@@ -128,6 +128,7 @@ const SESSION_GUEST = 'guest';                     // account ids are UUIDs
  * that belongs here, and tests/test_device_session.py fails until a new key is
  * listed here or named there as a setting. */
 const PERSONAL_KEYS = [
+  'optic.brokerage.scope.v1',    // the account the Brokerage workspace is narrowed to
   'optic.recent.v1',             // symbols opened, offered back by the search bar
   'optic.scan.recent.v1',        // requests typed into Find stocks, offered back under it
   'optic.pulse.history.v1',      // Pulse conversations
@@ -10754,10 +10755,7 @@ const ASK_GROUP = 'Ask Milo';
  * live here: the Brokerage page joins the palette when it joins the menu. */
 function paletteAllowed(p) {
   if (p.owner && !isOwner()) return false;
-  if (p.feature === 'brokerage') {
-    const g = NAV_GROUPS.find((x) => x.id === 'portfolio');
-    return !!(g && g.views.includes('brokerage'));
-  }
+  if (p.feature === 'brokerage') return navFeatureOn('brokerage');
   return true;
 }
 
@@ -33018,7 +33016,7 @@ function accountPanels() {
         <span class="set-row-title">Linked brokerages</span>
         <span class="set-row-note">Read-only connections, what they can see, and how to disconnect or delete the data.</span>
       </div>
-      <div class="set-row-act"><button type="button" class="btn" data-go-view="brokerage">Manage</button></div>
+      <div class="set-row-act"><button type="button" class="btn" data-go-view="brokerage" data-bk-section="connections">Manage</button></div>
     </div>
   </div>
 
@@ -43317,6 +43315,13 @@ function chatContextPayload() {
     }
   }
   ctx.active_view = STATE.view;
+  // The account the Brokerage workspace is narrowed to, if any. Ids only: the
+  // server intersects them with the reader's own accounts and builds the
+  // portfolio itself (main._with_linked_portfolio, get_my_portfolio).
+  if (STATE.view === 'brokerage' && typeof bkScopeIds === 'function') {
+    const ids = bkScopeIds();
+    if (ids && ids.length) ctx.brokerage_scope = ids;
+  }
   // The retirement model the chip has always listed, now actually sent, and
   // labelled as the reader's own entries rather than market data.
   if (STATE.roth) ctx.roth = { source: 'retirement inputs the reader entered in this browser', model: STATE.roth };
@@ -43381,7 +43386,8 @@ function chatFocus() {
   const focus = {
     scope: chatScope,
     view,
-    view_label: CHAT_VIEW_LABELS[view] || VIEW_NAMES[view] || cap(String(view)),
+    view_label: (view === 'brokerage' && typeof bkViewLabel === 'function') ? bkViewLabel()
+      : (CHAT_VIEW_LABELS[view] || VIEW_NAMES[view] || cap(String(view))),
     ticker: chatScope === 'auto' ? ticker : null,
     captured_at: new Date().toISOString(),
   };
@@ -43546,6 +43552,7 @@ function pulseSubject() {
   if (SECURITY_VIEWS.includes(v) && STATE.ticker) {
     return { kind: 'security', sym: STATE.ticker, label: `${STATE.ticker} \u00b7 ${SUB_LABELS[v] || v}` };
   }
+  if (v === 'brokerage') return { kind: 'brokerage', label: 'Your linked portfolio' };
   if (['tracker', 'paper', 'roth'].includes(v)) return { kind: 'portfolio', label: VIEW_NAMES[v] || 'Positions' };
   if (['watchlist', 'alerts'].includes(v)) return { kind: 'watchlist', label: 'Your watchlist' };
   if (['scan', 'explore', 'insiders', 'analysts'].includes(v)) return { kind: 'screen', label: VIEW_NAMES[v] || 'Discover' };
@@ -43564,6 +43571,7 @@ function pulsePlaceholder() {
   if (sub.kind === 'security' || sub.kind === 'chart') {
     return `Ask about ${sub.sym}, e.g. "What would change the picture for ${sub.sym}?"`;
   }
+  if (sub.kind === 'brokerage') return 'Ask about your linked portfolio, e.g. "Where am I concentrated?"';
   if (sub.kind === 'portfolio') return 'Ask about your paper trades, e.g. "How concentrated am I?"';
   if (sub.kind === 'watchlist') return 'Ask about your watchlist, e.g. "What changed this week?"';
   if (sub.kind === 'screen') return 'Ask about these results, e.g. "What do they have in common?"';
@@ -43591,6 +43599,15 @@ function pulseModes() {
       { id: 'chart', label: 'Read this chart', text: `Read the ${t} chart: the trend, the levels that matter, and what the most recent bars say about momentum.` },
       { id: 'levels', label: 'Key levels', text: `Which support and resistance levels on ${t} matter most, and what happens on a break of each?` },
       { id: 'catalyst', label: 'Catalysts', text: `What upcoming events could move ${t} through those levels?` },
+    ];
+  }
+  if (sub.kind === 'brokerage') {
+    return [
+      { id: 'attention', label: 'What needs attention', text: 'What deserves my attention in my linked portfolio this week: concentration, upcoming events and anything that changed?' },
+      { id: 'moved', label: 'Why it moved', text: 'Why did my portfolio move today? Separate what you measured from headlines that only match the timing.' },
+      { id: 'earnings', label: 'My earnings', text: 'Which earnings affect me this week, and how much of my portfolio do they cover?' },
+      { id: 'exposure', label: 'Exposure', text: 'How exposed am I to technology, counting what my ETFs hold, and how complete is that look-through?' },
+      { id: 'research', label: 'Research next', text: 'Which of my holdings or risks deserve more research, and why?' },
     ];
   }
   if (sub.kind === 'portfolio' || sub.kind === 'watchlist') {
@@ -46027,11 +46044,14 @@ async function fillBillingRow() {
   if (flash) html = `<span class="set-row-note">${esc(flash)}</span> ${html}`;
   host.innerHTML = html;
   const row = document.getElementById('set-brokerage-row');
-  const g = NAV_GROUPS.find((x) => x.id === 'portfolio');
-  if (row) row.hidden = !(g && g.views.includes('brokerage'));
+  if (row) row.hidden = !navFeatureOn('brokerage');
 }
 
-const BROKER = { status: null, portfolio: null, billing: null, loading: false, error: null, armed: null, flash: null, agreed: false, renaming: null };
+const BROKER = { status: null, portfolio: null, billing: null, loading: false, error: null, armed: null, flash: null,
+  agreed: false, renaming: null, section: null, queued: false };
+/* Whether the server has said linking is open to this reader: set by the
+ * status probe, read by the nav, the palette and Settings. */
+let BROKER_ON = false;
 
 /* Only the provider's own pages and Stripe's are followed. The URL comes from
  * Optic's server, but a check here costs nothing and means a compromised or
@@ -46093,9 +46113,8 @@ async function brokerFetch(method, url, body) {
  *  Added at runtime rather than written into NAV_GROUPS so that a deployment
  *  without the feature renders the menu it always had. */
 function brokerageNavJoin() {
-  const group = NAV_GROUPS.find((g) => g.id === 'portfolio');
-  if (!group || group.views.includes('brokerage')) return;
-  group.views.push('brokerage');
+  if (BROKER_ON) return;
+  BROKER_ON = true;
   // Both, because a page opened at #/brokerage was painted before the row
   // existed and the phone bar lit Home for it.
   if (typeof paintNav === 'function') paintNav(STATE.view);
@@ -46105,6 +46124,12 @@ function brokerageNavJoin() {
 async function brokerageProbe() {
   const r = await brokerFetch('GET', '/api/brokerage/status');
   if (r.ok && r.data && r.data.available) brokerageNavJoin();
+  else if (r.ok && BROKER_ON) {
+    // Signed out, or owner-only mode for someone else: the entrance goes.
+    BROKER_ON = false;
+    if (typeof paintNav === 'function') paintNav(STATE.view);
+    if (typeof paintMobileTabs === 'function') paintMobileTabs(STATE.view);
+  }
   return r;
 }
 
@@ -46126,28 +46151,30 @@ async function loadBrokerage(force) {
   const host = views.brokerage;
   if (!host) return;
   brokerageReadFlash();
-  if (BROKER.loading) return;
-  if (!BROKER.status || force) host.innerHTML = '<div class="panel span2"><p class="sub">Loading your brokerage connections...</p></div>';
+  // A load already running is not dropped any more: an action that finishes
+  // while one is in flight (a rename, a sync) queues one more, so the page
+  // never shows the state from before the action (2026-10-15).
+  if (BROKER.loading) { BROKER.queued = true; return; }
+  if (!BROKER.status) host.innerHTML = '<div class="panel span2"><p class="sub">Loading your brokerage...</p></div>';
   BROKER.loading = true;
   try {
     const st = await brokerageProbe();
     BROKER.status = st.ok ? st.data : null;
     BROKER.error = st.ok ? null : ((st.data && st.data.detail) || 'Could not load brokerage status.');
-    BROKER.portfolio = null;
     const ent = (BROKER.status && BROKER.status.entitlement) || null;
     if (ent && !ent.can_link) {
       const b = await brokerFetch('GET', '/api/billing/status');
       BROKER.billing = b.ok ? b.data : null;
     }
-    const conns = (BROKER.status && BROKER.status.connections) || [];
-    if (conns.length) {
-      const p = await brokerFetch('GET', '/api/brokerage/portfolio');
-      BROKER.portfolio = p.ok ? p.data : { available: false, reason: (p.data && p.data.detail) || 'Could not load the portfolio.' };
-    }
   } finally {
     BROKER.loading = false;
   }
-  if (STATE.view === 'brokerage') renderBrokerage();
+  if (STATE.view === 'brokerage') {
+    renderBrokerage();
+    const conns = (BROKER.status && BROKER.status.connections) || [];
+    if (conns.length && typeof bkWorkspaceLoad === 'function') await bkWorkspaceLoad(force);
+  }
+  if (BROKER.queued) { BROKER.queued = false; loadBrokerage(true); }
 }
 
 function bkMoney(v, ccy) {
@@ -46222,8 +46249,6 @@ function renderBrokerage() {
   }
   const ent = st.entitlement || {};
   const conns = st.connections || [];
-  const active = conns.filter((c) => c.status !== 'disconnected');
-  const canAdd = ent.can_link && active.length < (ent.max_connections || 0);
   const parts = [flash];
 
   if (!ent.can_link && !conns.length) {
@@ -46232,16 +46257,36 @@ function renderBrokerage() {
     host.innerHTML = parts.join('');
     return;
   }
+
+  if (conns.length && typeof bkWorkspaceRender === 'function') {
+    // Linked: the six-section workspace (static/brokerage.js), whose
+    // Connections section is built from bkConnectionsHTML below.
+    bkWorkspaceRender(host, flash);
+    return;
+  }
+  host.innerHTML = parts.concat(bkConnectionsHTML()).join('');
+  if (typeof revealPanels === 'function') revealPanels(host);
+}
+
+/** The Connections section: linking, each connection and its accounts, what
+ *  Optic can see, and deleting everything. The workspace's Connections tab and
+ *  the page before anything is linked both use it, so there is one version. */
+function bkConnectionsHTML() {
+  const st = BROKER.status || {};
+  const ent = st.entitlement || {};
+  const conns = st.connections || [];
+  const active = conns.filter((c) => c.status !== 'disconnected');
+  const canAdd = ent.can_link && active.length < (ent.max_connections || 0);
+  const parts = [];
   if (st.paused_at) {
     parts.push(`<div class="panel span2"><h2>${hg('Syncing is paused')}</h2>
       <p class="sub">Your paid plan ended, so these accounts stopped updating on ${esc(new Date(st.paused_at).toLocaleDateString())}.
-        What you see below is the last sync. ${st.provider_closed_at
+        What you see is the last sync. ${st.provider_closed_at
     ? 'The connection has been closed at the provider; reconnect after upgrading to resume.'
     : 'Resubscribe within 7 days to resume where you left off. After 7 days the connection is closed at the provider, and after 30 days Optic deletes its copy.'}
         You can disconnect or delete everything now on any plan.</p>
       <div class="set-row-act"><button type="button" class="btn" data-billing-checkout>Resume with Pro</button></div></div>`);
   }
-
   parts.push(`<div class="panel span2"><div class="bk-head"><h2>${hg('Connections')}</h2>
       ${canAdd ? `<button type="button" class="btn primary" data-bk-connect${
     (st.consent && !st.consent.accepted && !BROKER.agreed) ? ' disabled aria-disabled="true"' : ''}>Connect a brokerage</button>` : ''}</div>
@@ -46251,8 +46296,6 @@ function renderBrokerage() {
     : 'Linking and syncing are part of the paid plan. Your stored data stays until you delete it or the retention period ends.'}</p>
     ${conns.length ? conns.map(bkConnCard).join('') : '<p class="sub">Nothing linked yet. Connect a brokerage to see your holdings here.</p>'}
   </div>`);
-
-  parts.push(bkPortfolioHtml(BROKER.portfolio, conns));
   parts.push(bkPermissions(st, !conns.length));
   if (conns.length) {
     parts.push(`<div class="panel span2 gap set-danger"><h2>${hg('Delete all brokerage data')}</h2>
@@ -46262,8 +46305,7 @@ function renderBrokerage() {
     ? '<button type="button" class="btn bk-danger" data-bk-delete-all="confirm">Yes, delete all brokerage data</button> <button type="button" class="btn" data-bk-disarm>Keep it</button>'
     : '<button type="button" class="btn" data-bk-delete-all>Delete all brokerage data</button>'}</div></div>`);
   }
-  host.innerHTML = parts.join('');
-  if (typeof revealPanels === 'function') revealPanels(host);
+  return parts.join('');
 }
 
 /** The agreement a reader gives before the first link, and again when the
@@ -46387,107 +46429,6 @@ function bkBars(rows, max = 8) {
   return `<ul class="bk-bars">${shown.map((r) => `<li><span class="bk-bar-l">${esc(r.label)}</span>
     <span class="bk-bar-t"><span class="bk-bar-f" style="width:${Math.max(1, Math.min(100, r.share_pct))}%"></span></span>
     <span class="bk-bar-v">${r.share_pct.toFixed(1)}%</span></li>`).join('')}</ul>`;
-}
-
-function bkPortfolioHtml(p, conns) {
-  if (!conns.length) return '';
-  if (!p) return '<div class="panel span2"><p class="sub">Loading your portfolio...</p></div>';
-  if (p.available === false) return `<div class="panel span2"><h2>${hg('Portfolio')}</h2><p class="sub">${esc(p.reason || 'No portfolio yet.')}</p></div>`;
-  if (!p.accounts_counted) {
-    return `<div class="panel span2"><h2>${hg('Portfolio')}</h2><p class="sub">${
-      (p.accounts || []).length ? 'No account is selected, or none has synced yet. Tick an account above to count it.'
-        : 'Waiting for the first sync. Accounts appear here once the broker sends data.'}</p></div>`;
-  }
-  const t = p.totals || {};
-  const by = t.by_currency || {};
-  const combined = t.combined_usd;
-  const perf = p.performance || {};
-  const upl = perf.unrealized_pl_by_currency || {};
-  const conc = p.concentration || {};
-  const asOfObj = p.as_of || {};
-  const asOf = asOfObj.oldest_broker || asOfObj.oldest_sync;
-  const asOfLabel = asOfObj.oldest_broker ? 'Broker data as of' : 'Fetched from your broker';
-  const totalTile = combined
-    ? `${esc(bkMoney(combined.value, 'USD'))}${combined.approximate ? ' <small>approx.</small>' : ''}`
-    : Object.entries(by).map(([c, b]) => esc(bkMoney(b.total, c))).join('<br>');
-  const cashTile = (p.cash || []).length ? p.cash.map((c) => esc(bkMoney(c.amount, c.currency))).join('<br>') : 'Not supplied';
-  const uplTile = Object.keys(upl).length ? Object.entries(upl).map(([c, v]) => bkSigned(v, c)).join('<br>') : 'Not supplied';
-  const out = [];
-  out.push(`<div class="panel span2"><div class="bk-head"><h2>${hg('Your portfolio')}</h2>
-      <span class="set-row-note">${asOfLabel} ${esc(bkWhen(asOf))}. Not live.</span></div>
-    <div class="bk-tiles">
-      <div class="bk-tile"><span class="bk-k">Total value</span><span class="bk-v">${totalTile}</span>
-        <span class="bk-n">Optic's arithmetic on your broker's numbers</span></div>
-      <div class="bk-tile"><span class="bk-k">Cash</span><span class="bk-v">${cashTile}</span><span class="bk-n">From your broker</span></div>
-      <div class="bk-tile"><span class="bk-k">Unrealised gain</span><span class="bk-v">${uplTile}</span>
-        <span class="bk-n">${perf.positions_with_basis}/${perf.positions_total} positions have a cost basis${
-  perf.basis_coverage_pct !== null && perf.basis_coverage_pct !== undefined ? ` (${perf.basis_coverage_pct}% of value)` : ''}</span></div>
-      <div class="bk-tile"><span class="bk-k">Largest holding</span><span class="bk-v">${conc.top1_pct !== null && conc.top1_pct !== undefined
-    ? `${esc(((p.holdings || [])[0] || {}).symbol || '')} ${conc.top1_pct}%` : 'Not supplied'}</span>
-        <span class="bk-n">Top 5: ${conc.top5_pct ?? 'n/a'}%. Like ${conc.effective_holdings ?? 'n/a'} equal positions</span></div>
-    </div>
-    <div class="bk-asks">${BROKER_ASKS.map((q) => `<button type="button" class="cc-q" data-ask-text="${esc(q)}">${esc(q)}</button>`).join('')}</div>
-  </div>`);
-
-  out.push(`<div class="panel"><h2>${hg('Allocation')}</h2>
-      <p class="bk-eyebrow">By asset type</p>${bkBars((p.allocation || {}).by_kind)}
-      <p class="bk-eyebrow">By account</p>${bkBars((p.allocation || {}).by_account)}</div>
-    <div class="panel"><h2>${hg('Concentration')}</h2>
-      <p class="bk-eyebrow">By sector (stocks; ETFs not looked through)</p>${bkBars((p.allocation || {}).by_sector)}
-      ${(conc.flags || []).length ? `<ul class="bk-flags">${conc.flags.map((f) => `<li>${esc(f)}</li>`).join('')}</ul>` : '<p class="sub">No single stock above 20% and no sector above 40% of long holdings.</p>'}
-      ${(conc.combined_exposure || []).map((e) => `<p class="sub">${esc(e.symbol)}: ${esc(bkQty(e.shares))} shares plus options controlling ${
-  e.options.map((o) => `${bkQty(o.notional_shares)} shares (${esc(o.option_type || '')} ${esc(String(o.strike))}, ${esc(o.expiry || '')})`).join(', ')}. Not delta-adjusted.</p>`).join('')}
-      <p class="set-row-note">${esc(conc.basis || '')}</p></div>`);
-
-  const rows = (p.holdings || []).map((h) => `<tr>
-      <td class="name"><b>${esc(h.symbol || '')}</b><span class="bk-sub">${esc(h.description || '')}</span></td>
-      <td>${esc((h.accounts || []).join(', '))}</td>
-      <td>${esc(bkQty(h.quantity))}</td>
-      <td>${esc(bkMoney(h.price, h.currency))}</td>
-      <td>${esc(bkMoney(h.market_value, h.currency))}</td>
-      <td>${h.weight_pct !== null && h.weight_pct !== undefined ? `${h.weight_pct}%` : 'n/a'}</td>
-      <td>${h.cost_basis === null ? '<span class="bk-na">Not supplied</span>' : esc(bkMoney(h.cost_basis, h.currency))}</td>
-      <td>${h.unrealized_pl === null ? '<span class="bk-na">Not supplied</span>' : `${bkSigned(h.unrealized_pl, h.currency)}${h.unrealized_pct !== null ? ` <small>${h.unrealized_pct}%</small>` : ''}`}</td>
-    </tr>`).join('');
-  out.push(`<div class="panel span2"><h2>${hg('Holdings')}</h2>
-    <p class="sub">Quantity, price and cost come from your broker. Value, weight and gain are Optic's arithmetic. The same security in
-      several accounts is one row.</p>
-    <div class="ss-scroll"><table class="data bk-table"><thead><tr><th>Holding</th><th>Accounts</th><th>Qty</th><th>Broker price</th>
-      <th>Value</th><th>Weight</th><th>Cost basis</th><th>Unrealised</th></tr></thead><tbody>${rows}</tbody></table></div></div>`);
-
-  if ((p.options || []).length) {
-    out.push(`<div class="panel span2"><h2>${hg('Options')}</h2>
-      <div class="ss-scroll"><table class="data bk-table"><thead><tr><th>Contract</th><th>Account</th><th>Contracts</th><th>Price</th>
-        <th>Est. value</th><th>Cost</th><th>Est. unrealised</th><th>Expires</th></tr></thead><tbody>${p.options.map((o) => `<tr>
-        <td class="name"><b>${esc(o.underlying || '')}</b> ${esc(strikeLabel(o.strike))} ${esc(o.option_type || '')}${o.mini ? ' <small>mini</small>' : ''}</td>
-        <td>${esc(o.account || '')}</td><td>${esc(bkQty(o.contracts))}</td><td>${esc(bkMoney(o.price, o.currency))}</td>
-        <td>${esc(bkMoney(o.market_value_est, o.currency))}</td>
-        <td>${o.cost_basis === null ? '<span class="bk-na">Not supplied</span>' : esc(bkMoney(o.cost_basis, o.currency))}</td>
-        <td>${o.unrealized_pl_est === null ? '<span class="bk-na">Not supplied</span>' : bkSigned(o.unrealized_pl_est, o.currency)}</td>
-        <td>${esc(o.expiry || '')}${o.days_to_expiry !== null ? ` <small>${o.days_to_expiry}d</small>` : ''}</td></tr>`).join('')}</tbody></table></div>
-      <p class="set-row-note">Estimated value is contracts x the broker's price x the contract multiplier. No greeks come through the connection.</p></div>`);
-  }
-
-  const earn = p.earnings_ahead || [];
-  const ch = p.changes;
-  out.push(`<div class="panel"><h2>${hg('Earnings ahead')}</h2>${earn.length
-    ? `<ul class="bk-list">${earn.map((e) => `<li><b>${esc(e.symbol)}</b> ${esc(e.date)} <small>in ${e.days} day${e.days === 1 ? '' : 's'}</small>${
-      e.weight_pct ? `, ${e.weight_pct}% of long holdings` : ''}${e.has_options ? ', and you hold options on it' : ''}</li>`).join('')}</ul>`
-    : '<p class="sub">No reported earnings date in the next 30 days for the stocks Optic checked (up to 25, largest first). ETFs and funds have none.</p>'}
-    <p class="set-row-note">Dates from Optic's market data, not your broker.</p></div>
-    <div class="panel"><h2>${hg('Since your last sync')}</h2>${bkChangesHtml(ch)}</div>`);
-
-  if ((p.unsupported || []).length) {
-    out.push(`<div class="panel span2"><h2>${hg('Not counted')}</h2><ul class="bk-list">${p.unsupported.map((u) =>
-      `<li><b>${esc(u.description)}</b> <small>${esc(u.account || '')}</small>. ${esc(u.reason)}</li>`).join('')}</ul></div>`);
-  }
-  const notes = (p.notes || []).slice();
-  (p.price_checks || []).forEach((c) => notes.push(`${c.symbol}: broker ${bkMoney(c.broker_price, 'USD')} at the last sync, Optic's delayed quote ${bkMoney(c.optic_price, 'USD')} (${c.gap_pct > 0 ? '+' : ''}${c.gap_pct}%).`));
-  out.push(`<div class="panel span2"><h2>${hg('What this cannot tell you')}</h2><ul class="bk-list">
-    ${notes.map((n) => `<li>${esc(n)}</li>`).join('')}
-    <li>No transactions, realised gains, dividends or tax lots come through this connection, so Optic shows unrealised gain against your broker's cost, not a return.</li>
-    <li>This is information, not advice. Nothing here suggests buying, selling or rebalancing.</li></ul></div>`);
-  return out.join('');
 }
 
 function bkChangesHtml(ch) {
@@ -46712,6 +46653,13 @@ const NAV_GROUPS = [
    * against a gear at 1160. A ninth left 18px. The `follow` group above is the
    * precedent for a group named after its primary view. */
   { id: 'portfolio', label: 'Positions', views: ['tracker', 'paper', 'roth'] },
+  /* The Brokerage workspace (2026-10-15): its own destination rather than a
+   * fourth tab under Positions, because it is six sections about the reader's
+   * real accounts, not a variant of the paper book. `feature` keeps it off
+   * every nav until the server says linking is open to this reader
+   * (owner-only mode included), which is what the runtime splice into
+   * Positions did before; navVisibleGroups reads BROKER_ON. */
+  { id: 'brokerage', label: 'Brokerage', views: ['brokerage'], feature: 'brokerage' },
   /* On the strip, and it took an audit to notice it was not.
    *
    * This group existed only to give groupForView something to resolve, and it
@@ -46759,7 +46707,15 @@ function isOwner() {
 /** The strip shows every group except the off-strip ones, and shows the
  *  owner's group only to the signed-in owner. See `reports` above. */
 function navVisibleGroups() {
-  return NAV_GROUPS.filter((g) => !g.offStrip && (!g.owner || isOwner()));
+  return NAV_GROUPS.filter((g) => !g.offStrip && (!g.owner || isOwner()) && navFeatureOn(g.feature));
+}
+
+/** A group behind a feature shows once the server has said the feature is
+ *  open to this reader. Only the Brokerage workspace has one. */
+function navFeatureOn(feature) {
+  if (!feature) return true;
+  if (feature === 'brokerage') return typeof BROKER_ON !== 'undefined' && BROKER_ON;
+  return false;
 }
 
 function navGroupLabel(group) {
@@ -46861,6 +46817,12 @@ let routeApplying = false;
  *  page with no route of its own. */
 function routeFor(view) {
   if (view === 'home') return '';
+  if (view === 'brokerage') {
+    // Each workspace section has its own address, so a refresh, a shared link
+    // and Back all land on the section the reader was on (2026-10-15).
+    const sec = (typeof BROKER !== 'undefined' && BROKER && BROKER.section) || 'overview';
+    return `#/brokerage/${sec}`;
+  }
   if (view === 'instrument') {
     return STATE.instrument ? `#/instrument/${encodeURIComponent(STATE.instrument.symbol)}` : null;
   }
@@ -46890,6 +46852,12 @@ function parseRoute(hash) {
   const head = parts[0];
   if (ROUTE_VIEWS[head] && parts.length === 1) return { view: ROUTE_VIEWS[head], symbol: null };
   if (head === 'instrument' && parts[1]) return { view: 'instrument', symbol: parts[1] };
+  if (head === 'brokerage' && parts.length === 2) {
+    const section = parts[1].toLowerCase();
+    // The workspace's sections; static/brokerage.js labels the same ids.
+    return ['overview', 'holdings', 'performance', 'events', 'scenarios', 'connections'].includes(section)
+      ? { view: 'brokerage', symbol: null, section } : null;
+  }
   const symbol = head.toUpperCase();
   if (!ROUTE_SYMBOL_RE.test(symbol)) return null;
   const view = parts[1] ? ROUTE_VIEWS[parts[1].toLowerCase()] : 'overview';
@@ -46922,6 +46890,9 @@ function applyRoute(hash) {
       if (STATE.instrument && STATE.instrument.symbol === symbol) switchView('instrument');
       else openInstrument(symbol, symbol, STATE.instrumentFrom || 'market');
     } else if (!symbol) {
+      // A workspace section is set before the view opens, so it loads the
+      // right one; between sections of an open workspace this is all Back does.
+      if (view === 'brokerage' && typeof bkSetSection === 'function') bkSetSection(route.section || null, true);
       if (view !== STATE.view) switchView(view);
     } else if (view === 'chart' && STATE.ticker) {
       // The chart keeps its own symbol (see STATE.chartSymbol), so stepping
@@ -47032,6 +47003,8 @@ const NAV_ICONS = {
   discover: '<circle cx="11" cy="11" r="6"/><path d="m20 20-4.3-4.3"/>',
   // Stacked rows in a ledger.
   portfolio: '<rect x="3.5" y="4.5" width="17" height="15" rx="1.5"/><path d="M3.5 10h17M9 10v9.5"/>',
+  // A briefcase: the accounts the reader actually holds, as opposed to the ledger above.
+  brokerage: '<rect x="3.5" y="7.5" width="17" height="12" rx="1.5"/><path d="M9 7.5V5.6a1.1 1.1 0 0 1 1.1-1.1h3.8A1.1 1.1 0 0 1 15 5.6v1.9M3.5 12.5h17"/>',
   // An eye: the list you are keeping watch over.
   follow: '<path d="M2.6 12C6 6.8 8.9 4.6 12 4.6s6 2.2 9.4 7.4c-3.4 5.2-6.3 7.4-9.4 7.4S6 17.2 2.6 12Z"/><circle cx="12" cy="12" r="2.6"/>',
   // Three dots, for the bottom bar's More: everything the four tabs are not.
@@ -47131,7 +47104,7 @@ function paintNav(view) {
 const NAV_SECTIONS = {
   home: 'Research', security: 'Research', analyse: 'Research',
   market: 'Research', discover: 'Research',
-  portfolio: 'Tracking', follow: 'Tracking',
+  portfolio: 'Tracking', follow: 'Tracking', brokerage: 'Tracking',
   reports: 'Owner',
 };
 
@@ -47818,6 +47791,9 @@ if (window.OpticAuth && window.OpticAuth.on) {
     if (STATE.view === 'reports') loadReports(true);
     if (STATE.view === 'usage') loadUsage(true);
     if (STATE.view === 'accounts') loadAccounts(true);
+    // Signing in or out changes whether the Brokerage entrance shows at all.
+    if (STATE.view === 'brokerage') loadBrokerage(true);
+    else brokerageProbe();
   });
 }
 
@@ -47875,6 +47851,9 @@ const rerenderActiveView = () => {
     wsRedrawChart();
     return true;
   }
+  // The workspace keeps its data in BROKER, not STATE, so it redraws itself
+  // (new chart widths, a theme's colours) from what it already fetched.
+  if (STATE.view === 'brokerage' && typeof bkWorkspaceRerender === 'function') return bkWorkspaceRerender();
   const d = STATE[STATE.view];
   if (!d) return false;
   /* Returns whether it rendered.

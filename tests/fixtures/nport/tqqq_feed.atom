@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="ISO-8859-1" ?>
+  <feed xmlns="http://www.w3.org/2005/Atom">
+    <author>
+      <email>webmaster@sec.gov</email>
+      <name>Webmaster</name>
+    </author>
+    <company-info>
+      <addresses>
+        <address type="mailing">
+          <city>BETHESDA</city>
+          <state>MD</state>
+          <street1>7272 WISCONSIN AVENUE</street1>
+          <street2>21ST FLOOR</street2>
+          <zip>20814</zip>
+        </address>
+        <address type="business">
+          <city>BETHESDA</city>
+          <phone>240-497-6400</phone>
+          <state>MD</state>
+          <street1>7272 WISCONSIN AVENUE</street1>
+          <street2>21ST FLOOR</street2>
+          <zip>20814</zip>
+        </address>
+      </addresses>
+      <cik>0001174610</cik>
+      <cik-href>https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&amp;CIK=0001174610&amp;owner=include&amp;count=10</cik-href>
+      <conformed-name>PROSHARES TRUST</conformed-name>
+      <fiscal-year-end>0531</fiscal-year-end>
+      <formerly-names count="3">
+        <names>
+          <date>2002-10-31</date>
+          <name>PROFUNDS ETF TRUST</name>
+        </names>
+        <names>
+          <date>2026-10-15</date>
+          <name>PROSHARES TRUST</name>
+        </names>
+        <names>
+          <date>2005-11-08</date>
+          <name>XTRASHARES TRUST</name>
+        </names>
+      </formerly-names>
+      <state-location>MD</state-location>
+      <state-location-href>https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&amp;State=MD&amp;owner=include&amp;count=10</state-location-href>
+      <state-of-incorporation>DE</state-of-incorporation>
+    </company-info>
+    <entry>
+      <category label="form type" scheme="https://www.sec.gov/" term="NPORT-P" />
+      <content type="text/xml">
+        <accession-number>0002071691-26-017348</accession-number>
+        <act>40</act>
+        <file-number>811-21114</file-number>
+        <file-number-href>https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&amp;filenum=811-21114&amp;owner=include&amp;count=10</file-number-href>
+        <filing-date>2026-07-28</filing-date>
+        <filing-href>https://www.sec.gov/Archives/edgar/data/1174610/000207169126017348/0002071691-26-017348-index.htm</filing-href>
+        <filing-type>NPORT-P</filing-type>
+        <film-number>261211476</film-number>
+        <form-name>Monthly Portfolio Investments Report on Form N-PORT (Public)</form-name>
+        <size>158 KB</size>
+      </content>
+      <id>urn:tag:sec.gov,2008:accession-number=0002071691-26-017348</id>
+      <link href="https://www.sec.gov/Archives/edgar/data/1174610/000207169126017348/0002071691-26-017348-index.htm" rel="alternate" type="text/html" />
+      <summary type="html"> &lt;b&gt;Filed:&lt;/b&gt; 2026-07-28 &lt;b&gt;AccNo:&lt;/b&gt; 0002071691-26-017348 &lt;b&gt;Size:&lt;/b&gt; 158 KB</summary>
+      <title>NPORT-P  - Monthly Portfolio Investments Report on Form N-PORT (Public)</title>
+      <updated>2026-07-28T15:41:17-04:00</updated>
+    </entry>
+    <entry>
+      <category label="form type" scheme="https://www.sec.gov/" term="NPORT-P" />
+      <content type="text/xml">
+        <accession-number>0002071691-26-009253</accession-number>
+        <act>40</act>
+        <file-number>811-21114</file-number>
+        <file-number-href>https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&amp;filenum=811-21114&amp;owner=include&amp;count=10</file-number-href>
+        <filing-date>2026-04-24</filing-date>
+        <filing-href>https://www.sec.gov/Archives/edgar/data/1174610/000207169126009253/0002071691-26-009253-index.htm</filing-href>
+        <filing-type>NPORT-P</filing-type>
+        <film-number>26892964</film-number>
+        <form-name>Monthly Portfolio Investments Report on Form N-PORT (Public)</form-name>
+        <size>19 MB</size>
+      </content>
+      <id>urn:tag:sec.gov,2008:accession-number=0002071691-26-009253</id>
+      <link href="https://www.sec.gov/Archives/edgar/data/1174610/000207169126009253/0002071691-26-009253-index.htm" rel="alternate" type="text/html" />
+      <summary type="html"> &lt;b&gt;Filed:&lt;/b&gt; 2026-04-24 &lt;b&gt;AccNo:&lt;/b&gt; 0002071691-26-009253 &lt;b&gt;Size:&lt;/b&gt; 19 MB</summary>
+      <title>NPORT-P  - Monthly Portfolio Investments Report on Form N-PORT (Public)</title>
+      <updated>2026-04-24T14:42:45-04:00</updated>
+    </entry>
+    <id>https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&amp;CIK=0001174610</id>
+    <link href="https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&amp;CIK=S000024908&amp;type=NPORT-P&amp;owner=include&amp;start=0&amp;count=10" rel="alternate" type="text/html" />
+    <link href="https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&amp;CIK=S000024908&amp;type=NPORT-P&amp;owner=include&amp;start=0&amp;count=10&amp;output=atom" rel="self" type="application/atom+xml" />
+    <link href="https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&amp;CIK=S000024908&amp;scd=filings&amp;type=NPORT-P%25&amp;datea=&amp;dateb=&amp;owner=include&amp;count=10&amp;output=atom&amp;start=10" rel="next" type="application/atom+xml" />
+    <title>PROSHARES TRUST  (0001174610)</title>
+    <updated>2026-10-15T22:21:11-04:00</updated>
+  </feed>

@@ -1,0 +1,219 @@
+<?xml version="1.0" encoding="UTF-8"?><edgarSubmission xmlns="http://www.sec.gov/edgar/nport" xmlns:com="http://www.sec.gov/edgar/common" xmlns:ncom="http://www.sec.gov/edgar/nportcommon" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.sec.gov/edgar/nport eis_NPORT_Filer.xsd">
+  <headerData>
+    <submissionType>NPORT-P</submissionType>
+    <isConfidential>false</isConfidential>
+    <filerInfo>
+
+      <filer>
+        <issuerCredentials>
+          <cik>0000930667</cik>
+          <ccc>XXXXXXXX</ccc>
+        </issuerCredentials>
+      </filer>
+
+
+      <seriesClassInfo>
+        <seriesId>S000004269</seriesId>
+        <classId>C000011973</classId>
+      </seriesClassInfo>
+
+    </filerInfo>
+  </headerData>
+  <formData>
+    <genInfo>
+      <regName>iShares, Inc.</regName>
+      <regFileNumber>811-09102</regFileNumber>
+      <regCik>0000930667</regCik>
+      <regLei>549300MGJZCNMJLBAJ67</regLei>
+      <regStreet1>400 Howard Street</regStreet1>
+      <regCity>San Francisco</regCity>
+      <regStateConditional regCountry="US" regState="US-CA"/>
+      <regZipOrPostalCode>94105</regZipOrPostalCode>
+      <regPhone>800-474-2737</regPhone>
+      <seriesName>iShares MSCI Germany ETF</seriesName>
+      <seriesId>S000004269</seriesId>
+      <seriesLei>5493004D0K60CDIFRQ61</seriesLei>
+      <repPdEnd>2026-08-31</repPdEnd>
+      <repPdDate>2026-05-31</repPdDate>
+      <isFinalFiling>N</isFinalFiling>
+    </genInfo>
+    <fundInfo>
+      <totAssets>1517182944.23</totAssets>
+      <totLiabs>44688597.53</totLiabs>
+      <netAssets>1472494346.70</netAssets>
+    </fundInfo>
+    <invstOrSecs>
+      <invstOrSec>
+        <name>Siemens Aktiengesellschaft</name>
+        <lei>W38RGI023J3WT1HWRP32</lei>
+        <title>SIEMENS AG</title>
+        <cusip>N/A</cusip>
+        <identifiers>
+          <isin value="DE0007236101"/>
+          <other otherDesc="Internal" value="5727973"/>
+        </identifiers>
+        <balance>562334.00000000</balance>
+        <units>NS</units>
+        <currencyConditional curCd="EUR" exchangeRt="0.85733900"/>
+        <valUSD>176314224.49000000</valUSD>
+        <pctVal>11.97384729422</pctVal>
+        <payoffProfile>Long</payoffProfile>
+        <assetCat>EC</assetCat>
+        <issuerCat>CORP</issuerCat>
+        <invCountry>DE</invCountry>
+        <isRestrictedSec>N</isRestrictedSec>
+
+        <fairValLevel>2</fairValLevel>
+        <securityLending>
+          <isCashCollateral>N</isCashCollateral>
+          <isNonCashCollateral>N</isNonCashCollateral>
+          <isLoanByFund>N</isLoanByFund>
+        </securityLending>
+      </invstOrSec>
+      <invstOrSec>
+        <name>SAP SE</name>
+        <lei>529900D6BF99LW9R2E68</lei>
+        <title>SAP SE</title>
+        <cusip>N/A</cusip>
+        <identifiers>
+          <isin value="DE0007164600"/>
+          <other otherDesc="Internal" value="4846288"/>
+        </identifiers>
+        <balance>772639.00000000</balance>
+        <units>NS</units>
+        <currencyConditional curCd="EUR" exchangeRt="0.85733900"/>
+        <valUSD>139766061.71000000</valUSD>
+        <pctVal>9.491789358867</pctVal>
+        <payoffProfile>Long</payoffProfile>
+        <assetCat>EC</assetCat>
+        <issuerCat>CORP</issuerCat>
+        <invCountry>DE</invCountry>
+        <isRestrictedSec>N</isRestrictedSec>
+
+        <fairValLevel>2</fairValLevel>
+        <securityLending>
+          <isCashCollateral>N</isCashCollateral>
+          <isNonCashCollateral>N</isNonCashCollateral>
+          <isLoanByFund>N</isLoanByFund>
+        </securityLending>
+      </invstOrSec>
+      <invstOrSec>
+        <name>EURO</name>
+        <lei>N/A</lei>
+        <title>EURO</title>
+        <cusip>N/A</cusip>
+        <identifiers>
+          <isin value="N/A"/>
+          <other otherDesc="Internal" value="EUR"/>
+        </identifiers>
+        <balance>3252153.64000000</balance>
+        <units>NS</units>
+        <currencyConditional curCd="EUR" exchangeRt="0.85733900"/>
+        <valUSD>3793311.21000000</valUSD>
+        <pctVal>0.257611257965</pctVal>
+        <payoffProfile>N/A</payoffProfile>
+        <assetConditional assetCat="OTHER" desc="currency"/>
+        <issuerConditional desc="currency" issuerCat="OTHER"/>
+        <invCountry>XX</invCountry>
+        <isRestrictedSec>N</isRestrictedSec>
+
+        <fairValLevel>N/A</fairValLevel>
+        <securityLending>
+          <isCashCollateral>N</isCashCollateral>
+          <isNonCashCollateral>N</isNonCashCollateral>
+          <isLoanByFund>N</isLoanByFund>
+        </securityLending>
+      </invstOrSec>
+      <invstOrSec>
+        <name>DAX INDEX FUTURE JUN26</name>
+        <lei>N/A</lei>
+        <title>DAX INDEX FUTURE JUN26</title>
+        <cusip>N/A</cusip>
+        <identifiers>
+          <isin value="N/A"/>
+          <ticker value="FDAXM26"/>
+          <other otherDesc="INTERNAL" value="GXM620267"/>
+        </identifiers>
+        <balance>8.00000000</balance>
+        <units>NC</units>
+        <currencyConditional curCd="EUR" exchangeRt="0.85733900"/>
+        <valUSD>142067.40000000</valUSD>
+        <pctVal>0.009648077788</pctVal>
+        <payoffProfile>N/A</payoffProfile>
+        <assetCat>DE</assetCat>
+        <issuerConditional desc="Index Future" issuerCat="OTHER"/>
+        <invCountry>DE</invCountry>
+        <isRestrictedSec>N</isRestrictedSec>
+
+        <fairValLevel>1</fairValLevel>
+        <derivativeInfo>
+          <futrDeriv derivCat="FUT">
+            <counterparties>
+              <counterpartyName>EUREX DEUTSCHLAND</counterpartyName>
+              <counterpartyLei>529900LN3S50JPU47S06</counterpartyLei>
+            </counterparties>
+            <payOffProf>Long</payOffProf>
+            <descRefInstrmnt>
+              <indexBasketInfo>
+                <indexName>DAX INDEX FUTURE Jun 2026</indexName>
+                <indexIdentifier>FDAXM26</indexIdentifier>
+              </indexBasketInfo>
+            </descRefInstrmnt>
+            <expDate>2026-06-19</expDate>
+            <notionalAmt>5731688.50000000</notionalAmt>
+            <curCd>EUR</curCd>
+            <unrealizedAppr>142067.40000000</unrealizedAppr>
+          </futrDeriv>
+        </derivativeInfo>
+        <securityLending>
+          <isCashCollateral>N</isCashCollateral>
+          <isNonCashCollateral>N</isNonCashCollateral>
+          <isLoanByFund>N</isLoanByFund>
+        </securityLending>
+      </invstOrSec>
+      <invstOrSec>
+        <name>BlackRock Funds III: BlackRock Cash Funds: Institutional; SL Agency Shares</name>
+        <lei>N/A</lei>
+        <title>BLACKROCK CASH FUNDS INSTITUTIONAL FUND SL AGENCY</title>
+        <cusip>066922519</cusip>
+        <identifiers>
+          <isin value="US0669225197"/>
+          <other otherDesc="Internal" value="066922519            00001"/>
+        </identifiers>
+        <balance>44009841.73880000</balance>
+        <units>NS</units>
+        <curCd>USD</curCd>
+        <valUSD>44023044.69000000</valUSD>
+        <pctVal>2.989691932513</pctVal>
+        <payoffProfile>Long</payoffProfile>
+        <assetCat>STIV</assetCat>
+        <issuerCat>RF</issuerCat>
+        <invCountry>US</invCountry>
+        <isRestrictedSec>N</isRestrictedSec>
+
+        <fairValLevel>1</fairValLevel>
+        <securityLending>
+          <cashCollateralCondition cashCollateralVal="44023044.69000000" isCashCollateral="Y"/>
+          <isNonCashCollateral>N</isNonCashCollateral>
+          <isLoanByFund>N</isLoanByFund>
+        </securityLending>
+      </invstOrSec>
+    </invstOrSecs>
+    <explntrNotes>
+
+
+
+      <explntrNote note="Monthly returns presented in Item B.5(a) have been calculated without deducting any applicable sales loads or redemption fees." noteItem="B.5.a"/>
+
+
+    </explntrNotes>
+    <signature>
+      <ncom:dateSigned>2026-06-30</ncom:dateSigned>
+      <ncom:nameOfApplicant>iShares, Inc.</ncom:nameOfApplicant>
+      <ncom:signature>Chuck Pulsfort </ncom:signature>
+      <ncom:signerName>Chuck Pulsfort </ncom:signerName>
+      <ncom:title>Assistant Treasurer</ncom:title>
+    </signature>
+  </formData>
+  <documents>XXXX</documents>
+</edgarSubmission>

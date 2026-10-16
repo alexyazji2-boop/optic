@@ -1,0 +1,171 @@
+{
+ "cik": "0000884394",
+ "entityType": "other",
+ "sic": "",
+ "sicDescription": "",
+ "ownerOrg": "",
+ "insiderTransactionForOwnerExists": 0,
+ "insiderTransactionForIssuerExists": 0,
+ "name": "SPDR S&P 500 ETF TRUST",
+ "tickers": [
+  "SPY"
+ ],
+ "exchanges": [
+  "NYSE"
+ ],
+ "ein": "000000000",
+ "lei": null,
+ "category": "",
+ "fiscalYearEnd": "0930",
+ "stateOfIncorporation": "NY",
+ "stateOfIncorporationDescription": "NY",
+ "filings": {
+  "recent": {
+   "accessionNumber": [
+    "0001410368-26-089410",
+    "0001193125-26-247066",
+    "0001410368-26-055357",
+    "0001410368-26-023904",
+    "0001410368-26-020131",
+    "0001193125-26-023648",
+    "0001193125-26-022775"
+   ],
+   "filingDate": [
+    "2026-08-28",
+    "2026-05-29",
+    "2026-05-28",
+    "2026-03-13",
+    "2026-02-26",
+    "2026-01-27",
+    "2026-01-26"
+   ],
+   "reportDate": [
+    "2026-06-30",
+    "2026-03-31",
+    "2026-03-31",
+    "2025-12-31",
+    "2025-12-31",
+    "",
+    ""
+   ],
+   "acceptanceDateTime": [
+    "2026-08-28T16:25:47.000Z",
+    "2026-05-29T17:25:34.000Z",
+    "2026-05-28T19:11:03.000Z",
+    "2026-03-12T22:28:56.000Z",
+    "2026-02-26T21:49:39.000Z",
+    "2026-01-27T16:24:08.000Z",
+    "2026-01-26T22:07:02.000Z"
+   ],
+   "act": [
+    "40",
+    "40",
+    "40",
+    "40",
+    "40",
+    "33",
+    "33"
+   ],
+   "form": [
+    "NPORT-P",
+    "N-30D",
+    "NPORT-P",
+    "N-CEN",
+    "NPORT-P",
+    "497",
+    "497"
+   ],
+   "fileNumber": [
+    "811-06125",
+    "811-06125",
+    "811-06125",
+    "811-06125",
+    "811-06125",
+    "033-46080",
+    "033-46080"
+   ],
+   "filmNumber": [
+    "261336892",
+    "261041014",
+    "261034053",
+    "26749427",
+    "26690027",
+    "26563083",
+    "26561279"
+   ],
+   "items": [
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+    ""
+   ],
+   "core_type": [
+    "NPORT-P",
+    "N-30D",
+    "NPORT-P",
+    "N-CEN",
+    "NPORT-P",
+    "497",
+    "497"
+   ],
+   "size": [
+    1272560,
+    1175414,
+    454098,
+    24986,
+    1262358,
+    1408553,
+    1280064
+   ],
+   "isXBRL": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "isInlineXBRL": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "isXBRLNumeric": [
+    0,
+    0,
+    0,
+    null,
+    null,
+    null,
+    null
+   ],
+   "primaryDocument": [
+    "xslFormNPORT-P_X01/primary_doc.xml",
+    "d75559dn30d.htm",
+    "xslFormNPORT-P_X01/primary_doc.xml",
+    "xslFormN-CEN_X01/primary_doc.xml",
+    "xslFormNPORT-P_X01/primary_doc.xml",
+    "d935960d497.htm",
+    "d77353d497.htm"
+   ],
+   "primaryDocDescription": [
+    "",
+    "SPDR S&P 500 ETF TRUST",
+    "",
+    "",
+    "",
+    "SPDR S&P 500 ETF TRUST",
+    "SPDR S&P 500 ETF TRUST"
+   ]
+  },
+  "files": []
+ }
+}

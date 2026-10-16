@@ -1,0 +1,123 @@
+{
+ "cik": "0001222333",
+ "entityType": "operating",
+ "sic": "6221",
+ "sicDescription": "Commodity Contracts Brokers & Dealers",
+ "ownerOrg": "09 Crypto Assets",
+ "insiderTransactionForOwnerExists": 0,
+ "insiderTransactionForIssuerExists": 0,
+ "name": "SPDR GOLD TRUST",
+ "tickers": [
+  "GLD"
+ ],
+ "exchanges": [
+  "NYSE"
+ ],
+ "ein": "522369757",
+ "lei": null,
+ "category": "Large accelerated filer",
+ "fiscalYearEnd": "0930",
+ "stateOfIncorporation": "",
+ "stateOfIncorporationDescription": "",
+ "filings": {
+  "recent": {
+   "accessionNumber": [
+    "0001437749-26-031296",
+    "0001437749-26-025680",
+    "0001437749-26-014926",
+    "0001437749-26-004053"
+   ],
+   "filingDate": [
+    "2026-09-28",
+    "2026-08-04",
+    "2026-05-05",
+    "2026-02-13"
+   ],
+   "reportDate": [
+    "2026-09-28",
+    "2026-06-30",
+    "2026-03-31",
+    ""
+   ],
+   "acceptanceDateTime": [
+    "2026-09-28T14:51:28.000Z",
+    "2026-08-04T20:31:10.000Z",
+    "2026-05-05T20:48:31.000Z",
+    "2026-02-13T18:48:11.000Z"
+   ],
+   "act": [
+    "34",
+    "34",
+    "34",
+    "34"
+   ],
+   "form": [
+    "8-K",
+    "10-Q",
+    "10-Q",
+    "FWP"
+   ],
+   "fileNumber": [
+    "001-32356",
+    "001-32356",
+    "001-32356",
+    "333-267520"
+   ],
+   "filmNumber": [
+    "261412873",
+    "261239327",
+    "26944184",
+    "26631106"
+   ],
+   "items": [
+    "5.02",
+    "",
+    "",
+    ""
+   ],
+   "core_type": [
+    "XBRL",
+    "XBRL",
+    "XBRL",
+    "FWP"
+   ],
+   "size": [
+    161309,
+    2999079,
+    3056728,
+    82648
+   ],
+   "isXBRL": [
+    1,
+    1,
+    1,
+    0
+   ],
+   "isInlineXBRL": [
+    1,
+    1,
+    1,
+    0
+   ],
+   "isXBRLNumeric": [
+    0,
+    1,
+    1,
+    null
+   ],
+   "primaryDocument": [
+    "gld20260911_8k.htm",
+    "gld20260630_10q.htm",
+    "gld20260331_10q.htm",
+    "gld20260213_fwp.htm"
+   ],
+   "primaryDocDescription": [
+    "FORM 8-K",
+    "FORM 10-Q",
+    "FORM 10-Q",
+    "FORM FWP"
+   ]
+  },
+  "files": []
+ }
+}

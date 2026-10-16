@@ -1,0 +1,99 @@
+<?xml version="1.0" encoding="ISO-8859-1" ?>
+  <feed xmlns="http://www.w3.org/2005/Atom">
+    <author>
+      <email>webmaster@sec.gov</email>
+      <name>Webmaster</name>
+    </author>
+    <company-info>
+      <addresses>
+        <address type="mailing">
+          <city>SAN FRANCISCO</city>
+          <state>CA</state>
+          <street1>400 HOWARD STREET</street1>
+          <zip>94105</zip>
+        </address>
+        <address type="business">
+          <city>SAN FRANCISCO</city>
+          <phone>(415) 670-2000</phone>
+          <state>CA</state>
+          <street1>400 HOWARD STREET</street1>
+          <zip>94105</zip>
+        </address>
+      </addresses>
+      <cik>0000930667</cik>
+      <cik-href>https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&amp;CIK=0000930667&amp;owner=include&amp;count=10</cik-href>
+      <conformed-name>iShares, Inc.</conformed-name>
+      <fiscal-year-end>0831</fiscal-year-end>
+      <formerly-names count="5">
+        <names>
+          <date>1996-10-30</date>
+          <name>FOREIGN FUND INC</name>
+        </names>
+        <names>
+          <date>2018-11-14</date>
+          <name>ISHARES INC</name>
+        </names>
+        <names>
+          <date>2018-11-14</date>
+          <name>iSHARES INC</name>
+        </names>
+        <names>
+          <date>2000-04-28</date>
+          <name>WEBS INDEX FUND INC</name>
+        </names>
+        <names>
+          <date>1997-01-08</date>
+          <name>WFBS INDEX FUND INC</name>
+        </names>
+      </formerly-names>
+      <state-location>CA</state-location>
+      <state-location-href>https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&amp;State=CA&amp;owner=include&amp;count=10</state-location-href>
+      <state-of-incorporation>MD</state-of-incorporation>
+    </company-info>
+    <entry>
+      <category label="form type" scheme="https://www.sec.gov/" term="NPORT-P" />
+      <content type="text/xml">
+        <accession-number>0001004726-26-006446</accession-number>
+        <act>40</act>
+        <file-number>811-09102</file-number>
+        <file-number-href>https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&amp;filenum=811-09102&amp;owner=include&amp;count=10</file-number-href>
+        <filing-date>2026-07-27</filing-date>
+        <filing-href>https://www.sec.gov/Archives/edgar/data/930667/000100472626006446/0001004726-26-006446-index.htm</filing-href>
+        <filing-type>NPORT-P</filing-type>
+        <film-number>261204600</film-number>
+        <form-name>Monthly Portfolio Investments Report on Form N-PORT (Public)</form-name>
+        <size>411 KB</size>
+      </content>
+      <id>urn:tag:sec.gov,2008:accession-number=0001004726-26-006446</id>
+      <link href="https://www.sec.gov/Archives/edgar/data/930667/000100472626006446/0001004726-26-006446-index.htm" rel="alternate" type="text/html" />
+      <summary type="html"> &lt;b&gt;Filed:&lt;/b&gt; 2026-07-27 &lt;b&gt;AccNo:&lt;/b&gt; 0001004726-26-006446 &lt;b&gt;Size:&lt;/b&gt; 411 KB</summary>
+      <title>NPORT-P  - Monthly Portfolio Investments Report on Form N-PORT (Public)</title>
+      <updated>2026-07-27T12:38:05-04:00</updated>
+    </entry>
+    <entry>
+      <category label="form type" scheme="https://www.sec.gov/" term="NPORT-P" />
+      <content type="text/xml">
+        <accession-number>0001410368-26-039464</accession-number>
+        <act>40</act>
+        <file-number>811-09102</file-number>
+        <file-number-href>https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&amp;filenum=811-09102&amp;owner=include&amp;count=10</file-number-href>
+        <filing-date>2026-04-23</filing-date>
+        <filing-href>https://www.sec.gov/Archives/edgar/data/930667/000141036826039464/0001410368-26-039464-index.htm</filing-href>
+        <filing-type>NPORT-P</filing-type>
+        <film-number>26886391</film-number>
+        <form-name>Monthly Portfolio Investments Report on Form N-PORT (Public)</form-name>
+        <size>60 KB</size>
+      </content>
+      <id>urn:tag:sec.gov,2008:accession-number=0001410368-26-039464</id>
+      <link href="https://www.sec.gov/Archives/edgar/data/930667/000141036826039464/0001410368-26-039464-index.htm" rel="alternate" type="text/html" />
+      <summary type="html"> &lt;b&gt;Filed:&lt;/b&gt; 2026-04-23 &lt;b&gt;AccNo:&lt;/b&gt; 0001410368-26-039464 &lt;b&gt;Size:&lt;/b&gt; 60 KB</summary>
+      <title>NPORT-P  - Monthly Portfolio Investments Report on Form N-PORT (Public)</title>
+      <updated>2026-04-23T10:38:57-04:00</updated>
+    </entry>
+    <id>https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&amp;CIK=0000930667</id>
+    <link href="https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&amp;CIK=S000004269&amp;type=NPORT-P&amp;owner=include&amp;start=0&amp;count=10" rel="alternate" type="text/html" />
+    <link href="https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&amp;CIK=S000004269&amp;type=NPORT-P&amp;owner=include&amp;start=0&amp;count=10&amp;output=atom" rel="self" type="application/atom+xml" />
+    <link href="https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&amp;CIK=S000004269&amp;scd=filings&amp;type=NPORT-P%25&amp;datea=&amp;dateb=&amp;owner=include&amp;count=10&amp;output=atom&amp;start=10" rel="next" type="application/atom+xml" />
+    <title>iShares, Inc.  (0000930667)</title>
+    <updated>2026-10-15T22:21:12-04:00</updated>
+  </feed>

@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="ISO-8859-1" ?>
+  <feed xmlns="http://www.w3.org/2005/Atom">
+    <author>
+      <email>webmaster@sec.gov</email>
+      <name>Webmaster</name>
+    </author>
+    <company-info>
+      <addresses>
+        <address type="mailing">
+          <city>DOWNERS GROVE</city>
+          <state>IL</state>
+          <street1>3500 LACEY ROAD</street1>
+          <street2>SUITE 700</street2>
+          <zip>60515</zip>
+        </address>
+        <address type="business">
+          <city>DOWNERS GROVE</city>
+          <phone>800-983-0903</phone>
+          <state>IL</state>
+          <street1>3500 LACEY ROAD</street1>
+          <street2>SUITE 700</street2>
+          <zip>60515</zip>
+        </address>
+      </addresses>
+      <cik>0001067839</cik>
+      <cik-href>https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&amp;CIK=0001067839&amp;owner=include&amp;count=10</cik-href>
+      <conformed-name>INVESCO QQQ TRUST, SERIES 1</conformed-name>
+      <fiscal-year-end>0930</fiscal-year-end>
+      <formerly-names count="4">
+        <names>
+          <date>1998-08-07</date>
+          <name>INVESTMENT PRODUCT SERVICES INC</name>
+        </names>
+        <names>
+          <date>2009-01-26</date>
+          <name>NASDAQ 100 TRUST SERIES 1</name>
+        </names>
+        <names>
+          <date>1998-10-19</date>
+          <name>NASDAQ GOLD SM TRUST SER 1</name>
+        </names>
+        <names>
+          <date>2018-09-04</date>
+          <name>POWERSHARES QQQ TRUST, SERIES 1</name>
+        </names>
+      </formerly-names>
+      <state-location>IL</state-location>
+      <state-location-href>https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&amp;State=IL&amp;owner=include&amp;count=10</state-location-href>
+    </company-info>
+    <entry>
+      <category label="form type" scheme="https://www.sec.gov/" term="NPORT-P" />
+      <content type="text/xml">
+        <accession-number>0001067839-26-000030</accession-number>
+        <act>40</act>
+        <file-number>811-08947</file-number>
+        <file-number-href>https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&amp;filenum=811-08947&amp;owner=include&amp;count=10</file-number-href>
+        <filing-date>2026-08-28</filing-date>
+        <filing-href>https://www.sec.gov/Archives/edgar/data/1067839/000106783926000030/0001067839-26-000030-index.htm</filing-href>
+        <filing-type>NPORT-P</filing-type>
+        <film-number>261333380</film-number>
+        <form-name>Monthly Portfolio Investments Report on Form N-PORT (Public)</form-name>
+        <size>552 KB</size>
+      </content>
+      <id>urn:tag:sec.gov,2008:accession-number=0001067839-26-000030</id>
+      <link href="https://www.sec.gov/Archives/edgar/data/1067839/000106783926000030/0001067839-26-000030-index.htm" rel="alternate" type="text/html" />
+      <summary type="html"> &lt;b&gt;Filed:&lt;/b&gt; 2026-08-28 &lt;b&gt;AccNo:&lt;/b&gt; 0001067839-26-000030 &lt;b&gt;Size:&lt;/b&gt; 552 KB</summary>
+      <title>NPORT-P  - Monthly Portfolio Investments Report on Form N-PORT (Public)</title>
+      <updated>2026-08-28T09:26:52-04:00</updated>
+    </entry>
+    <entry>
+      <category label="form type" scheme="https://www.sec.gov/" term="NPORT-P" />
+      <content type="text/xml">
+        <accession-number>0001067839-26-000024</accession-number>
+        <act>40</act>
+        <file-number>811-08947</file-number>
+        <file-number-href>https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&amp;filenum=811-08947&amp;owner=include&amp;count=10</file-number-href>
+        <filing-date>2026-05-28</filing-date>
+        <filing-href>https://www.sec.gov/Archives/edgar/data/1067839/000106783926000024/0001067839-26-000024-index.htm</filing-href>
+        <filing-type>NPORT-P</filing-type>
+        <film-number>261028509</film-number>
+        <form-name>Monthly Portfolio Investments Report on Form N-PORT (Public)</form-name>
+        <size>113 KB</size>
+      </content>
+      <id>urn:tag:sec.gov,2008:accession-number=0001067839-26-000024</id>
+      <link href="https://www.sec.gov/Archives/edgar/data/1067839/000106783926000024/0001067839-26-000024-index.htm" rel="alternate" type="text/html" />
+      <summary type="html"> &lt;b&gt;Filed:&lt;/b&gt; 2026-05-28 &lt;b&gt;AccNo:&lt;/b&gt; 0001067839-26-000024 &lt;b&gt;Size:&lt;/b&gt; 113 KB</summary>
+      <title>NPORT-P  - Monthly Portfolio Investments Report on Form N-PORT (Public)</title>
+      <updated>2026-05-28T06:53:06-04:00</updated>
+    </entry>
+    <id>https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&amp;CIK=0001067839</id>
+    <link href="https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&amp;CIK=S000101292&amp;type=NPORT-P&amp;owner=include&amp;start=0&amp;count=10" rel="alternate" type="text/html" />
+    <link href="https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&amp;CIK=S000101292&amp;type=NPORT-P&amp;owner=include&amp;start=0&amp;count=10&amp;output=atom" rel="self" type="application/atom+xml" />
+    <title>INVESCO QQQ TRUST, SERIES 1  (0001067839)</title>
+    <updated>2026-10-15T22:21:10-04:00</updated>
+  </feed>

@@ -1,0 +1,643 @@
+<?xml version="1.0" encoding="UTF-8"?><edgarSubmission xmlns="http://www.sec.gov/edgar/nport" xmlns:com="http://www.sec.gov/edgar/common" xmlns:ncom="http://www.sec.gov/edgar/nportcommon" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.sec.gov/edgar/nport eis_NPORT_Filer.xsd">
+  <headerData>
+    <submissionType>NPORT-P</submissionType>
+    <isConfidential>false</isConfidential>
+    <filerInfo>
+
+      <filer>
+        <issuerCredentials>
+          <cik>0001174610</cik>
+          <ccc>XXXXXXXX</ccc>
+        </issuerCredentials>
+      </filer>
+
+
+      <seriesClassInfo>
+        <seriesId>S000024908</seriesId>
+        <classId>C000074098</classId>
+      </seriesClassInfo>
+
+
+    </filerInfo>
+  </headerData>
+  <formData>
+    <genInfo>
+      <regName>ProShares Trust</regName>
+      <regFileNumber>811-21114</regFileNumber>
+      <regCik>0001174610</regCik>
+      <regLei>5493005D9DS7C1P5AM59</regLei>
+      <regStreet1>7272 Wisconsin Avenue</regStreet1>
+      <regCity>Bethesda</regCity>
+      <regStateConditional regCountry="US" regState="US-MD"/>
+      <regZipOrPostalCode>20814</regZipOrPostalCode>
+      <regPhone>240-497-6400</regPhone>
+      <seriesName>ProShares UltraPro QQQ</seriesName>
+      <seriesId>S000024908</seriesId>
+      <seriesLei>03026FQTQRJ0JSTBI779</seriesLei>
+      <repPdEnd>2026-05-31</repPdEnd>
+      <repPdDate>2026-05-31</repPdDate>
+      <isFinalFiling>N</isFinalFiling>
+    </genInfo>
+    <fundInfo>
+      <totAssets>39819603339.51</totAssets>
+      <totLiabs>46917427.46</totLiabs>
+      <netAssets>39772685912.05</netAssets>
+    </fundInfo>
+    <invstOrSecs>
+      <invstOrSec>
+        <name>NVIDIA Corp.</name>
+        <lei>549300S4KLFTLO7GSQ80</lei>
+        <title>NVIDIA Corp.</title>
+        <cusip>67066G104</cusip>
+        <identifiers>
+          <isin value="US67066G1040"/>
+        </identifiers>
+        <balance>4668872.00000000</balance>
+        <units>NS</units>
+        <curCd>USD</curCd>
+        <valUSD>985785634.08000000</valUSD>
+        <pctVal>2.478549314622</pctVal>
+        <payoffProfile>Long</payoffProfile>
+        <assetCat>EC</assetCat>
+        <issuerCat>CORP</issuerCat>
+        <invCountry>US</invCountry>
+        <isRestrictedSec>N</isRestrictedSec>
+
+        <fairValLevel>1</fairValLevel>
+        <securityLending>
+          <isCashCollateral>N</isCashCollateral>
+          <isNonCashCollateral>N</isNonCashCollateral>
+          <isLoanByFund>N</isLoanByFund>
+        </securityLending>
+      </invstOrSec>
+      <invstOrSec>
+        <name>Apple, Inc.</name>
+        <lei>HWUPKR0MPOU8FGXBT394</lei>
+        <title>Apple, Inc.</title>
+        <cusip>037833100</cusip>
+        <identifiers>
+          <isin value="US0378331005"/>
+        </identifiers>
+        <balance>2820812.00000000</balance>
+        <units>NS</units>
+        <curCd>USD</curCd>
+        <valUSD>880262592.72000000</valUSD>
+        <pctVal>2.213233963294</pctVal>
+        <payoffProfile>Long</payoffProfile>
+        <assetCat>EC</assetCat>
+        <issuerCat>CORP</issuerCat>
+        <invCountry>US</invCountry>
+        <isRestrictedSec>N</isRestrictedSec>
+
+        <fairValLevel>1</fairValLevel>
+        <securityLending>
+          <isCashCollateral>N</isCashCollateral>
+          <isNonCashCollateral>N</isNonCashCollateral>
+          <isLoanByFund>N</isLoanByFund>
+        </securityLending>
+      </invstOrSec>
+      <invstOrSec>
+        <name>Microsoft Corp.</name>
+        <lei>INR2EJN1ERAN0W5ZP974</lei>
+        <title>Microsoft Corp.</title>
+        <cusip>594918104</cusip>
+        <identifiers>
+          <isin value="US5949181045"/>
+        </identifiers>
+        <balance>1426885.00000000</balance>
+        <units>NS</units>
+        <curCd>USD</curCd>
+        <valUSD>642440702.40000000</valUSD>
+        <pctVal>1.615281160092</pctVal>
+        <payoffProfile>Long</payoffProfile>
+        <assetCat>EC</assetCat>
+        <issuerCat>CORP</issuerCat>
+        <invCountry>US</invCountry>
+        <isRestrictedSec>N</isRestrictedSec>
+
+        <fairValLevel>1</fairValLevel>
+        <securityLending>
+          <isCashCollateral>N</isCashCollateral>
+          <isNonCashCollateral>N</isNonCashCollateral>
+          <isLoanByFund>N</isLoanByFund>
+        </securityLending>
+      </invstOrSec>
+      <invstOrSec>
+        <name>ProShares GENIUS Money Market ETF</name>
+        <lei>529900MYSWPDZBB76T85</lei>
+        <title>ProShares GENIUS Money Market ETF</title>
+        <cusip>74350P691</cusip>
+        <identifiers>
+          <isin value="US74350P6916"/>
+        </identifiers>
+        <balance>72900000.00000000</balance>
+        <units>NS</units>
+        <curCd>USD</curCd>
+        <valUSD>7298748000.00000000</valUSD>
+        <pctVal>18.35115691240</pctVal>
+        <payoffProfile>Long</payoffProfile>
+        <assetConditional assetCat="OTHER" desc="Exchange traded fund"/>
+        <issuerCat>RF</issuerCat>
+        <invCountry>US</invCountry>
+        <isRestrictedSec>N</isRestrictedSec>
+
+        <fairValLevel>1</fairValLevel>
+        <securityLending>
+          <isCashCollateral>N</isCashCollateral>
+          <isNonCashCollateral>N</isNonCashCollateral>
+          <isLoanByFund>N</isLoanByFund>
+        </securityLending>
+      </invstOrSec>
+      <invstOrSec>
+        <name>Repurchase Agreement</name>
+        <lei>N/A</lei>
+        <title>Repurchase Agreement</title>
+        <cusip>000000000</cusip>
+        <identifiers>
+          <other otherDesc="CINS." value="260529681"/>
+        </identifiers>
+        <balance>96158877.51000000</balance>
+        <units>PA</units>
+        <curCd>USD</curCd>
+        <valUSD>96158877.51000000</valUSD>
+        <pctVal>0.241771143449</pctVal>
+        <payoffProfile>Long</payoffProfile>
+        <assetCat>RA</assetCat>
+        <issuerCat>CORP</issuerCat>
+        <invCountry>US</invCountry>
+        <isRestrictedSec>N</isRestrictedSec>
+
+        <fairValLevel>2</fairValLevel>
+        <repurchaseAgrmt>
+          <transCat>Repurchase</transCat>
+          <notClearedCentCparty isCleared="N">
+            <counterpartyInfos>
+              <counterpartyInfo lei="RCNB6OTYUAMMP879YW96" name="BNP Paribas Securities Corp."/>
+            </counterpartyInfos>
+          </notClearedCentCparty>
+          <isTriParty>N</isTriParty>
+          <repurchaseRt>3.61000000</repurchaseRt>
+          <maturityDt>2026-06-01</maturityDt>
+          <repurchaseCollaterals>
+            <repurchaseCollateral>
+              <principalAmt>96158877.51000000</principalAmt>
+              <principalCd>USD</principalCd>
+              <collateralVal>98082055.06030000</collateralVal>
+              <collateralCd>USD</collateralCd>
+              <invstCat>UST</invstCat>
+            </repurchaseCollateral>
+          </repurchaseCollaterals>
+        </repurchaseAgrmt>
+        <securityLending>
+          <isCashCollateral>N</isCashCollateral>
+          <isNonCashCollateral>N</isNonCashCollateral>
+          <isLoanByFund>N</isLoanByFund>
+        </securityLending>
+      </invstOrSec>
+      <invstOrSec>
+        <name>U.S. Treasury Bills</name>
+        <lei>254900HROIFWPRGM1V77</lei>
+        <title>U.S. Treasury Bills</title>
+        <cusip>912797RF6</cusip>
+        <identifiers>
+          <isin value="US912797RF64"/>
+        </identifiers>
+        <balance>250000000.00000000</balance>
+        <units>PA</units>
+        <curCd>USD</curCd>
+        <valUSD>249044062.50000000</valUSD>
+        <pctVal>0.626168579740</pctVal>
+        <payoffProfile>Long</payoffProfile>
+        <assetCat>STIV</assetCat>
+        <issuerCat>UST</issuerCat>
+        <invCountry>US</invCountry>
+        <isRestrictedSec>N</isRestrictedSec>
+
+        <fairValLevel>2</fairValLevel>
+        <debtSec>
+          <maturityDt>2026-07-09</maturityDt>
+          <couponKind>None</couponKind>
+          <annualizedRt>0.00000000</annualizedRt>
+          <isDefault>N</isDefault>
+          <areIntrstPmntsInArrs>N</areIntrstPmntsInArrs>
+          <isPaidKind>N</isPaidKind>
+        </debtSec>
+        <securityLending>
+          <isCashCollateral>N</isCashCollateral>
+          <isNonCashCollateral>N</isNonCashCollateral>
+          <isLoanByFund>N</isLoanByFund>
+        </securityLending>
+      </invstOrSec>
+      <invstOrSec>
+        <name>N/A</name>
+        <lei>N/A</lei>
+        <title>Nasdaq 100 E-Mini Index</title>
+        <cusip>N/A</cusip>
+        <identifiers>
+          <other otherDesc="Inhouse Sedol" value="NQM6IDX"/>
+          <other otherDesc="Future Ticker" value="NQM6 Index"/>
+        </identifiers>
+        <balance>9211.00000000</balance>
+        <units>NC</units>
+        <curCd>USD</curCd>
+        <valUSD>1037932387.46000000</valUSD>
+        <pctVal>2.609661288038</pctVal>
+        <payoffProfile>N/A</payoffProfile>
+        <assetCat>DE</assetCat>
+        <issuerConditional desc="Future" issuerCat="OTHER"/>
+        <invCountry>US</invCountry>
+        <isRestrictedSec>N</isRestrictedSec>
+
+        <fairValLevel>1</fairValLevel>
+        <derivativeInfo>
+          <futrDeriv derivCat="FUT">
+            <counterparties>
+              <counterpartyName>CME Clearing House</counterpartyName>
+              <counterpartyLei>LCZ7XYGSLJUHFXXNXD88</counterpartyLei>
+            </counterparties>
+            <payOffProf>Long</payOffProf>
+            <descRefInstrmnt>
+              <indexBasketInfo>
+                <indexName>Nasdaq 100 E-Mini Index</indexName>
+                <indexIdentifier>US6311011026</indexIdentifier>
+              </indexBasketInfo>
+            </descRefInstrmnt>
+            <expDate>2026-06-18</expDate>
+            <notionalAmt>5601255155.00000000</notionalAmt>
+            <curCd>USD</curCd>
+            <unrealizedAppr>1037932387.46000000</unrealizedAppr>
+          </futrDeriv>
+        </derivativeInfo>
+        <securityLending>
+          <isCashCollateral>N</isCashCollateral>
+          <isNonCashCollateral>N</isNonCashCollateral>
+          <isLoanByFund>N</isLoanByFund>
+        </securityLending>
+      </invstOrSec>
+      <invstOrSec>
+        <name>N/A</name>
+        <lei>N/A</lei>
+        <title>Total Return Swap</title>
+        <cusip>N/A</cusip>
+        <identifiers>
+          <other otherDesc="Inhouse Asset ID" value="TQQQ_NDX_BAR"/>
+        </identifiers>
+        <balance>337270.00000000</balance>
+        <units>NC</units>
+        <curCd>USD</curCd>
+        <valUSD>1551180356.81999993</valUSD>
+        <pctVal>3.900114667262</pctVal>
+        <payoffProfile>N/A</payoffProfile>
+        <assetCat>DE</assetCat>
+        <issuerConditional desc="Total Return Swap" issuerCat="OTHER"/>
+        <invCountry>US</invCountry>
+        <isRestrictedSec>N</isRestrictedSec>
+
+        <fairValLevel>2</fairValLevel>
+        <derivativeInfo>
+          <swapDeriv derivCat="SWP">
+            <counterparties>
+              <counterpartyName>Barclays Bank plc</counterpartyName>
+              <counterpartyLei>G5GSEF7VJP5I7OUK5573</counterpartyLei>
+            </counterparties>
+            <descRefInstrmnt>
+              <indexBasketInfo>
+                <indexName>NASDAQ-100 Index</indexName>
+                <indexIdentifier>NDX</indexIdentifier>
+              </indexBasketInfo>
+            </descRefInstrmnt>
+            <swapFlag>Y</swapFlag>
+            <floatingRecDesc curCd="USD" fixedOrFloating="Floating" floatingRtIndex="N/A" floatingRtSpread="0.00000000" pmntAmt="0.00000000">
+              <rtResetTenors>
+                <rtResetTenor rateTenor="Day" rateTenorUnit="1" resetDt="Day" resetDtUnit="1"/>
+              </rtResetTenors>
+            </floatingRecDesc>
+            <floatingPmntDesc curCd="USD" fixedOrFloating="Floating" floatingRtIndex="FEDL01" floatingRtSpread="0.95000000" pmntAmt="0.00000000">
+              <rtResetTenors>
+                <rtResetTenor rateTenor="Day" rateTenorUnit="1" resetDt="Day" resetDtUnit="1"/>
+              </rtResetTenors>
+            </floatingPmntDesc>
+            <terminationDt>2027-11-04</terminationDt>
+            <upfrontPmnt>0.00000000</upfrontPmnt>
+            <pmntCurCd>USD</pmntCurCd>
+            <upfrontRcpt>0.00000000</upfrontRcpt>
+            <rcptCurCd>USD</rcptCurCd>
+            <notionalAmt>10230471618.60000038</notionalAmt>
+            <curCd>USD</curCd>
+            <unrealizedAppr>1551180356.81999993</unrealizedAppr>
+          </swapDeriv>
+        </derivativeInfo>
+        <securityLending>
+          <isCashCollateral>N</isCashCollateral>
+          <isNonCashCollateral>N</isNonCashCollateral>
+          <isLoanByFund>N</isLoanByFund>
+        </securityLending>
+      </invstOrSec>
+      <invstOrSec>
+        <name>N/A</name>
+        <lei>N/A</lei>
+        <title>Total Return Swap</title>
+        <cusip>N/A</cusip>
+        <identifiers>
+          <other otherDesc="Inhouse Asset ID" value="TQQQ_NDX_BNP"/>
+        </identifiers>
+        <balance>384163.00000000</balance>
+        <units>NC</units>
+        <curCd>USD</curCd>
+        <valUSD>1524260614.27999997</valUSD>
+        <pctVal>3.832430672775</pctVal>
+        <payoffProfile>N/A</payoffProfile>
+        <assetCat>DE</assetCat>
+        <issuerConditional desc="Total Return Swap" issuerCat="OTHER"/>
+        <invCountry>US</invCountry>
+        <isRestrictedSec>N</isRestrictedSec>
+
+        <fairValLevel>2</fairValLevel>
+        <derivativeInfo>
+          <swapDeriv derivCat="SWP">
+            <counterparties>
+              <counterpartyName>BNP Paribas SA</counterpartyName>
+              <counterpartyLei>R0MUWSFPU8MPRO8K5P83</counterpartyLei>
+            </counterparties>
+            <descRefInstrmnt>
+              <indexBasketInfo>
+                <indexName>NASDAQ-100 Index</indexName>
+                <indexIdentifier>NDX</indexIdentifier>
+              </indexBasketInfo>
+            </descRefInstrmnt>
+            <swapFlag>Y</swapFlag>
+            <floatingRecDesc curCd="USD" fixedOrFloating="Floating" floatingRtIndex="N/A" floatingRtSpread="0.00000000" pmntAmt="0.00000000">
+              <rtResetTenors>
+                <rtResetTenor rateTenor="Day" rateTenorUnit="1" resetDt="Day" resetDtUnit="1"/>
+              </rtResetTenors>
+            </floatingRecDesc>
+            <floatingPmntDesc curCd="USD" fixedOrFloating="Floating" floatingRtIndex="FEDL01" floatingRtSpread="1.05000000" pmntAmt="0.00000000">
+              <rtResetTenors>
+                <rtResetTenor rateTenor="Day" rateTenorUnit="1" resetDt="Day" resetDtUnit="1"/>
+              </rtResetTenors>
+            </floatingPmntDesc>
+            <terminationDt>2027-03-08</terminationDt>
+            <upfrontPmnt>0.00000000</upfrontPmnt>
+            <pmntCurCd>USD</pmntCurCd>
+            <upfrontRcpt>0.00000000</upfrontRcpt>
+            <rcptCurCd>USD</rcptCurCd>
+            <notionalAmt>11652885428.33999634</notionalAmt>
+            <curCd>USD</curCd>
+            <unrealizedAppr>1524260614.27999997</unrealizedAppr>
+          </swapDeriv>
+        </derivativeInfo>
+        <securityLending>
+          <isCashCollateral>N</isCashCollateral>
+          <isNonCashCollateral>N</isNonCashCollateral>
+          <isLoanByFund>N</isLoanByFund>
+        </securityLending>
+      </invstOrSec>
+      <invstOrSec>
+        <name>N/A</name>
+        <lei>N/A</lei>
+        <title>Total Return Swap</title>
+        <cusip>N/A</cusip>
+        <identifiers>
+          <other otherDesc="Inhouse Asset ID" value="TQQQ_NDX_BOA"/>
+        </identifiers>
+        <balance>342128.00000000</balance>
+        <units>NC</units>
+        <curCd>USD</curCd>
+        <valUSD>1500133138.95000029</valUSD>
+        <pctVal>3.771767243145</pctVal>
+        <payoffProfile>N/A</payoffProfile>
+        <assetCat>DE</assetCat>
+        <issuerConditional desc="Total Return Swap" issuerCat="OTHER"/>
+        <invCountry>US</invCountry>
+        <isRestrictedSec>N</isRestrictedSec>
+
+        <fairValLevel>2</fairValLevel>
+        <derivativeInfo>
+          <swapDeriv derivCat="SWP">
+            <counterparties>
+              <counterpartyName>Bank of America NA</counterpartyName>
+              <counterpartyLei>B4TYDEB6GKMZO031MB27</counterpartyLei>
+            </counterparties>
+            <descRefInstrmnt>
+              <indexBasketInfo>
+                <indexName>NASDAQ-100 Index</indexName>
+                <indexIdentifier>NDX</indexIdentifier>
+              </indexBasketInfo>
+            </descRefInstrmnt>
+            <swapFlag>Y</swapFlag>
+            <floatingRecDesc curCd="USD" fixedOrFloating="Floating" floatingRtIndex="N/A" floatingRtSpread="0.00000000" pmntAmt="0.00000000">
+              <rtResetTenors>
+                <rtResetTenor rateTenor="Day" rateTenorUnit="1" resetDt="Day" resetDtUnit="1"/>
+              </rtResetTenors>
+            </floatingRecDesc>
+            <floatingPmntDesc curCd="USD" fixedOrFloating="Floating" floatingRtIndex="FEDL01" floatingRtSpread="1.15000000" pmntAmt="0.00000000">
+              <rtResetTenors>
+                <rtResetTenor rateTenor="Day" rateTenorUnit="1" resetDt="Day" resetDtUnit="1"/>
+              </rtResetTenors>
+            </floatingPmntDesc>
+            <terminationDt>2027-11-04</terminationDt>
+            <upfrontPmnt>0.00000000</upfrontPmnt>
+            <pmntCurCd>USD</pmntCurCd>
+            <upfrontRcpt>0.00000000</upfrontRcpt>
+            <rcptCurCd>USD</rcptCurCd>
+            <notionalAmt>10817570317.49999619</notionalAmt>
+            <curCd>USD</curCd>
+            <unrealizedAppr>1500133138.95000029</unrealizedAppr>
+          </swapDeriv>
+        </derivativeInfo>
+        <securityLending>
+          <isCashCollateral>N</isCashCollateral>
+          <isNonCashCollateral>N</isNonCashCollateral>
+          <isLoanByFund>N</isLoanByFund>
+        </securityLending>
+      </invstOrSec>
+      <invstOrSec>
+        <name>N/A</name>
+        <lei>N/A</lei>
+        <title>Total Return Swap</title>
+        <cusip>N/A</cusip>
+        <identifiers>
+          <other otherDesc="Inhouse Asset ID" value="TQQQ_NDX_CIT"/>
+        </identifiers>
+        <balance>399471.00000000</balance>
+        <units>NC</units>
+        <curCd>USD</curCd>
+        <valUSD>1639668284.81000042</valUSD>
+        <pctVal>4.122598831861</pctVal>
+        <payoffProfile>N/A</payoffProfile>
+        <assetCat>DE</assetCat>
+        <issuerConditional desc="Total Return Swap" issuerCat="OTHER"/>
+        <invCountry>US</invCountry>
+        <isRestrictedSec>N</isRestrictedSec>
+
+        <fairValLevel>2</fairValLevel>
+        <derivativeInfo>
+          <swapDeriv derivCat="SWP">
+            <counterparties>
+              <counterpartyName>Citibank NA</counterpartyName>
+              <counterpartyLei>E57ODZWZ7FF32TWEFA76</counterpartyLei>
+            </counterparties>
+            <descRefInstrmnt>
+              <indexBasketInfo>
+                <indexName>NASDAQ-100 Index</indexName>
+                <indexIdentifier>NDX</indexIdentifier>
+              </indexBasketInfo>
+            </descRefInstrmnt>
+            <swapFlag>Y</swapFlag>
+            <floatingRecDesc curCd="USD" fixedOrFloating="Floating" floatingRtIndex="N/A" floatingRtSpread="0.00000000" pmntAmt="0.00000000">
+              <rtResetTenors>
+                <rtResetTenor rateTenor="Day" rateTenorUnit="1" resetDt="Day" resetDtUnit="1"/>
+              </rtResetTenors>
+            </floatingRecDesc>
+            <floatingPmntDesc curCd="USD" fixedOrFloating="Floating" floatingRtIndex="FEDL01" floatingRtSpread="1.25000000" pmntAmt="0.00000000">
+              <rtResetTenors>
+                <rtResetTenor rateTenor="Day" rateTenorUnit="1" resetDt="Day" resetDtUnit="1"/>
+              </rtResetTenors>
+            </floatingPmntDesc>
+            <terminationDt>2027-03-08</terminationDt>
+            <upfrontPmnt>0.00000000</upfrontPmnt>
+            <pmntCurCd>USD</pmntCurCd>
+            <upfrontRcpt>0.00000000</upfrontRcpt>
+            <rcptCurCd>USD</rcptCurCd>
+            <notionalAmt>12616904221.92000008</notionalAmt>
+            <curCd>USD</curCd>
+            <unrealizedAppr>1639668284.81000042</unrealizedAppr>
+          </swapDeriv>
+        </derivativeInfo>
+        <securityLending>
+          <isCashCollateral>N</isCashCollateral>
+          <isNonCashCollateral>N</isNonCashCollateral>
+          <isLoanByFund>N</isLoanByFund>
+        </securityLending>
+      </invstOrSec>
+      <invstOrSec>
+        <name>N/A</name>
+        <lei>N/A</lei>
+        <title>Total Return Swap</title>
+        <cusip>N/A</cusip>
+        <identifiers>
+          <other otherDesc="Inhouse Asset ID" value="TQQQ_NDX_GOL"/>
+        </identifiers>
+        <balance>327917.00000000</balance>
+        <units>NC</units>
+        <curCd>USD</curCd>
+        <valUSD>1503376400.06999969</valUSD>
+        <pctVal>3.779921736727</pctVal>
+        <payoffProfile>N/A</payoffProfile>
+        <assetCat>DE</assetCat>
+        <issuerConditional desc="Total Return Swap" issuerCat="OTHER"/>
+        <invCountry>US</invCountry>
+        <isRestrictedSec>N</isRestrictedSec>
+
+        <fairValLevel>2</fairValLevel>
+        <derivativeInfo>
+          <swapDeriv derivCat="SWP">
+            <counterparties>
+              <counterpartyName>Goldman Sachs International</counterpartyName>
+              <counterpartyLei>W22LROWP2IHZNBB6K528</counterpartyLei>
+            </counterparties>
+            <descRefInstrmnt>
+              <indexBasketInfo>
+                <indexName>NASDAQ-100 Index</indexName>
+                <indexIdentifier>NDX</indexIdentifier>
+              </indexBasketInfo>
+            </descRefInstrmnt>
+            <swapFlag>Y</swapFlag>
+            <floatingRecDesc curCd="USD" fixedOrFloating="Floating" floatingRtIndex="N/A" floatingRtSpread="0.00000000" pmntAmt="0.00000000">
+              <rtResetTenors>
+                <rtResetTenor rateTenor="Day" rateTenorUnit="1" resetDt="Day" resetDtUnit="1"/>
+              </rtResetTenors>
+            </floatingRecDesc>
+            <floatingPmntDesc curCd="USD" fixedOrFloating="Floating" floatingRtIndex="FEDL01" floatingRtSpread="1.00000000" pmntAmt="0.00000000">
+              <rtResetTenors>
+                <rtResetTenor rateTenor="Day" rateTenorUnit="1" resetDt="Day" resetDtUnit="1"/>
+              </rtResetTenors>
+            </floatingPmntDesc>
+            <terminationDt>2027-11-08</terminationDt>
+            <upfrontPmnt>0.00000000</upfrontPmnt>
+            <pmntCurCd>USD</pmntCurCd>
+            <upfrontRcpt>0.00000000</upfrontRcpt>
+            <rcptCurCd>USD</rcptCurCd>
+            <notionalAmt>9946765386.04999542</notionalAmt>
+            <curCd>USD</curCd>
+            <unrealizedAppr>1503376400.06999969</unrealizedAppr>
+          </swapDeriv>
+        </derivativeInfo>
+        <securityLending>
+          <isCashCollateral>N</isCashCollateral>
+          <isNonCashCollateral>N</isNonCashCollateral>
+          <isLoanByFund>N</isLoanByFund>
+        </securityLending>
+      </invstOrSec>
+      <invstOrSec>
+        <name>N/A</name>
+        <lei>N/A</lei>
+        <title>Total Return Swap</title>
+        <cusip>N/A</cusip>
+        <identifiers>
+          <other otherDesc="Inhouse Asset ID" value="TQQQ_NDX_JPM"/>
+        </identifiers>
+        <balance>378319.00000000</balance>
+        <units>NC</units>
+        <curCd>USD</curCd>
+        <valUSD>1286133490.24000001</valUSD>
+        <pctVal>3.233710423993</pctVal>
+        <payoffProfile>N/A</payoffProfile>
+        <assetCat>DE</assetCat>
+        <issuerConditional desc="Total Return Swap" issuerCat="OTHER"/>
+        <invCountry>US</invCountry>
+        <isRestrictedSec>N</isRestrictedSec>
+
+        <fairValLevel>2</fairValLevel>
+        <derivativeInfo>
+          <swapDeriv derivCat="SWP">
+            <counterparties>
+              <counterpartyName>J.P. Morgan Securities</counterpartyName>
+              <counterpartyLei>7H6GLXDRUGQFU57RNE97</counterpartyLei>
+            </counterparties>
+            <descRefInstrmnt>
+              <indexBasketInfo>
+                <indexName>NASDAQ-100 Index</indexName>
+                <indexIdentifier>NDX</indexIdentifier>
+              </indexBasketInfo>
+            </descRefInstrmnt>
+            <swapFlag>Y</swapFlag>
+            <floatingRecDesc curCd="USD" fixedOrFloating="Floating" floatingRtIndex="N/A" floatingRtSpread="0.00000000" pmntAmt="0.00000000">
+              <rtResetTenors>
+                <rtResetTenor rateTenor="Day" rateTenorUnit="1" resetDt="Day" resetDtUnit="1"/>
+              </rtResetTenors>
+            </floatingRecDesc>
+            <floatingPmntDesc curCd="USD" fixedOrFloating="Floating" floatingRtIndex="FEDL01" floatingRtSpread="0.85000000" pmntAmt="0.00000000">
+              <rtResetTenors>
+                <rtResetTenor rateTenor="Day" rateTenorUnit="1" resetDt="Day" resetDtUnit="1"/>
+              </rtResetTenors>
+            </floatingPmntDesc>
+            <terminationDt>2027-11-08</terminationDt>
+            <upfrontPmnt>0.00000000</upfrontPmnt>
+            <pmntCurCd>USD</pmntCurCd>
+            <upfrontRcpt>0.00000000</upfrontRcpt>
+            <rcptCurCd>USD</rcptCurCd>
+            <notionalAmt>11475618324.42000008</notionalAmt>
+            <curCd>USD</curCd>
+            <unrealizedAppr>1286133490.24000001</unrealizedAppr>
+          </swapDeriv>
+        </derivativeInfo>
+        <securityLending>
+          <isCashCollateral>N</isCashCollateral>
+          <isNonCashCollateral>N</isNonCashCollateral>
+          <isLoanByFund>N</isLoanByFund>
+        </securityLending>
+      </invstOrSec>
+    </invstOrSecs>
+    <explntrNotes>
+      <explntrNote note="Each Repurchase Agreement was fully collateralized which had an aggregate value at the Trust level." noteItem="C.10.f.iii"/>
+    </explntrNotes>
+    <signature>
+      <ncom:dateSigned>2026-06-30</ncom:dateSigned>
+      <ncom:nameOfApplicant>ProShares Trust</ncom:nameOfApplicant>
+      <ncom:signature>Maria Clem Sell</ncom:signature>
+      <ncom:signerName>Maria Clem Sell</ncom:signerName>
+      <ncom:title>Treasurer</ncom:title>
+    </signature>
+  </formData>
+</edgarSubmission>
