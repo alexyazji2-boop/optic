@@ -7150,19 +7150,6 @@ async def _with_linked_portfolio(request: Request, history: List[Dict[str, Any]]
     return dict({"brokerage_portfolio": block, "brokerage_linked": True}, **(context or {}))
 
 
-def _model_trial(request: Request, payload: Dict[str, Any]) -> Optional[str]:
-    """The model the owner asked this one answer to use (`model_trial`), or None for PULSE_MODEL. Only an admin
-    account may name one, and only from ai.TRIAL_MODELS: for every other reader the field does nothing."""
-    wanted = str(payload.get("model_trial") or "")
-    if wanted not in ai.TRIAL_MODELS:
-        return None
-    try:
-        user = auth_deps.current_user(request)
-    except (sqlite3.Error, OSError):
-        return None
-    return wanted if auth_admin.is_admin(user) else None
-
-
 @app.post("/api/chat")
 async def chat(request: Request,
                payload: Dict[str, Any] = Body(...)) -> StreamingResponse:
@@ -7206,8 +7193,7 @@ async def chat(request: Request,
     return StreamingResponse(
         ai.stream_chat(history, context=context, use_web=use_web,
                        attachments=attachments, persona=persona, mode=mode,
-                       horizon=horizon, toolbox=_milo_toolbox(request, context),
-                       model=_model_trial(request, payload)),
+                       horizon=horizon, toolbox=_milo_toolbox(request, context)),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )

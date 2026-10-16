@@ -364,8 +364,7 @@ def test_both_of_pulses_routes_record_what_they_used():
     src = (ROOT / "app/ai.py").read_text()
     chat = src[src.index("async def stream_chat("):src.index("async def deep_research(")]
     research = src[src.index("async def deep_research("):]
-    # The model of this answer: PULSE_MODEL, or the owner's trial model (2026-10-16).
-    assert '_streamed("pulse", final, kwargs.get("model") or PULSE_MODEL' in chat
+    assert '_streamed("pulse", final, PULSE_MODEL)' in chat
     assert '_streamed("research", final, PULSE_MODEL)' in research
 
 

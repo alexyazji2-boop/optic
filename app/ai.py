@@ -51,10 +51,11 @@ log = logging.getLogger(__name__)
 # Every call below passes one of these two, and `tests/test_pulse_model.py`
 # fails on a literal anywhere else, so a switch is one of these lines.
 MODEL = "claude-opus-5-5"
-PULSE_MODEL = "claude-sonnet-5"
-# Models the owner may try Milo on, one answer at a time, before PULSE_MODEL changes (2026-10-16: "move Milo
-# to Sonnet 5.5 if it provides better answers"). Only an admin account's request can name one (main.chat).
-TRIAL_MODELS = ("claude-sonnet-5-5",)
+# Sonnet 5.5 from Sonnet 5 on 2026-10-16, at the owner's word ("move Milo to Sonnet 5.5 if it provides
+# better answers"): the same 14 questions asked of both on the live site, through the owner's account, were
+# judged better on 9, worse on 2 and even on 3 against Optic's own figures, at the same list price and about
+# 29% less wait (docs/milo/reasoning-eval/LIVE-MODEL-TRIAL.md). Sonnet 5 is a legacy model.
+PULSE_MODEL = "claude-sonnet-5-5"
 
 # Server-side refusal fallback: on a policy decline the API re-runs the request
 # on Anthropic's recommended fallback model inside the same call, so a false
@@ -3198,7 +3199,6 @@ async def stream_chat(
     mode: str = knowledge.DEFAULT_MODE,
     horizon: str = horizon_mod.DEFAULT,
     toolbox: Optional[Any] = None,
-    model: Optional[str] = None,
 ) -> AsyncGenerator[str, None]:
     client = _client()
     if client is None:
@@ -3221,9 +3221,6 @@ async def stream_chat(
     if kwargs is None:
         yield _sse("error", {"message": "No message to send."})
         return
-    if model in TRIAL_MODELS:
-        # The owner's model trial (main.chat checks the account): the same request on another model.
-        kwargs["model"] = model
     if meta.get("problems"):
         # Told, not swallowed: a silently dropped file makes the answer look wrong
         # for no visible reason.
@@ -3261,7 +3258,7 @@ async def stream_chat(
                         if getattr(delta, "type", "") == "text_delta":
                             yield _sse("delta", {"text": delta.text})
                 final = await stream.get_final_message()
-            _streamed("pulse", final, kwargs.get("model") or PULSE_MODEL)
+            _streamed("pulse", final, PULSE_MODEL)
             usage = getattr(final, "usage", None)
             for key in usage_sum:
                 usage_sum[key] += getattr(usage, key, None) or 0
