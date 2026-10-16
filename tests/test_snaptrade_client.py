@@ -178,6 +178,22 @@ def test_a_refused_refresh_is_typed_so_the_copy_can_still_be_read():
         p.refresh_connection("u", "s", "c1")
 
 
+def test_the_real_time_plans_refusal_means_read_now():
+    p, _ = client({("POST", "/authorizations/c1/refresh"): (403, {
+        "code": "1141", "detail": "Manual refresh not enabled on the real-time plan. "
+                                  "Data endpoints already return real-time data"})})
+    with pytest.raises(snaptrade.RefreshUnavailable) as e:
+        p.refresh_connection("u", "s", "c1")
+    assert e.value.live is True
+
+
+def test_other_refusals_of_a_refresh_stay_errors():
+    p, _ = client({("POST", "/authorizations/c1/refresh"): (400, {"code": "1012", "detail": "Bad"})})
+    with pytest.raises(ProviderError) as e:
+        p.refresh_connection("u", "s", "c1")
+    assert not isinstance(e.value, snaptrade.RefreshUnavailable)
+
+
 def test_accounts_all_maps_fields_and_skips_non_investment():
     p, _ = client({("GET", "/accounts/all"): (200, [
         {"id": "a1", "brokerage_authorization": "c1", "name": "Roth", "number": "12345678",

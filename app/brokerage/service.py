@@ -493,13 +493,16 @@ def request_refresh(user: Dict[str, Any], conn: Dict[str, Any]) -> Dict[str, Any
         return {"connection_id": conn["id"], "result": "error", "message": "Not linked."}
     try:
         prov.refresh_connection(creds["provider_user_id"], creds["secret"], conn["provider_connection_id"])
-    except RefreshUnavailable:
-        # No on-demand refresh (SnapTrade's free key, or a disabled
-        # connection): read the copy the provider already holds. Its "as of"
-        # is the broker's own time, so it is not passed off as fresh (M3, M4).
+    except RefreshUnavailable as exc:
+        # No on-demand refresh: on SnapTrade's Real-time plan (the free key)
+        # because its reads are already live, otherwise because the plan has no
+        # paid refresh or the connection is disabled. Read now either way. The
+        # "as of" is the broker's own time, so a cached copy is not passed off
+        # as fresh (M3, M4).
         out = sync_connection(user, conn, prov=prov, creds=creds)
         if out.get("result") in ("ok", "partial"):
-            out["message"] = ("The broker can't be asked for a fresh copy right now, so Optic read the "
+            out["message"] = ("Synced straight from your broker." if exc.live else
+                              "The broker can't be asked for a fresh copy right now, so Optic read the "
                               "latest copy SnapTrade holds. Its time is shown as the broker's.")
         return out
     store.set_connection(user["id"], conn["id"], last_attempt_at=db.utcnow())

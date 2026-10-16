@@ -782,6 +782,23 @@ def test_a_refresh_the_plan_refuses_reads_the_providers_copy_instead():
     assert c.post("/api/brokerage/connections/{}/sync".format(conn["id"])).status_code == 429
 
 
+def test_on_the_real_time_plan_sync_now_reads_the_broker_straight_away():
+    c, user = reader()
+    paid(user)
+    link(c)
+    prov = service.provider()
+
+    def live(u, s, cid):
+        exc = RefreshUnavailable("SnapTrade returned 403 (1141: Manual refresh not enabled on the real-time plan)")
+        exc.live = True
+        raise exc
+    prov.refresh_connection = live
+    conn = store.connections(user["id"])[0]
+    r = c.post("/api/brokerage/connections/{}/sync".format(conn["id"]))
+    del prov.refresh_connection
+    assert r.status_code == 200 and r.json() == dict(r.json(), result="ok", message="Synced straight from your broker.")
+
+
 def test_purge_treats_not_found_as_done_and_stops_retrying_forever(monkeypatch):
     from app.brokerage.providers import NotFoundAtProvider
     store.queue_purge("sandbox", "gone-user", None, "x")

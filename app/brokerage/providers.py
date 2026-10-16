@@ -42,9 +42,12 @@ class ProviderOutage(ProviderError):
 
 
 class RefreshUnavailable(ProviderError):
-    """The provider will not refresh from the broker on demand (SnapTrade's
-    402: the plan has no paid refresh, as on the free key, or the connection
-    is disabled). The copy the provider already holds can still be read."""
+    """The provider will not refresh from the broker on demand: SnapTrade's
+    402 (no paid refresh on the plan, or the connection is disabled), or its
+    403 1141 on the Real-time plan, whose reads are already live (`live`).
+    Either way the provider's data can still be read."""
+
+    live = False
 
 
 class UnsupportedBroker(ProviderError):

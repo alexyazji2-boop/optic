@@ -219,9 +219,23 @@ class SnapTradeProvider(Provider):
 
     def refresh_connection(self, provider_user_id, secret, connection_id) -> None:
         """A paid call on the Daily plan ($0.05 each, pricing page 2026-09-23).
-        Only ever made from a reader's metered "Sync now"."""
-        self._call("POST", "/authorizations/{}/refresh".format(urllib.parse.quote(connection_id, safe="")),
-                   user=self._u(provider_user_id, secret))
+        Only ever made from a reader's metered "Sync now".
+
+        On the Real-time plan, which is what the free key runs on, SnapTrade
+        refuses it with 403 1141 because its data endpoints already read the
+        broker live (seen on the first live sync, 2026-10-15). That is a
+        refusal the caller can answer by reading straight away."""
+        try:
+            self._call("POST", "/authorizations/{}/refresh".format(urllib.parse.quote(connection_id, safe="")),
+                       user=self._u(provider_user_id, secret))
+        except RefreshUnavailable:
+            raise
+        except ProviderError as exc:
+            if "SnapTrade returned 403" not in str(exc):
+                raise
+            refused = RefreshUnavailable(str(exc))
+            refused.live = "(1141:" in str(exc)
+            raise refused from None
 
     # ------------------------------------------------------------- accounts
 
