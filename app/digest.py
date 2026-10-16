@@ -38,6 +38,19 @@ MAX_EXPLANATIONS = 4
 QUIET_MOVE_PCT = 3.0
 
 
+
+def _reader_date(value) -> str:
+    """'Thu, Oct 29' for an ISO date, as the rest of the page dates a report.
+    The digest printed '(2026-10-29)' beside an Overview that says 'Oct 29'
+    (launch audit, 2026-10-16). Anything else is passed through."""
+    from datetime import date
+    text = str(value or "")
+    try:
+        d = date.fromisoformat(text[:10])
+    except ValueError:
+        return text
+    return "{}, {} {}".format(d.strftime("%a"), d.strftime("%b"), d.day)
+
 def _parse(ts: Any) -> Optional[datetime]:
     if not ts:
         return None
@@ -100,7 +113,7 @@ def compose(symbol: str, briefing: Optional[Dict[str, Any]], news: Optional[Dict
     days = news.get("days_to_earnings")
     if isinstance(days, (int, float)) and 0 <= days <= 14:
         look.append("Earnings are due in {} day{} ({}).".format(
-            int(days), "" if int(days) == 1 else "s", news.get("earnings_date") or "date on file"))
+            int(days), "" if int(days) == 1 else "s", _reader_date(news.get("earnings_date")) or "date on file"))
     for gap in (name or {}).get("not_checked") or []:
         look.append("Not checked: {}.".format(gap))
     if news.get("held"):

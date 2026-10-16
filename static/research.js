@@ -166,6 +166,13 @@
     return tile('trade', 'Is there a trade?', value, sw.why, more);
   }
 
+  /* "Nov 2" for an ISO date, as the rest of the Overview dates a report. */
+  function dayLabel(iso) {
+    return /^\d{4}-\d{2}-\d{2}$/.test(String(iso || ''))
+      ? new Date(`${iso}T12:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+      : String(iso || '');
+  }
+
   function earningsTile(er) {
     if (!er) return tile('earnings', 'What about earnings?', 'Insufficient Data', 'No earnings data.', '');
     const pre = er.pre;
@@ -191,9 +198,7 @@
       /* "Nov 2, before the open", the way the rest of the Overview dates the
        * same report ("Earnings report on Nov 2, in 17 days"). It printed
        * "Reports 2026-11-02, before open" in a 30px headline (2026-10-16). */
-      const day = /^\d{4}-\d{2}-\d{2}$/.test(String(rel.date || ''))
-        ? new Date(`${rel.date}T12:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-        : String(rel.date || '');
+      const day = dayLabel(rel.date);
       const timing = { before_open: 'before the open', after_close: 'after the close' }[rel.timing]
         || (rel.timing && rel.timing !== 'unknown' ? rel.timing.replace('_', ' ') : '');
       const when = `${day}${timing ? ', ' + timing : ''}` + (rel.confirmed ? '' : ' (estimated)');
@@ -216,7 +221,7 @@
       const rec = (post.release || {}).recency || {};
       const lead = rec.state === 'probably_missing' ? `${rec.text} ` : '';
       return tile('earnings', 'What about earnings?', q.grade ? `Report quality ${q.grade}` : 'Report not graded',
-        `${lead}Reported ${post.release.date}. ${(post.reaction || {}).text || ''}`, more);
+        `${lead}Reported ${dayLabel(post.release.date)}. ${(post.reaction || {}).text || ''}`, more);
     }
     const reason = (pre || post || {}).reason || er.reason || 'No earnings view.';
     return tile('earnings', 'What about earnings?', 'Insufficient Data', reason, '');

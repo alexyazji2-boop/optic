@@ -17279,6 +17279,11 @@ function ovBusinessRead(d) {
 
 /* How the share price has behaved: the year, the last three months, and the
  * distance from the year's highest close. About the stock, not the business. */
+/** Whether the Dossier's symbol is an index (^GSPC), not a fund or a stock. */
+function ovIsIndex() {
+  return /^\^/.test(String(STATE.ticker || ''));
+}
+
 function ovPriceRead(d) {
   const { dates, close } = overviewSeries(d);
   if (close.length < 20) return null;
@@ -17288,13 +17293,16 @@ function ovPriceRead(d) {
   const m3 = close.length > 64 ? (last / close[close.length - 64] - 1) * 100 : null;
   const off = (last / Math.max(...close) - 1) * 100;
   const yrWords = Math.abs(yr) < 2 ? `little changed ${span}` : `${yr >= 0 ? 'up' : 'down'} ${fmt(Math.abs(yr), 0)}% ${span}`;
+  /* An index has a level, not a share price (^GSPC read "The share price is
+   * up 16%" and "the fund's price", 2026-10-16). */
+  const subj = ovIsIndex() ? 'The index' : 'The share price';
   let text;
   if (Number.isFinite(m3) && yr >= 5 && m3 <= -5) {
-    text = `The share price is ${yrWords}, but has fallen ${fmt(Math.abs(m3), 0)}% over the last three months.`;
+    text = `${subj} is ${yrWords}, but has fallen ${fmt(Math.abs(m3), 0)}% over the last three months.`;
   } else if (Number.isFinite(m3) && yr <= -5 && m3 >= 5) {
-    text = `The share price is ${yrWords}, but has risen ${fmt(m3, 0)}% over the last three months.`;
+    text = `${subj} is ${yrWords}, but has risen ${fmt(m3, 0)}% over the last three months.`;
   } else {
-    text = `The share price is ${yrWords}${off > -3 ? ', close to its highest close of that period'
+    text = `${subj} is ${yrWords}${off > -3 ? ', close to its highest close of that period'
       : `, ${fmt(Math.abs(off), 0)}% below its highest close`}.`;
   }
   const evidence = [[`Change ${span}`, fmtPct(yr, 1)]];
@@ -17752,7 +17760,8 @@ function ovTakeawaysHTML(d, biz, price, factors) {
       <p class="ov-take-kind">The share price</p>
       <p class="ov-take-text">${esc(price.text)}</p>
       <p class="ov-take-why">${price.why ? esc(price.why) + ' ' : ''}${symbolIsFund(STATE.ticker)
-    ? 'This describes the fund’s price, not the businesses it holds.' : 'This describes the stock, not the business.'}</p>
+    ? (ovIsIndex() ? 'This describes the index level, not the businesses in it.'
+      : 'This describes the fund’s price, not the businesses it holds.') : 'This describes the stock, not the business.'}</p>
       ${ovEvidenceHTML(price.evidence, `Daily closes through ${price.through}. Source: ${priceSourceName(d)}.`, 'chart', 'Open the chart')}
     </li>`);
   }
