@@ -572,8 +572,11 @@ function bkwPerformanceHTML(d) {
     <div class="panel"><h2>${hg('Income and costs')}</h2>
       <p class="bkw-line">Dividends ${bkSigned(inc.dividends, d.currency || 'USD')}</p>
       <p class="bkw-line">Interest ${bkSigned(inc.interest, d.currency || 'USD')}</p>
-      <p class="bkw-line">Fees paid ${esc(bkMoney(Math.abs(Number(inc.fees || 0)), d.currency || 'USD'))}</p>
-      <p class="bkw-line">Taxes withheld ${esc(bkMoney(Math.abs(Number(inc.taxes || 0)), d.currency || 'USD'))}</p>
+      ${/* A figure the broker did not supply says so: Number(undefined || 0)
+           printed $0.00, the same as a broker reporting no fees (launch audit,
+           2026-10-16). bkMoney already says "Not supplied" for a missing one. */''}
+      <p class="bkw-line">Fees paid ${esc(bkMoney(inc.fees === null || inc.fees === undefined ? null : Math.abs(Number(inc.fees)), d.currency || 'USD'))}</p>
+      <p class="bkw-line">Taxes withheld ${esc(bkMoney(inc.taxes === null || inc.taxes === undefined ? null : Math.abs(Number(inc.taxes)), d.currency || 'USD'))}</p>
     </div>
   </div>
   <div class="panel span2"><h2>${hg('What drove it')}</h2>
