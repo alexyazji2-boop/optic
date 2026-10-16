@@ -410,3 +410,32 @@ def test_milo_gets_each_stocks_industry_and_the_rule_about_sector_names(monkeypa
     assert "Energy means oil, gas and coal" in block["calculated"]["classification"]
     assert "Bloom Energy is filed under Industrials" in ai.FORMAT_PROMPT
     assert "check every holding's name and industry" in ai.FORMAT_PROMPT
+
+
+def test_value_now_reprices_holdings_at_quotes_and_keeps_cash_options_and_bar_closes():
+    """The owner asked for the portfolio to update in real time (2026-10-16): the tile showed the previous
+    evening's broker total through a -2.5% session."""
+    held = [{"symbol": "AAA", "kind": "equity", "quantity": 10, "value_usd": 1000.0, "currency": "USD"},
+            {"symbol": "BBB", "kind": "etf", "quantity": 5, "value_usd": 500.0, "currency": "USD"},
+            {"symbol": "CCC", "kind": "equity", "quantity": 2, "value_usd": 200.0, "currency": "USD"}]
+    quotes = {"AAA": {"price": 95.0, "price_time": "2026-10-16T16:29:00Z"},
+              "BBB": {"price": 102.0, "as_of": "2026-10-16T16:28:00Z"},
+              "CCC": {"price": 90.0, "price_source": "daily_bar"}}
+    totals = {"combined_usd": {"value": 1900.0}}      # 1,700 of holdings, plus cash and options
+    v = workspace.value_now(held, quotes, totals)
+    # AAA 1,000 -> 950, BBB 500 -> 510; CCC's bar close is not "now", so it stays at 200.
+    assert v["available"] and v["value"] == 1860.0 and v["change_from_broker"] == -40.0
+    assert v["kept_at_broker"] == ["CCC"] and v["priced"] == ["AAA", "BBB"]
+    assert v["quotes_newest"] == "2026-10-16T16:29:00Z" and v["broker_value"] == 1900.0
+    assert workspace.value_now(held, {}, totals)["available"] is False
+    assert workspace.value_now(held, quotes, {"by_currency": {}})["available"] is False
+
+
+def test_the_overview_shows_value_now_and_refreshes_while_the_market_is_open():
+    import os
+    src = open(os.path.join(os.path.dirname(__file__), "..", "static", "brokerage.js"), encoding="utf-8").read()
+    assert "k: 'Value now'" in src and "The broker's own total is" in src
+    assert "if (sec === 'overview') bkwScheduleRefresh();" in src
+    body = src[src.index("function bkwScheduleRefresh() {"):src.index("async function bkwLoadBriefing() {")]
+    assert "isTapeLiveET()" in body and "document.hidden" in body and "bkwWantKey('overview') !== want" in body
+    assert "addEventListener('visibilitychange'" in body

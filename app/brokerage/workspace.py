@@ -196,6 +196,49 @@ def _scope_meta(user: Dict[str, Any], core: Dict[str, Any]) -> Dict[str, Any]:
 # ------------------------------------------------------------------ overview
 
 
+PRICED_KINDS = ("equity", "etf", "fund", "crypto")
+
+
+def value_now(holdings: List[Dict[str, Any]], quotes: Dict[str, Dict[str, Any]],
+              totals: Dict[str, Any]) -> Dict[str, Any]:
+    """The portfolio at Optic's current delayed prices: the broker's own total with each quote-priced holding
+    swapped from the broker's value to quantity x the current quote. Cash and options stay as the broker last
+    reported them. Asked for by the owner (2026-10-16): the page showed only the broker's figure from the
+    previous evening's sync while the holdings fell 2.5% during the session.
+
+    A quote that is a daily bar's close (`price_source` "daily_bar", the feed's fallback when the quote
+    fails) is not "now", so that holding keeps the broker's value and is named."""
+    base = ((totals or {}).get("combined_usd") or {}).get("value")
+    if base is None:
+        return {"available": False, "reason": "The broker's total is not in one currency, so there is nothing to "
+                                              "reprice."}
+    broker_part = at_quotes = 0.0
+    priced, kept, times = [], [], []
+    for h in holdings or []:
+        sym = str(h.get("symbol") or "").upper()
+        if not sym or h.get("kind") not in PRICED_KINDS or (h.get("currency") or "USD") != "USD":
+            continue
+        q = quotes.get(sym) or {}
+        price, qty, held = q.get("price"), h.get("quantity"), h.get("value_usd")
+        if price is None or qty is None or held is None or q.get("price_source") == "daily_bar":
+            kept.append(sym)
+            continue
+        broker_part += float(held)
+        at_quotes += float(qty) * float(price)
+        priced.append(sym)
+        stamp = q.get("price_time") or q.get("as_of")
+        if stamp:
+            times.append(str(stamp))
+    if not priced:
+        return {"available": False, "reason": "No holding could be priced at a current quote just now."}
+    return {"available": True, "value": round(float(base) - broker_part + at_quotes, 2), "currency": "USD",
+            "broker_value": round(float(base), 2), "change_from_broker": round(at_quotes - broker_part, 2),
+            "priced": priced, "kept_at_broker": kept,
+            "quotes_oldest": min(times) if times else None, "quotes_newest": max(times) if times else None,
+            "basis": "Your broker's quantities at Optic's delayed quotes; cash and options as the broker last "
+                     "reported them. Quantities change only at a sync, so a trade since then is not in it."}
+
+
 def overview(user: Dict[str, Any], account_ids: Optional[List[str]] = None,
              today: Optional[date] = None) -> Dict[str, Any]:
     """What do I own, what changed, what deserves attention."""
@@ -215,6 +258,7 @@ def overview(user: Dict[str, Any], account_ids: Optional[List[str]] = None,
         "section": "overview",
         "scope": _scope_meta(user, core),
         "totals": totals,
+        "value_now": value_now(holdings, quotes, totals),
         "cash": core.get("cash"),
         "top_holdings": [{k: h.get(k) for k in ("symbol", "description", "kind", "weight_pct", "market_value",
                                                 "value_usd", "unrealized_pl", "unrealized_pct", "currency")}
@@ -230,7 +274,8 @@ def overview(user: Dict[str, Any], account_ids: Optional[List[str]] = None,
         "alerts_unseen": unseen,
         "freshness": _freshness(core, quotes),
         "notes": core.get("notes") or [],
-        "sources": {"totals": "broker", "today": "market", "observations": "optic", "upcoming": "market"},
+        "sources": {"totals": "broker", "value_now": "market", "today": "market", "observations": "optic",
+                    "upcoming": "market"},
     }
 
 

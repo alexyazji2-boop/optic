@@ -236,6 +236,7 @@ function bkwPaintPanel() {
 }
 
 function bkwAfterRender(sec) {
+  if (sec === 'overview') bkwScheduleRefresh();
   if (sec === 'performance' && BKW.data.performance) bkwMountPerformance(BKW.data.performance);
   if (typeof revealPanels === 'function') revealPanels(views.brokerage);
 }
@@ -292,6 +293,35 @@ async function bkWorkspaceLoad(force) {
   if (sec === 'holdings' && r.ok) bkwLoadExtras();
 }
 
+/* The Overview's prices refresh every minute while the regular session is open and the tab is visible:
+ * quotes are cached about 30 seconds server-side and delayed about 15 minutes at source, so a faster
+ * refresh shows nothing new. The data is replaced in place, never cleared to "Loading", and a refresh that
+ * returns after the reader changed account or section is dropped. Broker quantities only change at a sync. */
+const BKW_REFRESH_MS = 60000;
+
+function bkwScheduleRefresh() {
+  clearTimeout(BKW.refreshTimer);
+  if (typeof isTapeLiveET === 'function' && !isTapeLiveET()) return;
+  BKW.refreshTimer = setTimeout(bkwRefreshOverview, BKW_REFRESH_MS);
+}
+
+/* Coming back to a tab left open for hours refreshes at once rather than on the next tick: the owner's
+ * screenshot of 2026-10-16 came from a tab still showing the previous evening's figures. */
+if (typeof document !== 'undefined' && document.addEventListener) {
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden && STATE.view === 'brokerage' && bkwSection() === 'overview') bkwRefreshOverview();
+  });
+}
+
+async function bkwRefreshOverview() {
+  if (STATE.view !== 'brokerage' || bkwSection() !== 'overview') return;
+  if (document.hidden) { bkwScheduleRefresh(); return; }
+  const want = bkwWantKey('overview');
+  const r = await brokerFetch('GET', BKW_ENDPOINT.overview() + bkwQuery({}));
+  if (STATE.view !== 'brokerage' || bkwSection() !== 'overview' || bkwWantKey('overview') !== want) return;
+  if (r.ok) { BKW.data.overview = r.data; BKW.dataKey.overview = want; bkwPaintPanel(); } else bkwScheduleRefresh();
+}
+
 async function bkwLoadBriefing() {
   const scope = BKW.scopeKey;
   if (BKW.extra.briefing || BKW.loading.briefing === scope) return;
@@ -331,8 +361,17 @@ function bkwOverviewHTML(d) {
   const since = d.since_sync || {};
   const perf = d.performance || {};
   const pl = perf.unrealized_pl_by_currency || {};
+  /* Value now: the broker's quantities at Optic's delayed quotes, refreshed while the market is open
+   * (bkwScheduleRefresh). The broker's own total, from the last sync, sits beneath it. The owner asked for
+   * this on 2026-10-16: the tile showed the previous evening's figure through a -2.5% session. */
+  const now = d.value_now || {};
+  const brokerWhen = ((d.freshness || {}).broker || {}).oldest_broker_as_of;
+  const totalTile = now.available
+    ? { k: 'Value now', v: esc(bkMoney(now.value, 'USD')),
+        n: `${bkwSrc('market')} Your broker's quantities at Optic's delayed prices, ${esc(agoWords(now.quotes_newest) || 'just now')}. The broker's own total is ${esc(totalText)}${brokerWhen ? ` (${esc(agoWords(brokerWhen))})` : ''}${(now.kept_at_broker || []).length ? `; ${esc(now.kept_at_broker.join(', '))} kept at the broker's price` : ''}. Cash and options as last reported.` }
+    : { k: 'Total value', v: esc(totalText), n: `${bkwSrc('broker')} Securities, options at the broker's last price, and cash.` };
   const tiles = [
-    { k: 'Total value', v: esc(totalText), n: `${bkwSrc('broker')} Securities, options at the broker's last price, and cash.` },
+    totalTile,
     { k: 'Today', v: today.available ? `${bkSigned(today.total, 'USD')} ${bkwSignedPct(today.total_pct)}` : '<span class="bk-na">No quotes</span>',
       n: `${bkwSrc('market')} ${today.available ? `Quantity x price change since the previous close, quotes ${esc(agoWords(today.quotes_newest))}. Covers ${esc(bkMoney(today.covered_value_at_prev_close, 'USD'))}.` : 'Optic could not price your holdings just now.'}` },
     { k: 'Since your last sync', v: since.available ? Object.entries(since.value_change_by_currency || {}).map(([c, v]) => bkSigned(v, c)).join(' ') || '0' : '<span class="bk-na">After the next sync</span>',
