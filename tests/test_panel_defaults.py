@@ -106,5 +106,7 @@ def test_the_retirement_page_opens_its_form_and_nothing_else():
     """That page is a form, and a form whose sections are all open is a wall,
     so it used to open nothing (`roth: []`). Nothing included the section
     holding the inputs: the page loaded as seven folded headings with no field
-    in sight (2026-10-16). It opens that one section only."""
-    assert _defaults()["roth"] == ["roth ira model allocation"]
+    in sight (2026-10-16). It opens that section, and the two that answer
+    the reader's question once the form is filled: where this year's money
+    goes, and the drift from target."""
+    assert _defaults()["roth"] == ["roth ira model allocation", "where to put this year", "drift from target"]

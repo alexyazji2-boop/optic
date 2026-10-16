@@ -50115,9 +50115,12 @@ const PANELS_OPEN_BY_DEFAULT = {
   /* One, not none. The page is a form, and seven open sections were a wall,
    * so it opened with every section shut -- which shut the form too. Measured
    * 2026-10-16: the page was seven folded headings and nothing to type into.
-   * The first section holds the inputs and the model they produce; the rest
-   * stay one press away. */
-  roth: ['roth ira model allocation'],
+   * The first section holds the inputs and the model they produce. The two
+   * answers to "what do I do with this year's money" open too: where to put
+   * the contribution, and the drift from target, which is drawn only once
+   * holdings are entered (and stayed folded under the Recalculate that asked
+   * for it). The reference sections stay one press away. */
+  roth: ['roth ira model allocation', 'where to put this year', 'drift from target'],
   /* The statements, and the segment tables under them.
    *
    * 6,261px and seven sections with no index and no collapse, because this
