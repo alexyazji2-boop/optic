@@ -30358,8 +30358,10 @@ function renderMarket(d) {
       </div>
       <h3>${hg('Rotation')}</h3>
       <p style="color:var(--ink-2);font-size:var(--t-body);margin:0">${gloss(s.rotation_note || '')}</p>
-      ${(s.suggested_pair || {}).long ? `<div class="callout info">Cleanest expression right now:
-        <strong>long ${esc(s.suggested_pair.long)} / short ${esc(s.suggested_pair.short)}</strong>. ${esc(s.suggested_pair.note)}</div>` : ''}
+      ${/* A comparison, not an order: it read "Cleanest expression right now:
+         long XLE / short XLI" under a "Not a recommendation" banner. */''}
+      ${(s.suggested_pair || {}).long ? `<div class="callout info">Strongest against weakest right now:
+        <strong>${esc(s.suggested_pair.long)}</strong> against <strong>${esc(s.suggested_pair.short)}</strong>. ${esc(s.suggested_pair.note)}</div>` : ''}
     </div>
     ${evc.note ? `<div class="panel">
       <h2>${hg('Equal-weight vs cap-weight (RSP / SPY)')} <span class="th-plain">· daily bars</span></h2>

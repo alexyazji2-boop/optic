@@ -523,21 +523,31 @@ def analyse(provider) -> Dict[str, Any]:
     breadth_ratio = next((r for r in ratio_rows if r["name"] == "Russell / S&P"), None)
     if breadth_ratio and breadth_ratio.get("chg_20d") is not None:
         if breadth_ratio["chg_20d"] < -3:
-            notes.append("Small caps lagging badly. Rally is narrow, be selective")
+            notes.append("Small caps lagging badly: the rally is narrow")
         elif breadth_ratio["chg_20d"] > 3:
             notes.append("Small caps leading. Broad participation supports breakouts")
 
     score = float(np.clip(score, -100, 100))
+    # Described, not instructed (launch audit, 2026-10-16). These read "Favor
+    # puts, hedges, and premium selling", "cut size" and "Trade the setup"
+    # directly under the panel's own "Not a recommendation ... not advice to
+    # change your positioning". The regime and what it usually goes with stay;
+    # the instruction to the reader does not.
     if score >= 35:
-        regime, stance = "risk-on", "Favor long-delta swings and breakout continuation."
+        regime, stance = "risk-on", ("The backdrop leans risk-on: the kind of tape in which long positions "
+                                     "and breakouts usually have the market behind them.")
     elif score >= 12:
-        regime, stance = "mildly risk-on", "Long bias, but demand confirmation before sizing up."
+        regime, stance = "mildly risk-on", ("A mild lean to risk-on: supportive, but not strong enough on its own "
+                                            "to carry a weak setup.")
     elif score <= -35:
-        regime, stance = "risk-off", "Favor puts, hedges, and premium selling into fear; avoid breakout chasing."
+        regime, stance = "risk-off", ("The backdrop leans risk-off: the kind of tape in which breakouts often "
+                                      "fail and demand for protection is high.")
     elif score <= -12:
-        regime, stance = "mildly risk-off", "Defensive lean; take profits faster and cut size."
+        regime, stance = "mildly risk-off", ("A mild lean to risk-off: a less forgiving backdrop, in which moves "
+                                             "fade faster than usual.")
     else:
-        regime, stance = "neutral / mixed", "No macro edge. Trade the setup, not the market."
+        regime, stance = "neutral / mixed", ("No clear lean either way: the backdrop is not pushing prices in one "
+                                             "direction, so a single stock's own setup matters more than the market.")
 
     grouped: Dict[str, List[Dict[str, Any]]] = {}
     for item in INSTRUMENTS:

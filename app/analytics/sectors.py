@@ -342,7 +342,7 @@ def analyse(provider) -> Dict[str, Any]:
     if breadth_200 >= 70:
         breadth_note = "Broad participation: {:.0f}% of sectors above their 200-day. Breakouts have follow-through.".format(breadth_200)
     elif breadth_200 >= 45:
-        breadth_note = "Mixed participation ({:.0f}% above 200-day). Leadership is narrowing, be selective.".format(breadth_200)
+        breadth_note = "Mixed participation ({:.0f}% above 200-day). Leadership is narrowing: fewer sectors are carrying the market.".format(breadth_200)
     else:
         breadth_note = "Narrow tape, only {:.0f}% of sectors above their 200-day. Long setups are fighting the current.".format(breadth_200)
 
@@ -381,7 +381,7 @@ def analyse(provider) -> Dict[str, Any]:
             {
                 "long": strongest[0]["symbol"],
                 "short": weakest[0]["symbol"],
-                "note": "Highest-RS sector against the lowest. The cleanest expression of the current rotation.",
+                "note": "The sector with the highest relative strength and the one with the lowest: the widest gap in the current rotation.",
             }
             if strongest and weakest
             else None
