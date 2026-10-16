@@ -477,7 +477,9 @@ def test_sign_out_does_not_repaint_a_page_that_is_reloading():
 
 
 def test_deleting_the_account_hands_the_browser_to_the_guest_first():
-    block = RAW[RAW.index("if (target.closest('[data-acct-delete]')) {"):]
+    # The request is sent from the inline form's confirm press since
+    # 2026-10-16 (it was two window.prompt calls on the first press).
+    block = RAW[RAW.index("if (target.closest('[data-acct-del-confirm]')) {"):]
     block = block[:block.index("\n    return;\n  }")]
     assert block.index("handDeviceSessionToGuest();") < block.index("await window.OpticAuth.refresh();")
 

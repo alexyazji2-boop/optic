@@ -1956,6 +1956,13 @@ async function postJSON(url, body) {
         'That did not go through. Your session may have expired: reload and try again.', 'bad');
       throw new Error('Session expired.');
     }
+    /* Asked only of a browser that has held a token before, which is an
+     * operator's. A visitor pressing Clear on the chart's Alerts widget was
+     * asked by a browser dialog to paste OPTIC_WRITE_TOKEN (launch audit,
+     * 2026-10-16); a visitor gets a sentence instead. */
+    if (!writeToken()) {
+      throw new Error('Only the owner of this site can change the saved record.');
+    }
     const supplied = window.prompt(
       'This action changes the saved record, so it needs the write token.\n'
       + 'Set OPTIC_WRITE_TOKEN on the server, then paste it here.');
@@ -25442,10 +25449,12 @@ function alertsBody() {
       <div class="alert-title">${esc(x.title)}</div>
       ${x.body ? `<div class="alert-body">${esc(x.body)}</div>` : ''}
     </li>`).join('')}</ul>
-    <div class="alert-acts">
+    ${/* The owner's, as on the Alerts page (alertsWritable): every visitor
+         saw both, and Clear asked them for the server's write token. */''}
+    ${alertsWritable() ? `<div class="alert-acts">
       <button type="button" class="btn" data-alerts-seen>Mark all read</button>
       <button type="button" class="btn" data-alerts-clear>Clear</button>
-    </div>`
+    </div>` : ''}`
     : `<p class="ws-none">Nothing yet. Alerts are recorded when a scan opens or
        closes a position, so the first ones arrive after the next scan.</p>`;
 
@@ -33282,11 +33291,23 @@ function accountPanels() {
       reports you sent are kept with the address they came from, so a reply can
       still reach you, and the shared paper-trading ledger is not affected because
       it was never yours.</p>
-    <div class="set-row-act">
+    ${/* What the server also does (auth/routes.py delete_account), said before
+         the press rather than learned after (launch audit, 2026-10-16). */''}
+    <p class="sub">A paid plan is cancelled at the same moment, and any linked brokerage is
+      disconnected at the provider with Optic's copy of its data deleted.</p>
+    <div class="set-row-act" id="acct-del-act">
       <button type="button" class="btn" data-acct-delete>Delete this account</button>
     </div>
   </div>`;
 }
+
+document.addEventListener('submit', (evt) => {
+  const form = evt.target && evt.target.closest && evt.target.closest('[data-acct-del-form]');
+  if (!form) return;
+  evt.preventDefault();
+  const go = form.querySelector('[data-acct-del-confirm]');
+  if (go) go.click();
+});
 
 /* The security block is a second paint, on purpose.
  *
@@ -33589,16 +33610,42 @@ document.addEventListener('click', async (evt) => {
     return;
   }
 
+  /* An inline form, not two browser prompts: window.prompt showed the
+   * password in clear text as it was typed (launch audit, 2026-10-16). */
   if (target.closest('[data-acct-delete]')) {
     const state = window.OpticAuth.state();
     const email = (state.user || {}).email || '';
-    const typed = window.prompt('This deletes the account and everything on it, and it '
-      + 'cannot be undone.\n\nType ' + email + ' to confirm.');
-    if (!typed) return;
-    let password = '';
-    if (state.methods && state.methods.password) {
-      password = window.prompt('Enter your password to confirm.') || '';
+    const host = document.getElementById('acct-del-act');
+    if (!host) return;
+    host.innerHTML = `<form class="set-del-form" data-acct-del-form>
+      <p class="sub">This cannot be undone.</p>
+      <label class="auth-field"><span>Type ${esc(email)} to confirm</span>
+        <input type="email" name="confirm_email" autocomplete="off" spellcheck="false" required></label>
+      ${state.methods && state.methods.password ? `<label class="auth-field"><span>Your password</span>
+        <input type="password" name="password" autocomplete="current-password" required></label>` : ''}
+      <div class="set-row-act">
+        <button type="button" class="btn" data-acct-del-confirm>Delete the account</button>
+        <button type="button" class="btn" data-acct-del-cancel>Cancel</button>
+      </div>
+    </form>`;
+    const first = host.querySelector('input');
+    if (first) first.focus();
+    return;
+  }
+  if (target.closest('[data-acct-del-cancel]')) {
+    const host = document.getElementById('acct-del-act');
+    if (host) {
+      host.innerHTML = '<button type="button" class="btn" data-acct-delete>Delete this account</button>';
+      host.querySelector('button').focus();
     }
+    return;
+  }
+  if (target.closest('[data-acct-del-confirm]')) {
+    const form = target.closest('[data-acct-del-form]');
+    if (form && !form.reportValidity()) return;
+    const typed = ((form && form.querySelector('[name=confirm_email]')) || {}).value || '';
+    const password = ((form && form.querySelector('[name=password]')) || {}).value || '';
+    if (!typed) return;
     try {
       await authApi('/api/auth/delete-account', {
         method: 'POST', body: { confirm_email: typed, password: password },
@@ -48623,11 +48670,16 @@ document.addEventListener('click', (evt) => {
     if (STATE.view === 'alerts') loadAlertsFeed(true);
   };
   if (evt.target.closest('[data-alerts-seen]')) {
-    postJSON('/api/alerts/seen', {}).then(refreshAlerts);
+    postJSON('/api/alerts/seen', {}).then(refreshAlerts)
+      .catch((err) => window.OpticAuth && window.OpticAuth.toast(err.message, 'bad'));
     return;
   }
   if (evt.target.closest('[data-alerts-clear]')) {
-    postJSON('/api/alerts/clear', {}).then(refreshAlerts);
+    /* Deletes every alert on the deployment, for everyone, in one press: it
+     * asks first now, and a failure says so (it had no catch). */
+    if (!window.confirm('Delete every alert from the scheduled scan, for every reader? This cannot be undone.')) return;
+    postJSON('/api/alerts/clear', {}).then(refreshAlerts)
+      .catch((err) => window.OpticAuth && window.OpticAuth.toast(err.message, 'bad'));
     return;
   }
   /* ---- one alert at a time ---- */
@@ -48646,7 +48698,7 @@ document.addEventListener('click', (evt) => {
     const row = ((STATE.alertsFeed || {}).rows || []).find((a) => a.id === id);
     if (row) row.seen = 1;
     renderAlerts();
-    postJSON('/api/alerts/seen', { ids: [id] }).then(refreshAlerts);
+    postJSON('/api/alerts/seen', { ids: [id] }).then(refreshAlerts).catch(() => { /* a read mark is not worth an error */ });
     return;
   }
   const kind = evt.target.closest('[data-alert-kind]');
