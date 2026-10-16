@@ -241,14 +241,18 @@
      ever sit on, not against the plane. The old comments measured on pure black,
      which no text in this app is ever drawn on: --neg read "4.51:1" and was
      actually 3.96:1 where it appears. */
-  --pos: #0ca30c;           /* on --surface-2: 5.49:1 */
-  --neg: #d95656;           /* on --surface-2: 4.69:1, was #d43c3c at 3.96:1 */
+  /* Re-measured 2026-10-16 against the surface these now sit on. The asset
+     layer below (:root, "--surface-2: var(--asset-raised)") moved panels to
+     #232326, where #0ca30c was 4.67:1 and #d95656 4.04:1, under AA for the
+     11-14px figures they colour; on a raised tile (#2a2a2d) 4.27 and 3.69. */
+  --pos: #11b011;           /* on #232326: 5.41:1; on #2a2a2d: 4.93:1 */
+  --neg: #e66e6e;           /* on #232326: 5.09:1; on #2a2a2d: 4.65:1 */
   --mid: #383835;
 
   /* Status — "is something wrong", not "which way did it go". Reserved, never
      used as a series, and deliberately fixed across themes: a warning is the
      same warning on any background. Direction lives in --pos/--neg above. */
-  --good: #0ca30c;
+  --good: #11b011;          /* the --pos green, re-measured 2026-10-16 */
   --warn: #fab219;          /* on --surface-2: 10.04:1 */
   --serious: #ec835a;
   --critical: #d03b3b;
@@ -11453,8 +11457,13 @@ body.cp-open { overflow: hidden; }
   gap: var(--space-2);
 }
 .tr-grid[hidden] { display: none; }
-/* Across both of the board's columns; see the comment where it is drawn. */
-.hm-board > .hm-trends { grid-column: 1 / -1; }
+/* Across both of the board's columns; see the comment where it is drawn.
+ * Below the two columns, in the brief's order the phone already uses (the
+ * day's read, your names, what changed, then where the indices and sectors
+ * sit): above them, its fourteen cards (893px at 1440x900) put the Optic
+ * Desk's bottom line at y=1699 and "What changed since yesterday" at 2778,
+ * two and three screens down (launch audit, 2026-10-16). */
+.hm-board > .hm-trends { grid-column: 1 / -1; order: 1; }
 /* The edge carries the state and the type stays ink, as on the Indices
    cards: a card of green type reads as an alert rather than a state. */
 .tr-card {
@@ -11616,8 +11625,10 @@ body.cp-open { overflow: hidden; }
 .wl-go { text-align: right; font-size: var(--t-small); font-weight: 500; color: var(--s1); white-space: nowrap; }
 .wl-open:hover .wl-go-word, .wl-open:focus-visible .wl-go-word { text-decoration: underline; }
 /* The signal column's header is no longer the last span, so it is aligned by
-   position; the new last one is the Analyze column's, and empty. */
-.wv-cols span:nth-child(5) { text-align: right; }
+   position; the new last one is the Analyze column's, and empty. Sixth since
+   the 30-session sparkline took a column: nth-child(5) right-aligned "What
+   changed" instead, 530px from the text under it (2026-10-16). */
+.wv-cols span:nth-child(6) { text-align: right; }
 
 /* The layout follows the list's own width, not the window's. With Pulse open
    the window is still desktop-wide while the home page's card is a third of
@@ -20192,3 +20203,20 @@ footer.legal > .legal-full {
 .op-scen td.down { color: var(--neg); }
 .op-liqs { list-style: none; margin: var(--space-2) 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-1); font-size: var(--t-small); color: var(--ink-2); }
 .op-exp-table td, .op-exp-table th { white-space: nowrap; }
+
+/* Launch audit (2026-10-16): the Dossier header's symbol and name are the
+   page's h1 now, and look exactly as the two spans did. The global h1 rules
+   (display face, the hero size) are undone here, and the h1 lays its two
+   children out on the row's own baseline and gap. */
+.sec-id > .sec-h1 {
+  display: inline-flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: calc(6px * var(--ui-scale)) var(--space-3);
+  margin: 0;
+  font: inherit;
+  letter-spacing: 0;
+  line-height: inherit;
+  color: inherit;
+}
+

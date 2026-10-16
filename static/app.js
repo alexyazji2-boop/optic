@@ -15445,11 +15445,15 @@ function securityHeader(view, opts = {}) {
            sources as the chart header, falling back to a monogram for a fund,
            an index or a name nobody serves a logo for (2026-10-12). */''}
       ${tickerMark(sym, 36)}
-      <span class="sec-sym">${esc(sym)}</span>
+      ${/* The page's h1 (launch audit, 2026-10-16): the Dossier hides
+           #page-head, so Overview, Earnings, Financials, News and Investing
+           had no h1 at all and a screen reader's heading list started at a
+           section. The symbol and the name, in the look they had. */''}
+      <h1 class="sec-h1"><span class="sec-sym">${esc(sym)}</span>
       ${/* The feed names a fund or a thin listing by its symbol when it has
            no name, which printed "MSFT MSFT 529.30". */''}
       ${q.name && String(q.name).trim().toUpperCase() !== sym.toUpperCase()
-    ? `<span class="sec-name">${esc(q.name)}</span>` : ''}
+    ? `<span class="sec-name">${esc(q.name)}</span>` : ''}</h1>
       ${has ? `<span class="sec-px">${fmt(price, 2)}</span>
         <span class="sec-chg ${dir}">${Number.isFinite(pct)
     ? `${pct >= 0 ? '+' : ''}${fmt(pct, 2)}%` : ''}</span>` : `<span class="sec-px-none"
@@ -31810,7 +31814,11 @@ function renderEarnings(d) {
           `${esc(cap(ext.kind))} · ${usd(ext.price)}`, signClass(ext.move_pct), EARN_DEFS.reaction)
         : tile('Reaction', 'no quote yet', 'nothing traded outside the session', '', EARN_DEFS.reaction))
     : tile('Implied move', imp.available ? fmt(imp.implied_move_pct, 1) + '%' : '—',
-      imp.available ? `${imp.dte}-day straddle · ${fmt(imp.strike, 2)} strike` : (imp.reason || null),
+      imp.available ? `${imp.dte}-day straddle · ${fmt(imp.strike, 2)} strike${
+    /* Overnight the chain has no bid or ask and the straddle is the last
+     * trades, each at its own time; said, not shown as a live price. */
+    imp.priced_from === 'last_trades' ? ` · from the last trades${imp.last_trade
+      ? `, ${new Date(imp.last_trade).toLocaleDateString('en-US', { weekday: 'short', timeZone: 'America/New_York' })}` : ''}` : ''}` : (imp.reason || null),
       '', EARN_DEFS.implied_move)}
       ${tile('Beat rate', sp.beat_rate_pct !== null && sp.beat_rate_pct !== undefined
     ? fmt(sp.beat_rate_pct, 0) + '%' : '—', sp.quarters ? `last ${sp.quarters} quarters` : null,

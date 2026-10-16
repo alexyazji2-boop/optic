@@ -596,6 +596,23 @@ def _implied_move(provider, ticker: str, spot: Optional[float], report_date: Opt
 
     strike = float(min(both, key=lambda k: abs(k - spot)))
     call_px, put_px = float(calls.loc[strike]), float(puts.loc[strike])
+    # Quoted, or the last trades? The provider's mid falls back to the last
+    # trade when a side has no bid and ask, which is every contract overnight
+    # and all weekend on the free feed. The straddle is then yesterday's
+    # trades, each at its own time, and the reader is told so rather than
+    # shown it as the market's price now (launch audit, 2026-10-16).
+    at = priced[priced["strike"] == strike]
+    # The same first-quote-per-side rule as the lookup above.
+    legs = pd.concat([at[at["is_call"]].head(1), at[~at["is_call"]].head(1)])
+    quoted = False
+    if {"bid", "ask"} <= set(legs.columns):
+        bid = pd.to_numeric(legs["bid"], errors="coerce")
+        ask = pd.to_numeric(legs["ask"], errors="coerce")
+        quoted = bool(len(legs) >= 2 and ((bid > 0) & (ask > 0)).all())
+    last_trade = None
+    if not quoted and "last_trade" in legs.columns:
+        stamps = pd.to_datetime(legs["last_trade"], errors="coerce", utc=True).dropna()
+        last_trade = stamps.min().isoformat() if len(stamps) else None
     # A strike far from spot isn't an at-the-money straddle any more, and the
     # implied move read off it would be wrong rather than merely imprecise.
     if abs(strike / spot - 1.0) > 0.05:
@@ -616,6 +633,8 @@ def _implied_move(provider, ticker: str, spot: Optional[float], report_date: Opt
         # The straddle price as a share of spot is the standard implied-move
         # shorthand. It's the breakeven move, so slightly conservative.
         "implied_move_pct": _f(straddle / spot * 100.0, 2),
+        "priced_from": "quotes" if quoted else "last_trades",
+        "last_trade": last_trade,
     })
     tau = dte / 365.0
     iv = implied_vol(call_px, spot, strike, tau, rate=rate, is_call=True)

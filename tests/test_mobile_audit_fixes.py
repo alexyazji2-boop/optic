@@ -114,5 +114,8 @@ def test_the_ticker_header_shows_the_company_logo_before_the_symbol():
     (2026-10-12): the chart header's ticker-keyed mark, with its monogram
     fallback, before the symbol in every ticker page's header."""
     app = (ROOT / "static/app.js").read_text()
-    assert "${tickerMark(sym, 36)}\n      <span class=\"sec-sym\">${esc(sym)}</span>" in app
+    # The symbol sits inside the page's h1 since 2026-10-16; the mark still
+    # comes first.
+    head = app[app.index("function securityHeader("):]
+    assert head.index("${tickerMark(sym, 36)}") < head.index('<h1 class="sec-h1"><span class="sec-sym">${esc(sym)}</span>')
     assert ".sec-id > .co-mark, .sec-id > .stage-explain { align-self: center; }" in CSS

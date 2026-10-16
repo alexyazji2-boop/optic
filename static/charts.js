@@ -67,11 +67,12 @@ const C = {
   grid: '#2c2c2a', baseline: '#383835', surface: '#121010',
   s1: '#3987e5', s2: '#d95926', s3: '#199e70', s4: '#c98500',
   s5: '#d55181', s6: '#5fa617', s7: '#9085e9', s8: '#e66767',
-  pos: '#0ca30c', neg: '#d95656',
-  good: '#0ca30c', warn: '#fab219', serious: '#ec835a', critical: '#d03b3b',
+  // The dark theme's --pos/--neg (styles.css), for the moment before syncChartTheme.
+  pos: '#11b011', neg: '#e66e6e',
+  good: '#11b011', warn: '#fab219', serious: '#ec835a', critical: '#d03b3b',
   // Weinstein stages. --stage-1..4 in styles.css says why these four; the
   // values here are the dark theme's, for the moment before syncChartTheme.
-  stage1: '#98d292', stage2: '#0ca30c', stage3: '#fab219', stage4: '#d95656',
+  stage1: '#98d292', stage2: '#11b011', stage3: '#fab219', stage4: '#e66e6e',
 
   /* The default colour for a chart drawing.
    *
