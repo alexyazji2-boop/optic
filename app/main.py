@@ -511,23 +511,26 @@ NEAR_TERM_MAX_DTE = 5
 NEAR_TERM_MAX_EXPIRIES = 3
 
 
-def _near_expiries(listed: Any) -> List[str]:
+def _near_expiries(listed: Any, now: Optional[datetime] = None) -> List[str]:
     """Listed expiries 0 to NEAR_TERM_MAX_DTE days out, nearest first."""
     if isinstance(listed, dict):
         listed = listed.get("available") or []
     return [e for e in sorted(str(x) for x in (listed or []))
-            if 0 <= vol_surface_mod.expiry_dte(e) <= NEAR_TERM_MAX_DTE][:NEAR_TERM_MAX_EXPIRIES]
+            if 0 <= vol_surface_mod.expiry_dte(e, now) <= NEAR_TERM_MAX_DTE][:NEAR_TERM_MAX_EXPIRIES]
 
 
 def _near_term_gex(ticker: str, chain: Optional[pd.DataFrame], swing_chain: Optional[pd.DataFrame],
-                   spot: float, rate: float, div: float, main_read: Dict[str, Any]) -> Dict[str, Any]:
+                   spot: float, rate: float, div: float, main_read: Dict[str, Any],
+                   now: Optional[datetime] = None) -> Dict[str, Any]:
     """Dealer gamma in the 0-5 day expiries the swing read leaves out.
 
     Same model, same assumption, same inputs; reported beside the main total
-    rather than folded into it. Open interest is the previous session's, so a
-    same-day (0DTE) position opened today is in none of it: for SPX-family
-    products that is most of the day's volume (Cboe), which is why the share
-    shown is of open positions, not of trading."""
+    rather than folded into it. `now` is the main read's clock, so the
+    combined total adds two reads measured at one instant. Open interest is
+    the previous session's, so a same-day (0DTE) position opened today is in
+    none of it: for SPX-family products that is most of the day's volume
+    (Cboe), which is why the share shown is of open positions, not of
+    trading."""
     used = set(swing_chain["expiry"].astype(str).unique()) if (
         swing_chain is not None and not swing_chain.empty and "expiry" in swing_chain) else set()
     if chain is not None and not chain.empty and "expiry" in chain:
@@ -539,8 +542,8 @@ def _near_term_gex(ticker: str, chain: Optional[pd.DataFrame], swing_chain: Opti
     unusable = _chain_unusable(chain, spot)
     if unusable:
         return {"available": False, "reason": unusable}
-    chain = vol_surface_mod.apply_clock(chain)
-    chain = vol_surface_mod.apply_quotes(chain)
+    chain = vol_surface_mod.apply_clock(chain, now)
+    chain = vol_surface_mod.apply_quotes(chain, now)
     chain = vol_surface_mod.resolve_surface(chain, spot, rate, div,
                                             american=vol_surface_mod.is_american(ticker))
     read = gex_mod.analyse(chain, spot, rate=rate, div=div, ticker=ticker)
@@ -696,9 +699,11 @@ def _swing_snapshot(
             ).format(len(listed), ticker)
     # The rate, the clock, the quotes and the volatility, before anything is
     # built on them (Options audit, 2026-10-13; see app/rates.py and
-    # app/analytics/vol_surface.py for what each corrects).
+    # app/analytics/vol_surface.py for what each corrects). One clock serves
+    # this read and the short-dated one beside it.
     rate_info = rates_mod.risk_free(YF_PROVIDER)
     rate = rate_info["rate"]
+    clock = datetime.now(timezone.utc)
     surface: Dict[str, Any] = {"available": False}
     iv_rank: Dict[str, Any] = {"available": False}
     event_date = None
@@ -707,8 +712,8 @@ def _swing_snapshot(
             event_date = legs.get("earnings_date")
         except Exception:                                         # noqa: BLE001
             event_date = None
-        chain = vol_surface_mod.apply_clock(chain)
-        chain = vol_surface_mod.apply_quotes(chain)
+        chain = vol_surface_mod.apply_clock(chain, clock)
+        chain = vol_surface_mod.apply_quotes(chain, clock)
         chain = vol_surface_mod.resolve_surface(chain, spot, rate, div,
                                                 american=vol_surface_mod.is_american(ticker))
         surface = vol_surface_mod.build(chain, spot, rate, div, event_date=event_date)
@@ -738,7 +743,7 @@ def _swing_snapshot(
         if near_list and isinstance(gex_read, dict) and "error" not in gex_read:
             try:
                 gex_read["near_term"] = _near_term_gex(
-                    ticker, legs.get("near_chain"), chain, spot, rate, div, gex_read)
+                    ticker, legs.get("near_chain"), chain, spot, rate, div, gex_read, now=clock)
             except Exception as exc:                              # noqa: BLE001
                 gex_read["near_term"] = {"available": False,
                                          "reason": "the short-dated chain could not be read ({})".format(

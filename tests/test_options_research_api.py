@@ -16,10 +16,12 @@ from app.analytics import vol_surface as vs
 SPOT, R, Q = 100.0, 0.04, 0.0
 
 
-def _chain(expiries):
+def _chain(expiries, now=None):
+    """Priced at `now` (the real clock when not given)."""
+    stamp = pd.Timestamp(now).tz_convert("UTC") if now else pd.Timestamp.now(tz="UTC")
     rows = []
     for exp in expiries:
-        tau = vs.expiry_tau(exp)
+        tau = vs.expiry_tau(exp, now)
         for k in range(80, 125, 5):
             for is_call in (True, False):
                 v = 0.25 + (100 - k) * 0.002
@@ -30,8 +32,8 @@ def _chain(expiries):
                              "bid": 0.0 if (wide and is_call) else round(px * 0.97, 2),
                              "ask": round(px * 1.03, 2) + 0.01, "last": px, "volume": 500.0,
                              "open_interest": 40.0 if k == 115 else 2000.0, "iv": 0.5, "iv_filled": False,
-                             "last_trade": pd.Timestamp.now(tz="UTC"), "dte": 0, "tau": tau,
-                             "fetched_at": pd.Timestamp.now(tz="UTC").isoformat()})
+                             "last_trade": stamp, "dte": 0, "tau": tau,
+                             "fetched_at": stamp.isoformat()})
     return pd.DataFrame(rows)
 
 
