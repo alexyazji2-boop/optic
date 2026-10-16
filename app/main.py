@@ -512,11 +512,19 @@ NEAR_TERM_MAX_EXPIRIES = 3
 
 
 def _near_expiries(listed: Any, now: Optional[datetime] = None) -> List[str]:
-    """Listed expiries 0 to NEAR_TERM_MAX_DTE days out, nearest first."""
+    """Listed expiries 0 to NEAR_TERM_MAX_DTE days out, nearest first, that
+    have not yet closed.
+
+    An expiry settles at its 4:00pm ET close, but the ET calendar counts it 0
+    days out until midnight and the clock floors its time left at an hour
+    (vol_surface MIN_TAU). Left in until the feed drops it from the list, a
+    settled expiry would read as the steepest gamma on the board."""
     if isinstance(listed, dict):
         listed = listed.get("available") or []
+    now = now or datetime.now(timezone.utc)
     return [e for e in sorted(str(x) for x in (listed or []))
-            if 0 <= vol_surface_mod.expiry_dte(e, now) <= NEAR_TERM_MAX_DTE][:NEAR_TERM_MAX_EXPIRIES]
+            if vol_surface_mod.expiry_close(e) > now
+            and vol_surface_mod.expiry_dte(e, now) <= NEAR_TERM_MAX_DTE][:NEAR_TERM_MAX_EXPIRIES]
 
 
 def _near_term_gex(ticker: str, chain: Optional[pd.DataFrame], swing_chain: Optional[pd.DataFrame],

@@ -57,6 +57,14 @@ def test_near_expiries_takes_zero_to_five_days_nearest_first():
     assert m._near_expiries(None, NOW) == []
 
 
+def test_an_expiry_leaves_the_near_term_at_its_4pm_close_not_at_midnight():
+    listed = ["2026-10-16", "2026-10-19", "2026-10-20"]
+    assert m._near_expiries(listed, datetime(2026, 10, 16, 15, 59, tzinfo=ET)) == listed
+    assert m._near_expiries(listed, datetime(2026, 10, 16, 16, 0, tzinfo=ET)) == listed[1:]
+    # 9pm ET: the UTC date has rolled, the ET one has not; settled either way.
+    assert m._near_expiries(listed, datetime(2026, 10, 17, 1, 0, tzinfo=timezone.utc)) == listed[1:]
+
+
 @pytest.mark.parametrize("now", list(INSTANTS.values()), ids=list(INSTANTS))
 def test_near_term_is_read_separately_with_its_share_of_gamma(now):
     swing, main_read = _read(_chain(_dates(10, 31, now=now), now), now)
