@@ -129,7 +129,7 @@ class SnapTradeProvider(Provider):
                 return resp.json()
             except ValueError:
                 raise ProviderError("SnapTrade returned something that was not JSON") from None
-        said = self._error_said(resp, (user or {}).get("secret"), self.consumer_key)
+        said = self._error_said(resp, (user or {}).get("secret"), self.consumer_key, self.client_id)
         if resp.status_code in (429,) or resp.status_code >= 500:
             raise ProviderOutage("SnapTrade returned {}".format(resp.status_code))
         # Expiry is read from `authorizations[].disabled`, which is documented,
@@ -151,9 +151,10 @@ class SnapTradeProvider(Provider):
     @staticmethod
     def _error_said(resp: requests.Response, *secrets: Optional[str]) -> str:
         """SnapTrade's own code and sentence, as "1076: Unable to verify
-        signature sent". It goes to the log and the owner, so the reader's
-        secret and the consumer key are cut out should the sentence ever
-        echo them (1083 echoes the client id, which is not a secret)."""
+        signature sent". It goes to the log and the owner, so every credential
+        is cut out of it, the client id included: 1083 echoes whatever was sent
+        as the client id, and on the first live connect (2026-10-15) that was
+        the consumer key, pasted into the wrong variable."""
         try:
             body = resp.json()
         except ValueError:

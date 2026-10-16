@@ -136,6 +136,18 @@ def test_a_refusal_carries_snaptrades_own_code_and_sentence():
     assert str(e.value) == "SnapTrade rejected Optic's credentials (401, 1076: Unable to verify signature sent)"
 
 
+def test_a_client_id_refusal_does_not_echo_a_key_pasted_as_the_client_id():
+    # SnapTrade's 1083 repeats the client id it was sent, which was the
+    # consumer key when the two Railway variables were swapped.
+    http = FakeHTTP({("POST", "/snapTrade/registerUser"):
+                     (401, {"detail": "Invalid clientId provided - KEYPASTEDASID", "code": "1083"})})
+    p = snaptrade.SnapTradeProvider("KEYPASTEDASID", "ckey", session=http)
+    with pytest.raises(ProviderError) as e:
+        p.register_user()
+    assert "KEYPASTEDASID" not in str(e.value)
+    assert "1083: Invalid clientId provided" in str(e.value)
+
+
 def test_a_refusal_that_echoes_a_secret_does_not_repeat_it():
     p, _ = client({("GET", "/accounts/all"): (400, {"code": "1012", "detail": "bad userSecret=TOPSECRET ckey"})})
     with pytest.raises(ProviderError) as e:
