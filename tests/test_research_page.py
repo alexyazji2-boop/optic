@@ -59,8 +59,23 @@ def test_a_post_earnings_payload_grades_the_report_apart_from_the_reaction():
 
 
 def test_a_failed_read_says_so():
+    """And keeps the four questions on the page: since 2026-10-16 each tile
+    carries the plain answer too, so a failed grade costs the grades only."""
     html = _render({"available": False, "reason": "no filings"})["html"]
-    assert "could not grade" in html and "no filings" in html
+    assert "grades are not available" in html and "no filings" in html
+    assert "Is it a strong business?" in html and "Not graded" in html
+
+
+def test_the_takeaways_are_said_inside_the_four_questions():
+    """One set of answers on the Overview (2026-10-16): the takeaways'
+    sentences are routed into the tiles, and a company no longer gets the
+    separate takeaways section; a fund, which the four do not grade, does."""
+    assert "data-rf-plain" in RJS and "window.ovPlainHTML" in RJS
+    assert "window.ovPlainHTML = ovPlainHTML" in APP
+    render = APP[APP.index("function renderOverviewView() {"):]
+    render = render[:render.index("\n}\n")]
+    assert "framed ? window.OpticFramework.hostHTML()" in render
+    assert "<div id=\"ov-takeaways\">${ovTakeawaysHTML(" in render
 
 
 def test_wired_into_the_overview_and_loaded_after_app_js():

@@ -2351,6 +2351,10 @@ body.chat-resizing svg { pointer-events: none; }
 .dg-top { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: baseline; }
 .dg-top .muted { font-size: var(--t-caption); }
 .dg-h { margin: var(--space-2) 0 var(--space-1); font-size: var(--t-small); font-weight: 600; color: var(--ink); }
+/* The Overview's folded headline list (launch audit 2026-10-16). */
+.dg-why { margin: var(--space-2) 0; }
+.dg-why > summary { cursor: pointer; font-size: var(--t-small); font-weight: 600; color: var(--ink); }
+.dg-why > summary .dg-tag { margin-left: var(--space-1); }
 .dg-tag {
   margin-left: var(--space-1); padding: 0 var(--space-1); border: 1px solid var(--ws-line);
   border-radius: var(--r-pill); font-size: var(--t-micro); font-weight: 500; color: var(--ink-muted);
@@ -20061,6 +20065,13 @@ footer.legal > .legal-full {
    tiles do not shout louder than the one grade that loaded. */
 .rf-value.is-none { color: var(--ink-muted); font-size: var(--t-lead); }
 .rf-sub { margin: var(--space-1) 0 0; font-size: var(--t-small); line-height: 1.5; color: var(--ink-2); }
+/* The plain answer under the grade (launch audit 2026-10-16): the takeaway
+   that used to be its own section, in the takeaway's own register. */
+.rf-plain:empty { display: none; }
+.rf-plain { margin: var(--space-2) 0 0; }
+.rf-plain-text { margin: 0; font-size: var(--t-base); font-weight: 600; line-height: 1.45; color: var(--ink); }
+.rf-plain-why { margin: var(--space-1) 0 0; font-size: var(--t-small); line-height: 1.5; color: var(--ink-2); }
+.rf-plain .ov-ev { margin-top: var(--space-2); }
 .rf-more { margin-top: var(--space-2); }
 .rf-more > summary { cursor: pointer; font-size: var(--t-small); font-weight: 600; color: var(--ink-2); }
 .rf-more > summary:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: var(--r-xs); }

@@ -112,6 +112,16 @@ def letter(score: Optional[float]) -> Optional[str]:
     return "F"
 
 
+def _vs_price(upside: float) -> str:
+    """A model value against the price, in words: "50% below the price".
+
+    "-50% from the price" read as a signed figure to decode, on the Overview's
+    "Is the price attractive?" tile (launch audit, 2026-10-16)."""
+    if abs(upside) < 0.005:
+        return "about level with the price"
+    return "{:.0%} {} the price".format(abs(upside), "below" if upside < 0 else "above")
+
+
 def _band(x: float, steps: List[Tuple[float, int]], default: int = 0) -> int:
     for floor, score in steps:
         if x >= floor:
@@ -714,15 +724,15 @@ def valuation_grade(val: Dict[str, Any], data: Dict[str, Any], lt: Dict[str, Any
         implausible = upside > 1.0 or upside < -0.6
         if primary and implausible:
             out.append(_component("intrinsic", "Intrinsic value", "not_applicable",
-                                  reason="The base case is {:+.0%} from the price, a gap wider than the model's own "
+                                  reason="The base case is {}, a gap wider than the model's own "
                                          "reliability: it reflects the assumptions (growth and margins held for "
                                          "years) more than a mispricing, so it is shown and not graded. The "
-                                         "fair-value workspace shows which assumption drives it.".format(upside),
+                                         "fair-value workspace shows which assumption drives it.".format(_vs_price(upside)),
                                   evidence=ev, figures={"per_share": per_share, "upside": upside, "scenarios": rng}))
         elif primary:
             out.append(_component("intrinsic", "Intrinsic value", "scored",
                                   _band(upside, [(0.30, 4), (0.10, 3), (-0.10, 2), (-0.30, 1)]),
-                                  "The base-case model value is {:+.0%} from the price.".format(upside), ev,
+                                  "The base-case model value is {}.".format(_vs_price(upside)), ev,
                                   {"per_share": per_share, "upside": upside, "scenarios": rng,
                                    "model": model_id, "model_version": val.get("model_version")}))
         else:

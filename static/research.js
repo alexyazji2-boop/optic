@@ -22,10 +22,39 @@
   const money = (v) => (has(v) ? '$' + Number(v).toFixed(2) : 'n/a');
   const pct = (v, d = 1) => (has(v) ? `${Number(v).toFixed(d)}%` : 'n/a');
 
+  /* One set of answers (launch audit, 2026-10-16). The Overview stated each
+   * conclusion twice: "Key takeaways" (the business, the price you pay, the
+   * share price, a risk) in plain words, then these four tiles with their
+   * grades, one section apart. Measured on AAPL at 390px: 1,106px and
+   * 1,167px, with the valuation and the earnings date in both. So the plain
+   * sentence now sits inside the tile it answers, under the grade, and
+   * app.js no longer draws the takeaways for a company (a fund, which these
+   * four do not grade, keeps them). `ovPlainHTML` is app.js's; the tiles
+   * render with it before the grades arrive, so the page has its answers at
+   * once and the slowest read on it only adds the grades. */
+  const QUESTIONS = [
+    ['business', 'Is it a strong business?'], ['price', 'Is the price attractive?'],
+    ['trade', 'Is there a trade?'], ['earnings', 'What about earnings?'],
+  ];
+
+  function plainHTML(id) {
+    const html = typeof window.ovPlainHTML === 'function' ? window.ovPlainHTML(id) : '';
+    return `<div class="rf-plain" data-rf-plain="${id}">${html || ''}</div>`;
+  }
+
+  function pendingGrid(note) {
+    return `<div class="rf-grid">${QUESTIONS.map(([id, label]) => `<div class="rf-tile" data-rf="${id}">
+        <p class="osc-label">${esc(label)}</p>
+        <p class="rf-value is-none">${note ? 'Not graded' : 'Grading…'}</p>
+        ${plainHTML(id)}
+      </div>`).join('')}</div>
+      ${note ? `<p class="ov-meta">${esc(note)}</p>` : ''}`;
+  }
+
   function hostHTML() {
     return `<section class="ov-sec rf" id="ov-framework" aria-labelledby="rf-h">
       <h2 class="ov-q" id="rf-h">Four questions, answered separately</h2>
-      <div class="rf-body"><p class="ov-meta">Grading the business, the price, the setup and the earnings…</p></div>
+      <div class="rf-body">${pendingGrid('')}</div>
     </section>`;
   }
 
@@ -38,6 +67,7 @@
     return `<div class="rf-tile" data-rf="${id}">
       <p class="osc-label">${esc(label)}</p>
       <p class="rf-value${/^Insufficient|not graded/i.test(value) ? ' is-none' : ''}">${esc(value)}</p>
+      ${plainHTML(id)}
       <p class="rf-sub">${esc(sub || '')}</p>
       ${more ? `<details class="rf-more"><summary>Why</summary><div class="rf-more-body">${more}</div></details>` : ''}
     </div>`;
@@ -158,8 +188,15 @@
         <p class="ov-h3">What would prove it wrong</p>${list((pre.view || {}).invalidators)}
         <p class="ov-fine">${esc((pre.view || {}).thesis_vs_trade || '')} ${esc((pre.view || {}).probabilities_note || '')}
           Not in the data: ${esc((pre.not_available || []).join(', '))}.</p>`;
-      const when = `${rel.date}${rel.timing && rel.timing !== 'unknown' ? ', ' + rel.timing.replace('_', ' ') : ''}`
-        + (rel.confirmed ? '' : ' (estimated)');
+      /* "Nov 2, before the open", the way the rest of the Overview dates the
+       * same report ("Earnings report on Nov 2, in 17 days"). It printed
+       * "Reports 2026-11-02, before open" in a 30px headline (2026-10-16). */
+      const day = /^\d{4}-\d{2}-\d{2}$/.test(String(rel.date || ''))
+        ? new Date(`${rel.date}T12:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+        : String(rel.date || '');
+      const timing = { before_open: 'before the open', after_close: 'after the close' }[rel.timing]
+        || (rel.timing && rel.timing !== 'unknown' ? rel.timing.replace('_', ' ') : '');
+      const when = `${day}${timing ? ', ' + timing : ''}` + (rel.confirmed ? '' : ' (estimated)');
       return tile('earnings', 'What about earnings?', `Reports ${when}`, (pre.view || {}).headline, more);
     }
     if (post && post.available) {
@@ -187,7 +224,8 @@
 
   function render(out) {
     if (!out || out.available === false) {
-      return `<p class="ov-meta">The research framework could not grade this symbol: ${esc((out || {}).reason || 'no data')}.</p>`;
+      // The plain answers stay; only the grades are missing.
+      return pendingGrid(`The four grades are not available for this symbol: ${(out || {}).reason || 'no data'}.`);
     }
     const comb = out.combined || {};
     const gaps = ((out.data || {}).gaps || []);
@@ -195,7 +233,7 @@
         ${businessTile(out.long_term)}${priceTile(out.long_term)}${tradeTile(out.swing)}${earningsTile(out.earnings)}
       </div>
       ${comb.verdict ? `<p class="rf-verdict">${esc(comb.verdict)}</p>` : ''}
-      <p class="ov-fine">The Optic Score above summarises trend and signals. These four are graded separately, each by
+      <p class="ov-fine">The Optic Score below summarises trend and signals. These four are graded separately, each by
         its own stated rules (method ${esc(out.method_version || '')}, policy ${esc((out.policy || {}).version || '')}),
         and none has been shown to predict returns. "Insufficient Data" means evidence is missing, not that the answer is
         bad.${(out.freshness || {}).text ? ' ' + esc(out.freshness.text) : ''}${gaps.length ? ' Not loaded: ' + esc(gaps.join('; ')) + '.' : ''}</p>`;
@@ -205,7 +243,7 @@
     const host = document.querySelector('#ov-framework .rf-body');
     if (!host || STATE.ticker !== sym) return;
     if (FW.errors[sym]) {
-      host.innerHTML = `<p class="ov-meta">The research framework is not available right now: ${esc(FW.errors[sym])}.</p>`;
+      host.innerHTML = pendingGrid(`The four grades are not available right now: ${FW.errors[sym]}.`);
       return;
     }
     if (FW.data[sym]) host.innerHTML = render(FW.data[sym]);

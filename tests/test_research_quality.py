@@ -201,7 +201,8 @@ def test_an_implausible_model_gap_is_shown_not_graded():
            "dcf": {"per_share": 326.0}, "scenarios": {}, "reverse": {"solves": []}}
     out = quality.valuation_grade(val, strong_company(), {}, None, "operating", 0.1)
     ids = {c["id"]: c for c in out["components"]}
-    assert ids["intrinsic"]["status"] == "not_applicable" and "+226%" in ids["intrinsic"]["reason"]
+    # In words since 2026-10-16: "226% above the price", not "+226% from the price".
+    assert ids["intrinsic"]["status"] == "not_applicable" and "226% above the price" in ids["intrinsic"]["reason"]
 
 
 def test_implied_growth_is_judged_against_forward_estimates_not_a_boom_record():

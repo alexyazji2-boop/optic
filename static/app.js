@@ -1689,7 +1689,13 @@ function setStatus(parts) {
  * ratio. Every level and premium goes through here instead. */
 function usd(value, digits = 2) {
   if (value === null || value === undefined || Number.isNaN(Number(value))) return '—';
-  return '$' + Number(value).toLocaleString('en-US', {
+  /* The sign before the dollar: "-$86.45", the way a statement prints it.
+   * This printed "$-86.45" beside "+$100.00" in the same column (the
+   * Brokerage briefing, the Paper Desk's P&L), measured 2026-10-16. */
+  const n = Number(value);
+  // No stray minus on a value that rounds to zero ("-$0.00"), as fmtPct.
+  const neg = n < 0 && Number(Math.abs(n).toFixed(digits)) > 0;
+  return (neg ? '-' : '') + '$' + Math.abs(n).toLocaleString('en-US', {
     minimumFractionDigits: digits, maximumFractionDigits: digits,
   });
 }
@@ -17645,6 +17651,12 @@ function refreshOverviewFindings() {
   const biz = symbolIsFund(STATE.ticker) ? null : ovBusinessRead(d);
   if (take) take.innerHTML = ovTakeawaysHTML(d, biz, ovPriceRead(d), factors);
   if (fac) fac.innerHTML = ovFactorsHTML(d, factors);
+  // The four questions' plain answers, when the payload they read has moved
+  // (the valuation line waits on the long-term payload). An open "Show the
+  // figures" is left alone, as a repaint would fold it.
+  document.querySelectorAll('#ov-framework [data-rf-plain]').forEach((host) => {
+    if (!host.querySelector('details[open]')) host.innerHTML = ovPlainHTML(host.dataset.rfPlain);
+  });
   // Not while the form is open: a repaint would drop what is being typed.
   if (!document.querySelector('#ov-thesis details[open] form')) refreshThesisCheck();
 }
@@ -17672,6 +17684,45 @@ function ovEvidenceHTML(rows, source, view, viewLabel) {
     ? `<button type="button" class="ov-linkbtn" data-sec-view="${esc(view)}" data-sec-sym="${esc(STATE.ticker || '')}">${esc(viewLabel)}</button>` : ''}</p>` : ''}
   </details>`;
 }
+
+/* The plain answer under each of the four questions (static/research.js).
+ *
+ * The same four readings the takeaways make, routed to the question each
+ * answers: the business to "Is it a strong business?", the multiple against
+ * its own history to "Is the price attractive?", the share price's trend to
+ * "Is there a trade?". The risk card goes where its evidence lives: an
+ * earnings date to the earnings question (which already names the date, so
+ * only why it matters is said), a balance-sheet or statement risk to the
+ * business, a valuation risk to the price, anything about the tape to the
+ * trade. Nothing is computed here that the takeaways did not already. */
+function ovPlainHTML(id) {
+  const d = STATE.swing || {};
+  if (!d.quote) return '';
+  const biz = symbolIsFund(STATE.ticker) ? null : ovBusinessRead(d);
+  const val = biz ? ovValuationRead() : null;
+  const price = ovPriceRead(d);
+  const risk = ovFactors(d).neg.find((f) => !(val && f.view === 'long'));
+  const home = risk ? ({ financials: 'business', long: 'price', earnings: 'earnings' }[risk.view] || 'trade') : '';
+  const line = (text, why) => `${text ? `<p class="rf-plain-text">${esc(text)}</p>` : ''}${why
+    ? `<p class="rf-plain-why">${esc(why)}</p>` : ''}`;
+  const riskLine = home === id && id !== 'earnings'
+    ? `<p class="rf-plain-why"><strong>A risk to weigh:</strong> ${esc(risk.text)}.${risk.why ? ' ' + esc(risk.why) : ''}</p>` : '';
+  if (id === 'business' && biz) {
+    return line(biz.text, [biz.why, biz.conflict].filter(Boolean).join(' '))
+      + riskLine + ovEvidenceHTML(biz.evidence, biz.source, 'financials', 'Open Financials');
+  }
+  if (id === 'price' && val) {
+    return line(val.text, val.why) + riskLine + ovEvidenceHTML(val.evidence, val.source, 'long', 'Open Investing');
+  }
+  if (id === 'trade' && price) {
+    return line(price.text, `${price.why ? price.why + ' ' : ''}This describes the stock, not the business.`)
+      + riskLine + ovEvidenceHTML(price.evidence, `Daily closes through ${price.through}. Source: ${priceSourceName(d)}.`,
+        'chart', 'Open the chart');
+  }
+  if (id === 'earnings' && home === 'earnings') return line('', risk.why || '');
+  return riskLine;
+}
+if (typeof window !== 'undefined') window.ovPlainHTML = ovPlainHTML;
 
 function ovTakeawaysHTML(d, biz, price, factors) {
   const cards = [];
@@ -17730,8 +17781,16 @@ function ovFactorsHTML(d, factors) {
     ? ` <button type="button" class="ov-linkbtn" data-sec-view="${esc(f.view)}" data-sec-sym="${sym}"
       aria-label="Evidence for: ${esc(f.text)}">Evidence</button>` : ''}</li>`;
   const drivers = ovDrivers(d);
+  /* Folded below the Advanced level, with the count in the summary. Most of
+   * its points are the takeaways and the four questions above it said a
+   * third time (AAPL, 2026-10-16: revenue, margin, the earnings date and the
+   * valuation each appeared there already), and on a phone it was 743px.
+   * One press opens it; at Advanced and above it starts open, as before. */
+  const fold = knowledgeLevel() < 2;
+  const counts = `${factors.pos.length} for, ${factors.neg.length} against`;
   return `<section class="ov-sec" id="ov-drivers" aria-labelledby="ov-drv-h">
     <h2 class="ov-q" id="ov-drv-h">Bull case and bear case</h2>
+    ${fold ? `<details class="ov-ev ov-cases"><summary>Show the case for and against (${counts})</summary>` : ''}
     <div class="ov-cols">
       <div>
         <h3 class="ov-h3">Bull case</h3>
@@ -17744,6 +17803,7 @@ function ovFactorsHTML(d, factors) {
     : '<p class="ov-none">No bear-case point stands out in the data Optic holds. That is not the same as no risk: every stock can fall.</p>'}
       </div>
     </div>
+    ${fold ? '</details>' : ''}
     ${drivers.length ? `<details class="ov-ev ov-drivers"><summary>What has been moving it recently</summary>
       <ul class="ov-drv">${drivers.map((x) => `<li><span class="ov-drv-kind">${esc(x.kind)}</span>
         <span class="ov-drv-text">${x.url ? `<a href="${esc(x.url)}" target="_blank" rel="noopener noreferrer nofollow">${esc(x.text)}</a>` : esc(x.text)}</span>
@@ -17925,14 +17985,17 @@ function renderOverviewView() {
   const price = ovPriceRead(d);
   const factors = ovFactors(d);
   const ess = ovEssentialsHTML(q, (d.company || {}).short_interest);
+  const framed = !!(window.OpticFramework && !symbolIsFund(STATE.ticker));
 
   views.overview.innerHTML = `${securityHeader('overview')}
     <div class="ov-simple">
     ${ovAboutHTML()}
     <div id="ov-digest"></div>
-    <div id="ov-takeaways">${ovTakeawaysHTML(d, biz, price, factors)}</div>
+    ${/* A company's takeaways are said inside the four questions (see
+       ovPlainHTML); a fund, which they do not grade, keeps its own. */''}
+    ${framed ? window.OpticFramework.hostHTML()
+    : `<div id="ov-takeaways">${ovTakeawaysHTML(d, biz, price, factors)}</div>`}
     ${d.verdict ? ovScoreHTML(d) : ''}
-    ${window.OpticFramework && !symbolIsFund(STATE.ticker) ? window.OpticFramework.hostHTML() : ''}
     ${!biz && (fin.note || fin.notes) ? `<p class="caveat">${esc(fin.note || fin.notes)}</p>` : ''}
     ${overviewChartHTML(d)}
     ${ess ? `<section class="ov-sec" aria-labelledby="ov-ess-h">
@@ -32107,8 +32170,11 @@ function renderRoth(d) {
       </label>
       <button class="btn primary" type="submit">Recalculate</button>
     </form>
-    <p class="caveat" style="margin-top:var(--space-2)">Holdings stay on this device. Saved in your browser
-      and posted only to your own local server to compute the numbers. Nothing is stored server-side.</p>
+    ${/* "Posted only to your own local server" was true when Optic ran on the
+       reader's machine and false on the hosted site, where the holdings go to
+       Optic's server (2026-10-16). /api/retirement computes and discards them. */''}
+    <p class="caveat" style="margin-top:var(--space-2)">Your holdings are saved in this browser. To work
+      out the numbers they are sent to Optic's server, which computes the plan and keeps no copy.</p>
     <p class="caveat" style="margin-top:var(--space-2)">${gloss(d.limit_note || '')}</p>
 
     <div class="grid c4" style="margin:var(--space-3) 0">
@@ -44662,7 +44728,14 @@ function digestTime(iso) {
 }
 
 /* One name's three slots. `compact` drops the method line, for the list. */
-function digestBodyHTML(d, compact) {
+/* The digest leads with what changed; the headlines that may explain it are
+ * one press away when `fold` is set (the Overview). On a phone the four
+ * headline links were 600px of the 918px section, sitting above every
+ * takeaway on the page (launch audit, 2026-10-16). And "Not checked: ..." is
+ * a note about what the digest could not read, so it goes with the method
+ * note rather than under "Worth a closer look", where it read as advice.
+ * Headings are h3: the section heading above them is an h2. */
+function digestBodyHTML(d, compact, fold) {
   if (!d || d.available === false) {
     // A reason the server wrote is shown; a failed request is said plainly.
     return `<p class="muted">${esc((d && d.reason) || (d && d.error
@@ -44672,19 +44745,27 @@ function digestBodyHTML(d, compact) {
   const facts = (d.changed || []).map((f) => `<li>${esc(f.text)}${f.detail ? ` <span class="muted">${esc(f.detail)}</span>` : ''}</li>`).join('');
   const why = (d.explanations || []).map((e) => `<li><a href="${esc(e.url)}" target="_blank" rel="noopener">${
     esc(e.headline || e.url)}</a> <span class="muted">${esc([e.publisher, digestTime(e.published)].filter(Boolean).join(' · '))}</span></li>`).join('');
-  const look = (d.look_closer || []).map((x) => `<li>${esc(x)}</li>`).join('');
-  return `<div class="dg">
-    <h4 class="dg-h">What changed</h4>
-    ${facts ? `<ul class="dg-list">${facts}</ul>` : '<p class="muted">Nothing recorded for the period.</p>'}
-    <h4 class="dg-h">What may explain it <span class="dg-tag">not established</span></h4>
+  const gaps = (d.look_closer || []).filter((x) => /^Not checked:/.test(String(x)));
+  const look = (d.look_closer || []).filter((x) => !/^Not checked:/.test(String(x)))
+    .map((x) => `<li>${esc(x)}</li>`).join('');
+  const nWhy = (d.explanations || []).length;
+  const whyBlock = fold && why
+    ? `<details class="dg-why"><summary>${nWhy} headline${nWhy === 1 ? '' : 's'} published around it
+        <span class="dg-tag">not established as the cause</span></summary>
+        <ul class="dg-list">${why}</ul><p class="dg-note">${esc(d.explanations_note || '')}</p></details>`
+    : `<h3 class="dg-h">What may explain it <span class="dg-tag">not established</span></h3>
     ${why ? `<ul class="dg-list">${why}</ul>` : ''}
-    <p class="dg-note">${esc(d.explanations_note || '')}</p>
-    ${look ? `<h4 class="dg-h">Worth a closer look</h4><ul class="dg-list">${look}</ul>` : ''}
-    ${compact ? '' : `<p class="dg-note">${esc(d.method || '')}</p>`}
+    <p class="dg-note">${esc(d.explanations_note || '')}</p>`;
+  return `<div class="dg">
+    <h3 class="dg-h">What changed</h3>
+    ${facts ? `<ul class="dg-list">${facts}</ul>` : '<p class="muted">Nothing recorded for the period.</p>'}
+    ${whyBlock}
+    ${look ? `<h3 class="dg-h">Worth a closer look</h3><ul class="dg-list">${look}</ul>` : ''}
+    ${compact ? '' : `<p class="dg-note">${esc([d.method || '', ...gaps].filter(Boolean).join(' '))}</p>`}
   </div>`;
 }
 
-function digestCardHTML(d, title) {
+function digestCardHTML(d, title, fold) {
   const per = d && d.period;
   const span = per && per.label ? per.label : (per && per.latest ? `Session of ${per.latest}` : '');
   return `<div class="dg-card" role="region" aria-label="${esc(title)}">
@@ -44694,7 +44775,7 @@ function digestCardHTML(d, title) {
     ? (d.names.length ? d.names.map((n) => `<details class="dg-name"${n.state === 'changed' ? ' open' : ''}><summary><span class="tkr">${esc(n.symbol)}</span> <span class="muted">${
       esc(n.state === 'changed' ? `${(n.changed || []).length} change${(n.changed || []).length === 1 ? '' : 's'}` : n.state)}</span></summary>${digestBodyHTML(n, true)}</details>`).join('')
       : '<p class="muted">No names to digest.</p>') + `<p class="dg-note">${esc((d && d.method) || '')}</p>`
-    : digestBodyHTML(d, false)}
+    : digestBodyHTML(d, false, fold)}
   </div>`;
 }
 
@@ -44733,7 +44814,7 @@ async function paintOvDigest(sym) {
   if (!still || STATE.ticker !== sym) return;
   still.innerHTML = `<section class="ov-sec" aria-labelledby="ov-digest-h">
     <h2 class="ov-q" id="ov-digest-h">What changed lately</h2>
-    ${digestCardHTML(d, `${sym} digest`)}
+    ${digestCardHTML(d, `${sym} digest`, true)}
     <button type="button" class="ov-linkbtn" data-milo-explain="${esc(JSON.stringify({ label: `${sym}'s latest change`, value: '', where: 'Overview' }))}">Ask Milo about this</button>
   </section>`;
 }
@@ -46394,8 +46475,11 @@ function bkConnectionsHTML() {
  *  it is ticked, and the server refuses a link without it either way. */
 function bkConsentHtml(c) {
   if (c.accepted) {
-    return `<p class="set-row-note">You agreed to the linking terms (version ${esc(c.version || '')}) on ${
-      esc(new Date(c.accepted_at).toLocaleDateString())}.</p>`;
+    /* The version is kept for the record (it is the server's, and the title
+     * carries it), not printed: it read "terms-draft-2026-10-12+privacy-draft-
+     * 2026-10-12|shown:none" in the middle of a sentence (2026-10-16). */
+    return `<p class="set-row-note" title="${esc(c.version ? `Terms version ${c.version}` : '')}">You agreed to the linking terms on ${
+      esc(new Date(c.accepted_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }))}.</p>`;
   }
   /* Only the documents that have a URL are named: the server records the
    * agreement under a version that says which ones were shown (owner-only
@@ -47518,8 +47602,10 @@ function pageTabTitle() {
   const v = STATE.view;
   if (v === 'chart') return chartTabTitle();
   if (!v || v === 'home') return APP_TITLE;
-  const name = (typeof SUB_LABELS !== 'undefined' && SUB_LABELS[v])
-    || (typeof VIEW_NAMES !== 'undefined' && VIEW_NAMES[v]) || '';
+  // VIEW_NAMES first: it has the full names ("Optic's Read" where the menu
+  // says "Read"); SUB_LABELS covers the pages it lacks.
+  const name = (typeof VIEW_NAMES !== 'undefined' && VIEW_NAMES[v])
+    || (typeof SUB_LABELS !== 'undefined' && SUB_LABELS[v]) || '';
   if (!name) return APP_TITLE;
   const sym = typeof SECURITY_VIEWS !== 'undefined' && SECURITY_VIEWS.includes(v) && STATE.ticker
     ? `${STATE.ticker} ` : '';

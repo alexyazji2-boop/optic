@@ -885,8 +885,10 @@
         } else if (made.mail && !made.mail.available) {
           // Honest rather than reassuring: no mail is configured, so no message
           // was sent, and saying "check your inbox" would be a lie.
-          toast('Account created. Email is not configured on this deployment, so no '
-            + 'verification message was sent.', 'warn');
+          // Reader words, not operator words: "this deployment" and "the server
+          // log" name things a reader cannot see or reach (2026-10-16).
+          toast('Account created. Optic is not sending email yet, so no '
+            + 'confirmation message was sent.', 'warn');
         } else {
           toast('Account created, but the verification email could not be sent. '
             + 'You can request another from Settings.', 'warn');
@@ -905,8 +907,8 @@
         // with no mail relay nothing is emailed to anyone, and a link exists
         // only if an account does.
         if (asked.mail && !asked.mail.available) {
-          message = 'Email is not configured on this deployment, so nothing is emailed. '
-            + 'If an account uses that address, its reset link is in the server log.';
+          message = 'Optic is not sending email yet, so a reset link cannot be emailed to '
+            + 'anyone. Devices already signed in stay signed in.';
         }
         if (note) { note.textContent = message; note.hidden = false; }
         busy(form, false);
@@ -1160,8 +1162,8 @@
         closeMenu();
         if (reply.already_verified) toast('That address is already confirmed.');
         else if (reply.sent) toast('A new confirmation link is on its way.');
-        else toast('Email is not configured on this deployment, so the link went to '
-          + 'the server log.', 'warn');
+        else toast('Optic is not sending email yet, so the confirmation link could not '
+          + 'be sent.', 'warn');
       }).catch(function (err) { toast(err.message, 'bad'); });
       return;
     }
