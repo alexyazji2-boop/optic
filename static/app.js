@@ -8004,6 +8004,7 @@ document.addEventListener('input', (evt) => {
 
 document.addEventListener('change', (evt) => {
   if (evt.target.id === 'pt-expiry' || evt.target.id === 'pt-strike') {
+    paperCaptureForm();
     if (evt.target.id === 'pt-expiry') {
       paperTicket.expiry = evt.target.value;
       // A strike from the previous expiry is not on the new ladder.
@@ -8015,8 +8016,13 @@ document.addEventListener('change', (evt) => {
     return;
   }
   if (evt.target.id === 'pt-ticker') {
+    paperCaptureForm();
     paperTicket.ticker = (evt.target.value || '').toUpperCase().trim();
-    renderPaperView();
+    /* The symbol's change fires as focus leaves it, usually for Qty: the redraw
+     * replaced the field being clicked into and the first keystrokes went
+     * nowhere. So it waits for the focus to land, then redraws and puts the
+     * focus (and anything already typed) back by id. */
+    setTimeout(() => preserveUI(views.paper, () => renderPaperView(), { keepInputs: true }), 0);
     if (paperTicket.instrument === 'option' && paperTicket.ticker) {
       paperLoadChain(paperTicket.ticker);
     }
@@ -8660,6 +8666,36 @@ document.addEventListener('input', (evt) => {
   if (feed) { feed.innerHTML = watchlistFeedHTML({}); fillSparks(feed); }
   const shown = document.getElementById('wv-shown');
   if (shown) shown.textContent = watchShownLabel();
+});
+
+/* What is typed in the ticket, into paperTicket, without a redraw.
+ *
+ * The ticket was read only at submit, and every toggle and select (Long or
+ * Short, Shares or Option, call or put, the expiry, the strike, the symbol)
+ * redrew it from paperTicket, so pressing Short after filling it in wiped the
+ * quantity, entry, stop, target and thesis. And the cost, risk and wrong-side
+ * stop preview read paperTicket too, so it appeared only after a refused
+ * submit (launch audit, 2026-10-16). */
+function paperCaptureForm() {
+  const form = document.getElementById('pt-form');
+  if (!form) return;
+  const get = (n) => {
+    const el = form.elements[n];
+    return el ? (el.value || '').trim() : null;
+  };
+  ['qty', 'entry', 'stop', 'target', 'thesis'].forEach((k) => {
+    const v = get(k);
+    if (v !== null) paperTicket[k] = v;
+  });
+  const sym = get('ticker');
+  if (sym !== null) paperTicket.ticker = sym.toUpperCase();
+}
+
+document.addEventListener('input', (evt) => {
+  if (!evt.target.closest || !evt.target.closest('#pt-form')) return;
+  paperCaptureForm();
+  const host = document.getElementById('pt-preview');
+  if (host) host.innerHTML = paperPreviewHTML();
 });
 
 document.addEventListener('submit', (evt) => {
@@ -38232,7 +38268,7 @@ function paperTicketHTML() {
       <input id="pt-thesis" name="thesis" type="text" value="${esc(t.thesis)}"
         maxlength="200" placeholder="Held the 200-day and volume came in"></div>
     ${paperReadHTML()}
-    ${paperPreviewHTML()}
+    <div id="pt-preview" aria-live="polite">${paperPreviewHTML()}</div>
     <div class="ins-acts">
       <button class="btn primary" type="submit">Open the trade</button>
       <button class="btn" type="button" data-paper-clear>Clear</button>
@@ -48945,9 +48981,10 @@ document.addEventListener('click', (evt) => {
   /* ---------------------------------------------------- Insiders page */
   /* ------------------------------------------------------ the paper book */
   const ptDir = evt.target.closest('[data-paper-dir]');
-  if (ptDir) { paperTicket.direction = ptDir.dataset.paperDir; renderPaperView(); return; }
+  if (ptDir) { paperCaptureForm(); paperTicket.direction = ptDir.dataset.paperDir; renderPaperView(); return; }
   const ptInst = evt.target.closest('[data-paper-inst]');
   if (ptInst) {
+    paperCaptureForm();
     paperTicket.instrument = ptInst.dataset.paperInst;
     renderPaperView();
     // The chain is only needed by the option half, so it is fetched when that
@@ -48959,6 +48996,7 @@ document.addEventListener('click', (evt) => {
   }
   const ptOt = evt.target.closest('[data-paper-ot]');
   if (ptOt) {
+    paperCaptureForm();
     paperTicket.optionType = ptOt.dataset.paperOt;
     // The strike ladder is per side, so a strike chosen for a call is not
     // necessarily on the put ladder. Cleared rather than carried across.
