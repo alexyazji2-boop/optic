@@ -19572,11 +19572,12 @@ function renderPriority(p) {
 }
 
 async function loadPriority() {
-  if (STATE.priority) return;
+  // A failed read is retried on the next visit, not kept (launch audit, 2026-10-16).
+  if (STATE.priority && !STATE.priority.failed) return;
   try {
     STATE.priority = await getJSON('/api/priority');
   } catch (err) {
-    STATE.priority = { available: false, reason: err.message };
+    STATE.priority = { available: false, failed: true, reason: err.message };
   }
   mountPanel('priority-host', renderPriority(STATE.priority));
 }
@@ -20806,11 +20807,12 @@ function renderGlobal(g) {
 }
 
 async function loadGlobal() {
-  if (STATE.globalOvernight) return;
+  // A failed read is retried on the next visit, not kept (launch audit, 2026-10-16).
+  if (STATE.globalOvernight && !STATE.globalOvernight.failed) return;
   try {
     STATE.globalOvernight = await getJSON('/api/global');
   } catch (err) {
-    STATE.globalOvernight = { available: false, reason: err.message };
+    STATE.globalOvernight = { available: false, failed: true, reason: err.message };
   }
   mountPanel('global-host', renderGlobal(STATE.globalOvernight));
 }
@@ -21590,11 +21592,12 @@ function mountEvaluation(e) {
 }
 
 async function loadEvaluation() {
-  if (STATE.evaluation) return;
+  // A failed read is retried on the next visit, not kept (launch audit, 2026-10-16).
+  if (STATE.evaluation && !STATE.evaluation.failed) return;
   try {
     STATE.evaluation = await getJSON('/api/evaluate');
   } catch (err) {
-    STATE.evaluation = { available: false, reason: err.message };
+    STATE.evaluation = { available: false, failed: true, reason: err.message };
   }
   const host = document.getElementById('eval-host');
   if (host) {
@@ -21698,11 +21701,12 @@ function repaintMarketLate() {
 }
 
 async function loadDispersion() {
-  if (STATE.dispersion) return;
+  // A failed read is retried on the next visit, not kept (launch audit, 2026-10-16).
+  if (STATE.dispersion && !STATE.dispersion.failed) return;
   try {
     STATE.dispersion = stampFetched(await getJSON('/api/dispersion'));
   } catch (err) {
-    STATE.dispersion = { available: false, reason: err.message };
+    STATE.dispersion = { available: false, failed: true, reason: err.message };
   }
   repaintMarketLate();
 }
@@ -21745,11 +21749,12 @@ function renderDispersion(dd) {
   </div>`;
 }
 async function loadCorrelation() {
-  if (STATE.correlation) return;
+  // A failed read is retried on the next visit, not kept (launch audit, 2026-10-16).
+  if (STATE.correlation && !STATE.correlation.failed) return;
   try {
     STATE.correlation = stampFetched(await getJSON('/api/implied-correlation'));
   } catch (err) {
-    STATE.correlation = { available: false, reason: err.message };
+    STATE.correlation = { available: false, failed: true, reason: err.message };
   }
   repaintMarketLate();
 }
