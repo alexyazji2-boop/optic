@@ -8899,6 +8899,16 @@ function watchAdoptAccountLists(lists, preferId) {
   if (wanted) { watchSave(wanted.symbols || []); watchAccountListRemember(wanted.id); }
 }
 
+/* The open account list, in both places it is held. Edits updated
+ * ACCOUNT.watchlist but not the list's entry in ACCOUNT.watchlists, so the
+ * chip counts went stale and switching to another list and back reloaded the
+ * old symbols over this session's edits (launch audit, 2026-10-16). */
+function setAccountWatchlist(symbols) {
+  ACCOUNT.watchlist = symbols;
+  const open = (ACCOUNT.watchlists || []).find((w) => w.id === ACCOUNT.listId);
+  if (open) open.symbols = [...(symbols || [])];
+}
+
 async function watchListSwitch(id) {
   if (signedIn() && Array.isArray(ACCOUNT.watchlists)) {
     const found = ACCOUNT.watchlists.find((w) => w.id === id);
@@ -9029,7 +9039,7 @@ async function watchSymbolMove(symbol, delta) {
   order.splice(to, 0, order.splice(from, 1)[0]);
   watchSave(order);
   if (signedIn() && ACCOUNT.listId) {
-    ACCOUNT.watchlist = order;
+    setAccountWatchlist(order);
     try {
       await authApi('/api/watchlists/' + ACCOUNT.listId + '/order',
         { method: 'PUT', body: { symbols: order } });
@@ -9056,7 +9066,7 @@ async function watchWrite(symbols) {
     const updated = await authApi('/api/watchlists/' + ACCOUNT.listId + '/items', {
       method: 'POST', body: { symbols: symbols },
     });
-    ACCOUNT.watchlist = updated.watchlist.symbols || [];
+    setAccountWatchlist(updated.watchlist.symbols || []);
     return ACCOUNT.watchlist;
   } catch (err) {
     window.OpticAuth.toast(err.message, 'bad');
@@ -9067,7 +9077,7 @@ async function watchWrite(symbols) {
 function watchAdd(symbol) {
   const next = [...watchList(), String(symbol).toUpperCase().trim()];
   const clean = [...new Set(next.filter(Boolean))];
-  if (ACCOUNT.watchlist) ACCOUNT.watchlist = clean;     // optimistic
+  if (ACCOUNT.watchlist) setAccountWatchlist(clean);     // optimistic
   watchWrite(clean).then(() => {
     STATE.watchlist = null;               // force a refetch: the row is not local
     loadWatchlist(true);
@@ -9089,7 +9099,7 @@ function watchRemove(symbol, opts = {}) {
   const kept = watchList().filter((s) => s !== sym);
   watchSave(kept);
   if (ACCOUNT.watchlist) {
-    ACCOUNT.watchlist = kept;
+    setAccountWatchlist(kept);
     if (ACCOUNT.listId) {
       authApi('/api/watchlists/' + ACCOUNT.listId + '/items/' + encodeURIComponent(sym),
         { method: 'DELETE' }).catch((err) => {
@@ -13158,9 +13168,16 @@ function optDeltaRange() {
 async function loadOptResearch(force) {
   const sym = STATE.ticker;
   if (!sym) return;
+  /* A new symbol drops the old table: it stayed under the new name until the
+   * reply landed, and for good if that reply failed (launch audit,
+   * 2026-10-16). And each request has a number, so quick filter changes
+   * cannot land out of order. */
   if (OPT.sym !== sym) {
     OPT.sym = sym; OPT.expiry = null; OPT.legs = []; OPT.analysis = null; OPT.rowsCache = {};
+    OPT.data = null; OPT.error = null;
   }
+  OPT.seq = (OPT.seq || 0) + 1;
+  const seq = OPT.seq;
   const dr = optDeltaRange();
   const qs = new URLSearchParams({ side: OPT.side, delta_lo: dr.lo, delta_hi: dr.hi, min_oi: OPT.minOi || 0,
     include_unquoted: OPT.unquoted ? 'true' : 'false' });
@@ -13170,14 +13187,17 @@ async function loadOptResearch(force) {
   paintOptResearch();
   try {
     const data = await getJSON(`/api/options/${encodeURIComponent(sym)}/research?${qs}`);
-    if (STATE.ticker !== sym) return;
+    if (STATE.ticker !== sym || OPT.seq !== seq) return;
     OPT.data = data; OPT.expiry = data.expiry;
   } catch (err) {
+    if (STATE.ticker !== sym || OPT.seq !== seq) return;
     OPT.error = err.message;
   } finally {
-    OPT.loading = false;
-    paintOptResearch();
-    updateChatContext && updateChatContext();
+    if (STATE.ticker === sym && OPT.seq === seq) {
+      OPT.loading = false;
+      paintOptResearch();
+      updateChatContext && updateChatContext();
+    }
   }
 }
 
@@ -13190,6 +13210,9 @@ function optResearchHTML() {
   const d = OPT.data;
   if (OPT.error && !d) return `<div class="callout bad">${esc(OPT.error)}</div>`;
   if (!d) return loadingHTML('the option chain for research');
+  // A failed refresh over a table that is still shown says so above it.
+  const stale = OPT.error ? `<div class="callout bad">Could not refresh: ${esc(OPT.error)} The table below is
+    from the last read that worked.</div>` : '';
   const exps = d.listed_expiries || [];
   const t = d.table || {};
   const rows = t.rows || [];
@@ -13237,7 +13260,7 @@ function optResearchHTML() {
         aria-label="Add the ${fmt(r.strike, 2)} ${r.type} to the position builder">Add</button>` : ''}</td>
     </tr>`).join('')}</tbody></table></div>`
     : `<p class="ov-none">No contract on this expiry passes these filters${dropped ? ` (${esc(dropped)} left out)` : ''}. Widen the delta range or the spread.</p>`;
-  return `${controls}${sum}${evs ? `<ul class="op-events">${evs}</ul>` : ''}${table}
+  return `${stale}${controls}${sum}${evs ? `<ul class="op-events">${evs}</ul>` : ''}${table}
     <p class="ov-fine">${fmt(t.shown || 0, 0)} of ${fmt(t.total || 0, 0)} ${OPT.side}s shown${dropped ? `; left out: ${esc(dropped)}` : ''}.
       Cost is one contract (100 shares) at the ask, before fees. Breakeven at expiry is the strike ${OPT.side === 'call' ? 'plus' : 'minus'} the ask.
       Decay is the model's dollars lost per day with nothing else changing; per vol pt is the dollar change for a one-point move in implied volatility.
@@ -16493,6 +16516,15 @@ function congressRow(t) {
 
 function renderCongress(c) {
   if (!c) return '';
+  /* A read that failed says so. It fell into the no-filings sentence below,
+   * so an error read as "an absence of a disclosure" (launch audit,
+   * 2026-10-16). And a reply for another symbol is not drawn at all. */
+  if (c.ticker && STATE.ticker && c.ticker !== STATE.ticker) return '';
+  if (c.failed) {
+    return `<div class="panel" data-fixed="1"><h2>${hg('Congressional disclosures')}</h2>
+      <p class="sub">The House disclosures could not be read just now (${esc(c.reason || 'no answer')}).
+        This is a failed read, not a finding that nothing was disclosed.</p></div>`;
+  }
   if (!c.available || !(c.trades || []).length) {
     return `<div class="panel" data-fixed="1"><h2>${hg('Congressional disclosures')}</h2>
       <p class="sub">No House filing covering this symbol in the record read so
@@ -16523,11 +16555,17 @@ async function loadCongress(force) {
   if (!sym) return;
   if (!force && STATE.congressFor === sym) return;
   STATE.congressFor = sym;
+  STATE.congress = null;   // the previous symbol's trades are not this one's
+  let out;
   try {
-    STATE.congress = await getJSON(`/api/congress?ticker=${encodeURIComponent(sym)}&limit=40`);
+    out = await getJSON(`/api/congress?ticker=${encodeURIComponent(sym)}&limit=40`);
   } catch (err) {
-    STATE.congress = { available: false, reason: err.message };
+    out = { available: false, failed: true, reason: err.message };
+    // Not remembered as read, so the next visit asks again.
+    STATE.congressFor = null;
   }
+  if (STATE.ticker !== sym) return;
+  STATE.congress = { ...out, ticker: sym };
 }
 
 function renderFinancialsView(force) {
@@ -21595,6 +21633,18 @@ function ordinal(v) {
   const suf = t >= 11 && t <= 13 ? 'th' : ({ 1: 'st', 2: 'nd', 3: 'rd' }[n % 10] || 'th');
   return `${n}${suf}`;
 }
+/* Macro's late pieces (dispersion, implied correlation, the sector board)
+ * each redrew the whole tab when they landed, up to three times on load and
+ * on every refresh, closing expanders, clearing the currency search and
+ * wiping an open Sector Read. And they redrew it from any other tab, too.
+ * Now: only while Macro is on screen, keeping what the reader had open or
+ * typed, and the open read is put back (launch audit, 2026-10-16). */
+function repaintMarketLate() {
+  if (!STATE.market || STATE.view !== 'market') return;
+  preserveUI(views.market, () => renderMarket(STATE.market), { keepInputs: true });
+  if (STATE.sectorRead) renderSectorRead('sector-read-host');
+}
+
 async function loadDispersion() {
   if (STATE.dispersion) return;
   try {
@@ -21602,7 +21652,7 @@ async function loadDispersion() {
   } catch (err) {
     STATE.dispersion = { available: false, reason: err.message };
   }
-  if (STATE.market) renderMarket(STATE.market);
+  repaintMarketLate();
 }
 function dispersionSpark(rows) {
   if (!rows || rows.length < 10) return '';
@@ -21649,7 +21699,7 @@ async function loadCorrelation() {
   } catch (err) {
     STATE.correlation = { available: false, reason: err.message };
   }
-  if (STATE.market) renderMarket(STATE.market);
+  repaintMarketLate();
 }
 
 /* Portfolio-level risk.
@@ -21968,19 +22018,30 @@ function renderSectorRead(host) {
   if (!el) return;
   const r = STATE.sectorRead;
   if (!r) { el.innerHTML = ''; return; }
+  /* The read's panels are fixed (never folded by the late collapsible pass,
+   * which folded "Reading the board..." and the failure reason shut), and the
+   * section holding them is opened: a requested read sat inside a folded
+   * "Sector board" (launch audit, 2026-10-16). */
+  /* Revealed once, on the paint after the press (which can be several paints
+   * later when the press came from Explore, before this tab existed); later
+   * repaints neither reopen a section the reader shut nor scroll the page. */
+  const reveal = !!STATE.sectorReadReveal;
+  STATE.sectorReadReveal = false;
+  const holder = reveal ? el.closest('.panel.is-closed') : null;
+  if (holder) openPanel(holder);
   if (r.loading) {
-    el.innerHTML = `<div class="panel"><h2>${esc(r.symbol)}. Reading the board…</h2>
+    el.innerHTML = `<div class="panel" data-fixed="1"><h2>${esc(r.symbol)}. Reading the board…</h2>
       <p class="sub">Writing from the levels and returns for ${esc(r.symbol)}.</p></div>`;
     return;
   }
   if (!r.available) {
-    el.innerHTML = `<div class="panel"><h2>${esc(r.symbol)} read</h2>
+    el.innerHTML = `<div class="panel" data-fixed="1"><h2>${esc(r.symbol)} read</h2>
       ${r.summary ? `<p class="sub">${esc(r.summary)}</p>` : ''}
       <div class="callout">${esc(r.reason || 'No written read available.')}</div></div>`;
     return;
   }
   const row = r.row || {};
-  el.innerHTML = `<div class="panel sector-read">
+  el.innerHTML = `<div class="panel sector-read" data-fixed="1">
     <div class="earn-brief-head">
       <h2>${esc(r.symbol)}${row.name ? ` \u00b7 ${esc(row.name)}` : ''} read</h2>
       <div style="display:flex;gap:var(--space-2);align-items:center">
@@ -21994,19 +22055,25 @@ function renderSectorRead(host) {
     <p class="caveat">${gloss(r.method || '')}</p>
     <p class="caveat">${esc(r.disclaimer || '')}</p>
   </div>`;
-  el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  if (reveal || STATE.sectorReadScroll) el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  STATE.sectorReadScroll = false;
 }
 
 async function openSectorRead(symbol, host) {
   const sym = (symbol || '').toUpperCase();
   const cached = STATE.sectorReadCache[sym];
+  STATE.sectorReadReveal = true;
   if (cached) { STATE.sectorRead = cached; renderSectorRead(host); return; }
   STATE.sectorRead = { loading: true, symbol: sym };
   renderSectorRead(host);
+  // The written read, when it lands, is scrolled to once.
+  STATE.sectorReadScroll = true;
   try {
     const data = await getJSON(`/api/sectors/${encodeURIComponent(sym)}/read`);
     data.symbol = data.symbol || sym;
-    STATE.sectorReadCache[sym] = data;
+    // A refusal (no credit, writer down) is not kept: the server does not
+    // cache it either, so a later press can succeed.
+    if (data.available !== false) STATE.sectorReadCache[sym] = data;
     if ((STATE.sectorRead || {}).symbol !== sym) return;   // a later click won
     STATE.sectorRead = data;
   } catch (err) {
@@ -31666,6 +31733,8 @@ async function loadEarningsBrief(ticker) {
     // The reader may have moved on while this was in flight.
     if (STATE.ticker === ticker) renderEarningsBrief(b);
   } catch (err) {
+    // Only for the symbol on screen, as the success branch already checks.
+    if (STATE.ticker !== ticker) return;
     renderEarningsBrief({ available: false,
       reason: `The brief could not be loaded (${err.message}). Every figure it would `
         + 'discuss is in the panels below.' });
@@ -33697,7 +33766,13 @@ function detailsKey(el) {
   return (el.id || (sum ? sum.textContent.trim().slice(0, 60) : '')) || null;
 }
 
-function preserveUI(host, fn) {
+/* `opts.keepInputs`: fields the reader has typed into (value no longer the
+ * markup's default) are put back after the redraw. For a background refresh
+ * only: there the data moved, not the reader, and the 20-second Options
+ * refresh was wiping a half-typed budget or position-builder leg (launch
+ * audit, 2026-10-16). A control press that means to reset a field does not
+ * pass it. */
+function preserveUI(host, fn, opts = {}) {
   // A control press is not a fresh load. animateNextChart is sticky — set true
   // by the last foreground load and only ever cleared by the resize path — so
   // every timeframe or candle/line press was replaying the draw-on animation
@@ -33714,8 +33789,25 @@ function preserveUI(host, fn) {
   const focusId = active && active.id ? active.id : null;
   const caret = active && typeof active.selectionStart === 'number'
     ? [active.selectionStart, active.selectionEnd] : null;
+  const typed = [];
+  if (opts.keepInputs) {
+    (host || document).querySelectorAll('input[id], textarea[id], select[id]').forEach((el) => {
+      if (el.type === 'checkbox' || el.type === 'radio') {
+        if (el.checked !== el.defaultChecked) typed.push([el.id, 'checked', el.checked]);
+      } else if (el.tagName === 'SELECT') {
+        if ([...el.options].some((o) => o.selected !== o.defaultSelected)) typed.push([el.id, 'value', el.value]);
+      } else if (el.value !== el.defaultValue) {
+        typed.push([el.id, 'value', el.value]);
+      }
+    });
+  }
 
   fn();
+
+  typed.forEach(([id, prop, v]) => {
+    const el = document.getElementById(id);
+    if (el) el[prop] = v;
+  });
 
   (host || document).querySelectorAll('details').forEach((el) => {
     const key = detailsKey(el);
@@ -36441,7 +36533,9 @@ async function loadSwing(force, opts = {}) {
     }
     setChartLive(isTapeLiveET());
     setChartAnimation(!silent || hasPendingDraws());
-    renderSwing(data);
+    // A background refresh keeps open menus, focus, scroll and typed fields.
+    if (silent && STATE.view === 'swing') preserveUI(views.swing, () => renderSwing(data), { keepInputs: true });
+    else renderSwing(data);
     endLoad(views.swing);
     if (!silent) revealPanels(views.swing);
     loadPatternRates();
@@ -41653,7 +41747,7 @@ async function loadSectorBoard() {
   if (STATE.sectorBoard) return;
   try {
     STATE.sectorBoard = stampFetched(await getJSON('/api/sectors/board'));
-    if (STATE.market) renderMarket(STATE.market);
+    repaintMarketLate();
   } catch (err) {
     console.warn('Sector board unavailable:', err.message);
   }
@@ -41718,7 +41812,9 @@ function macroFactors(m) {
 async function loadMarket(force, opts = {}) {
   const silent = !!opts.silent;
   if (STATE.market && STATE.market.sectors && !force) {
-    sweepCharts(() => renderMarket(STATE.market)); revealPanels(views.market); loadSectorBoard(); loadCorrelation(); loadDispersion(); return;
+    sweepCharts(() => renderMarket(STATE.market)); revealPanels(views.market);
+    if (STATE.sectorRead) renderSectorRead('sector-read-host');
+    loadSectorBoard(); loadCorrelation(); loadDispersion(); return;
   }
   if (!silent) beginLoad(views.market, 'macro and sector data (this pulls ~40 symbols)');
   try {
@@ -41726,7 +41822,11 @@ async function loadMarket(force, opts = {}) {
     STATE.market = data;
     setChartLive(isTapeLiveET());
     setChartAnimation(!silent || hasPendingDraws());
-    renderMarket(data);
+    // The 20-second refresh keeps what the reader opened or typed.
+    if (silent && STATE.view === 'market') preserveUI(views.market, () => renderMarket(data), { keepInputs: true });
+    else renderMarket(data);
+    // A read asked for from Explore before this tab existed lands here.
+    if (STATE.sectorRead) renderSectorRead('sector-read-host');
     // Not awaited: one extra request each, and the rest of the tab should not wait.
     loadSectorBoard();
     loadCorrelation();
@@ -41760,10 +41860,15 @@ async function loadLong(force, opts = {}) {
   // now rather than waiting for it (static/valuation.js paints when its
   // panel exists).
   if (window.OpticValuation) window.OpticValuation.load();
-  if (!silent) beginLoad(views.long, `10-year history for ${STATE.ticker} and the major indices`);
+  // "and the major indices" came off: the request is indices=false.
+  if (!silent) beginLoad(views.long, `10-year history for ${STATE.ticker}`);
+  // As loadEarnings: a reply for a symbol the reader has left is dropped,
+  // not stored under the new one (it also feeds the Overview's score and Milo).
+  const asked = STATE.ticker;
   try {
-    const data = await getJSON(`/api/longterm/${encodeURIComponent(STATE.ticker)}?indices=false`);
-    data.ticker = STATE.ticker;
+    const data = await getJSON(`/api/longterm/${encodeURIComponent(asked)}?indices=false`);
+    if (STATE.ticker !== asked) return;
+    data.ticker = asked;
     STATE.long = data;
     setChartLive(isTapeLiveET());
     setChartAnimation(!silent || hasPendingDraws());
@@ -41778,6 +41883,7 @@ async function loadLong(force, opts = {}) {
     updateStatus();
     updateChatContext();
   } catch (err) {
+    if (STATE.ticker !== asked) return;
     if (!silent) {
       endLoad(views.long);
       views.long.innerHTML = errorHTML(err.message);
@@ -41960,9 +42066,16 @@ async function loadEarnings(force, opts = {}) {
     loadEarningsBrief(STATE.ticker); return;
   }
   if (!silent) beginLoad(views.earnings, `earnings data for ${STATE.ticker}`);
+  /* The symbol asked for, kept, and the reply dropped if the reader has moved
+   * on. It was stamped with STATE.ticker after the await, so a slow reply for
+   * the previous symbol was stored and drawn as the new one ("Next report ·
+   * NVDA" over AAPL's numbers) and then served from cache (launch audit,
+   * 2026-10-16). */
+  const asked = STATE.ticker;
   try {
-    const data = await getJSON(`/api/earnings/${encodeURIComponent(STATE.ticker)}`);
-    data.ticker = STATE.ticker;
+    const data = await getJSON(`/api/earnings/${encodeURIComponent(asked)}`);
+    if (STATE.ticker !== asked) return;
+    data.ticker = asked;
     STATE.earnings = data;
     setChartLive(isTapeLiveET());
     setChartAnimation(!silent || hasPendingDraws());
@@ -41974,6 +42087,7 @@ async function loadEarnings(force, opts = {}) {
     updateStatus();
     updateChatContext();
   } catch (err) {
+    if (STATE.ticker !== asked) return;
     if (!silent) { endLoad(views.earnings); views.earnings.innerHTML = errorHTML(err.message); }
     else console.warn('Silent earnings refresh failed:', err.message);
   }
@@ -48121,7 +48235,14 @@ const rerenderActiveView = () => {
    * list somewhere else. Two lists, one of which is a guess about the other,
    * is how a view comes to silently not repaint. */
   if (STATE.view === 'swing') renderSwing(d);
-  else if (STATE.view === 'earnings') renderEarnings(d);
+  else if (STATE.view === 'earnings') {
+    renderEarnings(d);
+    /* The brief's host comes back empty from renderEarnings, and only the
+     * loader fills it, so opening Milo or flipping the advanced switch made
+     * the Pre-earnings brief vanish (launch audit, 2026-10-16). Cached, so
+     * this repaints rather than refetches. */
+    if (STATE.ticker) loadEarningsBrief(STATE.ticker);
+  }
   else if (STATE.view === 'market') renderMarket(d);
   else if (STATE.view === 'indices') renderIndices(d);
   else if (STATE.view === 'roth') renderRoth(d);

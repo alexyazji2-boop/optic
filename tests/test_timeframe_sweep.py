@@ -127,7 +127,7 @@ var frames = [];
 function requestAnimationFrame(f) { frames.push(f); return frames.length; }
 function runFrames() { var f = frames; frames = []; f.forEach(function (g) { g(); }); }
 function afterDrawsSettle(fn) { fn(); }
-function preserveUI(host, fn) { setChartAnimation(false); fn(); }
+function preserveUI(host, fn, opts = {}) { setChartAnimation(false); fn(); }
 var renders = [];
 function renderSwing() { renders.push(chartAnimationOn()); }
 var views = { swing: {} };

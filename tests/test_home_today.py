@@ -397,7 +397,7 @@ def test_an_open_row_survives_the_refresh_tick():
     # preserveUI keys open <details> on their summary text, which is the right
     # key here: the feed re-sorts these rows, and an index-based key would
     # reopen whichever row had moved into that slot.
-    pu = APP.split("function preserveUI(host, fn) {", 1)[1].split("\n}", 1)[0]
+    pu = APP.split("function preserveUI(host, fn, opts = {}) {", 1)[1].split("\n}", 1)[0]
     assert "details[open]" in pu and "detailsKey" in pu
 
 
