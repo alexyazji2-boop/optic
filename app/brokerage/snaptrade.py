@@ -129,7 +129,7 @@ class SnapTradeProvider(Provider):
                 return resp.json()
             except ValueError:
                 raise ProviderError("SnapTrade returned something that was not JSON") from None
-        code = self._error_code(resp)
+        said = self._error_said(resp, (user or {}).get("secret"), self.consumer_key)
         if resp.status_code in (429,) or resp.status_code >= 500:
             raise ProviderOutage("SnapTrade returned {}".format(resp.status_code))
         # Expiry is read from `authorizations[].disabled`, which is documented,
@@ -139,19 +139,32 @@ class SnapTradeProvider(Provider):
         if resp.status_code == 402:
             raise ProviderError("SnapTrade refused the request (402): refresh or plan not available")
         if resp.status_code == 401:
-            raise ProviderError("SnapTrade rejected Optic's credentials (401)")
+            # SnapTrade's code tells a wrong client id (1083) from a consumer key
+            # that does not match it (1076), which is all the owner can act on.
+            raise ProviderError("SnapTrade rejected Optic's credentials (401{})"
+                                .format(", " + said if said else ""))
         if resp.status_code == 404:
             raise NotFoundAtProvider("SnapTrade could not find that resource (404)")
         raise ProviderError("SnapTrade returned {}{}".format(resp.status_code,
-                                                             " ({})".format(code) if code else ""))
+                                                             " ({})".format(said) if said else ""))
 
     @staticmethod
-    def _error_code(resp: requests.Response) -> str:
+    def _error_said(resp: requests.Response, *secrets: Optional[str]) -> str:
+        """SnapTrade's own code and sentence, as "1076: Unable to verify
+        signature sent". It goes to the log and the owner, so the reader's
+        secret and the consumer key are cut out should the sentence ever
+        echo them (1083 echoes the client id, which is not a secret)."""
         try:
             body = resp.json()
         except ValueError:
             return ""
-        return str((body or {}).get("code") or "") if isinstance(body, dict) else ""
+        if not isinstance(body, dict):
+            return ""
+        detail = " ".join(str(body.get("detail") or "").split())
+        for secret in secrets:
+            if secret:
+                detail = detail.replace(secret, "[redacted]")
+        return ": ".join(p for p in (str(body.get("code") or ""), detail[:160]) if p)
 
     @staticmethod
     def _u(puid: str, secret: str) -> Dict[str, str]:

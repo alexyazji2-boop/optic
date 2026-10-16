@@ -126,6 +126,24 @@ def test_user_secret_never_appears_in_an_error():
     assert "TOPSECRET" not in str(e.value)
 
 
+def test_a_refusal_carries_snaptrades_own_code_and_sentence():
+    # The first live connect said only "401"; SnapTrade's code is what tells a
+    # wrong client id (1083) from a consumer key that does not match (1076).
+    p, _ = client({("POST", "/snapTrade/registerUser"):
+                   (401, {"detail": "Unable to verify signature sent", "status_code": 401, "code": "1076"})})
+    with pytest.raises(ProviderError) as e:
+        p.register_user()
+    assert str(e.value) == "SnapTrade rejected Optic's credentials (401, 1076: Unable to verify signature sent)"
+
+
+def test_a_refusal_that_echoes_a_secret_does_not_repeat_it():
+    p, _ = client({("GET", "/accounts/all"): (400, {"code": "1012", "detail": "bad userSecret=TOPSECRET ckey"})})
+    with pytest.raises(ProviderError) as e:
+        p.list_accounts("u", "TOPSECRET")
+    assert "TOPSECRET" not in str(e.value) and "ckey" not in str(e.value)
+    assert "1012" in str(e.value)
+
+
 def test_accounts_all_maps_fields_and_skips_non_investment():
     p, _ = client({("GET", "/accounts/all"): (200, [
         {"id": "a1", "brokerage_authorization": "c1", "name": "Roth", "number": "12345678",
