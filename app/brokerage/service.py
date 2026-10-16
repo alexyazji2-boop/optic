@@ -30,17 +30,19 @@ plan: a reader whose subscription ended still owns their data.
 from __future__ import annotations
 
 import dataclasses
+import json
 import logging
 import os
 import threading
-from datetime import datetime, timedelta, timezone
+from dataclasses import asdict
+from datetime import date, datetime, timedelta, timezone
 from typing import Any, Callable, Dict, List, Optional
 
 from .. import db, runtime, vault
 from ..auth import admin as auth_admin
 from ..auth import store as auth_store
 from . import portfolio, store
-from .providers import (AuthExpired, NotFoundAtProvider, Provider, ProviderError, ProviderOutage,
+from .providers import (AuthExpired, FeatureUnavailable, NotFoundAtProvider, Provider, ProviderError, ProviderOutage,
                         RefreshUnavailable, SandboxProvider, UnsupportedBroker)
 
 log = logging.getLogger("optic.brokerage")
@@ -337,7 +339,7 @@ def finish_link(user: Dict[str, Any], state: Dict[str, Any]) -> Dict[str, Any]:
             except ProviderError as exc:
                 store.queue_purge(prov.name, creds["provider_user_id"], target.id, _safe(exc))
             if existing:
-                store.delete_connection(user["id"], existing["id"])
+                _delete_connection(user["id"], existing["id"])
             refused.append(target.institution)
         elif existing is None and len(active) >= ent["max_connections"]:
             try:
@@ -429,7 +431,8 @@ def sync_connection(user: Dict[str, Any], conn: Dict[str, Any], prov: Optional[P
                 states.append("limit")
                 continue
             row = store.upsert_account(uid, conn["id"], prov.name, acct.id, acct.name, acct.number_mask,
-                                       acct.institution, acct.account_type, acct.currency)
+                                       acct.institution, acct.account_type, acct.currency,
+                                       institution_account_id=acct.institution_account_id)
             seen.add(row["id"])
             try:
                 h = prov.holdings(creds["provider_user_id"], creds["secret"], acct.id)
@@ -450,6 +453,7 @@ def sync_connection(user: Dict[str, Any], conn: Dict[str, Any], prov: Optional[P
                     "The broker is still sending this account's first data." if state == "pending" else None)
             store.save_payload(uid, row["id"], _payload(h, acct), state, note, acct.broker_as_of)
             states.append(state)
+            _sync_history(uid, prov, creds, row, acct)
         for gone in ([] if only_account else store.accounts(uid, conn["id"])):
             if gone["id"] not in seen:
                 store.set_account_state(uid, gone["id"], "missing",
@@ -532,17 +536,96 @@ def _safe(exc: Exception) -> str:
 
 def _snapshot(user_id: str) -> None:
     try:
-        built = portfolio.build(_accounts_with_payloads(user_id))
-        store.add_snapshot(user_id, built["summary"])
+        accts = _accounts_with_payloads(user_id)
+        built = portfolio.build(accts)
+        summary = built["summary"]
+        summary["by_account"] = {a["id"]: d for a in accts for d in [portfolio.account_detail(a)] if d}
+        store.add_snapshot(user_id, summary)
     except Exception as exc:                                    # noqa: BLE001
         log.warning("brokerage snapshot skipped: %s", type(exc).__name__)
+
+
+# --------------------------------------------------------------- history
+#
+# Transactions and the provider's daily balance estimate. SnapTrade's launch
+# guide allows one transactions fetch per account a day and refreshes its copy
+# once a day, a day late; balance history is an add-on answering 403 until it
+# is switched on, so a refusal is remembered for a week before asking again.
+# Neither ever fails a sync: holdings are what a sync is for.
+
+HISTORY_EVERY_HOURS = 20
+HISTORY_UNAVAILABLE_RECHECK_DAYS = 7
+ACTIVITY_OVERLAP_DAYS = 10     # re-read the last days each time: late postings and reprocessed ids
+
+
+def _hours_since(stamp: Optional[str]) -> float:
+    if not stamp:
+        return float("inf")
+    try:
+        then = datetime.fromisoformat(str(stamp).replace("Z", "+00:00"))
+    except ValueError:
+        return float("inf")
+    if then.tzinfo is None:
+        then = then.replace(tzinfo=timezone.utc)
+    return (datetime.now(timezone.utc) - then).total_seconds() / 3600.0
+
+
+def _sync_history(uid: str, prov: Provider, creds: Dict[str, str], row: Dict[str, Any], acct: Any) -> None:
+    fresh = store.account(uid, row["id"]) or row
+    if _hours_since(fresh.get("activities_synced_at")) >= HISTORY_EVERY_HOURS:
+        try:
+            old = store.activities(uid, row["id"]) or []
+            start = None
+            if old:
+                last = max((a.get("trade_date") or "") for a in old) or None
+                if last:
+                    start = (date.fromisoformat(last) - timedelta(days=ACTIVITY_OVERLAP_DAYS)).isoformat()
+            got = [asdict(a) for a in prov.activities(creds["provider_user_id"], creds["secret"], acct.id,
+                                                       start_date=start)]
+            store.save_activities(uid, row["id"], merge_activities(old, got, start),
+                                  acct.transactions_first_date)
+        except FeatureUnavailable:
+            store.set_activities_state(uid, row["id"], "unavailable")
+        except (ProviderError, vault.VaultUnavailable, ValueError) as exc:
+            log.warning("brokerage transactions skipped: %s", type(exc).__name__)
+            store.set_activities_state(uid, row["id"], "error")
+    hist_state = fresh.get("history_state")
+    wait = (HISTORY_UNAVAILABLE_RECHECK_DAYS * 24) if hist_state == "unavailable" else HISTORY_EVERY_HOURS
+    if _hours_since(fresh.get("history_synced_at")) >= wait:
+        try:
+            got = prov.balance_history(creds["provider_user_id"], creds["secret"], acct.id)
+            store.save_history(uid, row["id"], {"currency": got.get("currency"),
+                                                "points": [list(p) for p in got.get("points") or []]})
+        except FeatureUnavailable:
+            store.set_history_state(uid, row["id"], "unavailable")
+        except (ProviderError, vault.VaultUnavailable, ValueError) as exc:
+            log.warning("brokerage balance history skipped: %s", type(exc).__name__)
+            store.set_history_state(uid, row["id"], "error")
+
+
+def merge_activities(old: List[Dict[str, Any]], new: List[Dict[str, Any]],
+                     start: Optional[str]) -> List[Dict[str, Any]]:
+    """Everything stored before the re-read window, plus the fresh read of the
+    window itself. Replacing the window rather than merging by id means a
+    transaction the broker reprocessed under a new id is not counted twice."""
+    keep = [a for a in old if start and (a.get("trade_date") or "") < start]
+    out = keep + list(new)
+    seen, unique = set(), []
+    for a in out:
+        k = a.get("id") or json.dumps(a, sort_keys=True, default=str)
+        if k in seen:
+            continue
+        seen.add(k)
+        unique.append(a)
+    unique.sort(key=lambda a: (a.get("trade_date") or "", a.get("id") or ""))
+    return unique
 
 
 def _accounts_with_payloads(user_id: str) -> List[Dict[str, Any]]:
     key = store.dek(user_id)
     out = []
     for row in store.accounts(user_id):
-        item = {k: v for k, v in row.items() if k != "payload"}
+        item = {k: v for k, v in row.items() if k not in ("payload", "activities", "history")}
         try:
             item["payload"] = store.payload(user_id, row, key) if row["sync_state"] != "missing" else None
         except Exception:                                       # noqa: BLE001
@@ -553,6 +636,19 @@ def _accounts_with_payloads(user_id: str) -> List[Dict[str, Any]]:
 
 
 # ------------------------------------------------------------ disconnecting
+
+
+def _delete_connection(uid: str, connection_id: str) -> None:
+    """The connection, its accounts (cascade: holdings, transactions, balance
+    history) and its accounts' part of every stored snapshot."""
+    gone = [a["id"] for a in store.accounts(uid, connection_id)]
+    store.delete_connection(uid, connection_id)
+    try:
+        store.scrub_snapshots(uid, gone, portfolio.drop_accounts)
+    except Exception as exc:                                    # noqa: BLE001
+        # Never leave a disconnected account in history because a scrub failed.
+        log.warning("brokerage snapshot scrub failed, clearing history: %s", type(exc).__name__)
+        db.execute("DELETE FROM brokerage_snapshots WHERE user_id = ?", (uid,))
 
 
 def disconnect(user: Dict[str, Any], connection_id: str) -> Dict[str, Any]:
@@ -580,7 +676,7 @@ def disconnect(user: Dict[str, Any], connection_id: str) -> Dict[str, Any]:
         store.queue_purge(conn["provider"], creds["provider_user_id"], conn["provider_connection_id"],
                           "provider not configured at disconnect")
         queued = True
-    store.delete_connection(uid, connection_id)
+    _delete_connection(uid, connection_id)
     remaining = store.connections(uid)
     if not remaining:
         delete_all(user)
@@ -738,7 +834,7 @@ def handle_webhook(event: Dict[str, Any]) -> str:
         store.set_connection(uid, conn["id"], status="active", status_reason=None)
         return "fixed"
     if kind == "CONNECTION_DELETED" and conn:
-        store.delete_connection(uid, conn["id"])
+        _delete_connection(uid, conn["id"])
         return "deleted"
     if kind == "USER_DELETED":
         store.purge_local(uid)

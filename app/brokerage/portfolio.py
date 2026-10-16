@@ -87,6 +87,7 @@ def build(accounts: List[Dict[str, Any]],
     lines: Dict[str, Dict[str, Any]] = {}
     options: List[Dict[str, Any]] = []
     unsupported: List[Dict[str, Any]] = []
+    cash_equivalents: List[Dict[str, Any]] = []
     cash_by_ccy: Dict[str, float] = {}
     sync_times: List[str] = []
     broker_times: List[str] = []
@@ -123,6 +124,16 @@ def build(accounts: List[Dict[str, Any]],
             kind = pos.get("kind") or "other"
             qty, price, avg = _num(pos.get("quantity")), _num(pos.get("price")), _num(pos.get("avg_cost"))
             ccy = (pos.get("currency") or acct_ccy).upper()
+            if pos.get("cash_equivalent") and "balances" not in (p.get("problems") or []):
+                # SnapTrade's Balance.cash "includes" a money-market fund that
+                # positions/all also returns with cash_equivalent=true, so the
+                # line is shown but counted once, as cash. When the balances
+                # failed there is no cash figure to hold it, and it counts here.
+                cash_equivalents.append({"symbol": pos.get("symbol"), "description": pos.get("description"),
+                                         "account": a.get("name"), "currency": ccy,
+                                         "value": _r(qty * price) if qty is not None and price is not None
+                                         else None})
+                continue
             if kind not in VALUED_KINDS or qty is None or price is None:
                 unsupported.append({
                     "description": pos.get("description") or pos.get("symbol") or "Unnamed holding",
@@ -410,6 +421,10 @@ def build(accounts: List[Dict[str, Any]],
         notes.append("{} holding{} could not be valued and {} left out of every total and weight."
                      .format(len(unsupported), "" if len(unsupported) == 1 else "s",
                              "is" if len(unsupported) == 1 else "are"))
+    if cash_equivalents:
+        notes.append("Money-market and other cash-equivalent holdings ({}) are counted once, inside cash, "
+                     "because the broker's cash balance already includes them."
+                     .format(", ".join(c["symbol"] or c["description"] or "unnamed" for c in cash_equivalents[:5])))
     if any(h["kind"] == "bond" for h in holdings):
         notes.append("Bonds are valued as quantity x the broker's price. Brokers quote bonds in "
                      "different conventions, so check bond values against the broker.")
@@ -433,6 +448,7 @@ def build(accounts: List[Dict[str, Any]],
         "options": options,
         "cash": [{"currency": c, "amount": round(v, 2)} for c, v in sorted(cash_by_ccy.items())],
         "unsupported": unsupported,
+        "cash_equivalents": cash_equivalents,
         "allocation": {"by_kind": shares(by_kind, KIND_LABELS),
                        "by_sector": shares(sectors),
                        "by_account": shares(by_account)},
@@ -471,6 +487,96 @@ def snapshot_summary(holdings: Iterable[Dict[str, Any]], options: Iterable[Dict[
             "combined_usd": (combined or {}).get("value"),
             "accounts": sorted(a["id"] for a in accounts if a.get("selected") and a.get("lines_total") is not None),
             "positions": positions}
+
+
+def account_detail(acct: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """One account's own values for a snapshot. Kept for every account with
+    data, selected or not, so history can later be read for whatever accounts
+    the reader picks, and so a disconnected account can be cut out of stored
+    snapshots without guessing (see drop_accounts)."""
+    p = acct.get("payload")
+    if not p:
+        return None
+    acct_ccy = (acct.get("currency") or "USD").upper()
+    balances_ok = "balances" not in (p.get("problems") or [])
+    positions: Dict[str, Dict[str, Any]] = {}
+    total: Dict[str, float] = {}
+    cash: Dict[str, float] = {}
+    complete = not p.get("problems")
+    for pos in p.get("positions") or []:
+        kind = pos.get("kind") or "other"
+        qty, price = _num(pos.get("quantity")), _num(pos.get("price"))
+        ccy = (pos.get("currency") or acct_ccy).upper()
+        if pos.get("cash_equivalent") and balances_ok:
+            continue
+        if kind not in VALUED_KINDS or qty is None or price is None:
+            complete = False
+            continue
+        key = "{}:{}:{}".format(kind, (pos.get("symbol") or pos.get("description") or "").upper(), ccy)
+        e = positions.setdefault(key, {"symbol": pos.get("symbol"), "kind": kind, "currency": ccy,
+                                       "qty": 0.0, "value": 0.0})
+        e["qty"] += qty
+        e["value"] += qty * price
+        total[ccy] = total.get(ccy, 0.0) + qty * price
+    for opt in p.get("options") or []:
+        n, price = _num(opt.get("contracts")), _num(opt.get("price"))
+        ccy = (opt.get("currency") or acct_ccy).upper()
+        if n is None or price is None:
+            complete = False
+            continue
+        mv = n * price * multiplier(opt)
+        o = dict(opt, currency=ccy, strike=_num(opt.get("strike")))
+        e = positions.setdefault(_okey(o), {
+            "symbol": opt.get("underlying"), "kind": "option", "currency": ccy, "qty": 0.0, "value": 0.0,
+            "multiplier": multiplier(opt), "label": "{} {} {} {}".format(opt.get("underlying"), o.get("strike"), opt.get("option_type"),
+                                          opt.get("expiry"))})
+        e["qty"] += n
+        e["value"] += mv
+        total[ccy] = total.get(ccy, 0.0) + mv
+    for c in p.get("cash") or []:
+        amt = _num(c.get("amount"))
+        if amt is None:
+            continue
+        ccy = (c.get("currency") or acct_ccy).upper()
+        cash[ccy] = cash.get(ccy, 0.0) + amt
+        total[ccy] = total.get(ccy, 0.0) + amt
+    for e in positions.values():
+        e["price"] = _r(e["value"] / e["qty"] / (e.get("multiplier") or 1), 4) if e["qty"] else None
+        e["value"] = _r(e["value"])
+    return {"name": acct.get("name"), "currency": acct_ccy, "selected": bool(acct.get("selected")),
+            "complete": complete, "total": {c: _r(v) for c, v in total.items()},
+            "cash": {c: _r(v) for c, v in cash.items()}, "positions": positions,
+            "broker_total": _num(p.get("total_value"))}
+
+
+def drop_accounts(summary: Dict[str, Any], gone: Iterable[str]) -> Optional[Dict[str, Any]]:
+    """A stored snapshot without the given accounts, its portfolio-level
+    figures rebuilt from what remains; None when it cannot be separated (a
+    snapshot from before per-account detail was kept), which the caller
+    deletes rather than keep a disconnected account's data."""
+    by = summary.get("by_account")
+    if not isinstance(by, dict):
+        return None
+    gone = set(gone)
+    keep = {aid: d for aid, d in by.items() if aid not in gone}
+    selected = [aid for aid in summary.get("accounts") or [] if aid in keep]
+    merged: Dict[str, Dict[str, Any]] = {}
+    by_ccy: Dict[str, float] = {}
+    for aid in selected:
+        d = keep[aid] or {}
+        for k, e in (d.get("positions") or {}).items():
+            m = merged.setdefault(k, dict({kk: vv for kk, vv in e.items() if kk not in ("qty", "value", "price")},
+                                          qty=0.0, value=0.0))
+            m["qty"] += e.get("qty") or 0.0
+            m["value"] += e.get("value") or 0.0
+        for c, v in (d.get("total") or {}).items():
+            by_ccy[c] = by_ccy.get(c, 0.0) + (v or 0.0)
+    for m in merged.values():
+        m["price"] = _r(m["value"] / m["qty"] / (m.get("multiplier") or 1), 4) if m["qty"] else None
+        m["value"] = _r(m["value"])
+    return dict(summary, by_account=keep, accounts=selected, positions=merged,
+                by_currency={c: _r(v) for c, v in by_ccy.items()},
+                combined_usd=_r(by_ccy.get("USD", 0.0)) if set(by_ccy) <= {"USD"} else None)
 
 
 SPLIT_RATIOS = (2.0, 3.0, 4.0, 5.0, 10.0, 0.5, 1 / 3.0, 0.25, 0.2, 0.1)

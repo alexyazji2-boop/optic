@@ -844,6 +844,26 @@ MIGRATION_14 = [
 ]
 
 
+# History for the Brokerage workspace (2026-10-15). Transactions and the
+# provider's daily balance estimate are sealed per account like the holdings
+# payload, under the reader's own data key, and go with the account row when
+# it is disconnected. `institution_account_id` is the broker's id for the
+# account, which survives a second connection to the same login. Snapshots
+# gain the calendar day so one a day can be kept for longer than the last 30.
+MIGRATION_15 = [
+    "ALTER TABLE brokerage_accounts ADD COLUMN institution_account_id TEXT",
+    "ALTER TABLE brokerage_accounts ADD COLUMN activities BLOB",
+    "ALTER TABLE brokerage_accounts ADD COLUMN activities_synced_at TEXT",
+    "ALTER TABLE brokerage_accounts ADD COLUMN activities_first_date TEXT",
+    "ALTER TABLE brokerage_accounts ADD COLUMN activities_state TEXT",
+    "ALTER TABLE brokerage_accounts ADD COLUMN history BLOB",
+    "ALTER TABLE brokerage_accounts ADD COLUMN history_synced_at TEXT",
+    "ALTER TABLE brokerage_accounts ADD COLUMN history_state TEXT",
+    "ALTER TABLE brokerage_snapshots ADD COLUMN day TEXT",
+    "CREATE INDEX IF NOT EXISTS idx_bsnap_user_day ON brokerage_snapshots(user_id, day)",
+]
+
+
 MIGRATIONS: List[Tuple[int, str, List[str]]] = [
     (1, "accounts", MIGRATION_1),
     (2, "oauth_pkce", MIGRATION_2),
@@ -859,6 +879,7 @@ MIGRATIONS: List[Tuple[int, str, List[str]]] = [
     (12, "brokerage_and_billing", MIGRATION_12),
     (13, "valuation_models", MIGRATION_13),
     (14, "brokerage_account_nickname", MIGRATION_14),
+    (15, "brokerage_history", MIGRATION_15),
 ]
 
 

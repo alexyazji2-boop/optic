@@ -144,21 +144,36 @@ def set_account_nickname(user_id: str, account_id: str, nickname: Optional[str])
 
 def upsert_account(user_id: str, connection_id: str, provider: str, provider_account_id: str,
                    name: str, number_mask: str, institution: str, account_type: Optional[str],
-                   currency: Optional[str]) -> Dict[str, Any]:
+                   currency: Optional[str], institution_account_id: Optional[str] = None) -> Dict[str, Any]:
     """Keyed on (user, provider, provider account id). If the same account is
     reached through a second connection, the row moves to that connection
-    instead of being duplicated: one account, counted once."""
+    instead of being duplicated: one account, counted once.
+
+    A second portal visit to the same broker login gives the account a new
+    provider id (SnapTrade's fix-broken-connections doc); the broker's own
+    `institution_account_id` does not change. A row found by it is re-keyed to
+    the new provider id, so the reader's name, selection and history stay."""
     now = db.utcnow()
+    if institution_account_id:
+        same = db.row("SELECT id, provider_account_id FROM brokerage_accounts WHERE user_id = ? AND provider = ? "
+                      "AND institution_account_id = ? AND provider_account_id != ?",
+                      (user_id, provider, institution_account_id, provider_account_id))
+        taken = db.row("SELECT id FROM brokerage_accounts WHERE user_id = ? AND provider = ? AND "
+                       "provider_account_id = ?", (user_id, provider, provider_account_id))
+        if same and not taken:
+            db.execute("UPDATE brokerage_accounts SET provider_account_id = ?, connection_id = ?, updated_at = ? "
+                       "WHERE id = ? AND user_id = ?", (provider_account_id, connection_id, now, same["id"], user_id))
     db.execute(
         "INSERT INTO brokerage_accounts (id, user_id, connection_id, provider, provider_account_id, name, "
-        "number_mask, institution, account_type, currency, created_at, updated_at) "
-        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?) "
+        "number_mask, institution, account_type, currency, created_at, updated_at, institution_account_id) "
+        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?) "
         "ON CONFLICT(user_id, provider, provider_account_id) DO UPDATE SET "
         "connection_id = excluded.connection_id, name = excluded.name, number_mask = excluded.number_mask, "
         "institution = excluded.institution, account_type = excluded.account_type, "
-        "currency = excluded.currency, updated_at = excluded.updated_at",
+        "currency = excluded.currency, updated_at = excluded.updated_at, "
+        "institution_account_id = COALESCE(excluded.institution_account_id, brokerage_accounts.institution_account_id)",
         (db.new_id(), user_id, connection_id, provider, provider_account_id, name, number_mask,
-         institution, account_type, currency, now, now))
+         institution, account_type, currency, now, now, institution_account_id))
     found = db.row("SELECT * FROM brokerage_accounts WHERE user_id = ? AND provider = ? AND "
                    "provider_account_id = ?", (user_id, provider, provider_account_id))
     assert found is not None
@@ -182,6 +197,60 @@ def save_payload(user_id: str, account_id: str, payload: Dict[str, Any], state: 
                (sealed, state, note, now, broker_as_of, now, account_id, user_id))
 
 
+# ------------------------------------------------------- account history
+#
+# Transactions and the provider's daily balance estimate, sealed per account
+# under the reader's data key like the holdings payload. Both live on the
+# account row, so disconnecting the account deletes them with it.
+
+def save_activities(user_id: str, account_id: str, rows: List[Dict[str, Any]],
+                    first_date: Optional[str]) -> None:
+    key = dek(user_id)
+    if key is None:
+        raise vault.VaultUnavailable("no data key for this user")
+    sealed = vault.seal(key, json.dumps(rows, default=str), "acts:{}:{}".format(user_id, account_id))
+    db.execute("UPDATE brokerage_accounts SET activities = ?, activities_synced_at = ?, activities_first_date = ?, "
+               "activities_state = 'ok' WHERE id = ? AND user_id = ?",
+               (sealed, db.utcnow(), first_date, account_id, user_id))
+
+
+def set_activities_state(user_id: str, account_id: str, state: str) -> None:
+    """Records a failed or unavailable fetch without touching what was stored,
+    and stamps the attempt so a failing account is not retried every sync."""
+    db.execute("UPDATE brokerage_accounts SET activities_state = ?, activities_synced_at = ? "
+               "WHERE id = ? AND user_id = ?", (state, db.utcnow(), account_id, user_id))
+
+
+def activities(user_id: str, account_id: str) -> Optional[List[Dict[str, Any]]]:
+    row = db.row("SELECT activities FROM brokerage_accounts WHERE id = ? AND user_id = ?", (account_id, user_id))
+    key = dek(user_id)
+    if not row or row["activities"] is None or key is None:
+        return None
+    return json.loads(vault.open_(key, row["activities"], "acts:{}:{}".format(user_id, account_id)))
+
+
+def save_history(user_id: str, account_id: str, history: Dict[str, Any]) -> None:
+    key = dek(user_id)
+    if key is None:
+        raise vault.VaultUnavailable("no data key for this user")
+    sealed = vault.seal(key, json.dumps(history, default=str), "hist:{}:{}".format(user_id, account_id))
+    db.execute("UPDATE brokerage_accounts SET history = ?, history_synced_at = ?, history_state = 'ok' "
+               "WHERE id = ? AND user_id = ?", (sealed, db.utcnow(), account_id, user_id))
+
+
+def set_history_state(user_id: str, account_id: str, state: str) -> None:
+    db.execute("UPDATE brokerage_accounts SET history_state = ?, history_synced_at = ? WHERE id = ? AND user_id = ?",
+               (state, db.utcnow(), account_id, user_id))
+
+
+def history(user_id: str, account_id: str) -> Optional[Dict[str, Any]]:
+    row = db.row("SELECT history FROM brokerage_accounts WHERE id = ? AND user_id = ?", (account_id, user_id))
+    key = dek(user_id)
+    if not row or row["history"] is None or key is None:
+        return None
+    return json.loads(vault.open_(key, row["history"], "hist:{}:{}".format(user_id, account_id)))
+
+
 def set_account_state(user_id: str, account_id: str, state: str, note: Optional[str]) -> None:
     db.execute("UPDATE brokerage_accounts SET sync_state = ?, sync_note = ?, updated_at = ? "
                "WHERE id = ? AND user_id = ?", (state, note, db.utcnow(), account_id, user_id))
@@ -198,7 +267,8 @@ def payload(user_id: str, row: Dict[str, Any], key: Optional[bytes] = None) -> O
 
 # ---------------------------------------------------------------- snapshots
 
-SNAPSHOTS_KEPT = 30
+SNAPSHOTS_KEPT = 30        # the most recent, whatever the day: "since my last sync"
+SNAPSHOT_DAYS = 400        # and the last of each day for this long: collected history
 
 
 def add_snapshot(user_id: str, summary: Dict[str, Any]) -> None:
@@ -206,14 +276,87 @@ def add_snapshot(user_id: str, summary: Dict[str, Any]) -> None:
     if key is None:
         return
     sid = db.new_id()
+    taken = summary.get("taken_at") or db.utcnow()
     sealed = vault.seal(key, json.dumps(summary, default=str), "snap:{}:{}".format(user_id, sid))
-    db.execute_many([
-        ("INSERT INTO brokerage_snapshots (id, user_id, taken_at, payload) VALUES (?,?,?,?)",
-         (sid, user_id, summary.get("taken_at") or db.utcnow(), sealed)),
-        ("DELETE FROM brokerage_snapshots WHERE user_id = ? AND id NOT IN (SELECT id FROM "
-         "brokerage_snapshots WHERE user_id = ? ORDER BY taken_at DESC LIMIT ?)",
-         (user_id, user_id, SNAPSHOTS_KEPT)),
-    ])
+    db.execute("INSERT INTO brokerage_snapshots (id, user_id, taken_at, payload, day) VALUES (?,?,?,?,?)",
+               (sid, user_id, taken, sealed, str(taken)[:10]))
+    prune_snapshots(user_id)
+
+
+def prune_snapshots(user_id: str, now: Optional[str] = None) -> int:
+    """Keep the newest SNAPSHOTS_KEPT, plus the newest of each calendar day
+    for SNAPSHOT_DAYS. Before 2026-10-15 only the newest 30 were kept, so a
+    week of hourly syncs left no history older than a day or two."""
+    from datetime import datetime, timedelta, timezone
+    rows = db.rows("SELECT id, taken_at, day FROM brokerage_snapshots WHERE user_id = ? "
+                   "ORDER BY taken_at DESC, rowid DESC", (user_id,))
+    keep = {r["id"] for r in rows[:SNAPSHOTS_KEPT]}
+    cutoff = ((datetime.fromisoformat(now.replace("Z", "+00:00")) if now else datetime.now(timezone.utc))
+              - timedelta(days=SNAPSHOT_DAYS)).strftime("%Y-%m-%d")
+    seen = set()
+    for r in rows:
+        day = r["day"] or str(r["taken_at"])[:10]
+        if day not in seen:
+            seen.add(day)
+            if day >= cutoff:
+                keep.add(r["id"])
+    drop = [r["id"] for r in rows if r["id"] not in keep]
+    for i in range(0, len(drop), 200):
+        chunk = drop[i:i + 200]
+        db.execute("DELETE FROM brokerage_snapshots WHERE user_id = ? AND id IN ({})".format(",".join("?" * len(chunk))),
+                   (user_id, *chunk))
+    return len(drop)
+
+
+def daily_snapshots(user_id: str, since_day: Optional[str] = None) -> List[Dict[str, Any]]:
+    """The last snapshot of each day, oldest first: the history Optic
+    collected itself, as opposed to the provider's reconstruction."""
+    key = dek(user_id)
+    if key is None:
+        return []
+    rows = db.rows("SELECT id, taken_at, day, payload FROM brokerage_snapshots WHERE user_id = ? "
+                   "ORDER BY taken_at DESC, rowid DESC", (user_id,))
+    seen, out = set(), []
+    for r in rows:
+        day = r["day"] or str(r["taken_at"])[:10]
+        if day in seen or (since_day and day < since_day):
+            continue
+        seen.add(day)
+        try:
+            out.append(json.loads(vault.open_(key, r["payload"], "snap:{}:{}".format(user_id, r["id"]))))
+        except Exception:                                       # noqa: BLE001
+            continue
+    return list(reversed(out))
+
+
+def scrub_snapshots(user_id: str, account_ids: List[str], rebuild: Any) -> int:
+    """Remove disconnected accounts from every stored snapshot, which the
+    Disconnect promise ("deletes Optic's copy of that connection's data straight
+    away") covers as much as the account row. `rebuild(summary, remaining)`
+    returns the snapshot without them, or None to delete it (one taken before
+    snapshots kept per-account detail cannot be separated)."""
+    key = dek(user_id)
+    if key is None or not account_ids:
+        return 0
+    gone = set(account_ids)
+    changed = 0
+    for r in db.rows("SELECT id, payload FROM brokerage_snapshots WHERE user_id = ?", (user_id,)):
+        try:
+            summary = json.loads(vault.open_(key, r["payload"], "snap:{}:{}".format(user_id, r["id"])))
+        except Exception:                                       # noqa: BLE001
+            continue
+        held = set(summary.get("accounts") or []) | set((summary.get("by_account") or {}).keys())
+        if not held & gone:
+            continue
+        fixed = rebuild(summary, gone)
+        if fixed is None:
+            db.execute("DELETE FROM brokerage_snapshots WHERE id = ? AND user_id = ?", (r["id"], user_id))
+        else:
+            sealed = vault.seal(key, json.dumps(fixed, default=str), "snap:{}:{}".format(user_id, r["id"]))
+            db.execute("UPDATE brokerage_snapshots SET payload = ? WHERE id = ? AND user_id = ?",
+                       (sealed, r["id"], user_id))
+        changed += 1
+    return changed
 
 
 def recent_snapshots(user_id: str, limit: int = 2) -> List[Dict[str, Any]]:

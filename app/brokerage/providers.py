@@ -59,6 +59,12 @@ class NotFoundAtProvider(ProviderError):
     deletion that is success, not a failure to retry."""
 
 
+class FeatureUnavailable(ProviderError):
+    """The provider, or this plan of it, does not offer that data: SnapTrade's
+    balance history is an add-on that answers 403 until it is switched on in
+    the dashboard. Not a failure to retry, and not a reason to fail a sync."""
+
+
 class WebhookRejected(ProviderError):
     """A webhook whose signature or freshness did not verify."""
 
@@ -89,6 +95,13 @@ class Account:
     # When the provider last pulled this account from the broker successfully.
     broker_as_of: Optional[str] = None
     initial_sync_done: bool = True
+    # The institution's own id for the account, where the provider passes it
+    # on: the same account reached through a second connection has a new
+    # provider id but the same one of these.
+    institution_account_id: Optional[str] = None
+    # The earliest transaction the provider knows of. Anything before it is
+    # not missing data Optic can fetch: the broker did not hand it over.
+    transactions_first_date: Optional[str] = None
 
 
 @dataclass
@@ -101,6 +114,10 @@ class Position:
     price: Optional[float]         # broker's price per unit, in `currency`
     avg_cost: Optional[float]      # per unit; None when the broker did not supply it
     raw_type: Optional[str] = None
+    # A money-market fund or similar that the broker also counts in the
+    # account's cash balance (SnapTrade's `cash_equivalent`, whose Balance.cash
+    # "includes" them): counted once, as cash.
+    cash_equivalent: bool = False
 
 
 @dataclass
@@ -126,6 +143,28 @@ class Cash:
     currency: str
     amount: Optional[float]
     buying_power: Optional[float] = None
+
+
+@dataclass
+class Activity:
+    """One transaction as the broker reported it. `amount` is signed from the
+    account's side: positive for money in (a sale, a deposit, a dividend),
+    negative for money out (a purchase, a withdrawal, a fee), in `currency`."""
+    id: str
+    type: str                      # BUY, SELL, DIVIDEND, CONTRIBUTION, WITHDRAWAL, TRANSFER, FEE, ...
+    trade_date: Optional[str]      # YYYY-MM-DD
+    settlement_date: Optional[str] = None
+    symbol: Optional[str] = None
+    option_occ: Optional[str] = None
+    option_action: Optional[str] = None
+    units: Optional[float] = None
+    price: Optional[float] = None
+    amount: Optional[float] = None
+    currency: Optional[str] = None
+    fee: Optional[float] = None
+    fx_rate: Optional[float] = None
+    description: str = ""
+    group_ref: Optional[str] = None
 
 
 @dataclass
@@ -168,6 +207,16 @@ class Provider:
     def verify_webhook(self, headers: Dict[str, str], body: bytes) -> Dict[str, Any]:
         raise WebhookRejected("this provider does not send webhooks")
 
+    def activities(self, provider_user_id: str, secret: str, account_id: str,
+                   start_date: Optional[str] = None) -> List[Activity]:
+        """Transactions from `start_date` (YYYY-MM-DD, inclusive) or from the
+        first the provider knows, oldest first."""
+        raise FeatureUnavailable("this provider does not supply transactions")
+
+    def balance_history(self, provider_user_id: str, secret: str, account_id: str) -> Dict[str, Any]:
+        """{"currency": str|None, "points": [(YYYY-MM-DD, total value)]}, oldest first."""
+        raise FeatureUnavailable("this provider does not supply balance history")
+
 
 # --------------------------------------------------------------------- sandbox
 #
@@ -186,6 +235,69 @@ SANDBOX_SCENARIOS = {
     "outage": "The provider is down for every sync after the first",
     "unsupported": "The broker is not supported: the connection cannot be made",
 }
+
+
+# Transactions for the sandbox's standard and edge accounts, chosen so the
+# cash they leave matches the cash the holdings report (individual 2,400,
+# Roth 300): a performance view built on them can be checked by hand. The
+# 1,000 TRANSFER on 2026-05-01 leaves the individual account and arrives in
+# the Roth, so across both linked accounts it is not money in or out.
+# (id, type, trade date, symbol, units, price, amount, description, extra)
+SANDBOX_ACTIVITIES: Dict[str, List[tuple]] = {
+    "ind": [
+        ("i01", "CONTRIBUTION", "2026-01-02", None, None, None, 26663.50, "Bank deposit", {}),
+        ("i02", "BUY", "2026-01-05", "AAPL", 40, 150.10, -6004.00, "Bought 40 AAPL", {}),
+        ("i03", "BUY", "2026-01-05", "MSFT", 15, 301.00, -4515.00, "Bought 15 MSFT", {}),
+        ("i04", "BUY", "2026-01-06", "NVDA", 60, 48.25, -2895.00, "Bought 60 NVDA", {}),
+        ("i05", "BUY", "2026-01-06", "VOO", 20, 380.00, -7600.00, "Bought 20 VOO", {}),
+        ("i06", "BUY", "2026-01-07", None, 2, 4.10, -820.00, "Bought 2 AAPL Dec 18 2026 250 calls",
+         {"option_occ": "AAPL  261218C00250000", "option_action": "BUY_TO_OPEN", "symbol_under": "AAPL"}),
+        ("i07", "DIVIDEND", "2026-02-12", "AAPL", None, None, 10.40, "AAPL dividend", {}),
+        ("i08", "FEE", "2026-03-02", None, None, None, -5.00, "Account maintenance fee", {}),
+        ("i09", "DIVIDEND", "2026-03-27", "VOO", None, None, 32.10, "VOO dividend", {}),
+        ("i10", "WITHDRAWAL", "2026-04-15", None, None, None, -1500.00, "Bank withdrawal", {}),
+        ("i11", "TRANSFER", "2026-05-01", None, None, None, -1000.00, "Transfer to Roth IRA", {}),
+        ("i12", "DIVIDEND", "2026-06-26", "VOO", None, None, 33.00, "VOO dividend", {}),
+    ],
+    "roth": [
+        ("r01", "CONTRIBUTION", "2026-01-02", None, None, None, 14136.05, "Roth contribution", {}),
+        ("r02", "BUY", "2026-01-08", "VOO", 30, 401.20, -12036.00, "Bought 30 VOO", {}),
+        ("r03", "BUY", "2026-01-09", "SCHD", 50, 24.10, -1205.00, "Bought 50 SCHD", {}),
+        ("r04", "BUY", "2026-01-09", "AAPL", 10, 172.00, -1720.00, "Bought 10 AAPL", {}),
+        ("r05", "DIVIDEND", "2026-03-25", "SCHD", None, None, 13.50, "SCHD dividend", {}),
+        ("r06", "DIVIDEND", "2026-03-27", "VOO", None, None, 48.15, "VOO dividend", {}),
+        ("r07", "TRANSFER", "2026-05-01", None, None, None, 1000.00, "Transfer from Individual", {}),
+        ("r08", "DIVIDEND", "2026-06-24", "SCHD", None, None, 13.80, "SCHD dividend", {}),
+        ("r09", "DIVIDEND", "2026-06-26", "VOO", None, None, 49.50, "VOO dividend", {}),
+    ],
+    "tfsa": [
+        ("t01", "CONTRIBUTION", "2026-02-02", None, None, None, 8000.00, "Deposit", {"currency": "CAD"}),
+        ("t02", "BUY", "2026-02-03", "SHOP.TO", 25, 98.00, -2450.00, "Bought 25 SHOP", {"currency": "CAD"}),
+        ("t03", "BUY", "2026-02-03", "XEQT.TO", 100, 30.00, -3000.00, "Bought 100 XEQT", {"currency": "CAD"}),
+    ],
+    "margin": [
+        ("m01", "CONTRIBUTION", "2026-02-02", None, None, None, 10000.00, "Deposit", {}),
+        ("m02", "SELL", "2026-02-10", "TSLA", -10, 240.00, 2400.00, "Sold short 10 TSLA", {}),
+        ("m03", "INTEREST", "2026-03-31", None, None, None, -15.20, "Margin interest", {}),
+        ("m04", "EXTERNAL_ASSET_TRANSFER_IN", "2026-04-02", None, 1, None, None,
+         "Transfer in: Example Holdings LP", {}),
+    ],
+}
+
+# Kinds of activity that move money across the account's boundary rather than
+# within it. TRANSFER is here too: between two linked accounts it nets to
+# nothing, which is for the performance maths to see, not the provider.
+EXTERNAL_FLOW_TYPES = ("CONTRIBUTION", "WITHDRAWAL", "TRANSFER", "EXTERNAL_ASSET_TRANSFER_IN",
+                       "EXTERNAL_ASSET_TRANSFER_OUT")
+
+
+def _sandbox_activity(row: tuple) -> Activity:
+    aid, kind, day, sym, units, price, amount, desc, extra = row
+    return Activity(id=aid, type=kind, trade_date=day, settlement_date=day,
+                    symbol=sym or extra.get("symbol_under"), option_occ=extra.get("option_occ"),
+                    option_action=extra.get("option_action"), units=units, price=price, amount=amount,
+                    currency=extra.get("currency", "USD"), fee=0.0 if kind in ("BUY", "SELL") else None,
+                    description=desc)
 
 
 def _p(symbol, kind, qty, price, avg, desc=None, ccy="USD", raw=None):
@@ -366,6 +478,52 @@ class SandboxProvider(Provider):
             h.cash = []
             h.problems = ["options", "balances"]
         return h
+
+
+    def _live_connection(self, provider_user_id: str, cid: str) -> str:
+        """The checks every read makes, in the order holdings() makes them."""
+        scenario = self._scenario(cid)
+        with self._lock:
+            conn = self._user(provider_user_id)["connections"].get(cid)
+            if conn is None:
+                raise ProviderError("connection not found at the provider")
+            n = max(0, self._user(provider_user_id)["syncs"].get(cid, 0))
+            if conn["disabled"]:
+                raise AuthExpired("The broker needs you to sign in again.")
+            if scenario == "outage" and n >= 1:
+                raise ProviderOutage("The provider is not responding.")
+        return scenario
+
+    def activities(self, provider_user_id, secret, account_id, start_date=None) -> List[Activity]:
+        cid, _, which = account_id.rpartition(":")
+        if self._live_connection(provider_user_id, cid) == "partial":
+            raise ProviderError("transactions did not arrive for this account")
+        out = [_sandbox_activity(r) for r in SANDBOX_ACTIVITIES.get(which, [])]
+        return [a for a in out if not start_date or (a.trade_date or "") >= start_date]
+
+    def balance_history(self, provider_user_id, secret, account_id) -> Dict[str, Any]:
+        """Daily totals from the first deposit to yesterday: the money put in so
+        far, grown along a gentle wave. Shaped like SnapTrade's estimate (one
+        value a day, weekends included), not meant to match the holdings."""
+        import math
+        from datetime import date, timedelta
+        cid, _, which = account_id.rpartition(":")
+        if self._live_connection(provider_user_id, cid) == "edge":
+            raise FeatureUnavailable("SnapTrade returned 403 (balance history is an add-on that is not enabled)")
+        acts = [_sandbox_activity(r) for r in SANDBOX_ACTIVITIES.get(which, [])]
+        flows = sorted((a.trade_date, a.amount or 0.0) for a in acts if a.type in EXTERNAL_FLOW_TYPES)
+        if not flows:
+            return {"currency": "USD", "points": []}
+        start = date.fromisoformat(flows[0][0])
+        end = date.today() - timedelta(days=1)
+        points = []
+        day = start
+        while day <= end:
+            base = sum(v for d, v in flows if d <= day.isoformat())
+            k = (day - start).days
+            points.append((day.isoformat(), round(base * (1 + 0.12 * k / 365 + 0.02 * math.sin(k / 9)), 2)))
+            day += timedelta(days=1)
+        return {"currency": "USD", "points": points}
 
 
 def _with_query(url: str, **params: str) -> str:

@@ -46,7 +46,8 @@ from typing import Any, Dict, List, Optional
 
 import requests
 
-from .providers import (Account, AuthExpired, Cash, Connection, Holdings, NotFoundAtProvider, OptionPosition,
+from .providers import (Account, Activity, AuthExpired, Cash, Connection, FeatureUnavailable, Holdings,
+                        NotFoundAtProvider, OptionPosition,
                         Position, Provider, ProviderError, ProviderOutage, RefreshUnavailable, UnsupportedBroker,
                         WebhookRejected)
 
@@ -257,7 +258,10 @@ class SnapTradeProvider(Provider):
             sync = a.get("sync_status") or {}
             held = sync.get("holdings") if isinstance(sync.get("holdings"), dict) else {}
             positions_at = sync.get("positions") if isinstance(sync.get("positions"), str) else None
+            txn = sync.get("transactions") if isinstance(sync.get("transactions"), dict) else {}
             out.append(Account(
+                institution_account_id=str(a.get("institution_account_id") or "") or None,
+                transactions_first_date=(str(txn.get("first_transaction_date") or "")[:10] or None),
                 id=str(a.get("id")),
                 connection_id=str(a.get("connection_id") or a.get("brokerage_authorization") or ""),
                 name=a.get("display_name") or a.get("name") or "Account",
@@ -295,7 +299,8 @@ class SnapTradeProvider(Provider):
                     symbol=inst.get("symbol"), description=inst.get("description") or inst.get("symbol") or "",
                     kind=KIND_MAP.get(kind, "other"), currency=_ccy(r.get("currency")),
                     quantity=_num(r.get("units")), price=_num(r.get("price")),
-                    avg_cost=_num(r.get("cost_basis")), raw_type=kind))
+                    avg_cost=_num(r.get("cost_basis")), raw_type=kind,
+                    cash_equivalent=bool(r.get("cash_equivalent"))))
         except (AuthExpired, ProviderOutage):
             raise
         except ProviderError:
@@ -311,6 +316,53 @@ class SnapTradeProvider(Provider):
         if h.problems == ["positions", "balances"]:
             raise UnsupportedBroker("Neither holdings nor balances are available for this account.")
         return h
+
+    # ------------------------------------------------------------ history
+
+    ACTIVITY_PAGE = 1000            # the spec's default and maximum page
+    ACTIVITY_MAX = 20_000           # a ceiling on one fetch, far past any retail account
+
+    def activities(self, provider_user_id, secret, account_id, start_date=None) -> List[Activity]:
+        """GET /accounts/{id}/activities, every page. SnapTrade's copy is
+        refreshed once a day and a day late; its launch guide asks for at most
+        one fetch per account per day, which the caller enforces."""
+        user = self._u(provider_user_id, secret)
+        aid = urllib.parse.quote(account_id, safe="")
+        out: List[Activity] = []
+        offset = 0
+        while offset < self.ACTIVITY_MAX:
+            params = {"offset": str(offset), "limit": str(self.ACTIVITY_PAGE)}
+            if start_date:
+                params["startDate"] = start_date
+            got = self._call("GET", "/accounts/{}/activities".format(aid), user=user, params=params) or {}
+            rows = (got.get("data") if isinstance(got, dict) else got) or []
+            out.extend(_activity(r) for r in rows if isinstance(r, dict))
+            offset += len(rows)
+            total = ((got.get("pagination") or {}).get("total")) if isinstance(got, dict) else None
+            if len(rows) < self.ACTIVITY_PAGE or (isinstance(total, int) and offset >= total):
+                break
+        out.sort(key=lambda a: (a.trade_date or "", a.id))
+        return out
+
+    def balance_history(self, provider_user_id, secret, account_id) -> Dict[str, Any]:
+        """GET /accounts/{id}/balanceHistory: SnapTrade's estimated daily totals,
+        up to a year. An add-on, off until switched on in the dashboard, when it
+        answers 403; the spec says to replace the series on each fetch."""
+        aid = urllib.parse.quote(account_id, safe="")
+        try:
+            got = self._call("GET", "/accounts/{}/balanceHistory".format(aid),
+                             user=self._u(provider_user_id, secret)) or {}
+        except ProviderError as exc:
+            if "SnapTrade returned 403" in str(exc):
+                raise FeatureUnavailable(str(exc)) from None
+            raise
+        points = []
+        for p in (got.get("history") if isinstance(got, dict) else None) or []:
+            day, value = str((p or {}).get("date") or "")[:10], _num((p or {}).get("total_value"))
+            if len(day) == 10 and value is not None:
+                points.append((day, value))
+        return {"currency": _ccy(got.get("currency")) if isinstance(got, dict) else None,
+                "points": sorted(points)}
 
     # ------------------------------------------------------------- webhooks
 
@@ -336,6 +388,22 @@ class SnapTradeProvider(Provider):
         if abs(time.time() - at) > WEBHOOK_MAX_AGE:
             raise WebhookRejected("event is too old to accept")
         return parsed
+
+
+def _activity(r: Dict[str, Any]) -> Activity:
+    sym = r.get("symbol") if isinstance(r.get("symbol"), dict) else {}
+    opt = r.get("option_symbol") if isinstance(r.get("option_symbol"), dict) else {}
+    under = opt.get("underlying_symbol") if isinstance(opt.get("underlying_symbol"), dict) else {}
+    return Activity(
+        id=str(r.get("id") or ""), type=str(r.get("type") or "").upper(),
+        trade_date=str(r.get("trade_date") or "")[:10] or None,
+        settlement_date=str(r.get("settlement_date") or "")[:10] or None,
+        symbol=sym.get("symbol") or sym.get("raw_symbol") or under.get("symbol") or None,
+        option_occ=opt.get("ticker") or None, option_action=r.get("option_type") or None,
+        units=_num(r.get("units")), price=_num(r.get("price")), amount=_num(r.get("amount")),
+        currency=_ccy(r.get("currency")), fee=_num(r.get("fee")), fx_rate=_num(r.get("fx_rate")),
+        description=" ".join(str(r.get("description") or "").split())[:200],
+        group_ref=r.get("external_reference_id") or None)
 
 
 def _ccy(v: Any) -> Optional[str]:

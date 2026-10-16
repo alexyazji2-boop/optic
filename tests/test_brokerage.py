@@ -600,17 +600,37 @@ def test_vault_round_trip_and_rotation(monkeypatch):
     assert vault.unwrap_dek("u1", wrapped) == dek
 
 
+# Every SnapTrade call that is not a read. Linking, unlinking and the paid
+# refresh: none of them can place an order or move money. A new entry here is
+# a decision to review, not a line to append.
+WRITE_CALLS_ALLOWED = {
+    ("POST", "/snapTrade/registerUser"), ("DELETE", "/snapTrade/deleteUser"), ("POST", "/snapTrade/login"),
+    ("DELETE", "/connection/"), ("POST", "/authorizations/"),
+}
+
+
 def test_no_trading_surface_exists():
     """Read-only by construction: no provider method, route or SnapTrade call
-    can place an order or move money."""
+    can place an order or move money. Words like "withdrawal" may appear, since
+    the transaction history names them; what is pinned is what Optic can do.
+    (2026-10-15: the old version banned the words themselves, which a read of
+    the reader's deposits and withdrawals tripped.)"""
     import inspect
     from app.brokerage import providers, snaptrade
-    code = "\n".join(l for m in (providers, snaptrade, broute)
-                     for l in inspect.getsource(m).splitlines() if not l.strip().startswith(("#", "*", '"')))
-    for word in ("placeOrder", "/trade/", "place_order", "transfer", "withdraw", "/orders"):
-        assert word not in code
-    assert not [n for n in dir(providers.Provider) if "order" in n or "trade" in n]
-    assert '"connectionType": "read"' in inspect.getsource(snaptrade)
+    source = inspect.getsource(snaptrade)
+    calls = re.findall(r'_call\(\s*"(GET|POST|PUT|PATCH|DELETE)",\s*"([^"{]+)', source)
+    assert calls, "the pattern no longer finds SnapTrade calls"
+    writes = {(verb, path) for verb, path in calls if verb != "GET"}
+    assert writes <= WRITE_CALLS_ALLOWED, writes - WRITE_CALLS_ALLOWED
+    assert ("POST", "/authorizations/") in writes          # the refresh, and only that, under /authorizations
+    assert "/authorizations/{}/refresh" in source and "/trade" not in source.replace("trade-if", "")
+    for word in ("placeOrder", "place_order", "/orders", "/trade/"):
+        assert word not in source
+    for name in dir(providers.Provider):
+        assert not any(w in name.lower() for w in ("order", "trade", "transfer", "withdraw", "deposit")), name
+    for route in broute.router.routes:
+        assert not any(w in route.path.lower() for w in ("order", "trade", "transfer", "withdraw")), route.path
+    assert '"connectionType": "read"' in source
 
 
 def test_a_connection_gone_at_the_provider_is_an_error_not_ok():
