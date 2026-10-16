@@ -180,8 +180,14 @@ def test_the_chat_route_runs_research_and_framework_side_by_side(monkeypatch):
         seen.update(context or {})
         yield "data: {}\n\n"
 
+    async def no_levels(history, context, horizon=None):
+        return context
+
     monkeypatch.setattr(m, "_with_research", slow_research)
     monkeypatch.setattr(m, "_with_framework", slow_framework)
+    # The take chart's levels joined the same gather (2026-10-15); unstubbed,
+    # they fetched five years of NVDA from Yahoo and the timing measured that.
+    monkeypatch.setattr(m, "_with_take_levels", no_levels)
     monkeypatch.setattr(m.ai, "stream_chat", fake_stream)
     monkeypatch.setattr(m, "_spend_guard", lambda request: None)
     t0 = time.time()
