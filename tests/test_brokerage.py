@@ -799,6 +799,32 @@ def test_on_the_real_time_plan_sync_now_reads_the_broker_straight_away():
     assert r.status_code == 200 and r.json() == dict(r.json(), result="ok", message="Synced straight from your broker.")
 
 
+def test_a_renamed_account_keeps_its_name_through_syncs_and_milo_sees_it():
+    c, user = reader()
+    paid(user)
+    link(c)
+    acct = store.accounts(user["id"])[0]
+    broker_name = acct["name"]
+    r = c.patch("/api/brokerage/accounts/{}".format(acct["id"]), json={"nickname": "  Investing  "})
+    assert r.status_code == 200
+    conn = c.get("/api/brokerage/status").json()["connections"][0]
+    shown = next(a for a in conn["accounts"] if a["id"] == acct["id"])
+    assert (shown["name"], shown["broker_name"], shown["nickname"]) == ("Investing", broker_name, "Investing")
+    # A sync rewrites the broker's name and leaves the reader's alone.
+    service.sync_connection(user, store.connections(user["id"])[0])
+    assert store.account(user["id"], acct["id"])["name"] == "Investing"
+    assert any(a["name"] == "Investing" for a in c.get("/api/brokerage/portfolio").json()["accounts"])
+    # Blank goes back to the broker's name; anything long is cut to 40.
+    c.patch("/api/brokerage/accounts/{}".format(acct["id"]), json={"nickname": ""})
+    assert store.account(user["id"], acct["id"])["name"] == broker_name
+    c.patch("/api/brokerage/accounts/{}".format(acct["id"]), json={"nickname": "x" * 90})
+    assert store.account(user["id"], acct["id"])["name"] == "x" * 40
+    assert c.patch("/api/brokerage/accounts/{}".format(acct["id"]), json={"nickname": 5}).status_code == 400
+    # Another reader cannot name it.
+    them, _ = reader("them@example.com")
+    assert them.patch("/api/brokerage/accounts/{}".format(acct["id"]), json={"nickname": "Mine"}).status_code == 404
+
+
 def test_purge_treats_not_found_as_done_and_stops_retrying_forever(monkeypatch):
     from app.brokerage.providers import NotFoundAtProvider
     store.queue_purge("sandbox", "gone-user", None, "x")

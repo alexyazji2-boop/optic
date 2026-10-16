@@ -835,6 +835,15 @@ MIGRATION_13 = [
 ]
 
 
+# The reader's own name for a linked account (2026-10-15). Brokers' names do
+# not always reach the aggregator: Robinhood's "Investing" arrives as
+# "Robinhood Individual", the same as two other accounts. A sync rewrites
+# `name` from the broker and never touches `nickname`.
+MIGRATION_14 = [
+    "ALTER TABLE brokerage_accounts ADD COLUMN nickname TEXT",
+]
+
+
 MIGRATIONS: List[Tuple[int, str, List[str]]] = [
     (1, "accounts", MIGRATION_1),
     (2, "oauth_pkce", MIGRATION_2),
@@ -849,6 +858,7 @@ MIGRATIONS: List[Tuple[int, str, List[str]]] = [
     (11, "valuations", MIGRATION_11),
     (12, "brokerage_and_billing", MIGRATION_12),
     (13, "valuation_models", MIGRATION_13),
+    (14, "brokerage_account_nickname", MIGRATION_14),
 ]
 
 

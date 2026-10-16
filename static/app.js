@@ -46031,7 +46031,7 @@ async function fillBillingRow() {
   if (row) row.hidden = !(g && g.views.includes('brokerage'));
 }
 
-const BROKER = { status: null, portfolio: null, billing: null, loading: false, error: null, armed: null, flash: null, agreed: false };
+const BROKER = { status: null, portfolio: null, billing: null, loading: false, error: null, armed: null, flash: null, agreed: false, renaming: null };
 
 /* Only the provider's own pages and Stripe's are followed. The URL comes from
  * Optic's server, but a check here costs nothing and means a compromised or
@@ -46332,11 +46332,42 @@ function bkConnCard(c) {
     </div>
     <p class="set-row-note">Last successful sync: ${esc(bkWhen(c.last_sync_at))}${
   c.status_reason ? `. ${esc(c.status_reason)}` : ''}${armed ? '. Disconnecting removes it at the provider and deletes Optic\'s copy of its data now.' : ''}</p>
-    <ul class="bk-accts">${(c.accounts || []).map((a) => `<li>
+    <ul class="bk-accts">${(c.accounts || []).map((a) => (BROKER.renaming === a.id ? bkRenameRow(a) : `<li>
       <label class="bk-acct"><input type="checkbox" data-bk-select="${esc(a.id)}"${a.selected ? ' checked' : ''}>
         <span><b>${esc(a.name || 'Account')}</b> ${esc(a.number_mask || '')}${a.account_type ? ` · ${esc(a.account_type)}` : ''}${a.currency ? ` · ${esc(a.currency)}` : ''}</span></label>
-      <span class="bk-acct-state">${esc(bkAcctState(a))}</span></li>`).join('')}</ul>
+      <span class="bk-acct-side"><span class="bk-acct-state">${esc(bkAcctState(a))}</span>
+        <button type="button" class="btn" data-bk-rename="${esc(a.id)}" aria-label="Rename ${esc(a.name || 'Account')} ${esc(a.number_mask || '')}">Rename</button></span></li>`)).join('')}</ul>
   </div>`;
+}
+
+/** One account row as a name field. The broker's own name is the
+ *  placeholder, and saving a blank field goes back to it. Outside the row's
+ *  <label>, so typing and the buttons never toggle the account's checkbox. */
+function bkRenameRow(a) {
+  const broker = a.broker_name || a.name || 'Account';
+  return `<li class="bk-renaming">
+      <input type="text" class="bk-rename-input" maxlength="40" value="${esc(a.nickname || '')}" placeholder="${esc(broker)}"
+        aria-label="Name for ${esc(broker)} ${esc(a.number_mask || '')}" autocomplete="off" data-bk-rename-input="${esc(a.id)}">
+      <span class="bk-acct-side">
+        <button type="button" class="btn primary" data-bk-rename-save="${esc(a.id)}">Save</button>
+        <button type="button" class="btn" data-bk-rename-cancel>Cancel</button></span>
+      <p class="set-row-note">${esc(a.number_mask || '')}${a.account_type ? ` · ${esc(a.account_type)}` : ''}. Leave it blank to use the broker's name, ${esc(broker)}.</p>
+    </li>`;
+}
+
+async function bkSaveRename(id) {
+  const field = document.querySelector('[data-bk-rename-input]');
+  const btn = document.querySelector('[data-bk-rename-save]');
+  if (btn) btn.disabled = true;
+  const r = await brokerFetch('PATCH', `/api/brokerage/accounts/${encodeURIComponent(id)}`, { nickname: field ? field.value : '' });
+  if (!r.ok) {
+    if (btn) btn.disabled = false;
+    if (window.OpticAuth && window.OpticAuth.toast) window.OpticAuth.toast((r.data && r.data.detail) || 'Could not rename that.', 'bad');
+    return true;
+  }
+  BROKER.renaming = null;
+  loadBrokerage(true);
+  return true;
 }
 
 function bkAcctState(a) {
@@ -46471,10 +46502,19 @@ function bkChangesHtml(ch) {
 }
 
 async function brokerageAction(evt) {
-  const t = evt.target.closest && evt.target.closest('[data-bk-connect], [data-bk-reconnect], [data-bk-sync], [data-bk-disconnect], [data-bk-disarm], [data-bk-delete-all], [data-bk-reload], [data-billing-checkout], [data-billing-portal]');
+  const t = evt.target.closest && evt.target.closest('[data-bk-connect], [data-bk-reconnect], [data-bk-sync], [data-bk-disconnect], [data-bk-disarm], [data-bk-delete-all], [data-bk-reload], [data-bk-rename], [data-bk-rename-save], [data-bk-rename-cancel], [data-billing-checkout], [data-billing-portal]');
   if (!t) return false;
   const toast = (msg, tone) => (window.OpticAuth && window.OpticAuth.toast ? window.OpticAuth.toast(msg, tone) : null);
   if (t.matches('[data-bk-reload]')) { loadBrokerage(true); return true; }
+  if (t.matches('[data-bk-rename]')) {
+    BROKER.renaming = t.dataset.bkRename;
+    renderBrokerage();
+    const field = document.querySelector('[data-bk-rename-input]');
+    if (field) { field.focus(); field.select(); }
+    return true;
+  }
+  if (t.matches('[data-bk-rename-cancel]')) { BROKER.renaming = null; renderBrokerage(); return true; }
+  if (t.matches('[data-bk-rename-save]')) return bkSaveRename(t.dataset.bkRenameSave);
   if (t.matches('[data-bk-disarm]')) { BROKER.armed = null; renderBrokerage(); return true; }
   if (t.matches('[data-billing-checkout], [data-billing-portal]')) {
     const portal = t.matches('[data-billing-portal]');
@@ -46560,6 +46600,13 @@ async function brokerageSelect(evt) {
 if (typeof document !== 'undefined' && document.addEventListener) {
   document.addEventListener('click', (evt) => { brokerageAction(evt); });
   document.addEventListener('change', (evt) => { brokerageSelect(evt); });
+  // Enter saves a new account name and Escape leaves it as it was.
+  document.addEventListener('keydown', (evt) => {
+    const field = evt.target && evt.target.closest && evt.target.closest('[data-bk-rename-input]');
+    if (!field) return;
+    if (evt.key === 'Enter') { evt.preventDefault(); bkSaveRename(field.dataset.bkRenameInput); }
+    else if (evt.key === 'Escape') { evt.stopPropagation(); BROKER.renaming = null; renderBrokerage(); }
+  });
 }
 
 const NAV_GROUPS = [

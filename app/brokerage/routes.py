@@ -199,10 +199,17 @@ async def select_account(account_id: str, request: Request,
                          payload: Dict[str, Any] = Body(default={})) -> Dict[str, Any]:
     user = deps.require_user(request)
     deps.csrf_guard(request)
-    if "selected" not in (payload or {}):
-        raise HTTPException(status_code=400, detail="Say whether the account is selected.")
-    if not store.set_account_selected(user["id"], account_id, bool(payload["selected"])):
+    payload = payload or {}
+    if "selected" not in payload and "nickname" not in payload:
+        raise HTTPException(status_code=400, detail="Say whether the account is selected, or what to call it.")
+    if "nickname" in payload and not isinstance(payload["nickname"], (str, type(None))):
+        raise HTTPException(status_code=400, detail="A name is text.")
+    if not store.account(user["id"], account_id):
         raise HTTPException(status_code=404, detail="No such account.")
+    if "selected" in payload:
+        store.set_account_selected(user["id"], account_id, bool(payload["selected"]))
+    if "nickname" in payload:
+        store.set_account_nickname(user["id"], account_id, payload["nickname"])
     return {"ok": True}
 
 

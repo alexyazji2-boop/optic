@@ -107,15 +107,39 @@ def delete_connection(user_id: str, connection_id: str) -> None:
 # ----------------------------------------------------------------- accounts
 
 
+NICKNAME_MAX = 40
+
+
+def _named(row: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    """The reader's nickname, where they set one, is the account's name
+    everywhere: the page, the portfolio and Milo. The broker's own name stays
+    alongside as `broker_name`."""
+    if row is None:
+        return None
+    row = dict(row)
+    row["broker_name"] = row.get("name")
+    if row.get("nickname"):
+        row["name"] = row["nickname"]
+    return row
+
+
 def accounts(user_id: str, connection_id: Optional[str] = None) -> List[Dict[str, Any]]:
     if connection_id:
-        return db.rows("SELECT * FROM brokerage_accounts WHERE user_id = ? AND connection_id = ? "
-                       "ORDER BY created_at", (user_id, connection_id))
-    return db.rows("SELECT * FROM brokerage_accounts WHERE user_id = ? ORDER BY created_at", (user_id,))
+        return [_named(r) for r in db.rows("SELECT * FROM brokerage_accounts WHERE user_id = ? AND "
+                                           "connection_id = ? ORDER BY created_at", (user_id, connection_id))]
+    return [_named(r) for r in db.rows("SELECT * FROM brokerage_accounts WHERE user_id = ? ORDER BY created_at",
+                                       (user_id,))]
 
 
 def account(user_id: str, account_id: str) -> Optional[Dict[str, Any]]:
-    return db.row("SELECT * FROM brokerage_accounts WHERE id = ? AND user_id = ?", (account_id, user_id))
+    return _named(db.row("SELECT * FROM brokerage_accounts WHERE id = ? AND user_id = ?", (account_id, user_id)))
+
+
+def set_account_nickname(user_id: str, account_id: str, nickname: Optional[str]) -> bool:
+    """Blank clears it, and the broker's name shows again."""
+    clean = " ".join(str(nickname or "").split())[:NICKNAME_MAX] or None
+    return db.execute("UPDATE brokerage_accounts SET nickname = ?, updated_at = ? WHERE id = ? AND user_id = ?",
+                      (clean, db.utcnow(), account_id, user_id)) > 0
 
 
 def upsert_account(user_id: str, connection_id: str, provider: str, provider_account_id: str,
