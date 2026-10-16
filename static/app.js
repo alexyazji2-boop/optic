@@ -15264,7 +15264,7 @@ function advancedOn() {
 function advancedToggleHTML() {
   const on = advancedOn();
   return `<button type="button" class="adv-toggle" role="switch" aria-checked="${on}" data-adv-toggle
-    title="Opens the specialist panels, full terminology and methodology on every page. Same setting as Optic Mode in the Milo panel.">
+    title="Opens the Advanced panels, full terminology and methodology on every page. Panels marked Professional open at the Professional level of Optic Mode, in the Milo panel.">
     <span class="adv-track" aria-hidden="true"><span class="adv-knob"></span></span>
     <span class="adv-label">Show advanced analysis</span></button>`;
 }
@@ -50639,7 +50639,11 @@ function makePanelsCollapsible(view) {
       panel.classList.add('is-specialist');
       const tag = document.createElement('span');
       tag.className = 'spec-tag';
-      tag.textContent = 'Advanced';
+      /* The rung it opens at. With "Show advanced analysis" on (rung 2) the
+       * Professional-only panels (vanna, net premium by strike, niche
+       * industries) still read "Advanced" and stayed folded, so the switch
+       * seemed not to have worked on them (launch audit, 2026-10-16). */
+      tag.textContent = panelMinLevel(view, title) >= 3 ? 'Professional' : 'Advanced';
       head.appendChild(tag);
     }
     panel.classList.toggle('is-open', open);
