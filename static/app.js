@@ -46820,8 +46820,8 @@ function routeFor(view) {
   if (view === 'brokerage') {
     // Each workspace section has its own address, so a refresh, a shared link
     // and Back all land on the section the reader was on (2026-10-15).
-    const sec = (typeof BROKER !== 'undefined' && BROKER && BROKER.section) || 'overview';
-    return `#/brokerage/${sec}`;
+    const sec = (typeof BROKER !== 'undefined' && BROKER && BROKER.section) || null;
+    return sec ? `#/brokerage/${sec}` : '#/brokerage';
   }
   if (view === 'instrument') {
     return STATE.instrument ? `#/instrument/${encodeURIComponent(STATE.instrument.symbol)}` : null;
@@ -46892,7 +46892,14 @@ function applyRoute(hash) {
     } else if (!symbol) {
       // A workspace section is set before the view opens, so it loads the
       // right one; between sections of an open workspace this is all Back does.
-      if (view === 'brokerage' && typeof bkSetSection === 'function') bkSetSection(route.section || null, true);
+      // On the first load this runs before static/brokerage.js has loaded,
+      // so the section is recorded here too; the workspace reads it from
+      // BROKER (2026-10-16: a refresh on Scenarios showed Scenarios under
+      // #/brokerage/overview).
+      if (view === 'brokerage') {
+        if (typeof bkSetSection === 'function') bkSetSection(route.section || null, true);
+        else if (route.section) BROKER.section = route.section;
+      }
       if (view !== STATE.view) switchView(view);
     } else if (view === 'chart' && STATE.ticker) {
       // The chart keeps its own symbol (see STATE.chartSymbol), so stepping

@@ -104,6 +104,14 @@ def test_alerts_fire_on_thresholds_and_compare_with_a_baseline_snapshot():
     assert not [a for a in got if a["kind"] == "drift"]
 
 
+def test_a_fund_is_not_a_single_holding_concentration():
+    prefs = alerts.validate({})
+    ov = {"holdings": [{"symbol": "VOO", "kind": "etf", "weight_pct": 60.0},
+                       {"symbol": "NVDA", "kind": "equity", "weight_pct": 40.0}], "allocation": {}}
+    got = alerts.evaluate(ov, {}, [], [], {}, None, prefs, TODAY)
+    assert [a["title"] for a in got if a["kind"] == "concentration"] == ["NVDA is 40.0% of your portfolio"]
+
+
 def test_alerts_are_sealed_deduplicated_and_marked_seen():
     c, user = reader()
     paid(user)

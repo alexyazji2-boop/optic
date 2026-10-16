@@ -78,6 +78,10 @@ def _cached(key: str, producer: Callable[[], Any], ttl: float = SECTION_TTL) -> 
         if hit and now - hit[0] < ttl:
             return hit[1]
     value = producer()
+    if not value:
+        # An empty answer is usually a source that failed this time (Yahoo
+        # throttling, SEC refusing): asked again next time, not remembered.
+        return value
     with _cache_lock:
         if len(_cache) > 400:
             for k in sorted(_cache, key=lambda k: _cache[k][0])[:100]:
@@ -98,12 +102,30 @@ def _lookups() -> Dict[str, Callable]:
     return dict(broute.LOOKUPS)
 
 
+CORE_TTL = 600.0   # the core reads stored data (versioned key) plus slow-moving lookups
+
+
 def _core(user: Dict[str, Any], account_ids: Optional[List[str]]) -> Dict[str, Any]:
-    """The overview for the scope, cached per reader, scope and data version."""
+    """The overview for the scope, cached per reader, scope and data version.
+
+    Measured 2026-10-16 on a local server Yahoo was throttling: 81s, because
+    the overview's price check asked for one full quote per holding (three
+    Yahoo documents each), and the 60s section cache made every section pay
+    it again. Prices now come from one batch request for every symbol, and
+    the core is kept for ten minutes: its inputs are the stored sync (in the
+    key) and sectors and earnings dates, which change daily at most."""
     uid = user["id"]
-    _, chosen = service.scoped(uid, account_ids)
+    accts, chosen = service.scoped(uid, account_ids)
     key = "{}:core:{}".format(uid, _version(uid, chosen))
-    return _cached(key, lambda: service.overview(user, account_ids=chosen or None, **_lookups()))
+
+    def produce() -> Dict[str, Any]:
+        syms = sorted({str(p.get("symbol") or "").upper() for a in accts if a["id"] in chosen
+                       for p in ((a.get("payload") or {}).get("positions") or []) if p.get("symbol")})
+        prices = _quotes(syms)
+        lookups = dict(_lookups())
+        lookups["optic_price"] = lambda s: (prices.get(str(s).upper()) or {}).get("price")
+        return service.overview(user, account_ids=chosen or None, **lookups)
+    return _cached(key, produce, ttl=CORE_TTL)
 
 
 def _freshness(core: Dict[str, Any], quotes: Optional[Dict[str, Dict[str, Any]]] = None) -> Dict[str, Any]:
@@ -116,6 +138,45 @@ def _freshness(core: Dict[str, Any], quotes: Optional[Dict[str, Dict[str, Any]]]
         "market": {"quotes_oldest": min(qt) if qt else None, "quotes_newest": max(qt) if qt else None,
                    "delayed_minutes": max(delays) if delays else None},
     }
+
+
+MARKET_TTL = 1800.0   # shared across readers: daily history changes once a day
+
+
+def _closes(symbols: List[str], period: str = "1y") -> Dict[str, Any]:
+    """Daily closes, shared by every reader asking about the same symbols."""
+    syms = sorted({s for s in symbols if s})
+    key = "mkt:closes:{}:{}".format(period, ",".join(syms))
+    return _cached(key, lambda: _safe(_m("closes_of"), syms, period, default={}) or {}, ttl=MARKET_TTL)
+
+
+def _benchmark(symbol: str) -> Optional[Dict[str, Any]]:
+    key = "mkt:bench:{}".format(symbol)
+    return _cached(key, lambda: _safe(_m("benchmark_of"), symbol, default=None), ttl=MARKET_TTL)
+
+
+def _budgeted(fn: Optional[Callable], seconds: float) -> Optional[Callable]:
+    """`fn` until `seconds` of wall time have gone, then None for every
+    further call. A section asks about many symbols one at a time (sectors of
+    fund constituents, calendars, fundamentals); under a throttled Yahoo each
+    call can wait up to 20s, and a section that waits for all of them never
+    arrives (the first local run sat at "Working it out..." for minutes). The
+    modules treat None as "not available" and say how much they covered."""
+    if fn is None:
+        return None
+    start = time.monotonic()
+
+    def call(*a: Any, **k: Any) -> Any:
+        if time.monotonic() - start > seconds:
+            return None
+        try:
+            return fn(*a, **k)
+        except Exception:                                       # noqa: BLE001
+            return None
+    return call
+
+
+LOOKUP_BUDGET = 15.0
 
 
 def _quotes(symbols: List[str]) -> Dict[str, Dict[str, Any]]:
@@ -202,7 +263,14 @@ def holdings(user: Dict[str, Any], account_ids: Optional[List[str]] = None) -> D
 
 def exposure(user: Dict[str, Any], account_ids: Optional[List[str]] = None,
              core: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """Cached like the core: holdings, scorecard and scenarios all read it, and
+    a cold one spends up to 40 sector lookups on fund constituents."""
     core = core or _core(user, account_ids)
+    key = "{}:exposure:{}".format(user["id"], _version(user["id"], core.get("scope") or []))
+    return _cached(key, lambda: _exposure(core), ttl=CORE_TTL)
+
+
+def _exposure(core: Dict[str, Any]) -> Dict[str, Any]:
     from . import exposure as exposure_mod
     held = core.get("holdings") or []
     funds = sorted({str(h["symbol"]).upper() for h in held if h.get("kind") in ("etf", "fund") and h.get("symbol")})
@@ -221,10 +289,12 @@ def exposure(user: Dict[str, Any], account_ids: Optional[List[str]] = None,
     opts_usd = sum(float(o.get("market_value_est") or 0) for o in core.get("options") or []
                    if (o.get("currency") or "USD") == "USD")
     try:
-        return exposure_mod.build(held, lt, _m("sector_of") or (lambda s: None), country_of=_m("country_of"),
+        return exposure_mod.build(held, lt, _budgeted(_m("sector_of"), LOOKUP_BUDGET) or (lambda s: None),
+                                  country_of=_budgeted(_m("country_of"), LOOKUP_BUDGET),
                                   cash_usd=round(cash_usd, 2), options_usd=round(opts_usd, 2))
     except TypeError:
-        return exposure_mod.build(held, lt, _m("sector_of") or (lambda s: None), country_of=_m("country_of"))
+        return exposure_mod.build(held, lt, _budgeted(_m("sector_of"), LOOKUP_BUDGET) or (lambda s: None),
+                                  country_of=_budgeted(_m("country_of"), LOOKUP_BUDGET))
 
 
 def scorecard(user: Dict[str, Any], account_ids: Optional[List[str]] = None,
@@ -235,13 +305,13 @@ def scorecard(user: Dict[str, Any], account_ids: Optional[List[str]] = None,
     held = core.get("holdings") or []
     syms = [str(h["symbol"]).upper() for h in held if h.get("symbol")][:30]
     exp = exposure(user, account_ids, core=core)
-    closes = _safe(_m("closes_of"), syms + ["SPY"], "1y", default={}) or {}
+    closes = _closes(syms + ["SPY"], "1y")
     bench = closes.get("SPY") or []
     ev = events(user, account_ids, today=today, core=core)
     flat = [{"symbol": e.get("symbol"), "kind": e.get("kind"), "date": e.get("date"), "confirmed": e.get("confirmed"),
              "weight_pct": e.get("weight_pct")} for e in ev.get("events") or []]
     market = _safe(_m("market_ref"), default={"pe": None, "ten_year": None})
-    out = scorecard_mod.build(held, exp, _m("fundamentals_of") or (lambda s: None),
+    out = scorecard_mod.build(held, exp, _budgeted(_m("fundamentals_of"), LOOKUP_BUDGET) or (lambda s: None),
                               {s: v for s, v in closes.items() if s != "SPY"}, bench, flat, market, today)
     out["section"] = "scorecard"
     return out
@@ -286,7 +356,7 @@ def performance(user: Dict[str, Any], account_ids: Optional[List[str]] = None, p
             ccy = d["currency"]
             current[a["id"]] = {"value": (d["total"] or {}).get(ccy), "currency": ccy,
                                 "as_of": a.get("broker_as_of") or a.get("last_sync_at")}
-    bench = _safe(_m("benchmark_of"), benchmark, default=None) if benchmark else None
+    bench = _benchmark(benchmark) if benchmark else None
     out = perf_mod.build(
         [{"id": a["id"], "name": a.get("name"), "currency": (a.get("currency") or "USD").upper(),
           "transactions_first_date": rows[a["id"]].get("activities_first_date"),
@@ -310,8 +380,8 @@ def events(user: Dict[str, Any], account_ids: Optional[List[str]] = None, today:
     today = today or date.today()
     key = "{}:events:{}:{}".format(user["id"], _version(user["id"], core.get("scope") or []), today.isoformat())
     return _cached(key, lambda: events_mod.build(core.get("holdings") or [], core.get("options") or [], today,
-                                                 earnings_of=_m("earnings_calendar_of"),
-                                                 dividend_of=_m("dividend_of")), ttl=900.0)
+                                                 earnings_of=_budgeted(_m("earnings_calendar_of"), LOOKUP_BUDGET),
+                                                 dividend_of=_budgeted(_m("dividend_of"), LOOKUP_BUDGET)), ttl=900.0)
 
 
 def theses(user: Dict[str, Any], core: Dict[str, Any]) -> Dict[str, Any]:
@@ -335,7 +405,7 @@ def thesis_news(user: Dict[str, Any], symbols: List[str], since: Optional[Dict[s
     """Developments for names with a saved thesis, newer than the thesis was
     last saved: the shared, free catalyst rows (headlines, filings, wires and
     the calendar), cached 30 minutes per symbol by `catalysts`."""
-    fn = _m("catalysts_of")
+    fn = _budgeted(_m("catalysts_of"), 2 * LOOKUP_BUDGET)
     out: Dict[str, List[Dict[str, Any]]] = {}
     for sym in symbols[:limit_names]:
         rows = _safe(fn, sym, default=[]) or []
@@ -402,11 +472,12 @@ def scenario(user: Dict[str, Any], changes: List[Dict[str, Any]], funding: str,
     held = core.get("holdings") or []
     syms = sorted({str(h["symbol"]).upper() for h in held if h.get("symbol")} |
                   {str(c.get("symbol") or "").upper() for c in changes or [] if c.get("symbol")})[:30]
-    closes = _safe(_m("closes_of"), syms + ["SPY"], "1y", default={}) or {}
+    closes = _closes(syms + ["SPY"], "1y")
     cash_usd = sum(float(c.get("amount") or 0) for c in core.get("cash") or [] if (c.get("currency") or "USD") == "USD")
     exp = exposure(user, account_ids, core=core)
     out = scen_mod.run(held, round(cash_usd, 2), changes or [], funding,
-                       _m("price_of") or (lambda s: None), _m("sector_of") or (lambda s: None),
+                       _m("price_of") or (lambda s: None),
+                       _budgeted(_m("sector_of"), LOOKUP_BUDGET) or (lambda s: None),
                        {s: v for s, v in closes.items() if s != "SPY"}, closes.get("SPY") or [], exposure=exp)
     out["section"] = "scenarios"
     out["scope"] = _scope_meta(user, core)

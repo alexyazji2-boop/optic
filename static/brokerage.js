@@ -33,6 +33,7 @@ const BKW_BENCHMARKS = [['SPY', 'S&P 500 (SPY)'], ['VTI', 'US total market (VTI)
   ['ACWI', 'World stocks (ACWI)'], ['AGG', 'US bonds (AGG)']];
 const BKW = {
   data: {},        // section id -> payload, for the scope it was loaded with
+  dataKey: {},     // section id -> the bkwWantKey its payload answers
   scopeKey: null,  // the scope string the cached data belongs to
   loading: {},
   error: {},
@@ -62,6 +63,14 @@ function bkSetSection(id, fromRoute) {
   const changed = BROKER.section !== next;
   BROKER.section = next;
   bkwStore(BKW_SECTION_KEY, next);
+  // A bare #/brokerage, or one written before this file loaded, is brought in
+  // line with the section actually shown, in place (no new history entry).
+  if (STATE.view === 'brokerage' && typeof routeFor === 'function' && history.replaceState) {
+    const want = routeFor('brokerage');
+    if (want && want !== location.hash && fromRoute) {
+      try { history.replaceState(null, '', want); } catch (e) { /* a sandboxed frame */ }
+    }
+  }
   if (STATE.view === 'brokerage' && BROKER.status && (BROKER.status.connections || []).length) {
     if (changed) {
       bkWorkspaceRender(views.brokerage, bkFlashHtml());
@@ -185,7 +194,7 @@ function bkWorkspaceRender(host, flash) {
       ${bkwAskButton(def.ask)}
     </div>
     <nav class="sec-tabs bkw-tabs" role="tablist" aria-label="Brokerage sections">${tabs}</nav>
-    <div id="bkw-panel" class="bkw-panel" role="tabpanel" aria-labelledby="bkw-tab-${sec}">${bkwSectionHTML(sec)}</div>`;
+    <div id="bkw-panel" class="bkw-panel" role="tabpanel" aria-labelledby="bkw-tab-${sec}">${bkwSafeSection(sec)}</div>`;
   bkwAfterRender(sec);
 }
 
@@ -204,11 +213,23 @@ function bkwSectionHTML(sec) {
   return '';
 }
 
+/* A renderer that throws must not leave the last state on screen: the first
+ * local run showed "Working it out..." under a finished scenario because one
+ * field had an unexpected shape. The section says so instead. */
+function bkwSafeSection(sec) {
+  try {
+    return bkwSectionHTML(sec);
+  } catch (e) {
+    if (typeof console !== 'undefined') console.error('brokerage section', sec, e);
+    return '<div class="panel span2"><p class="sub">This section could not be drawn. Reload the page; if it persists, report it with Report a Problem.</p></div>';
+  }
+}
+
 function bkwPaintPanel() {
   const panel = document.getElementById('bkw-panel');
   if (!panel) return;
   const sec = bkwSection();
-  panel.innerHTML = bkwSectionHTML(sec);
+  panel.innerHTML = bkwSafeSection(sec);
   const fresh = document.getElementById('bkw-fresh');
   if (fresh) fresh.innerHTML = bkwFreshness();
   bkwAfterRender(sec);
@@ -233,21 +254,38 @@ const BKW_ENDPOINT = {
   events: () => '/api/brokerage/workspace/events',
 };
 
+/* What a section's data must match to be shown: the account scope, and for
+ * Performance the period and benchmark. A request answers for the key it was
+ * sent with; one that comes back after the reader changed the account or the
+ * period is dropped, not painted over the newer choice (2026-10-16: a load
+ * started before switching to the Roth landed after it and showed both
+ * accounts). */
+function bkwWantKey(sec) {
+  return `${bkScopeIds().join(',')}|${sec === 'performance' ? `${BKW.period}:${BKW.bench}` : ''}`;
+}
+
 async function bkWorkspaceLoad(force) {
   const sec = bkwSection();
   const scopeKey = bkScopeIds().join(',');
-  if (BKW.scopeKey !== scopeKey) { BKW.data = {}; BKW.extra = {}; BKW.error = {}; BKW.scopeKey = scopeKey; }
+  if (BKW.scopeKey !== scopeKey) { BKW.data = {}; BKW.dataKey = {}; BKW.extra = {}; BKW.error = {}; BKW.loading = {}; BKW.scopeKey = scopeKey; }
+  BKW.dataKey = BKW.dataKey || {};
   if (force) { delete BKW.data[sec]; BKW.extra = {}; }
-  if (!BKW_ENDPOINT[sec] || BKW.data[sec] || BKW.loading[sec]) {
+  if (!BKW_ENDPOINT[sec]) return;
+  const want = bkwWantKey(sec);
+  if (BKW.data[sec] && BKW.dataKey[sec] === want) {
     if (sec === 'holdings') bkwLoadExtras();
+    if (sec === 'overview') bkwLoadBriefing();
     return;
   }
-  BKW.loading[sec] = true;
+  if (BKW.loading[sec] === want) return;
+  BKW.loading[sec] = want;
   BKW.error[sec] = null;
   const params = sec === 'performance' ? { period: BKW.period, benchmark: BKW.bench } : {};
   const r = await brokerFetch('GET', BKW_ENDPOINT[sec]() + bkwQuery(params));
-  BKW.loading[sec] = false;
-  if (r.ok) BKW.data[sec] = r.data;
+  if (BKW.loading[sec] !== want) return;          // superseded while in flight
+  BKW.loading[sec] = null;
+  if (bkwWantKey(sec) !== want) return;           // the reader has moved on
+  if (r.ok) { BKW.data[sec] = r.data; BKW.dataKey[sec] = want; }
   else BKW.error[sec] = (r.data && r.data.detail) || 'That section could not be loaded.';
   if (STATE.view === 'brokerage' && bkwSection() === sec) bkwPaintPanel();
   if (sec === 'overview' && r.ok) bkwLoadBriefing();
@@ -255,23 +293,27 @@ async function bkWorkspaceLoad(force) {
 }
 
 async function bkwLoadBriefing() {
-  if (BKW.extra.briefing || BKW.loading.briefing) return;
-  BKW.loading.briefing = true;
+  const scope = BKW.scopeKey;
+  if (BKW.extra.briefing || BKW.loading.briefing === scope) return;
+  BKW.loading.briefing = scope;
   const r = await brokerFetch('GET', '/api/brokerage/workspace/briefing' + bkwQuery());
-  BKW.loading.briefing = false;
+  if (BKW.scopeKey !== scope) return;
+  BKW.loading.briefing = null;
   BKW.extra.briefing = r.ok ? r.data : { error: (r.data && r.data.detail) || 'The briefing could not be built.' };
   if (bkwSection() === 'overview') bkwPaintPanel();
 }
 
 async function bkwLoadExtras() {
+  const scope = BKW.scopeKey;
   const want = [['scorecard', '/api/brokerage/workspace/scorecard']];
   const h = BKW.data.holdings;
   if (h && (h.options || []).length) want.push(['options', '/api/brokerage/workspace/options']);
   await Promise.all(want.map(async ([key, url]) => {
-    if (BKW.extra[key] || BKW.loading[key]) return;
-    BKW.loading[key] = true;
+    if (BKW.extra[key] || BKW.loading[key] === scope) return;
+    BKW.loading[key] = scope;
     const r = await brokerFetch('GET', url + bkwQuery());
-    BKW.loading[key] = false;
+    if (BKW.scopeKey !== scope) return;
+    BKW.loading[key] = null;
     BKW.extra[key] = r.ok ? r.data : { error: (r.data && r.data.detail) || 'Could not be calculated just now.' };
     if (bkwSection() === 'holdings') bkwPaintPanel();
   }));
@@ -467,8 +509,10 @@ function bkwOptionsHTML(o, raw) {
       <td class="num">${p.delta_shares === null || p.delta_shares === undefined ? 'n/a' : Number(p.delta_shares).toFixed(1)}</td>
       <td class="num">${p.theta_per_day === null || p.theta_per_day === undefined ? 'n/a' : bkSigned(p.theta_per_day, p.currency || 'USD')}</td>
       <td class="num">${p.vega_per_vol_point === null || p.vega_per_vol_point === undefined ? 'n/a' : esc(bkMoney(p.vega_per_vol_point, p.currency || 'USD'))}</td>
-      <td>${esc((p.notes || []).join(' ') || p.greeks_note || '')}</td></tr>`).join('');
-  const under = (o.by_underlying || []).map((u) => `<li><b>${esc(u.underlying)}</b>: net ${esc(Number(u.net_delta_shares || 0).toFixed(1))} share-equivalents (${esc(String(u.stock_shares || 0))} shares held), theta ${bkSigned(u.theta_per_day, 'USD')} a day</li>`).join('');
+      <td>${esc([p.greeks_available === false ? (p.greeks_reason || 'No Greeks for this contract.') : '', (p.notes || []).join(' ')].filter(Boolean).join(' '))}</td></tr>`).join('');
+  const under = (o.by_underlying || []).map((u) => `<li><b>${esc(u.underlying)}</b>: ${(u.legs_without_greeks || []).length && !u.complete
+    ? `${esc(String(u.stock_shares || 0))} shares held; ${u.legs_without_greeks.length} option leg${u.legs_without_greeks.length === 1 ? '' : 's'} without Greeks, so no net delta is shown`
+    : `net ${esc(Number(u.net_delta_shares || 0).toFixed(1))} share-equivalents (${esc(String(u.stock_shares || 0))} shares held)${u.theta_per_day === null || u.theta_per_day === undefined ? '' : `, theta ${bkSigned(u.theta_per_day, u.currency || 'USD')} a day`}`}</li>`).join('');
   const cons = (o.considerations || []).map((c) => `<li>${esc(typeof c === 'string' ? c : (c.text || c.note || ''))}</li>`).join('');
   return `<div class="panel span2"><h2>${hg('Options risk')}</h2>
     <p class="sub">${bkwSrc('optic')} Greeks from implied volatility solved from your broker's option price and Optic's underlying quote. Delta is in share-equivalents (positive gains when the underlying rises); theta and vega are in dollars.</p>
@@ -528,8 +572,8 @@ function bkwPerformanceHTML(d) {
     <div class="panel"><h2>${hg('Income and costs')}</h2>
       <p class="bkw-line">Dividends ${bkSigned(inc.dividends, d.currency || 'USD')}</p>
       <p class="bkw-line">Interest ${bkSigned(inc.interest, d.currency || 'USD')}</p>
-      <p class="bkw-line">Fees ${bkSigned(inc.fees, d.currency || 'USD')}</p>
-      <p class="bkw-line">Taxes ${bkSigned(inc.taxes, d.currency || 'USD')}</p>
+      <p class="bkw-line">Fees paid ${esc(bkMoney(Math.abs(Number(inc.fees || 0)), d.currency || 'USD'))}</p>
+      <p class="bkw-line">Taxes withheld ${esc(bkMoney(Math.abs(Number(inc.taxes || 0)), d.currency || 'USD'))}</p>
     </div>
   </div>
   <div class="panel span2"><h2>${hg('What drove it')}</h2>
@@ -711,8 +755,13 @@ function bkwScenarioResult(r) {
   const histCell = (h, k, fmt) => (h.available ? fmt(h[k]) : '<span class="bk-na">n/a</span>');
   const weights = (r.weights || []).filter((w) => w.changed).slice(0, 15).map((w) => `<tr><td class="name">${esc(w.symbol)}</td><td class="num">${bkwPct(w.before_pct)}</td><td class="num">${bkwPct(w.after_pct)}</td><td class="num">${bkwSignedPct(w.change_pts, 1)}</td></tr>`).join('');
   const changes = (r.changes || []).filter((c) => c.status !== 'applied').map((c) => `<li><b>${esc(c.symbol)}</b>: ${esc(c.reason || c.status)}</li>`).join('');
-  const sectors = (((r.sectors || {}).look_through) || ((r.sectors || {}).direct) || []).filter((x) => Math.abs(x.change_pts || 0) >= 0.05)
+  // look_through is a list when the fund holdings could be re-split after the
+  // change, and {available: false, reason} when not; direct is always a list.
+  const lt = (r.sectors || {}).look_through;
+  const sectorList = Array.isArray(lt) ? lt : (((r.sectors || {}).direct) || []);
+  const sectors = sectorList.filter((x) => Math.abs(x.change_pts || 0) >= 0.05)
     .map((x) => `<li>${esc(x.sector || x.label)} ${bkwPct(x.before_pct)} to ${bkwPct(x.after_pct)}</li>`).join('');
+  const ltNote = lt && !Array.isArray(lt) && lt.reason ? `<p class="set-row-note">Sectors are shown for directly held stocks: ${esc(lt.reason)}</p>` : '';
   const stress = r.stress || {};
   return `<div class="panel span2"><h2>${hg('Before and after')}</h2>
     <p class="sub">${esc(r.funding_rule || '')}</p>
@@ -728,7 +777,7 @@ function bkwScenarioResult(r) {
     </tbody></table></div>
     <p class="set-row-note">${esc(hist.label || '')}${hb.available ? '' : ` ${esc(hb.reason || '')}`}</p>
     ${weights ? `<h3 class="bkw-h3">Weights that change</h3><div class="ss-scroll"><table class="data bk-table"><thead><tr><th>Holding</th><th class="num">Now</th><th class="num">After</th><th class="num">Change</th></tr></thead><tbody>${weights}</tbody></table></div>` : ''}
-    ${sectors ? `<h3 class="bkw-h3">Sectors that change</h3><ul class="bkw-list">${sectors}</ul>` : ''}
+    ${sectors ? `<h3 class="bkw-h3">Sectors that change</h3><ul class="bkw-list">${sectors}</ul>${ltNote}` : ''}
     ${stress.before ? `<p class="set-row-note">${esc(stress.label || '')}: ${bkwPct(stress.before.pct)} now, ${bkwPct((stress.after || {}).pct)} after.</p>` : ''}
     ${changes ? `<h3 class="bkw-h3">Not applied</h3><ul class="bkw-list">${changes}</ul>` : ''}
     ${(r.warnings || []).length ? `<ul class="bkw-list">${r.warnings.map((w) => `<li>${esc(w)}</li>`).join('')}</ul>` : ''}

@@ -187,14 +187,18 @@ def evaluate(overview: Dict[str, Any], events: Dict[str, Any], snapshots: List[D
 
     weights = {str(h.get("symbol") or "").upper(): float(h.get("weight_pct") or 0.0)
                for h in overview.get("holdings") or [] if h.get("symbol")}
+    funds = {str(h.get("symbol") or "").upper() for h in overview.get("holdings") or []
+             if h.get("kind") in ("etf", "fund")}
     if prefs["concentration"]["on"]:
         cap = prefs["concentration"]["single_pct"]
         for sym, w in weights.items():
-            if w >= cap:
+            # A fund is many companies: VOO at 47% of a portfolio is not the
+            # risk a single stock at 47% is (first local run, 2026-10-16).
+            if w >= cap and sym not in funds:
                 add("concentration", (sym, cap, _month(today)),
                     "{} is {:.1f}% of your portfolio".format(sym, w),
-                    "Above the {}% you set for a single holding. Holdings in funds are not looked through "
-                    "here.".format(cap), symbol=sym, link="#/brokerage/holdings", severity="watch")
+                    "Above the {}% you set for a single holding. Exposure through funds is in Holdings & "
+                    "Exposure.".format(cap), symbol=sym, link="#/brokerage/holdings", severity="watch")
         scap = prefs["concentration"]["sector_pct"]
         for row in ((overview.get("allocation") or {}).get("by_sector") or []):
             share = float(row.get("share_of_long_pct", row.get("share_pct")) or 0.0)
