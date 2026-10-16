@@ -338,7 +338,8 @@ function bkwOverviewHTML(d) {
     { k: 'Since your last sync', v: since.available ? Object.entries(since.value_change_by_currency || {}).map(([c, v]) => bkSigned(v, c)).join(' ') || '0' : '<span class="bk-na">After the next sync</span>',
       n: `${bkwSrc('optic')} ${since.available ? `Price effect ${Object.entries(since.price_effect_by_currency || {}).map(([c, v]) => bkSigned(v, c)).join(' ') || 'none'}; the rest is trades, deposits or new positions.` : esc(since.reason || '')}` },
     { k: 'Unrealised gain', v: Object.entries(pl).map(([c, v]) => bkSigned(v, c)).join(' ') || '<span class="bk-na">Not supplied</span>',
-      n: `${bkwSrc('optic')} Market value minus the broker's average cost, on ${esc(String(perf.basis_coverage_pct ?? 'n/a'))}% of value with a cost basis. Not a return.` },
+      n: `${bkwSrc('optic')} Market value minus the broker's average cost, on ${perf.basis_coverage_pct === null || perf.basis_coverage_pct === undefined
+    ? 'the holdings the broker gave a cost for' : `${esc(String(perf.basis_coverage_pct))}% of value with a cost basis`}. Not a return.` },
   ];
   const tilesHtml = `<div class="bk-tiles">${tiles.map((t) => `<div class="bk-tile"><span class="bk-k">${esc(t.k)}</span><span class="bk-v">${t.v}</span><span class="bk-n">${t.n}</span></div>`).join('')}</div>`;
 

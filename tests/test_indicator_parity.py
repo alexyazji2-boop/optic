@@ -59,7 +59,9 @@ def test_the_menu_says_where_the_other_five_live():
     for name in ("ADX", "Stochastic", "on-balance volume", "money flow",
                  "relative strength"):
         assert name in fn, name
-    assert "Analysis tab" in fn
+    # The Options tab, by the name the tab strip uses; "the Analysis tab"
+    # named no tab (2026-10-16).
+    assert "Options tab, under Indicators" in fn
 
 
 def test_a_study_ticked_on_either_tab_reaches_the_other():

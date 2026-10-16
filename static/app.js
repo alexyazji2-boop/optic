@@ -22957,7 +22957,7 @@ function wsStudiesMenu() {
         anchored at the first bar of the window.</p>` : ''}
       <p class="ws-studies-note">ADX, Stochastic, on-balance volume, money flow
         and relative strength need their own scale rather than the price axis.
-        They are on the Analysis tab, under Indicators.</p>
+        They are on the Options tab, under Indicators beside its price chart.</p>
     </div>` : ''}
   </div>`;
 }
@@ -32825,7 +32825,11 @@ function renderSettings() {
   <div class="panel span2">
     <h2>${hg('About this build')}</h2>
     ${kv([
-    ['Data source', 'Yahoo Finance via yfinance. Quotes delayed roughly 15 minutes'],
+    // From the status check rather than written in: a deployment with a
+    // real-time chain said "delayed roughly 15 minutes" here regardless.
+    ['Data source', STATE.health && STATE.health.realtime_chain
+      ? `Real-time option chains via ${feedName(STATE.health.provider)}; other quotes may be delayed`
+      : 'Yahoo Finance. Quotes delayed roughly 15 minutes'],
     ['Assistant', (() => {
       const a = (STATE.health || {}).assistant;
       if (!a) return 'Checking\u2026';
@@ -36847,11 +36851,16 @@ function readRebuildHTML() {
   const next = nextBriefAnchor();
   if (!next) return '';
   const nextIso = next.toISOString();
-  return `<p class="read-next">Next rebuild ${esc(stampIn(nextIso, zone))}
+  /* Two schedules, said apart. The figures refresh about every twenty
+   * minutes (the tracker loop asks for the brief that often), and the written
+   * read is a new edition at 9:00 every day and after a trading day's close
+   * (app/brief.py). "Rebuilds this read at 9:00" sat under "Last updated 12m
+   * ago" (launch audit, 2026-10-16). */
+  return `<p class="read-next">Next morning edition ${esc(stampIn(nextIso, zone))}
     <span class="read-updated-ago">· in ${esc(roughGap(next - new Date()))}</span>.
-    The terminal rebuilds this read at 9:00 am Eastern <strong>every day, weekends
-    included</strong>, so it keeps picking up news while the market is shut and a
-    Monday read covers everything back to Friday's close.</p>`;
+    The figures refresh about every 20 minutes. The written read is new at 9:00 am
+    Eastern <strong>every day, weekends included</strong>, and again after the close
+    on a trading day, so a Monday read covers everything back to Friday's close.</p>`;
 }
 
 function briefWhen(iso) {
