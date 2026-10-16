@@ -102,9 +102,9 @@ def test_the_two_keys_that_were_dead_are_not_back():
     assert "close defence" not in defaults.get("long", [])
 
 
-def test_a_view_that_opens_nothing_says_so_with_an_empty_list():
-    """`roth: []` is a decision -- that page is a form, and a form whose
-    sections are all open is a wall. An absent key would be the same thing by
-    accident, so the entry exists and is empty."""
-    assert "roth" in _defaults()
-    assert _defaults()["roth"] == []
+def test_the_retirement_page_opens_its_form_and_nothing_else():
+    """That page is a form, and a form whose sections are all open is a wall,
+    so it used to open nothing (`roth: []`). Nothing included the section
+    holding the inputs: the page loaded as seven folded headings with no field
+    in sight (2026-10-16). It opens that one section only."""
+    assert _defaults()["roth"] == ["roth ira model allocation"]

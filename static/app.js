@@ -5438,7 +5438,7 @@ function renderHomeStatus(health) {
   const assistantOn = !!(health && health.assistant && health.assistant.enabled);
   foot.innerHTML = [
     `<span class="dot-sep"><span class="chip ${realtime ? 'bull' : 'neutral'}" style="padding:var(--space-0) var(--space-2)"><span class="dot"></span>${
-      realtime ? `real-time chains via ${esc(provider)}` : `${esc(provider)} feed · quotes delayed ~15 min`}</span></span>`,
+      realtime ? `real-time chains via ${esc(feedName(provider))}` : `${esc(feedName(provider))} · quotes delayed ~15 min`}</span></span>`,
     `<span class="dot-sep"><span class="chip ${assistantOn ? 'bull' : 'neutral'}" style="padding:var(--space-0) var(--space-2)"><span class="dot"></span>${
       assistantOn ? `${ASSISTANT_NAME} ready` : `${ASSISTANT_NAME} needs an API key`}</span></span>`,
     '<span>Greeks computed locally via Black-Scholes. Analysis only, not investment advice.</span>',
@@ -5549,7 +5549,9 @@ function paintWatchHitBadge() {
   if (!tab) return;
   const n = (STATE.watchHits || {}).unseen || 0;
   let dot = tab.querySelector('.mtab-badge');
-  if (!n) { if (dot) dot.remove(); return; }
+  // The name goes back to the visible "More" with the dot: left as "Alerts.
+  // N unread", a reader heard unread alerts on a button with none (2026-10-16).
+  if (!n) { if (dot) dot.remove(); tab.removeAttribute('aria-label'); return; }
   if (!dot) {
     dot = document.createElement('span');
     dot.className = 'mtab-badge';
@@ -5557,7 +5559,8 @@ function paintWatchHitBadge() {
     tab.appendChild(dot);
   }
   dot.textContent = n > 9 ? '9+' : String(n);
-  tab.setAttribute('aria-label', 'Alerts. ' + n + ' unread');
+  // Starts with the word on the button (WCAG 2.5.3, label in name).
+  tab.setAttribute('aria-label', `More. ${n} unread alert${n === 1 ? '' : 's'}`);
 }
 
 function paintMobileTabs(view) {
@@ -10787,6 +10790,15 @@ const PALETTE_PLACES = [
   { view: 'overview', label: 'Dossier: Overview',
     terms: 'overview dossier ticker security summary company snapshot' },
   { view: 'chart', label: 'Chart', terms: 'chart charting drawings indicators advanced' },
+  /* Options, Investing and Earnings were the three Dossier pages missing
+   * here, so typing "options" or "earnings" offered no page while every other
+   * rail page was findable (2026-10-16). */
+  { view: 'swing', label: 'Options',
+    terms: 'options option chain greeks gamma flow swing setup calls puts strategies levels' },
+  { view: 'long', label: 'Investing',
+    terms: 'investing long term valuation fair value dcf conviction drawdown hold' },
+  { view: 'earnings', label: 'Earnings',
+    terms: 'earnings report eps estimates surprise implied move guidance results' },
   { view: 'financials', label: 'Financials',
     terms: 'financials revenue margin cash ownership short interest statements' },
   { view: 'news', label: 'News', terms: 'news headlines catalysts sentiment company' },
@@ -10819,7 +10831,9 @@ function recentSymbols() {
   try {
     const raw = JSON.parse(localStorage.getItem(RECENT_KEY) || '[]');
     return Array.isArray(raw)
-      ? raw.filter((s) => typeof s === 'string' && /^[A-Z.^=-]{1,12}$/.test(s))
+      // Digits too: 7203.T, 0700.HK and 2330.TW were remembered by
+      // rememberSymbol and then dropped here, so they never came back as Recent.
+      ? raw.filter((s) => typeof s === 'string' && /^[A-Z0-9.^=-]{1,12}$/.test(s))
       : [];
   } catch (e) { return []; }
 }
@@ -11153,7 +11167,10 @@ async function paletteBuild(query, early) {
      */
     [
       ['Chart', 'Charting workspace', () => { loadChartWorkspace(sym); switchView('chart'); }],
-      ['News', 'Headlines for this symbol', () => loadTicker(sym, 'brief')],
+      // 'news', the Dossier's News page. This said 'brief', which opened
+      // Optic's Read, the market-wide summary, under a row promising this
+      // symbol's headlines (found 2026-10-16).
+      ['News', 'Headlines for this symbol', () => loadTicker(sym, 'news')],
       ['Earnings', 'History, estimates and the read', () => loadTicker(sym, 'earnings')],
       ['Investing', 'Valuation and the decade view', () => loadTicker(sym, 'long')],
       ['Compare', 'Put it beside other names', () => {
@@ -12790,6 +12807,16 @@ function renderOptionsPlain(d) {
   const reg = ((d.gex || {}).regime) || {};
   const p = d.pulse || {};
   const items = [];
+  /* An unusable chain is said first, in the panel named for the options
+   * market. Measured 2026-10-16 at 5:15am: AAPL's chain came back with no
+   * quotes (the free feed's overnight state, every night and weekend), and
+   * this panel's only line was Optic's stance, so a page called Options said
+   * nothing about options and nothing about why. The reason was in the
+   * composite table four panels down, as "Excluded". */
+  const chainErr = (d.gex && d.gex.error) || (f && f.error) || '';
+  if (chainErr) {
+    items.push({ text: 'There are no options readings right now.', why: chainErr });
+  }
   if (Number.isFinite(vol.calls) && Number.isFinite(vol.puts) && vol.puts > 0) {
     const per100 = Math.round((vol.calls / vol.puts) * 100);
     items.push({ text: per100 >= 105 ? 'Options traders are leaning toward calls, the contracts that pay if the price rises.'
@@ -12805,7 +12832,9 @@ function renderOptionsPlain(d) {
   }
   if (p.stance) {
     items.push({ text: `Optic\u2019s short-term signals: ${String(p.stance).toLowerCase()}${p.conviction ? `, ${convictionWords(p.conviction)}` : ''}.`,
-      why: 'A model reading for the next 2 to 8 weeks from charts, options activity, news tone and the economy. It is not a forecast.' });
+      why: chainErr
+        ? 'A model reading for the next 2 to 8 weeks from charts, news tone and the economy. Options activity is left out of it until the chain is quoted again. It is not a forecast.'
+        : 'A model reading for the next 2 to 8 weeks from charts, options activity, news tone and the economy. It is not a forecast.' });
   }
   if (knowledgeLevel() >= 2 || !items.length) return '';
   const sym = esc(d.ticker || STATE.ticker || '');
@@ -17096,6 +17125,15 @@ function overviewChartTitle(sym, close) {
  * bars, and with a Tradier token set the server reads Tradier first. */
 function priceSourceName(d) {
   return (d || {}).data_source === 'tradier' ? 'Tradier, with Yahoo Finance where it has no data' : 'Yahoo Finance';
+}
+
+/* A feed by the name a reader knows. "yfinance" is the Python library that
+ * reads Yahoo Finance, and it was the source named on the top line of every
+ * Dossier page and in Home's footer (2026-10-16), beside charts that already
+ * said "Source: Yahoo Finance". */
+function feedName(id) {
+  const key = String(id || 'yfinance').toLowerCase();
+  return { yfinance: 'Yahoo Finance', yahoo: 'Yahoo Finance', tradier: 'Tradier' }[key] || String(id);
 }
 
 function overviewChartHTML(d) {
@@ -32767,6 +32805,12 @@ function pulseBlockedReason() {
   return null;
 }
 
+/** Whether the reader's Milo allowance is used up right now. */
+function pulseAllowanceSpent() {
+  const state = ACCOUNT.allowance;
+  return !!(state && state.enforced !== false && state.allowed && Number(state.left) <= 0);
+}
+
 function renderPulseUnavailable() {
   const reason = pulseBlockedReason();
   const off = !!reason;
@@ -32780,6 +32824,20 @@ function renderPulseUnavailable() {
     [input, send, research].forEach((el) => { if (el) el.disabled = false; });
     markPulseControls(false);
     if (input) input.removeAttribute('aria-describedby');
+    /* A spent allowance shuts Send and Deep research, not the box. Both stayed
+     * live under "All 3 of the Free plan's messages are used", and a press
+     * came back as a red 429 bubble (found 2026-10-16). The box stays open so
+     * a question can still be drafted for later, the note above it says why,
+     * and the buttons come back when the next message does. */
+    const spent = pulseAllowanceSpent();
+    [send, research].forEach((el) => { if (el) el.disabled = spent; });
+    if (input && spent && $('#chat-allow')) input.setAttribute('aria-describedby', 'chat-allow');
+    clearTimeout(renderPulseUnavailable.wake);
+    const next = spent && ACCOUNT.allowance && Date.parse(ACCOUNT.allowance.next_at || '');
+    if (next) {
+      renderPulseUnavailable.wake = setTimeout(() => loadAllowance(),
+        Math.min(Math.max(next - Date.now() + 2000, 5000), 6 * 3600 * 1000));
+    }
     return;
   }
   [input, send, research].forEach((el) => { if (el) el.disabled = true; });
@@ -36558,9 +36616,16 @@ function briefLead(e) {
 function briefStrip(indices) {
   const rows = (indices || []).filter((r) => r.day !== null && r.day !== undefined);
   if (!rows.length) return '';
+  /* A fund is named as the fund. The rows are SPY, QQQ, DIA and IWM under
+   * index names, so "S&P 500 771.79" sat on the Read while Home's band showed
+   * the S&P 500 at 7,744 (2026-10-16). The day's percentage is close either
+   * way; the level is not. */
+  const label = (r) => (r.symbol && !String(r.symbol).startsWith('^') && r.symbol !== r.name
+    ? `${r.symbol} · ${r.name}` : r.name);
   return `<div class="read-strip">${rows.map((r) => `
-    <div class="read-tick">
-      <span class="read-tick-name">${esc(r.name)}</span>
+    <div class="read-tick"${r.symbol && !String(r.symbol).startsWith('^')
+    ? ` title="${esc(`${r.symbol} is a fund that tracks the ${r.name}; this is the fund's price`)}"` : ''}>
+      <span class="read-tick-name">${esc(label(r))}</span>
       <span class="read-tick-last">${fmt(r.last, 2)}</span>
       <span class="read-tick-day ${signClass(r.day)}">${fmtPct(r.day, 2)}</span>
     </div>`).join('')}</div>`;
@@ -42564,7 +42629,7 @@ function updateStatus() {
    * delayed feed, and all weekend, the two are far apart, and a bare clock
    * beside the source read as the time of the price. */
   if (d.generated_at) {
-    parts.push(`Source: ${esc(d.data_source || 'yfinance')} · fetched ${
+    parts.push(`Source: ${esc(feedName(d.data_source))} · fetched ${
       new Date(d.generated_at).toLocaleTimeString()}${
       quote.market_time ? ` · price as of ${esc(quote.market_time)}` : ''}`);
   }
@@ -45902,6 +45967,15 @@ async function sendChat(text) {
     node.classList.add('err');
     pulseStepsDone(node, true);
     node.querySelector('.bubble').textContent = err.message;
+    /* The question goes back in the box, and out of the thread. The offline
+     * error says "the question is still in the box", and it was not: Send
+     * empties the box before this runs (found 2026-10-16). And the turn that
+     * got no answer leaves the history, so sending it again is one question,
+     * not the same one twice in a row. */
+    const last = chatState.messages[chatState.messages.length - 1];
+    if (last && last.role === 'user' && last.content === text + fileNote) chatState.messages.pop();
+    const box = $('#chat-input');
+    if (box && !box.value.trim()) box.value = text;
   } finally {
     pulseReplyScoutDone(scout, node);
     chatState.busy = false;
@@ -45955,12 +46029,19 @@ async function runResearch() {
     // Kill the spinner too: it kept saying "searching…" beneath the failure.
     pulseStepsDone(node, true);
     node.querySelector('.bubble').textContent = err.message;
+    // As in sendChat: a typed question that got no answer is not lost.
+    const box = $('#chat-input');
+    if (custom && box && !box.value.trim()) box.value = custom;
   } finally {
     pulseReplyScoutDone(scout, node);
     chatState.busy = false;
     setChatStop(false);
     $('#chat-send').disabled = false;
     $('#chat-research').disabled = false;
+    /* Deep research spends from the same allowance as a chat (_spend_guard
+     * guards both), and only sendChat refreshed the count, so "N left" was
+     * one behind after every research run. */
+    if (typeof loadAllowance === 'function') loadAllowance();
   }
 }
 
@@ -47427,8 +47508,26 @@ document.addEventListener('visibilitychange', () => {
   if (!document.hidden && chartLive.owed && STATE.view === 'chart') chartLiveRepaint();
 });
 
+/* Every page says which page it is (WCAG 2.4.2). The tab read "Optic
+ * Terminal" on every view but the chart, so since pages got their own
+ * addresses (2026-10-06) every history entry, bookmark and tab was the same
+ * two words, and a screen reader announced no page on a change. Home keeps
+ * the bare name; a Dossier page leads with its symbol, the way the chart
+ * does. */
+function pageTabTitle() {
+  const v = STATE.view;
+  if (v === 'chart') return chartTabTitle();
+  if (!v || v === 'home') return APP_TITLE;
+  const name = (typeof SUB_LABELS !== 'undefined' && SUB_LABELS[v])
+    || (typeof VIEW_NAMES !== 'undefined' && VIEW_NAMES[v]) || '';
+  if (!name) return APP_TITLE;
+  const sym = typeof SECURITY_VIEWS !== 'undefined' && SECURITY_VIEWS.includes(v) && STATE.ticker
+    ? `${STATE.ticker} ` : '';
+  return `${sym}${name} · ${APP_TITLE}`;
+}
+
 function syncTabTitle() {
-  const title = STATE.view === 'chart' ? chartTabTitle() : APP_TITLE;
+  const title = pageTabTitle();
   if (document.title !== title) document.title = title;
 }
 
@@ -47479,7 +47578,9 @@ function switchView(view, force) {
     gear.setAttribute('aria-pressed', String(open));
     gear.setAttribute('aria-label', open ? 'Close settings' : 'Settings');
     gear.dataset.railTitle = open
-      ? `Close settings. Back to ${VIEW_NAMES[viewBeforeSettings] || 'Home'}`
+      // SUB_LABELS second: VIEW_NAMES lacks most pages, so Settings opened
+      // from Scan said "Back to Home" and then went back to Scan.
+      ? `Close settings. Back to ${VIEW_NAMES[viewBeforeSettings] || SUB_LABELS[viewBeforeSettings] || 'Home'}`
       : 'Settings. Appearance and time zone';
     syncRailTitles();
   }
@@ -47941,6 +48042,22 @@ const SEARCH_DEBOUNCE_MS = 160;
 
 /* `onChoose`, when given, is what a pick does instead of opening the symbol:
  * the Compare boxes keep the symbol and move on to the next box. */
+/** Which suggestion an un-highlighted Enter means, or -1 for "the typed text".
+ *
+ * Only a name: when the typed text is a listed symbol (F, AI, META) or looks
+ * like one the list may not hold (^GSPC, ES=F, BRK-B), it is submitted as typed,
+ * as before. And only once the list answered for exactly what is in the box, so
+ * a fast Enter is never matched against the previous keystroke's results. */
+function typedNamePick(items, listedFor, typed) {
+  const q = String(typed || '').trim();
+  if (!q || !items || !items.length || q !== listedFor) return -1;
+  if (/[\^=.\-]/.test(q)) return -1;
+  const upper = q.toUpperCase();
+  if (items.some((r) => String(r.symbol || '').toUpperCase() === upper)) return -1;
+  const lower = q.toLowerCase();
+  return items.findIndex((r) => String(r.name || '').toLowerCase().includes(lower));
+}
+
 function attachTypeahead(inputId, listId, onChoose) {
   const input = document.getElementById(inputId);
   const list = document.getElementById(listId);
@@ -48030,6 +48147,13 @@ function attachTypeahead(inputId, listId, onChoose) {
       // the typed symbol as it always did.
       evt.preventDefault();
       choose(active);
+    } else if (evt.key === 'Enter' && typedNamePick(items, lastQuery, input.value) >= 0) {
+      // A company's name, typed and submitted, opens the company the list has
+      // already found. Measured 2026-10-16: "costco" then Enter loaded a symbol
+      // COSTCO, a Not found page and a "Did you mean COST" chip, while the list
+      // under the box was already showing Costco Wholesale.
+      evt.preventDefault();
+      choose(typedNamePick(items, lastQuery, input.value));
     }
   });
 
@@ -49826,7 +49950,12 @@ const PANELS_OPEN_BY_DEFAULT = {
    * text on every visit and they are 4,500px of it. */
   tracker: ['optic portfolio', 'open positions'],
   indices: ['major etfs', 'index regime'],
-  roth: [],
+  /* One, not none. The page is a form, and seven open sections were a wall,
+   * so it opened with every section shut -- which shut the form too. Measured
+   * 2026-10-16: the page was seven folded headings and nothing to type into.
+   * The first section holds the inputs and the model they produce; the rest
+   * stay one press away. */
+  roth: ['roth ira model allocation'],
   /* The statements, and the segment tables under them.
    *
    * 6,261px and seven sections with no index and no collapse, because this
@@ -51262,6 +51391,15 @@ function restoreReloadPlace() {
         .classList.add('msg-greeting');
     }
   } catch (e) {
+    /* The footer says the check failed instead of "Checking data source…" for
+     * the rest of the visit, which is what it said when this request failed:
+     * nothing else ever repainted it (found 2026-10-16). */
+    const foot = $('#home-foot');
+    if (foot) {
+      foot.innerHTML = '<span class="dot-sep"><span class="chip neutral" style="padding:var(--space-0) var(--space-2)"><span class="dot"></span>Status check did not answer</span></span>'
+        + '<span>Analysis only, not investment advice.</span>'
+        + '<span class="dot-sep"><button type="button" class="foot-link" data-open-report>Report a problem</button></span>';
+    }
     /* Non-fatal for the page, but not silent: with no answer about the
      * assistant, a question would meet the origin-down copy unannounced. */
     addMsg('assistant', `Hi, I'm ${ASSISTANT_NAME}. The server did not answer a status check just now, `

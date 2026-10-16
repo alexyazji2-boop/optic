@@ -72,7 +72,12 @@
     const q = lt.quality || {};
     const conv = lt.conviction || {};
     const value = q.status === 'scored' ? `Quality ${q.grade}` : 'Insufficient Data';
-    const sub = q.status === 'scored' ? `Long-term conviction: ${conv.label}. ${conv.why || ''}` : (q.reason || '');
+    /* "Quality and price together", not "Long-term conviction". The Optic
+     * Score above it on the same page says "High conviction" for the trend
+     * model's reading, so AAPL showed "High conviction" and "Long-term
+     * conviction: Neutral" one panel apart (2026-10-16). This verdict weighs
+     * the business against the price; the score weighs the price record. */
+    const sub = q.status === 'scored' ? `Quality and price together: ${conv.label}. ${conv.why || ''}` : (q.reason || '');
     const more = `<table class="rf-table"><tbody>${componentRows(q.components)}</tbody></table>
       ${(lt.loss_paths || []).length ? `<p class="ov-h3">Two ways this could lose money over three years</p>
         ${list((lt.loss_paths || []).map((l) => `${l.risk}: ${l.text}`))}` : ''}
