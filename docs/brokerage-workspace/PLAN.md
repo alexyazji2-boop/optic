@@ -122,4 +122,9 @@ theses fields, the Milo `get_my_portfolio` tool, routes, the front end.
 | # | What | Commit | State |
 |---|---|---|---|
 | 0 | Discovery (nav, services, Milo/brokerage/SnapTrade) | n/a | done |
-| 1 | Data foundation: transactions, balance history, daily snapshots, scrub on disconnect, cross-connection identity, cash-equivalent fix | 8b86336 | done, 117 brokerage tests |
+| 1 | Data foundation: transactions, balance history, daily snapshots, scrub on disconnect, cross-connection identity, cash-equivalent fix | 8b86336 | done |
+| 2 | Sections API, calendar, alerts, Desk read, briefing, theses fields, Milo `get_my_portfolio` | 58fca9c | done |
+| 3 | Analytics modules (performance, look-through and exposure, options risk, scorecard, scenarios) and the six-section page | 830d22f | done |
+| 4 | Fixes from the first browser run (81s core, lookup budgets, stale responses, routing on refresh, fund alerts) | 77967c8 | done |
+| 5 | Hard-case route tests, docs (README.md) | this commit | done |
+| 6 | Deploy | | waiting for the owner's authorisation |

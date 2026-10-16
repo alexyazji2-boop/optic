@@ -136,7 +136,7 @@ def headlines_for(rows: List[Dict[str, Any]], news_of: Optional[Callable[[str], 
 
 
 def observations(overview: Dict[str, Any], events: Dict[str, Any], moves: Dict[str, Any],
-                 limit: int = 4) -> List[Dict[str, Any]]:
+                 limit: int = 5) -> List[Dict[str, Any]]:
     """A few things that deserve attention, most important first. Each says
     where it came from so the page can link to the detail."""
     obs: List[Dict[str, Any]] = []
@@ -171,6 +171,10 @@ def observations(overview: Dict[str, Any], events: Dict[str, Any], moves: Dict[s
                     "text": "{} holding{} could not be valued and {} left out of every figure.".format(
                         len(overview["unsupported"]), "" if len(overview["unsupported"]) == 1 else "s",
                         "is" if len(overview["unsupported"]) == 1 else "are")})
+    # Incomplete data first: it qualifies every other line on the page (the
+    # first browser run cut a partial sync's warning off below a price move).
+    order = {"data": 0, "concentration": 1, "earnings": 2, "options": 3, "move": 4}
+    obs.sort(key=lambda o: order.get(o["kind"], 5))
     return obs[:limit]
 
 

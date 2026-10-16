@@ -343,3 +343,51 @@ def test_milos_portfolio_tool_reads_only_the_asking_reader(market, monkeypatch):
     assert body["signed_in"] is False and "data" not in body
     with pytest.raises(milo_tools.InvalidInput):
         milo_tools.validate("get_my_portfolio", {"part": "everything"})
+
+
+# ------------------------------------------------ hard cases, through the routes
+
+SECTIONS = ("overview", "holdings", "scorecard", "options", "performance", "events", "briefing")
+
+
+@pytest.mark.parametrize("scenario", ["edge", "partial", "outage", "expired"])
+def test_every_section_answers_for_awkward_accounts(market, scenario):
+    """CAD and a mini option and crypto and an unvalued private placement
+    (edge), a sync that lost its balances (partial), a provider that stops
+    answering after the first sync (outage), an authorisation that expires
+    (expired): every section still answers from what was stored, and says
+    what is missing rather than showing a smaller portfolio as if whole."""
+    c, user = reader()
+    paid(user)
+    link(c, scenario)
+    if scenario in ("outage", "expired"):
+        service.sync_connection(user, store.connections(user["id"])[0])   # the second sync fails
+    for sec in SECTIONS:
+        r = c.get("/api/brokerage/workspace/{}".format(sec))
+        assert r.status_code == 200, (scenario, sec, r.text[:300])
+    hold = c.get("/api/brokerage/workspace/holdings").json()
+    over = c.get("/api/brokerage/workspace/overview").json()
+    if scenario == "edge":
+        assert [u for u in hold["unsupported"] if "Private placement" in (u.get("description") or "")]
+        assert any("could not be valued" in n for n in hold["notes"])
+        assert "CAD" in over["totals"]["by_currency"]
+        perf = c.get("/api/brokerage/workspace/performance").json()
+        assert any(s["balance_history"] == "unavailable" for s in perf["data_status"])
+    if scenario == "partial":
+        assert any("did not return" in n for n in hold["notes"])
+        assert any(o["kind"] == "data" for o in over["observations"])
+    if scenario in ("outage", "expired"):
+        st = c.get("/api/brokerage/status").json()["connections"][0]["status"]
+        assert st == ("outage" if scenario == "outage" else "expired")
+        assert hold["holdings"], "the last good data is still shown"
+
+
+def test_options_risk_without_a_quote_says_so_rather_than_inventing_greeks(market):
+    c, user = reader()
+    paid(user)
+    link(c)
+    o = c.get("/api/brokerage/workspace/options").json()
+    assert o["available"] is True
+    for p in o["positions"]:
+        assert p["greeks_available"] is False and p["greeks_reason"]
+        assert p["delta_shares"] is None
