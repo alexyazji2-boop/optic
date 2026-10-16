@@ -189,7 +189,7 @@
   --baseline: #383835;
 
   /* categorical slots, dark steps, fixed order */
-  --s1: #3987e5;
+  --s1: #4a93ea;           /* 4.97:1 on #232326 as text (links, counts); #3987e5 was 4.31 (2026-10-16) */
   --s2: #d95926;
   --s3: #199e70;
   --s4: #c98500;
@@ -4623,8 +4623,8 @@ h3 .ask-pulse { font-size: var(--t-micro); padding: var(--space-0) var(--space-2
 
 /* The five bands. Colour reinforces the word, which is always present — the
  * dial reads correctly in greyscale because "Extreme Greed" is written on it. */
-.fg-xfear { color: var(--critical); border-color: color-mix(in srgb, var(--critical) 60%, transparent); }
-.fg-fear { color: var(--critical); border-color: color-mix(in srgb, var(--critical) 35%, transparent); }
+.fg-xfear { color: var(--neg); border-color: color-mix(in srgb, var(--critical) 60%, transparent); }
+.fg-fear { color: var(--neg); border-color: color-mix(in srgb, var(--critical) 35%, transparent); }
 .fg-neutral { color: var(--ink-2); }
 .fg-greed { color: var(--good); border-color: color-mix(in srgb, var(--good) 35%, transparent); }
 .fg-xgreed { color: var(--good); border-color: color-mix(in srgb, var(--good) 60%, transparent); }
@@ -5253,7 +5253,7 @@ h3 .ask-pulse { font-size: var(--t-micro); padding: var(--space-0) var(--space-2
   white-space: nowrap;
 }
 .att-meta .sz { font-size: var(--t-micro); color: var(--ink-muted); }
-.att-tile.bad .sz { color: var(--critical); }
+.att-tile.bad .sz { color: var(--neg); }  /* text: --critical is 3.26:1 on a panel; the status keeps its border */
 
 .att-x {
   position: absolute;

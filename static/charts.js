@@ -65,7 +65,7 @@ function escapeText(v) {
 const C = {
   ink: '#f5f1ec', ink2: '#c2c6cb', muted: '#9fa3a8',
   grid: '#2c2c2a', baseline: '#383835', surface: '#121010',
-  s1: '#3987e5', s2: '#d95926', s3: '#199e70', s4: '#c98500',
+  s1: '#4a93ea', s2: '#d95926', s3: '#199e70', s4: '#c98500',
   s5: '#d55181', s6: '#5fa617', s7: '#9085e9', s8: '#e66767',
   // The dark theme's --pos/--neg (styles.css), for the moment before syncChartTheme.
   pos: '#11b011', neg: '#e66e6e',

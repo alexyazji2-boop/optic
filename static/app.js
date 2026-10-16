@@ -26712,7 +26712,7 @@ function wsRenderDrawings() {
      * still counting in "2 drawings" and still selectable. A drawing with no
      * colour should be the wrong colour, never nothing. */
     const line = (x1, y1, x2, y2, extra) => el('line', Object.assign({
-      x1, y1, x2, y2, stroke: colour || C.s1 || '#3987e5',
+      x1, y1, x2, y2, stroke: colour || C.s1 || '#4a93ea',
       'stroke-width': dr.width || 1.6, 'stroke-linecap': 'round',
     }, extra || {}));
 
