@@ -27,9 +27,16 @@ def test_the_x_is_on_the_title_row_and_is_named():
 
 
 def test_it_closes_the_panel_and_hands_focus_back():
+    """To whatever opened it (the pill, the footer link or Settings), and
+    Escape is heard by the whole panel, not only the box, which a signed-out
+    reader never reaches (2026-10-16)."""
     fn = re.search(r"^function installReportPanel\(\) \{.*?^\}", APP, re.M | re.S).group()
-    assert ("if (close) close.addEventListener('click', () => { closeReportPanel(); "
-            "btn.focus(); });") in fn
+    assert "if (close) close.addEventListener('click', () => closeReportPanel(true));" in fn
+    assert "if (e.key === 'Escape') { e.stopPropagation(); closeReportPanel(true); }" in fn
+    close = re.search(r"^function closeReportPanel\(refocus\) \{.*?^\}", APP, re.M | re.S).group()
+    assert "reportOpener.focus()" in close
+    opener = re.search(r"^function openReportPanel\(\) \{.*?^\}", APP, re.M | re.S).group()
+    assert "reportOpener =" in opener and "#rp-gate button" in opener
 
 
 def test_it_looks_like_the_sign_in_dialogs_close_button():

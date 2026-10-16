@@ -31184,6 +31184,11 @@ function renderCompare(c) {
       aria-label="Ticker ${i + 1}, or a company name" role="combobox" aria-expanded="false"
       aria-autocomplete="list" aria-controls="cmp-results-${i}">
     <ul class="combo-list" id="cmp-results-${i}" role="listbox" hidden></ul>
+    ${/* Its own remove, from three boxes up. "- Remove" dropped the last box
+         whichever name was meant, so with A, B and C the only way to drop A
+         was to retype the other two (launch audit, 2026-10-16). */''}
+    ${(STATE.compareInputs || []).length > 2 ? `<button type="button" class="cmp-x" data-cmp-drop="${i}"
+      aria-label="Remove ticker ${i + 1}${v ? ` (${esc(v)})` : ''}" title="Remove this one">×</button>` : ''}
   </div>`).join('');
 
   /* Controls first, then the answer.
@@ -31216,8 +31221,7 @@ function renderCompare(c) {
       <button type="button" class="btn" data-cmp-run>Compare</button>
       ${(STATE.compareInputs || []).length < 4
     ? '<button type="button" class="bulk-btn" data-cmp-add>+ Add ticker</button>' : ''}
-      ${(STATE.compareInputs || []).length > 2
-    ? '<button type="button" class="bulk-btn" data-cmp-drop>− Remove</button>' : ''}
+
     </div>
     ${comparePicksHTML()}
   </div>`;
@@ -32415,24 +32419,41 @@ if (window.OpticAuth && window.OpticAuth.on) window.OpticAuth.on(paintReportGate
 
 /* Opened from the pill, from Settings and from the footer, so the three cannot
  * drift into three different forms. */
+/* Focus goes into the panel and comes back to whatever opened it (the pill,
+ * the footer link or Settings). Signed out, the box is hidden behind the
+ * sign-in gate, so focus stayed on the pill and Escape -- heard only by the
+ * box -- did nothing: a keyboard reader could open the panel and not close
+ * it (launch audit, 2026-10-16). */
+let reportOpener = null;
+
 function openReportPanel() {
   const panel = $('#rp-panel');
   const btn = $('#rp-open');
   if (!panel || !btn) return;
+  const from = document.activeElement;
+  reportOpener = from && from !== document.body && !panel.contains(from) ? from : btn;
   panel.hidden = false;
   btn.setAttribute('aria-expanded', 'true');
   paintReportGate();
   const box = $('#rp-text');
   if (box && reportAccount()) box.focus();
+  else {
+    const first = panel.querySelector('#rp-gate button, #rp-gate a, #rp-close');
+    if (first) first.focus();
+  }
   reportCount();
 }
 
-function closeReportPanel() {
+function closeReportPanel(refocus) {
   const panel = $('#rp-panel');
   const btn = $('#rp-open');
   if (!panel || !btn) return;
+  const inside = panel.contains(document.activeElement);
   panel.hidden = true;
   btn.setAttribute('aria-expanded', 'false');
+  // Back to the opener when focus was in the panel (or the caller asks), so
+  // it is not left on a control that just disappeared.
+  if ((inside || refocus) && reportOpener && document.contains(reportOpener)) reportOpener.focus();
 }
 
 function reportCount() {
@@ -32525,7 +32546,13 @@ function installReportPanel() {
   // The x in the corner. Focus goes back to the button that opened it, as it
   // does on Escape, so a keyboard reader is not left on a hidden panel.
   const close = $('#rp-close');
-  if (close) close.addEventListener('click', () => { closeReportPanel(); btn.focus(); });
+  if (close) close.addEventListener('click', () => closeReportPanel(true));
+  const panelEl = $('#rp-panel');
+  if (panelEl) {
+    panelEl.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') { e.stopPropagation(); closeReportPanel(true); }
+    });
+  }
   const send = $('#rp-send');
   if (send) send.addEventListener('click', sendReport);
   const box = $('#rp-text');
@@ -32533,8 +32560,8 @@ function installReportPanel() {
     box.addEventListener('input', reportCount);
     // Escape closes it; Cmd/Ctrl+Enter sends. Enter alone must not, because
     // this is a multi-line box and a report is usually more than one line.
+    // Escape is the panel's own listener now; Cmd/Ctrl+Enter sends.
     box.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') { closeReportPanel(); btn.focus(); }
       if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) sendReport();
     });
   }
@@ -49350,9 +49377,17 @@ document.addEventListener('click', (evt) => {
     mountCompare(STATE.compare);
     return;
   }
-  if (evt.target.closest('[data-cmp-drop]')) {
-    STATE.compareInputs = (STATE.compareInputs || []).slice(0, -1);
+  const cmpDrop = evt.target.closest('[data-cmp-drop]');
+  if (cmpDrop) {
+    const at = Number(cmpDrop.dataset.cmpDrop);
+    const list = [...(STATE.compareInputs || [])];
+    if (list.length > 2 && Number.isInteger(at) && at >= 0 && at < list.length) list.splice(at, 1);
+    STATE.compareInputs = list;
     mountCompare(STATE.compare);
+    // Focus to the box that took its place, so a keyboard reader is not left
+    // on a button that is gone.
+    const next = views.compare && views.compare.querySelector(`[data-cmp-input="${Math.min(at, list.length - 1)}"]`);
+    if (next) next.focus();
     return;
   }
   const ewBtn = evt.target.closest('[data-ew-offset]');
@@ -49451,6 +49486,17 @@ $('#chat-close').addEventListener('click', () => {
   document.body.classList.remove('chat-open');
   wsOnChatToggle();
 });
+/* The toggle says whether the panel is open (aria-expanded) and which panel
+ * it opens. Six places open or shut it by `body.chat-open`, so the state is
+ * read from that class rather than set at each (launch audit, 2026-10-16). */
+(function syncChatToggleState() {
+  const t = document.getElementById('chat-toggle');
+  if (!t || typeof MutationObserver === 'undefined') return;
+  t.setAttribute('aria-controls', 'chat');
+  const sync = () => t.setAttribute('aria-expanded', String(document.body.classList.contains('chat-open')));
+  sync();
+  new MutationObserver(sync).observe(document.body, { attributes: true, attributeFilter: ['class'] });
+}());
 $('#chat-send').addEventListener('click', () => {
   const text = $('#chat-input').value;
   $('#chat-input').value = '';
