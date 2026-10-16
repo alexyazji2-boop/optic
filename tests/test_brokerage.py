@@ -757,7 +757,7 @@ def test_refused_refresh_does_not_spend_the_allowance():
         raise ProviderError("402")
     prov.refresh_connection = refuse
     conn = store.connections(user["id"])[0]
-    assert c.post("/api/brokerage/connections/{}/sync".format(conn["id"])).status_code == 502
+    assert c.post("/api/brokerage/connections/{}/sync".format(conn["id"])).status_code == 424
     del prov.refresh_connection
     assert c.post("/api/brokerage/connections/{}/sync".format(conn["id"])).status_code == 200
 
@@ -917,6 +917,37 @@ def test_owner_only_lets_the_owner_link_with_only_snaptrades_terms(monkeypatch):
     monkeypatch.setenv("TERMS_URL", "https://example.test/terms")
     monkeypatch.setenv("PRIVACY_URL", "https://example.test/privacy")
     assert me.get(STATUS).json()["consent"]["accepted"] is False
+
+
+def test_a_provider_refusal_reaches_the_page_and_only_the_owner_sees_why(monkeypatch):
+    # The first live SnapTrade connect (2026-10-15) answered 502, which
+    # Cloudflare replaced with its own page, and nothing said what SnapTrade
+    # had refused. Now: not 502, logged, and the reason shown to the owner.
+    monkeypatch.setenv("ADMIN_EMAILS", OWNER)
+    prov = snaptrade_with_only_its_own_terms(monkeypatch)
+    monkeypatch.setenv("TERMS_URL", "https://example.test/terms")
+    monkeypatch.setenv("PRIVACY_URL", "https://example.test/privacy")
+
+    def refuse():
+        raise ProviderError("SnapTrade rejected Optic's credentials (401)")
+    monkeypatch.setattr(prov, "register_user", refuse)
+
+    import app.brokerage.routes as bk_routes
+    logged = []
+    monkeypatch.setattr(bk_routes.log, "warning", lambda msg, *a: logged.append(msg % a))
+    me, _ = owner()
+    version = me.get(STATUS).json()["consent"]["version"]
+    r = me.post("/api/brokerage/connect", json={"consent_version": version})
+    assert r.status_code == 424
+    assert "did not complete that" in r.json()["detail"]
+    assert "(Owner only: SnapTrade rejected Optic's credentials (401))" in r.json()["detail"]
+    assert any("rejected Optic's credentials (401)" in line for line in logged)
+
+    them, other = reader("them@example.com")
+    paid(other)
+    r = them.post("/api/brokerage/connect", json={"consent_version": version})
+    assert r.status_code == 424
+    assert "Owner only" not in r.json()["detail"] and "401" not in r.json()["detail"]
 
 
 def test_without_owner_only_snaptrade_still_needs_all_three_documents(monkeypatch):

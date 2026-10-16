@@ -24,6 +24,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from starlette.concurrency import run_in_threadpool
 
 from .. import runtime
+from ..auth import admin as auth_admin
 from ..auth import deps
 from ..auth import store as auth_store
 from ..auth import ratelimit as auth_ratelimit
@@ -58,7 +59,9 @@ def set_lookups(**fns: Callable) -> None:
     LOOKUPS.update(fns)
 
 
-def _http(exc: Exception) -> HTTPException:
+def _http(exc: Exception, user: Optional[Dict[str, Any]] = None) -> HTTPException:
+    """The reader's answer for a failed step. Pass the reader so the owner
+    also sees the provider's own reason (owner-only)."""
     if isinstance(exc, service.NotAvailable):
         return HTTPException(status_code=503, detail=str(exc))
     if isinstance(exc, service.NotEntitled):
@@ -67,10 +70,21 @@ def _http(exc: Exception) -> HTTPException:
         return HTTPException(status_code=428, detail=str(exc))
     if isinstance(exc, LookupError):
         return HTTPException(status_code=404, detail=str(exc).strip("'\"") or "Not found.")
+    owner = bool(user) and auth_admin.is_admin(user)
     if isinstance(exc, ProviderError):
-        return HTTPException(status_code=502, detail="The brokerage provider did not complete that. "
-                                                     "Nothing was changed; try again shortly.")
-    return HTTPException(status_code=500, detail="Something went wrong.")
+        # 424, not 502: Cloudflare swaps an origin 502 for its own "the origin
+        # is misconfigured" page, which is what the owner saw on the first live
+        # SnapTrade connect (2026-10-15) instead of this sentence. The
+        # provider's reason names status codes and error codes, never a secret,
+        # so it is logged, and shown to the owner, who has no other way to read it.
+        log.warning("brokerage provider error: %s: %s", type(exc).__name__, exc)
+        detail = "The brokerage provider did not complete that. Nothing was changed; try again shortly."
+        if owner:
+            detail += " (Owner only: {})".format(exc)
+        return HTTPException(status_code=424, detail=detail)
+    log.error("brokerage request failed: %s", type(exc).__name__, exc_info=exc)
+    return HTTPException(status_code=500, detail="Something went wrong." + (
+        " (Owner only: {})".format(type(exc).__name__) if owner else ""))
 
 
 @router.get("/status")
@@ -113,7 +127,7 @@ async def connect(request: Request, payload: Dict[str, Any] = Body(default={})) 
                                       (payload or {}).get("reconnect") or None,
                                       (payload or {}).get("consent_version") or None, ip_hash)
     except Exception as exc:                                    # noqa: BLE001
-        raise _http(exc)
+        raise _http(exc, user)
     return {"url": url}
 
 
@@ -163,7 +177,7 @@ async def sync_now(connection_id: str, request: Request) -> Dict[str, Any]:
     try:
         result = await run_in_threadpool(service.request_refresh, user, conn)
     except Exception as exc:                                    # noqa: BLE001
-        raise _http(exc)
+        raise _http(exc, user)
     # Spent only once the provider accepted the request: a refused refresh
     # bought nothing and costs the reader nothing (review M3).
     auth_ratelimit.record("brokerage_sync", bucket)
@@ -177,7 +191,7 @@ async def disconnect(connection_id: str, request: Request) -> Dict[str, Any]:
     try:
         return await run_in_threadpool(service.disconnect, user, connection_id)
     except Exception as exc:                                    # noqa: BLE001
-        raise _http(exc)
+        raise _http(exc, user)
 
 
 @router.patch("/accounts/{account_id}")
