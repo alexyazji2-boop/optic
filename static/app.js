@@ -1687,6 +1687,12 @@ function setStatus(parts) {
  * "12.54", "330.0" and "342.43" all appeared in the UI as bare numbers, where a
  * reader has to work out whether they're dollars, a strike, a percentage or a
  * ratio. Every level and premium goes through here instead. */
+/** A plain percentage, or the dash alone. `fmt(x) + '%'` printed "—%" for a
+ *  missing figure (a bank's gross margin, a new listing's volatility). */
+function pctOrDash(v, digits = 1) {
+  return v !== null && v !== undefined && Number.isFinite(Number(v)) ? fmt(Number(v), digits) + '%' : '—';
+}
+
 function usd(value, digits = 2) {
   if (value === null || value === undefined || Number.isNaN(Number(value))) return '—';
   /* The sign before the dollar: "-$86.45", the way a statement prints it.
@@ -13296,7 +13302,7 @@ function optResearchHTML() {
       <td class="num">${r.cost_ask_contract ? optMoney(r.cost_ask_contract, 0) : '—'}<div class="caption">at the ask</div></td>
       <td class="num op-adv">${optMoney(r.theta_per_contract)}</td>
       <td class="num op-adv">${optMoney(r.vega_per_contract)}</td>
-      <td class="num op-adv">${r.p_itm_model !== null ? fmt(r.p_itm_model * 100, 0) + '%' : '—'}</td>
+      <td class="num op-adv">${Number.isFinite(r.p_itm_model) ? fmt(r.p_itm_model * 100, 0) + '%' : '—'}</td>
       <td class="num op-adv">${fmt(r.open_interest, 0)} / ${fmt(r.volume, 0)}</td>
       <td class="num op-adv">${r.exercise === 'european' ? '<span class="caption">European</span>' : (r.early_exercise_premium_contract >= 0.5 ? optMoney(r.early_exercise_premium_contract) : '<span class="caption">under $1</span>')}</td>
       <td>${r.mid ? `<button type="button" class="btn sm" data-op-add="${esc(r.contract || '')}" data-op-strike="${r.strike}" data-op-type="${r.type}" data-op-exp="${esc(r.expiry)}"
@@ -18199,7 +18205,7 @@ function renderCompany(co) {
       ${si.available ? `
         <p class="sub">Squeeze potential: <strong>${esc(si.squeeze_potential)}</strong>${si.settlement_date ? ` · settled ${esc(si.settlement_date)}` : ''}</p>
         <div class="grid c3" style="margin-bottom:var(--space-3)">
-          ${tile('% of float short', si.percent_of_float !== null ? fmt(si.percent_of_float * 100, 2) + '%' : '—',
+          ${tile('% of float short', Number.isFinite(si.percent_of_float) ? fmt(si.percent_of_float * 100, 2) + '%' : '—',
     null, '', FIN_DEFS.short_pct_float)}
           ${tile('Days to cover', fmt(si.days_to_cover, 2), null, '', FIN_DEFS.days_to_cover)}
           ${tile('vs prior period', fmtPct(si.change_vs_prior_pct, 1), null, signClass(si.change_vs_prior_pct),
@@ -18367,7 +18373,7 @@ function renderCompany(co) {
             <td class="name">${esc(hd.holder)}</td>
             <td class="name">${esc(hd.date_reported)}</td>
             <td>${fmtCompact(hd.shares)}</td>
-            <td>${hd.pct_held !== null ? fmt(hd.pct_held * 100, 2) + '%' : '—'}</td>
+            <td>${Number.isFinite(hd.pct_held) ? fmt(hd.pct_held * 100, 2) + '%' : '—'}</td>
             <td class="${signClass(hd.pct_change)}">${hd.pct_change !== null ? fmtPct(hd.pct_change * 100, 1) : '—'}</td>
           </tr>`).join('')}</tbody>
         </table>
@@ -31875,8 +31881,8 @@ function renderEarnings(d) {
     <td class="${signClass(r.revenue_yoy_pct)}">${fmtPct(r.revenue_yoy_pct, 1)}</td>
     <td>${usdCompact(r.net_income)}</td>
     <td class="${signClass(r.net_income_yoy_pct)}">${fmtPct(r.net_income_yoy_pct, 1)}</td>
-    <td>${fmt(r.gross_margin_pct, 1)}%</td>
-    <td>${fmt(r.operating_margin_pct, 1)}%</td>
+    <td>${pctOrDash(r.gross_margin_pct, 1)}</td>
+    <td>${pctOrDash(r.operating_margin_pct, 1)}</td>
   </tr>`).join('');
 
   const aRows = (gr.annual || []).map((r) => `<tr>
@@ -31885,8 +31891,8 @@ function renderEarnings(d) {
     <td class="${signClass(r.revenue_yoy_pct)}">${fmtPct(r.revenue_yoy_pct, 1)}</td>
     <td>${usdCompact(r.net_income)}</td>
     <td class="${signClass(r.net_income_yoy_pct)}">${fmtPct(r.net_income_yoy_pct, 1)}</td>
-    <td>${fmt(r.gross_margin_pct, 1)}%</td>
-    <td>${fmt(r.operating_margin_pct, 1)}%</td>
+    <td>${pctOrDash(r.gross_margin_pct, 1)}</td>
+    <td>${pctOrDash(r.operating_margin_pct, 1)}</td>
   </tr>`).join('');
 
   const ratingRows = (an.ratings || []).map((r) => `<tr>
@@ -35516,13 +35522,13 @@ function renderLong(d) {
         ${tile('vs SPY (5y)', fmtPct(h.excess_cagr_5y_pct, 1), `SPY ${fmtPct(h.benchmark_cagr_5y_pct, 1)}`, signClass(h.excess_cagr_5y_pct))}
       </div>
       ${kv([
-    ['Annualized volatility', fmt(risk.annualised_vol_pct, 1) + '%'],
-    ['Downside volatility', fmt(risk.downside_vol_pct, 1) + '%'],
+    ['Annualized volatility', pctOrDash(risk.annualised_vol_pct, 1)],
+    ['Downside volatility', pctOrDash(risk.downside_vol_pct, 1)],
     ['Return / vol (1y)', fmt(risk.sharpe_proxy, 2)],
     ['Sortino proxy', fmt(risk.sortino_proxy, 2)],
     ['Beta vs SPY', fmt(risk.beta_vs_spy, 2)],
     ['Correlation vs SPY', fmt(risk.correlation_vs_spy, 2)],
-    ['Positive days', fmt(risk.pct_positive_days, 1) + '%'],
+    ['Positive days', pctOrDash(risk.pct_positive_days, 1)],
     ['Best / worst day', `${fmtPct(risk.best_day_pct, 1)} / ${fmtPct(risk.worst_day_pct, 1)}`],
   ])}
       <p class="caveat">Return/vol and Sortino use a zero risk-free rate. A relative screen, not a performance report.</p>
