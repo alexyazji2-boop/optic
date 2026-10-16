@@ -18377,7 +18377,7 @@ function renderCompany(co) {
     ${/* The market-wide version of the same question, which lives on Read
         * because it is not about this company. */''}
     <p class="caveat">Every Form 4 as it is filed, across the market, is on
-      <button type="button" class="auth-link" data-view="brief">Optic's Read</button>.</p>
+      <button type="button" class="auth-link" data-go-view="brief">Optic's Read</button>.</p>
     </div>
   </div>`;
 }
@@ -20470,8 +20470,11 @@ function renderInstrument(d) {
       : { dir: signClass(s.chg_1d) || 'flat', text: fmtPct(s.chg_1d, 2) + ' today' })}
       ${stat('20 days', fmtPct(s.chg_20d, 2), signClass(s.chg_20d), level('from', s.close_20d_ago))}
       ${stat('vs 200-day', fmtPct(s.vs_sma200, 1), signClass(s.vs_sma200), level('average', s.sma200))}
+      ${/* null <= 30 is true in JS, so a missing RSI read "Oversold
+           territory" under a dash (launch audit, 2026-10-16). */''}
       ${stat('RSI', fmt(s.rsi, 0), '',
-    s.rsi >= 70 ? 'Overbought territory' : s.rsi <= 30 ? 'Oversold territory' : 'Mid-range')}
+    !Number.isFinite(s.rsi) ? 'Not enough history'
+      : s.rsi >= 70 ? 'Overbought territory' : s.rsi <= 30 ? 'Oversold territory' : 'Mid-range')}
       ${stat('From 52-week high', fmtPct(s.pct_from_52w_high, 1), signClass(s.pct_from_52w_high),
     level('high', s.high_52w))}
     </div>
@@ -42015,7 +42018,12 @@ async function loadTracker(force, opts = {}) {
   // Shared ledger, so nothing about the loaded ticker invalidates it.
   if (STATE.tracker && !force) {
     sweepCharts(() => renderTracker(STATE.tracker)); revealPanels(views.tracker);
-    loadPortfolioRisk(); return;
+    loadPortfolioRisk();
+    /* Leaving the tab stops the scan poll, and nothing restarted it: back on
+     * the tab, "Scan running..." stayed up with the buttons shut and nothing
+     * checking (launch audit, 2026-10-16). The poll settles it either way. */
+    if (STATE.trackerScanning || ((STATE.tracker || {}).progress || {}).running) startTrackerPoll();
+    return;
   }
   if (!silent) beginLoad(views.tracker, "Optic's own position ledger");
   try {
@@ -50040,8 +50048,12 @@ const PANELS_DENSE = {
  * gains against losses is cannot use the figure, and the glossary entry does
  * not fix that inside one panel. */
 const PANELS_SIMPLE_HIDES = {
-  swing: ['rsi (14)', 'macd (12, 26, 9)', 'fibonacci levels',
-    'moving averages'],
+  /* 'moving averages' and 'fibonacci levels' came off (launch audit,
+   * 2026-10-16). Both name h3 blocks inside the price panel, which are never
+   * folded, and matching is by substring, so 'moving averages' caught the
+   * price panel itself ("Price, moving averages & Fibonacci"): at Simple the
+   * Options tab's chart started folded and tagged. */
+  swing: ['rsi (14)', 'macd (12, 26, 9)'],
   market: ['equal-weight vs cap-weight'],
   long: ['weekly structure'],
   earnings: [],
@@ -50327,7 +50339,10 @@ const PANELS_OPEN_BY_DEFAULT = {
    * portfolio shut. Matching is `title.includes(key)`, so these are the
    * headings as they now read. The explainers stay closed: they are the same
    * text on every visit and they are 4,500px of it. */
-  tracker: ['optic portfolio', 'open positions'],
+  /* 'three books' is the book selector, a control, and 'no trades yet' is
+   * the empty state that says why the page is empty; both started folded
+   * (launch audit, 2026-10-16). */
+  tracker: ['optic portfolio', 'open positions', 'three books', 'no trades yet'],
   indices: ['major etfs', 'index regime'],
   /* One, not none. The page is a form, and seven open sections were a wall,
    * so it opened with every section shut -- which shut the form too. Measured
@@ -51172,8 +51187,10 @@ document.addEventListener('change', (evt) => {
 document.addEventListener('click', (evt) => {
   const head = evt.target.closest('.panel > h2.is-toggle');
   if (!head) return;
-  // Let links and glossary terms inside the heading behave normally.
-  if (evt.target.closest('a, .gloss-term, .chip, .ask-pulse')) return;
+  // Let links, glossary terms and any other control inside the heading behave
+  // normally. "Explain chart" (.chart-pulse) was missing from the list, so one
+  // press drafted the prompt and folded the chart it was about (2026-10-16).
+  if (evt.target.closest('a, .gloss-term, .chip, .ask-pulse, button:not(.panel-toggle), input, select, label')) return;
   const panel = head.parentElement;
   const open = !panel.classList.contains('is-open');
   panel.classList.toggle('is-open', open);
