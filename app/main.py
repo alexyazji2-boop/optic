@@ -103,7 +103,10 @@ from .analytics import straddle_calibration as straddle_cal_mod
 from .analytics import iv_cheapness as iv_cheap_mod
 from .analytics import vol_surface as vol_surface_mod
 from .analytics import liquidity as liquidity_mod
-from .analytics import contracts as contracts_mod
+# Option-contract research. Named apart from `contracts_mod` (federal awards,
+# imported above): sharing that name shadowed it, and /api/contracts answered
+# 500 on every call from 2026-10-13 (32a8f6b) until 2026-10-16.
+from .analytics import contracts as option_contracts_mod
 from .analytics import position as position_mod
 from . import watch_runner
 from . import signal_history
@@ -1381,7 +1384,7 @@ async def options_research(
         exp = expiry if expiry in listed else _default_expiry(listed)
         quote, spot, div, rate_info, frame = _options_frame(sym, [exp], 1)
         partial = _chain_unusable(frame, spot)
-        tbl = contracts_mod.table(frame, spot, rate_info["rate"], div, side=side, expiry=exp,
+        tbl = option_contracts_mod.table(frame, spot, rate_info["rate"], div, side=side, expiry=exp,
                                   delta_lo=min(delta_lo, delta_hi), delta_hi=max(delta_lo, delta_hi),
                                   max_spread_pct=max_spread, min_oi=min_oi,
                                   include_unquoted=include_unquoted,
@@ -1399,12 +1402,12 @@ async def options_research(
             "expiry": exp,
             "side": side,
             "listed_expiries": [{"expiry": e, "dte": vol_surface_mod.expiry_dte(e),
-                                 "monthly": contracts_mod.is_monthly(e)} for e in listed],
+                                 "monthly": option_contracts_mod.is_monthly(e)} for e in listed],
             "filters": {"delta_lo": delta_lo, "delta_hi": delta_hi, "max_spread": max_spread,
                         "min_oi": min_oi, "include_unquoted": include_unquoted},
             "unusable": partial,
             "summary": summary[0] if summary else None,
-            "events": contracts_mod.events(exp, today, earn, None, _ex_dividend(sym),
+            "events": option_contracts_mod.events(exp, today, earn, None, _ex_dividend(sym),
                                            index_like=sym in gex_mod.INDEX_LIKE),
             "table": tbl,
             "rate": rate_info,
@@ -1521,7 +1524,7 @@ async def options_analyze(ticker: str, payload: Dict[str, Any] = Body(...)) -> D
             "leg_liquidity": [{"strike": l.get("strike"), "type": l["type"], "expiry": l.get("expiry"),
                                **(l.get("liquidity") or {})} for l in legs if l["type"] != "stock"],
             "flags": flags,
-            "events": contracts_mod.events(first_exp, today, earn, None, exd,
+            "events": option_contracts_mod.events(first_exp, today, earn, None, exd,
                                            index_like=sym in gex_mod.INDEX_LIKE) if first_exp else [],
             "multi_leg_note": ("The legs' quoted spreads add up to ${:,.2f} for the position. On an exchange's "
                                "complex order book a spread order can fill inside that; nothing here can see "

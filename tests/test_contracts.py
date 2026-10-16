@@ -327,3 +327,26 @@ def test_the_date_leads_the_row_and_the_header():
     css = (ROOT / "static/styles.css").read_text()
     assert "table.ct-table td.ct-agency { white-space: normal; min-width: 18ch; }" in css
     assert "table.ct-table td.ct-awarded::before { content: 'Awarded '; }" in css
+
+
+def test_the_route_reaches_the_federal_awards_module(monkeypatch):
+    """Drive /api/contracts itself, not the module beside it.
+
+    From 2026-10-13 a second `contracts_mod` import (option-contract research)
+    shadowed this one, and every call raised AttributeError: 'recent' and
+    answered 500, on the Insiders page and the live site alike. Every test above
+    calls the module directly or reads main.py as text, so none of them saw it.
+    """
+    from fastapi.testclient import TestClient
+    from app import main
+
+    monkeypatch.setattr(contracts, "recent",
+                        lambda limit=12, days=30: {"available": True, "scope": "market", "awards": [], "limit": limit})
+    monkeypatch.setattr(contracts, "for_company",
+                        lambda name, ticker="", limit=12: {"available": True, "scope": "company", "ticker": ticker, "awards": []})
+    client = TestClient(main.app)
+    res = client.get("/api/contracts?limit=5")
+    assert res.status_code == 200, res.text
+    assert res.json()["scope"] == "market" and res.json()["limit"] == 5
+    assert main.contracts_mod is contracts
+    assert main.option_contracts_mod is not contracts
