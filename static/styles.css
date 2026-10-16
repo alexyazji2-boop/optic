@@ -246,7 +246,7 @@
      #232326, where #0ca30c was 4.67:1 and #d95656 4.04:1, under AA for the
      11-14px figures they colour; on a raised tile (#2a2a2d) 4.27 and 3.69. */
   --pos: #11b011;           /* on #232326: 5.41:1; on #2a2a2d: 4.93:1 */
-  --neg: #e66e6e;           /* on #232326: 5.09:1; on #2a2a2d: 4.65:1 */
+  --neg: #e76f68;           /* on #232326: 5.13:1; on #2a2a2d: 4.68:1; 27+ from --s2 and --s5 (CIE76) */
   --mid: #383835;
 
   /* Status — "is something wrong", not "which way did it go". Reserved, never

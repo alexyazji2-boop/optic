@@ -41149,7 +41149,7 @@ function scanAskHTML() {
       <div class="sc-ask-actions">
         <button type="submit" class="btn primary">Find symbols now</button>
         <button type="button" class="btn milo-btn" data-sc-ask-pulse
-          title="Put the request and its matches in Milo's box, to edit and send">Ask Milo</button>
+          title="Finds the matches first (words the screen cannot read itself can use one Milo message), then puts the request and its matches in Milo's box to edit and send">Ask Milo</button>
       </div>
     </form>
     <div class="sc-ask-examples" role="group" aria-label="Examples">
