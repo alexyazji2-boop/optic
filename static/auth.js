@@ -415,7 +415,10 @@
 
   /* ---------------------------------------------------------------- toasts */
 
-  function toast(message, kind) {
+  /* `action` ({label, run}) adds one button to the note, such as Undo after
+   * removing a watchlist row (launch audit, 2026-10-16). Pressing it runs the
+   * action and closes the note; pressing the note elsewhere still dismisses it. */
+  function toast(message, kind, action) {
     var host = document.getElementById('auth-toasts');
     if (!host) {
       host = document.createElement('div');
@@ -428,9 +431,21 @@
     var note = document.createElement('div');
     note.className = 'auth-toast' + (kind ? ' ' + kind : '');
     note.textContent = message;
+    if (action && action.label && typeof action.run === 'function') {
+      var act = document.createElement('button');
+      act.type = 'button';
+      act.className = 'auth-toast-act';
+      act.textContent = action.label;
+      act.addEventListener('click', function (e) {
+        e.stopPropagation();
+        drop();
+        action.run();
+      });
+      note.appendChild(act);
+    }
     host.appendChild(note);
     // Long enough to read two lines, and dismissible by clicking it.
-    var timer = setTimeout(function () { drop(); }, 7000);
+    var timer = setTimeout(function () { drop(); }, action ? 10000 : 7000);
     function drop() {
       clearTimeout(timer);
       note.classList.add('gone');

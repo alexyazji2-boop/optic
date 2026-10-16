@@ -5402,7 +5402,7 @@ document.addEventListener('click', (evt) => {
   const open = evt.target.closest('[data-watch-open]');
   if (open) { loadTicker(open.dataset.watchOpen, SEARCH_LANDING); return; }
   const rm = evt.target.closest('[data-watch-remove]');
-  if (rm) { evt.preventDefault(); evt.stopPropagation(); watchRemove(rm.dataset.watchRemove); return; }
+  if (rm) { evt.preventDefault(); evt.stopPropagation(); watchRemove(rm.dataset.watchRemove, { undo: true }); return; }
   const go = evt.target.closest('[data-go-view]');
   if (go) { switchView(go.dataset.goView); return; }
   /* A market question goes into Pulse's box when it is pressed, for the reader
@@ -9077,8 +9077,15 @@ function watchAdd(symbol) {
   return clean;
 }
 
-function watchRemove(symbol) {
+function watchRemove(symbol, opts = {}) {
   const sym = String(symbol).toUpperCase();
+  /* A row's x removes it at once, so it says so and offers it back: a stray
+   * press on the wrong row lost that name with no way back but retyping it
+   * (launch audit, 2026-10-16). The header's Watch/Watching toggle is its own
+   * undo and passes nothing. */
+  if (opts.undo && window.OpticAuth && window.OpticAuth.toast && watchList().includes(sym)) {
+    window.OpticAuth.toast(`Removed ${sym} from the watchlist.`, '', { label: 'Undo', run: () => watchAdd(sym) });
+  }
   const kept = watchList().filter((s) => s !== sym);
   watchSave(kept);
   if (ACCOUNT.watchlist) {
