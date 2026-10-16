@@ -33,6 +33,8 @@ from . import billing as billing_mod
 from .brokerage import routes as brokerage_routes
 from .brokerage import service as brokerage_service
 from .brokerage import store as brokerage_store
+from .brokerage import workspace as brokerage_workspace
+from .brokerage import workspace_routes as brokerage_ws_routes
 from . import db as accounts_db
 from .auth import admin as auth_admin
 from .auth import deps as auth_deps
@@ -48,6 +50,7 @@ from . import earnings_week as earnings_week_mod
 from . import priority as priority_mod
 from . import weekly as weekly_mod
 from . import catalysts as catalysts_mod
+from . import catalyst_rules as catalyst_rules_mod
 from . import catalyst_live as catalyst_live_mod
 from . import live_mirror
 from .analytics import business as business_mod
@@ -6981,8 +6984,66 @@ def _tool_screen(request: str) -> Dict[str, Any]:
         "understood": reading.get("understood"), "unread": reading.get("leftover"), "result": res})
 
 
-def _milo_toolbox(request: Request) -> milo_tools.Toolbox:
-    """The tools for one answer, bound to the asking reader for the one tool that is theirs."""
+# What each part of get_my_portfolio may drop, least needed first, to fit the
+# result budget (milo_tools.shrink never truncates silently: it names what it
+# left out). Measured 2026-10-15: the summary is ~17k characters at 60 holdings.
+PORTFOLIO_TOOL_LIMIT = 26_000
+PORTFOLIO_TOOL_OPTIONAL = {
+    "summary": [("calculated", "price_checks"), ("calculated", "allocation", "by_account"),
+                ("calculated", "changes_since_previous_sync")],
+    "exposure": [("currency",), ("issuer_country",), ("asset_class",), ("etfs",)],
+    "events": [("theses",), ("desk",)],
+    "performance": [("series",), ("definitions",), ("attribution", "rows")],
+    "scorecard": [("definitions",)],
+    "options": [("units",)],
+    "briefing": [("upcoming",), ("drivers",)],
+}
+
+
+def _milo_portfolio(user: Optional[Dict[str, Any]], part: str, scope: Optional[List[str]]) -> Dict[str, Any]:
+    """The reader's own portfolio for the get_my_portfolio tool. `user` is
+    bound when the toolbox is built; nothing the model sends names a reader."""
+    if not user:
+        return {"status": "ok", "signed_in": False, "linked": False,
+                "note": "The reader is not signed in, so no linked brokerage can be read."}
+    if not brokerage_service.open_to(user):
+        return {"status": "unavailable", "reason": brokerage_service.NOT_SWITCHED_ON}
+    if not brokerage_store.link(user["id"]) or not brokerage_store.accounts(user["id"]):
+        return {"status": "ok", "signed_in": True, "linked": False,
+                "note": "No brokerage is linked to this account. Linking is on the Brokerage page."}
+    if part == "summary":
+        data = brokerage_service.milo_context(user, account_ids=scope, **brokerage_routes.LOOKUPS) or {}
+    elif part == "exposure":
+        data = brokerage_workspace.exposure(user, scope)
+    elif part == "events":
+        full = brokerage_workspace.events_research(user, scope)
+        data = {"calendar": full.get("calendar"), "desk": full.get("desk"),
+                "theses": [{k: t.get(k) for k in ("symbol", "held", "why", "horizon", "assumptions", "reassess_if",
+                                                  "risks", "catalysts", "saved_at", "developments")}
+                           for t in (full.get("theses") or {}).get("theses") or []]}
+    elif part == "performance":
+        data = brokerage_workspace.performance(user, scope)
+    elif part == "scorecard":
+        data = brokerage_workspace.scorecard(user, scope)
+    elif part == "options":
+        data = brokerage_workspace.options_risk(user, scope)
+    else:
+        data = brokerage_workspace.briefing(user, scope)
+    out = {"status": "ok", "signed_in": True, "linked": True, "part": part,
+           "source": "The reader's linked brokerage (read-only) and Optic's calculations on it",
+           "rules": "Broker facts, market data and Optic's calculations are labelled in the data; keep them "
+                    "apart, repeat limitations that matter, never advise a trade.", "data": data}
+    optional = [("data",) + path for path in PORTFOLIO_TOOL_OPTIONAL.get(part, [])]
+    return milo_tools.shrink(out, optional, limit=PORTFOLIO_TOOL_LIMIT)
+
+
+def _milo_toolbox(request: Request, context: Optional[Dict[str, Any]] = None) -> milo_tools.Toolbox:
+    """The tools for one answer, bound to the asking reader for the tools that are theirs.
+
+    The portfolio tool follows the same rule as the CONTEXT block
+    (`_with_linked_portfolio`): with Milo set to the market only, or to no
+    context, it is not offered at all, so the model cannot pull holdings into
+    an answer the reader scoped away from them."""
     try:
         user = auth_deps.current_user(request)
     except Exception as exc:                                        # noqa: BLE001 - as _spend_guard
@@ -7000,12 +7061,23 @@ def _milo_toolbox(request: Request) -> milo_tools.Toolbox:
         return {"status": "ok", "signed_in": True, "source": "The reader's saved watchlists",
                 "watchlists": [{"name": w.get("name"), "symbols": w.get("symbols") or []} for w in lists]}
 
-    return milo_tools.Toolbox(runners={
+    focus = (context or {}).get("focus") if isinstance((context or {}).get("focus"), dict) else {}
+    raw_scope = (context or {}).get("brokerage_scope")
+    scope = [str(a)[:64] for a in raw_scope][:20] if isinstance(raw_scope, list) else None
+
+    def portfolio(part: str) -> Dict[str, Any]:
+        return _milo_portfolio(user, part, scope)
+
+    runners = {
         "get_quote": _tool_quote, "get_options": _tool_options, "get_chart_levels": _tool_levels,
         "get_fundamentals": _tool_fundamentals, "get_valuation": _tool_valuation, "get_earnings": _tool_earnings,
         "get_news": _tool_news, "get_market": _tool_market, "compare": _tool_compare,
         "get_assessment": _tool_assessment, "screen_stocks": _tool_screen, "get_my_watchlists": watchlists,
-    })
+        "get_my_portfolio": portfolio,
+    }
+    if focus.get("scope") in ("none", "market"):
+        runners.pop("get_my_portfolio")
+    return milo_tools.Toolbox(runners=runners)
 
 
 # Narrowed after review (M5): a bare "earnings" or "sync" sent a reader's
@@ -7063,7 +7135,9 @@ async def _with_linked_portfolio(request: Request, history: List[Dict[str, Any]]
         # tell a linked reader they have nothing linked.
         return dict({"brokerage_linked": True}, **(context or {}))
     try:
-        block = await _run(brokerage_service.milo_context, user, **brokerage_routes.LOOKUPS)
+        raw_scope = (context or {}).get("brokerage_scope")
+        scope = [str(a)[:64] for a in raw_scope][:20] if isinstance(raw_scope, list) else None
+        block = await _run(brokerage_service.milo_context, user, account_ids=scope, **brokerage_routes.LOOKUPS)
     except Exception as exc:                                      # noqa: BLE001
         logging.getLogger("uvicorn.error").warning("linked portfolio context skipped: %s",
                                                    type(exc).__name__)
@@ -7116,7 +7190,7 @@ async def chat(request: Request,
     return StreamingResponse(
         ai.stream_chat(history, context=context, use_web=use_web,
                        attachments=attachments, persona=persona, mode=mode,
-                       horizon=horizon, toolbox=_milo_toolbox(request)),
+                       horizon=horizon, toolbox=_milo_toolbox(request, context)),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
@@ -7150,6 +7224,7 @@ app.include_router(account_mod.router)
 app.include_router(valuation_store.router)
 app.include_router(billing_mod.router)
 app.include_router(brokerage_routes.router)
+app.include_router(brokerage_ws_routes.router)
 
 
 def _broker_price(sym: str) -> Optional[float]:
@@ -7169,6 +7244,129 @@ brokerage_routes.set_lookups(
     optic_price=_broker_price,
     fx_to_usd=_fx_to_usd,
 )
+
+
+# ------------------------------------------------- brokerage workspace lookups
+#
+# Market data the Brokerage workspace reads, all through providers that cache
+# per symbol and are shared by every reader (quotes 30-60s, calendars 1h,
+# profiles and dividends 6-24h, fund holdings 7 days on disk). The workspace
+# bounds how many symbols each section asks about.
+
+
+def _ws_earnings_calendar(sym: str) -> Optional[Dict[str, Any]]:
+    cal = YF_PROVIDER.earnings_calendar(sym) or {}
+    dates = cal.get("dates") or []
+    timing = None
+    if dates and cal.get("confirmed"):
+        # BMO/AMC exists only in the earnings-history scrape; unknown is left unknown.
+        for row in YF_PROVIDER.earnings_history(sym, limit=4) or []:
+            if str(row.get("date") or "")[:10] == str(dates[0])[:10]:
+                timing = row.get("timing")
+                break
+    return {"dates": dates, "confirmed": bool(cal.get("confirmed")), "timing": timing}
+
+
+def _ws_dividend(sym: str) -> Optional[Dict[str, Any]]:
+    ex = _ex_dividend(sym)
+    if not ex:
+        return None
+    acts = extras_mod.corporate_actions(YF_PROVIDER, sym) or {}
+    last = (acts.get("dividends") or [])[-1:] or [{}]
+    return {"ex_date": ex, "last_amount": last[0].get("amount"), "currency": None}
+
+
+def _ws_quotes(symbols: List[str]) -> Dict[str, Dict[str, Any]]:
+    got = YF_PROVIDER.session_quotes(list(symbols)) or {}
+    return {s: {"price": q.get("price"), "prev_close": q.get("prev_close"), "change_pct": q.get("change_pct"),
+                "as_of": q.get("regular_market_time"), "market_time": q.get("regular_market_time"),
+                "delayed_minutes": q.get("delayed_minutes"), "market_state": q.get("market_state"),
+                "source": "Yahoo Finance"} for s, q in got.items()}
+
+
+def _ws_closes(symbols: List[str], period: str = "1y") -> Dict[str, List[List[Any]]]:
+    frames = YF_PROVIDER.batch_history(sorted(set(symbols)), period=period) or {}
+    out = {}
+    for sym, df in frames.items():
+        try:
+            out[sym] = [[str(idx.date()), float(v)] for idx, v in df["Close"].dropna().items()]
+        except Exception:                                       # noqa: BLE001
+            continue
+    return out
+
+
+def _ws_benchmark(symbol: str) -> Optional[Dict[str, Any]]:
+    closes = _ws_closes([symbol], "2y").get(symbol) or []
+    if not closes:
+        return None
+    acts = extras_mod.corporate_actions(YF_PROVIDER, symbol) or {}
+    return {"symbol": symbol, "closes": closes,
+            "dividends": [[d.get("date"), d.get("amount")] for d in acts.get("dividends") or [] if d.get("amount")],
+            "source": "Yahoo Finance daily closes (split-adjusted) and dividend history"}
+
+
+def _ws_spot(sym: str) -> Optional[Dict[str, Any]]:
+    q = YF_PROVIDER.quote(sym) or {}
+    if q.get("price") is None:
+        return None
+    return {"price": q.get("price"), "as_of": q.get("as_of"), "market_time": q.get("market_time"),
+            "source": "Yahoo Finance", "delayed_minutes": 15}
+
+
+def _ws_div(sym: str) -> Dict[str, Any]:
+    q = YF_PROVIDER.quote(sym) or {}
+    ex = _ex_dividend(sym)
+    upcoming = ex if ex and ex >= datetime.now(timezone.utc).date().isoformat() else None
+    return {"yield": q.get("dividend_yield"), "next_ex_date": upcoming}
+
+
+def _ws_market_ref() -> Dict[str, Any]:
+    spy = YF_PROVIDER.quote("SPY") or {}
+    tnx = YF_PROVIDER.quote("^TNX") or {}
+    ten = tnx.get("price")
+    return {"pe": spy.get("forward_pe") or spy.get("trailing_pe"),
+            "pe_basis": "forward" if spy.get("forward_pe") else ("trailing" if spy.get("trailing_pe") else None),
+            "ten_year": (ten / 100.0) if ten and ten > 1 else ten, "source": "Yahoo Finance (SPY, ^TNX)"}
+
+
+def _ws_fundamentals(sym: str) -> Optional[Dict[str, Any]]:
+    from .brokerage import scorecard as scorecard_mod
+    info = YF_PROVIDER._info(sym) or {}
+    return scorecard_mod.fundamentals_from_yahoo(info) if info else None
+
+
+def _ws_constituents(sym: str) -> Dict[str, Any]:
+    from .brokerage import lookthrough as lookthrough_mod
+    return lookthrough_mod.constituents(sym)
+
+
+def _ws_price(sym: str) -> Optional[Dict[str, Any]]:
+    q = YF_PROVIDER.quote(sym) or {}
+    return {"price": q.get("price"), "as_of": q.get("as_of"), "sector": q.get("sector")} if q.get("price") else None
+
+
+brokerage_workspace.set_market(
+    sector_of=lambda s: (YF_PROVIDER.profile(s) or {}).get("sector"),
+    country_of=lambda s: (YF_PROVIDER.profile(s) or {}).get("country"),
+    earnings_calendar_of=_ws_earnings_calendar,
+    dividend_of=_ws_dividend,
+    quotes_of=_ws_quotes,
+    news_of=lambda s: YF_PROVIDER.news(s, limit=12) or [],
+    closes_of=_ws_closes,
+    benchmark_of=_ws_benchmark,
+    spot_of=_ws_spot,
+    div_of=_ws_div,
+    rate=lambda: rates_mod.risk_free(YF_PROVIDER),
+    market_ref=_ws_market_ref,
+    fundamentals_of=_ws_fundamentals,
+    constituents_of=_ws_constituents,
+    price_of=_ws_price,
+    desk_served=lambda: desk_edition_mod.served(datetime.now(timezone.utc), session_mod),
+    named_in=catalyst_rules_mod.named_companies,
+    catalysts_of=lambda s: (catalysts_mod.ticker_catalysts(YF_PROVIDER, s) or {}).get("rows") or [],
+)
+brokerage_ws_routes.set_hooks(spend_guard=lambda request: _spend_guard(request),
+                              write_brief=ai.write_portfolio_brief)
 
 
 @app.on_event("startup")

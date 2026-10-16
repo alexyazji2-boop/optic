@@ -371,13 +371,19 @@ layers visibly apart in the answer:
 - **Your interpretation**: label it as your reading ("My read:"), keep it to
   what the facts support, and never tell the reader to buy, sell or rebalance.
 Repeat any `caveats` that change the answer. Never claim what `not_supplied`
-lists (transactions, realised gains, dividends, greeks, live prices), and do
-not compute a return: there are no cash flows to compute one from. If the
-block and `brokerage_linked` are both absent, you have no view of the reader's
-real accounts; say so rather than guessing at their holdings. If `brokerage_linked` is true but the
-block is absent, the reader has linked accounts that were not attached to this
-question, and no tool fetches them: say you can include them if they ask about
-their portfolio, rather than saying they have nothing linked.
+lists, and do not compute a return yourself: returns come only from
+get_my_portfolio's `performance` part, which separates deposits and withdrawals
+from investment results and says what history it rests on; quote its
+time-weighted and money-weighted figures with their periods and limitations.
+Contributions to a move are measured; headlines are only "published around the
+move", never its cause. If the block and `brokerage_linked` are both absent, you
+have no view of the reader's real accounts unless get_my_portfolio says they
+have some; say so rather than guessing at their holdings. If `brokerage_linked`
+is true but the block is absent, the reader has linked accounts that were not
+attached to this question: when the question is about their portfolio, fetch it
+with get_my_portfolio rather than saying they have nothing linked. A saved
+thesis is the reader's own words: you may say how a development bears on it,
+never rewrite or summarise it as if it were yours.
 
 Tag a source once per paragraph, at the first figure taken from it, not after
 every number. Never tag a figure that is not in CONTEXT: general knowledge and
@@ -731,9 +737,15 @@ say so before describing a trade.
 ## Looking things up
 You have tools that fetch Optic's own data for any symbol or the market: get_quote, get_options, \
 get_chart_levels, get_fundamentals, get_valuation, get_earnings, get_news, get_market, compare, \
-get_assessment, screen_stocks and get_my_watchlists. They run the same calculations the terminal's own \
-views show. CONTEXT is what the reader's page sent with the question: it enriches an answer, it does not \
-bound it.
+get_assessment, screen_stocks, get_my_watchlists and get_my_portfolio. They run the same calculations the \
+terminal's own views show. CONTEXT is what the reader's page sent with the question: it enriches an answer, \
+it does not bound it.
+- get_my_portfolio reads the signed-in reader's own linked accounts (summary, exposure, events, performance, \
+scorecard, options or briefing). For "where am I concentrated", "why did my portfolio move today", "which \
+earnings affect me this week", "how exposed am I to technology" or "what deserves more research", fetch the \
+part that answers it rather than asking the reader to open the Brokerage page. Its figures follow the \
+brokerage rules in the format notes: broker facts, Optic's calculations and your reading kept apart, \
+coverage and limitations repeated where they change the answer, no trade advice.
 
 - Decide what the question needs, check whether CONTEXT already has it for the right symbol and fresh \
 enough, and fetch what is missing before you write anything. Several calls are fine, in one turn when \
@@ -1731,6 +1743,65 @@ def _parse_brief_json(text: str, truncated: bool, ticker: str) -> Optional[Dict[
     log.warning("%s output was truncated; salvaged %d complete paragraphs",
                 ticker, len(parsed.get("paragraphs") or []))
     return parsed
+
+
+PORTFOLIO_BRIEF_PROMPT = """You write a short briefing about one reader's linked brokerage portfolio for
+Optic Terminal. The DATA block is everything you know: Optic measured it from the
+reader's broker data, Optic's quotes and the events calendar. Use nothing else.
+
+Rules:
+- Keep MEASURED and POSSIBLY RELATED apart. A holding's contribution to today's
+  move, and the change since the last sync, are measured: state them with their
+  numbers. A headline listed under drivers was matched to a move by when it was
+  published, nothing more: say "a headline published around the move" and never
+  that it caused the move. A large move with status "no_headline" had none: say so.
+- Describe; do not advise. No buying, selling, trimming, adding or "consider".
+  No price targets or predictions.
+- Say which upcoming events affect which holdings and how much of the portfolio
+  they are, marking estimated dates as estimated.
+- If something is missing (no earlier sync, quotes not available), say what is
+  missing in one short sentence instead of filling the gap.
+- Plain English, short sentences, no em dashes, no markdown headings.
+
+Return only a JSON object with these string fields:
+{"headline": one sentence, "what_changed": 2-4 sentences, "drivers": 1-3 sentences,
+ "ahead": 1-3 sentences, "attention": 1-2 sentences}"""
+
+PORTFOLIO_BRIEF_MAX_TOKENS = 1600
+
+
+def write_portfolio_brief(facts: Dict[str, Any]) -> Dict[str, Any]:
+    """A written portfolio briefing from the workspace's measured facts.
+
+    Not cached here: the caller keys the result on the facts and seals it per
+    reader (`portfolio_briefings`), because it describes one person's
+    holdings and `ai_store` keeps text in the clear."""
+    try:
+        from anthropic import Anthropic
+    except ImportError:
+        return {"available": False, "reason": "The assistant is not installed on this server."}
+    status = available()
+    if status.get("enabled") is not True:
+        return {"available": False, "reason": "The assistant is not switched on here."}
+    try:
+        client = Anthropic(max_retries=2)
+        msg = _ask(client, "portfolio_brief", model=PULSE_MODEL, max_tokens=PORTFOLIO_BRIEF_MAX_TOKENS,
+                   system=[{"type": "text", "text": PORTFOLIO_BRIEF_PROMPT}],
+                   messages=[{"role": "user", "content": "DATA:\n" + json.dumps(facts, default=str)[:40000]}])
+    except Exception as exc:                                    # noqa: BLE001
+        log.warning("portfolio brief failed: %s", type(exc).__name__)
+        return {"available": False, "reason": _human_error(exc)}
+    text = "".join(getattr(b, "text", "") for b in (msg.content or [])).strip()
+    start, end = text.find("{"), text.rfind("}")
+    try:
+        parsed = json.loads(text[start:end + 1]) if start >= 0 and end > start else None
+    except ValueError:
+        parsed = None
+    if not isinstance(parsed, dict) or not parsed.get("headline"):
+        return {"available": False, "reason": "The briefing came back unreadable and was not kept."}
+    clean = {k: str(parsed.get(k) or "").replace("\u2014", ",").strip()
+             for k in ("headline", "what_changed", "drivers", "ahead", "attention")}
+    return {"available": True, "model": PULSE_MODEL, **clean}
 
 
 def write_earnings_brief(ticker: str, facts: Dict[str, Any]) -> Optional[Dict[str, Any]]:

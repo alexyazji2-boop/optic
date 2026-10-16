@@ -98,6 +98,7 @@ FEATURES: Dict[str, str] = {
     "weekly": "Weekly update",
     "catalyst_scan": "Catalyst scan",
     "pulse": "Milo chat",
+    "portfolio_brief": "Portfolio briefings (Brokerage)",
     "research": "Deep research",
     "scan": "Scan requests",
 }

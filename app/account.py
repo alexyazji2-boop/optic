@@ -454,6 +454,11 @@ MAX_THESES = 200
 
 # The four boxes on the form. A fixed shape, unlike the snapshot.
 THESIS_PROSE = ("bull", "bear", "catalysts", "invalidation")
+# Added for the Brokerage workspace's position theses (2026-10-15). Written
+# only when a request carries them: the Dossier's thesis form predates them and
+# sends the four fields above, and a PUT from it must not blank what the
+# reader wrote in the workspace.
+THESIS_EXTRA = ("horizon", "assumptions")
 
 # Per field. Long enough for a considered write-up, short enough that the table
 # cannot be used as a file store.
@@ -485,7 +490,7 @@ def _thesis_payload(found: Dict[str, Any]) -> Dict[str, Any]:
         "saved_at": found["updated_at"],
         "created_at": found["created_at"],
     }
-    for key in THESIS_PROSE:
+    for key in THESIS_PROSE + THESIS_EXTRA:
         out[key] = found.get(key) or ""
     return out
 
@@ -538,7 +543,9 @@ async def put_thesis(symbol: str, request: Request,
     deps.csrf_guard(request)
     sym = _symbol(symbol)
     fields = _thesis_fields(payload)
-    if not any(fields.values()):
+    extra = {k: str(payload.get(k) or "").strip()[:MAX_THESIS_FIELD]
+             for k in THESIS_EXTRA if k in payload}
+    if not any(fields.values()) and not any(extra.values()):
         # Matches the client, which ignores a submit with every box empty. An
         # empty thesis is a delete, and a delete has its own verb.
         raise HTTPException(status_code=400, detail="There is nothing to save.")
@@ -571,6 +578,9 @@ async def put_thesis(symbol: str, request: Request,
             (fields["bull"], fields["bear"], fields["catalysts"],
              fields["invalidation"], _thesis_snapshot(payload), now,
              user["id"], sym))
+    for key, value in extra.items():
+        db.execute("UPDATE theses SET {}=? WHERE user_id=? AND symbol=?".format(key),
+                   (value, user["id"], sym))
     saved = db.row("SELECT * FROM theses WHERE user_id = ? AND symbol = ?",
                    (user["id"], sym))
     assert saved is not None

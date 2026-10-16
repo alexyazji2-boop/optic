@@ -57,7 +57,7 @@ def snapshot(**over):
 # ------------------------------------------------------------------------------------- definitions
 def test_every_tool_is_typed_closed_and_says_when_to_call_it():
     names = [s["name"] for s in milo_tools.SPECS]
-    assert len(names) == len(set(names)) == 12
+    assert len(names) == len(set(names)) == 13
     for spec in milo_tools.SPECS:
         schema = spec["input_schema"]
         assert schema["type"] == "object" and schema["additionalProperties"] is False, spec["name"]
@@ -326,7 +326,13 @@ def test_the_chat_route_gives_milo_its_tools(monkeypatch):
     TestClient(m.app).post("/api/chat", json={"messages": [{"role": "user", "content": "hi"}],
                                               "context": {"focus": {"scope": "none"}}})
     box = seen.get("toolbox")
-    assert isinstance(box, milo_tools.Toolbox) and set(box.runners) == set(milo_tools.TOOL_NAMES)
+    # With no context the reader scoped their holdings out of the answer, so the
+    # one tool that reads them is not offered (2026-10-15); every other tool is.
+    assert isinstance(box, milo_tools.Toolbox)
+    assert set(box.runners) == set(milo_tools.TOOL_NAMES) - {"get_my_portfolio"}
+    TestClient(m.app).post("/api/chat", json={"messages": [{"role": "user", "content": "hi"}],
+                                              "context": {"focus": {"scope": "auto"}}})
+    assert set(seen["toolbox"].runners) == set(milo_tools.TOOL_NAMES)
 
 
 def test_the_watchlist_tool_reads_only_the_asking_readers_lists(monkeypatch, tmp_path):

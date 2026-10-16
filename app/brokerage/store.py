@@ -373,6 +373,45 @@ def recent_snapshots(user_id: str, limit: int = 2) -> List[Dict[str, Any]]:
     return out
 
 
+# ------------------------------------------------------- written briefings
+#
+# The optional written briefing describes one reader's holdings, so it is
+# sealed under their data key (ai_store keeps text in the clear), keyed on the
+# facts it was written from, and only the last few are kept.
+
+BRIEFINGS_KEPT = 10
+
+
+def save_briefing(user_id: str, key: str, payload: Dict[str, Any]) -> None:
+    dk = dek(user_id)
+    if dk is None:
+        raise vault.VaultUnavailable("no data key for this user")
+    sealed = vault.seal(dk, json.dumps(payload, default=str), "brief:{}:{}".format(user_id, key))
+    db.execute_many([
+        ("INSERT INTO portfolio_briefings (user_id, key, payload, created_at) VALUES (?,?,?,?) "
+         "ON CONFLICT(user_id, key) DO UPDATE SET payload = excluded.payload, created_at = excluded.created_at",
+         (user_id, key, sealed, db.utcnow())),
+        ("DELETE FROM portfolio_briefings WHERE user_id = ? AND key NOT IN (SELECT key FROM portfolio_briefings "
+         "WHERE user_id = ? ORDER BY created_at DESC LIMIT ?)", (user_id, user_id, BRIEFINGS_KEPT)),
+    ])
+
+
+def briefing(user_id: str, key: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    """The briefing written from these facts, or with no key the newest."""
+    dk = dek(user_id)
+    if dk is None:
+        return None
+    row = (db.row("SELECT * FROM portfolio_briefings WHERE user_id = ? AND key = ?", (user_id, key)) if key else
+           db.row("SELECT * FROM portfolio_briefings WHERE user_id = ? ORDER BY created_at DESC LIMIT 1", (user_id,)))
+    if not row:
+        return None
+    try:
+        out = json.loads(vault.open_(dk, row["payload"], "brief:{}:{}".format(user_id, row["key"])))
+    except Exception:                                           # noqa: BLE001
+        return None
+    return dict(out, facts_key=row["key"], written_at=row["created_at"])
+
+
 # ------------------------------------------------------------ link states
 #
 # The hosted portal sends the browser back to /api/brokerage/callback. The
@@ -418,6 +457,8 @@ def purge_local(user_id: str) -> Optional[Dict[str, Any]]:
     row = link(user_id)
     db.execute_many([
         ("DELETE FROM brokerage_snapshots WHERE user_id = ?", (user_id,)),
+        ("DELETE FROM portfolio_alerts WHERE user_id = ?", (user_id,)),
+        ("DELETE FROM portfolio_briefings WHERE user_id = ?", (user_id,)),
         ("DELETE FROM brokerage_connections WHERE user_id = ?", (user_id,)),
         ("DELETE FROM brokerage_link_states WHERE user_id = ?", (user_id,)),
         ("DELETE FROM brokerage_users WHERE user_id = ?", (user_id,)),

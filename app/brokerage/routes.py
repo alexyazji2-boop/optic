@@ -361,9 +361,16 @@ async def background_loop(interval: int = 1800) -> None:
     not stop the others."""
     await asyncio.sleep(60)
     while True:
-        for step in (service.process_purges, service.enforce_lapses, service.auto_sync_due):
+        for step in (service.process_purges, service.enforce_lapses, service.auto_sync_due, _alerts_step):
             try:
                 await run_in_threadpool(step)
             except Exception as exc:                            # noqa: BLE001
                 log.warning("brokerage background step %s failed: %s", step.__name__, type(exc).__name__)
         await asyncio.sleep(interval)
+
+
+def _alerts_step() -> int:
+    """Portfolio alerts for linked readers, after the day's syncs."""
+    from ..auth import mailer
+    from . import workspace
+    return workspace.alerts_due(send=mailer.send, link="{}/#/brokerage/events".format(runtime.base_url().rstrip("/")))

@@ -864,6 +864,49 @@ MIGRATION_15 = [
 ]
 
 
+# The Brokerage workspace's own state (2026-10-15).
+# - Theses gain a horizon and the assumptions the reader is relying on. The
+#   Dossier and the workspace share the one row per reader and symbol.
+# - Portfolio alerts and the written briefing are derived from holdings, so
+#   their text is sealed with the reader's brokerage data key like the
+#   holdings themselves, and they go when brokerage data is deleted. The
+#   dedupe key is a hash, never a symbol.
+MIGRATION_16 = [
+    "ALTER TABLE theses ADD COLUMN horizon TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE theses ADD COLUMN assumptions TEXT NOT NULL DEFAULT ''",
+    """
+    CREATE TABLE IF NOT EXISTS portfolio_alert_settings (
+        user_id     TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+        settings    TEXT NOT NULL DEFAULT '{}',
+        updated_at  TEXT NOT NULL
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS portfolio_alerts (
+        id          TEXT PRIMARY KEY,
+        user_id     TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        kind        TEXT NOT NULL,
+        dedupe_key  TEXT NOT NULL,
+        payload     BLOB NOT NULL,
+        created_at  TEXT NOT NULL,
+        seen_at     TEXT,
+        emailed_at  TEXT
+    )
+    """,
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_palerts_dedupe ON portfolio_alerts(user_id, dedupe_key)",
+    "CREATE INDEX IF NOT EXISTS idx_palerts_user ON portfolio_alerts(user_id, created_at)",
+    """
+    CREATE TABLE IF NOT EXISTS portfolio_briefings (
+        user_id     TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        key         TEXT NOT NULL,
+        payload     BLOB NOT NULL,
+        created_at  TEXT NOT NULL,
+        PRIMARY KEY (user_id, key)
+    )
+    """,
+]
+
+
 MIGRATIONS: List[Tuple[int, str, List[str]]] = [
     (1, "accounts", MIGRATION_1),
     (2, "oauth_pkce", MIGRATION_2),
@@ -880,6 +923,7 @@ MIGRATIONS: List[Tuple[int, str, List[str]]] = [
     (13, "valuation_models", MIGRATION_13),
     (14, "brokerage_account_nickname", MIGRATION_14),
     (15, "brokerage_history", MIGRATION_15),
+    (16, "brokerage_workspace", MIGRATION_16),
 ]
 
 

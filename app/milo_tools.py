@@ -169,8 +169,29 @@ SPECS: List[Dict[str, Any]] = [
                         "anyone else's lists; a guest has none stored."),
         "input_schema": {"type": "object", "properties": {}, "additionalProperties": False},
     },
+    {
+        "name": "get_my_portfolio",
+        "description": ("The signed-in reader's own linked brokerage portfolio, read-only, for the accounts they "
+                        "count (or the account they narrowed the Brokerage page to): `summary` (holdings, weights, "
+                        "totals, concentration), `exposure` (sectors, issuer countries, pricing currencies and "
+                        "companies held directly and through funds, with look-through coverage), `events` (their "
+                        "earnings, ex-dividend dates and option expiries, confirmed or estimated), `performance` "
+                        "(time- and money-weighted returns, deposits and withdrawals, income, against a benchmark, "
+                        "with the history it rests on), `scorecard` (diversification, financial quality, valuation, "
+                        "volatility, event exposure, each with coverage), `options` (Greeks and expiry risk of their "
+                        "option positions) or `briefing` (measured moves today and since the last sync, with "
+                        "headlines matched by timing only). Call it when the reader asks about their own "
+                        "portfolio, holdings, accounts, exposure, performance or upcoming events and CONTEXT has no "
+                        "`brokerage_portfolio` or lacks the part needed. It never returns anyone else's data; "
+                        "describe it, never advise trades."),
+        "input_schema": {"type": "object", "properties": {
+            "part": {"type": "string", "enum": ["summary", "exposure", "events", "performance", "scorecard",
+                                                 "options", "briefing"]}},
+            "required": ["part"], "additionalProperties": False},
+    },
 ]
 TOOL_NAMES = [s["name"] for s in SPECS]
+PORTFOLIO_PARTS = ("summary", "exposure", "events", "performance", "scorecard", "options", "briefing")
 
 
 def definitions() -> List[Dict[str, Any]]:
@@ -225,6 +246,11 @@ def validate(name: str, raw: Any) -> Dict[str, Any]:
         out["tickers"] = list(dict.fromkeys(_ticker(t) for t in tks))
         if len(out["tickers"]) < 2:
             raise InvalidInput("tickers must name at least two different symbols.")
+    if name == "get_my_portfolio":
+        part = args.get("part")
+        if part not in PORTFOLIO_PARTS:
+            raise InvalidInput("part must be one of {}.".format(", ".join(PORTFOLIO_PARTS)))
+        out["part"] = part
     if name == "screen_stocks":
         req = re.sub(r"\s+", " ", str(args.get("request") or "")).strip()
         if not req or len(req) > 200:
@@ -249,6 +275,7 @@ def status_words(name: str, args: Dict[str, Any]) -> str:
         "get_assessment": "Running Optic's framework on {}".format(t),
         "screen_stocks": "Screening stocks",
         "get_my_watchlists": "Reading your watchlists",
+        "get_my_portfolio": "Reading your linked portfolio ({})".format(args.get("part") or "summary"),
     }.get(name, "Looking that up")
 
 
@@ -506,7 +533,9 @@ class Record:
                 "get_fundamentals": "long-term model", "get_valuation": "fair-value model",
                 "get_earnings": "earnings panel", "get_news": "news", "get_market": "market read",
                 "compare": "comparison", "get_assessment": "research framework",
-                "screen_stocks": "screener", "get_my_watchlists": "your watchlists"}.get(self.tool, self.tool)
+                "screen_stocks": "screener", "get_my_watchlists": "your watchlists",
+                "get_my_portfolio": "your portfolio ({})".format(self.args.get("part") or "summary")
+                }.get(self.tool, self.tool)
         return "{} {}".format(t, name).strip()
 
     def public(self) -> Dict[str, Any]:

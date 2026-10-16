@@ -36,7 +36,7 @@ import os
 import threading
 from dataclasses import asdict
 from datetime import date, datetime, timedelta, timezone
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from .. import db, runtime, vault
 from ..auth import admin as auth_admin
@@ -854,15 +854,34 @@ def handle_webhook(event: Dict[str, Any]) -> str:
 # ------------------------------------------------------------------- reading
 
 
+def scoped(user_id: str, account_ids: Optional[List[str]] = None) -> Tuple[List[Dict[str, Any]], List[str]]:
+    """The reader's accounts with `selected` set to the scope: the accounts
+    they ticked in Connections, or the subset of their own accounts the
+    workspace asked for. Ids that are not this reader's are ignored, never
+    an error that would confirm they exist."""
+    accts = _accounts_with_payloads(user_id)
+    own = {a["id"] for a in accts}
+    chosen = [i for i in (account_ids or []) if i in own]
+    if not chosen:
+        chosen = [a["id"] for a in accts if a.get("selected")]
+    return [dict(a, selected=a["id"] in chosen) for a in accts], chosen
+
+
 def overview(user: Dict[str, Any], sector_of: Callable = lambda s: None,
              earnings_of: Callable = lambda s: None, optic_price: Callable = lambda s: None,
-             fx_to_usd: Callable = lambda c: None) -> Dict[str, Any]:
+             fx_to_usd: Callable = lambda c: None, account_ids: Optional[List[str]] = None) -> Dict[str, Any]:
     uid = user["id"]
     snaps = store.recent_snapshots(uid, 2)
     previous = snaps[1] if len(snaps) > 1 else None
-    built = portfolio.build(_accounts_with_payloads(uid), sector_of=sector_of, earnings_of=earnings_of,
+    accts, chosen = scoped(uid, account_ids)
+    if account_ids and previous is not None:
+        # The stored "previous" covers the accounts selected at the time; a
+        # narrower scope compares against that snapshot cut to the scope.
+        previous = portfolio.drop_accounts(previous, [a["id"] for a in accts if a["id"] not in chosen]) or previous
+    built = portfolio.build(accts, sector_of=sector_of, earnings_of=earnings_of,
                             optic_price=optic_price, fx_to_usd=fx_to_usd, previous=previous)
     built.pop("summary", None)
+    built["scope"] = chosen
     return built
 
 
@@ -885,13 +904,14 @@ def connections_payload(user: Dict[str, Any]) -> List[Dict[str, Any]]:
     return out
 
 
-def milo_context(user: Dict[str, Any], **lookups: Callable) -> Optional[Dict[str, Any]]:
+def milo_context(user: Dict[str, Any], account_ids: Optional[List[str]] = None,
+                 **lookups: Callable) -> Optional[Dict[str, Any]]:
     """The signed-in reader's linked portfolio, compact, for Milo. Built on the
     server from the reader's own rows; nothing the browser sends can widen it.
     None when there is nothing linked."""
     if not store.link(user["id"]) or not store.accounts(user["id"]):
         return None
-    full = overview(user, **lookups)
+    full = overview(user, account_ids=account_ids, **lookups)
     conns = connections_payload(user)
     return {
         "source": "Read-only brokerage data relayed by the aggregator from the reader's broker, "
@@ -922,7 +942,8 @@ def milo_context(user: Dict[str, Any], **lookups: Callable) -> Optional[Dict[str
             "price_checks": full["price_checks"],
         },
         "caveats": full["notes"],
-        "not_supplied": "No transactions, realised gains, dividends, tax lots, greeks or live prices "
-                        "come through this connection. broker_as_of is when the broker last reported; "
-                        "last_sync_at is when Optic fetched it.",
+        "not_supplied": "This block has no transactions, returns, realised gains, tax lots, greeks or live "
+                        "prices: returns, deposits, withdrawals and dividends are in get_my_portfolio's "
+                        "performance part, greeks in its options part. broker_as_of is when the broker last "
+                        "reported; last_sync_at is when Optic fetched it.",
     }
