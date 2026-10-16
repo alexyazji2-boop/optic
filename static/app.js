@@ -13632,8 +13632,13 @@ function renderSwing(d) {
    * read the same judgement twice. Here it is one line with the way back to
    * it, and the tab leads with what it is for: the setup, what the options
    * are saying, then the levels and the inputs. */
+  /* Key Stats under the price, as every other facet has them under the
+   * header's price. Prepended above the price card, the volume and the
+   * session's high and low led a page whose card repeats both one panel
+   * down (launch audit, 2026-10-16). */
   const html = `
   ${renderPriceHead(d, extQ)}
+  ${keyStatsHTML(d.quote, { view: 'swing', short: (d.company || {}).short_interest })}
   ${renderOptionsPricing(d)}
   ${renderOptionsPlain(d)}
   ${renderPulseLine(d)}
@@ -14261,8 +14266,7 @@ function renderSwing(d) {
    * which is the part that is not duplicated. Every other facet (news,
    * financials, overview, earnings, long) has no px-head and keeps the full
    * header, so nothing else changes. */
-  views.swing.innerHTML = securityHeader('swing', { compact: true })
-    + keyStatsHTML(d.quote, { view: 'swing', short: (d.company || {}).short_interest }) + html;
+  views.swing.innerHTML = securityHeader('swing', { compact: true }) + html;
   orderAssetPageForPhone();
   watchPriceCardForStrip();
   // The research table and position builder have their own requests; a
