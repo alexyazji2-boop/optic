@@ -279,7 +279,10 @@
   async function load(force) {
     const sym = STATE.ticker;
     if (!sym) return;
-    if (VAL.data[sym] && !force) { paint(sym); return; }
+    // A failed read is shown, not kept as the answer: the next load asks again
+    // (it was cached as {available:false}, so Try again never retried until a
+    // reload; launch audit, 2026-10-16).
+    if (VAL.data[sym] && !VAL.data[sym].failed && !force) { paint(sym); return; }
     if (VAL.loading[sym] && !force) { paint(sym); return; }   // already on its way; it paints when it lands
     VAL.loading[sym] = true;
     paint(sym);
@@ -294,7 +297,7 @@
       // (a supplied capex figure is what lets them run).
       if (edited && fresh.available) await runNow(sym);
     } catch (err) {
-      VAL.data[sym] = { available: false, reason: err.message };
+      VAL.data[sym] = { available: false, failed: true, reason: err.message };
     }
     VAL.loading[sym] = false;
     if (STATE.ticker !== sym) return;
