@@ -46506,7 +46506,8 @@ async function brokerageAction(evt) {
       ok: 'Synced.', partial: 'Synced, but some data did not arrive.', expired: 'Your broker needs you to reconnect.',
       outage: 'The provider did not respond. Showing the last good data.', busy: 'A sync is already running.',
       paused: 'Syncing is paused because the plan ended.', unsupported: 'This account is not supported.', error: 'The sync failed.' };
-    toast(r.ok ? (words[r.data.result] || 'Done.') : ((r.data && r.data.detail) || 'Sync failed.'), r.ok && ['ok', 'partial', 'requested'].includes(r.data.result) ? 'good' : 'bad');
+    // A server sentence wins: a refused refresh reads the provider's copy and says so.
+    toast(r.ok ? (r.data.message || words[r.data.result] || 'Done.') : ((r.data && r.data.detail) || 'Sync failed.'), r.ok && ['ok', 'partial', 'requested'].includes(r.data.result) ? 'good' : 'bad');
     loadBrokerage(true);
     return true;
   }

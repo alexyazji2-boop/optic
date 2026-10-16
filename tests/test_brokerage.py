@@ -26,7 +26,7 @@ from app import db, vault
 from app.auth import config, store as auth_store
 from app.brokerage import portfolio, service, store
 from app.brokerage import routes as broute
-from app.brokerage.providers import ProviderError, SandboxProvider
+from app.brokerage.providers import ProviderError, RefreshUnavailable, SandboxProvider
 
 GOOD = "tungsten-carbide-9"
 KEY = base64.urlsafe_b64encode(b"k" * 32).decode()
@@ -760,6 +760,26 @@ def test_refused_refresh_does_not_spend_the_allowance():
     assert c.post("/api/brokerage/connections/{}/sync".format(conn["id"])).status_code == 424
     del prov.refresh_connection
     assert c.post("/api/brokerage/connections/{}/sync".format(conn["id"])).status_code == 200
+
+
+def test_a_refresh_the_plan_refuses_reads_the_providers_copy_instead():
+    # SnapTrade's free key has no on-demand refresh (402). "Sync now" then
+    # reads what SnapTrade already holds, says so, and spends the allowance.
+    c, user = reader()
+    paid(user)
+    link(c)
+    prov = service.provider()
+
+    def refuse(u, s, cid):
+        raise RefreshUnavailable("SnapTrade refused the request (402): refresh or plan not available")
+    prov.refresh_connection = refuse
+    conn = store.connections(user["id"])[0]
+    r = c.post("/api/brokerage/connections/{}/sync".format(conn["id"]))
+    del prov.refresh_connection
+    assert r.status_code == 200
+    assert r.json()["result"] == "ok" and "latest copy SnapTrade holds" in r.json()["message"]
+    # The one manual sync the paid plan allows a day was spent on it.
+    assert c.post("/api/brokerage/connections/{}/sync".format(conn["id"])).status_code == 429
 
 
 def test_purge_treats_not_found_as_done_and_stops_retrying_forever(monkeypatch):

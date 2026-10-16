@@ -47,7 +47,8 @@ from typing import Any, Dict, List, Optional
 import requests
 
 from .providers import (Account, AuthExpired, Cash, Connection, Holdings, NotFoundAtProvider, OptionPosition,
-                        Position, Provider, ProviderError, ProviderOutage, UnsupportedBroker, WebhookRejected)
+                        Position, Provider, ProviderError, ProviderOutage, RefreshUnavailable, UnsupportedBroker,
+                        WebhookRejected)
 
 BASE_URL = "https://api.snaptrade.com"
 TIMEOUT = 20
@@ -137,7 +138,8 @@ class SnapTradeProvider(Provider):
         # disabled connection but can also mean Optic's own SnapTrade plan, so
         # it is a provider-side error, never "sign in again" for every reader.
         if resp.status_code == 402:
-            raise ProviderError("SnapTrade refused the request (402): refresh or plan not available")
+            raise RefreshUnavailable("SnapTrade refused the request (402{}): refresh or plan not available"
+                                     .format(", " + said if said else ""))
         if resp.status_code == 401:
             # SnapTrade's code tells a wrong client id (1083) from a consumer key
             # that does not match it (1076), which is all the owner can act on.
@@ -231,17 +233,26 @@ class SnapTradeProvider(Provider):
         for a in raw:
             if a.get("kind") and a.get("kind") != "investment":
                 continue
-            total = ((a.get("balance") or {}).get("total") or {})
-            sync = ((a.get("sync_status") or {}).get("holdings") or {})
+            # The current schema (InvestmentAccount, openapi 2026-10-15) names the
+            # account display_name, masks the number itself and gives the total as
+            # net_value, with sync_status.positions a bare timestamp. The older
+            # name / number / balance.total / sync_status.holdings shape is still
+            # read where a response carries it. The first live link (Robinhood,
+            # 2026-10-15) had none of the old fields: every account was "Account".
+            total = a.get("net_value") or ((a.get("balance") or {}).get("total") or {})
+            sync = a.get("sync_status") or {}
+            held = sync.get("holdings") if isinstance(sync.get("holdings"), dict) else {}
+            positions_at = sync.get("positions") if isinstance(sync.get("positions"), str) else None
             out.append(Account(
                 id=str(a.get("id")),
-                connection_id=str(a.get("brokerage_authorization") or a.get("connection_id") or ""),
-                name=a.get("name") or "Account", number_mask=_mask(a.get("number")),
+                connection_id=str(a.get("connection_id") or a.get("brokerage_authorization") or ""),
+                name=a.get("display_name") or a.get("name") or "Account",
+                number_mask=_mask(a.get("masked_account_number") or a.get("number")),
                 institution=a.get("institution_name") or "", account_type=(a.get("meta") or {}).get("type")
-                or a.get("raw_type"), currency=total.get("currency") or None,
+                or a.get("raw_type"), currency=_ccy(total.get("currency")),
                 total_value=_num(total.get("amount")),
-                broker_as_of=sync.get("last_successful_sync"),
-                initial_sync_done=sync.get("initial_sync_completed") is not False))
+                broker_as_of=positions_at or held.get("last_successful_sync"),
+                initial_sync_done=held.get("initial_sync_completed") is not False))
         return out
 
     def holdings(self, provider_user_id, secret, account_id) -> Holdings:

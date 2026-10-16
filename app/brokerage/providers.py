@@ -41,6 +41,12 @@ class ProviderOutage(ProviderError):
     keep showing the last good data with its age."""
 
 
+class RefreshUnavailable(ProviderError):
+    """The provider will not refresh from the broker on demand (SnapTrade's
+    402: the plan has no paid refresh, as on the free key, or the connection
+    is disabled). The copy the provider already holds can still be read."""
+
+
 class UnsupportedBroker(ProviderError):
     """The broker, or this account type at the broker, is not available."""
 

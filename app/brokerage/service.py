@@ -41,7 +41,7 @@ from ..auth import admin as auth_admin
 from ..auth import store as auth_store
 from . import portfolio, store
 from .providers import (AuthExpired, NotFoundAtProvider, Provider, ProviderError, ProviderOutage,
-                        SandboxProvider, UnsupportedBroker)
+                        RefreshUnavailable, SandboxProvider, UnsupportedBroker)
 
 log = logging.getLogger("optic.brokerage")
 
@@ -491,7 +491,17 @@ def request_refresh(user: Dict[str, Any], conn: Dict[str, Any]) -> Dict[str, Any
     creds = _credentials(user["id"])
     if not creds:
         return {"connection_id": conn["id"], "result": "error", "message": "Not linked."}
-    prov.refresh_connection(creds["provider_user_id"], creds["secret"], conn["provider_connection_id"])
+    try:
+        prov.refresh_connection(creds["provider_user_id"], creds["secret"], conn["provider_connection_id"])
+    except RefreshUnavailable:
+        # No on-demand refresh (SnapTrade's free key, or a disabled
+        # connection): read the copy the provider already holds. Its "as of"
+        # is the broker's own time, so it is not passed off as fresh (M3, M4).
+        out = sync_connection(user, conn, prov=prov, creds=creds)
+        if out.get("result") in ("ok", "partial"):
+            out["message"] = ("The broker can't be asked for a fresh copy right now, so Optic read the "
+                              "latest copy SnapTrade holds. Its time is shown as the broker's.")
+        return out
     store.set_connection(user["id"], conn["id"], last_attempt_at=db.utcnow())
     return {"connection_id": conn["id"], "result": "requested"}
 

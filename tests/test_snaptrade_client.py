@@ -156,6 +156,28 @@ def test_a_refusal_that_echoes_a_secret_does_not_repeat_it():
     assert "1012" in str(e.value)
 
 
+def test_accounts_all_reads_the_current_investment_account_fields():
+    # The shape the live Robinhood link returned (openapi InvestmentAccount,
+    # 2026-10-15): display_name, masked_account_number, net_value, and
+    # sync_status timestamps. None of the older fields are present.
+    p, _ = client({("GET", "/accounts/all"): (200, {"results": [
+        {"kind": "investment", "id": "a1", "connection_id": "c1", "display_name": "Investing",
+         "masked_account_number": "****8443", "raw_type": "INDIVIDUAL",
+         "net_value": {"amount": 84213.55, "currency": "USD"},
+         "sync_status": {"positions": "2026-10-16T01:14:00.000Z", "balances": "2026-10-16T01:14:00.000Z"}},
+        {"kind": "deposit", "id": "d1", "connection_id": "c1", "display_name": "Spending"}]})})
+    (acct,) = p.list_accounts("u", "s")
+    assert (acct.id, acct.connection_id, acct.name, acct.number_mask) == ("a1", "c1", "Investing", "..8443")
+    assert (acct.account_type, acct.currency, acct.total_value) == ("INDIVIDUAL", "USD", 84213.55)
+    assert acct.broker_as_of == "2026-10-16T01:14:00.000Z" and acct.initial_sync_done is True
+
+
+def test_a_refused_refresh_is_typed_so_the_copy_can_still_be_read():
+    p, _ = client({("POST", "/authorizations/c1/refresh"): (402, {"code": "1137", "detail": "Not on this plan"})})
+    with pytest.raises(snaptrade.RefreshUnavailable):
+        p.refresh_connection("u", "s", "c1")
+
+
 def test_accounts_all_maps_fields_and_skips_non_investment():
     p, _ = client({("GET", "/accounts/all"): (200, [
         {"id": "a1", "brokerage_authorization": "c1", "name": "Roth", "number": "12345678",
