@@ -51777,7 +51777,17 @@ function restoreReloadPlace() {
   mountPulseMarks();
   installScoutEvents();
   mountMobileTabs();
-  renderHome();
+  /* A deep link opens its own page without drawing Home first. Home was
+   * always rendered, then the route applied, so #/NVDA/options or #/read
+   * fired Home's six requests (/api/home and its desk-writing path among
+   * them) and painted Home before the page asked for (launch audit,
+   * 2026-10-16). Home renders when it is opened, through loadView. */
+  let bootPlace = null;
+  try { bootPlace = JSON.parse(sessionStorage.getItem(RELOAD_PLACE_KEY) || 'null'); } catch (e) { bootPlace = null; }
+  const bootRoute = parseRoute(location.hash);
+  const bootElsewhere = (bootPlace && bootPlace.view && bootPlace.view !== 'home')
+    || (!(bootPlace && bootPlace.view) && bootRoute && bootRoute.view !== 'home');
+  if (!bootElsewhere) renderHome();
   restoreReloadPlace();
   updateStatus();
   try {

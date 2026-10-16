@@ -58,4 +58,7 @@ def test_a_reload_from_the_notice_comes_back_to_the_same_place():
     assert "sessionStorage.removeItem(RELOAD_PLACE_KEY);" in restore, "once, not on every load"
     assert "if (place.ticker) loadTicker(place.ticker, place.view);" in restore
     boot = APP[APP.index("(async function boot() {"):]
-    assert "renderHome();\n  restoreReloadPlace();" in boot
+    # Home is drawn first only when the place is Home (2026-10-16): a deep link
+    # or a saved place opens its own page without Home's requests.
+    assert "if (!bootElsewhere) renderHome();\n  restoreReloadPlace();" in boot
+    assert "bootPlace.view !== 'home'" in boot and "bootRoute.view !== 'home'" in boot
