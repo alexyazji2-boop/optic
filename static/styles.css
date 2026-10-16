@@ -2342,8 +2342,12 @@ body.chat-resizing svg { pointer-events: none; }
   width: min(320px, calc(100% - 2 * var(--space-4)));
   display: flex; flex-direction: column; gap: var(--space-1);
   padding: var(--space-2);
-  background: var(--raised); border: 1px solid var(--border-strong); border-radius: var(--r-lg);
-  box-shadow: 0 12px 32px var(--shadow-cast);
+  /* Opaque. It was `--raised`, which is a 3% white tint for lifting a card
+     off the panel, not a surface: the menu showed the panel's text straight
+     through it (2026-10-15, "this shows when i click the market only
+     button"). The tooltip's surface and elevation, as a menu over content. */
+  background: var(--surface-2); border: 1px solid var(--border-strong); border-radius: var(--r-lg);
+  box-shadow: var(--elev-2);
 }
 .chat-ctx-opt {
   display: flex; flex-direction: column; align-items: flex-start; gap: 2px;
