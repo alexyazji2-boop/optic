@@ -869,7 +869,8 @@ def scoped(user_id: str, account_ids: Optional[List[str]] = None) -> Tuple[List[
 
 def overview(user: Dict[str, Any], sector_of: Callable = lambda s: None,
              earnings_of: Callable = lambda s: None, optic_price: Callable = lambda s: None,
-             fx_to_usd: Callable = lambda c: None, account_ids: Optional[List[str]] = None) -> Dict[str, Any]:
+             fx_to_usd: Callable = lambda c: None, account_ids: Optional[List[str]] = None,
+             industry_of: Callable = lambda s: None) -> Dict[str, Any]:
     uid = user["id"]
     snaps = store.recent_snapshots(uid, 2)
     previous = snaps[1] if len(snaps) > 1 else None
@@ -882,6 +883,15 @@ def overview(user: Dict[str, Any], sector_of: Callable = lambda s: None,
                             optic_price=optic_price, fx_to_usd=fx_to_usd, previous=previous)
     built.pop("summary", None)
     built["scope"] = chosen
+    # The industry beside the sector, for stocks: a sector label alone can read
+    # as a contradiction. Yahoo files Bloom Energy under Industrials
+    # (electrical equipment), and Milo told the owner "no energy" in the same
+    # answer that listed BE (2026-10-16). Same cached profile as the sector.
+    for h in [h for h in built.get("holdings") or [] if h.get("kind") == "equity" and h.get("symbol")][:25]:
+        try:
+            h["industry"] = industry_of(h["symbol"])
+        except Exception:                                       # noqa: BLE001
+            h["industry"] = None
     return built
 
 
@@ -933,7 +943,9 @@ def milo_context(user: Dict[str, Any], account_ids: Optional[List[str]] = None,
             "totals": full["totals"],
             "weights": [{"symbol": h.get("symbol"), "weight_pct": h.get("weight_pct"),
                          "market_value": h.get("market_value"), "unrealized_pl": h.get("unrealized_pl"),
-                         "sector": h.get("sector")} for h in full["holdings"][:60]],
+                         "sector": h.get("sector"), "industry": h.get("industry")} for h in full["holdings"][:60]],
+            "classification": "Sector and industry are Yahoo Finance's, close to GICS. A company's sector can differ "
+                              "from what its name suggests: Energy means oil, gas and coal producers and services.",
             "allocation": full["allocation"],
             "concentration": full["concentration"],
             "performance": full["performance"],

@@ -391,3 +391,22 @@ def test_options_risk_without_a_quote_says_so_rather_than_inventing_greeks(marke
     for p in o["positions"]:
         assert p["greeks_available"] is False and p["greeks_reason"]
         assert p["delta_shares"] is None
+
+
+
+def test_milo_gets_each_stocks_industry_and_the_rule_about_sector_names(monkeypatch):
+    """Milo told the owner "no energy" in the answer that listed Bloom Energy,
+    which Yahoo files under Industrials (2026-10-16). It now sees the industry
+    beside the sector and is told how to say it."""
+    from app import ai
+    from app.brokerage import routes as broute
+    c, user = reader()
+    paid(user)
+    link(c)
+    lk = dict(broute.LOOKUPS, industry_of=lambda s: {"AAPL": "Consumer Electronics"}.get(s))
+    block = service.milo_context(user, **lk)
+    aapl = next(w for w in block["calculated"]["weights"] if w["symbol"] == "AAPL")
+    assert aapl["industry"] == "Consumer Electronics" and aapl["sector"] == "Technology"
+    assert "Energy means oil, gas and coal" in block["calculated"]["classification"]
+    assert "Bloom Energy is filed under Industrials" in ai.FORMAT_PROMPT
+    assert "check every holding's name and industry" in ai.FORMAT_PROMPT

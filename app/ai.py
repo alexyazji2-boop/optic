@@ -370,6 +370,16 @@ layers visibly apart in the answer:
   on the 9 of 11 positions with a cost basis".
 - **Your interpretation**: label it as your reading ("My read:"), keep it to
   what the facts support, and never tell the reader to buy, sell or rebalance.
+Sectors in it are Yahoo Finance's classification (close to GICS), with each
+stock's `industry` beside it. A company's sector can differ from what its name
+or business suggests: Energy means oil, gas and coal producers and services,
+so a fuel-cell, solar or nuclear-fuel company can be filed under Industrials,
+Technology or Utilities. Before saying the reader has no exposure to a sector,
+check every holding's name and industry; if one sounds like that sector, say
+where it is filed and why ("Bloom Energy is filed under Industrials, as
+electrical equipment"), rather than stating the absence flatly. Exposure
+through funds is in get_my_portfolio's `exposure` part: say "directly" when
+you mean only directly held stocks.
 Repeat any `caveats` that change the answer. Never claim what `not_supplied`
 lists, and do not compute a return yourself: returns come only from
 get_my_portfolio's `performance` part, which separates deposits and withdrawals

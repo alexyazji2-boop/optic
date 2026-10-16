@@ -399,7 +399,7 @@ function bkwHoldingsHTML(d) {
   const rows = (d.holdings || []).map((h) => {
     const q = (d.quotes || {})[String(h.symbol || '').toUpperCase()] || {};
     return `<tr>
-      <td class="name"><b>${esc(h.symbol || '')}</b> <span class="bkw-meta">${esc(h.description || '')}</span></td>
+      <td class="name"><b>${esc(h.symbol || '')}</b> <span class="bkw-meta">${esc(h.description || '')}${h.sector ? ` · ${esc(h.sector)}${h.industry ? `, ${esc(h.industry)}` : ''}` : ''}</span></td>
       <td>${esc((h.accounts || []).join(', '))}</td>
       <td class="num">${esc(bkQty(h.quantity))}</td>
       <td class="num">${esc(bkMoney(h.price, h.currency))}</td>

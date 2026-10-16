@@ -7240,6 +7240,7 @@ def _fx_to_usd(ccy: str) -> Optional[float]:
 # for the price check, and an exchange rate.
 brokerage_routes.set_lookups(
     sector_of=lambda s: (YF_PROVIDER.profile(s) or {}).get("sector"),
+    industry_of=lambda s: (YF_PROVIDER.profile(s) or {}).get("industry"),
     earnings_of=YF_PROVIDER.earnings_date,
     optic_price=_broker_price,
     fx_to_usd=_fx_to_usd,
