@@ -104,5 +104,8 @@ def test_no_module_hardcodes_a_claude_model_id():
     tree = ast.parse((ROOT / "app/ai.py").read_text())
     line = {getattr(t, "id", None): n.lineno for n in ast.walk(tree)
             if isinstance(n, ast.Assign) for t in n.targets}
+    # TRIAL_MODELS (2026-10-16): models only the owner can ask one answer to use, while choosing a successor
+    # to PULSE_MODEL; main._model_trial gates them to admin accounts.
     assert found == ["ai.py:{} 'claude-opus-5-5'".format(line["MODEL"]),
-                     "ai.py:{} 'claude-sonnet-5'".format(line["PULSE_MODEL"])], found
+                     "ai.py:{} 'claude-sonnet-5'".format(line["PULSE_MODEL"]),
+                     "ai.py:{} 'claude-sonnet-5-5'".format(line["TRIAL_MODELS"])], found

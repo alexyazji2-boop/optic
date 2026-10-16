@@ -439,3 +439,23 @@ def test_the_overview_shows_value_now_and_refreshes_while_the_market_is_open():
     body = src[src.index("function bkwScheduleRefresh() {"):src.index("async function bkwLoadBriefing() {")]
     assert "isTapeLiveET()" in body and "document.hidden" in body and "bkwWantKey('overview') !== want" in body
     assert "addEventListener('visibilitychange'" in body
+
+
+def test_the_status_chip_says_the_brokerage_overview_refreshes():
+    import os
+    src = open(os.path.join(os.path.dirname(__file__), "..", "static", "app.js"), encoding="utf-8").read()
+    assert "(STATE.view === 'brokerage' && typeof bkwSection === 'function' && bkwSection() === 'overview' && isTapeLiveET())" in src
+
+
+def test_only_an_admin_can_try_another_model(monkeypatch):
+    import types
+    from app import ai
+    req = types.SimpleNamespace()
+    monkeypatch.setattr(main.auth_deps, "current_user", lambda request: {"id": "u", "email": "owner@example.com"})
+    monkeypatch.setattr(main.auth_admin, "is_admin", lambda user: True)
+    assert main._model_trial(req, {"model_trial": "claude-sonnet-5-5"}) == "claude-sonnet-5-5"
+    assert main._model_trial(req, {"model_trial": "claude-opus-5-5"}) is None          # not a trial model
+    assert main._model_trial(req, {}) is None
+    monkeypatch.setattr(main.auth_admin, "is_admin", lambda user: False)
+    assert main._model_trial(req, {"model_trial": "claude-sonnet-5-5"}) is None
+    assert ai.TRIAL_MODELS == ("claude-sonnet-5-5",)

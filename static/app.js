@@ -43238,7 +43238,11 @@ function liveIndicatorHTML(opts = {}) {
   }
   // Extended hours get the same pulse but their own label, so "live" never
   // implies regular-session liquidity.
-  const refreshing = AUTO_REFRESH_VIEWS.includes(STATE.view);
+  // The Brokerage Overview refreshes itself while the tape is live (brokerage.js bkwScheduleRefresh), so
+  // "snapshot, not refreshing" was untrue there (the brokerage session's catch, 2026-10-16). Its health is
+  // not REFRESH_HEALTH's, which stays undefined for that view, so no false "refresh failed" either.
+  const refreshing = AUTO_REFRESH_VIEWS.includes(STATE.view)
+    || (STATE.view === 'brokerage' && typeof bkwSection === 'function' && bkwSection() === 'overview' && isTapeLiveET());
   const health = REFRESH_HEALTH[STATE.view];
   if (refreshing && health && health.failures > 0) {
     const phaseName = (SESSION_LABEL[session] || cap(session)).split(' · ')[0];
