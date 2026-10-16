@@ -40453,6 +40453,12 @@ function deskWhen(iso) {
 function deskEditionHTML(served) {
   if (!served) return '';
   if (served.available !== true) {
+    /* Nothing for a reader when there is no edition. Production has never
+     * published one (/api/desk/editions empty, automatic editions off on
+     * 2026-10-16), so the Read opened every day on "No edition has been
+     * published yet. The next is due ... 8:15 am", a promise nothing was
+     * scheduled to keep. The owner still sees the reason and the slot. */
+    if (!isOwner()) return '';
     const next = (served.next || {}).at;
     return `<div class="panel de"><h2>Optic Desk</h2><p class="sub">${esc(served.reason || 'No edition yet.')}${
       next ? ` The next is due ${esc(stampIn(next, activeZone()))}.` : ''}</p></div>`;
