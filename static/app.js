@@ -4775,13 +4775,31 @@ const HOME_TODAY_ROWS = 2;
  * would collapse every open column under a reader every twenty seconds. */
 const homeTodayOpen = new Set();
 
+/* A released event's or a reported company's result, in words, with the
+ * agency's own headline and its link when it is today's. What it is compared
+ * against is said: the previous print, since consensus forecasts are licensed
+ * and not in Optic's data. */
+function homeResultHTML(res) {
+  if (!res) return '';
+  if (res.pending) return `<span class="cs-note-result is-pending">${esc(res.text || '')}</span> `;
+  const headline = res.headline
+    ? ` <span class="cs-note-src">${esc(res.headline_source || 'Agency')}: \u201c${esc(res.headline)}\u201d${
+      res.headline_url ? ` <a href="${esc(res.headline_url)}" target="_blank" rel="noopener">Release</a>` : ''}</span>`
+    : '';
+  return `<span class="cs-note-result"${res.forecast_note ? ` title="${esc(res.forecast_note)}"` : ''}>${
+    esc(res.text || '')}</span>${headline} `;
+}
+
 function homeTodayRow(r) {
   const impact = PRI_IMPACT_CLASS[r.impact] || 'low';
   /* `short` is the terse form -- "COT" for the Commitments of Traders report --
    * and it is empty on most rows. The title is the fallback rather than the
    * other way round, because a blank cell reads as a fault. */
-  const when = (r.when || r.time || '').trim();
   const what = r.title || r.short || '';
+  // "GS reported Tuesday" already says when, as the strip's note does.
+  let when = (r.when || r.time || '').trim();
+  if (when && what.toLowerCase().includes(when.toLowerCase())) when = '';
+  const res = r.result && !r.result.pending ? r.result : null;
   const why = String(r.why || '').trim();
   /* The row is truncated to one line on purpose -- a digest is scanned down a
    * column and a wrapping row breaks that -- so there has to be a way to read
@@ -4800,14 +4818,16 @@ function homeTodayRow(r) {
    * and the stylesheet's comment is true for the first time. */
   const head = `<span class="cal-impact ${impact}">${esc(r.impact || 'low')}</span>
     <span class="ht-what" title="${esc(what)}">${esc(what)}</span>
+    ${res && res.short ? `<span class="ht-res">${esc(res.short)}</span>` : ''}
     ${when ? `<span class="ht-when">${esc(when)}</span>` : ''}`;
   // Nothing to reveal and nothing cut off: a plain row rather than a control
   // that opens onto nothing. A dead control does not error, it takes the click
   // and does nothing, which reads as a slow app.
-  if (!why) return `<li class="ht-row-item"><div class="ht-row">${head}</div></li>`;
+  if (!why && !r.result) return `<li class="ht-row-item"><div class="ht-row">${head}</div></li>`;
   return `<li class="ht-row-item"><details class="ht-det">
     <summary class="ht-row">${head}</summary>
-    <p class="ht-why">${esc(why)}</p>
+    <p class="ht-why">${r.result ? homeResultHTML(r.result) : ''}${
+      res && why ? `<span class="cs-note-why">${esc(why)}</span>` : esc(why)}</p>
   </details></li>`;
 }
 
@@ -4920,10 +4940,17 @@ function catalystPlacement(p, nowIso) {
       : (Number.isFinite(row.days_away) ? row.days_away : null);
     const day = days.find((x) => x.k === k);
     if (day) {
-      // A release already out says "Out" on the strip, where "Out at 2:00 PM
-      // ET" cut off the cell; the list below keeps the time.
-      day.items.push({ kind, col: kind === 'event' ? 'events' : 'earnings', title: row.short || row.title,
-        time: row.released ? 'Out' : row.time, impact: row.impact, row });
+      // A release already out says what it printed ("+1.3%", "Beat"), or
+      // "Out" while the figures are still on their way: "Out at 2:00 PM ET" cut
+      // off the cell, and the list below keeps the time. The figure replaced
+      // the bare "Out" on 2026-10-15: "if the results are out, the results
+      // should be shown here".
+      const res = row.result && !row.result.pending ? row.result.short : null;
+      // A report goes by its ticker: the cell is already headed with the day,
+      // and "TSM reported Thursday" cut its own "Beat" off.
+      day.items.push({ kind, col: kind === 'event' ? 'events' : 'earnings',
+        title: row.short || (kind === 'earnings' && row.ticker) || row.title,
+        time: res || (row.released ? 'Out' : row.time), result: !!res, impact: row.impact, row });
     }
   };
   ((cols.events || {}).rows || []).forEach((r) => place(r, 'event'));
@@ -4957,11 +4984,11 @@ function catalystStripHTML(p, nowIso) {
   let openItem = null;
   const item = (it) => {
     const inner = `${esc(it.title)}${
-      it.time ? `<span class="cs-time">${esc(it.time)}</span>` : ''}${
+      it.time ? `<span class="cs-time${it.result ? ' is-result' : ''}">${esc(it.time)}</span>` : ''}${
       it.impact === 'high' ? '<span class="sr-only"> (high impact)</span>' : ''}`;
     const cls = `cs-item is-${esc(it.kind)} impact-${esc(it.impact || 'low')}`;
     const tip = `${esc(it.title)}${it.time ? ' · ' + esc(it.time) : ''}`;
-    if (!String(it.row.why || '').trim()) return `<li class="${cls}" title="${tip}">${inner}</li>`;
+    if (!String(it.row.why || '').trim() && !it.row.result) return `<li class="${cls}" title="${tip}">${inner}</li>`;
     const open = catalystNoteOpen === it.title;
     if (open) openItem = it;
     return `<li class="${cls} has-note${open ? ' is-open' : ''}"><button type="button"
@@ -5011,8 +5038,11 @@ function catalystNoteHTML(it) {
   // read as a stutter.
   let when = String(row.when || row.time || '').trim();
   if (when && title.toLowerCase().includes(when.toLowerCase())) when = '';
+  const res = row.result || null;
+  const why = String(row.why || '').trim();
   return `<p class="cs-note" id="cs-note"><strong>${esc(title)}</strong>${
-    when ? `<span class="cs-note-when">${esc(when)}</span>` : ''} ${esc(String(row.why || '').trim())}</p>`;
+    when ? `<span class="cs-note-when">${esc(when)}</span>` : ''} ${res ? homeResultHTML(res) : ''}${
+    res && !res.pending && why ? `<span class="cs-note-why">${esc(why)}</span>` : esc(why)}</p>`;
 }
 
 /* Not through mountPanel: that falls back to re-rendering Optic's Read when its

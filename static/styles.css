@@ -15819,6 +15819,7 @@ main { padding-top: var(--space-7); }
   color: var(--ink);
 }
 .ht-when { flex: none; color: var(--ink-muted); font-variant-numeric: tabular-nums; }
+.ht-res { flex: none; color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
 /* One step smaller than the rest: this one sits inside a digest row rather
    than under a panel. */
 .ht-rest { margin: var(--space-1) 0 0; font-size: var(--t-caption); }
@@ -18634,6 +18635,8 @@ details.exact > .table-scroll, details.exact > table { margin-top: var(--space-2
 .cs-item.impact-high { border-left-color: var(--warn); font-weight: 600; }
 .cs-item.is-earnings { border-left-style: dashed; }
 .cs-time { margin-left: var(--space-1); color: var(--ink-muted); }
+/* A released figure reads as data, not as a time: ink, tabular. */
+.cs-time.is-result { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
 .cs-none { font-size: var(--t-caption); color: var(--ink-muted); }
 .cs-more { margin: 0; padding-left: var(--space-2); }
 
@@ -18723,6 +18726,13 @@ table.heat td.name { text-align: left; font-weight: 500; }
 .cs-note[hidden] { display: none; }
 .cs-note strong { color: var(--ink); font-weight: 600; }
 .cs-note-when { margin: 0 var(--space-2); color: var(--ink-muted); font-size: var(--t-caption); }
+/* Out: the figures lead, the agency's headline backs them, and the standing
+   description of the report drops to a muted line under them. */
+.cs-note-result { color: var(--ink); font-variant-numeric: tabular-nums; }
+.cs-note-result.is-pending { color: var(--ink-2); }
+.cs-note-src { color: var(--ink-2); }
+.cs-note-src a { color: var(--brand); }
+.cs-note-why { display: block; margin-top: var(--space-1); color: var(--ink-muted); font-size: var(--t-caption); }
 
 /* The desk's takeaway leads it, a step up from the paragraphs under it. */
 .md .md-overall { font-size: var(--t-lead); line-height: 1.5; margin-bottom: var(--space-3); }

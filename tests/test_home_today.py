@@ -334,7 +334,7 @@ def test_a_row_with_nothing_to_reveal_is_not_a_control():
     """A dead control does not error; it takes the click and does nothing,
     which reads as a slow app rather than a missing feature."""
     fn = APP.split("function homeTodayRow(r) {", 1)[1].split("\n}", 1)[0]
-    assert "if (!why) return" in fn
+    assert "if (!why && !r.result) return" in fn, "a result is something to reveal"
     assert '<div class="ht-row">' in fn, "a plain row, not a summary"
 
 
@@ -435,7 +435,7 @@ def test_a_strip_item_opens_its_reason_under_the_strip(rendered):
     assert 'aria-controls="cs-note"' in html and 'aria-expanded="false"' in html
     assert '<p class="cs-note" id="cs-note" hidden></p>' in html, "closed until asked"
     fn = APP.split("function catalystNoteHTML(it) {", 1)[1].split("\n}\n", 1)[0]
-    assert "esc(String(row.why || '').trim())" in fn
+    assert "const why = String(row.why || '').trim();" in fn and "esc(why)" in fn
     click = APP.split("const csNote = evt.target.closest('[data-cs-note]');", 1)[1]
     click = click[:click.index("return;")]
     assert "catalystNoteOpen = catalystNoteOpen === key ? null : key;" in click

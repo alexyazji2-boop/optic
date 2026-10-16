@@ -117,7 +117,8 @@ def test_home_keeps_minutes_that_came_out_earlier_today(monkeypatch):
 
 
 def test_the_strip_says_out_and_the_desk_does_not_take_minutes_for_a_meeting():
-    assert "time: row.released ? 'Out' : row.time" in APP
+    # Out, or what it printed once the figures are in (tests/test_home_results.py).
+    assert "time: res || (row.released ? 'Out' : row.time)" in APP
     block = MAIN[MAIN.index("for row in ((events_out or {}).get(\"events\") or []):"):]
     block = block[:block.index("break")]
     assert '"minutes" not in title' in block, "the rate path is priced to the decision"
