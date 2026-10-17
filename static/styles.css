@@ -11609,11 +11609,25 @@ body.cp-open { overflow: hidden; }
   border: 0;
   cursor: pointer;
   border-radius: var(--r-sm);
+  transition: background-color var(--dur-ui) var(--ease-ui),
+              box-shadow var(--dur-ui) var(--ease-ui);
 }
-.wl-open:hover { background: var(--surface-2); }
+/* Robinhood and Coinbase make a watchlist row feel like a live, tappable thing:
+   the row you are on takes a single accent edge rather than a full fill. The
+   same gold the rail, palette and home moves use, so the whole app marks
+   "here" one way. */
+.wl-open:hover { background: var(--surface-2); box-shadow: inset 2px 0 0 var(--btn-primary); }
 .wl-open:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
 .wl-sym { font-weight: 600; font-size: var(--t-body); color: var(--ink); }
-.wl-price, .wl-chg { font-variant-numeric: tabular-nums; font-size: var(--t-small); }
+/* Right-aligned so the decimals line up down the column, which is the
+   difference between a watchlist and an admin table. The change carries a touch
+   more weight because it is the reading the eye scans for. */
+.wl-price, .wl-chg {
+  font-variant-numeric: tabular-nums;
+  font-size: var(--t-small);
+  text-align: right;
+}
+.wl-chg { font-weight: 600; }
 .wl-price { color: var(--ink-2); }
 .wl-changed { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* The what-changed line is the reason this is a feed and not a quote table, so
@@ -11640,6 +11654,11 @@ body.cp-open { overflow: hidden; }
    the 30-session sparkline took a column: nth-child(5) right-aligned "What
    changed" instead, 530px from the text under it (2026-10-16). */
 .wv-cols span:nth-child(6) { text-align: right; }
+/* Price and change are right-aligned in the rows now, so their headers follow
+   -- the same fix the signal column already needed. Price is the 2nd span and
+   Today (the change) the 3rd. */
+.wv-cols span:nth-child(2),
+.wv-cols span:nth-child(3) { text-align: right; }
 
 /* The layout follows the list's own width, not the window's. With Pulse open
    the window is still desktop-wide while the home page's card is a third of
