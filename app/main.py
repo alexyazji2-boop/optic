@@ -4649,6 +4649,88 @@ def intraday_view_start(stamps: List[Any], period: str) -> int:
     return next((i for i, s in enumerate(stamps) if s >= cutoff), 0)
 
 
+# The feed's hour bars start at the open, so a US session's run 9:30 to 10:30,
+# 10:30 to 11:30 and on: the bar a tooltip calls 12:30 covers 12:30 to 1:30,
+# half an hour off every gridline on a clock axis. Its half-hour bars do start
+# on the clock (measured on NVDA: 9:30, 10:00, 10:30 ... 15:30), so the 1h rung
+# is built from those instead: 9:30 to 10:00 on its own, then 10:00 to 11:00
+# through 3:00 to 4:00. Seven bars a session either way, so a window holds as
+# many as before. Half-hour bars go back 60 days (30m over 3mo is refused), so
+# a longer window keeps the feed's own hours for the sessions before that,
+# which are the only hourly bars there are for them.
+HALF_HOUR_DAYS = 60
+
+
+def clock_hours(frame: pd.DataFrame) -> pd.DataFrame:
+    """Half-hour bars combined into clock hours, never across a session edge.
+
+    A bar that starts at the open or the close begins its own hour, so 9:00
+    pre-market and 9:30 regular trade are two bars, as they were on the feed's
+    own hours. Where the session opens is the feed's own metadata for an
+    extended-hours frame; for a regular one, the minute each day's first bar
+    starts, which is 9:30 for a US stock and midnight for a coin, whose hours
+    then fall on the clock with nothing to split. An open, high or low missing
+    from either half is missing from the hour, as the chart leaves out a
+    candle it has no value for rather than drawing a guessed one."""
+    if frame is None or frame.empty:
+        return frame
+    idx = frame.index
+    minutes = pd.Series(idx.hour * 60 + idx.minute, index=idx)
+    if frame.attrs.get("has_prepost"):
+        edges = list(frame.attrs.get("regular_minutes") or (570, 960))
+    else:
+        edges = [int(minutes.groupby(idx.date).min().mode().iloc[0])]
+    start = (minutes // 60) * 60
+    for edge in edges:
+        start = start.mask((start < edge) & (minutes >= edge), edge)
+    keys = idx - pd.to_timedelta((minutes - start).to_numpy(), unit="m")
+    groups = frame.groupby(keys, sort=True)
+    gaps = frame.isna().groupby(keys, sort=True).any()
+    out = pd.DataFrame({"Close": groups["Close"].last()})
+    if "Open" in frame:
+        out["Open"] = groups["Open"].apply(lambda s: s.iloc[0])
+    if "High" in frame:
+        out["High"] = groups["High"].max().mask(gaps["High"])
+    if "Low" in frame:
+        out["Low"] = groups["Low"].min().mask(gaps["Low"])
+    if "Adj Close" in frame:
+        out["Adj Close"] = groups["Adj Close"].last()
+    for col in ("Volume", "Dividends", "Stock Splits"):
+        if col in frame:
+            out[col] = groups[col].sum(min_count=1)
+    out = out[[c for c in frame.columns if c in out]]
+    out.index.name = idx.name
+    out.attrs.update(frame.attrs)
+    return out
+
+
+def intraday_bars(symbol: str, spec: Dict[str, Any]) -> pd.DataFrame:
+    """A size's bars, as the chart, its studies and its trend lines all read
+    them: the feed's own for every size but 1h, which is on clock hours."""
+    period, interval, prepost = spec["period"], spec["interval"], spec["prepost"]
+
+    def feed(p: str, i: str) -> pd.DataFrame:
+        return YF_PROVIDER.intraday_history(symbol, period=p, interval=i, prepost=prepost)
+
+    if interval != "60m":
+        return feed(period, interval)
+    m = re.fullmatch(r"(\d+)(d|mo|y)", (period or "").lower())
+    days = int(m.group(1)) * {"d": 1, "mo": 31, "y": 366}[m.group(2)] if m else 10 ** 6
+    halves = feed(period if days <= HALF_HOUR_DAYS else "{}d".format(HALF_HOUR_DAYS), "30m")
+    if halves is None or halves.empty:
+        return feed(period, interval)
+    hours = clock_hours(halves)
+    if days <= HALF_HOUR_DAYS:
+        return hours
+    older = feed(period, interval)
+    if older is None or older.empty:
+        return hours
+    older = older[older.index.date < hours.index[0].date()]
+    out = pd.concat([older, hours])
+    out.attrs.update({**older.attrs, **hours.attrs})
+    return out
+
+
 @app.get("/api/intraday/{ticker}")
 async def intraday(ticker: str, range: str = Query("1d"),
                    window: str = Query("", description="One of the size's windows"),
@@ -4685,8 +4767,7 @@ async def intraday(ticker: str, range: str = Query("1d"),
 
     def build() -> Dict[str, Any]:
         symbol = ticker.upper().strip()
-        frame = YF_PROVIDER.intraday_history(
-            symbol, period=spec["period"], interval=spec["interval"], prepost=spec["prepost"])
+        frame = intraday_bars(symbol, spec)
         if frame is None or frame.empty:
             return {"available": False, "ticker": symbol, "range": range,
                     "reason": ("No intraday bars came back. Free intraday history is "
@@ -5880,9 +5961,7 @@ async def trendlines_panel(ticker: str,
 
     def build() -> Dict[str, Any]:
         if spec:
-            df = YF_PROVIDER.intraday_history(sym, period=spec["period"],
-                                              interval=spec["interval"],
-                                              prepost=spec["prepost"])
+            df = intraday_bars(sym, spec)
         else:
             df = YF_PROVIDER.history(sym, period=period, interval="1d")
         out = trendlines_mod.build(df)
@@ -6613,9 +6692,7 @@ async def indicator_panel(
 
         def frame_for(symbol: str):
             if spec:
-                return YF_PROVIDER.intraday_history(
-                    symbol, period=spec["period"], interval=spec["interval"],
-                    prepost=spec["prepost"])
+                return intraday_bars(symbol, spec)
             # `max`, the All range's whole history, from the feed the chart's
             # bars came from (daily_bars, weekly_bars). The brokerage feed is
             # asked for a number of days, and would have read `max` as a year.

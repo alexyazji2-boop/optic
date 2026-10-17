@@ -44,9 +44,9 @@ class _Feed:
         return self.frame
 
 
-def _bars(highs, lows, closes=None, opens=None):
+def _bars(highs, lows, closes=None, opens=None, start="09:30", freq="5min"):
     n = len(highs)
-    idx = pd.date_range("2026-09-25 09:30", periods=n, freq="5min", tz="America/New_York")
+    idx = pd.date_range("2026-09-25 " + start, periods=n, freq=freq, tz="America/New_York")
     closes = closes or [(h + l) / 2 for h, l in zip(highs, lows)]
     opens = opens or closes
     return pd.DataFrame({"Open": opens, "High": highs, "Low": lows, "Close": closes,
@@ -63,7 +63,10 @@ def _get(monkeypatch, frame, rng="5"):
 
 @pytest.mark.parametrize("rng", sorted(main.INTRADAY_SPECS))
 def test_every_rung_sends_open_high_and_low_beside_the_close(monkeypatch, rng):
-    body = _get(monkeypatch, _bars([11, 12, 13], [9, 10, 11], opens=[10, 11, 12]), rng)
+    # An hour apart on the clock, so each bar is its own on the 1h rung too,
+    # which combines the feed's half-hours into clock hours (test_clock_hours).
+    body = _get(monkeypatch, _bars([11, 12, 13], [9, 10, 11], opens=[10, 11, 12],
+                                   start="10:00", freq="60min"), rng)
     assert body["opens"] == [10, 11, 12]
     assert body["highs"] == [11, 12, 13]
     assert body["lows"] == [9, 10, 11]
