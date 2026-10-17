@@ -106,6 +106,39 @@ def test_the_other_tabs_use_the_same_plate():
     assert "var(--scroll-cover, var(--surface))" in grid
 
 
+def test_the_remaining_readings_use_the_same_plate():
+    """A figure in its own box was still a flat cell on the tabs the first
+    plate pass did not reach. The ones that are a label and a number are
+    centred. The ones that hold a paragraph keep their alignment and take
+    the same edge, corner and wash."""
+    centred = (
+        ".ph-cell", ".wv-pulse-cell", ".bt-tile", ".bk-tile", ".op-tile",
+        ".pt-stat", ".su-cell", ".ob-item", ".fg-hbox",
+    )
+    for sel in centred:
+        body = CSS[CSS.index(sel + " {"):]
+        body = body[:body.index("}")]
+        assert "border-radius: var(--r-plate)" in body, sel
+        assert "var(--plate-sheen)" in body, sel
+        assert "text-align: center" in body, sel
+    prose = (
+        ".de-num", ".osc-tile", ".rf-tile", ".bkw-score", ".book-card",
+        ".cmp-hz", ".ew-day", ".catmode-box", ".vs-case",
+    )
+    for sel in prose:
+        body = CSS[CSS.index(sel + " {"):]
+        body = body[:body.index("}")]
+        assert "border-radius: var(--r-plate)" in body, sel
+        assert "var(--plate-sheen)" in body, sel
+    # Compare horizons and catalyst boxes are direct children of a panel
+    # grid, so the scroll covers would replace the wash.
+    grid = CSS[CSS.index(".panel .grid > .tile {"):]
+    grid = grid[:grid.index("}")]
+    assert ".panel .grid > .catmode-box" in CSS[CSS.index(".panel .grid > .catmode-box"):CSS.index(".panel .grid > .tile {")]
+    assert ".panel .grid > .cmp-hz" in CSS[CSS.index(".panel .grid > .cmp-hz"):CSS.index(".panel .grid > .tile {")]
+    assert "var(--plate-sheen)" in grid
+
+
 def test_the_week_and_the_trend_cards_use_the_same_plate():
     """One corner for the things that are cards of a reading. The phone
     trend row stays square: a 16px corner on a full-width row was the
