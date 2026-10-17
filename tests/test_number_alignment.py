@@ -42,8 +42,9 @@ def test_the_tile_is_declared_once():
 
 
 def test_the_consolidated_tile_keeps_what_was_actually_rendering():
-    """The later rule's values are the ones readers saw, so those are the ones
-    that survive the merge: the flat surface and no border.
+    """The fill is still the tile's own, because the scroll-shadow covers
+    match it. The edge is the quote plate's: a tile with no border read as
+    a tint inside the panel, which is the home strip before it became cards.
 
     The padding is no longer pinned here. --space-5 a side left an 88px content
     box in a 134px tile, and a price set at --t-d3 is 116px wide -- so the
@@ -53,7 +54,8 @@ def test_the_consolidated_tile_keeps_what_was_actually_rendering():
     here would let the two drift apart."""
     body = _rule(".tile")
     assert "background: var(--surface-2)" in body
-    assert "border: 0" in body
+    assert "border: 1px solid var(--ws-line-strong)" in body
+    assert "border-radius: var(--r-plate)" in body
     assert "padding:" in body, "the tile still needs its own padding"
 
 

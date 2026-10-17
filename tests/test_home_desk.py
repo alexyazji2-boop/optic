@@ -87,6 +87,25 @@ def test_the_strip_is_a_row_of_plates_and_the_figure_is_the_card():
     assert "grid-column: 1 / -1" in change
 
 
+def test_the_other_tabs_use_the_same_plate():
+    """The home strip is the template. A figure in its own box on the
+    Dossier, the index board, the overview's section row and Discover's
+    cross-asset grid is the same card, or those tabs stay on the corner
+    the home page just left."""
+    for sel in (".tile", ".ov-card", ".idx-card", ".ex-inst"):
+        body = CSS[CSS.index(sel + " {"):]
+        body = body[:body.index("}")]
+        assert "border-radius: var(--r-plate)" in body, sel
+        assert "var(--plate-sheen)" in body, sel
+    # The scroll covers on a tile inside a panel grid replace the wash.
+    # The sheen has to be painted back under them, or the Dossier's stat
+    # row is the one place the template is missing.
+    grid = CSS[CSS.index(".panel .grid > .tile {"):]
+    grid = grid[:grid.index("}")]
+    assert "var(--plate-sheen)" in grid
+    assert "var(--scroll-cover, var(--surface))" in grid
+
+
 def test_the_week_and_the_trend_cards_use_the_same_plate():
     """One corner for the things that are cards of a reading. The phone
     trend row stays square: a 16px corner on a full-width row was the

@@ -151,7 +151,6 @@ def _declared(css):
 KNOWN_LAYERED = {
     (".btn", "var(--r-md)", "var(--r-ctl)"),
     (".ws-menu-btn", "var(--r-md)", "var(--r-ctl)"),
-    (".tile", "var(--r-md)", "var(--r-lg)"),
     (".hm-block", "var(--r-md)", "var(--r-lg)"),
 }
 
@@ -193,8 +192,11 @@ FAMILIES = {
     # have no corner to keep.
     "pill":   [".chip", ".pill", ".wd-chip", ".sec-chip"],
     "button": [".btn", ".icon-btn", ".ws-menu-btn"],
-    # `.home-card` was one until the home page's tour went.
-    "card":   [".panel", ".tile"],
+    # `.tile` left this family when the quote plate did. A tile is a
+    # figure card at --r-plate. A panel is the pane it sits in, at --r-lg.
+    # Sharing a corner made every stat on the Dossier a smaller copy of
+    # the panel around it.
+    "card":   [".panel"],
 }
 
 
