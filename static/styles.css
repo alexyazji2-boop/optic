@@ -462,10 +462,9 @@
                            which sat two pixels away and read as a mistake */
   --r-lg: 8px;         /* panels, cards, tiles */
   /* Quote plates only: the home strip, the week cells, the trend cards.
-     16px on a cell about 140px wide. 24px, which is what a Kalshi market
-     card uses, rounded that cell's short side into a lozenge and put the
-     spark inside the curve. Panels stay on --r-lg: moving them here would
-     restyle every pane in the workspace to match a marketing card. */
+     Measured at 1440 with the text scale at 1.15: a plate is 151 by 120,
+     and 16px is a card corner on that rather than a pill. Panels stay on
+     --r-lg. Moving them here would restyle every pane in the workspace. */
   --r-plate: 16px;
   --r-pill: 999px;
   /* Nothing else may hold a bare pixel radius. The exceptions are 1px, 2px and
@@ -11238,9 +11237,11 @@ body.cp-open { overflow: hidden; }
      eight figures crushing into 375px. */
   flex: 1 0 auto;
   /* Floor, not the width. A short quote (VIX, the 10Y) would otherwise
-     collapse to its label. The long figures are wider than this and set
-     their own plate; eight of those still scroll on a 1280px window, which
-     is the cost of the figure being a headline. */
+     collapse to its label. Measured at 1440, text scale 1.15: every plate
+     is 151 wide, and eight of them plus the gaps need 1279px against a
+     1157px track, so Bitcoin starts under the fade. That is the cost of
+     the figure being 30px. Shrinking the floor to show all eight would
+     put 29,188 against the padding. */
   min-width: calc(132px * var(--ui-scale));
   padding: var(--space-3) var(--space-3) var(--space-2);
   border: 1px solid var(--ws-line-strong);
