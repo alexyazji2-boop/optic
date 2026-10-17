@@ -461,6 +461,12 @@
   --r-md: 6px;          /* buttons, selects, callouts — merged with --r-sm,
                            which sat two pixels away and read as a mistake */
   --r-lg: 8px;         /* panels, cards, tiles */
+  /* Quote plates only: the home strip, the week cells, the trend cards.
+     16px on a cell about 140px wide. 24px, which is what a Kalshi market
+     card uses, rounded that cell's short side into a lozenge and put the
+     spark inside the curve. Panels stay on --r-lg: moving them here would
+     restyle every pane in the workspace to match a marketing card. */
+  --r-plate: 16px;
   --r-pill: 999px;
   /* Nothing else may hold a bare pixel radius. The exceptions are 1px, 2px and
    * 3px on bar fills, legend keys, skeleton bars and dots -- elements 3 to 8
@@ -11146,27 +11152,34 @@ body.cp-open { overflow: hidden; }
 
 /* ------------------------------------------------ market command centre */
 
-/* The strip. A band, not a row of cards.
-   Scrolls horizontally rather than wrapping: eight cells do not fit a phone and
-   a strip that becomes three rows is no longer a strip. The order puts the
-   indices first so those are what is on screen before anyone scrolls.
-   `scrollbar-width: none` because the band is short enough that a visible bar
-   doubles its height on the platforms that reserve space for one. */
-/* The box, and the track that scrolls inside it. The box holds the border and
-   clips the track to its rounded corners, so the border stays whole while the
-   cells move. */
+/* The strip. Eight quotes, each its own plate, on one scrolling row.
+   A shared tray made them cells of a table: the number was 15px and the
+   only edge was a hairline between neighbours. A Robinhood benefit tile
+   and a Kalshi market are the other way round. The figure is the card,
+   and the card is separate from the next one.
+   Scrolls rather than wrapping: eight plates do not fit a phone, and a
+   strip that becomes three rows is no longer a strip. The indices come
+   first so those are what is on screen before anyone scrolls.
+   `scrollbar-width: none` because a visible bar doubles the height on the
+   platforms that reserve space for one.
+   The box is only the scrollport. It has no face of its own: a border
+   here would be a tray around the plates, and its radius would clip
+   theirs (overflow hidden, and an 8px corner over a 16px one). Padding
+   is the room the contact shadow needs inside that clip. */
 .ms-strip {
-  margin: 0 0 calc(16px * var(--ui-scale));
-  border: 1px solid var(--ws-line);
-  border-radius: var(--r-lg);
-  background: var(--ws-panel);
+  margin: 0 0 var(--space-3);
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: var(--space-2) 0;
   overflow: hidden;
 }
 .ms-track {
   display: flex;
-  gap: 0;
+  gap: var(--space-2);
   overflow-x: auto;
   scrollbar-width: none;
+  align-items: stretch;
 }
 .ms-track::-webkit-scrollbar { display: none; }
 
@@ -11198,50 +11211,60 @@ body.cp-open { overflow: hidden; }
 
 .ms-cell {
   display: grid;
-  /* max-content, not auto, and packed to the start.
+  /* max-content, not auto.
      An `auto` grid column absorbs free space, so once the cells were allowed to
      grow the label and the figure were pushed to opposite ends of a 240px box:
      "S&P 500" hard left and "+0.86%" hard right, reading as two unrelated
-     numbers rather than one quote. The cell still grows, the extra width is now
-     trailing space inside it, and the reading stays together. */
+     numbers rather than one quote. The price, the change and the spark each
+     span both columns now, so that gap cannot open. The columns stay
+     max-content anyway: the span is only as wide as they are, and putting the
+     change back beside the price must not be able to reopen it. */
   grid-template-columns: max-content max-content;
-  grid-template-rows: auto auto;
-  /* Centred in the cell, not packed to its left edge.
-     The columns stay `max-content`, which is what stops the label and the
-     figure drifting to opposite ends of a grown cell: this moves the pair as a
-     unit and leaves the trailing space split either side instead of all after
-     it. Same decision as `.tile`, and for the same reason: a row of equal boxes
-     with ragged-left contents reads as a column of accidents. */
+  grid-template-rows: auto auto auto auto;
+  /* The stack sits in the middle of the plate. `align-content`, not
+     `align-items`: stretching the rows would spend the extra height as gaps
+     between the label and the figure. */
   justify-content: center;
-  align-items: baseline;
-  gap: 0 var(--space-1);
+  align-content: center;
+  align-items: center;
+  row-gap: var(--space-1);
   /* Grow to fill, never shrink below the reading.
      `0 0 auto` left the eight cells at their natural width in a container that
      is now much wider than they are: measured at 1900, the last cell ended at
-     1249 inside a box running to 1722, so 473px of bordered empty strip sat
-     after Bitcoin. Growing distributes that space between them.
+     1249 inside a box running to 1722, so 473px of empty strip sat after
+     Bitcoin. Growing distributes that space between the plates.
      flex-shrink stays 0, which is what keeps the horizontal scroll honest on a
-     phone: the cells hold their width and the strip scrolls, rather than eight
-     figures crushing into 375px. */
+     phone: the plates hold their width and the strip scrolls, rather than
+     eight figures crushing into 375px. */
   flex: 1 0 auto;
-  /* A little smaller than it was (132px, the figure at --t-base, and 9px by
-     14px of padding), asked for with the strip in a screenshot: eight cells
-     now need about 930px where they needed about 1,070, so the strip fits
-     the column on a 1280px screen instead of scrolling. */
-  min-width: 112px;
-  padding: calc(10px * var(--ui-scale)) calc(14px * var(--ui-scale));
-  border: 0;
-  border-right: 1px solid var(--ws-line);
-  background: none;
+  /* Floor, not the width. A short quote (VIX, the 10Y) would otherwise
+     collapse to its label. The long figures are wider than this and set
+     their own plate; eight of those still scroll on a 1280px window, which
+     is the cost of the figure being a headline. */
+  min-width: calc(132px * var(--ui-scale));
+  padding: var(--space-3) var(--space-3) var(--space-2);
+  border: 1px solid var(--ws-line-strong);
+  border-radius: var(--r-plate);
+  /* A wash of the logo plate, which is white in both themes, over the
+     panel. On the dark plane that is the metal highlight. On the light
+     plane the panel is already the white card and the wash disappears,
+     which is what a white card on cream paper should do. Not a blur: a
+     frosted fill here would be glass with nothing behind it to reveal. */
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--logo-plate) 16%, var(--ws-panel)) 0%,
+    var(--ws-panel) 48%
+  );
+  box-shadow: var(--elev-1);
   text-align: center;
   cursor: pointer;
   transition: background var(--dur-ui) var(--ease-ui);
 }
-.ms-cell:last-child { border-right: 0; }
 .ms-cell:hover { background: var(--sys-fill); }
 
 .ms-label {
   grid-column: 1 / -1;
+  grid-row: 1;
   font-size: var(--t-micro);
   letter-spacing: 0.08em;
   color: var(--ink-muted);
@@ -11252,12 +11275,25 @@ body.cp-open { overflow: hidden; }
 /* Tabular figures so the strip does not jitter as quotes update, and so the
    values line up against each other when scanned. */
 .ms-last {
-  font: 600 var(--t-lead)/1.2 var(--sans);
+  grid-column: 1 / -1;
+  grid-row: 2;
+  justify-self: center;
+  /* The tile figure, not the navigation size. --t-lead is 15px and is what
+     the section tabs use; a quote sitting at that size was a caption with
+     a border. --t-d1 (36px) is the one number a panel is about, and eight
+     of those do not fit a row. */
+  font: 600 var(--t-d2)/1.05 var(--sans);
   font-variant-numeric: tabular-nums;
   color: var(--ink);
-  letter-spacing: -0.01em;
+  letter-spacing: -0.03em;
 }
-.ms-chg { font-size: var(--t-caption); font-variant-numeric: tabular-nums; }
+.ms-chg {
+  grid-column: 1 / -1;
+  grid-row: 3;
+  justify-self: center;
+  font-size: var(--t-caption);
+  font-variant-numeric: tabular-nums;
+}
 
 /* What matters now. The first substantial block on the page, and the one the
    whole redesign exists to put here, so its heading carries a little more
@@ -11485,7 +11521,7 @@ body.cp-open { overflow: hidden; }
   min-width: 0;
   padding: var(--space-3);
   border: 1px solid var(--ws-line);
-  border-radius: var(--r-md);
+  border-radius: var(--r-plate);
   background: var(--ws-inset);
   color: var(--ink);
   font: inherit;
@@ -18508,7 +18544,7 @@ details.exact > .table-scroll, details.exact > table { margin-top: var(--space-2
 /* Across both of the cell's columns and centred under them. It sat in the
    first column alone, so it lined up under the price and left the change's
    side of the cell empty. */
-.ms-spark { display: block; width: 64px; height: 16px; margin-top: 2px; grid-column: 1 / -1; justify-self: center; }
+.ms-spark { display: block; width: 64px; height: 16px; margin-top: 0; grid-column: 1 / -1; grid-row: 4; justify-self: center; }
 .cc-spark { display: inline-block; width: 56px; height: 18px; vertical-align: middle; }
 .ms-spark svg, .cc-spark svg { display: block; }
 
@@ -18518,7 +18554,7 @@ details.exact > .table-scroll, details.exact > table { margin-top: var(--space-2
   display: grid; grid-template-columns: repeat(auto-fit, minmax(7.5rem, 1fr)); gap: var(--space-2);
   margin: var(--space-2) 0 var(--space-3);
 }
-.cs-day { padding: var(--space-2); border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--surface-2); min-width: 0; }
+.cs-day { padding: var(--space-2); border: 1px solid var(--border); border-radius: var(--r-plate); background: var(--surface-2); min-width: 0; }
 .cs-day.is-today { border-color: var(--brand); }
 .cs-day.is-empty { opacity: 0.7; }
 .cs-date { display: block; font-size: var(--t-caption); font-weight: 600; color: var(--ink-2); margin-bottom: var(--space-1); }

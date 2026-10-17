@@ -9893,11 +9893,11 @@ function marketStripHTML(data) {
     </button>`;
   }).filter(Boolean).join('');
   if (!cells) return '';
-  /* Scrollable rather than wrapped. Eight cells do not fit a phone, and a strip
-   * that wraps to three rows stops being a strip; `overflow-x` keeps it one
-   * band at every width and the order means the indices are the ones on screen
-   * before you scroll. The cells scroll on a track inside the box, so the box
-   * keeps its border while they move (see stripFade). */
+  /* Scrollable rather than wrapped. Eight plates do not fit a phone, and a
+   * strip that wraps to three rows stops being a strip; `overflow-x` keeps
+   * it one band at every width and the order means the indices are the ones
+   * on screen before you scroll. The plates scroll on a track inside a
+   * scrollport that has no border of its own (see stripFade). */
   // When these were read. Nothing on Home said, and overnight half of them
   // are the last close and half are live futures and crypto.
   const at = data.generated_at ? timeIn(data.generated_at, activeZone()) : '';

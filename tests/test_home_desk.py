@@ -61,3 +61,42 @@ def test_the_day_cells_are_not_the_page_colour():
         ".cs-day.is-empty { opacity: 1")
     asof = CSS.rindex(".ms-asof {")
     assert "text-align: start" in CSS[asof:CSS.index("}", asof)]
+
+
+def test_the_strip_is_a_row_of_plates_and_the_figure_is_the_card():
+    """The box used to own the border, so eight readings were cells of one
+    tray and the last cell had its right edge removed. Each quote is a plate
+    now. The price sits on its own line at the figure size, and the change
+    sits under it rather than beside it."""
+    box = CSS[CSS.index(".ms-strip {"):]
+    box = box[:box.index("}")]
+    assert "overflow: hidden" in box
+    assert "border: 0" in box and "background: transparent" in box
+    cell = CSS[CSS.index(".ms-cell {"):]
+    cell = cell[:cell.index("}")]
+    assert "border-radius: var(--r-plate)" in cell
+    assert "border: 1px solid var(--ws-line-strong)" in cell
+    assert "box-shadow: var(--elev-1)" in cell
+    assert ".ms-cell:last-child { border-right: 0" not in CSS
+    price = CSS[CSS.index(".ms-last {"):]
+    price = price[:price.index("}")]
+    assert "grid-column: 1 / -1" in price
+    assert "var(--t-d2)" in price
+    change = CSS[CSS.index(".ms-chg {"):]
+    change = change[:change.index("}")]
+    assert "grid-column: 1 / -1" in change
+
+
+def test_the_week_and_the_trend_cards_use_the_same_plate():
+    """One corner for the things that are cards of a reading. The phone
+    trend row stays square: a 16px corner on a full-width row was the
+    375px height bug's cousin, a card pretending to be a list."""
+    day = CSS[CSS.index(".cs-day {"):]
+    day = day[:day.index("}")]
+    assert "border-radius: var(--r-plate)" in day
+    card = CSS[CSS.index(".tr-card {"):]
+    card = card[:card.index("}")]
+    assert "border-radius: var(--r-plate)" in card
+    phone = CSS[CSS.index("@media (max-width: 559px) {\n  .tr-grid"):]
+    phone = phone[:phone.index("\n}")]
+    assert "border-radius: 0" in phone
