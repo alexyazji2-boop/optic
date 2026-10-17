@@ -1,7 +1,12 @@
 yfinance>=0.2.55
 fastapi>=0.110
 uvicorn[standard]>=0.29
-pandas>=2.2
+# Capped below 3.0: pandas 3.0 removed the 'M' frequency alias (now 'ME'), which
+# app/valuation/inputs.py still uses (to_period('M'), date_range(freq='M')). An
+# unpinned `pip install` on a fresh deploy pulls 3.x and 500s valuation and the
+# backtest. 2.3.x keeps 'M' working (deprecation warning only). Measured: pandas
+# 3.0.6 raised "'M' is no longer supported" in test_backtest and test_valuation.
+pandas>=2.2,<3
 numpy>=1.23
 scipy>=1.9
 requests>=2.31
