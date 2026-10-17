@@ -162,7 +162,10 @@ def test_the_scales_are_still_single_scales():
     # What actually holds the line is tests/test_radius_scale.py, which fails
     # on any bare radius of 4px or more. With that in place the count here is
     # only a reminder that adding a step is a decision.
-    assert len(re.findall(r"^\s+--r-[a-z]+:", CSS, re.M)) == 7
+    #
+    # Eight. --r-plate is the quote plate (home strip, week, trend cards) at
+    # 16px. Putting that on --r-lg would have moved every panel.
+    assert len(re.findall(r"^\s+--r-[a-z]+:", CSS, re.M)) == 8
 
 
 def test_financial_figures_use_tabular_numerals():

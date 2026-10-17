@@ -43,14 +43,16 @@ def _tokens():
 
 
 def test_the_scale_names_every_step_the_app_draws():
-    """Six steps, because six is what it draws: marks, small controls,
-    buttons, chrome, cards, pills."""
+    """The drawn steps: marks, small controls, buttons, chrome, panels,
+    quote plates, pills. --r-md survives a merge and is the same size as
+    --r-ctl. --r-plate is the one step panels do not use."""
     t = _tokens()
     # The workspace redesign (2026-10-07) squared the chrome: a pane in a
-    # workspace at 8px rather than a card on a page at 14px. Still six steps.
+    # workspace at 8px rather than a card on a page at 14px. The plate is
+    # later, and it is not that pane.
     assert t == {"r-xs": "4px", "r-sm": "5px", "r-ctl": "6px",
                  "r-chrome": "8px", "r-md": "6px", "r-lg": "8px",
-                 "r-pill": "999px"}, t
+                 "r-plate": "16px", "r-pill": "999px"}, t
 
 
 def test_the_card_token_is_the_radius_cards_are_drawn_at():
@@ -149,7 +151,6 @@ def _declared(css):
 KNOWN_LAYERED = {
     (".btn", "var(--r-md)", "var(--r-ctl)"),
     (".ws-menu-btn", "var(--r-md)", "var(--r-ctl)"),
-    (".tile", "var(--r-md)", "var(--r-lg)"),
     (".hm-block", "var(--r-md)", "var(--r-lg)"),
 }
 
@@ -191,8 +192,11 @@ FAMILIES = {
     # have no corner to keep.
     "pill":   [".chip", ".pill", ".wd-chip", ".sec-chip"],
     "button": [".btn", ".icon-btn", ".ws-menu-btn"],
-    # `.home-card` was one until the home page's tour went.
-    "card":   [".panel", ".tile"],
+    # `.tile` left this family when the quote plate did. A tile is a
+    # figure card at --r-plate. A panel is the pane it sits in, at --r-lg.
+    # Sharing a corner made every stat on the Dossier a smaller copy of
+    # the panel around it.
+    "card":   [".panel"],
 }
 
 

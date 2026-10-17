@@ -4579,6 +4579,17 @@ function renderHome() {
       ${quick}
     </div>
 
+    ${/* The right track of the search row. The grid keeps the search centred
+        * by leaving an equal column on each side, and the brand fills the
+        * left one. The right one was empty: at 1440 it was about 220px of
+        * page, and the only text near it was "As of", right-aligned under
+        * the strip, which read as a caption for the hole.
+        * The greeting and the market's date already existed, as a full-width
+        * row above the board. They belong in that track, beside the search,
+        * so the row is the name, the search and the day. Below 1000px of
+        * Home there is no track and this aside is not shown; the row inside
+        * the market block is. */''}
+    <aside class="home-now" id="home-now">${homeNowHTML()}</aside>
 
     ${/* What matters today, above the search rather than below it.
         *
@@ -5304,6 +5315,11 @@ async function loadHomeMarket(opts = {}) {
   }
   const session = data.session || {};
   const holiday = session.holiday;
+  /* Same words as the row inside the market block. The wide layout shows
+   * this one and hides that one; a narrow Home does the reverse. Painted
+   * here, with the session, so a holiday named in the payload reaches the
+   * aside the first paint could not know about. */
+  paintHomeNow(session);
   /* Order follows the journey this page exists for: see the market, see what
    * moved, see your own names, then go looking. The strip is a band rather than
    * a block so it reads as state instead of competing with the first section.
@@ -9559,6 +9575,25 @@ function homeHello() {
   return `${homeGreeting()}${first ? `, ${first}` : ''}.`;
 }
 
+/* The greeting and the market's date, for the track beside the search.
+ *
+ * The same two strings the row inside the market block uses (homeHello,
+ * homeDateLine, and a holiday when the session names one). Two places, one
+ * wording: the wide layout shows this and hides that row, and a Home
+ * narrower than the three-column grid does the opposite. */
+function homeNowHTML(session) {
+  const holiday = (session || {}).holiday;
+  const date = homeDateLine(session);
+  return `<h2 class="home-now-hello">${esc(homeHello())}</h2>
+    <p class="home-now-date">${esc(date)}${
+      holiday ? ` \u00b7 ${esc(holiday)}, market closed` : ''}</p>`;
+}
+
+function paintHomeNow(session) {
+  const host = document.getElementById('home-now');
+  if (host) host.innerHTML = homeNowHTML(session);
+}
+
 /* ------------------------------------------------------------------ explore
  *
  * Discovery: the page for when you do not know what you are looking for.
@@ -9858,11 +9893,11 @@ function marketStripHTML(data) {
     </button>`;
   }).filter(Boolean).join('');
   if (!cells) return '';
-  /* Scrollable rather than wrapped. Eight cells do not fit a phone, and a strip
-   * that wraps to three rows stops being a strip; `overflow-x` keeps it one
-   * band at every width and the order means the indices are the ones on screen
-   * before you scroll. The cells scroll on a track inside the box, so the box
-   * keeps its border while they move (see stripFade). */
+  /* Scrollable rather than wrapped. Eight plates do not fit a phone, and a
+   * strip that wraps to three rows stops being a strip; `overflow-x` keeps
+   * it one band at every width and the order means the indices are the ones
+   * on screen before you scroll. The plates scroll on a track inside a
+   * scrollport that has no border of its own (see stripFade). */
   // When these were read. Nothing on Home said, and overnight half of them
   // are the last close and half are live futures and crypto.
   const at = data.generated_at ? timeIn(data.generated_at, activeZone()) : '';
