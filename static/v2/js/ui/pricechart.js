@@ -39,6 +39,38 @@ export function bollinger(v, n = 20, k = 2) {
 const TOOL_POINTS = { hline: 1, vline: 1, text: 1, trend: 2, ray: 2, rect: 2, fibdraw: 2 };
 const FIB = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1];
 
+/**
+ * Market structure breaks. A swing high is a bar whose high is above the
+ * highs of the `k` bars on each side (a swing low, below the lows); it is
+ * known only once those `k` later bars have closed, so nothing looks ahead.
+ * The structure level is the latest swing high (low) not yet broken. A close
+ * above it is a bullish break; a close below the swing low, a bearish one.
+ * Each level breaks once. Returns [{dir, from, at, price}] with bar indexes:
+ * `from` is the swing bar, `at` the bar whose close broke it.
+ */
+export function marketStructure(bars, k = 3) {
+  const out = [], n = bars.length;
+  let hi = null, lo = null;   // the active structure levels: {i, price}
+  for (let j = 0; j < n; j++) {
+    const i = j - k;          // the bar that becomes a confirmed swing at j
+    if (i >= k) {
+      const h = bars[i].h, l = bars[i].l;
+      let isHi = true, isLo = true;
+      for (let m = i - k; m <= i + k; m++) {
+        if (m === i) continue;
+        if (!(bars[m].h < h)) isHi = false;
+        if (!(bars[m].l > l)) isLo = false;
+      }
+      if (isHi) hi = { i, price: h };
+      if (isLo) lo = { i, price: l };
+    }
+    const c = bars[j].c;
+    if (hi && j > hi.i + k - 1 && c > hi.price) { out.push({ dir: 'bull', from: hi.i, at: j, price: hi.price }); hi = null; }
+    if (lo && j > lo.i + k - 1 && c < lo.price) { out.push({ dir: 'bear', from: lo.i, at: j, price: lo.price }); lo = null; }
+  }
+  return out;
+}
+
 export function createPriceChart(host, opts) {
   const S = Object.assign({ style: 'candles', overlays: {}, panes: { volume: true, rsi: false, macd: false }, levels: {}, events: [], drawings: [], tool: 'select', intraday: false }, opts);
   const bars = S.bars;
@@ -48,6 +80,7 @@ export function createPriceChart(host, opts) {
     sma20: sma(closes, 20), sma50: sma(closes, 50), sma200: sma(closes, 200),
     ema9: ema(closes, 9), ema21: ema(closes, 21), ema50: ema(closes, 50),
     bb: bollinger(closes), rsi: rsi(closes), macd: macd(closes),
+    msb: marketStructure(bars, S.msbK || 3),
   };
   let from = Math.max(0, N - (S.window || 126)), to = N - 1;
   let cross = -1, crossY = null, sel = -1, pending = null, W = 0, H = 0, layout = null, drag = null, raf = 0;
@@ -121,6 +154,17 @@ export function createPriceChart(host, opts) {
       if (S.style === 'area') o += `<path class="area" d="${d}L${X(to).toFixed(1)} ${pp.y1}L${X(from).toFixed(1)} ${pp.y1}Z"/>`;
       o += `<path class="pline" d="${d}"/>`;
     }
+    // market structure breaks: the swing level from its bar to the break, labelled, with a mark on the breaking close
+    if (S.overlays.msb) ind.msb.forEach((m) => {
+      if (m.at < from || m.from > to) return;
+      const x1 = X(Math.max(m.from, from)), x2 = X(Math.min(m.at, to)), y = ps.Y(m.price), bull = m.dir === 'bull';
+      if (y < pp.y0 || y > pp.y1) return;
+      const word = bull ? 'Bullish' : 'Bearish', at = bars[m.at];
+      o += `<g class="msb ${bull ? 'bull' : 'bear'}"><line x1="${x1.toFixed(1)}" x2="${x2.toFixed(1)}" y1="${y.toFixed(1)}" y2="${y.toFixed(1)}"/>`
+        + `<text x="${(x1 + 2).toFixed(1)}" y="${(bull ? y - 5 : y + 13).toFixed(1)}">MSB</text>`
+        + (m.at <= to ? `<circle cx="${X(m.at).toFixed(1)}" cy="${ps.Y(at.c).toFixed(1)}" r="${Math.max(5, Math.min(10, bw * 0.9)).toFixed(1)}"/>` : '')
+        + `<title>${word} market structure break: ${fmtT(at.t)} closed at ${num(at.c)}, ${bull ? 'above the swing high' : 'below the swing low'} of ${num(m.price)} from ${fmtT(bars[m.from].t)}</title></g>`;
+    });
     // earnings and other events
     (S.overlays.events === false ? [] : S.events).forEach((e) => { const i = idxOfT(e.t); if (i < from || i > to) return; const x = X(i).toFixed(1); o += `<g class="evm"><line x1="${x}" x2="${x}" y1="${pp.y0}" y2="${pp.y1}"/><text x="${x}" y="${pp.y1 - 4}" text-anchor="middle">${esc(e.kind)}</text><title>${esc(e.label)}</title></g>`; });
     // drawings
@@ -178,7 +222,10 @@ export function createPriceChart(host, opts) {
   function summary() {
     const a = bars[from], b = bars[to]; if (!a || !b) return 'Price chart';
     const ch = (b.c / a.c - 1) * 100;
-    return `${S.label || 'Price'}, ${to - from + 1} bars from ${fmtT(a.t)} to ${fmtT(b.t)}: from ${num(a.c)} to ${num(b.c)}, ${ch >= 0 ? 'up' : 'down'} ${num(Math.abs(ch), 1)} percent. Use the arrow keys to read each bar.`;
+    const breaks = S.overlays.msb ? ind.msb.filter((m) => m.at >= from && m.at <= to) : [];
+    const last = breaks[breaks.length - 1];
+    const msb = S.overlays.msb ? (last ? ` ${breaks.length} market structure break${breaks.length === 1 ? '' : 's'} in view; the latest is ${last.dir === 'bull' ? 'bullish' : 'bearish'}, on ${fmtT(bars[last.at].t)} through ${num(last.price)}.` : ' No market structure break in view.') : '';
+    return `${S.label || 'Price'}, ${to - from + 1} bars from ${fmtT(a.t)} to ${fmtT(b.t)}: from ${num(a.c)} to ${num(b.c)}, ${ch >= 0 ? 'up' : 'down'} ${num(Math.abs(ch), 1)} percent.${msb} Use the arrow keys to read each bar.`;
   }
   const redraw = () => { if (!raf) raf = requestAnimationFrame(draw); };
 
@@ -269,6 +316,8 @@ export function createPriceChart(host, opts) {
     set(next) { Object.assign(S, next); if (next.tool) pending = null; redraw(); },
     zoom: (f) => zoom(f, cross >= 0 ? cross : to), fit, pan,
     view: () => ({ from, to }),
+    /** The market structure breaks in view, newest last, for Milo and the page. */
+    structure: () => ind.msb.filter((m) => m.at >= from && m.at <= to).map((m) => ({ direction: m.dir === 'bull' ? 'bullish' : 'bearish', broke_on: fmtT(bars[m.at].t), close: bars[m.at].c, level: m.price, swing_on: fmtT(bars[m.from].t) })),
     undo() { const prev = undo.pop(); if (prev) { S.drawings = prev; if (S.onDrawings) S.onDrawings(prev); redraw(); } },
     deleteSelected() { if (sel >= 0) { commit(S.drawings.filter((_, j) => j !== sel)); sel = -1; } },
     clearDrawings() { commit([]); },

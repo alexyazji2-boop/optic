@@ -127,3 +127,29 @@ def test_a_v2_valuation_save_keeps_what_the_classic_app_wrote(tmp_path):
     # NaN for an unreadable amount, which JSON carries as null like the blank one
     assert got["amounts"] == [394e9, 2.5e12, 1000, None, None]
     assert got["emptyWithNote"] is False and got["empty"] is True
+
+
+def test_market_structure_breaks_follow_confirmed_swings_only(tmp_path):
+    """The chart's MSB study (ui/pricechart.js marketStructure): a close above
+    the latest confirmed swing high is a bullish break, below the latest
+    swing low a bearish one, each level breaks once, and a swing counts only
+    after the 3 bars on its right have closed."""
+    got = _run(tmp_path, f"""
+      const p = await import('{(V2 / "js/ui/pricechart.js").as_posix()}');
+      // high, low, close per bar; o = c
+      const raw = [[100, 98, 99], [101, 99, 100], [102, 100, 101], [101, 99, 100], [105, 101, 104],
+                   [110, 104, 106], [106, 102, 103], [105, 101, 102], [104, 100, 101], [106, 101, 105],
+                   [108, 104, 107], [109, 105, 108], [112, 107, 111], [113, 108, 112], [111, 106, 107],
+                   [108, 99, 100], [104, 97, 98], [103, 96, 97], [102, 95, 96], [100, 90, 91]];
+      const bars = raw.map(([h, l, c], i) => ({{ t: i, o: c, h, l, c }}));
+      const all = p.marketStructure(bars, 3);
+      // the same series cut before the swing high's 3rd right-hand bar: nothing is confirmed yet
+      const early = p.marketStructure(bars.slice(0, 8), 3);
+      print(JSON.stringify({{ all, early }}));
+    """)
+    breaks = got["all"]
+    assert breaks[0] == {"dir": "bull", "from": 5, "at": 12, "price": 110}   # close 111 above the 110 swing high of bar 5
+    bears = [b for b in breaks if b["dir"] == "bear"]
+    assert bears and bears[0]["price"] < 105 and bears[0]["at"] >= 15     # a later close below the latest swing low
+    assert len({(b["dir"], b["from"]) for b in breaks}) == len(breaks)     # each level breaks once
+    assert got["early"] == []

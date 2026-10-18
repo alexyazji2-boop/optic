@@ -1,6 +1,7 @@
 /* Optic v2 design tokens. Every colour, size and duration in the v2 frontend
    comes from here; components never use a literal colour.
-   Two themes: ivory (default) and charcoal. Gold is light, not paint: it marks
+   Two themes: charcoal (near-black, the default since 2026-10-18,
+   VISUAL-SPEC-DARK.md) and ivory (Light). Gold is light, not paint: it marks
    focus, selection, the mark and Milo, never chrome. */
 :root {
   /* surfaces */
@@ -69,26 +70,26 @@
   color-scheme: light;
 }
 :root[data-theme="charcoal"] {
-  --c-plane: #141311; --c-plane-2: #1a1917; --c-raised: #201e1b; --c-sunk: #2a2824;
-  --c-scene: #0c0b0a; --c-scene-2: #171614;
-  --c-ink: #f2ede3; --c-ink-2: #c3bbad; --c-ink-3: #9f978a;
-  --c-line: #34312c; --c-line-2: #2a2824;
-  --c-gold: #d4b144; --c-gold-ink: #e2c66e;
-  --c-pos: #5fcb8f; --c-neg: #f28a78; --c-warn: #e7b25a; --c-proposed: #b9a0ff; --c-focus: #f0d77c;
-  --c-chart-grid: #2c2a26; --c-area-top: rgba(212, 177, 68, .22); --c-cone-a: rgba(212, 177, 68, .32); --c-cone-edge: #e2c66e;
-  --c-tip-bg: #f2ede3; --c-tip-ink: #141311; --c-scrim: rgba(0, 0, 0, .55);
+  --c-plane: #0b0b0a; --c-plane-2: #0f0f0e; --c-raised: #151513; --c-sunk: #1c1b19;
+  --c-scene: #080807; --c-scene-2: #121210;
+  --c-ink: #eceae4; --c-ink-2: #bdb9b0; --c-ink-3: #918d85;
+  --c-line: #2a2926; --c-line-2: #1f1e1c;
+  --c-gold: #d4b144; --c-gold-ink: #e3c76f;
+  --c-pos: #4cc38a; --c-neg: #f07a66; --c-warn: #e7b25a; --c-proposed: #b9a0ff; --c-focus: #f0d77c;
+  --c-chart-grid: #24231f; --c-area-top: rgba(212, 177, 68, .20); --c-cone-a: rgba(212, 177, 68, .30); --c-cone-edge: #e3c76f;
+  --c-tip-bg: #eceae4; --c-tip-ink: #0b0b0a; --c-scrim: rgba(0, 0, 0, .6);
   color-scheme: dark;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme]) {
-    --c-plane: #141311; --c-plane-2: #1a1917; --c-raised: #201e1b; --c-sunk: #2a2824;
-    --c-scene: #0c0b0a; --c-scene-2: #171614;
-    --c-ink: #f2ede3; --c-ink-2: #c3bbad; --c-ink-3: #9f978a;
-    --c-line: #34312c; --c-line-2: #2a2824;
-    --c-gold: #d4b144; --c-gold-ink: #e2c66e;
-    --c-pos: #5fcb8f; --c-neg: #f28a78; --c-warn: #e7b25a; --c-proposed: #b9a0ff; --c-focus: #f0d77c;
-    --c-chart-grid: #2c2a26; --c-area-top: rgba(212, 177, 68, .22); --c-cone-a: rgba(212, 177, 68, .32); --c-cone-edge: #e2c66e;
-    --c-tip-bg: #f2ede3; --c-tip-ink: #141311; --c-scrim: rgba(0, 0, 0, .55);
+    --c-plane: #0b0b0a; --c-plane-2: #0f0f0e; --c-raised: #151513; --c-sunk: #1c1b19;
+    --c-scene: #080807; --c-scene-2: #121210;
+    --c-ink: #eceae4; --c-ink-2: #bdb9b0; --c-ink-3: #918d85;
+    --c-line: #2a2926; --c-line-2: #1f1e1c;
+    --c-gold: #d4b144; --c-gold-ink: #e3c76f;
+    --c-pos: #4cc38a; --c-neg: #f07a66; --c-warn: #e7b25a; --c-proposed: #b9a0ff; --c-focus: #f0d77c;
+    --c-chart-grid: #24231f; --c-area-top: rgba(212, 177, 68, .20); --c-cone-a: rgba(212, 177, 68, .30); --c-cone-edge: #e3c76f;
+    --c-tip-bg: #eceae4; --c-tip-ink: #0b0b0a; --c-scrim: rgba(0, 0, 0, .6);
     color-scheme: dark;
   }
 }

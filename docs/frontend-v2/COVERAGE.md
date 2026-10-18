@@ -154,6 +154,7 @@ Status words:
 | Widgets: watch, alerts, news, analysts, season, notes, insiders, reports, checklist, stop check, options, levels, stats, patterns, pairs, backtest, trading, learn | Current app | Linked. |
 | Colours, legend, full screen, navigator | Not yet | |
 | Explain chart with Milo | Rebuilt | |
+| Market structure breaks (MSB) | New in v2 | 2026-10-18: swing highs and lows with 3, 5 or 10 bars either side, confirmed after those bars close; a close beyond the latest unbroken swing is marked bullish or bearish with its level, an MSB label and a marker; in Milo's chart context. Not in the classic app. |
 
 ## Dossier, Investing
 
@@ -401,6 +402,10 @@ Status words:
 | Signal history | Not yet | In the current app. |
 | From the scheduled scan | Changed | Read-only list; kind filters, unread only and "Why this fired" not yet. |
 | Owner controls (mark read, clear all, email delivery) | Current app | |
+
+## Research workspace (2026-10-18, preview)
+
+`#/workspace`: a new v2 page, not a migration of a classic one. See WORKSPACE.md, VISUAL-SPEC-DARK.md, FEATURE-AUDIT.md and NEW-PRODUCTS.md.
 
 ## Stage 0 (2026-10-18)
 

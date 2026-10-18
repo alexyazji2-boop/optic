@@ -10,6 +10,23 @@ Stage 0, 2026-10-18. Classic is a temporary bridge, not the destination. Each mi
 - the page's notice and legal footer still present;
 - no em dashes in user-facing copy, and names in the rail and phone bar unchanged.
 
+## Sequence from 2026-10-18 (TapeDash direction)
+Order of work. Each step is local or staging until the owner approves a deploy; Classic stays the bridge throughout.
+
+1. **Owner decisions:** X1 to X3 in VISUAL-SPEC-DARK.md (dark default, the expandable sidebar, the workspace's name and place).
+2. **W0 and W1:** the dark system and the workspace, already built in preview, ship with or after the pending owner-only preview.
+3. **M1, advanced charting:** the largest Classic-only area, including C18's free chart read. MSB is already built as a new study.
+4. **W2 and M6:** the notifications bell, with alert filters, "Why this fired" and the owner controls.
+5. **M3 with W3 and W4:** research tools, guided contract comparison and the ranked setups view.
+6. **M4 with W4's archive:** the track record, after the `validation` branch.
+7. **M2:** valuation editors.
+8. **M5:** the remaining Milo features, after the Milo branches.
+9. **M7 with W6 and W7:** the restored extras, glossary tooltips (C17), the financial charts and the report archive.
+10. **M8:** fit and finish, including performance targets T2 and T6 and a production measurement.
+11. **M9:** the switch and retirement, each step a separate approval.
+
+New products P1 to P12 (NEW-PRODUCTS.md) are outside this sequence. Each needs its own data decision and budget.
+
 ## M1. Advanced charting
 **Scope:**
 - **Drawing tools:** channel, Fib extension, pitchfork, arrow, ruler, risk box and position sizing, plus snap and moving a drawing.

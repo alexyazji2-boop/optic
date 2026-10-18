@@ -40,17 +40,20 @@ export function onChange(fn) { subs.add(fn); return () => subs.delete(fn); }
 const emit = (what) => subs.forEach((fn) => { try { fn(what); } catch (e) { console.error(e); } });
 
 /* ---------------- theme ---------------- */
-export function theme() { const t = get(THEME_KEY); return t === 'light' || t === 'dark' ? t : 'system'; }
+// v2 is dark unless the reader chooses Light, or chooses to match the system
+// (VISUAL-SPEC-DARK.md, X1). The key is shared with the classic app, which
+// reads 'light', 'dark' and 'system' the same way; only an absent key differs
+// (dark here, follow-the-OS there).
+export function theme() { const t = get(THEME_KEY); return t === 'light' || t === 'system' ? t : 'dark'; }
 export function applyTheme() {
   const t = theme(), root = document.documentElement;
-  if (t === 'dark') root.setAttribute('data-theme', 'charcoal');
-  else if (t === 'light') root.setAttribute('data-theme', 'ivory');
-  else root.removeAttribute('data-theme');
-  const dark = t === 'dark' || (t === 'system' && matchMedia('(prefers-color-scheme: dark)').matches);
+  const light = t === 'light' || (t === 'system' && matchMedia('(prefers-color-scheme: light)').matches);
+  root.setAttribute('data-theme', light ? 'ivory' : 'charcoal');
   const meta = document.querySelector('meta[name="theme-color"]');
-  if (meta) meta.setAttribute('content', dark ? '#141311' : '#f6f2e9');
+  if (meta) meta.setAttribute('content', light ? '#f6f2e9' : '#0b0b0a');
 }
-export function setTheme(t) { put(THEME_KEY, t === 'light' || t === 'dark' ? t : null); applyTheme(); emit('theme'); }
+export function setTheme(t) { put(THEME_KEY, t === 'light' || t === 'system' ? t : 'dark'); applyTheme(); emit('theme'); }
+try { matchMedia('(prefers-color-scheme: light)').addEventListener('change', () => { if (theme() === 'system') applyTheme(); }); } catch (e) { /* no matchMedia in tests */ }
 
 /* ---------------- text size ---------------- */
 export function scale() { const s = get(SCALE_KEY); return SCALES[s] ? s : 'default'; }

@@ -17,6 +17,7 @@ import { openMilo } from './milo.js';
 // The classic labels and search words, so nothing becomes unfindable by the word it was found by.
 export const PLACES = [
   { view: 'home', label: 'Home', terms: 'home start' },
+  { view: 'workspace', label: 'Research workspace (preview)', href: '#/workspace', terms: 'workspace dashboard desk layout panels market overview options research long-term investing my desk' },
   { view: 'brief', label: "Optic's Read", terms: 'read brief daily market news morning' },
   { view: 'market', label: 'Macro & sectors', terms: 'macro sectors rotation regime economy' },
   { view: 'indices', label: 'Indices', terms: 'indices index spy qqq cycle' },
@@ -66,7 +67,7 @@ export function exactPlace(q, places) { const l = String(q).trim().toLowerCase()
 let root, input, list, untrap, opener, timer, seq = 0, items = [], sel = 0, catalogue = null, research = null, ctxSym = null;
 const allowed = (p) => (!p.owner || !!(store.state.me && store.state.me.admin)) && (!p.feature || !!getFlags()[p.feature]);
 const symFor = () => ctxSym || store.recent()[0] || null;
-const placeHref = (p) => (p.symbol ? (symFor() ? hrefFor(p.view, symFor()) : '#/') : hrefFor(p.view));
+const placeHref = (p) => (p.href ? p.href : p.symbol ? (symFor() ? hrefFor(p.view, symFor()) : '#/') : hrefFor(p.view));
 const go = (href) => () => { if (href.startsWith('/')) location.href = href; else location.hash = href; };
 const QUICK = [
   { label: 'Market overview', detail: 'Macro, sectors and rotation', run: go('#/macro') },

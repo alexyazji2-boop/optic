@@ -130,7 +130,7 @@ function preferences() {
   });
   return html`<section class="section" aria-labelledby="ap-h"><h2 class="t-h2" id="ap-h">Appearance</h2>
       <p class="section-sub">Both themes are hand-picked rather than one flipped into the other, so contrast and colour-vision separation hold either way.</p>
-      ${row('Theme', '"Follow system" tracks your operating system setting and changes with it.', seg('Theme', [['system', 'Follow system'], ['light', 'Light'], ['dark', 'Dark']], prefs.theme(), 'theme'))}</section>
+      ${row('Theme', 'Dark is the default. "Follow system" tracks your operating system setting and changes with it.', seg('Theme', [['dark', 'Dark'], ['light', 'Light'], ['system', 'Follow system']], prefs.theme(), 'theme'))}</section>
     <section class="section" aria-labelledby="ts-h"><h2 class="t-h2" id="ts-h">Text size</h2>
       <p class="section-sub">Scales the whole interface, type and spacing together, so the proportions stay as they are and only the size changes.</p>
       ${row('Size', 'Default is 15% larger than the terminal shipped with. Compact is that original density, for a small screen or a reader who wants more on it at once.', seg('Text size', [['compact', 'Compact'], ['default', 'Default'], ['large', 'Large']], prefs.scale(), 'scale'))}</section>

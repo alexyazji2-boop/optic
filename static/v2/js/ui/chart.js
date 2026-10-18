@@ -42,7 +42,10 @@ export function lineChart(series, opts = {}) {
   const step = opts.monthStep || (pts.length > 180 ? 3 : 1);
   pts.forEach((p, i) => {
     const m = p.d.slice(0, 7);
-    if (m !== prevM && i > 3 && i < pts.length - 6 && (Number(p.d.slice(5, 7)) - 1) % step === 0) {
+    if (opts.years) {
+      // long monthly series: one label per year, at January ('22)
+      if (m !== prevM && i > 3 && i < pts.length - 3 && p.d.slice(5, 7) === '01') months.push(`<text class="ax" x="${X(i).toFixed(1)}" y="${H - 6}" text-anchor="middle">’${p.d.slice(2, 4)}</text>`);
+    } else if (m !== prevM && i > 3 && i < pts.length - 6 && (Number(p.d.slice(5, 7)) - 1) % step === 0) {
       months.push(`<text class="ax" x="${X(i).toFixed(1)}" y="${H - 6}" text-anchor="middle">${monthName(Number(p.d.slice(5, 7)))}</text>`);
     }
     prevM = m;

@@ -30,18 +30,18 @@ const INTERVALS = [
 ];
 const RANGES = { daily: { '1M': 21, '3M': 63, '6M': 126, '1Y': 252, All: Infinity }, weekly: { '1M': 5, '3M': 13, '6M': 26, '1Y': 52, All: Infinity } };
 const TOOLS = [['select', 'Select and move'], ['hline', 'Horizontal line'], ['vline', 'Vertical line'], ['trend', 'Trend line'], ['ray', 'Ray'], ['rect', 'Rectangle'], ['fibdraw', 'Fibonacci retracement'], ['text', 'Text note']];
-const OVERLAYS = [['ma', 'MA 20, 50, 200'], ['ema', 'EMA 9, 21, 50'], ['bb', 'Bollinger 20, 2'], ['fib', 'Fibonacci'], ['sr', 'Support and resistance'], ['gex', 'Dealer gamma levels'], ['events', 'Earnings']];
+const OVERLAYS = [['ma', 'MA 20, 50, 200'], ['ema', 'EMA 9, 21, 50'], ['bb', 'Bollinger 20, 2'], ['fib', 'Fibonacci'], ['sr', 'Support and resistance'], ['gex', 'Dealer gamma levels'], ['msb', 'Market structure breaks'], ['events', 'Earnings']];
 const PANES = [['volume', 'Volume'], ['rsi', 'RSI 14'], ['macd', 'MACD 12, 26, 9']];
 
 let D = {}, V = {}, live = true, mainEl = null, chart = null;
 
 function readView() {
-  const d = { interval: '60', range: '6M', style: 'candles', session: 'regular', overlays: { ma: true, ema: false, bb: false, fib: false, sr: false, gex: false, events: true }, panes: { volume: true, rsi: false, macd: false } };
+  const d = { interval: '60', range: '6M', style: 'candles', session: 'regular', overlays: { ma: true, ema: false, bb: false, fib: false, sr: false, gex: false, msb: false, events: true }, panes: { volume: true, rsi: false, macd: false }, msbK: 5 };
   try { const s = JSON.parse(localStorage.getItem(VIEW_KEY) || 'null'); if (s && typeof s === 'object') { Object.assign(d, s, { overlays: Object.assign(d.overlays, s.overlays || {}), panes: Object.assign(d.panes, s.panes || {}) }); } } catch (e) { /* private */ }
   d.interval = '60'; // the Chart page opens on hourly bars, as in the classic app
   return d;
 }
-function saveView() { try { localStorage.setItem(VIEW_KEY, JSON.stringify({ range: V.range, style: V.style, session: V.session, overlays: V.overlays, panes: V.panes })); } catch (e) { /* private */ } }
+function saveView() { try { localStorage.setItem(VIEW_KEY, JSON.stringify({ range: V.range, style: V.style, session: V.session, overlays: V.overlays, panes: V.panes, msbK: V.msbK })); } catch (e) { /* private */ } }
 
 function readDrawings(sym) {
   if (!holds(store.state.user)) return [];
@@ -119,7 +119,8 @@ function toolbar() {
     : html`<div class="seg" role="group" aria-label="Session">${[['regular', 'Regular'], ['extended', 'Extended']].map(([k, l]) => html`<button type="button" data-v2-ch-session="${k}" aria-pressed="${V.session === k}">${l}</button>`)}</div>`}
     <div class="seg" role="group" aria-label="Style">${[['candles', 'Candles'], ['line', 'Line'], ['area', 'Area']].map(([k, l]) => html`<button type="button" data-v2-ch-style="${k}" aria-pressed="${V.style === k}">${l}</button>`)}</div>
     <details class="menu"><summary class="btn btn-sm">Indicators and levels</summary><div class="menu-body">
-      <p class="t-label">On the price</p>${OVERLAYS.map(([k, l]) => html`<label class="check"><input type="checkbox" data-v2-ch-ov="${k}" ${V.overlays[k] ? 'checked' : ''}> <span>${l}</span></label>`)}
+      <p class="t-label">On the price</p>${OVERLAYS.map(([k, l]) => html`<label class="check"><input type="checkbox" data-v2-ch-ov="${k}" ${V.overlays[k] ? 'checked' : ''} ${k === 'msb' ? html`aria-describedby="ch-msb-help"` : ''}> <span>${l}</span></label>${k === 'msb' ? html`<p class="menu-help" id="ch-msb-help">Marks where a close moved beyond the latest swing high (bullish) or swing low (bearish). A swing is a bar above or below the bars on each side, counted only once they have closed.</p>
+        <label class="ws-sel menu-help">Swing strength <select data-v2-ch-msbk aria-label="Market structure swing strength">${[3, 5, 10].map((k) => html`<option value="${k}" ${V.msbK === k ? 'selected' : ''}>${k} bars each side${k === 3 ? ', more breaks' : k === 10 ? ', fewer' : ''}</option>`)}</select></label>` : ''}`)}
       <p class="t-label">Panes</p>${PANES.map(([k, l]) => html`<label class="check"><input type="checkbox" data-v2-ch-pane="${k}" ${V.panes[k] ? 'checked' : ''}> <span>${l}</span></label>`)}
     </div></details>
     <span class="spacer"></span>
@@ -140,7 +141,7 @@ function paintChart() {
   host.innerHTML = '<div class="pc-host"></div>';
   if (chart) chart.destroy();
   chart = createPriceChart(host.firstChild, {
-    bars: D.bars, intraday: !!iv.intraday, style: V.style, overlays: V.overlays, panes: V.panes, levels: levels(), events: events(),
+    bars: D.bars, intraday: !!iv.intraday, msbK: V.msbK || 5, style: V.style, overlays: V.overlays, panes: V.panes, levels: levels(), events: events(),
     drawings: D.drawings, tool: V.tool, window: windowBars(), label: `${D.sym}, ${iv.label} bars`,
     height: Math.round(Math.max(380, Math.min(window.innerHeight - 260, 720))),
     onDrawings: (list) => { D.drawings = list; saveDrawings(D.sym, list); paintTools(); },
@@ -180,7 +181,7 @@ export async function render(main, route) {
   D = { sym, drawings: readDrawings(sym) };
   store.pushRecent(sym);
   document.title = `${sym} Chart, Optic`;
-  provideContext(() => ({ view: 'chart', ticker: sym, chart: { symbol: sym, interval: V.interval, range: V.range, drawings: D.drawings.length, bars: (D.bars || []).length }, technicals: D.t ? { bias: D.t.technicals.bias, rsi: D.t.technicals.rsi, macd: D.t.technicals.macd, support_resistance: D.t.technicals.support_resistance, moving_averages: D.t.technicals.moving_averages } : null }));
+  provideContext(() => ({ view: 'chart', ticker: sym, chart: { symbol: sym, interval: V.interval, range: V.range, drawings: D.drawings.length, bars: (D.bars || []).length, market_structure_breaks: V.overlays.msb && chart ? { method: `Swing high or low with ${V.msbK || 5} bars either side, confirmed only after those bars close; a close beyond the latest unbroken swing is a break`, in_view: chart.structure().slice(-6) } : undefined }, technicals: D.t ? { bias: D.t.technicals.bias, rsi: D.t.technicals.rsi, macd: D.t.technicals.macd, support_resistance: D.t.technicals.support_resistance, moving_averages: D.t.technicals.moving_averages } : null }));
   paint(); wire(main);
   core(sym).then((c) => { if (D.sym !== sym || !live) return; Object.assign(D, { quote: c.quote, session: c.session, quoteError: c.quoteError }); const h = $('.dhead', mainEl); if (h) { const tmp = document.createElement('div'); draw(tmp, header(sym, D, 'chart', { compact: true })); h.replaceWith(tmp.firstElementChild); } });
   tickerData().then(() => { if (live && D.sym === sym && D.bars) paintChart(); }).catch(() => {});
@@ -193,6 +194,7 @@ function wire(main) {
   main.addEventListener('change', (e) => {
     const el = e.target;
     if (el.matches('[data-v2-ch-iv]')) { V.interval = el.value; if (V.interval === 'weekly' && !RANGES.weekly[V.range]) V.range = '1Y'; paintTools(); loadBars(); return; }
+    if (el.matches('[data-v2-ch-msbk]')) { V.msbK = Number(el.value) || 5; saveView(); paintChart(); return; }
     if (el.matches('[data-v2-ch-ov]')) { V.overlays[el.dataset.v2ChOv] = el.checked; saveView(); if (chart) chart.set({ overlays: V.overlays }); return; }
     if (el.matches('[data-v2-ch-pane]')) { V.panes[el.dataset.v2ChPane] = el.checked; saveView(); paintChart(); }
   });
