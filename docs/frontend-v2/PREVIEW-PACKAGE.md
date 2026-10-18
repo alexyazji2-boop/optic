@@ -11,11 +11,12 @@ This is a preview of a rebuild still in progress, not a finished rebuild. Ten ca
 **Code**
 - **Branch:** `frontend-v2`. Its tip after this package's docs commit is given in the approval message; code as of `3f3d8be`.
 - **How it ships:** a fast-forward of `origin/main` from `b8d3b50`, which has not moved since the branch was cut.
-- **Commits:** 7.
+- **Commits:** 9 with code changes, the last being `a9e0818`. Every commit after it changes docs only; the approval message gives the exact tip.
   - `de6b20b`, `ba2b06b`, `6fdd4bb`, `8ea0562`, `688f24c`: the v2 pages, rounds 1 to 4.
   - `30ada38`: Stage 0.
   - `3f3d8be`: fail-closed access and the emergency shutdown.
-  - Plus this docs commit.
+  - `7058a93`: this package.
+  - `a9e0818`: the session chip on one line, with no trailing comma (found while showing the preview).
 - **Size:** 98 files, +13,313 / −57 lines. The bulk is new files under `static/v2/` and `docs/`.
 - **No database migrations, no new dependencies, no new background jobs.**
 
