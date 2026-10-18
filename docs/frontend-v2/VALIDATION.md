@@ -29,15 +29,15 @@ Run on 2026-10-17 against the real backend: a local server on :8075 with the see
 - The slowest sources are slow cold: `/api/priority` timed out past 2 minutes while the server was being rate-limited by the data provider after a restart. Home shows a loading line after 8 seconds and the rest of the page is unaffected.
 - VoiceOver itself was not driven; the accessibility tree was inspected instead.
 - Milo could not produce an answer locally because there is no key; streaming was tested only up to the server's error event.
-- The brokerage portfolio block was not seen with a linked sandbox account in this run.
+- The brokerage portfolio block was later checked with a linked sandbox account: figures labelled by source (value now, the broker's own total, provider estimates).
 
 ## Second round: the Dossier (2026-10-18)
 
 | Check | Result |
 |---|---|
-| Options, Chart, Investing, Earnings, Financials, News against the live backend | Render with no console errors; every block has loading, empty and error states |
+| Options, Chart, Investing, Earnings, Financials, News against the live backend | Render with no console errors. Each block has loading and error states in code; the forced loading/empty/error run covered the first journey only |
 | Position builder (bull call spread) | $635 at the mid, max profit $865, breakeven 351.35, from `/analyze` |
-| Valuation scenarios | Matches a hand calculation; saved to the browser key and the account route |
+| Valuation scenarios | Matches a hand calculation; saving to this browser tested; the account route (`PUT /api/valuations/{SYM}`) is wired but was not exercised |
 | Indicators (SMA, EMA, RSI) and scenario arithmetic | In `tests/test_frontend_v2.py` |
 | Drawings | Saved in `optic.chart.drawings.v2` with the classic kind names |
 | Audit, 52 views and 4 drawers | 0 faults after fixes |
