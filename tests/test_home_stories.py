@@ -217,7 +217,9 @@ def test_the_story_link_is_safe_and_external():
     assert "noopener" in fn and "noreferrer" in fn and "nofollow" in fn
     # Every interpolation of feed-supplied text is escaped. This is third-party
     # prose from an RSS feed, so it is the least trusted string on the page.
-    for field in ("s.url", "s.title", "s.source", "s.age_words", "s.tier"):
+    # The link also refuses any scheme but http(s) and mailto (safeHref).
+    assert "safeHref(s.url" in fn
+    for field in ("s.title", "s.source", "s.age_words", "s.tier"):
         assert "esc(%s" % field in fn, field
 
 

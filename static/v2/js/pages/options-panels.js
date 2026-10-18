@@ -5,6 +5,7 @@
 // named) with the classic app's wording; nothing is re-derived except the
 // value lab, which is the classic app's own client-side Black-Scholes.
 import { html, raw } from '../core/dom.js';
+import { CLASSIC } from '../core/classic.js';
 import { num, signed, dir, money, compact, clean, capFirst, shortDate, fullDate, isNum, score100 } from '../core/format.js';
 import { signedBars } from '../ui/bars.js';
 import { xyChart } from '../ui/xychart.js';
@@ -271,7 +272,7 @@ export function setups(t, sym, extra) {
   return html`<h3>Swing setups</h3>
     ${st === undefined ? html`<p class="t-muted" role="status">Loading setups…</p>` : !st ? note('Setups did not load.') : live.length ? html`<div class="tscroll"><table class="t"><thead><tr><th>Setup</th><th>Direction</th><th>Status</th><th>Trigger</th><th>Invalidation</th></tr></thead>
       <tbody>${live.slice(0, 12).map((r) => html`<tr><td>${r.label}${r.experimental ? ' (experimental)' : ''}</td><td>${r.direction === 'bull' ? 'Up' : 'Down'}</td><td>${capFirst(r.status)}</td><td>${num(r.trigger_level)}</td><td>${num(r.invalidation)}</td></tr>`)}</tbody></table></div>` : html`<p>No setup is armed, triggered or being watched on ${sym} now.</p>`}
-    <p class="asof">${st ? clean(st.method || '') : ''} Filters, rule settings, back-tests and alerts for setups are in the <a href="/#/${sym}/options">current app</a>.</p>
+    <p class="asof">${st ? clean(st.method || '') : ''} Filters, rule settings, back-tests and alerts for setups are in the <a href="${CLASSIC}#/${sym}/options">current app</a>.</p>
     ${p.available ? html`<h3>Chart patterns</h3><ul class="plain">${(p.candles || []).slice(0, 6).map((c) => html`<li><b>${c.name}</b>, ${shortDate(c.date)}: ${clean(c.note)} <span class="t-muted">${c.direction}, ${clean(c.conventional)}</span></li>`)}</ul>${note(p.method)}` : ''}
     ${rp && rp.available ? html`<h3>Relative performance</h3><p>${clean(rp.headline)}</p>${note(rp.method)}` : ''}
     ${se && se.monthly ? html`<h3>Seasonality, ${num(se.years, 0)} years</h3><div class="tscroll"><table class="t"><thead><tr><th>Month</th><th>Average</th><th>Median</th><th>Up years</th><th>Against baseline</th><th>Reading</th></tr></thead>

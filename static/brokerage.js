@@ -411,7 +411,7 @@ function bkwBriefingHTML() {
   if (b.error) return `<div class="panel span2"><h2>Briefing</h2><p class="sub">${esc(b.error)}</p></div>`;
   const rows = ((b.today || {}).rows || []).slice(0, 5).map((r) => `<tr><td class="name">${esc(r.symbol)}</td><td class="num">${bkwSignedPct(r.change_pct)}</td><td class="num">${bkSigned(r.contribution, 'USD')}</td></tr>`).join('');
   const drivers = (b.drivers || []).map((x) => {
-    const heads = (x.headlines || []).map((h) => `<li><a href="${esc(h.url || '#')}" target="_blank" rel="noopener">${esc(h.title || '')}</a> <span class="bkw-meta">${esc(h.publisher || '')} ${esc(h.published ? agoWords(h.published) : '')}</span></li>`).join('');
+    const heads = (x.headlines || []).map((h) => `<li><a href="${safeHref(h.url || '#')}" target="_blank" rel="noopener">${esc(h.title || '')}</a> <span class="bkw-meta">${esc(h.publisher || '')} ${esc(h.published ? agoWords(h.published) : '')}</span></li>`).join('');
     return `<div class="bkw-driver"><b>${esc(x.symbol)}</b> ${bkwSignedPct(x.change_pct)}
       ${heads ? `<ul class="bkw-list">${heads}</ul>` : ''}${x.note ? `<p class="set-row-note">${esc(x.note)}</p>` : ''}</div>`;
   }).join('');
@@ -668,7 +668,7 @@ function bkwEventRows(list, compact) {
         ${e.timing ? `<span class="bkw-meta">${e.timing === 'before_open' ? 'before the open' : 'after the close'}</span>` : ''}
         ${e.weight_pct ? `<span class="bkw-meta">${bkwPct(e.weight_pct)} of portfolio</span>` : ''}
         ${!compact && e.note ? `<span class="bkw-meta">${esc(e.note)}</span>` : ''}</span>
-      ${!compact ? `<span class="bkw-links">${e.links && e.links.earnings ? `<a class="btn sm" href="${esc(e.links.earnings)}">Earnings analysis</a>` : ''}${e.links && e.links.overview ? `<a class="btn sm" href="${esc(e.links.overview)}">Dossier</a>` : ''}${e.links && e.links.options ? `<a class="btn sm" href="${esc(e.links.options)}">Options</a>` : ''}</span>` : ''}
+      ${!compact ? `<span class="bkw-links">${e.links && e.links.earnings ? `<a class="btn sm" href="${safeHref(e.links.earnings)}">Earnings analysis</a>` : ''}${e.links && e.links.overview ? `<a class="btn sm" href="${safeHref(e.links.overview)}">Dossier</a>` : ''}${e.links && e.links.options ? `<a class="btn sm" href="${safeHref(e.links.options)}">Options</a>` : ''}</span>` : ''}
     </li>`).join('')}</ul>`;
 }
 
@@ -679,12 +679,12 @@ function bkwEventsHTML(d) {
   const th = d.theses || {};
   const deskItems = (desk.items || []).map((i) => `<li><span><b>${esc(i.label || '')}</b>${i.value !== null && i.value !== undefined ? ` <span class="bkw-meta">${esc(String(i.value))}${i.unit ? esc(i.unit) : ''}</span>` : ''}</span>
       <span class="bkw-meta">${esc(i.why)}${(i.cited_in || []).length ? ` Cited in: ${esc(i.cited_in.join(', '))}.` : ''} ${esc(i.source || '')}</span>
-      ${i.url ? `<a href="${esc(i.url)}" target="_blank" rel="noopener" class="bkw-meta">Source</a>` : ''}</li>`).join('');
+      ${i.url ? `<a href="${safeHref(i.url)}" target="_blank" rel="noopener" class="bkw-meta">Source</a>` : ''}</li>`).join('');
   const deskHtml = `<div class="panel span2"><h2>${hg('Optic Desk, for your portfolio')}</h2>
     ${desk.available ? `<p class="sub">From the ${esc(desk.edition.slot_label || '')} edition of ${esc(bkwDate(desk.edition.date))}${desk.edition.is_today ? '' : ' (not today\'s)'}: "${esc(desk.edition.headline || '')}". These are the edition's own sources that touch what you hold; nothing was rewritten for you.</p>
       ${deskItems ? `<ul class="bkw-list">${deskItems}</ul>` : '<p class="sub">Nothing in this edition touches what you hold.</p>'}
       ${(desk.market_wide || []).length ? `<h3 class="bkw-h3">Market-wide, next three days</h3><ul class="bkw-list">${desk.market_wide.map((m) => `<li>${esc(m.label)} <span class="bkw-meta">${esc(bkwDate(m.event_at))}</span></li>`).join('')}</ul>` : ''}
-      <p class="set-row-note"><a href="${esc(desk.link || '#/read')}" class="btn sm">Read the full edition</a></p>${bkwLimits(desk.limitations)}`
+      <p class="set-row-note"><a href="${safeHref(desk.link || '#/read')}" class="btn sm">Read the full edition</a></p>${bkwLimits(desk.limitations)}`
     : `<p class="sub">${esc(desk.reason || 'No edition is available.')}</p>`}</div>`;
   return `<div class="panel span2"><h2>${hg('Your calendar')}</h2>
       <p class="sub">${bkwSrc('market')} Earnings, ex-dividend dates and option expiries for what you hold, next ${esc(String(cal.window_days || 45))} days.
@@ -705,7 +705,7 @@ function bkwThesesHTML(th) {
   const list = th.theses || [];
   const cards = list.map((t) => {
     if (BKW.thesisEdit === t.symbol) return bkwThesisForm(t);
-    const devs = (t.developments || []).map((x) => `<li>${x.source_url ? `<a href="${esc(x.source_url)}" target="_blank" rel="noopener">${esc(x.title || '')}</a>` : esc(x.title || '')} <span class="bkw-meta">${esc(x.event_date || '')} ${esc(x.source_name || x.basis || '')}</span></li>`).join('');
+    const devs = (t.developments || []).map((x) => `<li>${x.source_url ? `<a href="${safeHref(x.source_url)}" target="_blank" rel="noopener">${esc(x.title || '')}</a>` : esc(x.title || '')} <span class="bkw-meta">${esc(x.event_date || '')} ${esc(x.source_name || x.basis || '')}</span></li>`).join('');
     return `<div class="bkw-thesis">
       <div class="bkw-row"><h3 class="bkw-h3">${esc(t.symbol)} ${t.held ? `<span class="bkw-meta">${bkwPct(t.weight_pct)} of portfolio</span>` : '<span class="set-tag off">Not held</span>'}</h3>
         <span><button type="button" class="btn sm" data-bkw-thesis-edit="${esc(t.symbol)}">Edit</button>
@@ -736,7 +736,7 @@ function bkwThesisForm(t) {
 
 function bkwAlertsHTML(a, s, choices) {
   const list = (a.alerts || []).slice(0, 15).map((x) => `<li class="${x.seen ? '' : 'bkw-unseen'}"><span><b>${esc(x.title)}</b> <span class="bkw-meta">${esc(agoWords(x.created_at))}</span></span>
-      <span class="bkw-meta">${esc(x.body || '')}</span>${x.link ? ` <a href="${esc(x.link)}" class="bkw-meta">Open</a>` : ''}</li>`).join('');
+      <span class="bkw-meta">${esc(x.body || '')}</span>${x.link ? ` <a href="${safeHref(x.link)}" class="bkw-meta">Open</a>` : ''}</li>`).join('');
   const draft = BKW.alertDraft || JSON.parse(JSON.stringify(s));
   const sel = (path) => {
     const [k, f] = path.split('.');

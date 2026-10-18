@@ -8,6 +8,7 @@
 // model. The trend score is labelled as in the Overview, beside the
 // business-and-price case, so the two long-term readings never blur.
 import { $, html, render as draw, raw } from '../core/dom.js';
+import { CLASSIC } from '../core/classic.js';
 import * as api from '../core/api.js';
 import * as store from '../core/store.js';
 import { num, signed, money, compact, clean, capFirst, shortDate, fullDate, isNum, score100 } from '../core/format.js';
@@ -149,7 +150,7 @@ function dcf(sym) {
   const d = v.dcf || {}, sc = v.scenarios || {}, rv = v.reverse || {}, tor = (v.tornado || []).slice(0, 4);
   const price = (v.market || {}).price;
   return html`<section class="section" aria-labelledby="dcf-h"><div class="section-head"><div><h2 class="t-h2" id="dcf-h">Fair-value model, discounted cash flow</h2><p class="section-sub">${clean((((v.classification || {}).models || {}).dcf || {}).name || '')}. ${clean((((v.classification || {}).models || {}).dcf || {}).why || '')}</p></div>
-      <a class="btn" href="/#/${sym}/investing">Edit the model in the current app</a></div>
+      <a class="btn" href="${CLASSIC}#/${sym}/investing">Edit the model in the current app</a></div>
     ${kv([['Base case, a share', html`${money(d.per_share)} <span class="t-muted">${signed((d.upside || 0) * 100, 0)} against ${num(price)}</span>`], ['Discount rate', pct((d.discount_rate || 0) * 100, 2)], ['Share of value after the forecast', pct((d.terminal_share || 0) * 100, 0)]], 3)}
     <div class="tscroll"><table class="t"><thead><tr><th>Case</th><th>A share</th><th>Against the price</th><th>What it assumes</th></tr></thead>
       <tbody>${['bear', 'base', 'bull'].filter((k) => sc[k]).map((k) => html`<tr><td>${capFirst(k)}</td><td>${money(sc[k].per_share)}</td><td>${signed((sc[k].upside || 0) * 100, 0)}</td><td style="text-align:left">${clean((v.scenario_text || {})[k] || '')}</td></tr>`)}</tbody></table></div>
@@ -230,21 +231,27 @@ function wire(main) {
     if ((b = t('[data-v2-lt-range]'))) { setSetting('optic.lt.range', b.dataset.v2LtRange); if (b.dataset.v2LtRange === 'All') loadAll(); paint(); return; }
     if ((b = t('[data-v2-lt-iv]'))) { setSetting('optic.lt.interval', b.dataset.v2LtIv); paint(); return; }
     if (t('[data-v2-vs-fill]')) {
+      // the classic app's valuationFillFromHistory: one decimal, and the exit
+      // P/E from the company's own median multiple when there is one
       const f = $('[data-v2-vs]', main); const hist = (D.vin || {}).history || {};
-      f['base.growth'].value = num((hist.revenue_growth || {}).value, 2).replace('−', '-');
-      f['base.margin'].value = num((hist.margin || {}).value, 2).replace('−', '-');
-      f['base.share_change'].value = num((hist.share_change || {}).value, 2).replace('−', '-');
-      D.vsBody = Object.assign(VS.readForm(f), { from_history: ['base.growth', 'base.margin', 'base.share_change'] });
-      D.vsStatus = 'Base case filled from history. Add an exit P/E, then save.'; paint();
+      const vh = (((D.lt || {}).holding || {}).valuation_history) || {};
+      const filled = [];
+      const put = (k, v) => { if (!Number.isFinite(v)) return; f[`base.${k}`].value = String(Math.round(v * 10) / 10); filled.push(`base.${k}`); };
+      put('growth', (hist.revenue_growth || {}).value); put('margin', (hist.margin || {}).value); put('share_change', (hist.share_change || {}).value);
+      if (vh.available && vh.median_pe > 0) put('pe', vh.median_pe);
+      const body = VS.readForm(f, D.vsBody);
+      body.from_history = [...new Set([...body.from_history, ...filled])];
+      D.vsBody = body;
+      D.vsStatus = filled.includes('base.pe') ? 'Base case filled from history, exit P/E from its median multiple. Save to keep it.' : 'Base case filled from history. Add an exit P/E, then save.'; paint();
     }
   });
   main.addEventListener('input', (e) => {
     const f = e.target.closest('[data-v2-vs]'); if (!f) return;
     clearTimeout(D.vsT);
     D.vsT = setTimeout(() => {
-      D.vsBody = Object.assign(VS.readForm(f), { from_history: (D.vsBody || {}).from_history || [] }); D.vsStatus = 'Not saved yet.';
+      D.vsBody = VS.readForm(f, D.vsBody); D.vsStatus = 'Not saved yet.';
       // only the results change while typing, so the caret stays where it is
-      const start = VS.startOf(D.vin);
+      const start = VS.startOf(D.vin, D.vsBody);
       VS.CASES.forEach(([c]) => { const o = f.querySelector(`[data-v2-vs-out="${c}"]`); if (o) draw(o, VS.caseOut(start, D.vsBody[c], D.vsBody.shared)); });
       const st = f.querySelector('.vs-status'); if (st) st.textContent = D.vsStatus;
     }, 350);
@@ -252,7 +259,7 @@ function wire(main) {
   main.addEventListener('submit', async (e) => {
     const f = e.target.closest('[data-v2-vs]'); if (!f) return;
     e.preventDefault();
-    const body = Object.assign(VS.readForm(f), { from_history: (D.vsBody || {}).from_history || [] });
+    const body = VS.readForm(f, D.vsBody);
     if (Object.keys(VS.errors(body)).length) { D.vsStatus = 'Not saved: fix the boxes marked first.'; paint(); return; }
     D.vsBody = body; D.vsStatus = await VS.save(D.sym, body); paint();
     toast(D.vsStatus);

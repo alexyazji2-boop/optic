@@ -435,7 +435,7 @@ function paint(focusSel) {
   if (!live) return;
   const y = window.scrollY, a = document.activeElement;
   const keepSel = focusSel || (a && mainEl.contains(a) ? (a.id ? `#${a.id}` : [...a.attributes].filter((x) => x.name.startsWith('data-v2-')).map((x) => `[${x.name}="${CSS.escape(x.value)}"]`).join('') || null) : null);
-  const fl = S.flash ? FLASH[S.flash] : null; S.flash = null;
+  const fl = S.flash ? FLASH[S.flash] : null; // kept until the reader moves to another section
   draw(mainEl, html`<header class="page-head"><h1 class="t-display-m">Brokerage</h1>${linked() ? html`<p class="section-sub">Your own linked accounts, read-only. Optic cannot place, cancel or move anything.</p>` : ''}</header>
     ${fl ? html`<p class="bk-flash ${fl[0]}" role="status">${fl[1]}</p>` : ''}${body()}`);
   if (Math.abs(window.scrollY - y) > 2) window.scrollTo(0, y);
@@ -505,6 +505,7 @@ async function refreshOverview() {
 const onVisible = () => { if (!document.hidden && live && S.section === 'overview' && linked()) refreshOverview(); };
 
 function setSection(id, push) {
+  if (push) S.flash = null;
   const ids = SECTIONS.map((s) => s.id);
   const next = ids.includes(id) ? id : 'overview';
   S.section = next; keep(SECTION_KEY, next);
@@ -531,7 +532,7 @@ export async function render(main, route, app) {
   paint();
   await loadAll(false);
 }
-export function dispose() { live = false; clearTimeout(refreshT); document.removeEventListener('visibilitychange', onVisible); }
+export function dispose() { live = false; S.flash = null; clearTimeout(refreshT); document.removeEventListener('visibilitychange', onVisible); }
 export function onAuth() { if (live) { W.scopeKey = null; loadAll(true); } }
 
 function wire(main) {
@@ -592,7 +593,7 @@ function wire(main) {
     if ((b = t('[data-v2-bk-thesis-del]'))) {
       const sym = b.dataset.v2BkThesisDel;
       if (!b.dataset.v2Confirm) { W.thesisArmed = sym; paint(`[data-v2-bk-thesis-del="${CSS.escape(sym)}"]`); return; }
-      await act(() => api.del(`/api/theses/${encodeURIComponent(sym)}`), 'Thesis deleted.', 'Could not delete that thesis.');
+      await act(() => api.del(`/api/theses/${encodeURIComponent(sym)}`).then((r) => { store.forgetLocalCopy('optic.thesis.v1', sym); return r; }), 'Thesis deleted.', 'Could not delete that thesis.');
       W.thesisArmed = null; delete W.data.events; paint(); loadSection(false); return;
     }
     if ((b = t('[data-v2-bk-alerts]'))) {

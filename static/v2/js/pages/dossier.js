@@ -8,6 +8,7 @@
 // drawer behind each answer shows the evidence and the method. No number here
 // is computed differently from the classic app.
 import { $, $$, html, render as draw, raw } from '../core/dom.js';
+import { CLASSIC } from '../core/classic.js';
 import * as api from '../core/api.js';
 import * as store from '../core/store.js';
 import { num, signed, dir, compact, clean, capFirst, longDate, fullDate, shortDate, isNum, score100 } from '../core/format.js';
@@ -223,7 +224,7 @@ function more(sym) {
     ...(prof.summary ? [[`What does ${name} do?`, html`<p>${clean(prof.summary)}</p>`, '']] : []),
     ...((news.articles || []).length ? [['Latest headlines', html`<ul class="plain">${news.articles.slice(0, 6).map((a) => html`<li><a href="${a.url}" target="_blank" rel="noopener">${clean(a.title)}</a> <span class="t-muted">${a.publisher}, ${a.age_words || ''}, ${a.tone || ''}</span></li>`)}</ul><a class="textlink" href="${hrefFor('news', sym)}">All headlines on News ${icon('out')}</a>`, news.overall_tone || '']] : []),
     ...(fil.length ? [['Recent SEC filings', html`<ul class="plain">${fil.slice(0, 5).map((f) => html`<li><a href="${f.url}" target="_blank" rel="noopener">${f.form}</a> ${clean(f.what)}, filed ${fullDate(f.filed)}</li>`)}</ul>`, `${Math.min(5, fil.length)} newest`]] : []),
-    ['Thesis check', html`<p>Save the conditions your idea depends on, and Optic marks each one as holding or broken. Theses are in the current app for now.</p><a class="textlink" href="/#/${sym}">Open the thesis check ${icon('out')}</a>`, ''],
+    ['Thesis check', html`<p>Save the conditions your idea depends on, and Optic marks each one as holding or broken. Theses are in the current app for now.</p><a class="textlink" href="${CLASSIC}#/${sym}">Open the thesis check ${icon('out')}</a>`, ''],
   ];
   return html`<section class="section" aria-labelledby="mr-h"><h2 class="t-h2" id="mr-h">More on ${name}</h2>
     <div class="more">${items.map(([t1, b, hint]) => html`<details><summary>${t1}<span>${hint ? html`<small>${hint}</small>` : ''}${icon('chev')}</span></summary><div class="inner">${b}</div></details>`)}</div></section>`;

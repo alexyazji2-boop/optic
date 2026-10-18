@@ -2,6 +2,7 @@
 // this page is still in the current app, and opens it there at the same
 // address. Every classic page stays reachable from the new frontend this way.
 import { html, render } from '../core/dom.js';
+import { CLASSIC } from '../core/classic.js';
 import { groupOf, pageOf, hrefFor, SETTINGS } from '../nav.js';
 import { icon } from '../ui/icons.js';
 import { groupTabs } from './tabs.js';
@@ -10,9 +11,9 @@ export function render_(main, route) {
   const g = route.view === 'settings' ? null : groupOf(route.view);
   const p = route.view === 'settings' ? SETTINGS : pageOf(route.view);
   const label = p ? p.label : 'This page';
-  let href = p ? hrefFor(p.view, route.symbol) : '/';
-  if (route.view === 'brokerage' && route.section) href = `/#/brokerage/${route.section}`;
-  if (route.view === 'instrument') href = `/#/instrument/${encodeURIComponent(route.symbol || '')}`;
+  let href = p ? hrefFor(p.view, route.symbol) : CLASSIC;
+  if (route.view === 'brokerage' && route.section) href = `${CLASSIC}#/brokerage/${route.section}`;
+  if (route.view === 'instrument') href = `${CLASSIC}#/instrument/${encodeURIComponent(route.symbol || '')}`;
   if (route.view === 'notfound') {
     render(main, html`<div class="state"><p class="t-h3">That address is not a page</p><p>Check the ticker, or search for the company.</p><button type="button" class="btn" data-v2-open-palette>Search</button></div>`);
     return;

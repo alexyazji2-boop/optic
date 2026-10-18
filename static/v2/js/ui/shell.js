@@ -2,11 +2,17 @@
 // (search, Ask Milo, account) and the phone bar. Pages render into #main.
 import { html, render, $, $$ } from '../core/dom.js';
 import { icon, brandMark } from './icons.js';
+import { footer as legalFooter } from '../core/legal.js';
 import { GROUPS, SECTIONS, SETTINGS, MOBILE_TABS, visibleGroups, hrefFor, groupOf } from '../nav.js';
 import { state as store, recent } from '../core/store.js';
 
 let flags = { admin: false, brokerage: false };
 export function setFlags(f) { flags = Object.assign(flags, f); }
+export const getFlags = () => ({ ...flags });
+// Collapsed to icons, remembered under the classic key (optic.rail.tight.v2: '1' or '0').
+const RAIL_KEY = 'optic.rail.tight.v2';
+export function railTight() { try { return localStorage.getItem(RAIL_KEY) === '1'; } catch (e) { return false; } }
+export function setRailTight(on) { try { localStorage.setItem(RAIL_KEY, on ? '1' : '0'); } catch (e) { /* private mode */ } const sh = $('.shell'); if (sh) sh.classList.toggle('is-tight', on); }
 
 function groupHref(g, symbol) {
   const first = g.pages[0];
@@ -17,17 +23,18 @@ const groupIsV2 = (g) => g.pages.some((p) => p.v2);
 
 export function mount(app) {
   render(app, html`<a class="skip" href="#main">Skip to content</a>
-  <div class="shell">
+  <div class="shell ${railTight() ? 'is-tight' : ''}">
     <div class="rail"></div>
     <div class="stage">
       <header class="topbar">
         <a class="brand-sm" href="#/" aria-label="Optic Terminal, Home">${brandMark()}</a>
-        <button type="button" class="search-btn" data-v2-open-palette aria-label="Search companies, tickers and pages">${icon('search')}<span class="sb-long">Search or ask</span><span class="sb-short" aria-hidden="true">Search</span><kbd>⌘K</kbd></button>
-        <span class="spacer"></span>
+        <button type="button" class="search-btn" data-v2-open-palette aria-label="Search companies, tickers and pages, or ask Milo">${icon('search')}<span class="sb-long">Search or ask</span><span class="sb-short" aria-hidden="true">Search</span><kbd>⌘K</kbd></button>
+        <span class="spacer"></span><span class="session-chip" id="session-chip" role="status" aria-live="off"></span>
         <button type="button" class="btn btn-milo btn-sm topbar-milo" data-v2-milo="" data-v2-milo-ctx="" data-v2-milo-sym="" aria-label="Ask Milo">${icon('milo')}<span class="tm-label" aria-hidden="true">Ask Milo</span></button>
         <button type="button" class="account-btn" data-v2-account aria-haspopup="dialog">Sign in</button>
       </header>
       <main id="main" class="page" tabindex="-1"></main>
+      <footer class="legal" id="legal-footer"><p class="app-status"><span id="app-status"></span><button type="button" class="textlink" data-v2-report-open>Report a problem</button></p>${legalFooter()}</footer>
     </div>
   </div>
   <nav class="tabbar" aria-label="Sections"></nav>`);
@@ -54,7 +61,7 @@ export function paint(route) {
   });
   render($('.rail'), html`<a class="brand" href="#/" aria-label="Optic Terminal, Home">${brandMark()}<span class="brand-word" aria-hidden="true">OPTIC <span>TERMINAL</span></span></a>
     <nav class="rail-nav" aria-label="Sections">${rows}</nav>
-    <div class="rail-foot"><a class="rail-row" href="${hrefFor('settings')}" ${SETTINGS.v2 ? '' : html`aria-label="${SETTINGS.label}, opens in the current app"`} ${route.view === 'settings' ? html`aria-current="page"` : ''}>${icon(SETTINGS.icon)}<span>${SETTINGS.label}</span>${SETTINGS.v2 ? '' : html`<span class="legacy" aria-hidden="true">${icon('out')}</span>`}</a></div>`);
+    <div class="rail-foot"><a class="rail-row" href="${hrefFor('settings')}" ${SETTINGS.v2 ? '' : html`aria-label="${SETTINGS.label}, opens in the current app"`} ${route.view === 'settings' ? html`aria-current="page"` : ''}>${icon(SETTINGS.icon)}<span>${SETTINGS.label}</span>${SETTINGS.v2 ? '' : html`<span class="legacy" aria-hidden="true">${icon('out')}</span>`}</a><button type="button" class="rail-row" data-v2-rail-collapse aria-pressed="${railTight()}" aria-label="Collapse">${icon('chev')}<span>Collapse</span></button></div>`);
 
   render($('.tabbar'), MOBILE_TABS.map((t) => {
     if (t.more) {
@@ -96,6 +103,3 @@ export function paintAccount() {
   }
 }
 
-export function setMiloContext(label, symbol, ask) {
-  $$('.topbar-milo').forEach((b) => { b.dataset.v2MiloCtx = label || ''; b.dataset.v2MiloSym = symbol || ''; b.dataset.v2Milo = ask || ''; });
-}

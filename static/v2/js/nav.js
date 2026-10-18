@@ -1,3 +1,4 @@
+import { CLASSIC } from './core/classic.js';
 // The navigation model. Names are the classic app's, word for word
 // (NAV_GROUPS, SUB_LABELS and MOBILE_TABS in static/app.js); renaming any of
 // them needs the owner's yes.
@@ -73,10 +74,10 @@ export function hrefFor(view, symbol) {
   const p = pageOf(view);
   if (!p) return '#/';
   if (g && g.symbol) {
-    if (!symbol) return p.v2 ? '#/' : '/#/';
-    return (p.v2 ? '#/' : '/#/') + encodeURIComponent(symbol) + (p.slug ? '/' + p.slug : '');
+    if (!symbol) return p.v2 ? '#/' : `${CLASSIC}#/`;
+    return (p.v2 ? '#/' : `${CLASSIC}#/`) + encodeURIComponent(symbol) + (p.slug ? '/' + p.slug : '');
   }
-  return (p.v2 ? '#/' : '/#/') + p.slug;
+  return (p.v2 ? '#/' : `${CLASSIC}#/`) + p.slug;
 }
 
 export function visibleGroups({ admin, brokerage }) {

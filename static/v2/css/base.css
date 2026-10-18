@@ -33,14 +33,14 @@ h1, h2, h3, h4, p { margin: 0; }
 .stack { display: flex; flex-direction: column; gap: var(--gap, var(--s-4)); }
 .cluster { display: flex; flex-wrap: wrap; align-items: center; gap: var(--gap, var(--s-3)); }
 .split { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-end; gap: var(--s-4); }
-.page { width: 100%; max-width: var(--page); padding: var(--s-2) clamp(20px, 4vw, 56px) 140px; outline: none; }
+.page { width: 100%; max-width: var(--page); padding: var(--s-2) clamp(20px, 4vw, 56px) 56px; outline: none; }
 .section { margin-top: var(--s-10); }
 .section-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-end; gap: var(--s-4); margin-bottom: var(--s-5); }
 .section-sub { margin-top: 6px; font-size: var(--t-note); color: var(--c-ink-3); max-width: 62ch; }
 .rule { border: 0; border-top: 1px solid var(--c-line); margin: 0; }
 
 @media (max-width: 860px) {
-  .page { padding: 0 16px 150px; }
+  .page { padding: 0 16px 40px; }
   .section { margin-top: var(--s-9); }
   :root { --t-h2: 22px; }
 }

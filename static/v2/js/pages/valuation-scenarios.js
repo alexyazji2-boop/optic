@@ -5,6 +5,9 @@
 //   shares N = shares x (1 + share change)^N; EPS = net income / shares N;
 //   price N = EPS x exit P/E; value today = price N / (1 + required)^N.
 // Signed in, saved to /api/valuations/{SYM}; signed out, to optic.valuation.v1.
+// The body is the classic app's valuationBodyOf exactly (v: 1, blank boxes as
+// null, notes as '', the reader's own revenue and share count in shared), so a
+// save in either app keeps everything the other wrote.
 import { html } from '../core/dom.js';
 import * as api from '../core/api.js';
 import * as store from '../core/store.js';
@@ -14,10 +17,18 @@ import { num, signed, money, compact, isNum, ago } from '../core/format.js';
 const KEY = 'optic.valuation.v1';
 export const CASES = [['bear', 'Bear'], ['base', 'Base'], ['bull', 'Bull']];
 export const FIELDS = [['growth', 'Revenue growth', '% a year', -95, 500], ['margin', 'Net margin', '%', -500, 100], ['share_change', 'Share count change', '% a year', -50, 100], ['pe', 'Exit P/E', 'times earnings', 0.1, 1000]];
-const SHARED = [['years', 'Years ahead', 'years', 1, 15], ['required_return', 'Required return', '% a year', 0, 50]];
+const SHARED = [['years', 'Years ahead', 'years', 1, 15, '5'], ['required_return', 'Required return', '% a year', 0, 50, '10']];
+// the classic app's VALUATION_OVERRIDES: the reader's own starting figures
+const OWN = [['revenue', 'Your own revenue (optional)', 'replaces the reported figure; 394B, 2.5T', 1, 1e14], ['shares', 'Your own share count (optional)', 'replaces the reported figure; 15.2B', 1, 1e13]];
 
 const n = (v) => { const t = String(v ?? '').trim().replace(/,/g, '').replace(/[%x×]$/i, ''); if (!t) return null; const x = Number(t); return Number.isFinite(x) ? x : NaN; };
-export const emptyBody = () => ({ shared: { years: 5, required_return: 10, revenue: null, shares: null }, bear: {}, base: {}, bull: {}, from_history: [] });
+// '394B' as 394e9, like the classic app's valuationAmount; null when blank, NaN when unreadable
+export const amount = (v) => { const t = String(v ?? '').trim().replace(/[,$\s]/g, ''); if (!t) return null; const m = /^(-?\d+(?:\.\d+)?)([kmbt]?)$/i.exec(t); return m ? Number(m[1]) * { '': 1, k: 1e3, m: 1e6, b: 1e9, t: 1e12 }[m[2].toLowerCase()] : NaN; };
+// blank boxes, as the classic app starts; the years and return are placeholders, not saved values
+export const emptyBody = () => ({ v: 1, shared: { years: null, required_return: null, revenue: null, shares: null }, bear: { note: '' }, base: { note: '' }, bull: { note: '' }, from_history: [] });
+// the classic app's valuationIsEmpty: nothing in any box and no note
+export const isEmpty = (b) => Object.values(b.shared || {}).every((v) => v === null || v === undefined)
+  && CASES.every(([c]) => !((b[c] || {}).note) && FIELDS.every(([k]) => { const v = (b[c] || {})[k]; return v === null || v === undefined; }));
 
 function local() { if (!holds(store.state.user)) return {}; try { const r = JSON.parse(localStorage.getItem(KEY) || '{}'); return r && typeof r === 'object' ? r : {}; } catch (e) { return {}; } }
 
@@ -48,15 +59,16 @@ export function work(start, c, shared) {
 export function errors(body) {
   const out = {};
   SHARED.forEach(([k, , , lo, hi]) => { const v = body.shared[k]; if (v !== null && v !== undefined && (Number.isNaN(v) || v < lo || v > hi)) out[`shared.${k}`] = `Between ${lo} and ${hi}`; });
+  OWN.forEach(([k]) => { const v = body.shared[k]; if (v !== null && v !== undefined && (Number.isNaN(v) || v < 1)) out[`shared.${k}`] = 'A positive amount, like 394B'; });
   CASES.forEach(([c]) => FIELDS.forEach(([k, , , lo, hi]) => { const v = (body[c] || {})[k]; if (v !== null && v !== undefined && (Number.isNaN(v) || v < lo || v > hi)) out[`${c}.${k}`] = `Between ${lo} and ${hi}`; }));
   return out;
 }
 
 export async function save(sym, body) {
-  const empty = CASES.every(([c]) => FIELDS.every(([k]) => !isNum((body[c] || {})[k])));
+  const empty = isEmpty(body);
   if (store.signedIn()) {
     try {
-      if (empty) await api.del(`/api/valuations/${encodeURIComponent(sym)}`).catch(() => {});
+      if (empty) { await api.del(`/api/valuations/${encodeURIComponent(sym)}`).catch(() => {}); store.forgetLocalCopy(KEY, sym); }
       else await api.put(`/api/valuations/${encodeURIComponent(sym)}`, body);
       return empty ? 'Cleared.' : 'Saved to your account just now.';
     } catch (e) { return `Not saved to your account (${e.message}).`; }
@@ -70,14 +82,24 @@ export async function save(sym, body) {
   } catch (e) { return 'Not saved: this browser refused the write.'; }
 }
 
-export function readForm(form) {
+/** The boxes as the stored body. `prev` is what the boxes were filled from:
+ *  a box still showing a figure filled from history keeps its tag; one the
+ *  reader has changed is theirs (the classic app drops the tag on typing). */
+export function readForm(form, prev) {
   const body = emptyBody();
   SHARED.forEach(([k]) => { body.shared[k] = n(form[`shared.${k}`].value); });
-  CASES.forEach(([c]) => { FIELDS.forEach(([k]) => { body[c][k] = n(form[`${c}.${k}`].value); }); body[c].note = String(form[`${c}.note`].value || '').slice(0, 1000) || null; });
+  OWN.forEach(([k]) => { body.shared[k] = amount(form[`shared.${k}`].value); });
+  CASES.forEach(([c]) => { FIELDS.forEach(([k]) => { body[c][k] = n(form[`${c}.${k}`].value); }); body[c].note = String(form[`${c}.note`].value || '').slice(0, 1000); });
+  const at = (b, key) => { const [scope, k] = key.split('.'); return ((b || {})[scope] || {})[k]; };
+  body.from_history = ((prev || {}).from_history || []).filter((key) => at(body, key) !== null && at(body, key) === at(prev, key));
   return body;
 }
 
-export const startOf = (inputs) => { const inp = (inputs || {}).inputs || {}; return { revenue: (inp.revenue || {}).value, shares: (inp.shares || {}).value, price: (inp.price || {}).value }; };
+/** Where the cases start: the reader's own figure where they gave one, else the reported one. */
+export const startOf = (inputs, body) => {
+  const inp = (inputs || {}).inputs || {}, own = ((body || {}).shared) || {};
+  return { revenue: own.revenue > 0 ? own.revenue : (inp.revenue || {}).value, shares: own.shares > 0 ? own.shares : (inp.shares || {}).value, price: (inp.price || {}).value, ownRevenue: own.revenue > 0, ownShares: own.shares > 0 };
+};
 export function caseOut(start, c, shared) {
   const r = work(start, c || {}, shared);
   return !r.ok ? html`<p class="t-muted">Needs ${r.missing.join(', ')}.</p>` : r.loss ? html`<p>A loss in year ${shared.years}: no earnings multiple to apply.</p>`
@@ -86,13 +108,15 @@ export function caseOut(start, c, shared) {
 
 export function view(sym, inputs, body, status) {
   const inp = (inputs || {}).inputs || {}, hist = (inputs || {}).history || {};
-  const start = { revenue: (inp.revenue || {}).value, shares: (inp.shares || {}).value, price: (inp.price || {}).value };
   const b = body || emptyBody();
+  const start = startOf(inputs, b);
   const errs = errors(b);
-  const field = (name, label, unit, value) => html`<label class="vs-f ${errs[name] ? 'bad' : ''}"><span class="t-label">${label}</span><span class="field field-sm"><input name="${name}" inputmode="decimal" value="${value ?? ''}" aria-describedby="${name}-u"><small id="${name}-u" class="t-muted">${errs[name] || unit}</small></span></label>`;
+  const tagged = (name) => (b.from_history || []).includes(name);
+  const field = (name, label, unit, value, hint) => html`<label class="vs-f ${errs[name] ? 'bad' : ''}"><span class="t-label">${label}</span><span class="field field-sm"><input name="${name}" inputmode="decimal" value="${value ?? ''}" placeholder="${hint || ''}" aria-describedby="${name}-u"><small id="${name}-u" class="t-muted">${errs[name] || (tagged(name) ? `${unit}, from history` : unit)}</small></span></label>`;
   return html`<form class="vs" data-v2-vs>
-    <p class="section-sub">Starting from reported figures: revenue ${compact(start.revenue)} (${(inp.revenue || {}).source || 'filings'}), ${compact(start.shares)} shares, price ${num(start.price)}. Every assumption below is yours.</p>
-    <div class="cluster">${SHARED.map(([k, l, u]) => field(`shared.${k}`, l, u, b.shared[k]))}</div>
+    <p class="section-sub">Starting from ${start.ownRevenue ? 'your own revenue' : 'reported revenue'} ${compact(start.revenue)}${start.ownRevenue ? '' : ` (${(inp.revenue || {}).source || 'filings'})`}, ${compact(start.shares)} shares${start.ownShares ? ' (your figure)' : ''}, price ${num(start.price)}. Every assumption below is yours.</p>
+    <div class="cluster">${SHARED.map(([k, l, u, , , hint]) => field(`shared.${k}`, l, u, b.shared[k], hint))}</div>
+    <details class="vs-own" ${start.ownRevenue || start.ownShares ? 'open' : ''}><summary>Your own starting figures</summary><div class="cluster">${OWN.map(([k, l, u]) => field(`shared.${k}`, l, u, b.shared[k]))}</div></details>
     <div class="vs-cases">${CASES.map(([c, label]) => { return html`<fieldset class="vs-case"><legend>${label}</legend>
       ${FIELDS.map(([k, l, u]) => field(`${c}.${k}`, l, u, (b[c] || {})[k]))}
       <label class="vs-f"><span class="t-label">Note</span><span class="field field-sm"><input name="${c}.note" value="${(b[c] || {}).note || ''}" maxlength="1000"></span></label>

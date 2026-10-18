@@ -398,7 +398,7 @@ def test_only_a_web_address_becomes_a_source_link():
       assert(httpUrl(' javascript:alert(1)') === '', 'a padded script');
       assert(httpUrl(null) === '', 'nothing');
     """)
-    assert "${httpUrl(c.source_url) ? `<p class=\"caveat\"><a href=\"${esc(httpUrl(c.source_url))}\"" in APP
+    assert "${httpUrl(c.source_url) ? `<p class=\"caveat\"><a href=\"${safeHref(httpUrl(c.source_url))}\"" in APP
 
 
 def test_the_button_refreshes_from_the_live_site_instead_of_scanning():

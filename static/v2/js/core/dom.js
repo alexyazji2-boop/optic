@@ -8,11 +8,26 @@ export const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
 // Tagged template: interpolated values are escaped unless wrapped in raw().
 const RAW = Symbol('raw');
 export const raw = (s) => ({ [RAW]: true, s: String(s == null ? '' : s) });
+// A value that is the whole of an href or src is checked as an address: a
+// server-supplied link (a headline, a filing, a source) with a javascript: or
+// data: scheme becomes "#". Escaping stops markup, not a scheme.
+const URL_ATTR = /\b(?:href|src|action|formaction|xlink:href)\s*=\s*["']$/i;
+export function safeUrl(u) {
+  const s = String(u == null ? '' : u).trim();
+  if (!s) return '#';
+  if (/^(?:https?:|mailto:)/i.test(s)) return s;
+  if (s.startsWith('//')) return '#';
+  if (/^[a-z][a-z0-9+.-]*:/i.test(s.replace(/[\u0000-\u0020]/g, ''))) return '#';
+  return s;
+}
 export function html(strings, ...vals) {
   let out = '';
   strings.forEach((str, i) => {
     out += str;
-    if (i < vals.length) out += flat(vals[i]);
+    if (i < vals.length) {
+      const v = vals[i];
+      out += URL_ATTR.test(str) && (typeof v === 'string' || typeof v === 'number') ? esc(safeUrl(v)) : flat(v);
+    }
   });
   return raw(out);
 }

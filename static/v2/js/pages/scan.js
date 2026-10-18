@@ -176,6 +176,9 @@ export async function render(main, route) {
   document.title = 'Scan, Optic';
   provideContext(() => ({ view: 'scan', scan: S.result && S.result.rows ? { id: S.scanId, name: S.result.name, rows: S.result.rows.slice(0, 15) } : null }));
   paint(); wire(main);
+  // #/scan?q=… (from Milo's "Find stocks" card, which said it may use a question) runs that request
+  const q = String((route.params || {}).q || '').trim();
+  if (q) runAsk(q.slice(0, 300));
   try { [S.scans, S.groups] = await Promise.all([api.get('/api/scanners', { ttl: 120000 }), api.get('/api/scanners/groups', { ttl: 600000 }).catch(() => null)]); if (!S.groups && S.scans) S.groups = { groups: [{ id: 'all', name: 'Screens', count: S.scans.scans.length, scans: S.scans.scans }] }; }
   catch (e) { S.scansErr = e; S.scans = null; }
   paint();

@@ -93,6 +93,11 @@ export function clock(iso, z = zone()) {
 /* ---------------- the advanced switch ---------------- */
 export function knowledge() { const k = get(KNOW_KEY); return k && k in LEVELS ? k : DEFAULT_MODE; }
 export function advancedOn() { return LEVELS[knowledge()] >= LEVELS.advanced; }
+/** Set the knowledge level directly (the Milo panel's selector), as OpticKnowledge.set does. */
+export function setKnowledge(id) {
+  if (!(id in LEVELS) || id === knowledge()) return;
+  put(KNOW_KEY, id); put(ASKED_KEY, '1'); emit('knowledge');
+}
 /** The classic switch: on goes to rung 2 and remembers the rung it left; off returns there. */
 export function setAdvanced(on) {
   if (on === advancedOn()) return;

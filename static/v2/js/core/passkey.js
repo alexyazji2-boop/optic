@@ -29,3 +29,19 @@ export async function create(name = '') {
     name,
   });
 }
+
+/** Sign in with a passkey this device or a synced account holds (classic signInWithPasskey). */
+export async function signIn({ remember = true } = {}) {
+  if (!supported()) throw new Error('This browser does not support passkeys.');
+  const { options: o } = await api.post('/api/auth/passkeys/login/options', {});
+  const publicKey = { challenge: fromB64(o.challenge), timeout: o.timeout, rpId: o.rpId, userVerification: o.userVerification, hints: ['client-device'],
+    allowCredentials: (o.allowCredentials || []).map((x) => ({ id: fromB64(x.id), type: x.type, transports: x.transports })) };
+  const c = await navigator.credentials.get({ publicKey });
+  if (!c) throw new Error('That passkey attempt did not complete.');
+  return api.post('/api/auth/passkeys/login/verify', {
+    credential: { id: c.id, rawId: toB64(c.rawId), type: c.type,
+      response: { clientDataJSON: toB64(c.response.clientDataJSON), authenticatorData: toB64(c.response.authenticatorData), signature: toB64(c.response.signature), userHandle: c.response.userHandle ? toB64(c.response.userHandle) : null },
+      clientExtensionResults: c.getClientExtensionResults ? c.getClientExtensionResults() : {} },
+    remember,
+  });
+}

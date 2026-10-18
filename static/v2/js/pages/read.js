@@ -6,6 +6,7 @@
 // already written; the server's own loop keeps the Read current. Writing a
 // missing piece is a labelled button, because it spends a model call.
 import { $, html, render as draw } from '../core/dom.js';
+import { CLASSIC } from '../core/classic.js';
 import * as api from '../core/api.js';
 import { num, signed, clean, capFirst, ago, shortDate, fullDate, isNum } from '../core/format.js';
 import { skeleton, empty, failed } from '../ui/states.js';
@@ -41,7 +42,7 @@ function readHero() {
   const b = D.brief;
   if (D.briefErr) return failed("Today's Read", D.briefErr, { retry: 'brief' });
   if (!b) return skeleton('lines', 6, "Loading today's Read");
-  if (b.missing) return empty("Today's Read has not been built yet", `${clean(b.reason || '')} The current app builds it on request.`, html`<a class="btn" href="/#/read">Open Read in the current app ${icon('out')}</a>`);
+  if (b.missing) return empty("Today's Read has not been built yet", `${clean(b.reason || '')} The current app builds it on request.`, html`<a class="btn" href="${CLASSIC}#/read">Open Read in the current app ${icon('out')}</a>`);
   const s = b.summary || {}, w = b.wires || {};
   const idx = ((b.overview || {}).groups || {}).indices || [];
   return html`${idx.length ? html`<div class="mstrip" style="--n:${idx.length}" role="group" aria-label="Indices">${idx.map((r) => html`<a class="mcell" href="#/${r.symbol}"><span class="k">${r.symbol} ${r.name}</span><span class="v">${num(r.last)}</span><span class="d ${r.day >= 0 ? 'up' : 'down'}">${signed(r.day)}</span></a>`)}</div>

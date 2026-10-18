@@ -769,7 +769,10 @@ def _home(code: str, provider: str = "", redirect_to: str = "") -> RedirectRespo
         query["auth_error"] = code if code in _ERROR_CODES else "provider"
     if provider:
         query["provider"] = provider
-    target = "{}/?{}".format(base_url(), urlencode(query))
+    # Land in the frontend the sign-in started from. Only these fixed roots are
+    # chosen, from the path's prefix, so this adds no way to leave the site.
+    root = "/v2/" if (redirect_to or "").startswith("/v2/") else "/classic" if (redirect_to or "").startswith("/classic") else "/"
+    target = "{}{}?{}".format(base_url(), root, urlencode(query))
     if redirect_to and redirect_to.startswith("/") and not redirect_to.startswith("//"):
         # Relative paths only. An absolute URL here would make this an open
         # redirect: hand someone a link that signs them in and lands them on a

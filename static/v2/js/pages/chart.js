@@ -8,6 +8,7 @@
 // so a line drawn here shows there and the other way round. The view choices
 // are a setting of this browser (optic.v2.chart.v1).
 import { $, $$, html, render as draw, isPhone } from '../core/dom.js';
+import { CLASSIC } from '../core/classic.js';
 import * as api from '../core/api.js';
 import * as store from '../core/store.js';
 import { holds } from '../core/device.js';
@@ -159,7 +160,7 @@ function paint() {
       <div id="ch-body"></div>
       <p class="legend-line" id="ch-key" aria-label="Key"></p>
       <div class="split ch-foot"><p class="asof" id="ch-note"></p>
-        <div class="cluster">${miloButton('Explain this chart', { ask: `Explain the ${D.sym} chart: the trend, support, resistance, momentum, volume and risk, and what would invalidate the read.`, context: `${D.sym} Dossier, Chart`, symbol: D.sym })}<a class="textlink" href="/#/${D.sym}/chart">More chart tools in the current app ${icon('out')}</a></div></div>
+        <div class="cluster">${miloButton('Explain this chart', { ask: `Explain the ${D.sym} chart: the trend, support, resistance, momentum, volume and risk, and what would invalidate the read.`, context: `${D.sym} Dossier, Chart`, symbol: D.sym })}<a class="textlink" href="${CLASSIC}#/${D.sym}/chart">More chart tools in the current app ${icon('out')}</a></div></div>
       <p class="asof">Wheel or pinch to zoom, drag to move along, arrows to read each bar, plus and minus to zoom. Studies, stages, MA Trend, volume by price, backtests, pairs, the stop check and the side widgets are in the current app.</p>
     </section>`);
   paintChart();
@@ -169,6 +170,13 @@ export async function render(main, route) {
   live = true; mainEl = main;
   const sym = route.symbol;
   V = Object.assign(readView(), { tool: 'select' });
+  // #/SYM/chart?interval=daily&range=1Y&show=ov:ma (from Milo's chart and study cards)
+  const pr = route.params || {};
+  if (INTERVALS.some((x) => x.key === pr.interval)) V.interval = pr.interval;
+  if (RANGES.daily[pr.range] !== undefined) V.range = pr.range;
+  const [kind, id] = String(pr.show || '').split(':');
+  if (kind === 'ov' && id in V.overlays) V.overlays[id] = true;
+  if (kind === 'pane' && id in V.panes) V.panes[id] = true;
   D = { sym, drawings: readDrawings(sym) };
   store.pushRecent(sym);
   document.title = `${sym} Chart, Optic`;

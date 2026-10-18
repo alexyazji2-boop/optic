@@ -2595,6 +2595,18 @@ function foldPulseLegal() {
 }
 
 function initLegalFooter() {
+  // The new design (v2), offered only when the server says it is open to this reader.
+  const tryV2 = document.getElementById('try-v2');
+  if (tryV2 && document.documentElement.dataset.v2Available === '1') {
+    tryV2.hidden = false;
+    tryV2.addEventListener('click', (evt) => {
+      const a = evt.target.closest('[data-try-v2]');
+      if (!a) return;
+      evt.preventDefault();
+      document.cookie = 'optic_ui=v2; path=/; max-age=31536000; samesite=lax';
+      location.href = '/' + location.hash;
+    });
+  }
   const btn = $('#legal-more');
   const full = $('#legal-full');
   if (!btn || !full) return;
@@ -10012,7 +10024,7 @@ function homeStories(data) {
   return `<ul class="cc-stories">${stories.map((s) => `<li>
     ${s.tier ? `<span class="nw-tier t-${esc(s.tier)}"
       title="${esc(s.tier_why || '')}">${esc(homeTierLabel(s.tier))}</span>` : ''}
-    <a href="${esc(s.url)}" target="_blank" rel="noopener noreferrer nofollow"
+    <a href="${safeHref(s.url)}" target="_blank" rel="noopener noreferrer nofollow"
       class="cc-story-t">${esc(s.title)}</a>
     <span class="subnote">${esc(s.source || '')}${
     s.age_words ? ` \u00b7 ${esc(s.age_words)}` : ''}</span>
@@ -12020,7 +12032,7 @@ function renderOpticPulse(d) {
          story, the meta row — and this adds one word to it. */''}
     ${pulseReadMore(d)}
 
-    ${story && story.title ? `<a class="pl-story" href="${esc(story.url || '#')}"
+    ${story && story.title ? `<a class="pl-story" href="${safeHref(story.url || '#')}"
       target="_blank" rel="noopener noreferrer">
       ${newsTierBadge(story)}
       <span class="pl-story-t">${esc(story.title)}</span>
@@ -13167,7 +13179,7 @@ function renderOptionsPricing(d) {
     }
     // Credit where the history came from, as its licence asks.
     const credit = rank.available && rank.attribution
-      ? ` <span class="ov-fine">${esc(rank.attribution)} (<a href="${esc(rank.source_url || '')}" target="_blank" rel="noopener">Source</a>).</span>` : '';
+      ? ` <span class="ov-fine">${esc(rank.attribution)} (<a href="${safeHref(rank.source_url || '')}" target="_blank" rel="noopener">Source</a>).</span>` : '';
     items.push({ text: `Options are priced for about ${fmt(iv30.iv_pct, 1)}% a year of movement over the next 30 days (implied volatility).`,
       why: `${rankText ? rankText.trim() + ' ' : ''}${rank.available ? esc(rank.note || '') : esc(rank.reason || '')}${credit}`,
       gloss: 'iv rank' });
@@ -13175,7 +13187,7 @@ function renderOptionsPricing(d) {
   const ivhv = d.iv_hv || {};
   if (ivhv.available) {
     items.push({ text: `Options price ${fmt(ivhv.iv30, 1)}% a year of movement; over the past 30 days the stock actually moved at ${fmt(ivhv.hv30, 1)}% (${ivhv.gap >= 0 ? 'implied above realised' : 'implied below realised'} by ${fmt(Math.abs(ivhv.gap), 1)} points, as of ${esc(ivhv.as_of || '')}).`,
-      why: `Implied was above realised on ${fmt(ivhv.iv_above_hv_pct, 0)}% of the past ${fmt(ivhv.days, 0)} days, and today's gap is wider than ${fmt(ivhv.gap_percentile, 0)}% of them. ${esc(ivhv.note || '')} <span class="ov-fine">${esc(ivhv.source || '')} (<a href="${esc(ivhv.source_url || '')}" target="_blank" rel="noopener">Source</a>).</span>`,
+      why: `Implied was above realised on ${fmt(ivhv.iv_above_hv_pct, 0)}% of the past ${fmt(ivhv.days, 0)} days, and today's gap is wider than ${fmt(ivhv.gap_percentile, 0)}% of them. ${esc(ivhv.note || '')} <span class="ov-fine">${esc(ivhv.source || '')} (<a href="${safeHref(ivhv.source_url || '')}" target="_blank" rel="noopener">Source</a>).</span>`,
       gloss: 'implied volatility' });
   }
   const cheap = d.iv_cheapness || {};
@@ -13186,7 +13198,7 @@ function renderOptionsPricing(d) {
   if (month && month.straddle_move_pct) {
     items.push({ text: `By ${shortDate(month.expiry)} (${month.dte} days) the at-the-money straddle is priced for a move of about ±${fmt(month.straddle_move_pct, 1)}%.`,
       why: `A one-standard-deviation move on the same implied volatility is ±${fmt(month.one_sd_move_pct, 1)}%. These are what options cost, not limits on the price: under the model a move larger than one standard deviation happens about a third of the time.${
-        (d.straddle_calibration || {}).available ? ` ${esc(d.straddle_calibration.text)} <span class="ov-fine">${esc(d.straddle_calibration.source || '')} (<a href="${esc(d.straddle_calibration.source_url || '')}" target="_blank" rel="noopener">Source</a>).</span>` : ''}` });
+        (d.straddle_calibration || {}).available ? ` ${esc(d.straddle_calibration.text)} <span class="ov-fine">${esc(d.straddle_calibration.source || '')} (<a href="${safeHref(d.straddle_calibration.source_url || '')}" target="_blank" rel="noopener">Source</a>).</span>` : ''}` });
   }
   const adv = knowledgeLevel() >= 2;
   if (term.available) {
@@ -15826,7 +15838,7 @@ function catalystDetail(news) {
     ? ` · reading ${esc(entry.lean)} on average` : ' · no net lean'}</p>
     ${hits.map((a) => `<div class="cat-detail-row">
       ${toneChip(a.tone)}
-      <a href="${esc(a.url)}" target="_blank" rel="noopener noreferrer nofollow"
+      <a href="${safeHref(a.url)}" target="_blank" rel="noopener noreferrer nofollow"
         >${esc(a.title)}</a>
       <span class="subnote">${esc(a.publisher || '')}${
   a.age_words ? ` · ${esc(a.age_words)}` : ''}</span>
@@ -15840,7 +15852,7 @@ function newsArticleRow(a) {
     <div class="nw-line">
       ${newsTierBadge(a)}
       ${toneChip(a.tone)}
-      <a class="nw-title" href="${esc(a.url)}" target="_blank"
+      <a class="nw-title" href="${safeHref(a.url)}" target="_blank"
         rel="noopener noreferrer nofollow">${esc(a.title)}</a>
       <span class="subnote">${esc(a.publisher || '')}${
   a.age_words ? ` \u00b7 ${esc(a.age_words)}` : ''}</span>
@@ -16630,7 +16642,7 @@ function renderCongress(c) {
     <p class="caveat">${esc(c.caveat || '')}
       ${c.complete ? '' : `Read so far: ${fmt(c.filings_parsed, 0)} of ${
   fmt(c.filings_known, 0)} filings this year.`}
-      <a href="${esc(c.source || '')}" target="_blank" rel="noopener">Source</a>.</p>
+      <a href="${safeHref(c.source || '')}" target="_blank" rel="noopener">Source</a>.</p>
   </div>`;
 }
 
@@ -17731,7 +17743,7 @@ function ovAboutSourceHTML(prof, fund) {
     const filed = m ? new Date(+m[1], +m[2] - 1, +m[3], 12)
       .toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : src.filed;
     const link = /^https:\/\/www\.sec\.gov\//.test(src.url || '')
-      ? ` <a href="${esc(src.url)}" target="_blank" rel="noopener">Read the filing</a>` : '';
+      ? ` <a href="${safeHref(src.url)}" target="_blank" rel="noopener">Read the filing</a>` : '';
     return `<p class="ov-fine">In the company’s own words, from its latest ${esc(src.form_name)}, filed ${esc(filed)}. Optic checks for a newer report every few hours.${link}</p>`;
   }
   return `<p class="ov-fine">In the ${fund ? 'fund' : 'company'}’s own words, as the data feed holds them. No annual report on file with the SEC to check it against, so it may lag the latest one.</p>`;
@@ -17952,7 +17964,7 @@ function ovFactorsHTML(d, factors) {
     ${fold ? '</details>' : ''}
     ${drivers.length ? `<details class="ov-ev ov-drivers"><summary>What has been moving it recently</summary>
       <ul class="ov-drv">${drivers.map((x) => `<li><span class="ov-drv-kind">${esc(x.kind)}</span>
-        <span class="ov-drv-text">${x.url ? `<a href="${esc(x.url)}" target="_blank" rel="noopener noreferrer nofollow">${esc(x.text)}</a>` : esc(x.text)}</span>
+        <span class="ov-drv-text">${x.url ? `<a href="${safeHref(x.url)}" target="_blank" rel="noopener noreferrer nofollow">${esc(x.text)}</a>` : esc(x.text)}</span>
         ${x.note ? `<span class="ov-f-why">${esc(x.note)}</span>` : ''}</li>`).join('')}</ul>
       <p class="ov-fine">None of these proves why the price moved. Prices also move on things no data feed records.</p>
     </details>` : ''}
@@ -18349,7 +18361,7 @@ function renderCompany(co) {
             <td class="name">${esc(f.filed || '')}</td>
             <td class="name"><strong>${esc(f.form)}</strong></td>
             <td class="name dim">${esc(f.what || '')}</td>
-            <td><a href="${esc(f.url)}" target="_blank" rel="noopener noreferrer nofollow"
+            <td><a href="${safeHref(f.url)}" target="_blank" rel="noopener noreferrer nofollow"
               style="color:var(--s1)">Open</a></td>
           </tr>`).join('')}</tbody>
         </table>
@@ -18694,6 +18706,15 @@ const CATALYST_FILTERS = { q: '', status: 'relevant', category: '', sector: '', 
 /* Only a web address becomes a link. The library can arrive from the live site
  * as well as this copy's own store, and esc() stops markup, not a scheme: a
  * `javascript:` address would still run on click. */
+/* Any address written into an href: escaped, and only http(s), mailto, an
+ * in-app hash or a same-site path survive. A feed's javascript: or data:
+ * address becomes "#" (esc() stops markup, not a scheme). */
+function safeHref(u) {
+  const s = String(u == null ? '' : u).trim();
+  if (/^(?:https?:|mailto:)/i.test(s)) return esc(s);
+  if (!s || s.startsWith('//') || /^[a-z][a-z0-9+.-]*:/i.test(s.replace(/[\u0000-\u0020]/g, ''))) return '#';
+  return esc(s);
+}
 function httpUrl(u) {
   return /^https?:\/\//i.test(String(u || '')) ? String(u) : '';
 }
@@ -18737,7 +18758,7 @@ function catalystCard(c) {
       </table>
       `
     : '<p class="sub">No company links were stored for this catalyst.</p>'}
-      ${httpUrl(c.source_url) ? `<p class="caveat"><a href="${esc(httpUrl(c.source_url))}" target="_blank"
+      ${httpUrl(c.source_url) ? `<p class="caveat"><a href="${safeHref(httpUrl(c.source_url))}" target="_blank"
         rel="noopener noreferrer nofollow" style="color:var(--s1)">Source${
   c.source_name ? ' · ' + esc(c.source_name) : ''}</a></p>` : ''}
     </div>
@@ -26161,7 +26182,7 @@ function wsWidgetBody(id) {
   n.article_count ? ` · ${fmt(n.article_count, 0)} stories` : ''}${
   n.held && n.held.fetched_at ? ` · fetched ${esc(shortWhen(n.held.fetched_at))}, the feed is empty now` : ''}</p>
     <ul class="ws-list">${arts.map((a) => `<li>
-      <a href="${esc(a.link || a.url || '#')}" target="_blank" rel="noopener"
+      <a href="${safeHref(a.link || a.url || '#')}" target="_blank" rel="noopener"
         class="ws-news-link">${esc((a.title || '').slice(0, 92))}</a>
       <span class="ws-leg-args">${esc(a.publisher || a.source || '')}</span>
     </li>`).join('')}</ul>`;
@@ -26271,7 +26292,7 @@ function wsWidgetBody(id) {
     return `${rows.length ? `<table class="data narrow"><tbody>${rows.map(([k, v]) =>
       `<tr><td class="name">${esc(k)}</td><td>${v}</td></tr>`).join('')}</tbody></table>` : ''}
     ${f.length ? `<ul class="ws-list">${f.slice(0, 5).map((x) => `<li>
-      <a href="${esc(x.url || '#')}" target="_blank" rel="noopener" class="ws-news-link">${
+      <a href="${safeHref(x.url || '#')}" target="_blank" rel="noopener" class="ws-news-link">${
   esc(x.form || '')}</a> <span class="ws-leg-args">${esc(x.filed || x.date || '')}</span>
     </li>`).join('')}</ul>` : ''}`;
   }
@@ -36935,7 +36956,7 @@ function briefAccess(e) {
 function briefLink(e, text) {
   const label = text === undefined ? esc(e.title) : text;
   return e.url
-    ? `<a href="${esc(e.url)}" target="_blank" rel="noopener noreferrer nofollow">${label}</a>`
+    ? `<a href="${safeHref(e.url)}" target="_blank" rel="noopener noreferrer nofollow">${label}</a>`
     : label;
 }
 
@@ -37079,7 +37100,7 @@ function calRow(e) {
   const prev = e.previous ? `
     <div class="cal-prev">
       <span class="cal-prev-tag">Last time</span>
-      <a href="${esc(e.previous.url || '#')}" target="_blank" rel="noopener noreferrer nofollow"
+      <a href="${safeHref(e.previous.url || '#')}" target="_blank" rel="noopener noreferrer nofollow"
         >${esc(e.previous.headline)}</a>
       ${e.previous.age_days !== null && e.previous.age_days !== undefined
     ? `<span class="cal-prev-age">${fmt(e.previous.age_days, 0)} days ago</span>` : ''}
@@ -39974,7 +39995,7 @@ function insCongressRow(t) {
     <td class="num ic-lag${late ? ' neg' : ''}"${t.date_suspect
     ? ' title="Not computed: the trade date in this filing is after the filing itself."' : ''}>${
   lag === null || lag === undefined ? '—' : `${fmt(lag, 0)}d`}</td>
-    <td class="ins-more">${t.source_url ? `<a href="${esc(t.source_url)}"
+    <td class="ins-more">${t.source_url ? `<a href="${safeHref(t.source_url)}"
       target="_blank" rel="noopener" title="The filing itself, on the Clerk's server"
       >Filing</a>` : ''}${t.district ? ` <span class="muted">${esc(t.district)}</span>` : ''}</td>
   </tr>`;
@@ -40032,7 +40053,7 @@ function contractRow(a) {
     ? `<span class="ct-sub"> · ${esc(a.sub_agency)}</span>` : ''}</td>
     <td class="num ct-amt">$${fmtCompact(a.amount, 1)}</td>
     <td class="ins-more">${a.url
-    ? `<a href="${esc(a.url)}" target="_blank" rel="noopener"
+    ? `<a href="${safeHref(a.url)}" target="_blank" rel="noopener"
         title="${esc(a.description || 'The award on USAspending')}">Award</a>` : ''}</td>
   </tr>`;
 }
@@ -40071,7 +40092,7 @@ function renderContracts() {
       <tbody>${rows.map(contractRow).join('')}</tbody>
     </table></div>` : ''}
     <p class="caveat">${esc(c.caveat || '')}
-      <a href="${esc(c.source || '')}" target="_blank" rel="noopener">USAspending</a>.</p>
+      <a href="${safeHref(c.source || '')}" target="_blank" rel="noopener">USAspending</a>.</p>
   </div>`;
 }
 
@@ -40216,7 +40237,7 @@ function congressResults() {
   c.latest_filed ? `Latest disclosure ${esc(dayLabel(c.latest_filed))}. ` : ''}${
   c.complete ? 'The whole year is read.'
     : `Read so far: ${fmt(c.filings_parsed, 0)} of ${fmt(c.filings_known, 0)} filings this year.`}
-      <a href="${esc(c.source || '')}" target="_blank" rel="noopener">Source</a>.</p>`;
+      <a href="${safeHref(c.source || '')}" target="_blank" rel="noopener">Source</a>.</p>`;
 }
 
 function renderInsidersView() {
@@ -40628,7 +40649,7 @@ function deskCites(u) {
     const name = esc(deskSourceName(e));
     const tip = esc(deskSourceTitle(e));
     return e.url
-      ? `<a class="de-src" href="${esc(e.url)}" target="_blank" rel="noopener noreferrer" title="${tip}">${name}</a>`
+      ? `<a class="de-src" href="${safeHref(e.url)}" target="_blank" rel="noopener noreferrer" title="${tip}">${name}</a>`
       : `<span class="de-src" title="${tip}">${name}</span>`;
   }).filter(Boolean);
   return chips.length ? `<span class="de-srcs" aria-label="Sources">${chips.join('')}</span>` : '';
@@ -42656,7 +42677,7 @@ function renderSessionBar() {
       <span class="ses-co-name">${esc(prof.name || data.ticker || '')}</span>
       ${prof.kind_label ? `<span class="chip neutral" style="padding:0 var(--space-2);font-size:var(--t-micro)"><span class="dot"></span>${esc(prof.kind_label)}</span>` : ''}
       ${meta ? `<span class="ses-co-meta">${meta}</span>` : ''}
-      ${prof.website ? `<a class="ses-co-link" href="${esc(prof.website)}" target="_blank"
+      ${prof.website ? `<a class="ses-co-link" href="${safeHref(prof.website)}" target="_blank"
         rel="noopener noreferrer">Site</a>` : ''}
     </div>
     ${prof.summary ? `<p class="ses-co-sum" id="ses-summary">${esc(prof.summary)}</p>
@@ -45070,7 +45091,7 @@ function digestBodyHTML(d, compact, fold) {
       : 'No digest for this symbol right now.'))}</p>`;
   }
   const facts = (d.changed || []).map((f) => `<li>${esc(f.text)}${f.detail ? ` <span class="muted">${esc(f.detail)}</span>` : ''}</li>`).join('');
-  const why = (d.explanations || []).map((e) => `<li><a href="${esc(e.url)}" target="_blank" rel="noopener">${
+  const why = (d.explanations || []).map((e) => `<li><a href="${safeHref(e.url)}" target="_blank" rel="noopener">${
     esc(e.headline || e.url)}</a> <span class="muted">${esc([e.publisher, digestTime(e.published)].filter(Boolean).join(' · '))}</span></li>`).join('');
   const gaps = (d.look_closer || []).filter((x) => /^Not checked:/.test(String(x)));
   const look = (d.look_closer || []).filter((x) => !/^Not checked:/.test(String(x)))
@@ -45723,7 +45744,7 @@ function pulseRetrievedHTML(got) {
 
 function pulseReadHTML(read) {
   return `<details class="milo-read"><summary>Sources Milo read (${read.length})</summary><ul>${read.map((r) => {
-    const name = r.url ? `<a href="${esc(r.url)}" target="_blank" rel="noopener">${esc(r.source)}</a>` : esc(r.source);
+    const name = r.url ? `<a href="${safeHref(r.url)}" target="_blank" rel="noopener">${esc(r.source)}</a>` : esc(r.source);
     const what = [r.what, r.period].filter(Boolean).join(' \u00b7 ');
     return `<li>${name}${what ? `<span class="mr-what">${esc(what)}</span>` : ''}</li>`;
   }).join('')}</ul></details>`;
@@ -46141,7 +46162,7 @@ async function streamTo(url, body, node) {
         const list = payload.sources || payload.citations || [];
         if (list.length) {
           sourcesEl.innerHTML = '<div style="color:var(--ink-muted);margin-bottom:var(--space-0)">Sources</div>'
-            + list.map((sc) => `<a href="${esc(sc.url)}" target="_blank" rel="noopener">${esc(sc.title || sc.url)}</a>`).join('');
+            + list.map((sc) => `<a href="${safeHref(sc.url)}" target="_blank" rel="noopener">${esc(sc.title || sc.url)}</a>`).join('');
         }
         if (Array.isArray(payload.read) && payload.read.length) {
           sourcesEl.insertAdjacentHTML('beforeend', pulseReadHTML(payload.read));
@@ -46811,7 +46832,7 @@ function bkConsentHtml(c) {
   /* Only the documents that have a URL are named: the server records the
    * agreement under a version that says which ones were shown (owner-only
    * mode links before Optic's own terms are published, 2026-10-15). */
-  const link = (url, text) => `<a href="${esc(url)}" target="_blank" rel="noopener">${esc(text)}</a>`;
+  const link = (url, text) => `<a href="${safeHref(url)}" target="_blank" rel="noopener">${esc(text)}</a>`;
   const optic = [c.terms_url && link(c.terms_url, 'Terms'), c.privacy_url && link(c.privacy_url, 'Privacy Policy')].filter(Boolean);
   const docs = [optic.length ? `Optic's ${optic.join(' and ')}` : '',
     c.provider_terms_url ? `SnapTrade's ${link(c.provider_terms_url, 'End User Terms')}` : ''].filter(Boolean);

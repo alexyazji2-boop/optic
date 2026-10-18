@@ -462,7 +462,7 @@
     const labels = dcf.missing_labels || {};
     return `<div class="dcf-missing">
       <p class="dcf-note">Read ${(dcf.missing || []).map((k) => esc(labels[k] || k)).join(' and ')} for the fiscal year to
-        ${esc(day(dcf.fy0_end))} from the company's 10-K${dcf.filing_url ? ` (<a href="${esc(dcf.filing_url)}" target="_blank" rel="noopener">filing</a>)` : ''}
+        ${esc(day(dcf.fy0_end))} from the company's 10-K${dcf.filing_url ? ` (<a href="${safeHref(dcf.filing_url)}" target="_blank" rel="noopener">filing</a>)` : ''}
         and enter it here. It will be marked as entered by you. Amounts accept B, M or K, for example 24.4B.</p>
       ${(dcf.missing || []).map((k) => `<label class="dcf-field"><span class="dcf-flabel">${esc(labels[k] || k)}</span>
         <span class="dcf-finput"><input type="text" inputmode="decimal" class="dcf-save-name" data-dcf-base="${esc(k)}"
@@ -848,7 +848,7 @@
     if (f.end) bits.push(esc(day(f.end)));
     const label = bits.join(' · ');
     const note = f.note || f.reason || f.rule || '';
-    return `${f.url ? `<a href="${esc(f.url)}" target="_blank" rel="noopener">${label || 'filing'}</a>` : label}
+    return `${f.url ? `<a href="${safeHref(f.url)}" target="_blank" rel="noopener">${label || 'filing'}</a>` : label}
       ${f.restated ? ' <span class="dcf-kind">restated</span>' : ''}${note ? `<span class="muted"> ${esc(note)}</span>` : ''}`;
   }
 
@@ -1025,7 +1025,7 @@
       ['Tagged restructuring and impairment', 'unusual_items', 'money'], ['Operating margin excluding them', 'ebit_margin_normalized'],
       ['Acquisitions / revenue', 'acquisitions_pct']];
     const cell = (f) => (f && has(f.value) ? `<td title="${esc([f.tag, f.form, f.filed && `filed ${f.filed}`].filter(Boolean).join(' · '))}">${f.url
-      ? `<a href="${esc(f.url)}" target="_blank" rel="noopener">${bigMoney(f.value)}</a>` : bigMoney(f.value)}${f.restated ? '*' : ''}</td>` : '<td class="muted">not reported</td>');
+      ? `<a href="${safeHref(f.url)}" target="_blank" rel="noopener">${bigMoney(f.value)}</a>` : bigMoney(f.value)}${f.restated ? '*' : ''}</td>` : '<td class="muted">not reported</td>');
     return `<p class="dcf-note">Fiscal years from the company's 10-K filings (SEC EDGAR, US-GAAP XBRL). Each figure links to its filing;
       hover for the tag. * restated in a later filing (the latest figure is used). Filings retrieved ${esc(when((d.inputs || {}).retrieved))}.</p>
       <div class="dcf-scroll"><table class="data dcf-fc"><thead><tr><th></th>${h.map((y) => `<th scope="col">FY ${esc(y.fy_end.slice(0, 4))}</th>`).join('')}</tr></thead>

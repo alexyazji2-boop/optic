@@ -1,6 +1,7 @@
 // Optic v2: boot, routing and the app-wide controls. device.js is imported
 // first so a pending account switch is finished before any store is read.
 import { keepDeviceSession, bringGuestThings, keepGuestThingsOut, switchedSaid } from './core/device.js';
+import { CLASSIC } from './core/classic.js';
 import { $, html, render, announce } from './core/dom.js';
 import * as api from './core/api.js';
 import * as store from './core/store.js';
@@ -9,7 +10,7 @@ import * as prefs from './core/prefs.js';
 import * as shell from './ui/shell.js';
 import * as palette from './ui/palette.js';
 import * as drawer from './ui/drawer.js';
-import { openMilo } from './ui/milo.js';
+import { openMilo, resetContext } from './ui/milo.js';
 import { toggleWatch } from './ui/company.js';
 import { toast } from './ui/toast.js';
 import { hrefFor } from './nav.js';
@@ -39,10 +40,17 @@ import * as reportsPage from './pages/reports.js';
 import * as watchlist from './pages/watchlist.js';
 import * as alerts from './pages/alerts.js';
 import * as signin from './pages/signin.js';
+import { startReset } from './pages/signin.js';
+import { handleAuthLinks } from './core/authlinks.js';
+import { areaNotice } from './core/legal.js';
+import { watchBuild } from './core/build.js';
+import { watchStatus } from './core/status.js';
+import { openReport } from './pages/settings.js';
 import * as bridge from './pages/bridge.js';
 
 const PAGES = { home, overview: dossier, swing: options, long: investing, earnings, financials, news, chart: chartPage, brief: readPage, market: macroPage, indices: indicesPage, instrument: instrumentPage, explore: explorePage, scan: scanPage, insiders: insidersPage, analysts: analystsPage, settings: settingsPage, compare: comparePage, tracker: trackerPage, paper: paperPage, roth: retirementPage, brokerage: brokeragePage, reports: reportsPage, usage: reportsPage, accounts: reportsPage, watchlist, alerts, signin };
 let current = null;   // { page, view, route }
+let noticeWatch = null;
 
 const app = {
   /** After sign in or out: settle whose browser this is, then reload state. */
@@ -85,15 +93,31 @@ function show(route) {
   if (current && current.page.dispose) current.page.dispose();
   drawer.close({ silent: true, route: true });
   palette.close({ silent: true });
-  if (route.view === 'signin' && store.signedIn()) { router.go('#/'); return; }
+  if (route.view === 'signin' && store.signedIn() && (route.params || {}).mode !== 'reset') { router.go('#/'); return; }
   const page = PAGES[route.view] || bridge;
   const main = $('#main');
   const view = document.createElement('div');
   view.className = 'page-view';
   main.replaceChildren(view);
+  // The page's own notice (not advice, hypothetical performance), where Classic puts it: below the
+  // answer, above the evidence, i.e. after the page's first section. Pages repaint themselves, so an
+  // observer puts it back after every paint; no page can drop it.
+  if (noticeWatch) noticeWatch.disconnect();
+  const notice = areaNotice(route.view);
+  if (notice) {
+    const place = () => {
+      if (view.querySelector(':scope .legal-area')) return;
+      const holder = document.createElement('div'); render(holder, notice);
+      const first = view.querySelector(':scope > section.section, :scope > .section');
+      const anchor = first ? first.nextSibling : null;
+      if (first) view.insertBefore(holder.firstElementChild, anchor); else if (view.firstElementChild) view.appendChild(holder.firstElementChild);
+    };
+    noticeWatch = new MutationObserver(place); noticeWatch.observe(view, { childList: true });
+  }
   current = { page, view, route };
   shell.paint(route);
-  shell.setMiloContext(route.symbol ? `${route.symbol} Dossier, Overview` : 'this page', route.symbol || '', '');
+  // Milo forgets the last page before this one renders (it registers its own context as it renders)
+  resetContext(route);
   window.scrollTo(0, 0);
   Promise.resolve(page.render(view, route, app)).catch((e) => {
     console.error(e);
@@ -117,7 +141,7 @@ function accountBody() {
   return html`<dl class="kv"><div><dt>Name</dt><dd>${u.name || `${u.first_name || ''} ${u.last_name || ''}`}</dd></div><div><dt>Email</dt><dd>${u.email}</dd></div>
       <div><dt>Plan</dt><dd>${plan.label || 'Free'}${(store.state.me || {}).admin ? ', owner' : ''}</dd></div></dl>
     ${u.email_verified ? '' : html`<p class="stale">Your email is not verified yet. The link is in your inbox.</p>`}
-    <nav class="more-list" aria-label="Account"><a class="rail-row" href="#/watchlist">Watchlists</a><a class="rail-row" href="#/settings">Settings</a><a class="rail-row" href="/#/read">Saved research, in the current app</a></nav>
+    <nav class="more-list" aria-label="Account"><a class="rail-row" href="#/watchlist">Watchlists</a><a class="rail-row" href="#/settings">Settings</a><a class="rail-row" href="${CLASSIC}#/read">Saved research, in the current app</a></nav>
     <button type="button" class="btn" data-v2-signout>Sign out</button>`;
 }
 
@@ -125,9 +149,13 @@ function wireGlobal() {
   document.addEventListener('click', async (e) => {
     const t = (s) => e.target.closest(s);
     let b;
-    if ((b = t('[data-v2-open-palette]'))) { e.preventDefault(); palette.open(b); return; }
+    if ((b = t('[data-v2-report-open]'))) { openReport(b, current ? document.title.replace(', Optic', '') : 'Optic'); return; }
+    if ((b = t('[data-v2-rail-collapse]'))) { const on = !shell.railTight(); shell.setRailTight(on); b.setAttribute('aria-pressed', String(on)); return; }
+    if (t('[data-v2-use-classic]')) { e.preventDefault(); document.cookie = 'optic_ui=classic; path=/; max-age=31536000; samesite=lax'; location.href = `${CLASSIC}${location.hash}`; return; }
+    if ((b = t('[data-v2-legal-more]'))) { const full = $('#legal-full'); const open = full.hidden; full.hidden = !open; b.setAttribute('aria-expanded', String(open)); b.textContent = open ? 'Hide the full disclaimer' : 'Full disclaimer'; return; }
+    if ((b = t('[data-v2-open-palette]'))) { e.preventDefault(); palette.open(b, { symbol: current && current.route.symbol }); return; }
     if ((b = t('[data-v2-milo]'))) {
-      openMilo({ question: b.dataset.v2Milo || '', contextLabel: b.dataset.v2MiloCtx || 'this page', symbol: b.dataset.v2MiloSym || '', opener: b });
+      openMilo({ question: b.dataset.v2Milo || '', opener: b, about: b.dataset.v2MiloCtx || '', symbol: b.dataset.v2MiloSym || '' });
       return;
     }
     if ((b = t('[data-v2-watch]'))) { e.preventDefault(); await toggleWatch(b.dataset.v2Watch); return; }
@@ -142,6 +170,10 @@ function wireGlobal() {
       let syms = [];
       try { const raw = JSON.parse(localStorage.getItem('optic.watchlists.v1') || 'null'); syms = raw && Array.isArray(raw.lists) ? raw.lists.flatMap((l) => l.symbols || []) : JSON.parse(localStorage.getItem('optic.chart.watch.v1') || '[]'); } catch (err) { syms = []; }
       if (syms.length) { try { await api.post('/api/watchlists/adopt', { symbols: [...new Set(syms)] }); toast(`Brought ${new Set(syms).size} names into your account.`); } catch (err) { toast(api.explain(err, 'Bringing them across'), { kind: 'bad' }); } }
+      // theses and valuation scenarios too, as the classic app's adoptLocalTheses
+      // and valuationAccountLoad do; the server never overwrites one the account has
+      await adoptKeyed('optic.thesis.v1', '/api/theses/adopt', 'theses', (n) => `Brought ${n} thesis${n === 1 ? '' : 'es'} into your account.`);
+      await adoptKeyed('optic.valuation.v1', '/api/valuations/adopt', 'valuations', (n) => `Brought scenarios for ${n} name${n === 1 ? '' : 's'} into your account.`);
       await afterAuth();
       if (current) show(current.route);
       return;
@@ -153,8 +185,8 @@ function wireGlobal() {
   });
   document.addEventListener('keydown', (e) => {
     const typing = /^(INPUT|TEXTAREA|SELECT)$/.test((e.target && e.target.tagName) || '') || (e.target && e.target.isContentEditable);
-    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); if (palette.isOpen()) palette.close(); else palette.open(); }
-    else if (e.key === '/' && !typing && !drawer.isOpen()) { e.preventDefault(); palette.open(); }
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); if (palette.isOpen()) palette.close(); else { const f = document.activeElement; const seed = f && f.matches && f.matches('input[type=search], input[type=text]:not([name=password])') && !f.closest('.palette') ? f.value : ''; palette.open(null, { seed, symbol: current && current.route.symbol }); } }
+    else if (e.key === '/' && !typing && !drawer.isOpen()) { e.preventDefault(); palette.open(null, { symbol: current && current.route.symbol }); }
   });
   store.subscribe((what) => {
     if (what !== 'lists') return;
@@ -174,16 +206,34 @@ async function boot() {
   window.addEventListener('storage', (e) => { if (/^optic\.(theme|ui\.scale\.v1)$/.test(e.key || '')) { prefs.applyTheme(); prefs.applyScale(); } });
   shell.mount($('#app'));
   wireGlobal();
+  watchBuild();
+  watchStatus();
   await store.loadMe();
   const r = await deviceCheck();
   if (r === 'reload') return;
+  // links from email and sign-in providers (?verify, ?reset, ?auth, ?auth_error), read once,
+  // after the account is settled so a reload cannot swallow them
+  const link = await handleAuthLinks().catch(() => null);
+  if (link && link.refresh) await store.loadMe();
   if (store.state.auth === 'unknown') toast('Optic could not check your sign-in. Showing this browser\'s lists for now.');
   await afterAuth();
   router.onRoute(show);
+  if (link && link.reset) { startReset(link.reset); history.replaceState(history.state, '', `${location.pathname}${location.search}#/signin?mode=reset`); }
+  else if (link && link.signin && !store.signedIn()) history.replaceState(history.state, '', `${location.pathname}${location.search}#/signin`);
+  else if (link && link.signedIn && link.hash) history.replaceState(history.state, '', `${location.pathname}${location.search}${link.hash}`);
   router.start();
+  if (link && link.signedIn && store.state.user) toast(`Signed in as ${store.state.user.email}.`);
   const said = switchedSaid();
   if (said === 'in') toast('Signed in. This browser now shows your account\'s things.');
   if (said === 'out') toast('Signed out. Your account\'s things are put away on this browser.');
 }
 
 boot();
+
+async function adoptKeyed(key, url, field, said) {
+  let local = null;
+  try { local = JSON.parse(localStorage.getItem(key) || 'null'); } catch (e) { local = null; }
+  if (!local || typeof local !== 'object' || !Object.keys(local).length) return;
+  try { const out = await api.post(url, { [field]: local }); const n = ((out || {}).adopted || []).length; if (n) toast(said(n)); }
+  catch (e) { /* the browser copies are untouched; the classic app tries again on its next load */ }
+}

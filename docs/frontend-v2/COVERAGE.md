@@ -49,18 +49,18 @@ Status words:
 | Brokerage group shown only when linking is available | Rebuilt | From `/api/brokerage/status`. |
 | Reports group for the owner only | Rebuilt | From `/api/auth/me` `admin`. |
 | Phone bar: Home, Dossier, Markets, Discover, More | Rebuilt | More opens a sheet with the remaining groups and Settings. |
-| Rail Collapse | Not yet | |
-| Search and command palette (⌘K, `/`) | Changed | Symbols from `/api/search`, recent symbols and the navigation's pages. Not yet: saved research, screens from `/api/scanners`, quick actions. |
+| Rail Collapse | Rebuilt | Stage 0. Same key as Classic, `optic.rail.tight.v2`. |
+| Search and command palette (⌘K, `/`) | Rebuilt | Stage 0: exact page names first, symbols with their actions, saved research, screens from `/api/scanners` with the sector board, quick actions, and an Ask Milo row that drafts the typed question. |
 | Ask Milo in the top bar | Rebuilt | Carries the page's context; gold outline. |
 | Account menu | Changed | Name, email, plan, owner badge, links, sign out. Resending the confirmation link is in Settings. |
 | Sign in and create account (email and password) | Rebuilt | `/api/auth/login`, `/api/auth/register`. |
-| Passkeys, Google, Apple, forgot and reset password, verify email | Current app | Linked from the v2 sign-in page. |
+| Passkeys, Google, Apple, forgot and reset password, verify email | Rebuilt | Stage 0. Links from e-mail (`?verify`, `?reset`) and provider callbacks (`?auth=ok`, `?auth_error`) are handled in v2; a provider sign-in started in v2 returns to v2. |
 | Guest things on sign-in ("bring them in" or "leave them") | Rebuilt | Same holder and shelf logic and keys as `static/app.js` (`core/device.js`); guest lists are adopted into the account. |
 | Account switch from another tab reloads this one | Rebuilt | |
 | Theme (system, light, dark) | Rebuilt | `optic.theme`, set in v2 Settings or the current app's; either holds in both. |
 | Text size, time zone, advanced switch | Changed | Same keys as the current app (`core/prefs.js`). Text size scales v2 from the classic Default; times on the rebuilt Settings and Reports pages follow the chosen zone. The advanced switch is saved for both apps; v2 pages already fold specialist material into tabs and details, so it does not change their layout yet. |
 | Toasts with Undo | Rebuilt | |
-| Footer health chip | Not yet | |
+| Footer health chip | Rebuilt | Stage 0: footer status from `/api/health`, session chip, offline bar, new-version bar (which also carries a rollback to the classic app). |
 
 ## Home
 
@@ -134,7 +134,7 @@ Status words:
 | How an option's value moves (Greeks lab) | Rebuilt | Tab. |
 | Swing setups | Changed | Tab lists armed, triggered and watched setups; filters, rule settings, back-tests and setup alerts in the current app. |
 | Chart patterns, seasonality, relative performance | Rebuilt | Tab. |
-| Thesis | Current app | Linked from the Overview. |
+| Thesis | Current app | Linked from the Overview. Brokerage theses are edited in v2; a v2 save keeps the Dossier's snapshot (server fix, Stage 0). |
 | Track record slots | Not yet | |
 | Silent refresh | Changed | Readings every 60 seconds while the market trades (was 20). |
 | Knowledge-level folding | Changed | Deeper panels are one tab away for everyone. |
@@ -401,6 +401,10 @@ Status words:
 | Signal history | Not yet | In the current app. |
 | From the scheduled scan | Changed | Read-only list; kind filters, unread only and "Why this fired" not yet. |
 | Owner controls (mark read, clear all, email delivery) | Current app | |
+
+## Stage 0 (2026-10-18)
+
+Stage 0 closed the five blocking areas (Milo essentials, sign-in and account links, search and palette, legal notices, app shell and caching), and fixed the round-trip faults found when Classic and v2 shared the same data. See STAGE0-EVIDENCE.md, CAPABILITY-MATRIX.md (the three-way classification that replaces page counts), MIGRATION.md, BRANCH-REVIEW.md and PREVIEW-PROPOSAL.md beside this file.
 
 ## Validation record
 

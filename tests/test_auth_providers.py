@@ -390,3 +390,19 @@ def test_a_reader_on_the_public_site_is_not_handed_the_operators_instructions(mo
     monkeypatch.delenv("RAILWAY_ENVIRONMENT")
     assert "GOOGLE_CLIENT_ID" in config.providers()["google"]["reason"], \
         "the operator running it locally still gets the instruction"
+
+
+def test_a_sign_in_started_in_v2_returns_to_v2_and_nowhere_else(google):
+    # v2 passes next=/v2/#/...; the return lands on /v2/, the classic start on /
+    client.get("/api/auth/google/start", params={"next": "/v2/#/settings"}, follow_redirects=False)
+    row = main.accounts_db.rows("SELECT * FROM oauth_states")[0]
+    reply = client.get("/api/auth/google/callback", params={"code": "auth-code", "state": row["state"]}, follow_redirects=False)
+    target = reply.headers["location"]
+    assert "/v2/?auth=ok" in target and target.endswith("&next=/v2/#/settings")
+    client.cookies.clear()
+    main.accounts_db.execute("DELETE FROM oauth_states")
+    client.get("/api/auth/google/start", params={"next": "//evil.example/x"}, follow_redirects=False)
+    row = main.accounts_db.rows("SELECT * FROM oauth_states")[0]
+    reply = client.get("/api/auth/google/callback", params={"code": "auth-code", "state": row["state"]}, follow_redirects=False)
+    target = reply.headers["location"]
+    assert "/?auth=ok" in target and "evil" not in target and "/v2/" not in target

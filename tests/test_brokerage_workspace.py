@@ -309,6 +309,22 @@ def test_a_position_thesis_keeps_horizon_and_assumptions_through_a_dossier_save(
     assert t["bull"] == "Data-centre demand, and software"
 
 
+def test_a_workspace_thesis_save_keeps_the_dossiers_snapshot():
+    # The Dossier's form saves a snapshot (the "what changed" baseline and the
+    # thesis check's conditions); the workspace's form sends prose only, in
+    # both apps, and used to wipe it.
+    c, user = reader()
+    snap = {"stance": "constructive", "price": 120.5, "check": {"conditions": ["close below 100"]}}
+    c.put("/api/theses/NVDA", json={"bull": "Data-centre demand", "invalidation": "Close below 100", "snapshot": snap})
+    c.put("/api/theses/NVDA", json={"bull": "Data-centre demand", "invalidation": "Close below 100",
+                                    "horizon": "3-5 years"})
+    t = c.get("/api/theses").json()["theses"]["NVDA"]
+    assert t["snapshot"] == snap and t["horizon"] == "3-5 years"
+    # a save that sends a snapshot still replaces it
+    c.put("/api/theses/NVDA", json={"bull": "Data-centre demand", "snapshot": {"stance": "cautious"}})
+    assert c.get("/api/theses").json()["theses"]["NVDA"]["snapshot"] == {"stance": "cautious"}
+
+
 # ------------------------------------------------------------------- Milo
 
 

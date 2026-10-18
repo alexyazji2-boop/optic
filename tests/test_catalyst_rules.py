@@ -532,7 +532,7 @@ def _js(scenario):
            "function fmt(v, d) { return Number(v).toFixed(d); }\n"
            + "\n".join(_const(n) for n in ("CAT_HORIZON_CLASS", "CAT_DIRECT_CLASS",
                                            "CAT_STRENGTH_CLASS", "CAT_BASIS"))
-           + "\n" + "\n".join(_raw_fn(n) for n in ("esc", "httpUrl", "catalystCard",
+           + "\n" + "\n".join(_raw_fn(n) for n in ("esc", "safeHref", "httpUrl", "catalystCard",
                                                     "catalystTickerHTML", "catalystCountLine",
                                                     "catalystScanLine", "catalystEmptyText"))
            + "\n" + scenario + "\nprint('TEST_OK');")

@@ -7,6 +7,7 @@
 // Each block loads on its own and shows its own loading, empty, stale and
 // failed state, so a slow source never holds the rest of the page.
 import { $, $$, html, render as draw, raw } from '../core/dom.js';
+import { CLASSIC } from '../core/classic.js';
 import * as api from '../core/api.js';
 import * as store from '../core/store.js';
 import { num, signed, dir, money, signedMoney, clean, ago, shortDate, isNum } from '../core/format.js';
@@ -251,7 +252,7 @@ function render_(main, isNew) {
       <section class="section" aria-labelledby="pr-h"><div class="section-head"><div><h2 class="t-h2" id="pr-h">What matters today</h2><p class="section-sub">The calendar, this week's earnings and the sector board, sorted by when they land.</p></div></div>
         <div id="hm-priority">${skeleton('lines', 4, 'Loading what matters today')}</div></section>
       <div id="hm-desk"></div>
-      <section class="section" aria-labelledby="mv-h"><div class="section-head"><div><h2 class="t-h2" id="mv-h">Moved most this month</h2></div><a class="textlink" href="/#/scan">All scans ${icon('out')}</a></div><div id="hm-movers">${skeleton('lines', 2)}</div></section>
+      <section class="section" aria-labelledby="mv-h"><div class="section-head"><div><h2 class="t-h2" id="mv-h">Moved most this month</h2></div><a class="textlink" href="#/scan">All scans ${icon('out')}</a></div><div id="hm-movers">${skeleton('lines', 2)}</div></section>
       <div id="hm-alerts"></div>`}
   `);
 }

@@ -572,11 +572,17 @@ async def put_thesis(symbol: str, request: Request,
         # `created_at` is not touched. It is when the reader first took a view
         # on this name, which is the more interesting of the two dates and the
         # one an update would quietly destroy.
+        # A save that sends no snapshot keeps the stored one. Only the Dossier's
+        # thesis form takes a snapshot (the baseline "what changed" compares
+        # against, and the thesis check's conditions); the Brokerage
+        # workspace's form, in either app, sends prose only, and used to wipe
+        # both every time it saved.
+        snapshot = _thesis_snapshot(payload) if "snapshot" in payload else (existing.get("snapshot") or "{}")
         db.execute(
             "UPDATE theses SET bull=?,bear=?,catalysts=?,invalidation=?,"
             "snapshot=?,updated_at=? WHERE user_id=? AND symbol=?",
             (fields["bull"], fields["bear"], fields["catalysts"],
-             fields["invalidation"], _thesis_snapshot(payload), now,
+             fields["invalidation"], snapshot, now,
              user["id"], sym))
     for key, value in extra.items():
         db.execute("UPDATE theses SET {}=? WHERE user_id=? AND symbol=?".format(key),

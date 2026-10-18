@@ -17,6 +17,42 @@ const LOCAL_KEY = 'optic.watches.v1';
 let S = {};
 let live = true;
 
+// What a check leaves behind, exactly as the classic app's checkWatchSymbol
+// does, so either app's next check knows what is news: signed in, the server
+// records it (/api/watches/seen); signed out, the watch keeps when it was last
+// met and on what evidence, and a swing-setup alert that fired is kept in the
+// browser's signal history (optic.signals.v1, as keepLocalSignal).
+const SIGNALS_KEY = 'optic.signals.v1', SIGNALS_MAX = 200;
+function keepSignal(rec) {
+  if (!rec || !rec.signal_key || !holds(store.state.user)) return;
+  let st = { signals: [], events: {} };
+  try { const raw = JSON.parse(localStorage.getItem(SIGNALS_KEY) || 'null'); if (raw && Array.isArray(raw.signals) && raw.events && typeof raw.events === 'object') st = raw; } catch (e) { /* unreadable: start again */ }
+  if (st.signals.some((x) => x.signal_key === rec.signal_key)) return;
+  st.signals.push(Object.assign({}, rec, { recorded_at: new Date().toISOString(), origin: 'alert check on the page' }));
+  if (st.signals.length > SIGNALS_MAX) {
+    st.signals.sort((a, b) => String(b.trigger_at).localeCompare(String(a.trigger_at)));
+    st.signals.slice(SIGNALS_MAX).forEach((x) => { delete st.events[x.signal_key]; });
+    st.signals = st.signals.slice(0, SIGNALS_MAX);
+  }
+  try { localStorage.setItem(SIGNALS_KEY, JSON.stringify(st)); } catch (e) { /* private */ }
+}
+async function record(results) {
+  if (store.signedIn()) {
+    try {
+      await api.post('/api/watches/seen', { results });
+      const fresh = await api.get('/api/watches', { ttl: 0, force: true });
+      S.watches = fresh.watches || S.watches;
+    } catch (e) { /* the check itself worked; recording is best effort */ }
+    return;
+  }
+  results.filter((x) => x.met && x.signal_record).forEach((x) => keepSignal(x.signal_record));
+  const hit = new Map(results.filter((x) => x.met).map((x) => [x.id, x]));
+  if (hit.size) {
+    saveLocal(localDefs().map((d) => { const h = hit.get(d.id); return h ? Object.assign(d, { last_met_at: new Date().toISOString(), last_evidence: { evidence: h.evidence, state: h.state } }) : d; }));
+    S.watches = localDefs();
+  }
+}
+
 function localDefs() {
   if (!holds(store.state.user)) return [];
   try { const r = JSON.parse(localStorage.getItem(LOCAL_KEY) || '[]'); return Array.isArray(r) ? r : []; } catch (e) { return []; }
@@ -204,10 +240,7 @@ function wire(main) {
       try {
         const r = await api.post('/api/watches/check', { ticker: sym, watches: defs.map((w) => ({ id: w.id, kind: w.kind, params: w.params })) }, { timeout: 60000 });
         S.checks[sym] = { at: r.checked_at || new Date().toISOString(), results: r.results || [], price: r.price };
-        if (!store.signedIn()) {
-          const met = new Set((r.results || []).filter((x) => x.met).map((x) => x.id));
-          if (met.size) { saveLocal(localDefs().map((d) => (met.has(d.id) ? Object.assign(d, { last_met_at: new Date().toISOString() }) : d))); S.watches = localDefs(); }
-        }
+        await record(r.results || []);
       } catch (err) { S.checks[sym] = null; toast(api.explain(err, 'The check'), { kind: 'bad' }); }
       paint(main);
       const again = $(`[data-v2-check="${sym}"]`, main); if (again) again.focus();

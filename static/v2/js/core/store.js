@@ -115,12 +115,23 @@ function saveGuest(lists, activeId) {
   writeJSON(WATCH_KEY, active ? active.symbols : []);
 }
 
+// Signed in, the classic app still keeps the open list in the flat key: its
+// chart dock, feed and alert builder read only that. Kept current here too, so
+// a change made in v2 shows there.
+function mirrorActive() {
+  if (!signedIn() || !holds(state.user)) return;
+  const active = (state.lists || []).find((l) => l.id === state.activeId);
+  if (active) writeJSON(WATCH_KEY, active.symbols);
+}
+
 function adoptServer(lists, preferId) {
   state.lists = (lists || []).map((w) => ({ id: w.id, name: w.name, symbols: (w.symbols || []).slice() }));
-  const remembered = readJSON(ACCOUNT_LIST_KEY, null);
+  // the classic app stores the id as a bare string, not JSON (watchListSwitch)
+  let remembered = null; try { remembered = holds(state.user) ? localStorage.getItem(ACCOUNT_LIST_KEY) : null; } catch (e) { /* private */ }
   const want = [preferId, state.activeId, remembered].find((id) => id && state.lists.some((l) => l.id === id));
   state.activeId = want || (state.lists[0] && state.lists[0].id) || null;
   if (state.activeId && holds(state.user)) { try { localStorage.setItem(ACCOUNT_LIST_KEY, state.activeId); } catch (e) { /* private */ } }
+  mirrorActive();
 }
 
 export async function loadLists({ force = false } = {}) {
@@ -156,7 +167,7 @@ export function listCap() {
 export function setActive(id) {
   if (!(state.lists || []).some((l) => l.id === id)) return;
   state.activeId = id;
-  if (signedIn()) { if (holds(state.user)) { try { localStorage.setItem(ACCOUNT_LIST_KEY, id); } catch (e) { /* private */ } } }
+  if (signedIn()) { if (holds(state.user)) { try { localStorage.setItem(ACCOUNT_LIST_KEY, id); } catch (e) { /* private */ } } mirrorActive(); }
   else saveGuest(state.lists, id);
   emit('lists');
 }
@@ -175,6 +186,7 @@ async function mutate(apply, remote) {
       const i = state.lists.findIndex((l) => l.id === r.watchlist.id);
       const w = { id: r.watchlist.id, name: r.watchlist.name, symbols: r.watchlist.symbols || [] };
       if (i >= 0) state.lists[i] = w; else state.lists.push(w);
+      mirrorActive();
     }
     api.invalidate('/api/watchlists');
     emit('lists');
@@ -273,4 +285,16 @@ export async function moveList(id, delta) {
   if (i < 0 || j < 0 || j >= state.lists.length) return;
   const next = state.lists.slice(); next.splice(j, 0, next.splice(i, 1)[0]);
   return mutate(() => { state.lists = next; }, () => api.put('/api/watchlists/order', { ids: next.map((l) => l.id) }));
+}
+
+/** Remove one symbol's entry from a keyed browser copy (optic.thesis.v1,
+ *  optic.valuation.v1). The classic app keeps such a copy beside the account's
+ *  and adopts it into the account on its next load, so a delete made here has
+ *  to remove both, or the classic app quietly puts the thing back. */
+export function forgetLocalCopy(key, sym) {
+  if (!holds(state.user)) return;
+  try {
+    const all = JSON.parse(localStorage.getItem(key) || 'null');
+    if (all && typeof all === 'object' && sym in all) { delete all[sym]; localStorage.setItem(key, JSON.stringify(all)); }
+  } catch (e) { /* unreadable or private: nothing to remove */ }
 }

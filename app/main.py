@@ -36,6 +36,7 @@ from .brokerage import store as brokerage_store
 from .brokerage import workspace as brokerage_workspace
 from .brokerage import workspace_routes as brokerage_ws_routes
 from . import db as accounts_db
+from . import frontend
 from .auth import admin as auth_admin
 from .auth import deps as auth_deps
 from .auth import ratelimit as auth_ratelimit
@@ -7471,11 +7472,22 @@ def _asset_version() -> str:
 
 
 @app.get("/api/build")
-async def build_stamp() -> Dict[str, Any]:
+async def build_stamp(request: Request) -> Dict[str, Any]:
     """The front end's current version, for a page left open to compare with
     the one it loaded (see `checkForNewBuild` in app.js). The same stamp the
     asset tags carry, nine file stats and nothing else."""
-    return {"build": _asset_version()}
+    out = {"build": _asset_version()}
+    v2_dir = STATIC_DIR / "v2"
+    if (v2_dir / "index.html").exists():
+        # v2 compares its own stamp (app/frontend.py), so a v2-only change does
+        # not ask classic tabs to reload, and the reverse
+        out["v2"] = frontend.v2_build(v2_dir)
+        # and learns of a rollback: what "/" now serves this reader, and
+        # whether v2 is open to them at all (OPTIC_V2_ACCESS)
+        owner = _is_owner(request)
+        out["ui"] = frontend.choose(request.cookies.get(frontend.COOKIE), owner)
+        out["v2_open"] = frontend.v2_allowed(owner)
+    return out
 
 
 class _NoCacheHTML(StaticFiles):
@@ -7483,23 +7495,63 @@ class _NoCacheHTML(StaticFiles):
 
     Assets get the same treatment rather than a long max-age. A far-future
     max-age would be safe only if the ?v= key were guaranteed correct, and
-    trusting that is what broke above."""
+    trusting that is what broke above. The exception is a v2 asset requested
+    at its content-versioned address (frontend.v2_page writes those): that
+    address changes whenever the file does, so it is cached as immutable."""
 
     def file_response(self, *args: Any, **kwargs: Any) -> Any:
         resp = super().file_response(*args, **kwargs)
-        resp.headers.setdefault("Cache-Control", "no-cache")
+        scope = kwargs.get("scope") if "scope" in kwargs else (args[2] if len(args) > 2 else {})
+        long_cache = frontend.cache_header((scope or {}).get("path", ""), ((scope or {}).get("query_string") or b"").decode("latin-1"))
+        resp.headers["Cache-Control"] = long_cache or resp.headers.get("Cache-Control") or "no-cache"
         return resp
+
+
+def _is_owner(request: Request) -> bool:
+    try:
+        return bool(auth_admin.is_admin(auth_deps.current_user(request)))
+    except Exception:  # an unreadable session is a guest, not an error page
+        return False
 
 
 if STATIC_DIR.exists():
     _INDEX = STATIC_DIR / "index.html"
+    _V2_DIR = STATIC_DIR / "v2"
 
-    @app.get("/", include_in_schema=False)
-    async def index() -> Any:
-        """index.html with the asset version stamped in from the file mtimes."""
+    def _classic_page(request: Optional[Request] = None) -> Response:
+        """index.html with the asset version stamped in from the file mtimes,
+        marked when v2 is open to this reader so its footer can offer it."""
         html = _INDEX.read_text(encoding="utf-8")
         html = re.sub(r"\?v=\d+", "?v=" + _asset_version(), html)
+        if request is not None and (_V2_DIR / "index.html").exists() and frontend.v2_allowed(_is_owner(request)):
+            html = html.replace("<html", '<html data-v2-available="1"', 1)
         return Response(content=html, media_type="text/html",
-                        headers={"Cache-Control": "no-cache"})
+                        headers={"Cache-Control": "no-cache", "Vary": "Cookie"})
+
+    def _v2_page() -> Response:
+        return Response(content=frontend.v2_page(_V2_DIR), media_type="text/html",
+                        headers={"Cache-Control": "no-cache", "Vary": "Cookie"})
+
+    @app.get("/", include_in_schema=False)
+    async def index(request: Request) -> Any:
+        """The classic app or v2, by OPTIC_DEFAULT_UI and the reader's optic_ui
+        choice (app/frontend.py). Classic unless both say otherwise."""
+        if (_V2_DIR / "index.html").exists() and frontend.choose(request.cookies.get(frontend.COOKIE), _is_owner(request)) == "v2":
+            return _v2_page()
+        return _classic_page(request)
+
+    @app.get("/classic", include_in_schema=False)
+    async def classic(request: Request) -> Any:
+        """The classic app, always, whatever "/" serves."""
+        return _classic_page(request)
+
+    @app.get("/v2/", include_in_schema=False)
+    @app.get("/v2/index.html", include_in_schema=False)
+    async def v2_index(request: Request) -> Any:
+        """v2, unless it is limited to the owner (OPTIC_V2_ACCESS=owner) and this
+        is not the owner: then the classic page, with the same hash route."""
+        if not (_V2_DIR / "index.html").exists() or not frontend.v2_allowed(_is_owner(request)):
+            return _classic_page(request)
+        return _v2_page()
 
     app.mount("/", _NoCacheHTML(directory=str(STATIC_DIR), html=True), name="static")

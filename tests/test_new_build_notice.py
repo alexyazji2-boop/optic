@@ -27,7 +27,10 @@ def _fn(name):
 
 def test_the_server_says_which_version_it_serves():
     out = TestClient(main.app).get("/api/build").json()
-    assert out == {"build": main._asset_version()}
+    assert out["build"] == main._asset_version()
+    # v2's own stamp and what "/" serves this reader sit beside it
+    # (tests/test_frontend_switch.py); the classic page reads only "build"
+    assert set(out) <= {"build", "v2", "ui", "v2_open"}
 
 
 def test_the_stamp_is_the_one_the_page_was_loaded_with():
