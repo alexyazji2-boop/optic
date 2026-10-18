@@ -10,7 +10,7 @@ async function session() {
   try {
     const s = await api.get('/api/session', { ttl: 50000, timeout: 10000 });
     const next = s.next && s.next.starts_at ? `${s.next.label} at ${prefs.clock(s.next.starts_at)}` : '';
-    render(el, html`<i class="ses-dot p-${s.phase}" aria-hidden="true"></i><span class="sc-label">${s.label}${next ? ',' : ''}</span>${next ? html`<span class="sc-next">${next}</span>` : ''}`);
+    render(el, html`<i class="ses-dot p-${s.phase}" aria-hidden="true"></i><span class="sc-label">${s.label}</span>${next ? html`<span class="sc-next">, ${next}</span>` : ''}`);
     el.title = [s.description, s.early_close_note].filter(Boolean).join(' ');
   } catch (e) { render(el, ''); }
 }

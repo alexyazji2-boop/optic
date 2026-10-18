@@ -496,7 +496,9 @@ table.st td a { text-decoration: none; font-weight: 600; } table.st td a:hover {
 .shell.is-tight .rail-row > span, .shell.is-tight .rail-sec, .shell.is-tight .brand-word { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .shell.is-tight .rail-row { justify-content: center; padding: 0; }
 .shell.is-tight [data-v2-rail-collapse] svg { transform: rotate(180deg); }
-.session-chip { display: inline-flex; align-items: center; gap: 6px; font: 500 13px/1.2 var(--f-label); color: var(--c-ink-3); margin-right: 8px; }
+.session-chip { display: inline-flex; align-items: center; gap: 6px; font: 500 13px/1.2 var(--f-label); color: var(--c-ink-3); margin-right: 8px; white-space: nowrap; }
+/* the comma travels with the part that can be hidden, so a narrow bar never ends on one */
+.session-chip .sc-next { margin-left: -6px; }
 .session-chip:empty { display: none; }
 @media (max-width: 1100px) { .session-chip .sc-next { display: none; } }
 @media (max-width: 860px) { .session-chip { display: none; } }
