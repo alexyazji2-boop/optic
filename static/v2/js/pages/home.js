@@ -114,7 +114,7 @@ function portfolio(ov, perf) {
       <div class="pf-row pf-head" role="row"><span role="columnheader">Holding</span><span role="columnheader" class="num">Price</span><span role="columnheader" class="num">Day</span><span role="columnheader" class="num">Effect</span></div>
       ${rows.slice(0, 6).map((r) => html`<a class="pf-row" role="row" href="#/${r.symbol}"><span role="cell"><b class="tick">${r.symbol}</b> <small class="t-muted">${num(r.quantity, 0)} shares</small></span><span role="cell" class="num">${num(r.price)}</span><span role="cell" class="num ${dir(r.change_pct)}">${signed(r.change_pct)}</span><span role="cell" class="num ${dir(r.contribution)}">${signedMoney(r.contribution, 0)}</span></a>`)}</div>` : ''}
     <p class="asof">${clean((vn && vn.basis) || '')}${sync ? ` Last sync ${ago(sync)}.` : ''}</p>
-    <div class="cluster"><a class="textlink" href="/#/brokerage/holdings">All holdings ${icon('out')}</a><a class="textlink" href="/#/brokerage/performance">Performance ${icon('out')}</a></div>
+    <div class="cluster"><a class="textlink" href="#/brokerage/holdings">All holdings ${icon('arrow')}</a><a class="textlink" href="#/brokerage/performance">Performance ${icon('arrow')}</a></div>
   </section>`;
 }
 

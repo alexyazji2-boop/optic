@@ -24,7 +24,7 @@ export const GROUPS = [
     { view: 'financials', label: 'Financials', slug: 'financials', v2: true },
     { view: 'news', label: 'News', slug: 'news', v2: true },
   ] },
-  { id: 'analyse', label: 'Compare', icon: 'compare', pages: [{ view: 'compare', label: 'Compare', slug: 'compare' }] },
+  { id: 'analyse', label: 'Compare', icon: 'compare', pages: [{ view: 'compare', label: 'Compare', slug: 'compare', v2: true }] },
   { id: 'market', label: 'Markets', icon: 'markets', pages: [
     { view: 'brief', label: 'Read', slug: 'read', v2: true },
     { view: 'market', label: 'Macro', slug: 'macro', v2: true },
@@ -37,23 +37,23 @@ export const GROUPS = [
     { view: 'analysts', label: 'Analysts', slug: 'analysts', v2: true },
   ] },
   { id: 'portfolio', label: 'Positions', icon: 'positions', pages: [
-    { view: 'tracker', label: 'Optic Portfolio', slug: 'portfolio' },
-    { view: 'paper', label: 'Paper Desk', slug: 'paper' },
-    { view: 'roth', label: 'Retirement', slug: 'retirement' },
+    { view: 'tracker', label: 'Optic Portfolio', slug: 'portfolio', v2: true },
+    { view: 'paper', label: 'Paper Desk', slug: 'paper', v2: true },
+    { view: 'roth', label: 'Retirement', slug: 'retirement', v2: true },
   ] },
-  { id: 'brokerage', label: 'Brokerage', icon: 'brokerage', feature: 'brokerage', pages: [{ view: 'brokerage', label: 'Brokerage', slug: 'brokerage' }] },
+  { id: 'brokerage', label: 'Brokerage', icon: 'brokerage', feature: 'brokerage', pages: [{ view: 'brokerage', label: 'Brokerage', slug: 'brokerage', v2: true }] },
   { id: 'follow', label: 'Watchlist', icon: 'watchlist', pages: [
     { view: 'watchlist', label: 'Watchlist', slug: 'watchlist', v2: true },
     { view: 'alerts', label: 'Alerts', slug: 'alerts', v2: true },
   ] },
   { id: 'reports', label: 'Reports', icon: 'reports', owner: true, pages: [
-    { view: 'reports', label: 'Problem Reports', slug: 'reports' },
-    { view: 'usage', label: 'Claude usage', slug: 'usage' },
-    { view: 'accounts', label: 'Accounts', slug: 'accounts' },
+    { view: 'reports', label: 'Problem Reports', slug: 'reports', v2: true },
+    { view: 'usage', label: 'Claude usage', slug: 'usage', v2: true },
+    { view: 'accounts', label: 'Accounts', slug: 'accounts', v2: true },
   ] },
 ];
 
-export const SETTINGS = { view: 'settings', label: 'Settings', slug: 'settings', icon: 'settings' };
+export const SETTINGS = { view: 'settings', label: 'Settings', slug: 'settings', icon: 'settings', v2: true };
 
 // The phone bar, as in the classic app.
 export const MOBILE_TABS = [

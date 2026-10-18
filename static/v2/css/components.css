@@ -268,8 +268,9 @@ ul.plain { margin: 0; padding-left: 18px; } ul.plain li { margin-bottom: 7px; }
 .state .t-h3 { color: var(--c-ink); }
 .state.err { border-style: solid; border-color: color-mix(in srgb, var(--c-neg) 40%, var(--c-line)); }
 .state.err .t-h3::before { content: "!"; display: inline-grid; place-items: center; width: 20px; height: 20px; margin-right: 8px; border-radius: 50%; background: var(--c-neg); color: #fff; font: 700 13px/1 var(--f-sans); vertical-align: 1px; }
-.stale { display: grid; grid-template-columns: 8px minmax(0, 1fr); align-items: baseline; gap: 10px; padding: 10px 14px; border-radius: var(--r-2); background: color-mix(in srgb, var(--c-warn) 12%, transparent); color: var(--c-ink); font-size: 15px; }
-.stale::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--c-warn); transform: translateY(-1px); }
+/* inline flow, so a note with bold or links inside reads as one sentence */
+.stale { position: relative; display: block; padding: 10px 14px 10px 32px; border-radius: var(--r-2); background: color-mix(in srgb, var(--c-warn) 12%, transparent); color: var(--c-ink); font-size: 15px; }
+.stale::before { content: ""; position: absolute; left: 14px; top: calc(10px + 0.75em - 4px); width: 8px; height: 8px; border-radius: 50%; background: var(--c-warn); }
 .asof { font-size: 14px; color: var(--c-ink-3); }
 
 /* ---------- toast ---------- */

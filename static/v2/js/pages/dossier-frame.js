@@ -37,7 +37,7 @@ export function header(sym, D, view = 'overview', { compact = false } = {}) {
         <span class="dh-chg ${dir(q.change_pct)}">${isNum(q.change_pct) ? html`${signed(q.change, 2, '')} (${signed(q.change_pct)})` : ''}</span></p>
       <p class="dh-state">${s.phase_label ? html`${clean(s.phase_label)}. ` : ''}${s.regular_close_label && s.phase !== 'regular' ? `Price is the ${s.regular_close_label}.` : ''}${ext ? html` ${capFirst(ext.kind)} ${num(ext.price)}, <span class="${dir(ext.change_pct)}">${signed(ext.change_pct)}</span>.` : ''}</p>
     </div>
-    <div class="cluster acts">${watchButton(sym)}<a class="btn" href="#/alerts?symbol=${sym}">Alert</a>${miloButton('Ask Milo', { ask: `What is the case for ${sym} right now?`, context: `${sym} Dossier, ${label}`, symbol: sym })}</div>
+    <div class="cluster acts">${watchButton(sym)}<a class="btn" href="#/alerts?symbol=${sym}">Alert</a><a class="btn" href="#/compare?t=${sym}">Compare</a>${miloButton('Ask Milo', { ask: `What is the case for ${sym} right now?`, context: `${sym} Dossier, ${label}`, symbol: sym })}</div>
   </header>`;
 }
 

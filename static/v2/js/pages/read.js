@@ -184,7 +184,7 @@ function releases() {
     <h3>Where this comes from</h3><p>${clean(b.attribution || '')}</p>
     <ul class="plain">${[...(m.sources || []), ...((b.wires || {}).sources || [])].map((s) => html`<li>${s.name}${s.detail ? `, ${s.detail}` : ''}: ${s.error ? html`<span class="down">unreachable</span>` : `${s.count} items`}${s.access === 'paid' ? ', subscription' : ''}</li>`)}</ul>
     ${(b.degraded_sources || []).length ? html`<p class="stale">Not available on this refresh: ${b.degraded_sources.join(', ')}.</p>` : ''}
-    <p><a class="textlink" href="/#/insiders">Insider filings are on Insiders ${icon('arrow')}</a></p>`;
+    <p><a class="textlink" href="#/insiders">Insider filings are on Insiders ${icon('arrow')}</a></p>`;
 }
 
 const TABS = [

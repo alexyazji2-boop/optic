@@ -36,11 +36,10 @@ async function request(method, path, { body, timeout = 20000, signal } = {}) {
   const timer = setTimeout(() => ctrl.abort('timeout'), timeout);
   if (signal) signal.addEventListener('abort', () => ctrl.abort('cancelled'), { once: true });
   const headers = { Accept: 'application/json' };
-  if (method !== 'GET') {
-    headers['Content-Type'] = 'application/json';
-    const t = cookie(CSRF_COOKIE);
-    if (t) headers[CSRF_HEADER] = t;
-  }
+  if (method !== 'GET') headers['Content-Type'] = 'application/json';
+  // on reads too: the owner's pages check it on GET, as the classic app sends it
+  const t = cookie(CSRF_COOKIE);
+  if (t) headers[CSRF_HEADER] = t;
   let res;
   try {
     res = await fetch(path, { method, headers, credentials: 'same-origin', body: body === undefined ? undefined : JSON.stringify(body), signal: ctrl.signal });

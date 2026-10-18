@@ -192,3 +192,60 @@ def test_discover_ranking_and_scan_cells(tmp_path):
     assert got["moves"] == [["VIX", 1.6], ["S&P 500 futures", 0.6], ["Gold", None]]
     assert got["cells"] == ["1.23%", "2.00×", "42%", "$2.5B", "n/a"]
     assert got["screen"] == ["$25.0M", "$36.34", "97%", "1.50×"]
+
+
+def test_positions_compare_and_brokerage_arithmetic(tmp_path):
+    """The rebuilt Compare, Optic Portfolio, Paper Desk, Retirement and
+    Brokerage pages compute what the classic pages compute (static/app.js and
+    static/brokerage.js), on numbers small enough to check by hand."""
+    script = tmp_path / "positions.mjs"
+    script.write_text(f"""
+      globalThis.window = {{ addEventListener() {{}} }};
+      globalThis.matchMedia = () => ({{ matches: false }});
+      globalThis.location = {{ hash: '', search: '' }};
+      globalThis.localStorage = {{ getItem() {{ return null; }}, setItem() {{}} }};
+      globalThis.document = {{ addEventListener() {{}}, querySelector() {{ return null; }} }};
+      const c = await import('{(V2 / "js/pages/compare.js").as_posix()}');
+      const t = await import('{(V2 / "js/pages/tracker.js").as_posix()}');
+      const p = await import('{(V2 / "js/pages/paper.js").as_posix()}');
+      const r = await import('{(V2 / "js/pages/retirement.js").as_posix()}');
+      const b = await import('{(V2 / "js/pages/brokerage.js").as_posix()}');
+      const rows = [{{ ticker: 'A', rs: 10, pe: 30 }}, {{ ticker: 'B', rs: 9.9, pe: 20 }}, {{ ticker: 'C', rs: 0, pe: 25 }}];
+      const g = t.travel({{ stop: 90, target: 110, entry_price: 100, mark_price: 105 }});
+      const short = t.travel({{ stop: 110, target: 90, entry_price: 100, mark_price: 104 }});
+      const pos = {{ instrument: 'option', entry_price: 2, stop: 1, qty: 3, direction: 'long' }};
+      const open = [{{ id: 'a', ticker: 'AAA', instrument: 'shares', direction: 'long', qty: 10, entry_price: 100, stop: 90 }},
+                    {{ id: 'b', ticker: 'BBB', instrument: 'option', direction: 'short', qty: 1, entry_price: 5, stop: 8, expiry: '2026-10-20' }}];
+      const h = p.health(open, {{ a: {{ pnl: -80 }}, b: {{ pnl: 50 }} }}, '2026-10-18');
+      print(JSON.stringify({{
+        lead: [c.leader({{ key: 'rs', lead: 'high' }}, rows), c.leader({{ key: 'pe', lead: 'low' }}, rows), c.leader({{ key: 'rs' }}, rows)],
+        tie: [c.rankRead([{{ ticker: 'A', score: 60 }}, {{ ticker: 'B', score: 56 }}]), c.rankRead([{{ ticker: 'A', score: 70 }}, {{ ticker: 'B', score: 52 }}])],
+        cells: [c.cell('usd', 343.456), c.cell('pct_plain', 1.25), c.cell('pctile', 24.6)],
+        gauge: [g.at, g.from, g.ahead, t.travelRead(g), t.travelRead(short)],
+        held: [t.heldDays('2026-10-01T00:00:00Z', '2026-10-11T00:00:00Z'), t.heldDays('2026-10-11T00:00:00Z', '2026-10-01T00:00:00Z')],
+        paper: [p.cost(pos), p.risk(pos), p.rOf(pos, 150), p.rText(-0.5), p.agrees({{ stance: 'bearish' }}, 'short'), p.agrees({{ stance: 'neutral' }}, 'long')],
+        health: [h.total, h.long, h.short, Math.round(h.topShare * 1000) / 1000, h.review.map((x) => x.why)],
+        roth: [r.clampInputs({{ years: '60', risk: 'wild', annual: '-5' }}), r.clampInputs({{ years: 'x', annual: 'y' }}).years],
+        broker: [b.money(-1234.5), b.money(null), b.qty(1.234567), b.pct(-0.861, 2, true), b.pct(1.2, 1, true)],
+      }}));
+    """)
+    out = subprocess.run([_jsc(), "-m", str(script)], capture_output=True, text=True, timeout=30)
+    assert out.returncode == 0, out.stderr
+    got = json.loads(out.stdout.strip().splitlines()[-1])
+    # A beats B by 0.1 on a spread of 10: inside 2% of the spread, so no leader
+    assert got["lead"] == [None, "B", None]
+    assert got["tie"] == ["A and B are level here (60 against 56). Too close to separate.", "A leads, 18 points clear of B."]
+    assert got["cells"] == ["$343.46", "1.3%", "25th"]
+    # stop 90, target 110: entry 100 is halfway, 105 is three quarters, half of the way to target
+    assert got["gauge"][:3] == [0.75, 0.5, True]
+    assert got["gauge"][3] == "50% of the way from entry to target"
+    assert got["gauge"][4] == "40% of the way from entry to the stop"
+    assert got["held"] == [10, 0]
+    # an option is 100 shares: costs 2 x 3 x 100, risks 1 x 3 x 100; +150 is half of that
+    assert got["paper"] == [600, 300, 0.5, "−0.50R", True, None]
+    # exposure at cost: 1000 long, 500 short; AAA is two thirds; AAA is at -0.8R and BBB expires in 2 days
+    assert got["health"][:4] == [1500, 1000, 500, 0.667]
+    assert got["health"][4] == ["−0.80R, within a quarter of its stop", "expires in 2 days"]
+    assert got["roth"][0] == {"years": 45, "risk": "balanced", "annual": 0, "holdings": "", "stock_candidates": ""}
+    assert got["roth"][1] == 30
+    assert got["broker"] == ["−$1,234.50", "Not supplied", "1.2346", "−0.86%", "+1.2%"]

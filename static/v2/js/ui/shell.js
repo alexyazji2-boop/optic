@@ -54,7 +54,7 @@ export function paint(route) {
   });
   render($('.rail'), html`<a class="brand" href="#/" aria-label="Optic Terminal, Home">${brandMark()}<span class="brand-word" aria-hidden="true">OPTIC <span>TERMINAL</span></span></a>
     <nav class="rail-nav" aria-label="Sections">${rows}</nav>
-    <div class="rail-foot"><a class="rail-row" href="${hrefFor('settings')}" aria-label="${SETTINGS.label}, opens in the current app" ${route.view === 'settings' ? html`aria-current="page"` : ''}>${icon(SETTINGS.icon)}<span>${SETTINGS.label}</span><span class="legacy" aria-hidden="true">${icon('out')}</span></a></div>`);
+    <div class="rail-foot"><a class="rail-row" href="${hrefFor('settings')}" ${SETTINGS.v2 ? '' : html`aria-label="${SETTINGS.label}, opens in the current app"`} ${route.view === 'settings' ? html`aria-current="page"` : ''}>${icon(SETTINGS.icon)}<span>${SETTINGS.label}</span>${SETTINGS.v2 ? '' : html`<span class="legacy" aria-hidden="true">${icon('out')}</span>`}</a></div>`);
 
   render($('.tabbar'), MOBILE_TABS.map((t) => {
     if (t.more) {
@@ -76,7 +76,7 @@ export function moreBody() {
   return html`<nav class="more-list" aria-label="More sections">${visibleGroups(flags).filter((g) => !shown.has(g.id)).map((g) => {
     const href = groupHref(g, sym);
     return html`<a class="rail-row" href="${href}">${icon(g.icon)}<span>${g.label}</span>${groupIsV2(g) ? '' : html`<span class="legacy">${icon('out')}<span class="sr">, opens in the current app</span></span>`}</a>`;
-  })}<a class="rail-row" href="${hrefFor('settings')}">${icon('settings')}<span>${SETTINGS.label}</span><span class="legacy">${icon('out')}<span class="sr">, opens in the current app</span></span></a></nav>`;
+  })}<a class="rail-row" href="${hrefFor('settings')}">${icon('settings')}<span>${SETTINGS.label}</span>${SETTINGS.v2 ? '' : html`<span class="legacy">${icon('out')}<span class="sr">, opens in the current app</span></span>`}</a></nav>`;
 }
 
 export function paintAccount() {

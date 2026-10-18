@@ -5,6 +5,7 @@ import { $, html, render, announce } from './core/dom.js';
 import * as api from './core/api.js';
 import * as store from './core/store.js';
 import * as router from './core/router.js';
+import * as prefs from './core/prefs.js';
 import * as shell from './ui/shell.js';
 import * as palette from './ui/palette.js';
 import * as drawer from './ui/drawer.js';
@@ -28,12 +29,19 @@ import * as explorePage from './pages/explore.js';
 import * as scanPage from './pages/scan.js';
 import * as insidersPage from './pages/insiders.js';
 import * as analystsPage from './pages/analysts.js';
+import * as settingsPage from './pages/settings.js';
+import * as comparePage from './pages/compare.js';
+import * as trackerPage from './pages/tracker.js';
+import * as paperPage from './pages/paper.js';
+import * as retirementPage from './pages/retirement.js';
+import * as brokeragePage from './pages/brokerage.js';
+import * as reportsPage from './pages/reports.js';
 import * as watchlist from './pages/watchlist.js';
 import * as alerts from './pages/alerts.js';
 import * as signin from './pages/signin.js';
 import * as bridge from './pages/bridge.js';
 
-const PAGES = { home, overview: dossier, swing: options, long: investing, earnings, financials, news, chart: chartPage, brief: readPage, market: macroPage, indices: indicesPage, instrument: instrumentPage, explore: explorePage, scan: scanPage, insiders: insidersPage, analysts: analystsPage, watchlist, alerts, signin };
+const PAGES = { home, overview: dossier, swing: options, long: investing, earnings, financials, news, chart: chartPage, brief: readPage, market: macroPage, indices: indicesPage, instrument: instrumentPage, explore: explorePage, scan: scanPage, insiders: insidersPage, analysts: analystsPage, settings: settingsPage, compare: comparePage, tracker: trackerPage, paper: paperPage, roth: retirementPage, brokerage: brokeragePage, reports: reportsPage, usage: reportsPage, accounts: reportsPage, watchlist, alerts, signin };
 let current = null;   // { page, view, route }
 
 const app = {
@@ -70,6 +78,7 @@ async function afterAuth() {
     }).catch(() => {});
   }
   if (current) shell.paint(current.route);
+  if (current && current.page.onAuth) current.page.onAuth(current.view);
 }
 
 function show(route) {
@@ -108,7 +117,7 @@ function accountBody() {
   return html`<dl class="kv"><div><dt>Name</dt><dd>${u.name || `${u.first_name || ''} ${u.last_name || ''}`}</dd></div><div><dt>Email</dt><dd>${u.email}</dd></div>
       <div><dt>Plan</dt><dd>${plan.label || 'Free'}${(store.state.me || {}).admin ? ', owner' : ''}</dd></div></dl>
     ${u.email_verified ? '' : html`<p class="stale">Your email is not verified yet. The link is in your inbox.</p>`}
-    <nav class="more-list" aria-label="Account"><a class="rail-row" href="#/watchlist">Watchlists</a><a class="rail-row" href="/#/settings">Settings, in the current app</a><a class="rail-row" href="/#/read">Saved research, in the current app</a></nav>
+    <nav class="more-list" aria-label="Account"><a class="rail-row" href="#/watchlist">Watchlists</a><a class="rail-row" href="#/settings">Settings</a><a class="rail-row" href="/#/read">Saved research, in the current app</a></nav>
     <button type="button" class="btn" data-v2-signout>Sign out</button>`;
 }
 
@@ -159,6 +168,10 @@ function wireGlobal() {
 }
 
 async function boot() {
+  prefs.applyTheme(); prefs.applyScale();
+  matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => prefs.applyTheme());
+  // another tab (or the classic app in one) changed a setting
+  window.addEventListener('storage', (e) => { if (/^optic\.(theme|ui\.scale\.v1)$/.test(e.key || '')) { prefs.applyTheme(); prefs.applyScale(); } });
   shell.mount($('#app'));
   wireGlobal();
   await store.loadMe();

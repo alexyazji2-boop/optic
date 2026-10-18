@@ -20,7 +20,7 @@ Status words:
 | Dossier | Earnings | `#/{SYM}/earnings` | Rebuilt |
 | Dossier | Financials | `#/{SYM}/financials` | Rebuilt |
 | Dossier | News | `#/{SYM}/news` | Rebuilt |
-| Compare | Compare | `#/compare` | Current app |
+| Compare | Compare | `#/compare` | Rebuilt |
 | Markets | Read | `#/read` | Rebuilt |
 | Markets | Macro | `#/macro` | Rebuilt |
 | Markets | Indices | `#/indices` | Rebuilt |
@@ -28,16 +28,16 @@ Status words:
 | Discover | Scan | `#/scan` | Rebuilt |
 | Discover | Insiders | `#/insiders` | Rebuilt |
 | Discover | Analysts | `#/analysts` | Rebuilt |
-| Positions | Optic Portfolio | `#/portfolio` | Current app |
-| Positions | Paper Desk | `#/paper` | Current app |
-| Positions | Retirement | `#/retirement` | Current app |
-| Brokerage | Brokerage | `#/brokerage` | Current app |
+| Positions | Optic Portfolio | `#/portfolio` | Rebuilt |
+| Positions | Paper Desk | `#/paper` | Rebuilt |
+| Positions | Retirement | `#/retirement` | Rebuilt |
+| Brokerage | Brokerage | `#/brokerage` | Rebuilt |
 | Watchlist | Watchlist | `#/watchlist` | Rebuilt |
 | Watchlist | Alerts | `#/alerts` | Rebuilt |
-| Reports | Problem Reports | `#/reports` | Current app |
-| Reports | Claude usage | `#/usage` | Current app |
-| Reports | Accounts | `#/accounts` | Current app |
-| (rail footer) | Settings | `#/settings` | Current app |
+| Reports | Problem Reports | `#/reports` | Rebuilt |
+| Reports | Claude usage | `#/usage` | Rebuilt |
+| Reports | Accounts | `#/accounts` | Rebuilt |
+| (rail footer) | Settings | `#/settings` | Rebuilt |
 | (none) | Instrument | `#/instrument/{SYM}` | Rebuilt |
 
 ## Shell and global
@@ -52,13 +52,13 @@ Status words:
 | Rail Collapse | Not yet | |
 | Search and command palette (⌘K, `/`) | Changed | Symbols from `/api/search`, recent symbols and the navigation's pages. Not yet: saved research, screens from `/api/scanners`, quick actions. |
 | Ask Milo in the top bar | Rebuilt | Carries the page's context; gold outline. |
-| Account menu | Changed | Name, email, plan, owner badge, links, sign out. Not yet in v2: resend verification. |
+| Account menu | Changed | Name, email, plan, owner badge, links, sign out. Resending the confirmation link is in Settings. |
 | Sign in and create account (email and password) | Rebuilt | `/api/auth/login`, `/api/auth/register`. |
 | Passkeys, Google, Apple, forgot and reset password, verify email | Current app | Linked from the v2 sign-in page. |
 | Guest things on sign-in ("bring them in" or "leave them") | Rebuilt | Same holder and shelf logic and keys as `static/app.js` (`core/device.js`); guest lists are adopted into the account. |
 | Account switch from another tab reloads this one | Rebuilt | |
-| Theme (system, light, dark) | Rebuilt | Reads `optic.theme`; changed in Settings in the current app. |
-| Text size, time zone, knowledge level, advanced switch | Not yet | Set in Settings in the current app. |
+| Theme (system, light, dark) | Rebuilt | `optic.theme`, set in v2 Settings or the current app's; either holds in both. |
+| Text size, time zone, advanced switch | Changed | Same keys as the current app (`core/prefs.js`). Text size scales v2 from the classic Default; times on the rebuilt Settings and Reports pages follow the chosen zone. The advanced switch is saved for both apps; v2 pages already fold specialist material into tabs and details, so it does not change their layout yet. |
 | Toasts with Undo | Rebuilt | |
 | Footer health chip | Not yet | |
 
@@ -288,6 +288,93 @@ Status words:
 | Across covered names or one symbol | Rebuilt | |
 | Show, rating and window filters | Rebuilt | A year's window for one symbol, as before. |
 | Sortable table | Changed | Every column sorts; the classic table was newest first with no column sorting. |
+
+## Compare
+
+| Feature | Status | Note |
+|---|---|---|
+| Two to four tickers, add and remove boxes, suggestions while typing | Changed | Suggestions use the browser's own list (a datalist from `/api/search`) instead of a custom drop-down. |
+| Recently viewed picks; nothing fetched until Compare | Rebuilt | |
+| Pre-filled from the Dossier | Changed | The Dossier header has a Compare button; `#/compare?t=AAPL,MSFT` pre-fills and runs. |
+| Horizon cards, Optic's take, standouts | Rebuilt | Same tie rule (5 points). |
+| How they have moved (indexed to 100) | Rebuilt | |
+| Where each name leads, per horizon | Rebuilt | |
+| Metric table: groups, meanings, leader dots, rank reads, failures, method | Rebuilt | Same leader rule (2% of the row's spread); tested. |
+
+## Positions, Optic Portfolio
+
+| Feature | Status | Note |
+|---|---|---|
+| Three books with value, return, counts, rules, start dates | Rebuilt | |
+| Run a scan now, Refresh marks, progress, cooldown messages | Rebuilt | Polls every 4 seconds while a scan runs. |
+| Market-closed and rate-limit notices; risk limits (open when advanced is on) | Rebuilt | |
+| Open positions: state of play, P&L chart, table with the stop-to-target gauge | Rebuilt | Same gauge arithmetic; tested. |
+| Month by month: picker, tiles, closed and still-open tables, consistency chart and table | Rebuilt | |
+| How the shortlist was chosen: funnel and screen ranking | Rebuilt | |
+| Track record | Rebuilt | |
+| Book-level risk: ratio, volatility, effective positions, money against risk, pairs, sectors | Changed | Money and risk shares in one table rather than a butterfly chart; sectors as bars. |
+| Closed trades, earlier records, rules, caveats, scan history | Rebuilt | |
+| Header tooltips (`data-defs`) and collapsible panels | Not yet | |
+
+## Positions, Paper Desk
+
+| Feature | Status | Note |
+|---|---|---|
+| The book in `optic.paper.v1`, 50 open, 200 closed | Rebuilt | Same key and record shape; a personal key, so it follows the person on this browser. |
+| Ticket: shares or option, chain, expiry and strike, quote line, preview, validation | Rebuilt | Same checks and messages, in the same order. |
+| Optic's read recorded on the trade ("Load it") | Rebuilt | From `/api/ticker`; no model call. |
+| Portfolio health: lead, exposure bar, review list | Rebuilt | Same arithmetic; tested. |
+| Marks from `/api/paper/mark`, Close at the mark | Rebuilt | |
+| Record, R chart, with and against Optic | Rebuilt | |
+| Clear the book (inline confirmation) | Rebuilt | |
+
+## Positions, Retirement
+
+| Feature | Status | Note |
+|---|---|---|
+| Inputs in `optic.roth.inputs`, Recalculate | Rebuilt | Same clamps; tested. |
+| Model allocation, target weights, blended figures | Rebuilt | |
+| Contribution projection with bands | Rebuilt | |
+| Drift, this year's contribution, overlap, stock sleeve, Roth notes, fund universe, correlation | Rebuilt | |
+
+## Brokerage
+
+| Feature | Status | Note |
+|---|---|---|
+| Not signed in, plan upgrade, not available, switched off for non-owners | Rebuilt | The status endpoint decides, as before. |
+| Six sections at their own addresses, remembered section and account scope | Rebuilt | Same keys (`optic.brokerage.section.v1`, `optic.brokerage.scope.v1`). |
+| Overview: four tiles with source tags, what you own, deserves attention, coming up | Rebuilt | Refreshes every minute in the regular session. |
+| Briefing: measured moves, possibly related headlines | Rebuilt | |
+| "Write it up" | Rebuilt | A paid Milo message, labelled as such before the press. |
+| Holdings, exposure with look-through, scorecard, options risk, cash, not counted | Rebuilt | |
+| Performance: period and benchmark, returns, charts, flows, income, attribution, history | Rebuilt | |
+| Events: calendar, theses (write, edit, delete), Desk items, alerts and alert settings | Rebuilt | |
+| Scenarios (what-if lab) | Rebuilt | |
+| Connections: consent, connect, reconnect, sync, disconnect, rename, count or not, delete all | Rebuilt | Inline confirmations. After linking, the provider returns to the current app's Brokerage page, because the callback address is the server's. |
+| Ask Milo, section questions | Rebuilt | Draft only; nothing is sent until the reader presses Send. |
+
+## Settings
+
+| Feature | Status | Note |
+|---|---|---|
+| Guest account panel; sign in and create account | Rebuilt | |
+| Profile: name, email confirmation, resend link | Rebuilt | |
+| Security: password change or add, remove a method (never the last), passkeys add, rename, remove, Google and Apple connect and disconnect, sessions, sign out everywhere | Changed | The classic page asked with `confirm()` and `prompt()`; these are inline steps on the row. Long session lists show the five newest first. |
+| Plan and billing (upgrade, manage, history, return message) | Rebuilt | Stripe returns to the current app's Settings page, because the return address is the server's. |
+| Linked brokerages row | Rebuilt | Opens the rebuilt Connections section. |
+| Delete account (typed email, password) | Rebuilt | |
+| Appearance, text size, how much to show, time zone and market hours | Rebuilt | Same keys as the current app. |
+| About this build | Rebuilt | |
+| Report a problem | Rebuilt | A drawer from Settings; signed out, it asks you to sign in. |
+
+## Reports (owner only)
+
+| Feature | Status | Note |
+|---|---|---|
+| Problem Reports: open and resolved, mark resolved or reopen, resolve all (press twice) | Rebuilt | |
+| Claude usage: by feature, totals, latest calls | Rebuilt | Reads the ledger only; no model call. |
+| Accounts | Rebuilt | Owner session only, as before. |
+| Not the owner, or signed out | Rebuilt | Same wording. |
 
 ## Watchlist
 

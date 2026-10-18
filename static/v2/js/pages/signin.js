@@ -28,6 +28,7 @@ function form() {
 }
 
 export async function render(main, route, app) {
+  if ((route.params || {}).mode === 'up') mode = 'up';
   draw(main, form());
   document.title = 'Sign in, Optic';
   const first = $('input', main); if (first) first.focus();

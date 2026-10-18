@@ -76,3 +76,31 @@ Nothing on these pages spends on load. Read asks for its summary, the weekly upd
 
 - Macro's `/api/market` is about 40 seconds cold; the page shows its own loading state and the tabs load beside it.
 - The forced empty state only covers Scan's building ranking; the other pages' empty states were seen only with a real empty answer on Analysts (NVDA with the Upgrades filter on).
+
+## Fourth round: Compare, Positions, Brokerage, Settings and Reports (2026-10-18)
+
+Same local server, no AI key. The local Optic Portfolio ledger has no trades, so its layout was checked against a read-only snapshot of the live ledger (`GET /api/tracker` and `/api/portfolio-risk`, no model call), served locally from a git-ignored folder that is removed before the commit. Brokerage used the local sandbox connection.
+
+| Check | Result |
+|---|---|
+| Settings | Theme, text size and time zone switched and reset, writing the classic keys (`optic.theme`, `optic.ui.scale.v1`, `optic.timezone`); market hours converted to London; signed-in profile, security, sessions (the five newest, then "Show all"), plan; a report sent from the drawer, focus back on its button |
+| Reports | The test report resolved and shown under Resolved; usage ledger and accounts against the owner endpoints |
+| Compare | AAPL, MSFT, NVDA from `#/compare?t=`: take, indexed chart, bars, table; Mobile Safari renders it |
+| Optic Portfolio | Snapshot with 13 open and 18 closed trades; book switch keeps focus through the background risk repaint |
+| Paper Desk | 10 AAPL at 340, stop 330, target 360: costs $3.4K, risks $100, 2.00 to 1; priced +0.35R by `/api/paper/mark`; closed, record shown, book cleared. Option ticket: 6 expiries, 44 strikes, quote line |
+| Retirement | Holdings and two candidates: every section, projection with both bands; inputs kept in `optic.roth.inputs` |
+| Brokerage | All six sections; a scenario adding $5,000 of NVDA; focus moves to the result. "Write it up" was not pressed |
+| Arithmetic | Compare leaders and ties, the stop-to-target gauge and held days, Paper Desk cost, risk, R, agreement and health, Retirement clamps, Brokerage money and percent formats, in `tests/test_frontend_v2.py` |
+| Audit | 16 new views × light and dark × desktop and phone: 0 faults after two fixes (Compare header links under 32px, a squeezed checkbox) |
+| Forced loading, error, empty | Every new page has a loading state and a named error with Try again, except where the page is local data (Paper Desk) or keeps working with partial data (Settings shows the failing part inline) |
+
+### Fixes that reach earlier rounds
+
+- Warning notes (`.stale`) with bold text inside broke into one word per line; they now flow as one paragraph everywhere.
+- v2 sends the CSRF header on reads as well, because the owner's pages check it on GET.
+- Settings' segmented controls name their attributes literally, for the dead-controls test.
+
+### Known limits
+
+- The provider's callback after linking a brokerage, and Stripe's return, land in the current app (the addresses are the server's).
+- The local server was stopped by the app during this round; every check above was re-run after the restart.
