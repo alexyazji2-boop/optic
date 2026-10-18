@@ -111,7 +111,7 @@ Run against the local server; the detail and every figure are in STAGE0-EVIDENCE
 
 | Check | Tool (in `~/Optic/work/v2-2026-10-17/stage0/`) | Result |
 |---|---|---|
-| Paid model calls on page load | `paid_call_probe.py` (recording SDK, fake key, :8077) | v2 0 in 90 loads; Classic 3 in 27 (L11) |
+| Paid model calls on page load | `paid_call_probe.py` (recording SDK, fake key, :8077) | v2 0 in 80 loads; Classic 3 in 27 (L11) |
 | Load speed, throttled phone and desktop, cold and warm | `load_perf.py` | v2 cold code 330 KB vs Classic 1,349 KB; phone content ready 4.0 s vs 8.0 s (Home) |
 | Data round trips, both directions, with account isolation | `roundtrip.py` | 61 of 61 after nine v2 fixes (one check is a recorded gap) |
 | Rollback | `rollback_rehearsal.py` (:8079) | 20 of 20 |

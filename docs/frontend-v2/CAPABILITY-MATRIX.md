@@ -12,7 +12,7 @@ Row-level detail per page is in COVERAGE.md.
 
 | Capability | Class | Evidence or gap |
 |---|---|---|
-| Rail, groups, page tabs, phone bar (names unchanged) | Implemented and tested | v2_check, 45 views × 2 sizes |
+| Rail, groups, page tabs, phone bar (names unchanged) | Implemented and tested | v2_check, 40 views × 2 sizes |
 | Rail Collapse (`optic.rail.tight.v2`, shared with Classic) | Implemented and tested | Stage 0 |
 | Command palette: exact page names, symbols with actions, saved research, screens, Ask Milo row, quick actions | Implemented and tested | Stage 0 (palette) |
 | Sign in, create account, forgot and reset password, verify email | Implemented and tested | Stage 0 (auth), real local flows |

@@ -101,10 +101,14 @@ Stage 0, 2026-10-18. Classic is a temporary bridge, not the destination. Each mi
   - real iOS Safari on the iOS 27 simulators (audit.js and the replay server);
   - the SE at 549px tall.
 - **Load budget:** v2's cold-load module bytes must stay within 10% of the Stage 0 figure in STAGE0-EVIDENCE.md, measured with the same throttled profiles.
+- **Performance targets T1 to T7 in PERFORMANCE.md, all met** (9 runs per cell, same throttling). Two were open on 2026-10-18:
+  - **T2:** the phone warm Dossier, 0.92 s against Classic's 0.80 s.
+  - **T6:** the spread on desktop cold Home. The slow request has to be found first.
+- **A production measurement** from the owner preview.
 
 ## M9. Default switch and Classic retirement
 
-1. **Owner-only preview on production** (separate approval): `OPTIC_V2_ACCESS=owner`, `OPTIC_DEFAULT_UI=classic`. The owner uses v2 at `/v2/` with the checklist in PREVIEW-PROPOSAL.md.
+1. **Owner-only preview on production** (separate approval): `OPTIC_V2_ACCESS=owner` (also what unset means; any unreadable value means `off`), `OPTIC_DEFAULT_UI=classic`. The package is PREVIEW-PACKAGE.md. The emergency shutdown at every stage is `OPTIC_V2_ACCESS=off`. The owner uses v2 at `/v2/` with the checklist in PREVIEW-PROPOSAL.md.
 2. **Opt-in for everyone** (separate approval): `OPTIC_V2_ACCESS=all`. Classic's footer offers "Try the new design"; v2's offers "Use the classic app".
 3. **v2 as the default** (separate approval), only after M1 to M8 pass: `OPTIC_DEFAULT_UI=v2`. Classic stays at `/classic` and through the cookie.
 4. **Observation period:** at least four weeks with v2 as the default. Problem reports are triaged weekly, and no Classic-only capability remains in the matrix.

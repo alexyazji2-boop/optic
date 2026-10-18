@@ -1,5 +1,7 @@
 # Owner-only preview: proposal for review
 
+> **Superseded by PREVIEW-PACKAGE.md** (2026-10-18). Two things changed since this was written. Access now fails closed: unset means owner-only. There is also a separate emergency shutdown, `OPTIC_V2_ACCESS=off`. This file's rollback table describes the earlier design.
+
 Stage 0, 2026-10-18. A proposal only: nothing here is deployed. Each step below that touches production needs its own approval.
 
 ## What the preview is
