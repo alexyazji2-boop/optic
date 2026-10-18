@@ -30,3 +30,17 @@ Run on 2026-10-17 against the real backend: a local server on :8075 with the see
 - VoiceOver itself was not driven; the accessibility tree was inspected instead.
 - Milo could not produce an answer locally because there is no key; streaming was tested only up to the server's error event.
 - The brokerage portfolio block was not seen with a linked sandbox account in this run.
+
+## Second round: the Dossier (2026-10-18)
+
+| Check | Result |
+|---|---|
+| Options, Chart, Investing, Earnings, Financials, News against the live backend | Render with no console errors; every block has loading, empty and error states |
+| Position builder (bull call spread) | $635 at the mid, max profit $865, breakeven 351.35, from `/analyze` |
+| Valuation scenarios | Matches a hand calculation; saved to the browser key and the account route |
+| Indicators (SMA, EMA, RSI) and scenario arithmetic | In `tests/test_frontend_v2.py` |
+| Drawings | Saved in `optic.chart.drawings.v2` with the classic kind names |
+| Audit, 52 views and 4 drawers | 0 faults after fixes |
+| Mobile Safari (iPhone 17) | Options builder and the chart start on the first screen |
+| Suite | 6183 passed, 1 skipped |
+| Paid calls | The pre-earnings brief loads only on request |

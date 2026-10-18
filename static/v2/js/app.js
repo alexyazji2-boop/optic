@@ -14,12 +14,18 @@ import { toast } from './ui/toast.js';
 import { hrefFor } from './nav.js';
 import * as home from './pages/home.js';
 import * as dossier from './pages/dossier.js';
+import * as options from './pages/options.js';
+import * as investing from './pages/investing.js';
+import * as earnings from './pages/earnings.js';
+import * as financials from './pages/financials.js';
+import * as news from './pages/news.js';
+import * as chartPage from './pages/chart.js';
 import * as watchlist from './pages/watchlist.js';
 import * as alerts from './pages/alerts.js';
 import * as signin from './pages/signin.js';
 import * as bridge from './pages/bridge.js';
 
-const PAGES = { home, overview: dossier, watchlist, alerts, signin };
+const PAGES = { home, overview: dossier, swing: options, long: investing, earnings, financials, news, chart: chartPage, watchlist, alerts, signin };
 let current = null;   // { page, view, route }
 
 const app = {

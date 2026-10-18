@@ -135,3 +135,28 @@ def test_helpers_match_the_classic_app(tmp_path):
                      ("swing", "AAPL", None), ("watchlist", None, None), ("alerts", None, "MSFT"),
                      ("brokerage", None, None), ("instrument", "^GSPC", None), ("market", None, None),
                      ("settings", None, None), ("notfound", None, None)]
+
+
+def test_chart_and_scenario_arithmetic(tmp_path):
+    """The Chart page's indicators and the valuation scenarios compute what the
+    classic app computes, on numbers small enough to check by hand."""
+    script = tmp_path / "math.mjs"
+    script.write_text(f"""
+      globalThis.window = {{ addEventListener() {{}} }};
+      globalThis.localStorage = {{ getItem() {{ return null; }}, setItem() {{}} }};
+      const c = await import('{(V2 / "js/ui/pricechart.js").as_posix()}');
+      const v = await import('{(V2 / "js/pages/valuation-scenarios.js").as_posix()}');
+      const s = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+      const up = [44.34, 44.09, 44.15, 43.61, 44.33, 44.83, 45.10, 45.42, 45.84, 46.08, 45.89, 46.03, 45.61, 46.28, 46.28];
+      const r = v.work({{ revenue: 100, shares: 10, price: 50 }}, {{ growth: 10, margin: 20, share_change: 0, pe: 15 }}, {{ years: 2, required_return: 10 }});
+      print(JSON.stringify({{ sma: c.sma(s, 3).slice(-1)[0], ema: c.ema(s, 3).slice(-1)[0], rsi: c.rsi(up, 14).slice(-1)[0], r }}));
+    """)
+    out = subprocess.run([_jsc(), "-m", str(script)], capture_output=True, text=True, timeout=30)
+    assert out.returncode == 0, out.stderr
+    got = json.loads(out.stdout.strip().splitlines()[-1])
+    assert got["sma"] == 9
+    assert abs(got["ema"] - 9) < 1e-9          # a straight line's EMA lags by (n-1)/2
+    assert abs(got["rsi"] - 70.46) < 0.02      # by hand: gains 3.34 / 14, losses 1.40 / 14, RS 2.386
+    r = got["r"]                               # 100 x 1.1^2 = 121; x 20% = 24.2; / 10 = 2.42; x 15 = 36.3
+    assert abs(r["eps"] - 2.42) < 1e-9 and abs(r["price"] - 36.3) < 1e-9
+    assert abs(r["today"] - 36.3 / 1.21) < 1e-9

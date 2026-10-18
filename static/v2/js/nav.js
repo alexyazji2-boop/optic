@@ -17,12 +17,12 @@ export const GROUPS = [
   { id: 'home', label: 'Home', icon: 'home', pages: [{ view: 'home', label: 'Home', slug: '', v2: true }] },
   { id: 'security', label: 'Dossier', icon: 'dossier', symbol: true, pages: [
     { view: 'overview', label: 'Overview', slug: '', v2: true },
-    { view: 'chart', label: 'Chart', slug: 'chart' },
-    { view: 'swing', label: 'Options', slug: 'options' },
-    { view: 'long', label: 'Investing', slug: 'investing' },
-    { view: 'earnings', label: 'Earnings', slug: 'earnings' },
-    { view: 'financials', label: 'Financials', slug: 'financials' },
-    { view: 'news', label: 'News', slug: 'news' },
+    { view: 'chart', label: 'Chart', slug: 'chart', v2: true },
+    { view: 'swing', label: 'Options', slug: 'options', v2: true },
+    { view: 'long', label: 'Investing', slug: 'investing', v2: true },
+    { view: 'earnings', label: 'Earnings', slug: 'earnings', v2: true },
+    { view: 'financials', label: 'Financials', slug: 'financials', v2: true },
+    { view: 'news', label: 'News', slug: 'news', v2: true },
   ] },
   { id: 'analyse', label: 'Compare', icon: 'compare', pages: [{ view: 'compare', label: 'Compare', slug: 'compare' }] },
   { id: 'market', label: 'Markets', icon: 'markets', pages: [

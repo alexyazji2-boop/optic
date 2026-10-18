@@ -23,6 +23,9 @@ export function lineChart(series, opts = {}) {
   let lo = Math.min(...pts.map((p) => p.c)), hi = Math.max(...pts.map((p) => p.c));
   const cone = opts.cone && Number.isFinite(opts.cone.lo) ? opts.cone : null;
   if (cone) { lo = Math.min(lo, cone.lo); hi = Math.max(hi, cone.hi); }
+  // overlays: extra lines aligned with the series by index (averages, bands)
+  const overlays = (opts.overlays || []).map((o) => Object.assign({}, o, { values: (o.values || []).slice(-pts.length) }));
+  overlays.forEach((o) => o.values.forEach((v) => { if (Number.isFinite(v)) { lo = Math.min(lo, v); hi = Math.max(hi, v); } }));
   const span = hi - lo || 1; lo -= span * 0.06; hi += span * 0.06;
   const slots = pts.length - 1 + (opts.future || 0);
   const X = (i) => pad.l + (i / slots) * (W - pad.l - pad.r);
@@ -77,7 +80,7 @@ export function lineChart(series, opts = {}) {
 
   const svg = `<svg class="chart" id="${id}" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="${esc(summary)}" tabindex="0">
     ${ticks.map((t) => `<line class="grid" x1="${pad.l}" x2="${W - pad.r}" y1="${Y(t).toFixed(1)}" y2="${Y(t).toFixed(1)}"/>${opts.noTicks ? '' : `<text class="ax" x="${W - pad.r + 6}" y="${(Y(t) + 4).toFixed(1)}">${num(t, dp > 0 && t < 1000 ? 0 : 0)}</text>`}`).join('')}
-    ${months.join('')}${area}<path class="line" d="${path}"/>${coneSvg}${events}${tags}
+    ${months.join('')}${area}${overlays.map((o) => { let d = '', pen = false; o.values.forEach((v, i) => { if (Number.isFinite(v)) { d += `${pen ? 'L' : 'M'}${X(i).toFixed(1)} ${Y(v).toFixed(1)}`; pen = true; } else pen = false; }); return d ? `<path class="ov ${o.cls || ''}" d="${d}"/>` : ''; }).join('')}<path class="line" d="${path}"/>${coneSvg}${events}${tags}
     ${opts.focusEnd ? `<circle class="focus-ring" cx="${X(pts.length - 1)}" cy="${Y(last.c)}" r="10"/>` : ''}
     <circle class="end" cx="${X(pts.length - 1)}" cy="${Y(last.c)}" r="3.5"/>
     <g class="xh" style="display:none"><line class="xh-v" y1="${pad.t}" y2="${H - pad.b}"/><circle class="xh-dot" r="4"/></g>

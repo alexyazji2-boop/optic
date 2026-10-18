@@ -375,3 +375,53 @@ ul.plain { margin: 0; padding-left: 18px; } ul.plain li { margin-bottom: 7px; }
   .tabbar svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.6; }
   .tabbar [aria-current="page"] { color: var(--c-ink); font-weight: 650; } .tabbar [aria-current="page"] svg { stroke: var(--c-gold); }
 }
+
+/* ---------- tab set: the rest of a page, one step away ---------- */
+.tabset-wrap { margin-top: 18px; }
+.tabset { display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none; border-bottom: 1px solid var(--c-line); }
+.tabset [role=tab] { flex: none; min-height: var(--tap); padding: 0 14px; border: 0; border-bottom: 2px solid transparent; margin-bottom: -1px; background: none; color: var(--c-ink-3); font: 500 15px/1 var(--f-sans); cursor: pointer; white-space: nowrap; }
+.tabset [role=tab]:hover { color: var(--c-ink); }
+.tabset [role=tab][aria-selected="true"] { color: var(--c-ink); border-bottom-color: var(--c-gold); }
+.tabpanel { padding: 22px 0 6px; display: grid; gap: 14px; align-content: start; }
+.tabpanel:focus-visible { outline-offset: 6px; }
+.tabpanel > p, .tabpanel li { max-width: 78ch; }
+
+/* ---------- readings: a compact row of labelled figures ---------- */
+.readings { display: grid; grid-template-columns: repeat(var(--rn, 5), minmax(0, 1fr)); border-top: 1px solid var(--c-line); border-bottom: 1px solid var(--c-line-2); margin-top: 26px; }
+.rd { display: flex; flex-direction: column; gap: 4px; padding: 16px 18px 14px 0; min-width: 0; }
+.rd + .rd { padding-left: 18px; border-left: 1px solid var(--c-line-2); }
+.rd .k { font: 500 13.5px/1.25 var(--f-label); color: var(--c-ink-3); }
+.rd .v { font: 600 24px/1.1 var(--f-sans); letter-spacing: -0.02em; }
+.rd .d { font-size: 14px; color: var(--c-ink-2); line-height: 1.4; }
+.rd.main .v { font-size: 34px; }
+
+/* ---------- bars ---------- */
+.bars { display: block; width: 100%; height: auto; overflow: visible; }
+.bars:focus-visible { outline: 2px solid var(--c-focus); outline-offset: 4px; border-radius: 4px; }
+.bars .zero { stroke: var(--c-line); }
+.bars .bar.pos { fill: var(--c-ink); opacity: .78; }
+.bars .bar.neg { fill: var(--c-ink-3); opacity: .5; }
+.bars .bar.on { fill: var(--c-gold); opacity: 1; }
+.bars .ax { fill: var(--c-ink-3); font: 500 var(--t-chart)/1 var(--f-sans); font-variant-numeric: tabular-nums; }
+.bars .mk { stroke: var(--c-gold); stroke-width: 1.5; stroke-dasharray: 3 3; }
+.bars .mk-t { fill: var(--c-gold-ink); font: 600 var(--t-chart)/1 var(--f-label); }
+.hbars { margin: 0; padding: 0; list-style: none; display: grid; gap: 10px; }
+.hbars li { display: grid; grid-template-columns: minmax(90px, 180px) minmax(0, 1fr) 70px; gap: 12px; align-items: center; font-size: 15px; }
+.hb-track { height: 8px; border-radius: 4px; background: var(--c-sunk); overflow: hidden; }
+.hb-fill { display: block; height: 100%; background: var(--c-gold); border-radius: 4px; }
+.hb-v { text-align: right; font-weight: 600; }
+.hb-n { grid-column: 1 / -1; font-size: 14px; color: var(--c-ink-3); }
+
+@media (max-width: 860px) {
+  .readings { display: flex; overflow-x: auto; scroll-snap-type: x proximity; scrollbar-width: none; margin-right: -16px; padding-right: 16px; }
+  .rd { flex: 0 0 auto; min-width: 150px; max-width: 220px; scroll-snap-align: start; padding: 12px 14px 10px 0; }
+  .rd + .rd { padding-left: 14px; }
+  .rd .v { font-size: 21px; } .rd.main .v { font-size: 26px; }
+  .rd .d { font-size: 13.5px; }
+  .hbars li { grid-template-columns: minmax(80px, 120px) minmax(0, 1fr) 60px; }
+}
+.chart .ov { fill: none; stroke-width: 1.5; stroke-linejoin: round; }
+.chart .ov.o1 { stroke: var(--c-gold); } .chart .ov.o2 { stroke: var(--c-ink-3); stroke-dasharray: 5 4; } .chart .ov.o3 { stroke: var(--c-ink-3); stroke-width: 1; opacity: .6; }
+.legend-line { display: flex; flex-wrap: wrap; gap: 16px; font-size: 14px; color: var(--c-ink-3); margin-top: 6px; }
+.legend-line i { display: inline-block; width: 18px; height: 0; border-top: 2px solid var(--c-chart-ink); margin-right: 6px; vertical-align: middle; }
+.legend-line i.o1 { border-color: var(--c-gold); } .legend-line i.o2 { border-top: 2px dashed var(--c-ink-3); } .legend-line i.o3 { border-color: var(--c-ink-3); opacity: .6; }

@@ -14,10 +14,10 @@ import { num, signed, dir, compact, clean, capFirst, longDate, fullDate, shortDa
 import { lineChart, meter, mountCharts } from '../ui/chart.js';
 import { skeleton, empty, failed, staleLine } from '../ui/states.js';
 import { icon } from '../ui/icons.js';
-import { watchButton } from '../ui/company.js';
+import { header as frameHeader, tabs as frameTabs, isFund } from './dossier-frame.js';
 import { button as miloButton, provideContext } from '../ui/milo.js';
 import * as drawer from '../ui/drawer.js';
-import { GROUPS, hrefFor } from '../nav.js';
+import { hrefFor } from '../nav.js';
 
 let live = true;
 let D = {};
@@ -28,28 +28,6 @@ const qualityWord = { A: 'Yes, high quality.', B: 'Yes, good quality.', C: 'Midd
 const starsWord = { 5: 'Yes. Below its fair value range.', 4: 'Yes. Below the middle of its range.', 3: 'About fair.', 2: 'Not especially. Above the middle of its range.', 1: 'No. Above its fair value range.' };
 const stanceWord = { fair: 'priced about in line with that history', expensive: 'priced above that history', cheap: 'priced below that history' };
 const timing = { before_open: 'before the open', after_close: 'after the close', during: 'during the session' };
-
-/* ---------------- header ---------------- */
-function header(sym) {
-  const q = D.quote || {};
-  const s = (D.session && D.session.prices) || {};
-  const name = q.name || (D.session && D.session.name) || '';
-  const ext = s.extended && isNum(s.extended.price) ? s.extended : null;
-  return html`<header class="dhead">
-    <div class="dh-id">
-      <h1 class="name"><b class="tick">${sym}</b>${name && name !== sym ? html`<span>${name}</span>` : ''}${q.sector ? html`<span class="t-muted dh-sector">${q.sector}</span>` : ''}</h1>
-      <p class="dh-price">${isNum(q.price) ? html`<span class="t-display">${num(q.price)}</span>` : D.quoteError ? '' : html`<span class="sk dh-sk" role="status" aria-label="Loading the price"></span>`}
-        <span class="dh-chg ${dir(q.change_pct)}">${isNum(q.change_pct) ? html`${signed(q.change, 2, '')} (${signed(q.change_pct)})` : ''}</span></p>
-      <p class="dh-state">${s.phase_label ? html`${clean(s.phase_label)}. ` : ''}${s.regular_close_label && s.phase !== 'regular' ? `Price is the ${s.regular_close_label}.` : ''}${ext ? html` ${capFirst(ext.kind)} ${num(ext.price)}, <span class="${dir(ext.change_pct)}">${signed(ext.change_pct)}</span>.` : ''}</p>
-    </div>
-    <div class="cluster acts">${watchButton(sym)}<a class="btn" href="#/alerts?symbol=${sym}">Alert</a>${miloButton(`Ask Milo`, { ask: `What is the case for ${sym} right now?`, context: `${sym} Dossier, Overview`, symbol: sym })}</div>
-  </header>`;
-}
-
-function tabs(sym) {
-  const g = GROUPS.find((x) => x.id === 'security');
-  return html`<nav class="tabs" aria-label="${sym} Dossier">${g.pages.map((p) => html`<a href="${hrefFor(p.view, sym)}" ${p.view === 'overview' ? html`aria-current="page"` : ''}>${p.label}${p.v2 ? '' : html`<span class="legacy-mark" aria-hidden="true">${icon('out')}</span><span class="sr">, opens in the current app</span>`}</a>`)}</nav>`;
-}
 
 /* ---------------- chart ---------------- */
 function series() {
@@ -124,11 +102,11 @@ function answers(sym) {
 }
 
 /** The "priced against history" line, with its basis beside the ratio (point 4). */
-function historyRatio(pr, im) {
+export function historyRatio(pr, im, quartersIn) {
   if (!pr || !pr.available || !isNum(pr.ratio)) return '';
   const k = pr.baseline_kind;
   const n = pr.baseline_sessions;
-  const quarters = ((D.earnings || {}).surprise || {}).quarters || 8;
+  const quarters = quartersIn || ((D.earnings || {}).surprise || {}).quarters || 8;
   const basis = k === 'event-plus-ordinary'
     ? `typical for the same ${n} sessions: the ±${num(pr.event_day_avg_pct)}% report-day average (${quarters} quarters) combined with a typical ${Math.max(n - 1, 1)}-session move over two years`
     : k === 'event-day' ? `the average move on the session after past reports (${quarters} quarters)`
@@ -260,7 +238,7 @@ function paint(main, sym) {
   const openDetails = $$('details[open] summary', main).map((x) => x.textContent.trim());
   const openEvs = $$('[data-v2-ev][aria-expanded="true"]', main).map((x) => x.getAttribute('aria-controls'));
   const scrollY = window.scrollY;
-  draw(main, html`${header(sym)}${tabs(sym)}
+  draw(main, html`${frameHeader(sym, D, 'overview')}${frameTabs(sym, 'overview', { fund: isFund(D) })}
     ${D.quoteError && !D.quote ? failed(`${sym}'s quote`, D.quoteError, { retry: 'dossier' }) : ''}
     ${((D.framework || {}).freshness || {}).state === 'stale' ? staleLine({ text: clean(D.framework.freshness.text) }) : ''}
     <section class="section dchart" aria-label="Price chart">${D.tickerError ? failed('The price history', D.tickerError, { retry: 'dossier' }) : chartBlock(sym)}</section>

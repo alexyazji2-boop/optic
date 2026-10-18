@@ -515,6 +515,8 @@ SETTINGS = {
     # Whether drawing points snap to a candle's O/H/L/C. A preference about the
     # tool, like the chart style beside it, not anything the reader made.
     "optic.chart.snap.v1",
+    # The rebuilt frontend's chart view: bar range, style, indicators, panes.
+    "optic.v2.chart.v1",
     # Swing setups: the panel's filters, and the rule parameters a reader
     # changed. Preferences about the tool, like the chart's beside them.
     "optic.setups.view.v1", "optic.setups.params.v1",
