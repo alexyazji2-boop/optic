@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Optic</title>
+<meta name="description" content="Optic Terminal: stock and options research, read in plain words.">
+<meta name="theme-color" content="#f6f2e9">
+<!-- The rebuilt frontend, served beside the current app while pages move
+     across (docs/frontend-v2/COVERAGE.md). Same fonts as the current app. -->
+<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource-variable/inter/opsz.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource-variable/space-grotesk/index.css">
+<link rel="stylesheet" href="css/tokens.css">
+<link rel="stylesheet" href="css/base.css">
+<link rel="stylesheet" href="css/components.css">
+<link rel="stylesheet" href="css/pages.css">
+<script>
+  // The theme the reader chose in Settings (optic.theme), applied before paint.
+  try {
+    var t = localStorage.getItem('optic.theme');
+    if (t === 'dark') document.documentElement.setAttribute('data-theme', 'charcoal');
+    else if (t === 'light') document.documentElement.setAttribute('data-theme', 'ivory');
+  } catch (e) { /* private mode: follow the system */ }
+</script>
+<script type="module" src="js/app.js"></script>
+</head>
+<body>
+<div id="app"></div>
+<noscript><p style="padding:24px">Optic needs JavaScript. The <a href="/">current app</a> needs it too.</p></noscript>
+</body>
+</html>

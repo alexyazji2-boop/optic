@@ -1,0 +1,103 @@
+/* Optic v2 design tokens. Every colour, size and duration in the v2 frontend
+   comes from here; components never use a literal colour.
+   Two themes: ivory (default) and charcoal. Gold is light, not paint: it marks
+   focus, selection, the mark and Milo, never chrome. */
+:root {
+  /* surfaces */
+  --c-plane: #f6f2e9;
+  --c-plane-2: #efe9dd;
+  --c-raised: #fffcf6;
+  --c-sunk: #e9e2d3;
+  --c-scene: #1b1a18;
+  --c-scene-2: #252320;
+  --c-on-scene: #f4efe5;
+  --c-on-scene-2: #b9b1a2;
+  /* ink */
+  --c-ink: #1b1a18;
+  --c-ink-2: #48443d;
+  --c-ink-3: #686256;
+  --c-line: #d9d1c1;
+  --c-line-2: #e6dfd1;
+  /* brand and meaning */
+  --c-gold: #b0861b;
+  --c-gold-ink: #74580c;
+  --c-gold-light: #d4b144;
+  --c-gold-wash: rgba(212, 177, 68, .14);
+  --c-pos: #0d7a42;
+  --c-neg: #b43a25;
+  --c-warn: #8a5a00;
+  --c-proposed: #6c43c9;
+  --c-focus: #1b1a18;
+  /* charts */
+  --c-chart-ink: var(--c-ink);
+  --c-chart-grid: #e3dccd;
+  --c-area-top: rgba(176, 134, 27, .20);
+  --c-area-bottom: rgba(176, 134, 27, 0);
+  --c-cone-a: rgba(176, 134, 27, .30);
+  --c-cone-b: rgba(176, 134, 27, .04);
+  --c-cone-edge: #8a6a14;
+  --c-halo: var(--c-plane);
+  --c-tip-bg: #1b1a18;
+  --c-tip-ink: #f6f2e9;
+  --c-scrim: rgba(20, 18, 15, .30);
+
+  /* type: Inter reads, Space Grotesk labels and tickers */
+  --f-sans: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-label: "Space Grotesk", "Inter", system-ui, sans-serif;
+  --t-display: clamp(40px, 6vw, 84px);
+  --t-display-m: clamp(28px, 3.4vw, 46px);
+  --t-h2: 24px;
+  --t-h3: 18px;
+  --t-body: 16px;
+  --t-note: 15px;
+  --t-label: 14px;
+  --t-micro: 13px;   /* labels on dense rows only */
+  --t-chart: 12px;   /* chart ticks and data tags only */
+  --track-display: -0.035em;
+  --w-display: 600;
+
+  /* space and shape */
+  --s-1: 4px; --s-2: 8px; --s-3: 12px; --s-4: 16px; --s-5: 20px; --s-6: 24px; --s-7: 32px; --s-8: 40px; --s-9: 56px; --s-10: 72px;
+  --r-1: 8px; --r-2: 12px; --r-3: 16px; --r-4: 22px; --r-pill: 999px;
+  --tap: 44px;
+  --rail: 236px;
+  --page: 1180px;
+
+  /* motion */
+  --ease: cubic-bezier(.2, .7, .2, 1);
+  --d-fast: 120ms; --d: 200ms; --d-slow: 320ms;
+  color-scheme: light;
+}
+:root[data-theme="charcoal"] {
+  --c-plane: #141311; --c-plane-2: #1a1917; --c-raised: #201e1b; --c-sunk: #2a2824;
+  --c-scene: #0c0b0a; --c-scene-2: #171614;
+  --c-ink: #f2ede3; --c-ink-2: #c3bbad; --c-ink-3: #9f978a;
+  --c-line: #34312c; --c-line-2: #2a2824;
+  --c-gold: #d4b144; --c-gold-ink: #e2c66e;
+  --c-pos: #5fcb8f; --c-neg: #f28a78; --c-warn: #e7b25a; --c-proposed: #b9a0ff; --c-focus: #f0d77c;
+  --c-chart-grid: #2c2a26; --c-area-top: rgba(212, 177, 68, .22); --c-cone-a: rgba(212, 177, 68, .32); --c-cone-edge: #e2c66e;
+  --c-tip-bg: #f2ede3; --c-tip-ink: #141311; --c-scrim: rgba(0, 0, 0, .55);
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    --c-plane: #141311; --c-plane-2: #1a1917; --c-raised: #201e1b; --c-sunk: #2a2824;
+    --c-scene: #0c0b0a; --c-scene-2: #171614;
+    --c-ink: #f2ede3; --c-ink-2: #c3bbad; --c-ink-3: #9f978a;
+    --c-line: #34312c; --c-line-2: #2a2824;
+    --c-gold: #d4b144; --c-gold-ink: #e2c66e;
+    --c-pos: #5fcb8f; --c-neg: #f28a78; --c-warn: #e7b25a; --c-proposed: #b9a0ff; --c-focus: #f0d77c;
+    --c-chart-grid: #2c2a26; --c-area-top: rgba(212, 177, 68, .22); --c-cone-a: rgba(212, 177, 68, .32); --c-cone-edge: #e2c66e;
+    --c-tip-bg: #f2ede3; --c-tip-ink: #141311; --c-scrim: rgba(0, 0, 0, .55);
+    color-scheme: dark;
+  }
+}
+/* The scene (one statement piece, Home only) carries its own palette so its
+   charts and text stay legible in either theme. */
+.scene {
+  --c-ink: var(--c-on-scene); --c-ink-2: var(--c-on-scene-2); --c-ink-3: var(--c-on-scene-2);
+  --c-chart-ink: var(--c-on-scene); --c-chart-grid: rgba(244, 239, 229, .07); --c-halo: var(--c-scene);
+  --c-pos: #6fd39b; --c-neg: #f5907f; --c-gold-ink: var(--c-gold-light); --c-cone-edge: var(--c-gold-light);
+  --c-cone-a: rgba(212, 177, 68, .38); --c-cone-b: rgba(212, 177, 68, .03);
+  --c-area-top: rgba(212, 177, 68, .16); --c-area-bottom: rgba(212, 177, 68, 0); --c-focus: var(--c-gold-light);
+}

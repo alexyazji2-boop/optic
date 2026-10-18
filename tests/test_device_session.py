@@ -544,6 +544,10 @@ def _keys_in_use():
                  "static/charts.js", "static/index.html"):
         text = (ROOT / path).read_text()
         found |= set(re.findall(r"""['"](optic\.[A-Za-z0-9_.-]+)['"]""", text))
+    # The rebuilt frontend reads and writes the same stores.
+    for path in sorted((ROOT / "static/v2").rglob("*")):
+        if path.suffix in (".js", ".html"):
+            found |= set(re.findall(r"""['"](optic\.[A-Za-z0-9_.-]+)['"]""", path.read_text()))
     return found
 
 

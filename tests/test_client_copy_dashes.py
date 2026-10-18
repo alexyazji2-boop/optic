@@ -16,7 +16,8 @@ import re
 from pathlib import Path
 
 STATIC = Path(__file__).resolve().parent.parent / "static"
-SCRIPTS = [STATIC / "app.js", STATIC / "auth.js", *sorted((STATIC / "components").glob("*.js"))]
+SCRIPTS = [STATIC / "app.js", STATIC / "auth.js", *sorted((STATIC / "components").glob("*.js")),
+           *sorted((STATIC / "v2").rglob("*.js"))]
 
 TAG = re.compile(r"<[^>]*>")
 
