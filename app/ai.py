@@ -2444,6 +2444,15 @@ _CATREAD_CACHE: Dict[str, Dict[str, Any]] = {}
 CATREAD_TTL = float(os.environ.get("CATALYST_READ_TTL", "3600"))
 
 
+def kept_catalyst_read(key: str) -> Optional[Dict[str, Any]]:
+    """The read already written for this release, if one is kept; never writes."""
+    hit = _CATREAD_CACHE.get(key)
+    if hit and (time.time() - hit["at"]) < CATREAD_TTL:
+        return hit["read"]
+    stored = ai_store.kept("catalyst_read", key, CATREAD_TTL)
+    return stored[0] if stored else None
+
+
 def write_catalyst_read(key: str, facts: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     """The desk note on the release currently in catalyst mode, or None."""
     hit = _CATREAD_CACHE.get(key)

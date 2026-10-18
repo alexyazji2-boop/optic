@@ -75,7 +75,7 @@ def test_every_navigation_page_is_in_the_coverage_tracker():
         for _view, plabel in re.findall(r"\{ view: '([a-z]+)', label: '([^']+)'", nav[start:end if end > 0 else None]):
             assert (glabel, plabel) in listed, (glabel, plabel)
     # and the tracker's v2 claims match nav.js
-    rebuilt = {p.strip() for _g, p, s in rows if s == "Rebuilt"}
+    rebuilt = {p.strip() for g, p, s in rows if s == "Rebuilt" and not g.startswith("(")}
     marked = set(re.findall(r"label: '([^']+)', slug: '[^']*', v2: true", NAV))
     assert rebuilt == marked
 
@@ -160,3 +160,35 @@ def test_chart_and_scenario_arithmetic(tmp_path):
     r = got["r"]                               # 100 x 1.1^2 = 121; x 20% = 24.2; / 10 = 2.42; x 15 = 36.3
     assert abs(r["eps"] - 2.42) < 1e-9 and abs(r["price"] - 36.3) < 1e-9
     assert abs(r["today"] - 36.3 / 1.21) < 1e-9
+
+
+def test_discover_ranking_and_scan_cells(tmp_path):
+    """Explore ranks each move against its own typical day (ATR / 1.6) and keeps
+    one of an index and its future; Scan formats cells as the classic page does."""
+    script = tmp_path / "discover.mjs"
+    script.write_text(f"""
+      globalThis.window = {{ addEventListener() {{}} }};
+      globalThis.matchMedia = () => ({{ matches: false }});
+      globalThis.location = {{ hash: '' }};
+      globalThis.localStorage = {{ getItem() {{ return null; }}, setItem() {{}} }};
+      globalThis.document = {{ addEventListener() {{}}, querySelector() {{ return null; }} }};
+      const e = await import('{(V2 / "js/pages/explore.js").as_posix()}');
+      const s = await import('{(V2 / "js/pages/scan.js").as_posix()}');
+      const home = {{ macro: {{ groups: {{
+        indices: [{{ label: 'S&P 500', symbol: '^GSPC', chg_1d: 0.5, atr_pct: 1.6 }}, {{ label: 'S&P 500 futures', symbol: 'ES=F', chg_1d: 0.6, atr_pct: 1.6 }}],
+        vol: [{{ label: 'VIX', symbol: '^VIX', chg_1d: 8, atr_pct: 8 }}, {{ label: 'Gold', symbol: 'GC=F', chg_1d: -1, atr_pct: null }}] }} }} }};
+      print(JSON.stringify({{
+        moves: e.rankedMoves(home).map((r) => [r.label, r.rel]),
+        cells: [s.scanCell('pct_plain', 1.234), s.scanCell('mult', 2), s.scanCell('ratio', 0.42), s.scanCell('usd', 2.5e9), s.scanCell('text', null)],
+        screen: [s.screenCell({{ unit: '$', decimals: 2 }}, 2.5e7), s.screenCell({{ unit: '$', decimals: 2 }}, 36.344),
+                 s.screenCell({{ unit: '%', decimals: 0 }}, 97.2), s.screenCell({{ unit: 'x', decimals: 2 }}, 1.5)],
+      }}));
+    """)
+    out = subprocess.run([_jsc(), "-m", str(script)], capture_output=True, text=True, timeout=30)
+    assert out.returncode == 0, out.stderr
+    got = json.loads(out.stdout.strip().splitlines()[-1])
+    # VIX 8% on an 8% range is 8 / (8 / 1.6) = 1.6 typical days; on a 1.6% range
+    # the future's 0.6 beats the index's 0.5, so only the future is kept
+    assert got["moves"] == [["VIX", 1.6], ["S&P 500 futures", 0.6], ["Gold", None]]
+    assert got["cells"] == ["1.23%", "2.00×", "42%", "$2.5B", "n/a"]
+    assert got["screen"] == ["$25.0M", "$36.34", "97%", "1.50×"]

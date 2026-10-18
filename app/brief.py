@@ -900,8 +900,14 @@ def build(yf_provider, day: Optional[str] = None) -> Dict[str, Any]:
     return payload
 
 
-def state(yf_provider, day: Optional[str] = None, force: bool = False) -> Dict[str, Any]:
+def state(yf_provider, day: Optional[str] = None, force: bool = False,
+          cached_only: bool = False) -> Dict[str, Any]:
     """What the endpoint serves.
+
+    `cached_only` serves what is already built (today's, or yesterday's under
+    its own date) and never builds or starts a rebuild, so a page that asks
+    with it can never start a model write. The rebuilt frontend asks with it;
+    the background loop keeps today's Read current.
 
     Asking for a past day reads the archive and never rebuilds — a brief dated
     last Tuesday should say what was known last Tuesday, not what today's feeds
@@ -916,6 +922,21 @@ def state(yf_provider, day: Optional[str] = None, force: bool = False) -> Dict[s
             return {"day": requested, "missing": True, "archive": archive(),
                     "reason": "No brief was recorded for that day."}
         return {**stored, "archive": archive(), "historical": True}
+
+    if cached_only:
+        with _LOCK:
+            held = _MEM.get(current)
+        stored = (held or {}).get("payload") or _load(current)
+        if stored:
+            age = time.time() - _parse_iso(stored.get("built_at"))
+            return {**stored, "archive": archive(), "cached": True,
+                    "stale": age >= REBUILD_AFTER_SECONDS, "refreshing": False}
+        previous = _previous_read(current)
+        if previous:
+            return {**previous, "archive": archive(), "cached": True, "stale": True,
+                    "previous_day": True, "refreshing": False}
+        return {"day": current, "missing": True, "archive": archive(),
+                "reason": "Today's Read has not been built yet. It is built every 20 minutes."}
 
     if not force:
         with _LOCK:

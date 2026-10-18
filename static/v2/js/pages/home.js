@@ -61,11 +61,11 @@ function strip(data) {
     const i = inst(data, group, label);
     if (!i || !isNum(i.last)) return '';
     const dp = i.last < 20 ? 2 : i.last > 1000 ? 0 : 2;
-    return html`<a class="mcell" href="/#/instrument/${encodeURIComponent(i.symbol)}"><span class="k">${label}</span><span class="v">${num(i.last, dp)}</span><span class="d ${dir(i.chg_1d)}">${moveLabel(i) || ''}</span></a>`;
+    return html`<a class="mcell" href="#/instrument/${encodeURIComponent(i.symbol)}"><span class="k">${label}</span><span class="v">${num(i.last, dp)}</span><span class="d ${dir(i.chg_1d)}">${moveLabel(i) || ''}</span></a>`;
   });
   const regular = (data.session || {}).phase === 'regular';
   return html`<div class="mstrip" role="group" aria-label="Market snapshot">${cells}</div>
-    <p class="asof">As of ${etTime(data.generated_at)}. ${regular ? '' : 'Futures and crypto trade now; the rest are at the last close.'} Index and price links open in the current app.</p>`;
+    <p class="asof">As of ${etTime(data.generated_at)}. ${regular ? '' : 'Futures and crypto trade now; the rest are at the last close.'}</p>`;
 }
 
 /* ---------------- the statement panel: the market's expected move ---------------- */
@@ -84,7 +84,7 @@ function scene(data, series) {
       <p class="big-cap">The one-day move options price, from the VIX: about ${num(em.implied_points, 0)} points either way from ${num(em.spot, 0)} (VIX ${num(em.vix, 1)} ÷ 16).</p>
       ${real && isNum(em.ratio) ? html`<p class="second"><b>${num(em.ratio, 1)}×</b><span>= ±${num(em.implied_pct, 2)}% priced ÷ ±${num(em.realized_pct, 2)}%, the index's own recent day (its 14-day average range, ${num(em.atr_pct, 2)}%, ÷ 1.6).</span></p>` : ''}
       <p class="claim">${clean(em.reading || '')}</p>
-      <div class="acts"><a class="btn btn-light" href="/#/macro">See the macro picture</a>${miloButton('Ask Milo about today', { ask: 'What matters for the market in the next session?', context: 'Home, the market today' })}</div>
+      <div class="acts"><a class="btn btn-light" href="#/macro">See the macro picture</a><a class="btn" href="#/explore">What moved most</a>${miloButton('Ask Milo about today', { ask: 'What matters for the market in the next session?', context: 'Home, the market today' })}</div>
     </div>
     <p class="src">Source: Yahoo Finance index and VIX quotes, ${etTime(data.generated_at)}. ${clean((data.session || {}).label || '')}.</p>
   </section>`;
@@ -242,7 +242,7 @@ function render_(main, isNew) {
       <section class="section" id="hm-modes" hidden aria-labelledby="md-h"><div class="section-head"><div><h2 class="t-h2" id="md-h">How should Optic speak to you?</h2><p class="section-sub">Change it any time in Settings.</p></div></div><div id="hm-modes-in"></div></section>
       <section class="section" aria-labelledby="pa-h"><h2 class="sr" id="pa-h">Ways to start</h2><div class="paths">
         <div class="path"><p class="t-h3">Look up a company</p><p>Every Dossier answers four questions first: the business, the price, the trade and what is next.</p><button type="button" class="textlink" data-v2-open-palette>Search ${icon('arrow')}</button></div>
-        <div class="path"><p class="t-h3">Read today's market</p><p>The day's read, the macro regime and the index cycles, in the current app for now.</p><a class="textlink" href="/#/read">Open Read ${icon('out')}</a></div>
+        <div class="path"><p class="t-h3">Read today's market</p><p>The day's read, the macro regime and the index cycles.</p><a class="textlink" href="#/read">Open Read ${icon('arrow')}</a></div>
         <div class="path"><p class="t-h3">${store.signedIn() ? 'Set alerts' : 'Keep it on an account'}</p><p>${store.signedIn() ? 'Watches check your conditions every 30 minutes and record what fired.' : 'A free account keeps your watchlists and alerts on any device.'}</p>${store.signedIn() ? html`<a class="textlink" href="#/alerts">Alerts ${icon('arrow')}</a>` : html`<a class="textlink" href="#/signin">Sign in or create one ${icon('arrow')}</a>`}</div>
       </div></section>`
     : html`<div id="hm-hero"></div><div id="hm-scene">${skeleton('chart', 1, 'Loading the market')}</div>

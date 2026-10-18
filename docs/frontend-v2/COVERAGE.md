@@ -21,13 +21,13 @@ Status words:
 | Dossier | Financials | `#/{SYM}/financials` | Rebuilt |
 | Dossier | News | `#/{SYM}/news` | Rebuilt |
 | Compare | Compare | `#/compare` | Current app |
-| Markets | Read | `#/read` | Current app |
-| Markets | Macro | `#/macro` | Current app |
-| Markets | Indices | `#/indices` | Current app |
-| Discover | Explore | `#/explore` | Current app |
-| Discover | Scan | `#/scan` | Current app |
-| Discover | Insiders | `#/insiders` | Current app |
-| Discover | Analysts | `#/analysts` | Current app |
+| Markets | Read | `#/read` | Rebuilt |
+| Markets | Macro | `#/macro` | Rebuilt |
+| Markets | Indices | `#/indices` | Rebuilt |
+| Discover | Explore | `#/explore` | Rebuilt |
+| Discover | Scan | `#/scan` | Rebuilt |
+| Discover | Insiders | `#/insiders` | Rebuilt |
+| Discover | Analysts | `#/analysts` | Rebuilt |
 | Positions | Optic Portfolio | `#/portfolio` | Current app |
 | Positions | Paper Desk | `#/paper` | Current app |
 | Positions | Retirement | `#/retirement` | Current app |
@@ -38,7 +38,7 @@ Status words:
 | Reports | Claude usage | `#/usage` | Current app |
 | Reports | Accounts | `#/accounts` | Current app |
 | (rail footer) | Settings | `#/settings` | Current app |
-| (none) | Instrument | `#/instrument/{SYM}` | Current app |
+| (none) | Instrument | `#/instrument/{SYM}` | Rebuilt |
 
 ## Shell and global
 
@@ -75,12 +75,12 @@ Status words:
 | What matters today (events, earnings, sectors) | Changed | `/api/priority`, grouped Now / Today / This week, three per group with Show more, filter to your names, each opens in place. |
 | Catalyst day strip | Not yet | |
 | Optic Desk (edition, bottom line, full read, Ask Milo) | Changed | Lead lines and the full read; scenarios and today's reports not yet. |
-| What matters now (ranked cross-asset moves) | Not yet | |
+| What matters now (ranked cross-asset moves) | Changed | The same ranking is on Discover, Explore, under Cross-asset; "What moved most" on Home's market panel opens it. |
 | What changed since yesterday (`POST /api/briefing`) | Not yet | Each watchlist row carries its own "what changed". |
 | Moved most this month | Rebuilt | `/api/scanners/movers`, with the building state. |
 | Your watchlist feed | Rebuilt | Rows open the company beside the list. |
 | Ask Milo question chips | Changed | One contextual Ask Milo per block. |
-| What's happening (Read headlines) | Not yet | |
+| What's happening (Read headlines) | Changed | Home links to the rebuilt Read, which carries the summary, search and headlines. |
 | Latest scan alerts | Rebuilt | From `/api/home` `alerts`. |
 | Index and sector trends board | Not yet | |
 | The market's expected move (statement panel) | Changed | Moved from Macro to Home's one charcoal panel: VIX-implied day, its basis, and the S&P 500's three months. |
@@ -199,6 +199,95 @@ Status words:
 | Catalyst types, filtering the headlines | Rebuilt | |
 | Headlines about the company and market context, with tiers, tone and tags | Rebuilt | |
 | How these are ranked | Rebuilt | |
+
+## Markets, Read
+
+| Feature | Status | Note |
+|---|---|---|
+| The day's Read: summary, sections, headline search | Changed | Served with `cached=true`: only what is already written. The server's own loop writes it every 20 minutes; if today's is missing, yesterday's is shown with its date, never a fresh model call. |
+| Optic Desk edition, with its sources | Rebuilt | `/api/desk/edition`; citations link to each source. |
+| Index strip | Rebuilt | |
+| Overnight, worldwide | Rebuilt | From the Read's `global_overnight`. |
+| Today's priority | Rebuilt | `/api/priority`. |
+| Market catalyst | Changed | Shows the kept read only; "Write the read" is a labelled button because it is a model call. |
+| Catalyst library: filters, search, scan for new | Rebuilt | "Scan for new catalysts" is a click, as before. |
+| Weekly analysis | Changed | Kept copy only (`cached=true`); "Write this week's update" is a labelled button. |
+| Fear and Greed, market regime | Rebuilt | |
+| On the calendar: impact and range filters | Rebuilt | |
+| Headlines; official releases and sources | Rebuilt | |
+| Ask Milo | Rebuilt | Contextual buttons; nothing is asked until the reader sends. |
+
+## Markets, Macro
+
+| Feature | Status | Note |
+|---|---|---|
+| The market today, in brief; regime and its factors | Changed | Factors drawn as signed bars around zero with each rule beside them. |
+| Expected S&P move from the VIX | Rebuilt | Also on Home's statement panel. |
+| Breadth (equal weight against cap weight) | Rebuilt | |
+| Yield curve | Rebuilt | |
+| Rotation map | Rebuilt | Quadrants, tails and "crossed a boundary this week". |
+| Economic data | Rebuilt | Series picker and chart. |
+| Stock maps: templates, drill into a sector, the full table | Changed | The server's treemap layout, drawn at the slot's width; sectors open by click, Enter or Space. |
+| Currencies with search, cross-asset, ratios, correlation and dispersion | Rebuilt | |
+| Sector board with a Sector Read | Changed | The Sector Read is written only on click and says so; it is a model call. |
+| Sector strength, themes and pairs | Rebuilt | |
+| Quiet refresh during the session | Rebuilt | Every 60 seconds while the market is open. |
+
+## Markets, Indices
+
+| Feature | Status | Note |
+|---|---|---|
+| Readings: secular trend, dispersion, furthest from the high, style | Rebuilt | |
+| Index fund board with an Index Read | Changed | Index Read only on click, labelled as a model call. |
+| Long-run regime per index | Rebuilt | |
+| Growth against the market (QQQ against SPY) | Rebuilt | |
+
+## Instrument
+
+| Feature | Status | Note |
+|---|---|---|
+| Five tiles (last, 20 days, against the 200-day, RSI, from the high) | Rebuilt | |
+| Chart with range and style | Rebuilt | The Chart page's engine: line, candles, area; 1M to 5Y. |
+| Reached from Home, Read, Macro and Explore | Rebuilt | |
+
+## Discover, Explore
+
+| Feature | Status | Note |
+|---|---|---|
+| What is worth a look (screenable names, biggest move, sector breadth) | Rebuilt | |
+| Screens by group, each opening on Scan | Rebuilt | `#/scan?id=`. |
+| Sectors against the S&P by their own week | Rebuilt | |
+| Cross-asset moves against each instrument's typical day | Rebuilt | Same ranking (ATR / 1.6), index and future kept once; tested. |
+| A partial page when a source is down | Rebuilt | Names what is missing; the rest still renders. |
+
+## Discover, Scan
+
+| Feature | Status | Note |
+|---|---|---|
+| Find stocks in plain words, examples, recent requests | Rebuilt | Same `optic.scan.recent.v1` key. The fixed reader is free; only words it cannot read go to Milo, and the page says so before the reader submits. |
+| What was understood, what could not be asked, Edit as filters | Rebuilt | |
+| Named scans: groups, scans, results, readings, blind spot, method | Changed | Same columns and formats; the in-cell bars are not drawn. |
+| Ranking still building: progress and automatic retry | Rebuilt | Polls every 5 seconds while building, as before. |
+| Build a screen: up to 8 bounds, states, sort, direction, funnel, ignored | Rebuilt | Same `optic.screener.v1` spec; a bound that is not a number is marked and the screen will not run. |
+| Does the score work? | Rebuilt | On request, as before. |
+| Ask Milo about the results | Rebuilt | |
+
+## Discover, Insiders
+
+| Feature | Status | Note |
+|---|---|---|
+| Symbol filter (also from `?symbol=`) | Rebuilt | |
+| House trades: activity chart, window, most disclosed, the filings | Rebuilt | Chart drawn at its own width; most-disclosed names filter the page. |
+| Insider filings (Form 4): show, refresh, read to the end for one company | Rebuilt | Reads up to 9 more rounds while filings remain, as before. |
+| Federal contracts | Rebuilt | |
+
+## Discover, Analysts
+
+| Feature | Status | Note |
+|---|---|---|
+| Across covered names or one symbol | Rebuilt | |
+| Show, rating and window filters | Rebuilt | A year's window for one symbol, as before. |
+| Sortable table | Changed | Every column sorts; the classic table was newest first with no column sorting. |
 
 ## Watchlist
 

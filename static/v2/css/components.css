@@ -425,3 +425,14 @@ ul.plain { margin: 0; padding-left: 18px; } ul.plain li { margin-bottom: 7px; }
 .legend-line { display: flex; flex-wrap: wrap; gap: 16px; font-size: 14px; color: var(--c-ink-3); margin-top: 6px; }
 .legend-line i { display: inline-block; width: 18px; height: 0; border-top: 2px solid var(--c-chart-ink); margin-right: 6px; vertical-align: middle; }
 .legend-line i.o1 { border-color: var(--c-gold); } .legend-line i.o2 { border-top: 2px dashed var(--c-ink-3); } .legend-line i.o3 { border-color: var(--c-ink-3); opacity: .6; }
+
+/* ---------- sortable table ---------- */
+table.st th { white-space: nowrap; }
+table.st th.n, table.st td.n { text-align: right; }
+table.st th:not(.n), table.st td:not(.n) { text-align: left; }
+.th-sort { display: inline-flex; align-items: center; gap: 4px; min-height: 36px; padding: 0; border: 0; background: none; font: inherit; color: inherit; cursor: pointer; }
+.th-sort:hover { color: var(--c-ink); }
+.th-sort .ic { width: 14px; height: 14px; }
+table.st tbody tr:hover { background: var(--c-plane-2); }
+table.st td a { text-decoration: none; font-weight: 600; } table.st td a:hover { text-decoration: underline; }
+@media (max-width: 860px) { table.st .ph-hide { display: none; } }

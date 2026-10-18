@@ -20,12 +20,20 @@ import * as earnings from './pages/earnings.js';
 import * as financials from './pages/financials.js';
 import * as news from './pages/news.js';
 import * as chartPage from './pages/chart.js';
+import * as readPage from './pages/read.js';
+import * as macroPage from './pages/macro.js';
+import * as indicesPage from './pages/indices.js';
+import * as instrumentPage from './pages/instrument.js';
+import * as explorePage from './pages/explore.js';
+import * as scanPage from './pages/scan.js';
+import * as insidersPage from './pages/insiders.js';
+import * as analystsPage from './pages/analysts.js';
 import * as watchlist from './pages/watchlist.js';
 import * as alerts from './pages/alerts.js';
 import * as signin from './pages/signin.js';
 import * as bridge from './pages/bridge.js';
 
-const PAGES = { home, overview: dossier, swing: options, long: investing, earnings, financials, news, chart: chartPage, watchlist, alerts, signin };
+const PAGES = { home, overview: dossier, swing: options, long: investing, earnings, financials, news, chart: chartPage, brief: readPage, market: macroPage, indices: indicesPage, instrument: instrumentPage, explore: explorePage, scan: scanPage, insiders: insidersPage, analysts: analystsPage, watchlist, alerts, signin };
 let current = null;   // { page, view, route }
 
 const app = {

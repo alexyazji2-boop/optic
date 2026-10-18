@@ -26,15 +26,15 @@ export const GROUPS = [
   ] },
   { id: 'analyse', label: 'Compare', icon: 'compare', pages: [{ view: 'compare', label: 'Compare', slug: 'compare' }] },
   { id: 'market', label: 'Markets', icon: 'markets', pages: [
-    { view: 'brief', label: 'Read', slug: 'read' },
-    { view: 'market', label: 'Macro', slug: 'macro' },
-    { view: 'indices', label: 'Indices', slug: 'indices' },
+    { view: 'brief', label: 'Read', slug: 'read', v2: true },
+    { view: 'market', label: 'Macro', slug: 'macro', v2: true },
+    { view: 'indices', label: 'Indices', slug: 'indices', v2: true },
   ] },
   { id: 'discover', label: 'Discover', icon: 'discover', pages: [
-    { view: 'explore', label: 'Explore', slug: 'explore' },
-    { view: 'scan', label: 'Scan', slug: 'scan' },
-    { view: 'insiders', label: 'Insiders', slug: 'insiders' },
-    { view: 'analysts', label: 'Analysts', slug: 'analysts' },
+    { view: 'explore', label: 'Explore', slug: 'explore', v2: true },
+    { view: 'scan', label: 'Scan', slug: 'scan', v2: true },
+    { view: 'insiders', label: 'Insiders', slug: 'insiders', v2: true },
+    { view: 'analysts', label: 'Analysts', slug: 'analysts', v2: true },
   ] },
   { id: 'portfolio', label: 'Positions', icon: 'positions', pages: [
     { view: 'tracker', label: 'Optic Portfolio', slug: 'portfolio' },

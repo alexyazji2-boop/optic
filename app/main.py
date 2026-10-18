@@ -49,6 +49,7 @@ from . import universe as universe_mod
 from . import earnings_week as earnings_week_mod
 from . import priority as priority_mod
 from . import weekly as weekly_mod
+from . import weekly_store
 from . import catalysts as catalysts_mod
 from . import catalyst_rules as catalyst_rules_mod
 from . import catalyst_live as catalyst_live_mod
@@ -3069,9 +3070,11 @@ async def desk_edition_publish(request: Request, body: Dict[str, Any] = Body(def
 async def daily_brief(
     day: Optional[str] = Query(None, pattern=r"^\d{4}-\d{2}-\d{2}$"),
     force: bool = Query(False),
+    cached: bool = Query(False, description="Serve only what is built; never build or write"),
 ) -> Dict[str, Any]:
-    """Today's brief, or an archived day. `force` rebuilds today from source."""
-    return await _run(brief_mod.state, YF_PROVIDER, day, force)
+    """Today's brief, or an archived day. `force` rebuilds today from source;
+    `cached` never builds, so it cannot start a model write."""
+    return await _run(brief_mod.state, YF_PROVIDER, day, force and not cached, cached)
 
 
 @app.get("/api/brief/search")
@@ -4249,7 +4252,7 @@ _WEEKLY_FORCE_COPY = {
 
 
 @app.get("/api/weekly")
-async def weekly_update(request: Request, force: bool = False) -> Dict[str, Any]:
+async def weekly_update(request: Request, force: bool = False, cached: bool = False) -> Dict[str, Any]:
     """The weekly market update, generated once per ISO week.
 
     Same economics as the morning note: one model call a week shared by every
@@ -4264,6 +4267,15 @@ async def weekly_update(request: Request, force: bool = False) -> Dict[str, Any]
         # update every reader gets. `force` only skips this copy's cache: it is
         # never passed on, so nobody here can make the live site write again.
         key = weekly_mod.week_key()
+        if cached and not force:
+            # What is kept for this week, if anything; never a write. The
+            # rebuilt frontend asks with this so opening a page spends nothing.
+            kept = weekly_store.load(key)
+            if kept and kept.get("headline"):
+                return {**kept, "available": True, "week_key": key, "cached": True}
+            # No mirror either: a request to the live site can make it write.
+            return {"available": False, "week_key": key, "not_written": True,
+                    "reason": "This week's update has not been written yet."}
         if live_mirror.active():
             got = live_mirror.fetch("/api/weekly", fresh=force)
             if got is not None:
@@ -4453,14 +4465,22 @@ _CATALYST_REFRESH_LOCK = asyncio.Lock()
 
 
 @app.get("/api/catalyst-mode")
-async def catalyst_mode() -> Dict[str, Any]:
-    """The release currently moving the tape, its cross-asset reaction, and a read."""
+async def catalyst_mode(cached: bool = False) -> Dict[str, Any]:
+    """The release currently moving the tape, its cross-asset reaction, and a read.
+
+    `cached` returns the facts (free) and a written read only if one is already
+    kept; it never writes one, so the rebuilt frontend can show the panel on
+    load and offer the read on request."""
     def build() -> Dict[str, Any]:
         facts = catalyst_live_mod.build(YF_PROVIDER)
         if not facts.get("available"):
             return facts
         key = (facts.get("release") or {}).get("url") or (facts.get("release") or {}).get("title") or "-"
-        read = ai.write_catalyst_read(key, facts)
+        read = ai.kept_catalyst_read(key) if cached else ai.write_catalyst_read(key, facts)
+        if cached and not read:
+            facts["read"] = {"available": False, "on_request": True}
+            facts["generated_at"] = datetime.now(timezone.utc).isoformat()
+            return facts
         facts["read"] = read or {"available": False}
         facts["generated_at"] = datetime.now(timezone.utc).isoformat()
         return facts

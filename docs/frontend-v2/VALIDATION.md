@@ -44,3 +44,35 @@ Run on 2026-10-17 against the real backend: a local server on :8075 with the see
 | Mobile Safari (iPhone 17) | Options builder and the chart start on the first screen |
 | Suite | 6183 passed, 1 skipped |
 | Paid calls | The pre-earnings brief loads only on request |
+
+## Third round: Markets and Discover (2026-10-18)
+
+Read, Macro, Indices, the Instrument page, Explore, Scan, Insiders and Analysts, against the same local server (no AI key).
+
+| Check | Result |
+|---|---|
+| Every page against the live backend | Renders with no console errors; Macro's 12 tabs and Read's 10 open and fill |
+| Scan, in plain words | "Near 52-week highs on heavy volume" read by the free parser (top tenth of the range, volume 30% above normal): 2 of 733, the same rows `/api/screener` returns; "Edit as filters" carries the bounds (90, 1.3) into Build a screen |
+| Scan, built screen | Funnel 733 → 56 → 2; bounds kept in `optic.screener.v1` |
+| Scan, named scans | `#/scan?id=pullback` opens that scan: 26 matched, first 25, columns in the classic formats |
+| Insiders | House trades (2,973 disclosures, chart, most disclosed), Form 4 filings after EDGAR answers, federal contracts |
+| Analysts | Upgrades filter (20 in 7 days), one-symbol search with the year window, column sort |
+| Macro stock map | Drills into a sector by click, Enter or a sector button |
+| Forced loading, error and empty | All eight pages, desktop and phone: a skeleton while loading, a named error with Try again on failure, the ranking-still-building state on Scan |
+| Automated audit | 11 views × light and dark × desktop and phone: 0 faults after fixes (a 21px map tile and ticker buttons under 44px) |
+| Mobile Safari (iPhone 17) | Scan renders as in Chrome |
+| Explore ranking and Scan cell formats | In `tests/test_frontend_v2.py` |
+| Suite | 6188 passed, 1 skipped |
+
+### Paid calls
+
+Nothing on these pages spends on load. Read asks for its summary, the weekly update and the catalyst read with `cached=true`, which returns only what is already written (`tests/test_cached_reads.py` proves those paths never call a model). Writing a missing piece, a Sector Read, an Index Read and a Scan request with words the free parser cannot read are all clicks, labelled before the reader clicks.
+
+### Backend change in this round
+
+`/api/brief`, `/api/weekly` and `/api/catalyst-mode` accept `cached=true`. Without it they behave exactly as before.
+
+### Known limits
+
+- Macro's `/api/market` is about 40 seconds cold; the page shows its own loading state and the tabs load beside it.
+- The forced empty state only covers Scan's building ranking; the other pages' empty states were seen only with a real empty answer on Analysts (NVDA with the Upgrades filter on).
