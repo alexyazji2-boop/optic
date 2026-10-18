@@ -27,19 +27,21 @@ def is_classic(r):
 @pytest.fixture(autouse=True)
 def env(monkeypatch):
     monkeypatch.delenv("OPTIC_DEFAULT_UI", raising=False)
-    monkeypatch.delenv("OPTIC_V2_ACCESS", raising=False)
+    # most tests are about the switch itself, with v2 open to all; the access
+    # tests below set or unset it themselves
+    monkeypatch.setenv("OPTIC_V2_ACCESS", "all")
     monkeypatch.setattr(main, "_is_owner", lambda request: False)
     client.cookies.clear()
     yield
     client.cookies.clear()
 
 
-def test_by_default_root_is_classic_and_both_addresses_work():
+def test_with_v2_open_to_all_root_is_still_classic_and_both_addresses_work():
     assert is_classic(client.get("/"))
     assert is_classic(client.get("/classic"))
     v2 = client.get("/v2/")
     assert is_v2(v2) and 'data-classic="/classic"' in v2.text
-    # offered from the classic footer, because v2 is open to everyone by default
+    # offered from the classic footer, because v2 is open to everyone
     assert 'data-v2-available="1"' in client.get("/").text
 
 
@@ -115,3 +117,78 @@ def test_an_open_v2_tab_learns_of_a_rollback(monkeypatch):
     monkeypatch.setattr(main, "_is_owner", lambda request: True)
     d = client.get("/api/build", cookies={"optic_ui": "v2"}).json()
     assert d["v2_open"] is True and d["ui"] == "v2"
+
+
+
+# ------------------------------------------------------------- fails closed
+V2_ADDRESSES = ["/v2/", "/v2", "/v2/index.html", "/V2/", "/V2/index.html", "/v2//", "/v2/./index.html",
+                "/v2/js/app.js", "/v2/js/core/dom.js", "/v2/css/base.css", "/V2/JS/APP.JS", "/v2/js/../index.html",
+                "/%76%32/index.html", "/v2/index.html?x=1"]
+
+
+def _no_v2_reaches(cookie=None):
+    if cookie:
+        client.cookies.set("optic_ui", cookie)
+    for path in V2_ADDRESSES:
+        r = client.get(path, follow_redirects=True)
+        assert not is_v2(r), path
+        assert "export function" not in r.text and "export const" not in r.text, path   # no v2 module source
+        assert r.status_code in (200, 404), (path, r.status_code)
+    assert not is_v2(client.get("/"))
+
+
+def test_unset_access_is_the_owner_only_preview(monkeypatch):
+    monkeypatch.delenv("OPTIC_V2_ACCESS", raising=False)
+    assert frontend.v2_access() == "owner"
+    _no_v2_reaches()                                 # signed out
+    _no_v2_reaches(cookie="v2")                      # a v2 preference from before
+    assert 'data-v2-available="1"' not in client.get("/").text
+    monkeypatch.setattr(main, "_is_owner", lambda request: True)
+    assert is_v2(client.get("/v2/"))
+
+
+@pytest.mark.parametrize("value", ["", "  ", "everyone", "true", "1", "Owner ", "OFF"])
+def test_an_unreadable_setting_fails_closed(monkeypatch, value):
+    monkeypatch.setenv("OPTIC_V2_ACCESS", value)
+    assert frontend.v2_access() in ("owner", "off")
+    _no_v2_reaches(cookie="v2")
+
+
+def test_a_non_owner_account_is_refused_every_v2_address(monkeypatch):
+    monkeypatch.setenv("OPTIC_V2_ACCESS", "owner")
+    monkeypatch.setenv("OPTIC_DEFAULT_UI", "v2")      # even with v2 as the default
+    _no_v2_reaches(cookie="v2")
+    assert client.get("/api/build").headers.get("x-optic-v2") == "closed"
+
+
+def test_the_owner_gets_v2_files_privately(monkeypatch):
+    monkeypatch.setenv("OPTIC_V2_ACCESS", "owner")
+    monkeypatch.setattr(main, "_is_owner", lambda request: True)
+    page = client.get("/v2/")
+    assert is_v2(page)
+    url = json.loads(re.search(r'<script type="importmap">(.*?)</script>', page.text).group(1))["imports"]["/v2/js/app.js"]
+    r = client.get(url)
+    assert r.status_code == 200 and r.headers["cache-control"].startswith("private") and "Cookie" in r.headers.get("vary", "")
+    assert client.get("/api/build").headers.get("x-optic-v2") is None
+
+
+def test_emergency_shutdown_closes_v2_to_everyone_whatever_they_chose(monkeypatch):
+    monkeypatch.setenv("OPTIC_V2_ACCESS", "off")
+    monkeypatch.setenv("OPTIC_DEFAULT_UI", "v2")
+    monkeypatch.setattr(main, "_is_owner", lambda request: True)   # the owner included
+    _no_v2_reaches(cookie="v2")
+    d = client.get("/api/build")
+    assert d.headers.get("x-optic-v2") == "closed"
+    assert d.json()["v2_open"] is False and d.json()["ui"] == "classic"
+    # the reader's own choice is not erased: it comes back when v2 reopens
+    assert client.cookies.get("optic_ui") == "v2"
+    monkeypatch.setenv("OPTIC_V2_ACCESS", "all")
+    assert is_v2(client.get("/"))
+
+
+def test_a_normal_rollback_keeps_an_explicit_v2_choice(monkeypatch):
+    monkeypatch.setenv("OPTIC_DEFAULT_UI", "classic")
+    assert is_classic(client.get("/"))
+    client.cookies.set("optic_ui", "v2")
+    assert is_v2(client.get("/"))
+    assert client.get("/api/build").headers.get("x-optic-v2") is None

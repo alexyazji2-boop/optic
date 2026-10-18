@@ -406,3 +406,24 @@ def test_a_sign_in_started_in_v2_returns_to_v2_and_nowhere_else(google):
     reply = client.get("/api/auth/google/callback", params={"code": "auth-code", "state": row["state"]}, follow_redirects=False)
     target = reply.headers["location"]
     assert "/?auth=ok" in target and "evil" not in target and "/v2/" not in target
+
+
+@pytest.mark.parametrize("next_, root", [
+    ("/#/AAPL", "/"),                 # the classic app's own start, unchanged from production
+    ("/", "/"),
+    ("/classic#/settings", "/classic"),
+    ("/v2/#/settings", "/v2/"),
+    ("https://evil.example/v2/", "/"),
+    ("/v2evil/", "/"),
+    ("javascript:alert(1)", "/"),
+])
+def test_the_return_lands_only_on_one_of_three_fixed_roots(google, next_, root):
+    client.get("/api/auth/google/start", params={"next": next_}, follow_redirects=False)
+    row = main.accounts_db.rows("SELECT * FROM oauth_states")[-1]
+    reply = client.get("/api/auth/google/callback", params={"code": "auth-code", "state": row["state"]}, follow_redirects=False)
+    target = reply.headers["location"]
+    path = target.split("://", 1)[-1].split("/", 1)[-1]
+    assert ("/" + path).startswith(root + "?auth=ok") or ("/" + path).startswith(root + "?"), (next_, target)
+    assert "evil" not in target.split("?", 1)[0]
+    client.cookies.clear()
+    main.accounts_db.execute("DELETE FROM oauth_states")

@@ -7554,4 +7554,24 @@ if STATIC_DIR.exists():
             return _classic_page(request)
         return _v2_page()
 
+    @app.middleware("http")
+    async def v2_gate(request: Request, call_next: Any) -> Any:
+        """v2 fails closed (app/frontend.py). For a reader v2 is closed to,
+        any address under /v2 (any case, any dot-segments) is the classic page
+        or a 404, never a v2 file; and every API answer carries
+        X-Optic-V2: closed, so a v2 tab left open learns of it at once."""
+        path = request.url.path
+        if frontend.v2_path(path):
+            if not frontend.v2_allowed(_is_owner(request)):
+                if frontend.v2_page_path(path) or path.endswith("/"):
+                    return _classic_page(request)
+                return Response(status_code=404, headers={"Cache-Control": "no-store", "Vary": "Cookie"})
+            resp = await call_next(request)
+            resp.headers["Vary"] = "Cookie"
+            return resp
+        resp = await call_next(request)
+        if path.startswith("/api/") and frontend.v2_access() != "all" and not frontend.v2_allowed(_is_owner(request)):
+            resp.headers["X-Optic-V2"] = "closed"
+        return resp
+
     app.mount("/", _NoCacheHTML(directory=str(STATIC_DIR), html=True), name="static")

@@ -50,6 +50,8 @@ async function request(method, path, { body, timeout = 20000, signal } = {}) {
     throw new ApiError(navigator.onLine === false ? 'offline' : 'server', 0, navigator.onLine === false ? 'You appear to be offline.' : 'Could not reach Optic.');
   }
   clearTimeout(timer);
+  // v2 closed to this reader (owner-only preview or emergency shutdown): core/build.js offers the classic app
+  if (res.headers.get('X-Optic-V2') === 'closed') { try { window.dispatchEvent(new CustomEvent('optic:v2-closed')); } catch (e) { /* no window in tests */ } }
   let data = null;
   const text = await res.text();
   try { data = text ? JSON.parse(text) : null; } catch (e) { data = null; }

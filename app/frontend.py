@@ -9,15 +9,24 @@ Who gets what
     when the reader has not chosen.
   * The ``optic_ui`` cookie (``classic`` or ``v2``), set by the "Try the new
     design" and "Use the classic app" links, overrides that for one browser.
-  * ``OPTIC_V2_ACCESS``: ``all`` (the default) or ``owner``. With ``owner``, v2
-    is served only to the signed-in owner (the owner-only preview); everyone
-    else gets the classic app, wherever they asked for v2.
+  * ``OPTIC_V2_ACCESS``: ``owner`` (the default), ``all`` or ``off``. It fails
+    closed: unset means the owner-only preview, and anything unreadable means
+    ``off``. With ``owner``, v2 is served only to the signed-in owner; with
+    ``off`` (the emergency shutdown) to nobody. Everyone v2 is closed to gets
+    the classic app at "/" and "/v2/" whatever their optic_ui cookie says, is
+    refused v2's files, and an open v2 tab is told on its next request
+    (the ``X-Optic-V2: closed`` header) and moved to the classic app on its
+    next navigation. The cookie itself is kept, so nothing a reader chose is
+    lost when v2 opens again.
   * ``/classic`` always serves the classic app, so it stays one address away
     whatever "/" serves. Hash routes are the same in both apps.
 
-Rollback is the environment: set ``OPTIC_DEFAULT_UI=classic`` (or
-``OPTIC_V2_ACCESS=owner``) and restart. Nothing is migrated in either
-direction; both apps read the same server data and the same browser keys.
+Two ways back, both an environment setting and a restart. Nothing is migrated
+in either direction; both apps read the same server data and browser keys.
+  * Normal rollback, ``OPTIC_DEFAULT_UI=classic``: "/" serves the classic app
+    again, but a reader who chose v2 (the cookie) keeps it.
+  * Emergency shutdown, ``OPTIC_V2_ACCESS=off``: v2 is closed to everyone,
+    the owner included, whatever anyone chose.
 
 v2's page
   The HTML is served with absolute asset paths (so it works at "/" as well as
@@ -31,6 +40,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import posixpath
 import re
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
@@ -45,12 +55,31 @@ def default_ui() -> str:
 
 
 def v2_access() -> str:
-    v = (os.environ.get("OPTIC_V2_ACCESS") or "all").strip().lower()
-    return "owner" if v == "owner" else "all"
+    raw = os.environ.get("OPTIC_V2_ACCESS")
+    if raw is None or not raw.strip():
+        return "owner"                      # fail closed: the preview, not the public
+    v = raw.strip().lower()
+    return v if v in ("all", "owner", "off") else "off"
 
 
 def v2_allowed(is_owner: bool) -> bool:
-    return v2_access() == "all" or bool(is_owner)
+    access = v2_access()
+    if access == "off":
+        return False
+    return access == "all" or bool(is_owner)
+
+
+def v2_path(path: str) -> bool:
+    """Whether a request path is under v2, read the way any server or file
+    system might: normalised, and without regard to case (macOS serves
+    static/V2 from static/v2)."""
+    p = posixpath.normpath("/" + (path or "").lstrip("/")).lower()
+    return p == "/v2" or p.startswith("/v2/")
+
+
+def v2_page_path(path: str) -> bool:
+    p = posixpath.normpath("/" + (path or "").lstrip("/")).lower()
+    return p in ("/v2", "/v2/index.html")
 
 
 def choose(cookie: Optional[str], is_owner: bool) -> str:
@@ -114,7 +143,9 @@ def v2_page(v2_dir: Path, classic_url: str = "/classic") -> str:
 
 
 def cache_header(path: str, query: str) -> Optional[str]:
-    """Versioned v2 assets never change at their address; everything else revalidates."""
+    """Versioned v2 assets never change at their address; everything else
+    revalidates. While v2 is not open to all, a shared cache must not keep
+    them (they are served per reader), so they are private."""
     if path.startswith(V2_PREFIX) and re.search(r"(^|&)v=[0-9a-f]{6,}", query or ""):
-        return "public, max-age=31536000, immutable"
+        return "{}, max-age=31536000, immutable".format("public" if v2_access() == "all" else "private")
     return None

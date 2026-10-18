@@ -43,7 +43,7 @@ import * as signin from './pages/signin.js';
 import { startReset } from './pages/signin.js';
 import { handleAuthLinks } from './core/authlinks.js';
 import { areaNotice } from './core/legal.js';
-import { watchBuild } from './core/build.js';
+import { watchBuild, isClosed } from './core/build.js';
 import { watchStatus } from './core/status.js';
 import { openReport } from './pages/settings.js';
 import * as bridge from './pages/bridge.js';
@@ -90,6 +90,8 @@ async function afterAuth() {
 }
 
 function show(route) {
+  // v2 closed to this reader since the page loaded: the move lands on the classic app instead
+  if (isClosed()) { location.href = `${CLASSIC}${location.hash}`; return; }
   if (current && current.page.dispose) current.page.dispose();
   drawer.close({ silent: true, route: true });
   palette.close({ silent: true });

@@ -12,22 +12,37 @@ import { html, render } from './dom.js';
 import { CLASSIC } from './classic.js';
 
 const mine = () => { const m = document.querySelector('meta[name="optic-build"]'); return m ? m.content : null; };
-let shown = false, last = 0;
+let shown = false, last = 0, closed = false;
+/** True once the server has said v2 is closed to this reader; the next navigation goes to the classic app. */
+export const isClosed = () => closed;
 async function check() {
   const have = mine(); if (!have || shown || Date.now() - last < 60000) return;
   last = Date.now();
   try {
     const r = await fetch('/api/build', { credentials: 'same-origin', cache: 'no-store' });
     const d = await r.json();
-    if (d && (d.v2_open === false || (d.ui === 'classic' && !location.pathname.startsWith('/v2')))) offer('classic');
+    if (d && d.v2_open === false) shut();
+    else if (d && d.ui === 'classic' && !location.pathname.startsWith('/v2')) offer('classic');
     else if (d && d.v2 && d.v2 !== have) offer();
   } catch (e) { /* offline: try again later */ }
+}
+// Closed (OPTIC_V2_ACCESS): no Later, and the next move inside v2 lands on the
+// classic app instead. Nothing is cleared: what the reader saved is on the
+// server or in this browser's shared keys, which the classic app reads.
+function shut() {
+  if (closed) return;
+  closed = true;
+  document.querySelectorAll('.build-new').forEach((b) => b.remove());
+  shown = false;
+  offer('closed');
 }
 function offer(kind) {
   shown = true;
   const bar = document.createElement('div');
   bar.className = 'build-new'; bar.setAttribute('role', 'status');
-  render(bar, kind === 'classic'
+  render(bar, kind === 'closed'
+    ? html`<p>The new design is switched off for now. Everything you saved is in the classic app, which opens on this page.</p><button type="button" class="btn btn-sm btn-primary" data-v2-build-classic>Open the classic app</button>`
+    : kind === 'classic'
     ? html`<p>Optic has moved this page back to the classic app. Your lists, settings and Milo history are there too.</p><button type="button" class="btn btn-sm btn-primary" data-v2-build-classic>Open the classic app</button><button type="button" class="btn btn-sm" data-v2-build-later>Later</button>`
     : html`<p>A new version of Optic is ready.</p><button type="button" class="btn btn-sm btn-primary" data-v2-build-reload>Reload</button><button type="button" class="btn btn-sm" data-v2-build-later>Later</button>`);
   bar.addEventListener('click', (e) => {
@@ -38,7 +53,8 @@ function offer(kind) {
   document.body.appendChild(bar);
 }
 export function watchBuild() {
+  window.addEventListener('optic:v2-closed', shut);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) check(); });
   setInterval(() => { if (!document.hidden) check(); }, 10 * 60 * 1000);
 }
-export const _test = { check, offer, reset: () => { last = 0; shown = false; document.querySelectorAll('.build-new').forEach((b) => b.remove()); } };
+export const _test = { check, offer, shut, reset: () => { last = 0; shown = false; closed = false; document.querySelectorAll('.build-new').forEach((b) => b.remove()); } };
