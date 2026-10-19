@@ -71,7 +71,7 @@ Row-level detail per page is in COVERAGE.md.
 | Track record slots | Classic-only | M4 |
 | Chart: bar sizes, styles, MA, EMA, Bollinger, Fib, S/R, GEX levels, earnings marks, panes, zoom, pan, crosshair, 7 drawing tools | Implemented and tested | v2_check, plus drawings shared with Classic (round trip §7) |
 | Chart: Market structure breaks (new study) | Implemented and tested | `marketStructure` unit test; prefix-stability test (a later bar never changes a recorded break); browser check (strength 3, 5, 10; formed vs known drawn apart; Milo context) |
-| Chart: free deterministic chart read | Classic-only | C18, M1 |
+| Chart: free deterministic chart read | Implemented and tested | C18, carried over 2026-10-19 (`ui/chartread.js`, the classic `chartReadModel` and its words): the Chart read button beside the plot; daily trend and its facts, nearest support and resistance, RSI and MACD, from the ticker payload already loaded, no model call. Browser check at 1440 and 390; `tests/test_v2_p3.py` |
 | Chart: channel, Fib extension, pitchfork, arrow, ruler, risk box, position sizing, snap, moving a drawing | Classic-only | M1 |
 | Chart studies: EMA clouds, MA Trend, TSO, VWAP, Keltner, Donchian, regression, stages, accumulation, auto trends, VBP, zones, sessions, insider marks | Classic-only | M1 |
 | Chart widgets (18), colours, legend, full screen, navigator | Classic-only | M1 |
@@ -111,9 +111,9 @@ Lines in this matrix:
 
 | Class | Lines |
 |---|---|
-| Implemented and tested (including partly tested) | 37 |
+| Implemented and tested (including partly tested) | 38 |
 | Incomplete | 11 |
-| Classic-only | 18 |
+| Classic-only | 17 |
 
 Many lines are groups. Counted one by one, the Classic-only capabilities are:
 - 7 chart drawing tools, plus snap and moving a drawing;
@@ -121,6 +121,6 @@ Many lines are groups. Counted one by one, the Classic-only capabilities are:
 - 18 chart widgets;
 - 8 valuation editors and methods;
 - 6 Milo features;
-- 12 others (research tools, Home extras, alerts).
+- 11 others (research tools, Home extras, alerts). The free chart read (C18) moved across on 2026-10-19.
 
 All of them are scheduled in MIGRATION.md.

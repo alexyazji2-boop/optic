@@ -43,6 +43,10 @@ kbd { font: 500 12px/1 var(--f-sans); padding: 4px 7px; border-radius: 6px; bord
 .btn-primary:hover { border-color: var(--c-ink); opacity: .92; }
 .btn-milo { border-color: var(--c-gold-light); background: transparent; }
 .btn-milo:hover { background: var(--c-gold-wash); border-color: var(--c-gold-light); }
+/* Milo switched off on this deployment (ui/milo.js checkAvailability): the buttons still open the drawer,
+   which says why, but no longer look ready to answer */
+html[data-milo="off"] .btn-milo, html[data-milo="off"] [data-v2-milo].btn { border-style: dashed; border-color: var(--c-line); color: var(--c-ink-2); }
+html[data-milo="off"] .btn-milo::after, html[data-milo="off"] [data-v2-milo].btn::after { content: "Off"; margin-left: 2px; padding: 3px 6px; border-radius: 5px; background: var(--c-sunk); color: var(--c-ink-3); font: 600 12px/1 var(--f-label); }
 .btn[aria-pressed="true"] { background: var(--c-gold-wash); border-color: var(--c-gold-light); }
 .btn-sm { min-height: 40px; padding: 0 14px; font-size: 14.5px; }
 .btn-quiet { border-color: transparent; background: transparent; color: var(--c-ink-2); font-weight: 500; }

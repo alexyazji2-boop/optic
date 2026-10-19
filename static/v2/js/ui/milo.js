@@ -106,7 +106,42 @@ const horizon = () => { try { return localStorage.getItem(HORIZON_KEY) || 'auto'
 const setPref = (k, v) => { try { localStorage.setItem(k, v); } catch (e) { /* private mode */ } };
 
 export function button(label, { ask, context, symbol, cls = '' } = {}) {
-  return html`<button type="button" class="btn btn-milo ${cls}" data-v2-milo="${ask || ''}" data-v2-milo-ctx="${context || ''}" data-v2-milo-sym="${symbol || ''}">${label}</button>`;
+  return html`<button type="button" class="btn btn-milo ${cls}" data-v2-milo="${ask || ''}" data-v2-milo-ctx="${context || ''}" data-v2-milo-sym="${symbol || ''}" ${AVAIL === 'off' ? html`aria-describedby="milo-off-desc"` : ''}>${label}</button>`;
+}
+
+/* ---------------- whether Milo can answer here ---------------- */
+// Every Ask Milo button looked ready on a deployment with no model behind it; the drawer said so only
+// after a press (owner's brief, 2026-10-19, item 17). The status is read once on load (a free status
+// request, not a model call): when Milo is off, every Milo button is marked so and described, and still
+// opens the drawer, which says why and what works without it.
+let AVAIL = null;   // 'off' | 'on' | null while unknown
+export const miloOff = () => AVAIL === 'off';
+export async function checkAvailability() {
+  try {
+    const r = await api.get('/api/ai-allowance', { ttl: 60000, timeout: 10000 });
+    if (!S.allowance) S.allowance = r;
+    AVAIL = r && r.ai && r.ai.enabled === false ? 'off' : 'on';
+  } catch (e) { AVAIL = null; }
+  markButtons();
+  // buttons drawn later (a page, a panel's menu) are marked as they appear
+  if (AVAIL === 'off' && !observer) {
+    let queued = false;
+    observer = new MutationObserver(() => { if (queued) return; queued = true; setTimeout(() => { queued = false; if (AVAIL === 'off') markButtons(); }, 50); });
+    observer.observe(document.body, { childList: true, subtree: true });
+  }
+}
+let observer = null;
+export function markButtons() {
+  document.documentElement.dataset.milo = AVAIL || '';
+  let note = document.getElementById('milo-off-desc');
+  if (AVAIL === 'off' && !note) {
+    note = document.createElement('p'); note.id = 'milo-off-desc'; note.hidden = true;
+    note.textContent = 'Milo is switched off on this deployment. The button opens Milo, which says why; every other part of Optic works without it.';
+    document.body.appendChild(note);
+  }
+  document.querySelectorAll('[data-v2-milo]').forEach((b) => {
+    if (AVAIL === 'off') { if (b.getAttribute('aria-describedby') !== 'milo-off-desc') { b.setAttribute('aria-describedby', 'milo-off-desc'); b.title = 'Milo is off on this deployment'; } } else { b.removeAttribute('aria-describedby'); if (b.title === 'Milo is off on this deployment') b.removeAttribute('title'); }
+  });
 }
 
 /* ---------------- allowance and blocking ---------------- */
@@ -124,7 +159,10 @@ function allowanceLine() {
   if (blocked()) return '';
   return Number.isFinite(a.left) && Number.isFinite(a.allowed) && a.allowed > 0 ? `${a.left} of ${a.allowed} questions left today.` : '';
 }
-async function loadAllowance() { try { S.allowance = await api.get('/api/ai-allowance', { force: true, timeout: 10000 }); } catch (e) { /* the panel still opens */ } paintChrome(); }
+async function loadAllowance() {
+  try { S.allowance = await api.get('/api/ai-allowance', { force: true, timeout: 10000 }); const was = AVAIL; AVAIL = (S.allowance.ai || {}).enabled === false ? 'off' : 'on'; if (was !== AVAIL) markButtons(); } catch (e) { /* the panel still opens */ }
+  paintChrome();
+}
 async function loadChoices() {
   if (!S.personas) { try { S.personas = await api.get('/api/personas', { ttl: 3600000 }); } catch (e) { S.personas = { personas: [{ id: 'neutral', label: 'Neutral analyst' }], horizons: { horizons: [{ id: 'auto', label: 'Auto' }] } }; } }
   if (!S.modes) { try { S.modes = await api.get('/api/knowledge/modes', { ttl: 3600000 }); } catch (e) { S.modes = { modes: [] }; } }

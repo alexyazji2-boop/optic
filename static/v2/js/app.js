@@ -10,7 +10,7 @@ import * as prefs from './core/prefs.js';
 import * as shell from './ui/shell.js';
 import * as palette from './ui/palette.js';
 import * as drawer from './ui/drawer.js';
-import { openMilo, resetContext } from './ui/milo.js';
+import { openMilo, resetContext, checkAvailability, markButtons } from './ui/milo.js';
 import { toggleWatch } from './ui/company.js';
 import { toast } from './ui/toast.js';
 import { hrefFor } from './nav.js';
@@ -235,6 +235,7 @@ async function boot() {
   if (link && link.refresh) await store.loadMe();
   if (store.state.auth === 'unknown') toast('Optic could not check your sign-in. Showing this browser\'s lists for now.');
   await afterAuth();
+  checkAvailability();
   router.onRoute(show);
   if (link && link.reset) { startReset(link.reset); history.replaceState(history.state, '', `${location.pathname}${location.search}#/signin?mode=reset`); }
   else if (link && link.signin && !store.signedIn()) history.replaceState(history.state, '', `${location.pathname}${location.search}#/signin`);

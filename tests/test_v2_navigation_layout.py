@@ -155,3 +155,26 @@ def test_insiders_views_have_counts_coverage_filters_and_both_dates():
         assert p in loadc, p
     assert "<th>Traded</th><th>Filed</th>" in ins
     assert "is-partial" in ins and "Partial." in ins
+
+
+# ------------------------------------------------------------ found by the four-width sweep
+
+def test_no_row_of_choices_scrolls_sideways_out_of_sight():
+    """The sweep at 768 and 390 found rows that scrolled sideways and clipped their last labels: Home's
+    layout tabs, Options' templates, Scan's examples, Analysts' Show filter and Brokerage's sections."""
+    ws = _src("pages/workspace.js")
+    assert "data-ws-presetsel" in _fn(ws, "function bar(") and "matches('[data-ws-presetsel]')" in ws
+    assert re.search(r"@media \(max-width: 640px\) \{\s*\.ws-layoutbar \.ws-presets \{ display: none; \}", CSS)
+    assert ".tpl { flex-wrap: nowrap" not in CSS
+    assert ".chips-scroll { flex-wrap: nowrap" not in CSS
+    assert ".an-filters .seg { overflow-x: auto" not in CSS
+    assert re.search(r"\.bk-tabs \{ display: grid; grid-template-columns: repeat\(3, minmax\(0, 1fr\)\)", CSS)
+
+
+def test_home_contracts_say_why_a_chain_has_no_rows():
+    """Overnight the panel drew an empty table under "ATM IV n/a%"; the Options page gave the reason."""
+    body = _src("pages/workspace.js")
+    i = body.index("  contracts: {")
+    block = body[i:body.index("\n  },", i)]
+    assert "d.unusable ? clean(d.unusable)" in block
+    assert "isNum(sm.atm_iv_pct) && isNum(sm.straddle_move_pct)" in block

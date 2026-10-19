@@ -42,12 +42,12 @@ Kept current as each milestone lands. Source of truth for status: this file. The
 | C15 | Signal history | Alerts | M4 | open |
 | C16 | Alerts owner controls | mark read, clear all, e-mail delivery | M6 | open |
 | C17 | Glossary tooltips and Learn widget | dotted-underline definitions (`app.js:433-573`), the Learn widget. Missing from the matrix until the 2026-10-18 audit | M7 | open |
-| C18 | Free chart read | Classic's deterministic "Chart read" popover (`app.js:23060-23135`); v2's only read is the paid Milo one | M1 | open |
+| C18 | Free chart read | Classic's deterministic "Chart read" popover (`app.js:23060-23135`) | M1 | verified 2026-10-19: `ui/chartread.js` on the Chart page's toolbar, the classic model and words, no model call; browser check at 1440 and 390 |
 
 ## By milestone
 | Milestone | Rows | Status |
 |---|---|---|
-| M1 Advanced charting | I6, C10, C11, C12, C18 | open (MSB added as a new study, 2026-10-18) |
+| M1 Advanced charting | I6, C10, C11, C12, C18 | open (MSB added as a new study, 2026-10-18; C18 verified 2026-10-19) |
 | M2 Valuation editors | C13 | open |
 | M3 Research tools | I4, I5, C7 (not the chip), C8, C14 | open |
 | M4 Track record | C9, C15 (after the validation branch) | open |

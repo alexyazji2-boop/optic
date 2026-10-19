@@ -129,3 +129,28 @@ The owner reviewed X1 to X3 on 2026-10-18 and decided them; the table records th
   - **Controls:** resizing is hidden. Reordering stays available through the ⋯ menu (Move up, Move down).
   - **Tables:** scroll sideways inside the panel and keep their first column fixed.
   - **Charts:** redraw at the panel's width.
+
+## 10. Navigation and shared controls (added 2026-10-19)
+Three levels, each with one look (owner's placement review: "sidebar destinations, page or workspace tabs, local filters and actions"):
+- **Destinations:** the rail and the phone bar. The gold hover pill stays on the sidebar only. The phone bar reads Home, Markets, Watchlist, Dossier, More; More lists every other destination, Discover first among them.
+- **Page and workspace tabs:**
+  - A destination's page is headed by the destination's name (Markets, Discover, Positions, Watchlist); its tab row names the view. The selected tab has a gold underline.
+  - Under 640 px a tab row becomes a view selector (`.tabsel`): the list's name in small type, then the current view in 16 px, with a chevron. Nothing is clipped at the screen edge.
+  - A page with more than one group of tools uses a group bar (`.op-groups`, `.gtabs`): equal segments in a sunken track; the selected one is raised with a gold border. Under 640 px a four-group bar is two by two, and labels wrap rather than clip. A group's own views are chips under the bar (`.gsub`).
+- **Local filters and actions:**
+  - Seg buttons and chips for filters; selects for long lists.
+  - A ticker's actions sit together at the right of its header: Watch, then "Ask about SYM", whose outline is the Milo gold. Alert and Compare are quiet (`.btn-quiet`: no border, ink-2 text); under 640 px they move under ⋯.
+  - The top bar's "Ask Milo" is the general launcher; a contextual Milo button names what it asks about.
+  - A ⋯ or Indicators menu closes on a click elsewhere and on Escape, returning focus to its button.
+
+## 11. States added 2026-10-19
+- **Coverage line** (`.ins-cover`): before the rows, what a view covers (which filings, which dates) and how much of it is read. A partial result is marked "Partial." in the warning colour, with what is still to read.
+- **Milo off:** when the deployment has no model, every Milo button has a dashed outline and an "Off" tag (a corner badge on the phone's icon button) and is described for screen readers. It still opens Milo, which says why.
+- **One reason, said once:** when every panel in a group fails for the same reason (an unquoted option chain outside market hours), the group says it once.
+- **Disabled until ready:** controls that need data not yet loaded (the Options templates before an expiry has loaded) are disabled, and the select names what it is waiting for ("Loading expiries", "Expiries unavailable").
+
+## 12. Financials
+- A summary first: the latest fiscal year's figures in a row of readings (two columns on a phone), then what the statements say.
+- A jump list of the sections the company has: chips under the top bar on a wide screen (they stay in view while scrolling), a "Jump to" selector on a phone. A jump moves focus to the section's heading.
+- Chart cards state the latest value and its change on the year before above the bars.
+- Tables keep their first column in place while the figures scroll; figures are right-aligned with tabular numerals.

@@ -15,6 +15,7 @@ import { holds } from '../core/device.js';
 import { num, clean, isNum } from '../core/format.js';
 import { skeleton, failed } from '../ui/states.js';
 import { icon } from '../ui/icons.js';
+import { chartReadCard } from '../ui/chartread.js';
 import { button as miloButton, provideContext, openMilo } from '../ui/milo.js';
 import { toast } from '../ui/toast.js';
 import { createPriceChart } from '../ui/pricechart.js';
@@ -38,12 +39,12 @@ const PANES = [['volume', 'Volume'], ['rsi', 'RSI 14'], ['macd', 'MACD 12, 26, 9
 let D = {}, V = {}, live = true, mainEl = null, chart = null;
 
 function readView() {
-  const d = { interval: '60', range: '6M', style: 'candles', session: 'regular', overlays: { ma: true, ema: false, bb: false, fib: false, sr: false, gex: false, msb: false, events: true }, panes: { volume: true, rsi: false, macd: false }, msbK: 5 };
+  const d = { interval: '60', range: '6M', style: 'candles', session: 'regular', read: false, overlays: { ma: true, ema: false, bb: false, fib: false, sr: false, gex: false, msb: false, events: true }, panes: { volume: true, rsi: false, macd: false }, msbK: 5 };
   try { const s = JSON.parse(localStorage.getItem(VIEW_KEY) || 'null'); if (s && typeof s === 'object') { Object.assign(d, s, { overlays: Object.assign(d.overlays, s.overlays || {}), panes: Object.assign(d.panes, s.panes || {}) }); } } catch (e) { /* private */ }
   d.interval = '60'; // the Chart page opens on hourly bars, as in the classic app
   return d;
 }
-function saveView() { try { localStorage.setItem(VIEW_KEY, JSON.stringify({ range: V.range, style: V.style, session: V.session, overlays: V.overlays, panes: V.panes, msbK: V.msbK })); } catch (e) { /* private */ } }
+function saveView() { try { localStorage.setItem(VIEW_KEY, JSON.stringify({ range: V.range, style: V.style, session: V.session, read: V.read, overlays: V.overlays, panes: V.panes, msbK: V.msbK })); } catch (e) { /* private */ } }
 
 function readDrawings(sym) {
   if (!holds(store.state.user)) return [];
@@ -128,6 +129,7 @@ function toolbar() {
         <label class="ws-sel menu-help">Swing strength <select data-v2-ch-msbk aria-label="Market structure swing strength">${[3, 5, 10].map((k) => html`<option value="${k}" ${V.msbK === k ? 'selected' : ''}>${k} bars each side${k === 3 ? ', more breaks' : k === 10 ? ', fewer' : ''}</option>`)}</select></label>` : ''}`)}
       <p class="t-label">Panes</p>${PANES.map(([k, l]) => html`<label class="check"><input type="checkbox" data-v2-ch-pane="${k}" ${V.panes[k] ? 'checked' : ''}> <span>${l}</span></label>`)}
     </div></details>
+    <button type="button" class="btn btn-sm" data-v2-ch-read aria-pressed="${!!V.read}" aria-controls="ch-read">${icon('trend')}<span class="ch-lbl">Chart read</span></button>
     <button type="button" class="btn btn-sm ch-drawtoggle" data-v2-ch-drawtoggle aria-expanded="${drawOpen()}" aria-controls="ch-draw">${icon('pencil')}<span class="ch-lbl">Draw</span></button>
     <span class="spacer"></span>
     <div class="ch-zoom" role="group" aria-label="Zoom"><button type="button" class="ch-tool" data-v2-ch-zoom="out" aria-label="Zoom out" title="Zoom out">${icon('minus')}</button><button type="button" class="ch-tool" data-v2-ch-zoom="in" aria-label="Zoom in" title="Zoom in">${icon('plus')}</button><button type="button" class="ch-tool" data-v2-ch-fit aria-label="Fit the whole range" title="Fit">${icon('fit')}</button></div>
@@ -176,13 +178,19 @@ function paint() {
   draw(mainEl, html`${header(D.sym, D, 'chart', { bar: true })}${tabs(D.sym, 'chart', { fund: isFund(D) })}
     <section class="section chart-page" aria-label="${D.sym} chart">
       <div id="ch-tools">${toolbar()}</div>
-      <div class="ch-stage"><div id="ch-draw">${drawbar()}</div><div id="ch-body"></div></div>
+      <div class="ch-stage"><div id="ch-draw">${drawbar()}</div><div id="ch-body"></div><aside class="ch-read" id="ch-read" aria-labelledby="cr-h" ${V.read ? '' : 'hidden'}></aside></div>
       <p class="legend-line" id="ch-key" aria-label="Key"></p>
       <div class="split ch-foot"><p class="asof" id="ch-note"></p>
         <div class="cluster">${miloButton('Explain this chart', { ask: `Explain the ${D.sym} chart: the trend, support, resistance, momentum, volume and risk, and what would invalidate the read.`, context: `${D.sym} Dossier, Chart`, symbol: D.sym })}<a class="textlink" href="${CLASSIC}#/${D.sym}/chart">More chart tools in the current app ${icon('out')}</a></div></div>
       <p class="asof">Wheel or pinch to zoom, drag to move along, arrows to read each bar, plus and minus to zoom. Studies, stages, MA Trend, volume by price, backtests, pairs, the stop check and the side widgets are in the current app.</p>
     </section>`);
-  paintChart();
+  paintChart(); paintRead();
+}
+// The chart read (ui/chartread.js), from the daily technicals this page already loads.
+function paintRead() {
+  const h = $('#ch-read', mainEl); if (!h) return;
+  h.hidden = !V.read;
+  if (V.read) draw(h, chartReadCard(D.sym, D.t, D.t ? undefined : D.tErr ? 'failed' : 'loading'));
 }
 
 export async function render(main, route) {
@@ -202,7 +210,7 @@ export async function render(main, route) {
   provideContext(() => ({ view: 'chart', ticker: sym, chart: { symbol: sym, interval: V.interval, range: V.range, drawings: D.drawings.length, bars: (D.bars || []).length, market_structure_breaks: V.overlays.msb && chart ? { method: `Swing high or low with ${V.msbK || 5} bars either side. The swing forms at its own bar but is only known once the ${V.msbK || 5} bars after it have closed; a close beyond the latest known, unbroken swing is a break. Earlier breaks never change as new bars arrive.`, in_view: chart.structure().slice(-6) } : undefined }, technicals: D.t ? { bias: D.t.technicals.bias, rsi: D.t.technicals.rsi, macd: D.t.technicals.macd, support_resistance: D.t.technicals.support_resistance, moving_averages: D.t.technicals.moving_averages } : null }));
   paint(); wire(main);
   core(sym).then((c) => { if (D.sym !== sym || !live) return; Object.assign(D, { quote: c.quote, session: c.session, quoteError: c.quoteError }); const h = $('.dhead', mainEl); if (h) { const tmp = document.createElement('div'); draw(tmp, header(sym, D, 'chart', { bar: true })); h.replaceWith(tmp.firstElementChild); } });
-  tickerData().then(() => { if (live && D.sym === sym && D.bars) paintChart(); }).catch(() => {});
+  tickerData().then(() => { if (live && D.sym === sym) { if (D.bars) paintChart(); paintRead(); } }).catch(() => { if (live && D.sym === sym) { D.tErr = true; paintRead(); } });
   loadBars();
 }
 export function dispose() { live = false; if (chart) { chart.destroy(); chart = null; } }
@@ -221,6 +229,7 @@ function wire(main) {
     let b;
     if ((b = t('[data-v2-ch-range]'))) { const was = V.range; V.range = b.dataset.v2ChRange; saveView(); paintTools(); if (V.range === 'All' || was === 'All') loadBars(); else paintChart(); return; }
     if ((b = t('[data-v2-ch-session]'))) { V.session = b.dataset.v2ChSession; saveView(); paintTools(); loadBars(); return; }
+    if ((b = t('[data-v2-ch-read]'))) { V.read = !V.read; saveView(); paintTools(); paintRead(); paintChart(); const again = $('[data-v2-ch-read]', mainEl); if (again) again.focus(); return; }
     if ((b = t('[data-v2-ch-style]'))) { V.style = b.dataset.v2ChStyle; saveView(); paintTools(); if (chart) chart.set({ style: V.style }); return; }
     if ((b = t('[data-v2-ch-zoom]'))) { if (chart) chart.zoom(b.dataset.v2ChZoom === 'in' ? 0.75 : 1.33); return; }
     if (t('[data-v2-ch-fit]')) { if (chart) chart.fit(); return; }

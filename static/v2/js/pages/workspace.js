@@ -439,13 +439,16 @@ export const PANELS = {
       const col = CONTRACT_COLS.find((c) => c.key === P.sort.key) || CONTRACT_COLS[0];
       const rows = near.sort((a, b) => { const x = col.v(a), y = col.v(b); if (!isNum(x) || !isNum(y)) return isNum(x) ? -1 : isNum(y) ? 1 : 0; return (x - y) * (P.sort.dir === 'asc' ? 1 : -1); });
       const sm = d.summary || {};
+      // An unquoted chain (the free feed outside market hours) or nothing in the delta band: say so, in the
+      // chain's own words, instead of an empty table and "n/a%" (overnight check, 2026-10-19).
+      const why = !rows.length ? (d.unusable ? clean(d.unusable) : `No ${P.side}s with a two-sided quote between 0.15 and 0.85 delta at this expiry.`) : '';
       return html`<div class="ws-toolrow"><div class="seg ws-seg" role="group" aria-label="Side">${[['call', 'Calls'], ['put', 'Puts']].map(([k, l]) => html`<button type="button" data-ws-set="contracts:side:${k}" aria-pressed="${P.side === k}">${l}</button>`)}</div>
           <label class="ws-sel">Expiry <select data-ws-expiry>${(d.listed_expiries || []).slice(0, 14).map((e) => html`<option value="${e.expiry}" ${e.expiry === d.expiry ? 'selected' : ''}>${shortDate(e.expiry)} (${e.dte}d${e.monthly ? ', monthly' : ''})</option>`)}</select></label>
-          <span class="ws-rule">ATM IV ${num(sm.atm_iv_pct, 1)}%, straddle prices ±${num(sm.straddle_move_pct, 1)}% to expiry</span></div>
-        <table class="ws-t"><caption class="sr">${link} ${P.side}s, ${d.expiry}, sorted by ${col.label}</caption><thead><tr>${CONTRACT_COLS.map((c) => { const on = c.key === P.sort.key;
+          ${isNum(sm.atm_iv_pct) && isNum(sm.straddle_move_pct) ? html`<span class="ws-rule">ATM IV ${num(sm.atm_iv_pct, 1)}%, straddle prices ±${num(sm.straddle_move_pct, 1)}% to expiry</span>` : ''}</div>
+        ${why ? html`<p class="ws-note">${why}</p>` : html`<table class="ws-t"><caption class="sr">${link} ${P.side}s, ${d.expiry}, sorted by ${col.label}</caption><thead><tr>${CONTRACT_COLS.map((c) => { const on = c.key === P.sort.key;
           return html`<th scope="col" class="${c.num ? 'n' : ''} ${c.sec ? 'ws-sec' : ''}" aria-sort="${on ? (P.sort.dir === 'asc' ? 'ascending' : 'descending') : 'none'}"><button type="button" class="th-sort" data-ws-sort="${c.key}">${c.label}${on ? icon(P.sort.dir === 'asc' ? 'up' : 'down') : ''}</button></th>`; })}<th scope="col" class="ws-rowcol"><span class="sr">Details</span></th></tr></thead><tbody>
           ${rows.map((r, i) => html`<tr>${CONTRACT_COLS.map((c) => html`<td class="${c.num ? 'n' : ''} ${c.sec ? 'ws-sec' : ''}">${c.cell(r)}</td>`)}<td class="ws-rowcol"><button type="button" class="ws-rowbtn" data-ws-row="ctr-${i}" aria-expanded="false" aria-controls="ctr-${i}" aria-label="Every figure for the ${num(r.strike)} ${P.side}">${icon('chev')}</button></td></tr>
-            <tr class="ws-rowd" id="ctr-${i}" hidden><td colspan="${CONTRACT_COLS.length + 1}"><dl>${CONTRACT_COLS.filter((c) => c.sec).map((c) => html`<div><dt>${c.label}</dt><dd>${c.cell(r)}</dd></div>`)}</dl></td></tr>`)}</tbody></table>`;
+            <tr class="ws-rowd" id="ctr-${i}" hidden><td colspan="${CONTRACT_COLS.length + 1}"><dl>${CONTRACT_COLS.filter((c) => c.sec).map((c) => html`<div><dt>${c.label}</dt><dd>${c.cell(r)}</dd></div>`)}</dl></td></tr>`)}</tbody></table>`}`;
     },
     foot: (d) => ({ source: 'Option chain from Yahoo Finance; greeks computed by Optic', at: (d || {}).fetched_at, note: 'Mid is between bid and ask; you usually pay more.' }),
     milo: (link) => `Compare the ${link} contracts on my Home for tradeability: spread, liquidity, delta and expiry fit.`,
@@ -592,6 +595,7 @@ function bar() {
   const recent = [...new Set([...(store.recent() || []), ...((store.activeList() || {}).symbols || [])])].filter((x) => x !== S.link).slice(0, 5);
   return html`<div class="ws-layoutbar">
     <div class="ws-presets" role="tablist" aria-label="Layout">${Object.entries(PRESETS).map(([k, p]) => html`<button type="button" role="tab" aria-selected="${S.preset === k}" data-ws-preset="${k}">${p.label}</button>`)}</div>
+    <label class="tabsel ws-presetsel"><span class="tabsel-k">Layout</span><select data-ws-presetsel aria-label="Layout">${Object.entries(PRESETS).map(([k, p]) => html`<option value="${k}" ${S.preset === k ? 'selected' : ''}>${p.label}</option>`)}</select></label>
     <button type="button" class="btn btn-sm ws-edit" data-ws-edit aria-pressed="${EDIT}">${EDIT ? 'Done' : 'Customize'}</button>
   </div>
   ${EDIT ? html`<div class="ws-toolbar ws-editbar" role="group" aria-label="Customize ${PRESETS[S.preset].label}">
@@ -856,6 +860,8 @@ function wire() {
   root.addEventListener('change', (e) => {
     if (e.target.matches('[data-ws-mode]')) { try { if (e.target.value) localStorage.setItem('optic.knowledge.v1', e.target.value); localStorage.setItem('optic.knowledge.asked.v1', '1'); } catch (err) { /* private mode */ } say('Saved. You can change it in Settings.'); return; }
     if (e.target.matches('[data-ws-expiry]')) { ps('contracts').expiry = e.target.value; loadPanel('contracts', { force: true }); }
+    // the phone's layout selector: the four tabs did not fit beside Customize and were clipped
+    if (e.target.matches('[data-ws-presetsel]')) { const k = e.target.value; if (k === 'mine' && !S.layouts.mine.some((x) => !x.hidden)) S.layouts.mine = JSON.parse(JSON.stringify(S.layouts.market)); S.preset = k; save(); paintAll(); say(`${PRESETS[S.preset].label} layout.`); const again = root.querySelector('[data-ws-presetsel]'); if (again) again.focus(); }
   });
   root.addEventListener('submit', (e) => { const f = e.target.closest('[data-ws-linkform]'); if (!f) return; e.preventDefault(); setLink(f.link.value); });
   // keyboard: arrows on a grip move its panel

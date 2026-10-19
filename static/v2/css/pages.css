@@ -163,6 +163,8 @@ details.method p { max-width: 80ch; }
   .topbar-milo { width: var(--tap); min-width: var(--tap); padding: 0; }
   .topbar-milo .tm-label { display: none; }
   .topbar-milo .ic { display: block; width: 20px; height: 20px; }
+  .topbar-milo { position: relative; }
+  html[data-milo="off"] .topbar-milo::after { position: absolute; right: -6px; top: -6px; margin: 0; padding: 2px 4px; border: 1px solid var(--c-line); }
   .welcome .wel-form { flex-wrap: nowrap; }
   .welcome .wel-form .field { flex: 1 1 auto; min-width: 0; }
   .welcome .wel-form .btn { flex: none; }
@@ -259,8 +261,9 @@ table.scen td { font-weight: 600; }
 .chart-tip em { display: block; font-style: normal; }
 @media (max-width: 860px) {
   .builder .section-head { align-items: flex-start; }
-  .tpl { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; margin-right: -16px; padding-right: 16px; }
-  .tpl .chip { flex: none; }
+  /* the templates wrap: a sideways-scrolling row clipped its last chips with no sign more were there */
+  .tpl { gap: 6px; }
+  .tpl .chip { min-height: 40px; padding: 0 12px; font-size: 14px; }
   .tiles { --kv: 2 !important; }
   .lede-line { font-size: 15.5px; margin-top: 12px; }
 }
@@ -352,6 +355,17 @@ table.scen td { font-weight: 600; }
 .ch-drawtoggle { display: none !important; }
 .ch-stage { display: flex; gap: 8px; align-items: flex-start; margin-top: 8px; }
 .ch-stage > #ch-body { flex: 1 1 auto; min-width: 0; }
+/* The chart read (ui/chartread.js): beside the plot on a wide screen, under it otherwise */
+.ch-read { flex: 0 0 280px; align-self: flex-start; padding: 14px 16px; border: 1px solid var(--c-line-2); border-radius: 10px; background: var(--c-plane-2); position: sticky; top: 72px; }
+.ch-read[hidden] { display: none; }
+.cr-title { margin: 0 0 6px; }
+.cr-trend { margin: 0 0 8px; font: 650 20px/1.2 var(--f-sans); }
+.cr-facts { margin: 0 0 12px; padding-left: 18px; display: grid; gap: 4px; font-size: 14px; color: var(--c-ink-2); }
+.cr-rows { margin: 0 0 10px; display: grid; gap: 0; }
+.cr-rows > div { display: flex; justify-content: space-between; gap: 12px; padding: 7px 0; border-top: 1px solid var(--c-line-2); font-size: 14px; }
+.cr-rows dt { color: var(--c-ink-3); } .cr-rows dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
+.cr-note { margin: 0; font-size: 13px; color: var(--c-ink-3); line-height: 1.45; }
+@media (max-width: 1180px) { .ch-stage { flex-wrap: wrap; } .ch-read { flex: 1 1 100%; position: static; } }
 .ch-draw { display: flex; flex-direction: column; gap: 2px; padding: 4px; border: 1px solid var(--c-line-2); border-radius: 10px; background: var(--c-plane-2); position: sticky; top: 72px; }
 .ch-sep { display: block; width: 24px; height: 1px; margin: 4px auto; background: var(--c-line); }
 .ch-confirm { margin: 8px 0 0; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
@@ -537,11 +551,14 @@ table.scen td { font-weight: 600; }
 #inst-chart { margin-top: 10px; }
 @media (max-width: 860px) {
   .ins-grid { grid-template-columns: 1fr; gap: 20px; }
-  .an-filters .seg { overflow-x: auto; flex-wrap: nowrap; max-width: 100%; scrollbar-width: none; }
-  .an-filters .seg button { flex: none; }
+  /* the six Show options wrap inside their group: a scrolling group clipped Target raised and Target
+     lowered (overnight sweep, 2026-10-19) */
+  .an-filters .seg { flex-wrap: wrap; max-width: 100%; border-radius: 14px; }
   .sread { padding: 14px; }
 }
-@media (max-width: 860px) { .chips-scroll { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; margin-right: -16px; padding-right: 16px; } .chips-scroll > * { flex: none; } }
+/* Chip rows wrap at every width: scrolling sideways clipped the last chips with no sign more were there
+   (overnight sweep, 2026-10-19). */
+@media (max-width: 860px) { .chips-scroll { flex-wrap: wrap; } }
 .t td .textlink, .top-list .textlink { min-width: 44px; justify-content: flex-start; text-align: left; }
 
 /* ---------- Settings and Reports (round 4) ---------- */
@@ -662,6 +679,13 @@ tr.sh-notes td { padding-top: 0; font-size: 13.5px; color: var(--c-ink-3); white
 .bk-tabs button { flex: none; min-height: var(--tap); padding: 0 14px; border: 0; background: none; color: var(--c-ink-3); font: 500 15px/1 var(--f-sans); border-bottom: 2px solid transparent; cursor: pointer; }
 .bk-tabs button[aria-selected="true"] { color: var(--c-ink); border-bottom-color: var(--c-gold); }
 .bk-tabs button:hover { color: var(--c-ink); }
+/* Under 860 px the six sections sit three across in the shared group bar: the scrolling row clipped
+   "Connections" at 768 (overnight sweep, 2026-10-19). */
+@media (max-width: 860px) {
+  .bk-tabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; overflow: visible; padding: 4px; border: 1px solid var(--c-line-2); border-radius: 12px; background: var(--c-plane-2); }
+  .bk-tabs button { min-height: 44px; padding: 6px; border: 1px solid transparent; border-radius: 9px; font-size: 14px; line-height: 1.2; }
+  .bk-tabs button[aria-selected="true"] { background: var(--c-raised); border-color: var(--c-gold); }
+}
 #bk-panel:focus { outline: none; }
 .bk-src { display: inline-block; font: 500 12px/1 var(--f-label); padding: 3px 7px; border-radius: var(--r-pill); border: 1px solid var(--c-line); color: var(--c-ink-2); margin-right: 4px; vertical-align: 1px; }
 .bk-src-broker { border-color: color-mix(in srgb, #5b7fbf 50%, var(--c-line)); } .bk-src-market { border-color: color-mix(in srgb, var(--c-gold) 55%, var(--c-line)); } .bk-src-optic { border-style: dashed; }
@@ -963,4 +987,11 @@ tr.sh-notes td { padding-top: 0; font-size: 13.5px; color: var(--c-ink-3); white
 @media (max-width: 860px) {
   .page-view section.section:not(.section .section):not(.ws-panel), .page-view > section.answers, #op-top > section.readings, #wl-body { padding: 12px 12px 14px; margin-top: 10px; }
   .page-head h1.t-display-m, .page-head .t-display-m, .ws-pagehead h1 { font-size: 24px; }
+}
+
+/* Home's layout tabs become the view selector under 640 px (pages/workspace.js bar) */
+.ws-presetsel { display: none !important; }
+@media (max-width: 640px) {
+  .ws-layoutbar .ws-presets { display: none; }
+  .ws-layoutbar .ws-presetsel { display: flex !important; flex: 1 1 auto; min-width: 0; width: auto; }
 }
