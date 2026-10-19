@@ -15,7 +15,7 @@ Kept current as each milestone lands. Source of truth for status: this file. The
 | I3 | Optic Desk | Scenarios and today's reports | M7 | open |
 | I4 | Advanced research (Overview) | Pulse score, all statistics, the rest of the ticker | M3 | open |
 | I5 | Swing setups | Filters, rule settings, back-tests, setup alerts | M3 | open |
-| I6 | Weekly structure (Investing) | Candle style, levels menu, pan | M1 | open |
+| I6 | Weekly structure (Investing) | Candle style, levels menu, pan | M1 | verified 2026-10-19: the Chart tab's interactive chart on the long-term model's weekly bars (all of them under All), monthly bars rolled up as the classic aggregateMonthly does; candles, line or area in the classic key `optic.lt.mode`, ranges stored in lower case as the classic app keeps them; the classic Technical levels menu (retracements, support and resistance as bands, volume) in the flags the classic charts share, switched in place with the menu left open; drag, wheel or pinch and the arrow keys; a pan or zoom kept while the rest of the page arrives. A week is named by its Monday and the current one says "so far" (the model dates weeks by their Friday). Checked on AAPL, SPY and COIN at 1440, 390 and 375 by 549: a mouse drag at 1440, a touch drag at 390, the arrow-key reading, the height steady across resizes; `tests/test_v2_weekly.py` |
 | I7 | Financials | The flow ratio chart | M7 | open |
 | I8 | Scan | In-cell bars | M7 | open |
 | I9 | Optic Portfolio | Header tooltips, collapsible panels | M7 | open |
@@ -48,7 +48,7 @@ Kept current as each milestone lands. Source of truth for status: this file. The
 ## By milestone
 | Milestone | Rows | Status |
 |---|---|---|
-| M1 Advanced charting | I6, C10, C11, C12, C18, C19 | open (MSB added as a new study, 2026-10-18; C18 verified 2026-10-19; C12 verified 2026-10-19, its 18 widgets and its chrome; C11, C19 and C10 verified 2026-10-19; I6 is left) |
+| M1 Advanced charting | I6, C10, C11, C12, C18, C19 | all six rows verified 2026-10-19 (MSB added as a new study, 2026-10-18; C18, then C12 with its 18 widgets and its chrome, then C11, C19, C10 and I6, each in its own commit) |
 | M2 Valuation editors | C13 | open |
 | M3 Research tools | I4, I5, C7 (not the chip), C8, C14 | open |
 | M4 Track record | C9, C15 (after the validation branch) | open |

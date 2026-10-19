@@ -165,7 +165,7 @@ Status words:
 |---|---|---|
 | The long-term picture and long-term view (score, phase, plan, factors) | Changed | Labelled "Long-term trend score, from price history", with the conflict sentence when the price is dear. |
 | Return and risk | Rebuilt | |
-| Weekly structure: weekly or monthly, 1Y to All, 40 and 200 averages | Changed | Line with averages; candle style, levels menu and pan not yet. |
+| Weekly structure: weekly or monthly, 1Y to All, 40 and 200 averages | Rebuilt | 2026-10-19 (I6): candles, line or area; the Technical levels menu (retracements, support and resistance as bands, volume); drag, wheel, pinch and arrow keys; a note when an average starts partway across a young listing. Each week is named by its Monday, and the current one says "so far". |
 | Drawdown | Rebuilt | |
 | Revenue and the multiple, multiple and revenue history, valuation against its own history | Rebuilt | |
 | Fair value, stars, analysts, dividend score, Morningstar | Rebuilt | Field chart drawn as the meter. |

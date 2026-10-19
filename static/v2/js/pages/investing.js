@@ -13,6 +13,9 @@ import * as api from '../core/api.js';
 import * as store from '../core/store.js';
 import { num, signed, money, compact, clean, capFirst, shortDate, fullDate, isNum, score100 } from '../core/format.js';
 import { lineChart, meter, mountCharts } from '../ui/chart.js';
+import { createPriceChart } from '../ui/pricechart.js';
+import { nyDate, weekMonday } from '../ui/studies.js';
+import { icon } from '../ui/icons.js';
 import { skeleton, empty, failed } from '../ui/states.js';
 import { button as miloButton, provideContext } from '../ui/milo.js';
 import { toast } from '../ui/toast.js';
@@ -22,6 +25,19 @@ import { kindOf, can } from '../core/instrument.js';
 
 const RANGES = { '1Y': 52, '3Y': 156, '5Y': 260, '10Y': 520, All: Infinity };
 let D = {}, live = true, mainEl = null;
+// The weekly structure chart (I6): the Chart tab's interactive chart, kept across the page's repaints so a pan or a
+// zoom survives the other sections arriving; built again only for another symbol, interval, range or history.
+let WK = { chart: null, host: null, key: '' };
+// The classic keys, so a choice made in either app holds in the other: the style and the range are the long-term
+// chart's own (optic.lt.*, ranges in lower case, 'candle' for candles); retracements, support and resistance and
+// volume are the flags the classic Options chart shares.
+const LT_STYLE_KEY = 'optic.lt.mode', LT_RANGE_KEY = 'optic.lt.range', LT_IV_KEY = 'optic.lt.interval';
+const LVL_KEYS = { fib: 'optic.chart.fib.v2', sr: 'optic.chart.sr.v2', vol: 'optic.chart.vol.v2' };
+const MONTHS = { '1Y': 12, '3Y': 36, '5Y': 60, '10Y': 120, All: Infinity };
+const ltRange = () => ({ '1y': '1Y', '3y': '3Y', '5y': '5Y', '10y': '10Y', all: 'All' })[String(setting(LT_RANGE_KEY, '5y')).toLowerCase()] || '5Y';
+const ltIv = () => (setting(LT_IV_KEY, 'weekly') === 'monthly' ? 'monthly' : 'weekly');
+const ltStyle = () => ({ candle: 'candles', line: 'line', area: 'area' })[setting(LT_STYLE_KEY, 'line')] || 'line';
+const lvlOn = (k) => (k === 'vol' ? setting(LVL_KEYS.vol, 'on') !== 'off' : setting(LVL_KEYS[k], 'off') === 'on');
 
 function setting(k, d) { try { return localStorage.getItem(k) || d; } catch (e) { return d; } }
 function setSetting(k, v) { try { localStorage.setItem(k, v); } catch (e) { /* private */ } }
@@ -68,28 +84,101 @@ function returnsRisk() {
 
 function weekly(sym) {
   const h = (D.lt || {}).holding; if (!h) return '';
-  const lt = h.long_trend || {};
-  const range = setting('optic.lt.range', '5Y'), iv = setting('optic.lt.interval', 'weekly');
-  return html`<section class="section" aria-labelledby="ws-h"><div class="section-head"><div><h2 class="t-h2" id="ws-h">Weekly structure</h2><p class="section-sub">${clean(lt.guidance || '')}</p></div>
-      <div class="cluster"><div class="seg" role="group" aria-label="Interval">${[['weekly', 'Weekly'], ['monthly', 'Monthly']].map(([k, l]) => html`<button type="button" data-v2-lt-iv="${k}" aria-pressed="${iv === k}">${l}</button>`)}</div>
-      <div class="seg" role="group" aria-label="Range">${Object.keys(RANGES).map((k) => html`<button type="button" data-v2-lt-range="${k}" aria-pressed="${range === k}">${k}</button>`)}</div></div></div>
-    <div class="chart-slot" data-chart="weekly">${skeleton('chart')}</div>
-    <p class="legend-line"><span><i></i>Close</span><span><i class="o1"></i>40-${iv === 'monthly' ? 'month' : 'week'} average</span><span><i class="o2"></i>200-${iv === 'monthly' ? 'month' : 'week'} average</span></p>
-    ${kv([['Against the 40-week average', signed(lt.vs_40w_sma)], ['Against the 200-week average', signed(lt.vs_200w_sma)], ['Weekly RSI', html`${num(lt.weekly_rsi, 1)} <span class="t-muted">40-week slope ${signed(lt.slope_40w_pct_3m)} over 3 months</span>`]], 3)}
+  const lt = h.long_trend || {}, range = ltRange(), iv = ltIv(), style = ltStyle(), unit = iv === 'monthly' ? 'month' : 'week';
+  const lv = [['fib', 'Retracements'], ['sr', 'Support and resistance'], ['vol', 'Volume']], n = lv.filter(([k]) => lvlOn(k)).length;
+  return html`<section class="section" aria-labelledby="ws-h"><div class="section-head"><div><h2 class="t-h2" id="ws-h">Weekly structure</h2><p class="section-sub">${clean(lt.guidance || '')} The 40-${unit} and 200-${unit} averages are the lines that separate secular bull phases from bear ones.</p></div></div>
+    <div class="ctools lt-tools" role="toolbar" aria-label="Weekly structure settings">
+      <div class="seg" role="group" aria-label="Interval">${[['weekly', 'Weekly'], ['monthly', 'Monthly']].map(([k, l]) => html`<button type="button" data-v2-lt-iv="${k}" aria-pressed="${iv === k}">${l}</button>`)}</div>
+      <div class="seg" role="group" aria-label="Range">${Object.keys(RANGES).map((k) => html`<button type="button" data-v2-lt-range="${k}" aria-pressed="${range === k}">${k}</button>`)}</div>
+      <div class="seg seg-ic" role="group" aria-label="Style">${[['candles', 'Candles', 'candles'], ['line', 'Line', 'lineChart'], ['area', 'Area', 'area']].map(([k, l, ic]) => html`<button type="button" data-v2-lt-style="${k}" aria-pressed="${style === k}" aria-label="${l}" title="${l}">${icon(ic)}</button>`)}</div>
+      <details class="menu lt-lvl"><summary class="btn btn-sm">Technical levels${n ? html` <span class="ch-count">${n}</span>` : ''}</summary><div class="menu-body">
+        ${lv.map(([k, l]) => html`<label class="check"><input type="checkbox" data-v2-lt-lvl="${k}" ${lvlOn(k) ? 'checked' : ''}> <span>${l}</span></label>`)}
+        <p class="menu-help">Retracements of the three-year range, and support and resistance found on these weekly bars, as bands. The same switches as the current app's charts.</p>
+      </div></details>
+    </div>
+    <div id="lt-chart" class="lt-chart">${skeleton('chart')}</div>
+    <p class="legend-line" id="lt-legend">${ltLegend()}</p>
+    <p class="asof" id="lt-note"></p>
+    <p class="asof">Drag to move along the years, wheel or pinch to zoom, arrows to read each ${unit}.</p>
+    ${kv([['Against the 40-week average', signed(lt.vs_40w_sma)], ['Against the 200-week average', signed(lt.vs_200w_sma)], ['Weekly RSI', num(lt.weekly_rsi, 1)], ['40-week slope over 3 months', signed(lt.slope_40w_pct_3m)]], 4)}
   </section>`;
 }
-function weeklyMaker() {
-  const h = (D.lt || {}).holding; if (!h) return {};
-  const range = setting('optic.lt.range', '5Y'), iv = setting('optic.lt.interval', 'weekly');
-  let dates, closes;
-  if (range === 'All' && D.allWeeks) { dates = D.allWeeks.dates; closes = D.allWeeks.close; }
-  else { const s = (h.long_trend || {}).series || {}; dates = s.dates || []; closes = s.close || []; }
-  let pts = dates.map((d, i) => ({ d: String(d).slice(0, 10), c: Number(closes[i]) })).filter((p) => isNum(p.c));
-  if (iv === 'monthly') pts = monthly(pts.map((p) => p.d), pts.map((p) => p.c)).map((m) => ({ d: m.d, c: m.c }));
-  const all = pts.map((p) => p.c), s40 = sma(all, 40), s200 = sma(all, 200);
-  const keep = range === 'All' ? pts.length : Math.min(pts.length, iv === 'monthly' ? Math.ceil(RANGES[range] / 4.33) : RANGES[range]);
-  const sl = pts.slice(-keep);
-  return { weekly: (w) => lineChart(sl, { w, h: Math.round(Math.max(220, Math.min(320, w * 0.32))), area: true, label: `${D.sym} ${iv} closes`, overlays: [{ values: s40.slice(-keep), cls: 'o1' }, { values: s200.slice(-keep), cls: 'o2' }], monthStep: keep > 150 ? 12 : 3, pad: { t: 16, r: 52, b: 24, l: 0 } }) };
+// The bars for the chart: twelve years of weekly bars from the long-term model (all of them once All has loaded
+// them), rolled up to calendar months when asked; and the two averages over the whole history, cut with the rest.
+function weeklyBars() {
+  const h = (D.lt || {}).holding; if (!h) return null;
+  const src = ltRange() === 'All' && D.allWeeks ? D.allWeeks : ((h.long_trend || {}).series || {});
+  let bars = (src.dates || []).map((d, i) => ({ t: Date.parse(`${String(d).slice(0, 10)}T00:00:00Z`), d: String(d).slice(0, 10), o: Number(src.open[i]), h: Number(src.high[i]), l: Number(src.low[i]), c: Number(src.close[i]), v: Number((src.volume || [])[i]) || 0 }))
+    .filter((b) => isNum(b.c) && b.c > 0 && Number.isFinite(b.t)).map((b) => Object.assign(b, { o: isNum(b.o) ? b.o : b.c, h: isNum(b.h) ? b.h : b.c, l: isNum(b.l) ? b.l : b.c }));
+  if (ltIv() === 'monthly') bars = monthlyBars(bars);
+  return bars;
+}
+export function monthlyBars(bars) {
+  const out = [];
+  bars.forEach((b) => {
+    const m = b.d.slice(0, 7), last = out[out.length - 1];
+    if (last && last.m === m) Object.assign(last, { h: Math.max(last.h, b.h), l: Math.min(last.l, b.l), c: b.c, v: last.v + b.v });
+    else out.push({ m, t: b.t, d: b.d, o: b.o, h: b.h, l: b.l, c: b.c, v: b.v });
+  });
+  return out;
+}
+// What the chart draws besides the bars, from the switches: the style, volume, retracements and the bands.
+function weeklyLooks() {
+  const h = (D.lt || {}).holding || {}, lv = h.levels || {};
+  const fib = lvlOn('fib') ? (h.accumulation_zones || []).filter((z) => isNum(z.price) && z.ratio !== null && z.ratio !== undefined).map((z) => ({ price: z.price, cls: 'fib', label: `${num(z.ratio * 100, 1)}% ${num(z.price)}`, end: true, crowd: true })) : [];
+  const bands = lvlOn('sr') ? (lv.support_resistance || []).filter((x) => isNum(x.band_low) && isNum(x.band_high)).slice(0, 8).map((x) => ({ lo: x.band_low, hi: x.band_high, role: x.role, label: `${x.role === 'resistance' ? 'Resistance' : 'Support'} ${num(x.price)}` })) : [];
+  return { style: ltStyle(), panes: { volume: lvlOn('vol'), rsi: false, macd: false }, lines: fib, bands };
+}
+function mountWeekly() {
+  const slot = $('#lt-chart', mainEl);
+  if (!slot) return;
+  const bars = weeklyBars();
+  if (!bars) return;
+  if (bars.length < 5) { draw(slot, empty('Not enough weekly history to draw', 'The long-term model has fewer than five weeks of bars for this symbol.')); return; }
+  const iv = ltIv(), range = ltRange(), key = [D.sym, iv, range, ltRange() === 'All' && D.allWeeks ? 'all' : 'model', bars.length].join('|');
+  const looks = weeklyLooks();
+  if (WK.chart && WK.key === key && WK.host) { slot.replaceWith(WK.host); WK.chart.set(looks); note(bars); return; }
+  if (WK.chart) WK.chart.destroy();
+  const host = document.createElement('div'); host.id = 'lt-chart'; host.className = 'lt-chart'; slot.replaceWith(host);
+  const closes = bars.map((b) => b.c), win = iv === 'monthly' ? MONTHS[range] : RANGES[range];
+  WK.chart = createPriceChart(host, Object.assign({
+    bars, intraday: false, overlays: {}, levels: {}, events: [], drawings: [], tool: 'select',
+    series: [{ values: sma(closes, 40), cls: 'o1' }, { values: sma(closes, 200), cls: 'o2' }],
+    window: Number.isFinite(win) ? win : bars.length, label: `${D.sym}, ${iv} bars`, when: (t) => barName(iv, t),
+    height: Math.round(Math.max(300, Math.min(440, (host.clientWidth || 800) * 0.42))),
+  }, looks));
+  WK.host = host; WK.key = key;
+  note(bars);
+}
+// Why an average starts partway across, or has no line: it has no value until it has as many bars as its length.
+const monthYear = (t) => new Date(t).toLocaleDateString('en-US', { month: 'short', year: 'numeric', timeZone: 'UTC' });
+const NY_HOUR = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', hour: 'numeric', hourCycle: 'h23' });
+/**
+ * A bar named for the time it covers. The model's weeks carry their Friday's date and the full history's their
+ * Monday's, so the current week could read as a date still to come: a week is named by its Monday, a month by
+ * itself, and the one still trading says so (a week until its Friday's 4pm close in New York).
+ */
+export function barName(iv, t, now = Date.now()) {
+  const today = nyDate(now), d = new Date(t).toISOString().slice(0, 10);
+  if (iv === 'monthly') return `${monthYear(t)}${d.slice(0, 7) === today.slice(0, 7) ? ', so far' : ''}`;
+  const monday = Date.parse(`${weekMonday(d)}T00:00:00Z`), friday = new Date(monday + 4 * 86400000).toISOString().slice(0, 10);
+  const open = friday > today || (friday === today && Number(NY_HOUR.format(new Date(now))) < 16);
+  return `Week of ${new Date(monday).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' })}${open ? ', so far' : ''}`;
+}
+export function maNote(sym, bars, shown, unit) {
+  const first = bars.length - Math.min(bars.length, shown);
+  const parts = [40, 200].map((n) => (n > bars.length ? `the ${n}-${unit} has none yet` : n - 1 > first ? `the ${n}-${unit} starts in ${monthYear(bars[n - 1].t)}` : null)).filter(Boolean);
+  return parts.length ? `Optic's price history for ${sym} begins in ${monthYear(bars[0].t)}. An average has no value until it has as many ${unit}s of closes as its length, so ${parts.join(' and ')}.` : '';
+}
+function note(bars) {
+  const el = $('#lt-note', mainEl); if (!el) return;
+  const iv = ltIv(), win = iv === 'monthly' ? MONTHS[ltRange()] : RANGES[ltRange()];
+  el.textContent = maNote(D.sym, bars, Number.isFinite(win) ? win : bars.length, iv === 'monthly' ? 'month' : 'week');
+}
+// The key under the chart, drawn again when a level is switched without redrawing the menu it was switched in.
+function ltLegend() {
+  const unit = ltIv() === 'monthly' ? 'month' : 'week', style = ltStyle();
+  return html`${style === 'candles' ? html`<span><i class="kup"></i>Up ${unit}</span><span><i class="kdn"></i>Down ${unit}</span>` : html`<span><i></i>Close</span>`}<span><i class="o1"></i>40-${unit} average</span><span><i class="o2"></i>200-${unit} average</span>${lvlOn('fib') ? html`<span><i class="kfib"></i>Retracements</span>` : ''}${lvlOn('sr') ? html`<span><i class="kbs"></i><i class="kbr"></i>Support and resistance</span>` : ''}${lvlOn('vol') ? html`<span><i class="kvol"></i>Volume</span>` : ''}`;
 }
 
 function drawdown() {
@@ -200,7 +289,8 @@ function paint() {
   const company = can(kindOf(sym, D)).valuation;
   draw(mainEl, html`${header(sym, D, 'long')}${tabs(sym, 'long', { fund: isFund(D) })}
     ${trend(sym)}${returnsRisk()}${weekly(sym)}${drawdown()}${company ? html`${multiple(sym)}${fairValue(sym)}${dcf(sym)}${scenarios(sym)}` : fundValuation(sym)}${accumulation()}`);
-  mountCharts(mainEl, Object.assign({}, weeklyMaker(), ddMaker(), peMaker()));
+  mountCharts(mainEl, Object.assign({}, ddMaker(), peMaker()));
+  mountWeekly();
   if (keepKey) {
     const el = keep.name ? mainEl.querySelector(`[name="${CSS.escape(keep.name)}"]`) : null;
     const el2 = el || [...mainEl.querySelectorAll('button')].find((b) => Object.entries(b.dataset).map((e) => e.join('=')).join('&') === keepKey);
@@ -229,22 +319,32 @@ export async function render(main, route) {
     step(VS.load(sym), (b) => { D.vsBody = b || null; }, () => {});
   }
   step(api.get(`/api/framework/${enc}?mode=combined`, { ttl: 300000, timeout: 60000 }), (d) => { D.fw = d; }, () => {});
-  if (setting('optic.lt.range', '5Y') === 'All') loadAll();
+  if (ltRange() === 'All') loadAll();
 }
 async function loadAll() {
   if (D.allWeeks) return;
   try { D.allWeeks = await api.get(`/api/weekly-bars/${encodeURIComponent(D.sym)}?span=max`, { ttl: 3600000, timeout: 45000 }); } catch (e) { toast('The full weekly history did not load.'); }
   paint();
 }
-export function dispose() { live = false; }
+export function dispose() { live = false; if (WK.chart) WK.chart.destroy(); WK = { chart: null, host: null, key: '' }; }
 export const retry = { lt: (m, r) => { api.invalidate('/api/longterm'); render(m, r); } };
 
 function wire(main) {
+  // a level switched: the chart, the count and the key change in place, so the menu stays open where it was
+  main.addEventListener('change', (e) => {
+    const el = e.target.closest('[data-v2-lt-lvl]'); if (!el) return;
+    setSetting(LVL_KEYS[el.dataset.v2LtLvl], el.checked ? 'on' : 'off');
+    if (WK.chart) WK.chart.set(weeklyLooks());
+    const n = ['fib', 'sr', 'vol'].filter(lvlOn).length, sum = $('.lt-lvl > summary', main);
+    if (sum) { let c = sum.querySelector('.ch-count'); if (!n && c) c.remove(); else if (n) { if (!c) { c = document.createElement('span'); c.className = 'ch-count'; sum.append(' ', c); } c.textContent = String(n); } }
+    const lg = $('#lt-legend', main); if (lg) draw(lg, ltLegend());
+  });
   main.addEventListener('click', (e) => {
     const t = (s) => e.target.closest(s);
     let b;
-    if ((b = t('[data-v2-lt-range]'))) { setSetting('optic.lt.range', b.dataset.v2LtRange); if (b.dataset.v2LtRange === 'All') loadAll(); paint(); return; }
-    if ((b = t('[data-v2-lt-iv]'))) { setSetting('optic.lt.interval', b.dataset.v2LtIv); paint(); return; }
+    if ((b = t('[data-v2-lt-range]'))) { setSetting(LT_RANGE_KEY, b.dataset.v2LtRange.toLowerCase()); if (b.dataset.v2LtRange === 'All') loadAll(); paint(); return; }
+    if ((b = t('[data-v2-lt-iv]'))) { setSetting(LT_IV_KEY, b.dataset.v2LtIv); paint(); return; }
+    if ((b = t('[data-v2-lt-style]'))) { setSetting(LT_STYLE_KEY, { candles: 'candle', line: 'line', area: 'area' }[b.dataset.v2LtStyle]); paint(); return; }
     if (t('[data-v2-vs-fill]')) {
       // the classic app's valuationFillFromHistory: one decimal, and the exit
       // P/E from the company's own median multiple when there is one

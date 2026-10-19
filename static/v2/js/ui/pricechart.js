@@ -140,7 +140,8 @@ export function createPriceChart(host, opts) {
   let flags = [], hoverP = null;
 
   // daily and weekly bars are dates (UTC midnight); intraday bars are moments in New York
-  const fmtT = (t) => { const d = new Date(t); return S.intraday ? d.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' }) : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' }); };
+  // a page can name its own bars (`when`: the Investing tab's weeks and months), else the date or the moment
+  const fmtT = (t) => { const w = S.when && S.when(t); if (w) return w; const d = new Date(t); return S.intraday ? d.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' }) : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' }); };
   const idxOfT = (t) => { let lo = 0, hi = N - 1; while (lo < hi) { const m = (lo + hi) >> 1; if (bars[m].t < t) lo = m + 1; else hi = m; } return lo > 0 && Math.abs(bars[lo - 1].t - t) < Math.abs(bars[lo].t - t) ? lo - 1 : lo; };
 
   function computeLayout() {
@@ -181,14 +182,16 @@ export function createPriceChart(host, opts) {
     [0.15, 0.5, 0.85].forEach((f) => { const v = ps.lo + (ps.hi - ps.lo) * f, y = ps.Y(v); o += `<line class="g" x1="0" x2="${W - layout.r}" y1="${y.toFixed(1)}" y2="${y.toFixed(1)}"/><text class="ax" x="${W - layout.r + 6}" y="${(y + 4).toFixed(1)}">${num(v, v < 10 ? 2 : v < 1000 ? 1 : 0)}</text>`; });
     // time axis
     const step = Math.max(1, Math.round((to - from) / Math.max(3, Math.floor(W / 120))));
-    for (let i = from; i <= to; i += step) o += `<text class="ax" x="${X(i).toFixed(1)}" y="${H - 6}" text-anchor="middle">${esc(S.intraday ? new Date(bars[i].t).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'America/New_York' }) : new Date(bars[i].t).toLocaleDateString('en-US', { month: 'short', year: '2-digit', timeZone: 'UTC' }))}</text>`;
+    for (let i = from; i <= to; i += step) o += `<text class="ax" x="${Math.max(2, X(i)).toFixed(1)}" y="${H - 6}" text-anchor="${X(i) < 20 ? 'start' : 'middle'}">${esc(S.intraday ? new Date(bars[i].t).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'America/New_York' }) : new Date(bars[i].t).toLocaleDateString('en-US', { month: 'short', year: '2-digit', timeZone: 'UTC' }))}</text>`;
     // everything on the price stays in the price pane: a 200-bar average or a channel below the scale ran into
     // the panes under it
     o += `<defs><clipPath id="${CLIP}"><rect x="0" y="${pp.y0}" width="${W - layout.r}" height="${pp.y1 - pp.y0}"/></clipPath></defs><g clip-path="url(#${CLIP})">`;
     // levels
     const L = S.levels || {};
-    // a label sits over its line at the left, or under it (`below`) or at the right (`end`) where lines run close
-    const hline = (v, cls, t, at = {}) => { if (!Number.isFinite(v) || v < ps.lo || v > ps.hi) return ''; const y = ps.Y(v).toFixed(1); return `<line class="lv ${cls}" x1="0" x2="${W - layout.r}" y1="${y}" y2="${y}"/><text class="lv-t ${cls}" x="${at.end ? W - layout.r - 6 : 6}" y="${at.below ? Number(y) + 14 : y - 4}"${at.end ? ' text-anchor="end"' : ''}>${esc(t)}</text>`; };
+    // a label sits over its line at the left, or under it (`below`) or at the right (`end`) where lines run close;
+    // a `crowd` label, and a band's, is left off where one already drawn on its side is within 15 px (the line stays)
+    const taken = [], room = (side, y) => { if (taken.some((q) => q.side === side && Math.abs(q.y - y) < 15)) return false; taken.push({ side, y }); return true; };
+    const hline = (v, cls, t, at = {}) => { if (!Number.isFinite(v) || v < ps.lo || v > ps.hi) return ''; const y = ps.Y(v).toFixed(1), ty = at.below ? Number(y) + 14 : y - 4; return `<line class="lv ${cls}" x1="0" x2="${W - layout.r}" y1="${y}" y2="${y}"/>${at.crowd && !room(at.end ? 'r' : 'l', Number(ty)) ? '' : `<text class="lv-t ${cls}" x="${at.end ? W - layout.r - 6 : 6}" y="${ty}"${at.end ? ' text-anchor="end"' : ''}>${esc(t)}</text>`}`; };
     if (S.overlays.fib && L.fib) (L.fib.levels || []).forEach((f) => { o += hline(f.price, 'fib', `Fib ${f.label}`); });
     if (S.overlays.sr && L.sr) L.sr.slice(0, 8).forEach((s) => { o += hline(s.price, s.role === 'support' ? 'sup' : 'res', `${s.role === 'support' ? 'Support' : 'Resistance'} ${num(s.price)}`); });
     // lines a side widget asks for (the stop check's stop, buffered stop and round number)
@@ -228,6 +231,11 @@ export function createPriceChart(host, opts) {
     if (OV.vbp) { const vb = volumeByPrice(bars.slice(from, to + 1).map((b) => b.c), bars.slice(from, to + 1).map((b) => b.v || 0)); if (vb) { const mx = Math.max(...vb.map((q) => q.volume)), wmax = (right - layout.l) * 0.22; vb.forEach((q) => { const y1 = ps.Y(q.hi), y2 = ps.Y(q.lo), w = (q.volume / mx) * wmax; o += `<rect class="vbp${q.poc ? ' poc' : ''}" x="${(right - w).toFixed(1)}" y="${(y1 + 0.5).toFixed(1)}" width="${w.toFixed(1)}" height="${Math.max(0.5, y2 - y1 - 1).toFixed(1)}"/>`; }); } }
     // session dividers on intraday bars: a dashed line where each trading day starts
     if (OV.sessions && S.intraday) ind.sess.forEach((i) => { if (i < from || i > to) return; const x = (X(i) - bw / 2).toFixed(1); o += `<line class="sdiv" x1="${x}" x2="${x}" y1="${pp.y0}" y2="${H - 22}"/>`; });
+    // a page's own bands and series (the Investing tab's weekly structure: support and resistance as shaded bands
+    // from the weekly frame, the 40 and 200-bar averages), on the same bars; the strongest band comes first, so
+    // where labels would stack it is the weaker ones that go
+    (S.bands || []).forEach((b) => { const y1 = ps.Y(b.hi), y2 = ps.Y(b.lo); if (y2 < pp.y0 || y1 > pp.y1) return; const top = Math.max(pp.y0, y1); o += `<rect class="band ${b.role === 'resistance' ? 'res' : 'sup'}" x="0" y="${top.toFixed(1)}" width="${W - layout.r}" height="${Math.max(1.5, Math.min(pp.y1, y2) - top).toFixed(1)}"/>${b.label && room('l', top - 3) ? `<text class="lv-t ${b.role === 'resistance' ? 'res' : 'sup'}" x="6" y="${(top - 3).toFixed(1)}">${esc(b.label)}</text>` : ''}`; });
+    (S.series || []).forEach((sr) => { o += `<path class="ov ${sr.cls || ''}" d="${path(sr.values, X, ps.Y)}"/>`; });
     // bands and averages
     if (S.overlays.bb) o += `<path class="ov bb" d="${path(ind.bb.up, X, ps.Y)}"/><path class="ov bb" d="${path(ind.bb.dn, X, ps.Y)}"/><path class="ov bbm" d="${path(ind.bb.mid, X, ps.Y)}"/>`;
     if (S.overlays.ma) [['sma20', 'm1'], ['sma50', 'm2'], ['sma200', 'm3']].forEach(([k, c]) => { o += `<path class="ov ${c}" d="${path(ind[k], X, ps.Y)}"/>`; });

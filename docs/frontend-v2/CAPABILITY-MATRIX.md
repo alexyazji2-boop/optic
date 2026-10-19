@@ -80,7 +80,7 @@ Row-level detail per page is in COVERAGE.md.
 | Chart indicator panes: ADX and DI, Stochastic, OBV, MFI, relative strength line | Implemented and tested | C19 (found 2026-10-19 and carried over the same day): panes under the price from /api/indicators on the chart's own bars, in one request with the price studies, each with its reference levels (25; 80 and 20; 100 against SPY), its values at the crosshair and its reading under the chart (daily bars). 0 to 100 scales kept whole. Past two panes the chart grows rather than squeezing the price. `tests/test_v2_studies.py`; browser check at 1440 and 390; the sweep at five sizes with every study and pane on |
 | Chart: colours, legend, full screen, navigator | Implemented and tested | C12's chrome, carried over 2026-10-19 (`pages/chart-chrome.js`, drawn by `ui/pricechart.js`): Colours in the toolbar (candle up, candle down and the line, with presets, any colour from the wheel, a note under 3:1 against the chart background, Default and Reset), kept in the classic key `optic.chart.colors.v1`; the legend on the plot's corner, folded to its count unless opened (`optic.chart.legend.v1`, shared), a row per overlay with its value at the crosshair and a cross that takes it off; full screen (the page takes the window, the browser's own full screen on top where it is allowed; Escape, the button or leaving the page goes back); the navigator under the plot (drag the window, drag an edge, press outside to jump; a slider for the keyboard). `tests/test_v2_chart_chrome.py`; browser check at 1440, 1024 and 390 against the local server, signed in, with real pointer, touch and key events (112 of 112, no sideways scroll after any step); the widget sweep on AAPL at 1440, 1280, 768, 390 and 375 × 549, and again on AAPL and SPY with the legend open and a chosen colour, and in full screen: no faults |
 | Investing: long-term view, return and risk, drawdown, valuation history, fair value, scenarios (saved, shared with Classic) | Implemented and tested | v2_check, plus the round trip |
-| Weekly structure | Incomplete | Candle style, levels menu and pan: M1 |
+| Weekly structure | Implemented and tested | I6, 2026-10-19: the Chart tab's interactive chart on the long-term model's weekly or monthly bars, 1Y to All; candles, line or area; the classic Technical levels menu (retracements, support and resistance bands, volume) in the classic keys; drag, wheel, pinch and arrow keys. `tests/test_v2_weekly.py` (months against the classic aggregateMonthly); a browser at 1440, 390 and 375 by 549 |
 | DCF editor, saved models, RI, FFO, DDM, comps, SOTP, valuation Milo | Classic-only | v2 shows the summary. Editing: M2 |
 | Earnings (per company) | Implemented and tested | The pre-earnings brief loads on request, because it is a paid call |
 | Earnings this week (no symbol) | Classic-only | M3 |
@@ -115,8 +115,8 @@ Lines in this matrix:
 
 | Class | Lines |
 |---|---|
-| Implemented and tested (including partly tested) | 45 |
-| Incomplete | 12 |
+| Implemented and tested (including partly tested) | 46 |
+| Incomplete | 11 |
 | Classic-only | 13 |
 
 Many lines are groups. Counted one by one, the Classic-only capabilities are:

@@ -513,6 +513,16 @@ table.chw-table { font-size: 13px; } table.chw-table th { padding: 6px 4px; font
 .pc .lastp { stroke-width: 1; stroke-dasharray: 3 3; } .pc .lastp.up { stroke: var(--pc-up, var(--c-pos)); } .pc .lastp.dn { stroke: var(--pc-down, var(--c-neg)); }
 .pc .lastp-tag.up { fill: var(--pc-up, var(--c-pos)); } .pc .lastp-tag.dn { fill: var(--pc-down, var(--c-neg)); } .pc .lastp-t { fill: var(--c-plane); font: 650 12px/1 var(--f-label); font-variant-numeric: tabular-nums; }
 .pc-read .pc-sym { font: 650 15px/1 var(--f-label); } .pc-read .pc-what { color: var(--c-ink-3); }
+/* the Investing tab's weekly structure (I6): the Chart tab's chart with the 40 and 200-bar averages, bands for
+   support and resistance found on weekly bars, and the levels menu */
+.lt-tools { margin: 4px 0 10px; }
+.lt-chart { min-height: 300px; }
+.pc .ov.o1 { stroke: var(--c-gold); stroke-width: 1.6; } .pc .ov.o2 { stroke: var(--c-ink-3); stroke-dasharray: 5 4; stroke-width: 1.4; }
+.pc .band { stroke: none; } .pc .band.sup { fill: color-mix(in srgb, var(--c-pos) 14%, transparent); } .pc .band.res { fill: color-mix(in srgb, var(--c-neg) 14%, transparent); }
+.legend-line i.kup, .legend-line i.kdn, .legend-line i.kvol { width: 10px; height: 10px; border: 0; border-radius: 2px; vertical-align: -1px; }
+.legend-line i.kup { background: var(--pc-up, var(--c-pos)); } .legend-line i.kdn { background: var(--pc-down, var(--c-neg)); } .legend-line i.kvol { background: color-mix(in srgb, var(--c-ink-3) 55%, transparent); }
+.legend-line i.kbs, .legend-line i.kbr { width: 10px; height: 10px; border: 0; border-radius: 2px; vertical-align: -1px; } .legend-line i.kbs { background: color-mix(in srgb, var(--c-pos) 40%, transparent); margin-right: 2px; } .legend-line i.kbr { background: color-mix(in srgb, var(--c-neg) 40%, transparent); }
+.legend-line i.kfib { border-top: 2px dashed var(--c-gold); }
 /* the classic studies (C11; ui/studies.js, pages/chart-studies.js) */
 .ch-imenu { max-height: min(72vh, 660px); overflow-y: auto; overscroll-behavior: contain; }
 .ch-snote:empty { display: none; }
