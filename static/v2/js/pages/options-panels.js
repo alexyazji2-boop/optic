@@ -35,9 +35,9 @@ export function pricing(t, sym) {
     iv.available ? [`Options are priced for about ${num(iv.iv_pct, 1)}% a year of movement over the next ${iv.days || 30} days.`, rank.available ? `${clean(rank.label || 'IV rank')} ${num(rank.rank, 0)}${isNum(rank.percentile) ? `, percentile ${num(rank.percentile, 0)}` : ''}. ${clean(rank.note || '')}` : clean(rank.reason || '')] : null,
     t.iv_hv && t.iv_hv.available ? [`Implied ${num(t.iv_hv.iv30, 1)}% against realised ${num(t.iv_hv.hv30, 1)}%.`, clean(t.iv_hv.note || '')] : null,
     t.iv_cheapness && t.iv_cheapness.available ? [`Cheap or dear? ${clean(t.iv_cheapness.text || '')}`, clean(t.iv_cheapness.finding || '')] : null,
-    r ? [`The ${shortDate(r.expiry)} at-the-money straddle is priced for a move of about ±${num(r.straddle_move_pct, 2)}%.`, `One standard deviation is ±${num(r.one_sd_move_pct, 2)}%. These are what options cost, not limits on the price: a move that size or larger happens about a third of the time.${t.straddle_calibration && t.straddle_calibration.available ? ' ' + clean(t.straddle_calibration.text) : ''}`] : null,
+    r && isNum(r.straddle_move_pct) ? [`The ${shortDate(r.expiry)} at-the-money straddle is priced for a move of about ±${num(r.straddle_move_pct, 2)}%.`, `${isNum(r.one_sd_move_pct) ? `One standard deviation is ±${num(r.one_sd_move_pct, 2)}%. ` : ''}These are what options cost, not limits on the price: a move that size or larger happens about a third of the time.${t.straddle_calibration && t.straddle_calibration.available ? ' ' + clean(t.straddle_calibration.text) : ''}`] : null,
     term.available ? [clean(term.text), 'Front against back expiry implied volatility.'] : null,
-    r ? [`25-delta risk reversal: ${skewWords(r.rr25_pts)} (${signed(r.rr25_pts, 1, ' vol pts')}).`, 'Positive means downside puts cost more than upside calls.'] : null,
+    r && isNum(r.rr25_pts) ? [`25-delta risk reversal: ${skewWords(r.rr25_pts)} (${signed(r.rr25_pts, 1, ' vol pts')}).`, 'Positive means downside puts cost more than upside calls.'] : null,
     ev.available ? [clean(ev.text), clean(ev.method || '')] : null,
   ].filter(Boolean);
   return html`<ul class="reads">${items.map(([a, b]) => html`<li><p>${a}</p>${b ? html`<p class="t-muted">${b}</p>` : ''}</li>`)}</ul>
@@ -93,7 +93,9 @@ export function flow(t, sym) {
   const f = t.flow || {};
   if (f.error) return empty('Flow is not available', clean(f.error));
   const v = f.volume || {}, oi = f.open_interest || {}, pm = f.premium || {}, np = f.new_positions || {};
-  return html`<p><b>${capFirst(f.stance || '')}.</b> ${(f.notes || []).map(clean).join(' ')}</p>
+  // each note is its own sentence: joined with spaces they ran together ("Mild call lean New positions skew put-side")
+  const sentence = (n) => { const t = clean(n).trim(); return t ? `${capFirst(t)}${/[.!?]$/.test(t) ? '' : '.'}` : ''; };
+  return html`<p><b>${capFirst(f.stance || '')}.</b> ${(f.notes || []).map(sentence).filter(Boolean).join(' ')}</p>
     ${kv([['Calls per 100 puts traded', isNum(v.calls) && v.puts ? num((v.calls / v.puts) * 100, 0) : 'n/a'], ['Put/call open interest', num(oi.put_call_ratio, 2)], ['Time value bought in calls', pct(pm.call_share_pct, 0)], ['New positions, calls share', pct(np.call_share_pct, 0)], ['Put minus call IV', signed((f.iv_skew || {}).put_minus_call_vol_pts, 1, ' pts')]], 3)}
     <p class="asof">"Premium" here is time value, not the whole price. ${clean(f.method || '')}</p>
     <h3>Net premium by strike</h3><div class="chart-slot" data-chart="flowStrikes"></div>

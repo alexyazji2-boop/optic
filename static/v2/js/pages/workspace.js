@@ -13,6 +13,7 @@ import * as api from '../core/api.js';
 import * as store from '../core/store.js';
 import { num, signed, money, compact, dir, isNum, ago, clean, shortDate, longDate, capFirst } from '../core/format.js';
 import { etDay } from '../core/marketTime.js';
+import { marketSession } from '../core/status.js';
 import { kindOf, kindWord } from '../core/instrument.js';
 import { row30, skewWords } from './options-panels.js';
 import { skeleton, failed } from '../ui/states.js';
@@ -88,10 +89,13 @@ const QUOTED = new Set(['indices', 'portfolio', 'watch', 'quote', 'contracts', '
 const CADENCE = { priority: 'Every 10 min', cnews: 'Every 10 min', calendar: 'Every 20 min', news: 'Every 20 min', desk: 'Latest edition', earnings: 'Hourly', movers: 'Nightly scan', alerts: 'Scheduled scan', economy: 'Every 6 h', tearn: 'Every 10 min', biz: 'As filed', fin: 'As filed', own: 'As filed' };
 // How often each cadence panel's source is rebuilt; data older than three of these says its age instead.
 const CADENCE_MS = { priority: 6e5, cnews: 6e5, calendar: 12e5, news: 12e5, earnings: 36e5, economy: 216e5 };
-const marketOpen = () => !!(((DATA.indices || {}).session) || {}).is_regular;
+// The session from the Indices panel, or from the top bar's clock when the layout has no Indices panel:
+// Options Research said "Last close" on every quoted footer at 10:05 AM on a trading day (2026-10-19).
+const sessionNow = () => (DATA.indices || {}).session || marketSession() || {};
+const marketOpen = () => !!sessionNow().is_regular;
 // Quoted panels say which prices they hold: delayed in session, otherwise the close they are from
 // (the footer's "Updated" time is when Optic fetched them, not when they traded).
-const lastClose = () => ((((DATA.indices || {}).session) || {}).last_close || {}).date;
+const lastClose = () => (sessionNow().last_close || {}).date;
 const statusOf = (id) => (QUOTED.has(id) ? (marketOpen() ? 'Delayed 15 min' : (lastClose() ? `${etDay(lastClose()).replace(/^\w+ /, '')} close` : 'Last close')) : (CADENCE[id] || ''));
 // Lists and tables take a default height for their kind and fill the rest of their row; the other
 // panels size to their content.
@@ -897,7 +901,14 @@ function wire() {
 
 /* ---------------- page ---------------- */
 const MARKET_PANELS = ['indices', 'regime', 'expected', 'sectors', 'watch', 'quote', 'contracts', 'portfolio'];
+// Quoted footers follow the top bar's session when it arrives or changes phase (the layout may have no
+// Indices panel to carry it).
+let sessionHooked = false;
 export async function render(main) {
+  if (!sessionHooked) {
+    sessionHooked = true;
+    window.addEventListener('optic:session', () => { if (live && !(DATA.indices || {}).session) QUOTED.forEach((id) => { if (DATA[id] !== undefined) paintBody(id); }); });
+  }
   root = main; live = true; load();
   document.title = 'Home, Optic';
   wire(); paintAll();

@@ -196,3 +196,35 @@ def test_a_redraw_keeps_an_open_menu_open():
     assert "details.menu[open]" in dom and "if (open.includes(menuKey(d))) d.open = true;" in dom
     ws = _src("pages/workspace.js")
     assert "matchMedia('(pointer: fine)').matches) again.focus()" in ws, "iOS reopens a select's menu when it is focused"
+
+
+def test_the_now_marker_sits_between_its_neighbouring_strikes(tmp_path):
+    """Strikes 300, 310, 320, 335 ... 400 are not evenly spaced in price; "Now" at 344.73 was drawn on the
+    350 bar of Net dealer gamma by strike."""
+    got = _run(tmp_path, f"""
+      const b = await import('{(JS / "ui/bars.js").as_posix()}');
+      const strikes = [300, 310, 320, 335, 340, 345, 350, 355, 360, 370, 380, 400];
+      const out = b.signedBars(strikes.map((x, i) => ({{ x, v: i % 2 ? 1 : -1 }})), {{ w: 600, h: 180, marker: {{ x: 344.73, text: 'Now' }} }});
+      const bars = [...out.html.matchAll(/<rect class="bar[^"]*" x="([\\d.]+)" y="[\\d.]+" width="([\\d.]+)"/g)].map((m) => [Number(m[1]), Number(m[2])]);
+      const mk = Number(out.html.match(/<line class="mk" x1="([\\d.]+)"/)[1]);
+      print(JSON.stringify({{ bars, mk }}));
+    """)
+    centre = lambda i: got["bars"][i][0] + got["bars"][i][1] / 2  # noqa: E731
+    assert centre(4) < got["mk"] < centre(5) + 0.5, (got["mk"], centre(4), centre(5))   # between the 340 and 345 bars, near 345
+    assert got["mk"] < centre(6) - 5, "not on the 350 bar"
+
+
+def test_market_hours_findings_stay_fixed():
+    """The market-hours check (2026-10-19, ~/Optic/work/v2-overnight/market-hours/REPORT.md)."""
+    css = (V2 / "css/components.css").read_text()
+    assert ".tscroll { overflow-x: auto; position: relative; }" in css, "F1: a hidden label escaped its table box on a phone"
+    op = _src("pages/options.js")
+    research = op[op.index("function research()"):op.index("\n}\n", op.index("function research()"))]
+    assert "if (!all.length) {" in research and "fo.unquoted" in research, "F2: no rows says why"
+    assert "Too few quotes near the money" in research
+    assert "timeout: 60000" in op[op.index("async function loadResearch"):op.index("\n}\n", op.index("async function loadResearch"))]
+    panels = _src("pages/options-panels.js")
+    assert "r && isNum(r.straddle_move_pct) ?" in panels and "r && isNum(r.rr25_pts) ?" in panels, "F2: no n/a% sentences"
+    ws = _src("pages/workspace.js")
+    assert "const sessionNow = () => (DATA.indices || {}).session || marketSession() || {};" in ws, "F4: footers follow the top bar's session"
+    assert "export const marketSession" in _src("core/status.js")

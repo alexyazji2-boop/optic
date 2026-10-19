@@ -590,7 +590,7 @@ table.narrow { max-width: 640px; }
 .ac-t th[scope="row"] { text-align: left; font-weight: 400; min-width: 200px; }
 .ac-mail { word-break: break-all; }
 @media (max-width: 860px) {
-  .set-row { grid-template-columns: 1fr; } .set-row-act { justify-content: flex-start; }
+  .set-row { grid-template-columns: minmax(0, 1fr); } .set-row-act { justify-content: flex-start; }
   .set-name { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; width: 100%; } .set-name .field { width: auto; min-width: 0; padding: 0 12px; }
   .ac-t th[scope="row"] { position: sticky; left: 0; background: var(--c-plane); z-index: 1; }
 }
@@ -995,3 +995,9 @@ tr.sh-notes td { padding-top: 0; font-size: 13.5px; color: var(--c-ink-3); white
   .ws-layoutbar .ws-presets { display: none; }
   .ws-layoutbar .ws-presetsel { display: flex !important; flex: 1 1 auto; min-width: 0; width: auto; }
 }
+
+/* Settings: a select with a long option ("My device's time zone, 10:21 am") set the row's width and the
+   page scrolled sideways by a few pixels on a phone (market-hours sweep, 2026-10-19) */
+.set-row-main, .set-row-act { min-width: 0; }
+.set-row .select { max-width: 100%; min-width: 0; }
+.set-row .select select { min-width: 0; max-width: 100%; text-overflow: ellipsis; }

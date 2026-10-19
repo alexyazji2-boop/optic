@@ -25,10 +25,21 @@ export function signedBars(rows, opts = {}) {
   const zero = pad.t + (H - pad.t - pad.b) / 2;
   const half = (H - pad.t - pad.b) / 2 - 2;
   const numeric = data.every((r) => typeof r.x === 'number');
+  // The bars stand one per strike, evenly spaced by rank, and strikes are not evenly spaced in price; a
+  // marker placed on a straight price scale drew "Now" at 344.73 on the 350 bar (market-hours check,
+  // 2026-10-19). It goes between its two neighbouring bars instead.
   const xAt = (x) => {
-    if (!numeric) return null;
-    const xs = data.map((r) => r.x), lo = Math.min(...xs), hi = Math.max(...xs);
-    return pad.l + bw / 2 + ((x - lo) / ((hi - lo) || 1)) * (W - pad.l - pad.r - bw);
+    if (!numeric || !Number.isFinite(x)) return null;
+    const xs = data.map((r) => r.x), n = xs.length, mid = (i) => pad.l + bw / 2 + i * bw;
+    if (n === 1) return mid(0);
+    const up = xs[n - 1] >= xs[0];
+    const before = (a, b) => (up ? a <= b : a >= b);
+    if (before(x, xs[0])) return mid(0);
+    if (before(xs[n - 1], x)) return mid(n - 1);
+    for (let i = 0; i < n - 1; i += 1) {
+      if (before(xs[i], x) && before(x, xs[i + 1])) return mid(i + (x - xs[i]) / ((xs[i + 1] - xs[i]) || 1));
+    }
+    return null;
   };
   const bars = data.map((r, i) => {
     const x = pad.l + i * bw + 1, h = (Math.abs(r.v) / max) * half;

@@ -5,10 +5,18 @@ import { html, render, $ } from './dom.js';
 import * as api from './api.js';
 import * as prefs from './prefs.js';
 
+// The market session the top bar shows, for a page that needs it without a fetch of its own (Home's
+// footers on a layout with no Indices panel). An 'optic:session' event says it changed.
+let LAST = null;
+export const marketSession = () => LAST;
+
 async function session() {
   const el = $('#session-chip'); if (!el) return;
   try {
     const s = await api.get('/api/session', { ttl: 50000, timeout: 10000 });
+    const changed = !LAST || LAST.phase !== s.phase;
+    LAST = s;
+    if (changed) { try { window.dispatchEvent(new CustomEvent('optic:session')); } catch (e) { /* no window in tests */ } }
     const next = s.next && s.next.starts_at ? `${s.next.label} at ${prefs.clock(s.next.starts_at)}` : '';
     render(el, html`<i class="ses-dot p-${s.phase}" aria-hidden="true"></i><span class="sc-label">${s.label}</span>${next ? html`<span class="sc-next">, ${next}</span>` : ''}`);
     el.title = [s.description, s.early_close_note].filter(Boolean).join(' ');

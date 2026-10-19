@@ -62,14 +62,14 @@ function readings(sym) {
   const main = im ? { pct: im.implied_move_pct, expiry: im.expiry, dte: im.dte, event: !!(e.next_report && e.next_report.date && e.next_report.date <= im.expiry) }
     : r30 ? { pct: r30.straddle_move_pct, expiry: r30.expiry, dte: r30.dte, event: r30.contains_event } : null;
   const cells = [];
-  if (main) cells.push(html`<div class="rd main"><span class="k">Implied move through ${shortDate(main.expiry)}</span><span class="v">±${num(main.pct)}%</span><span class="d">${isNum(spot) ? `${num(spot * (1 - main.pct / 100), 0)} to ${num(spot * (1 + main.pct / 100), 0)}. ` : ''}All ${main.dte} days${main.event && e.next_report ? `, the ${shortDate(e.next_report.date)} report included` : ''}.</span></div>`);
+  if (main && isNum(main.pct)) cells.push(html`<div class="rd main"><span class="k">Implied move through ${shortDate(main.expiry)}</span><span class="v">±${num(main.pct)}%</span><span class="d">${isNum(spot) ? `${num(spot * (1 - main.pct / 100), 0)} to ${num(spot * (1 + main.pct / 100), 0)}. ` : ''}All ${main.dte} days${main.event && e.next_report ? `, the ${shortDate(e.next_report.date)} report included` : ''}.</span></div>`);
   if (pr.available && isNum(pr.event_day_avg_pct)) cells.push(html`<div class="rd"><span class="k">Average report-day move</span><span class="v">±${num(pr.event_day_avg_pct)}%</span><span class="d">Last ${(e.surprise || {}).quarters || 8} quarters. History, not a price.</span></div>`);
   if (pr.available && isNum(pr.ratio)) cells.push(html`<div class="rd"><span class="k">Priced against history</span><span class="v">${num(pr.ratio, 2)}×</span><span class="d">±${num(pr.implied_move_pct)}% ÷ ±${num(pr.baseline_move_pct)}% typical for ${pr.baseline_sessions} sessions</span></div>`);
   const iv = vs.iv30 || {};
   if (iv.available) cells.push(html`<div class="rd"><span class="k">Implied volatility, 30 days</span><span class="v">${num(iv.iv_pct, 1)}%</span><span class="d">${(t.iv_rank || {}).available ? `Rank ${num(t.iv_rank.rank, 0)}` : 'No rank yet: history still building'}</span></div>`);
   // one expiry across the readings where the surface has it
   const rs = (main && (vs.expiries || []).find((x) => x.expiry === main.expiry)) || r30;
-  if (rs) cells.push(html`<div class="rd"><span class="k">Skew, ${shortDate(rs.expiry)}</span><span class="v">${P.skewWords(rs.rr25_pts)}</span><span class="d">25-delta risk reversal ${signed(rs.rr25_pts, 1, ' pts')}</span></div>`);
+  if (rs && isNum(rs.rr25_pts)) cells.push(html`<div class="rd"><span class="k">Skew, ${shortDate(rs.expiry)}</span><span class="v">${P.skewWords(rs.rr25_pts)}</span><span class="d">25-delta risk reversal ${signed(rs.rr25_pts, 1, ' pts')}</span></div>`);
   if (!g.error && g.regime) cells.push(html`<div class="rd"><span class="k">Dealer gamma</span><span class="v">${(g.regime.state || '').replace(/^./, (c) => c.toUpperCase())}</span><span class="d">${g.levels && g.levels.call_wall ? `Walls ${num(g.levels.call_wall.strike, 0)} and ${num((g.levels.put_wall || {}).strike, 0)}` : ''}</span></div>`);
   if (!cells.length) return '';
   return html`<section class="readings" style="--rn:${Math.min(cells.length, 6)}" aria-label="What options are pricing">${cells}</section>`;
@@ -231,6 +231,18 @@ function research() {
   if (d.unusable) return html`${head}${empty('No usable quotes for this expiry', clean(d.unusable))}`;
   const s = d.summary || {}, tbl = d.table || {}, all = tbl.rows || [];
   void f;
+  // A thinly quoted chain (the first minutes of a session, small names all day) has open interest, so the
+  // server does not call it unusable, but nothing passes the filters: say why, from what was filtered out,
+  // instead of an empty table under "At-the-money IV n/a%" (market-hours check, 2026-10-19).
+  if (!all.length) {
+    const fo = tbl.filtered_out || {}, why = [];
+    if (fo.unquoted) why.push(`${fo.unquoted} without a two-sided quote`);
+    if (fo.delta) why.push(`${fo.delta} outside the delta range`);
+    if (fo.spread) why.push(`${fo.spread} with a wider spread than you allow`);
+    if (fo.open_interest) why.push(`${fo.open_interest} under the least open interest`);
+    return html`${head}${empty(`No ${R.side === 'call' ? 'calls' : 'puts'} to show at this expiry`, `${tbl.total ? `Of ${tbl.total} contracts, ${why.length ? why.join(', ') : 'none passed the filters'}.` : 'The chain has no contracts at this expiry.'}${fo.unquoted ? ' Quotes fill in as the session goes on; "Show contracts without a two-sided quote" lists them anyway.' : ' A wider filter may find some.'}`)}`;
+  }
+  const ivLine = isNum(s.atm_iv_pct) && isNum(s.straddle_move_pct) ? ` At-the-money IV ${num(s.atm_iv_pct, 1)}%, straddle priced for ±${num(s.straddle_move_pct, 2)}%.` : ' Too few quotes near the money for an at-the-money IV yet.';
   // the strikes nearest the money first; the whole chain one press away
   let rs = all;
   if (!R.allStrikes && all.length > 15) {
@@ -239,7 +251,7 @@ function research() {
     rs = all.slice(lo, lo + 15);
   }
   return html`${head}
-    <p class="asof">${shortDate(s.expiry)}, ${s.dte} days. At-the-money IV ${num(s.atm_iv_pct, 1)}%, straddle priced for ±${num(s.straddle_move_pct, 2)}%. Price ${num(d.spot)}. Showing ${tbl.shown} of ${tbl.total}.</p>
+    <p class="asof">${shortDate(s.expiry)}, ${s.dte} days.${ivLine} Price ${num(d.spot)}. Showing ${tbl.shown} of ${tbl.total}.</p>
     ${(d.events || []).length ? html`<ul class="plain events-note">${d.events.map((e) => html`<li>${clean(e.text)}</li>`)}</ul>` : ''}
     <div class="tscroll"><table class="t contracts"><caption class="sr">${R.side === 'call' ? 'Calls' : 'Puts'} expiring ${shortDate(s.expiry)}</caption>
       <thead><tr><th>Strike</th><th>Delta</th><th>Bid / ask</th><th>Spread</th><th>IV</th><th>Breakeven</th><th>Cost</th>${R.more ? html`<th>Decay a day</th><th>Per vol pt</th><th>ITM, model</th><th>OI / volume</th><th>Early exercise</th>` : ''}<th><span class="sr">Add</span></th></tr></thead>
@@ -264,7 +276,8 @@ async function loadResearch() {
   if (R.expiry) q.set('expiry', R.expiry);
   if (Number(R.maxSpread)) q.set('max_spread', R.maxSpread);
   try {
-    const d = await api.get(`/api/options/${encodeURIComponent(D.sym)}/research?${q}`, { ttl: 60000, timeout: 30000 });
+    // 60 s, as the ticker snapshot it waits on gets: at 30 s the table timed out twice just after the open (2026-10-19)
+    const d = await api.get(`/api/options/${encodeURIComponent(D.sym)}/research?${q}`, { ttl: 60000, timeout: 60000 });
     if (my !== R.seq || !stillHere(g)) return;
     R.data = d; R.expiry = d.expiry;
   } catch (e) { if (my !== R.seq || !stillHere(g)) return; R.error = e; }
