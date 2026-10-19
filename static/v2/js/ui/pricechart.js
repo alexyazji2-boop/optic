@@ -12,6 +12,7 @@
 // Drawings are stored as {kind, points:[{t: epoch ms, p: price}]}, the classic
 // app's format, so they line up whatever the bar size.
 import { num, esc, compact } from '../core/format.js';
+import { tsoSeries, maTrendSeries, volumeByPrice, sessionStarts, TSO_LEVEL } from './studies.js';
 import { icon } from './icons.js';
 
 /* ---------- indicators (the textbook definitions the classic app uses) ---------- */
@@ -41,7 +42,8 @@ export function bollinger(v, n = 20, k = 2) {
   return { mid: m, up: m.map((x, i) => (x === null ? null : x + k * sd[i])), dn: m.map((x, i) => (x === null ? null : x - k * sd[i])) };
 }
 
-let legendSeq = 0;   // ids for each chart's legend body
+let legendSeq = 0;
+let clipSeq = 0;   // ids for each chart's price-pane clip   // ids for each chart's legend body
 
 /**
  * The navigator's window after a drag: `w` ({from, to}, bar indexes) moved by `d` bars in `mode` ('move' the
@@ -110,10 +112,14 @@ export function createPriceChart(host, opts) {
     ema9: ema(closes, 9), ema21: ema(closes, 21), ema50: ema(closes, 50),
     bb: bollinger(closes), rsi: rsi(closes), macd: macd(closes),
     msb: marketStructure(bars, S.msbK || 3),
+    // the classic studies (ui/studies.js): TSO's pane, MA Trend's candle colours, session dividers on intraday bars
+    tso: tsoSeries(bars.map((b) => b.h), bars.map((b) => b.l), closes), mat: maTrendSeries(bars.map((b) => b.o), closes),
+    sess: S.intraday ? sessionStarts(bars) : [],
   };
   let from = Math.max(0, N - (S.window || 126)), to = N - 1;
   let cross = -1, crossY = null, sel = -1, pending = null, W = 0, H = 0, layout = null, drag = null, raf = 0;
   const undo = [];
+  const CLIP = `pc-clip-${++clipSeq}`;
 
   host.classList.add('pc');
   // the legend sits over the plot's top-left corner (absolute, at its place in the flow); the navigator under it
@@ -132,13 +138,14 @@ export function createPriceChart(host, opts) {
   function computeLayout() {
     W = Math.max(300, host.clientWidth); H = S.height || Math.round(Math.max(340, Math.min(620, W * 0.55)));
     const panes = []; const r = 56, l = 4;
-    const extra = (S.panes.rsi ? 1 : 0) + (S.panes.macd ? 1 : 0);
+    const extra = (S.panes.rsi ? 1 : 0) + (S.panes.macd ? 1 : 0) + (S.panes.tso ? 1 : 0);
     const paneH = extra ? Math.round(H * 0.17) : 0;
     const priceH = H - 26 - extra * (paneH + 8);
     panes.push({ id: 'price', y0: 8, y1: 8 + priceH });
     let y = 8 + priceH + 8;
     if (S.panes.rsi) { panes.push({ id: 'rsi', y0: y, y1: y + paneH }); y += paneH + 8; }
-    if (S.panes.macd) { panes.push({ id: 'macd', y0: y, y1: y + paneH }); }
+    if (S.panes.macd) { panes.push({ id: 'macd', y0: y, y1: y + paneH }); y += paneH + 8; }
+    if (S.panes.tso) { panes.push({ id: 'tso', y0: y, y1: y + paneH }); }
     const span = Math.max(1, to - from + 1), bw = (W - l - r) / span;
     return { l, r, panes, bw, X: (i) => l + (i - from + 0.5) * bw, I: (x) => Math.round((x - l) / bw - 0.5 + from) };
   }
@@ -168,6 +175,9 @@ export function createPriceChart(host, opts) {
       const vh = (pp.y1 - pp.y0) * 0.18;
       for (let i = from; i <= to; i++) { const b = bars[i]; if (!b.v) continue; const h = (b.v / (vmax || 1)) * vh; o += `<rect class="vol ${b.c >= b.o ? 'u' : 'd'}" x="${(X(i) - bw * 0.38).toFixed(1)}" y="${(pp.y1 - h).toFixed(1)}" width="${Math.max(0.6, bw * 0.76).toFixed(1)}" height="${h.toFixed(1)}"/>`; }
     }
+    // everything on the price stays in the price pane: a 200-bar average or a channel below the scale ran into
+    // the panes under it
+    o += `<defs><clipPath id="${CLIP}"><rect x="0" y="${pp.y0}" width="${W - layout.r}" height="${pp.y1 - pp.y0}"/></clipPath></defs><g clip-path="url(#${CLIP})">`;
     // levels
     const L = S.levels || {};
     // a label sits over its line at the left, or under it (`below`) or at the right (`end`) where lines run close
@@ -177,21 +187,60 @@ export function createPriceChart(host, opts) {
     // lines a side widget asks for (the stop check's stop, buffered stop and round number)
     (S.lines || []).forEach((l) => { o += hline(l.price, l.cls, l.label, l); });
     if (S.overlays.gex && L.gex) { const g = L.gex; if (g.call_wall) o += hline(g.call_wall, 'gex', `Call wall ${num(g.call_wall, 0)}`); if (g.put_wall) o += hline(g.put_wall, 'gex', `Put wall ${num(g.put_wall, 0)}`); if (g.flip) o += hline(g.flip, 'gex', `Gamma flip ${num(g.flip, 0)}`); }
+    // the classic studies on the price (ui/studies.js; the data for most is fetched by the page, only while on)
+    const OV = S.overlays, SD = S.studies || {}, right = W - layout.r;
+    // supply and demand zones from the day's pattern read: a band from the bar it formed to the right edge
+    if (OV.zones) (SD.zones || []).forEach((z) => { const i0 = Math.max(from, idxOfT(z.t)); if (idxOfT(z.t) > to) return; const y1 = ps.Y(z.top), y2 = ps.Y(z.bottom); if (y2 < pp.y0 || y1 > pp.y1) return; const x0 = X(i0) - bw / 2; o += `<rect class="zn ${z.side === 'supply' ? 'sup' : 'dem'}${z.broken ? ' brk' : ''}" x="${x0.toFixed(1)}" y="${Math.max(pp.y0, y1).toFixed(1)}" width="${Math.max(2, right - x0).toFixed(1)}" height="${Math.max(2, Math.min(pp.y1, y2) - Math.max(pp.y0, y1)).toFixed(1)}"/><text class="lv-t zn-t" x="${(x0 + 4).toFixed(1)}" y="${(Math.max(pp.y0, y1) + 13).toFixed(1)}">${z.side === 'supply' ? 'Supply' : 'Demand'} ${num(z.bottom)} to ${num(z.top)}${z.broken ? ', broken' : ''}</text>`; });
+    // accumulation zones from the long-term model's weekly bars: a level each, named at the right
+    if (OV.accum) (SD.accum || []).forEach((z) => { o += hline(z.price, 'acc', z.label, { end: true }); });
+    // the server's channels and VWAP, bar for bar with these candles
+    // the server's channels and VWAP, bar for bar with these candles; a channel's middle line is dashed
+    [['keltner', 'kc'], ['donchian', 'dc'], ['sec', 'rc'], ['vwap', 'vw']].forEach(([k, cls]) => {
+      if (OV[k] && SD.lines && SD.lines[k]) SD.lines[k].forEach((ln) => { o += `<path class="ov sl ${cls}${/mid|fit/i.test(ln.name) ? ' mid' : ''}" d="${path(ln.values, X, ps.Y)}"/>`; });
+    });
+    // EMA clouds: the area between two averages, blue while the faster is above, amber while it is below; a run
+    // that changes side starts at the last bar of the one before, so the two meet
+    const cloud = (fa, sl) => {
+      let out = '', run = [];
+      const flush = () => { if (run.length > 1) out += `<path class="cl ${run[0].up ? 'up' : 'dn'}" d="M${run.map((q) => `${q.x} ${q.a}`).join('L')}L${run.slice().reverse().map((q) => `${q.x} ${q.b}`).join('L')}Z"/>`; run = []; };
+      for (let i = from; i <= to; i++) {
+        const a = fa[i], b = sl[i];
+        if (!Number.isFinite(a) || !Number.isFinite(b)) { flush(); continue; }
+        const q = { x: X(i).toFixed(1), a: ps.Y(a).toFixed(1), b: ps.Y(b).toFixed(1), up: a >= b };
+        if (run.length && run[0].up !== q.up) { const last = run[run.length - 1]; flush(); run = [Object.assign({}, last, { up: q.up })]; }
+        run.push(q);
+      }
+      flush();
+      return out;
+    };
+    if (OV.cloud921) o += cloud(ind.ema9, ind.ema21);
+    if (OV.cloud2150) o += cloud(ind.ema21, ind.ema50);
+    // auto trend lines (daily and weekly bars): the part of each line in view, read off the line at both ends
+    if (OV.trends && !S.intraday) (SD.trends || []).forEach((t) => { const a = Math.max(t.i1, from), b = Math.min(t.i2, to); if (a >= b) return; const at = (i) => t.p1 + (t.p2 - t.p1) * (i - t.i1) / Math.max(1, t.i2 - t.i1); o += `<line class="tl ${t.up ? 'up' : 'dn'}${t.broken ? ' brk' : ''}" x1="${X(a).toFixed(1)}" y1="${ps.Y(at(a)).toFixed(1)}" x2="${X(b).toFixed(1)}" y2="${ps.Y(at(b)).toFixed(1)}"><title>${esc(t.label)}</title></line>`; });
+    // volume by price, for the bars in view: bars from the right edge, the point of control the strongest
+    if (OV.vbp) { const vb = volumeByPrice(bars.slice(from, to + 1).map((b) => b.c), bars.slice(from, to + 1).map((b) => b.v || 0)); if (vb) { const mx = Math.max(...vb.map((q) => q.volume)), wmax = (right - layout.l) * 0.22; vb.forEach((q) => { const y1 = ps.Y(q.hi), y2 = ps.Y(q.lo), w = (q.volume / mx) * wmax; o += `<rect class="vbp${q.poc ? ' poc' : ''}" x="${(right - w).toFixed(1)}" y="${(y1 + 0.5).toFixed(1)}" width="${w.toFixed(1)}" height="${Math.max(0.5, y2 - y1 - 1).toFixed(1)}"/>`; }); } }
+    // session dividers on intraday bars: a dashed line where each trading day starts
+    if (OV.sessions && S.intraday) ind.sess.forEach((i) => { if (i < from || i > to) return; const x = (X(i) - bw / 2).toFixed(1); o += `<line class="sdiv" x1="${x}" x2="${x}" y1="${pp.y0}" y2="${H - 22}"/>`; });
     // bands and averages
     if (S.overlays.bb) o += `<path class="ov bb" d="${path(ind.bb.up, X, ps.Y)}"/><path class="ov bb" d="${path(ind.bb.dn, X, ps.Y)}"/><path class="ov bbm" d="${path(ind.bb.mid, X, ps.Y)}"/>`;
     if (S.overlays.ma) [['sma20', 'm1'], ['sma50', 'm2'], ['sma200', 'm3']].forEach(([k, c]) => { o += `<path class="ov ${c}" d="${path(ind[k], X, ps.Y)}"/>`; });
     if (S.overlays.ema) [['ema9', 'e1'], ['ema21', 'e2'], ['ema50', 'e3']].forEach(([k, c]) => { o += `<path class="ov ${c}" d="${path(ind[k], X, ps.Y)}"/>`; });
     // price
+    // candle colours: MA Trend's (above all five averages, below all five, between) over Weinstein stages
+    const tint = OV.matrend ? (i) => (ind.mat[i] === 1 ? ' tint mt1' : ind.mat[i] === -1 ? ' tint mt4' : ind.mat[i] === 0 ? ' tint mt0' : '')
+      : OV.stages && SD.stages ? (i) => (SD.stages[i] ? ` tint st${SD.stages[i]}` : ' tint st0') : () => '';
     if (S.style === 'candles') {
       for (let i = from; i <= to; i++) {
-        const b = bars[i], x = X(i), up = b.c >= b.o, y1 = ps.Y(Math.max(b.o, b.c)), y2 = ps.Y(Math.min(b.o, b.c));
-        o += `<line class="wick ${up ? 'u' : 'd'}" x1="${x.toFixed(1)}" x2="${x.toFixed(1)}" y1="${ps.Y(b.h).toFixed(1)}" y2="${ps.Y(b.l).toFixed(1)}"/><rect class="body ${up ? 'u' : 'd'}" x="${(x - bw * 0.36).toFixed(1)}" y="${y1.toFixed(1)}" width="${Math.max(1, bw * 0.72).toFixed(1)}" height="${Math.max(0.8, y2 - y1).toFixed(1)}"/>`;
+        const b = bars[i], x = X(i), up = b.c >= b.o, y1 = ps.Y(Math.max(b.o, b.c)), y2 = ps.Y(Math.min(b.o, b.c)), tc = tint(i);
+        o += `<line class="wick ${up ? 'u' : 'd'}${tc}" x1="${x.toFixed(1)}" x2="${x.toFixed(1)}" y1="${ps.Y(b.h).toFixed(1)}" y2="${ps.Y(b.l).toFixed(1)}"/><rect class="body ${up ? 'u' : 'd'}${tc}" x="${(x - bw * 0.36).toFixed(1)}" y="${y1.toFixed(1)}" width="${Math.max(1, bw * 0.72).toFixed(1)}" height="${Math.max(0.8, y2 - y1).toFixed(1)}"/>`;
       }
     } else {
       const d = path(closes, X, ps.Y);
       if (S.style === 'area') o += `<path class="area" d="${d}L${X(to).toFixed(1)} ${pp.y1}L${X(from).toFixed(1)} ${pp.y1}Z"/>`;
       o += `<path class="pline" d="${d}"/>`;
     }
+    // the stage of each run named along the foot of the price, where there is room
+    if (OV.stages && !OV.matrend && SD.stages && S.style === 'candles') { let a = from; for (let i = from; i <= to + 1; i++) { if (i <= to && SD.stages[i] === SD.stages[a]) continue; const n = SD.stages[a]; if (n && (i - a) * bw > 96) o += `<text class="st-t st${n}" x="${(X(a) - bw / 2 + 4).toFixed(1)}" y="${(pp.y1 - 5).toFixed(1)}">Stage ${n}, ${esc((S.stageNames || {})[n] || '')}</text>`; a = i; } }
     // market structure breaks: the level dotted from the swing bar to the bar that confirmed it (before it
     // was knowable), solid from confirmation to the break, a tick where it became known, a mark on the breaking close
     if (S.overlays.msb) ind.msb.forEach((m) => {
@@ -233,12 +282,18 @@ export function createPriceChart(host, opts) {
     // drawings
     S.drawings.forEach((dr, k) => { o += drawing(dr, k === sel); });
     if (pending && pending.points.length && cross >= 0) o += drawing({ kind: pending.kind, points: [...pending.points, { t: bars[cross].t, p: crossY }] }, false, true);
+    o += '</g>';
     // panes
     panes.slice(1).forEach((p) => {
       o += `<line class="pane-sep" x1="0" x2="${W}" y1="${p.y0 - 4}" y2="${p.y0 - 4}"/>`;
       if (p.id === 'rsi') {
         const Y = (v) => p.y0 + (1 - v / 100) * (p.y1 - p.y0);
         o += `<line class="g" x1="0" x2="${W - layout.r}" y1="${Y(70)}" y2="${Y(70)}"/><line class="g" x1="0" x2="${W - layout.r}" y1="${Y(30)}" y2="${Y(30)}"/><text class="ax" x="${W - layout.r + 6}" y="${Y(70) + 4}">70</text><text class="ax" x="${W - layout.r + 6}" y="${Y(30) + 4}">30</text><text class="pane-t" x="6" y="${p.y0 + 12}">RSI 14</text><path class="ov rsi" d="${path(ind.rsi, X, Y)}"/>`;
+      } else if (p.id === 'tso') {
+        // Trend Strength Oscillator: past +50 or -50 a strong trend has run far and fast ("overextended")
+        let mx = 100; for (let i = from; i <= to; i++) { const v = ind.tso[i]; if (Number.isFinite(v)) mx = Math.max(mx, Math.abs(v)); }
+        const Y = (v) => p.y0 + (1 - (v + mx) / (2 * mx)) * (p.y1 - p.y0);
+        o += `<line class="g" x1="0" x2="${W - layout.r}" y1="${Y(TSO_LEVEL)}" y2="${Y(TSO_LEVEL)}"/><line class="g" x1="0" x2="${W - layout.r}" y1="${Y(-TSO_LEVEL)}" y2="${Y(-TSO_LEVEL)}"/><line class="g z" x1="0" x2="${W - layout.r}" y1="${Y(0)}" y2="${Y(0)}"/><text class="ax" x="${W - layout.r + 6}" y="${Y(TSO_LEVEL) + 4}">+50</text><text class="ax" x="${W - layout.r + 6}" y="${Y(-TSO_LEVEL) + 4}">−50</text><text class="pane-t" x="6" y="${p.y0 + 12}">TSO 14, 14, 5</text><path class="ov tso" d="${path(ind.tso, X, Y)}"/>`;
       } else {
         const m = ind.macd; let mx = 0; for (let i = from; i <= to; i++) [m.line[i], m.signal[i], m.hist[i]].forEach((v) => { if (Number.isFinite(v)) mx = Math.max(mx, Math.abs(v)); });
         const Y = (v) => p.y0 + (1 - (v + (mx || 1)) / (2 * (mx || 1))) * (p.y1 - p.y0);
@@ -325,6 +380,9 @@ export function createPriceChart(host, opts) {
   const KEY = {
     bb: '<i class="o2"></i>', fib: '<i class="kfib"></i>', sr: '<i class="ksup"></i><i class="kres"></i>', gex: '<i class="kgex"></i>',
     msb: '<i class="kbull"></i><i class="kbear"></i>', events: '<b class="kE">E</b>', volume: '<i class="kvol"></i>',
+    cloud921: '<i class="kcu"></i><i class="kcd"></i>', cloud2150: '<i class="kcu"></i><i class="kcd"></i>', keltner: '<i class="kkc"></i>', donchian: '<i class="kdc"></i>', sec: '<i class="krc"></i>', vwap: '<i class="kvw"></i>',
+    zones: '<i class="kzs"></i><i class="kzd"></i>', accum: '<i class="kacc"></i>', trends: '<i class="ktu"></i><i class="ktd"></i>', vbp: '<i class="kvbp"></i>', sessions: '<i class="ksd"></i>',
+    stages: '<i class="kst1"></i><i class="kst2"></i><i class="kst3"></i><i class="kst4"></i>', matrend: '<i class="kmt1"></i><i class="kmt0"></i><i class="kmt4"></i>',
   };
   const VALUE = { bb: 'bb', msb: 'msb' };
   const lid = `pc-lb-${++legendSeq}`;

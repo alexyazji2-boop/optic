@@ -1,4 +1,4 @@
-# Migration tracker: the 29 open capabilities
+# Migration tracker: the 30 open capabilities
 
 Kept current as each milestone lands. Source of truth for status: this file. The rows come from CAPABILITY-MATRIX.md (11 incomplete, 18 Classic-only after the TapeDash audit of 2026-10-18, FEATURE-AUDIT.md), and each milestone's acceptance checks are in MIGRATION.md. A row closes only when its acceptance checks pass against the real server, and both the matrix and this file are updated in the same commit. **The rebuild is not complete while any row is open.**
 
@@ -22,7 +22,7 @@ Kept current as each milestone lands. Source of truth for status: this file. The
 | I10 | Alerts | Kind filters, unread only, "Why this fired" | M6 | open |
 | I11 | Notifications | A bell with the unseen count (the backend counts exist; Classic shows a phone badge) | W2 | open (found 2026-10-18) |
 
-## Classic-only (18 groups)
+## Classic-only (19 groups)
 | # | Group | Items | Milestone | Status |
 |---|---|---|---|---|
 | C1 | Milo attachments | `#chat-attach` | M5 | open |
@@ -35,7 +35,7 @@ Kept current as each milestone lands. Source of truth for status: this file. The
 | C8 | Thesis check | Dossier thesis form and check | M3 | open |
 | C9 | Track record slots | Options and Investing | M4 | open |
 | C10 | Chart drawing tools | channel, Fib extension, pitchfork, arrow, ruler, risk box, position sizing, snap, moving | M1 | open |
-| C11 | Chart studies | 14 studies (EMA clouds through insider marks) | M1 | in progress: insider marks verified 2026-10-19 (arrows on the price with a box naming each trade, `ui/pricechart.js` and `pages/chart-widgets.js` `insiderMarks`, browser check at 1440 and 390); the other 13 are open |
+| C11 | Chart studies | 14 studies (EMA clouds through insider marks) | M1 | verified 2026-10-19: insider marks (arrows with a box naming each trade) and then the other 13: EMA clouds, MA Trend, TSO, anchored VWAP, Keltner, Donchian, the regression channel, Weinstein stages, accumulation zones, auto trend lines, volume by price, supply and demand, session dividers (`ui/studies.js`, `pages/chart-studies.js`; the maths run against the classic functions in `tests/test_v2_studies.py`; browser check on AAPL daily and hourly with every study on; the sweep at five sizes on AAPL and SPY) |
 | C12 | Chart widgets and chrome | 18 widgets; colours, legend, full screen, navigator | M1 | verified 2026-10-19: the 18 widgets (`pages/chart-widgets.js`, `tests/test_v2_chart_widgets.py`, commit 724b705) and the chrome: colours, the legend, full screen and the navigator (`pages/chart-chrome.js`, `ui/pricechart.js`, `tests/test_v2_chart_chrome.py`), each checked at 1440, 1024 and 390 against the local server, signed in (112 of 112), and the widget sweep at five sizes |
 | C13 | Valuation editors | DCF editor, saved models, RI, FFO, DDM, comps, SOTP, valuation Milo | M2 | open |
 | C14 | Earnings this week | the page with no symbol | M3 | in progress: the workspace panel lists this week and next with consensus and on-request implied moves; the standalone page and before-open/after-close timing are open |
@@ -43,11 +43,12 @@ Kept current as each milestone lands. Source of truth for status: this file. The
 | C16 | Alerts owner controls | mark read, clear all, e-mail delivery | M6 | open |
 | C17 | Glossary tooltips and Learn widget | dotted-underline definitions (`app.js:433-573`), the Learn widget. Missing from the matrix until the 2026-10-18 audit | M7 | in progress: the Learn widget is on the Chart page (2026-10-19, the glossary copied word for word and compared by test); the tooltips are open |
 | C18 | Free chart read | Classic's deterministic "Chart read" popover (`app.js:23060-23135`) | M1 | verified 2026-10-19: `ui/chartread.js` on the Chart page's toolbar, the classic model and words, no model call; browser check at 1440 and 390 |
+| C19 | Chart indicator panes | ADX and DI, Stochastic, on-balance volume, money flow index, relative strength line (`app.js` IND_FALLBACK_CATALOGUE, from /api/indicators). Missing from the matrix until 2026-10-19, found while carrying over C11 | M1 | open |
 
 ## By milestone
 | Milestone | Rows | Status |
 |---|---|---|
-| M1 Advanced charting | I6, C10, C11, C12, C18 | open (MSB added as a new study, 2026-10-18; C18 verified 2026-10-19; C12 verified 2026-10-19, its 18 widgets and its chrome) |
+| M1 Advanced charting | I6, C10, C11, C12, C18, C19 | open (MSB added as a new study, 2026-10-18; C18 verified 2026-10-19; C12 verified 2026-10-19, its 18 widgets and its chrome; C11 verified 2026-10-19) |
 | M2 Valuation editors | C13 | open |
 | M3 Research tools | I4, I5, C7 (not the chip), C8, C14 | open |
 | M4 Track record | C9, C15 (after the validation branch) | open |

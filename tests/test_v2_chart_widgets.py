@@ -210,7 +210,7 @@ def test_the_arrows_their_box_and_the_switches():
     assert "insider ${g.side === 'buy' ? 'purchase' : 'sale'}" in pc, "the keyboard's bar reads its trades aloud"
     assert "if (e.pointerType !== 'touch') hoverP = null;" in pc, "a tap opens the box and lifting the finger keeps it"
     # on by default, in Indicators and in the Insiders panel
-    assert "['ins', 'Insider trades']" in CH and "events: true, ins: true }" in CH
+    assert "['ins', 'Insider trades']" in CH and "events: true, ins: true," in CH
     assert "insiders: place(ins, 4)" in CH
     assert "data-chw-ins" in CW and "if (el.matches('[data-chw-ins]')) { C.overlay('ins', el.checked); return true; }" in CW
     css = CSS[CSS.index(".pc .ins {"):]

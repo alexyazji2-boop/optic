@@ -26,6 +26,7 @@ import { toast } from '../ui/toast.js';
 import { createPriceChart } from '../ui/pricechart.js';
 import { core, header, tabs, isFund } from './dossier-frame.js';
 import * as W from './chart-widgets.js';
+import * as ST from './chart-studies.js';
 import * as C from './chart-chrome.js';
 
 const VIEW_KEY = 'optic.v2.chart.v1';
@@ -40,13 +41,19 @@ const RANGES = { daily: { '1M': 21, '3M': 63, '6M': 126, '1Y': 252, All: Infinit
 const TOOLS = [['select', 'Select and move'], ['hline', 'Horizontal line'], ['vline', 'Vertical line'], ['trend', 'Trend line'], ['ray', 'Ray'], ['rect', 'Rectangle'], ['fibdraw', 'Fibonacci retracement'], ['text', 'Text note']];
 const TOOL_ICON = { select: 'cursor', hline: 'hline', vline: 'vline', trend: 'trend', ray: 'ray', rect: 'rect', fibdraw: 'fib', text: 'text' };
 const TOOL_GROUP_STARTS = new Set(['hline', 'rect', 'text']);   // pointer | lines | shapes | notes
-const OVERLAYS = [['ma', 'MA 20, 50, 200'], ['ema', 'EMA 9, 21, 50'], ['bb', 'Bollinger 20, 2'], ['fib', 'Fibonacci'], ['sr', 'Support and resistance'], ['gex', 'Dealer gamma levels'], ['msb', 'Market structure breaks'], ['events', 'Earnings'], ['ins', 'Insider trades']];
-const PANES = [['volume', 'Volume'], ['rsi', 'RSI 14'], ['macd', 'MACD 12, 26, 9']];
+// The classic studies (C11) joined these on 2026-10-19, under the classic names; chart-studies.js has their data.
+const OVERLAYS = [['ma', 'MA 20, 50, 200'], ['ema', 'EMA 9, 21, 50'], ['cloud921', 'EMA 9 / 21 cloud'], ['cloud2150', 'EMA 21 / 50 cloud'], ['bb', 'Bollinger 20, 2'], ['keltner', 'Keltner channel'], ['donchian', 'Donchian channel'], ['sec', 'Regression channel'], ['vwap', 'Anchored VWAP'],
+  ['fib', 'Fibonacci'], ['sr', 'Support and resistance'], ['gex', 'Dealer gamma levels'], ['zones', 'Supply and demand'], ['accum', 'Accumulation zones'], ['trends', 'Auto trend lines'], ['vbp', 'Volume by price'],
+  ['msb', 'Market structure breaks'], ['events', 'Earnings'], ['ins', 'Insider trades'], ['sessions', 'Session dividers'],
+  ['stages', 'Weinstein stages'], ['matrend', 'MA Trend Identifier']];
+// where each group of the Indicators menu starts
+const OV_GROUP = { ma: 'Averages and bands', fib: 'Levels', msb: 'Structure and events', stages: 'Candle colours' };
+const PANES = [['volume', 'Volume'], ['rsi', 'RSI 14'], ['macd', 'MACD 12, 26, 9'], ['tso', 'Trend Strength Oscillator']];
 
 let D = {}, V = {}, live = true, mainEl = null, chart = null, unsub = null, phoneMq = null;
 
 function readView() {
-  const d = { interval: '60', range: '6M', style: 'candles', session: 'regular', read: false, dock: [], overlays: { ma: true, ema: false, bb: false, fib: false, sr: false, gex: false, msb: false, events: true, ins: true }, panes: { volume: true, rsi: false, macd: false }, msbK: 5 };
+  const d = { interval: '60', range: '6M', style: 'candles', session: 'regular', read: false, dock: [], overlays: { ma: true, ema: false, bb: false, fib: false, sr: false, gex: false, msb: false, events: true, ins: true, cloud921: false, cloud2150: false, keltner: false, donchian: false, sec: false, vwap: false, zones: false, accum: false, trends: false, vbp: false, sessions: false, stages: false, matrend: false }, panes: { volume: true, rsi: false, macd: false, tso: false }, msbK: 5 };
   try { const s = JSON.parse(localStorage.getItem(VIEW_KEY) || 'null'); if (s && typeof s === 'object') { Object.assign(d, s, { overlays: Object.assign(d.overlays, s.overlays || {}), panes: Object.assign(d.panes, s.panes || {}) }); } } catch (e) { /* private */ }
   d.interval = '60'; // the Chart page opens on hourly bars, as in the classic app
   d.dock = Array.isArray(d.dock) ? d.dock.filter((id, i, a) => W.IDS.includes(id) && a.indexOf(id) === i) : [];
@@ -132,8 +139,8 @@ function toolbar() {
     ${daily ? html`<div class="seg" role="group" aria-label="Range">${Object.keys(RANGES.daily).map((r) => html`<button type="button" data-v2-ch-range="${r}" aria-pressed="${V.range === r}">${r}</button>`)}</div>`
     : html`<div class="seg" role="group" aria-label="Session">${[['regular', 'Regular'], ['extended', 'Extended']].map(([k, l]) => html`<button type="button" data-v2-ch-session="${k}" aria-pressed="${V.session === k}">${l}</button>`)}</div>`}
     <div class="seg seg-ic" role="group" aria-label="Style">${[['candles', 'Candles', 'candles'], ['line', 'Line', 'lineChart'], ['area', 'Area', 'area']].map(([k, l, ic]) => html`<button type="button" data-v2-ch-style="${k}" aria-pressed="${V.style === k}" aria-label="${l}" title="${l}">${icon(ic)}</button>`)}</div>
-    <details class="menu"><summary class="btn btn-sm" aria-label="Indicators and levels">${icon('layers')}<span class="ch-lbl">Indicators</span></summary><div class="menu-body">
-      <p class="t-label">On the price</p>${OVERLAYS.map(([k, l]) => html`<label class="check"><input type="checkbox" data-v2-ch-ov="${k}" ${V.overlays[k] ? 'checked' : ''} ${k === 'msb' ? html`aria-describedby="ch-msb-help"` : ''}> <span>${l}</span></label>${k === 'msb' ? html`<p class="menu-help" id="ch-msb-help">Marks where a close moved beyond the latest swing high (bullish) or swing low (bearish). A swing is a bar above or below the bars on each side. Its level is drawn back to where it formed, but it only became known once those later bars had closed: the line is dotted before then, with a tick where it became known, and only a close after that counts as a break.</p>
+    <details class="menu"><summary class="btn btn-sm" aria-label="Indicators and levels">${icon('layers')}<span class="ch-lbl">Indicators</span></summary><div class="menu-body ch-imenu">
+      ${OVERLAYS.map(([k, l]) => html`${OV_GROUP[k] ? html`<p class="t-label">${OV_GROUP[k]}</p>` : ''}<label class="check"><input type="checkbox" data-v2-ch-ov="${k}" ${V.overlays[k] ? 'checked' : ''} ${k === 'msb' ? html`aria-describedby="ch-msb-help"` : ST.HELP[k] ? html`aria-describedby="ch-help-${k}"` : ''}> <span>${l}</span></label>${ST.HELP[k] ? html`<p class="menu-help" id="ch-help-${k}">${ST.HELP[k]}</p>` : ''}${k === 'msb' ? html`<p class="menu-help" id="ch-msb-help">Marks where a close moved beyond the latest swing high (bullish) or swing low (bearish). A swing is a bar above or below the bars on each side. Its level is drawn back to where it formed, but it only became known once those later bars had closed: the line is dotted before then, with a tick where it became known, and only a close after that counts as a break.</p>
         <label class="ws-sel menu-help">Swing strength <select data-v2-ch-msbk aria-label="Market structure swing strength">${[3, 5, 10].map((k) => html`<option value="${k}" ${V.msbK === k ? 'selected' : ''}>${k} bars each side${k === 3 ? ', more breaks' : k === 10 ? ', fewer' : ''}</option>`)}</select></label>` : ''}`)}
       <p class="t-label">Panes</p>${PANES.map(([k, l]) => html`<label class="check"><input type="checkbox" data-v2-ch-pane="${k}" ${V.panes[k] ? 'checked' : ''}> <span>${l}</span></label>`)}
     </div></details>
@@ -169,7 +176,7 @@ function paintChart() {
   if (chart) chart.destroy();
   chart = createPriceChart(host.firstChild, {
     bars: D.bars, intraday: !!iv.intraday, msbK: V.msbK || 5, style: V.style, overlays: V.overlays, panes: V.panes, levels: levels(), events: events(),
-    drawings: D.drawings, tool: V.tool, window: windowBars(), label: `${D.sym}, ${iv.label} bars`, ...extras(),
+    drawings: D.drawings, tool: V.tool, window: windowBars(), label: `${D.sym}, ${iv.label} bars`, ...extras(), ...studies(),
     height: plotHeight(host),
     onDrawings: (list) => { D.drawings = list; saveDrawings(D.sym, list); paintTools(); },
     askText: (dr, done) => { D.textFor = done; paintTools(); const i = $('[data-v2-ch-text] input', mainEl); if (i) i.focus(); },
@@ -181,6 +188,7 @@ function paintChart() {
   refit();
   syncHeight();
   const n = $('#ch-note', mainEl); if (n) n.textContent = clean(D.note || '');
+  const sn = $('#ch-snote', mainEl); if (sn) sn.textContent = ST.notes(V.overlays).join(' ');
 }
 // The plot fills the window under the toolbar, less the reading line above it (40 until it is drawn) and the
 // navigator under it; in full screen all of what is left, less the page's padding under the navigator.
@@ -276,9 +284,9 @@ function paint() {
       <div class="ch-stage"><div id="ch-draw">${drawbar()}</div><div id="ch-body"></div>
         <div class="ch-wrail" id="ch-wrail">${W.rail(shown(), isPhone())}</div>
         <div class="ch-side" id="ch-side" ${V.read || shown().length ? '' : 'hidden'}><aside class="ch-read" id="ch-read" aria-labelledby="cr-h" ${V.read ? '' : 'hidden'}></aside></div></div>
-      <div class="split ch-foot"><p class="asof" id="ch-note"></p>
+      <div class="split ch-foot"><div><p class="asof" id="ch-note"></p><p class="asof ch-snote" id="ch-snote" aria-live="polite"></p></div>
         <div class="cluster">${miloButton('Explain this chart', { ask: `Explain the ${D.sym} chart: the trend, support, resistance, momentum, volume and risk, and what would invalidate the read.`, context: `${D.sym} Dossier, Chart`, symbol: D.sym })}<a class="textlink" href="${CLASSIC}#/${D.sym}/chart">More chart tools in the current app ${icon('out')}</a></div></div>
-      <p class="asof">Wheel or pinch to zoom, drag the chart or the strip under it to move along, arrows to read each bar, plus and minus to zoom. Studies such as stages, MA Trend and volume by price, and the other drawing tools, are in the current app.</p>
+      <p class="asof">Wheel or pinch to zoom, drag the chart or the strip under it to move along, arrows to read each bar, plus and minus to zoom. The other drawing tools, and the indicator panes the current app adds (ADX, Stochastic, OBV, MFI, relative strength), are in the current app.</p>
     </section>`);
   applyColours(); paintChart(); paintRead(); syncSide();
 }
@@ -351,6 +359,10 @@ function extras() {
   return { marks: place(marks, 0), lines, insiders: place(ins, 4) };
 }
 function paintExtras() { if (chart) chart.set(extras()); }
+// The studies' data (chart-studies.js), and a line under the chart for each one that is on and has nothing to
+// draw yet, or its reading.
+function studies() { ST.need(V.overlays); return ST.data(V.overlays); }
+function paintStudies() { if (chart) chart.set(Object.assign({ overlays: V.overlays }, ST.data(V.overlays))); const n = $('#ch-snote', mainEl); if (n) n.textContent = ST.notes(V.overlays).join(' '); }
 const phase = () => ((D.session || {}).prices || {}).phase || ((D.session || {}).session || {}).phase || (marketSession() || {}).phase || null;
 
 export async function render(main, route) {
@@ -368,6 +380,9 @@ export async function render(main, route) {
   W.bind({ sym: () => D.sym, t: () => D.t, tErr: () => D.tErr, phase, repaint: repaintWidget, chart: paintExtras,
     overlayOn: (k) => !!V.overlays[k], overlay: (k, on) => { V.overlays[k] = on; saveView(); paintTools(); if (chart) chart.set({ overlays: V.overlays }); } });
   W.reset();
+  ST.bind({ sym: () => D.sym, bars: () => D.bars, iv: () => INTERVALS.find((x) => x.key === V.interval), range: () => V.range, session: () => V.session, weekly: () => V.interval === 'weekly',
+    firstShown: () => (D.bars ? D.bars[Math.max(0, D.bars.length - windowBars())].t : null), t: () => D.t, repaint: () => { if (live) paintStudies(); } });
+  ST.reset();
   if (unsub) unsub();
   unsub = store.subscribe((what) => { if (what === 'lists') repaintWidget('watchlist'); });
   if (!phoneMq) { phoneMq = matchMedia('(max-width: 860px)'); phoneMq.addEventListener('change', onPhoneChange); }
@@ -376,7 +391,7 @@ export async function render(main, route) {
   window.addEventListener('resize', onResize); window.addEventListener('storage', onStorage);
   store.pushRecent(sym);
   document.title = `${sym} Chart, Optic`;
-  provideContext(() => ({ view: 'chart', ticker: sym, chart: { symbol: sym, interval: V.interval, range: V.range, drawings: D.drawings.length, bars: (D.bars || []).length, market_structure_breaks: V.overlays.msb && chart ? { method: `Swing high or low with ${V.msbK || 5} bars either side. The swing forms at its own bar but is only known once the ${V.msbK || 5} bars after it have closed; a close beyond the latest known, unbroken swing is a break. Earlier breaks never change as new bars arrive.`, in_view: chart.structure().slice(-6) } : undefined }, technicals: D.t ? { bias: D.t.technicals.bias, rsi: D.t.technicals.rsi, macd: D.t.technicals.macd, support_resistance: D.t.technicals.support_resistance, moving_averages: D.t.technicals.moving_averages } : null, widgets: W.context(shown()) }));
+  provideContext(() => ({ view: 'chart', ticker: sym, chart: { symbol: sym, interval: V.interval, range: V.range, studies_on: OVERLAYS.filter(([k]) => V.overlays[k]).map(([, l]) => l).concat(PANES.filter(([k]) => V.panes[k] && k !== 'volume').map(([, l]) => l)), drawings: D.drawings.length, bars: (D.bars || []).length, market_structure_breaks: V.overlays.msb && chart ? { method: `Swing high or low with ${V.msbK || 5} bars either side. The swing forms at its own bar but is only known once the ${V.msbK || 5} bars after it have closed; a close beyond the latest known, unbroken swing is a break. Earlier breaks never change as new bars arrive.`, in_view: chart.structure().slice(-6) } : undefined }, technicals: D.t ? { bias: D.t.technicals.bias, rsi: D.t.technicals.rsi, macd: D.t.technicals.macd, support_resistance: D.t.technicals.support_resistance, moving_averages: D.t.technicals.moving_averages } : null, widgets: W.context(shown()) }));
   paint(); wire(main);
   core(sym).then((c) => { if (D.sym !== sym || !live) return; Object.assign(D, { quote: c.quote, session: c.session, quoteError: c.quoteError }); const h = $('.dhead', mainEl); if (h) { const tmp = document.createElement('div'); draw(tmp, header(sym, D, 'chart', { bar: true })); h.replaceWith(tmp.firstElementChild); } repaintWidget('stats'); });
   loadTicker(sym);
@@ -413,7 +428,7 @@ function wire(main) {
     if (el.matches('[data-v2-cc-pick]')) { pickColour(el.dataset.v2CcPick, el.value, `[data-v2-cc-pick="${el.dataset.v2CcPick}"]`); return; }
     if (el.matches('[data-v2-ch-iv]')) { V.interval = el.value; if (V.interval === 'weekly' && !RANGES.weekly[V.range]) V.range = '1Y'; paintTools(); loadBars(); return; }
     if (el.matches('[data-v2-ch-msbk]')) { V.msbK = Number(el.value) || 5; saveView(); paintChart(); return; }
-    if (el.matches('[data-v2-ch-ov]')) { V.overlays[el.dataset.v2ChOv] = el.checked; saveView(); if (chart) chart.set({ overlays: V.overlays }); if (el.dataset.v2ChOv === 'sr') repaintWidget('levels'); if (el.dataset.v2ChOv === 'ins') repaintWidget('insiders'); return; }
+    if (el.matches('[data-v2-ch-ov]')) { V.overlays[el.dataset.v2ChOv] = el.checked; saveView(); ST.need(V.overlays); paintStudies(); if (el.dataset.v2ChOv === 'sr') repaintWidget('levels'); if (el.dataset.v2ChOv === 'ins') repaintWidget('insiders'); return; }
     if (el.matches('[data-v2-ch-pane]')) { V.panes[el.dataset.v2ChPane] = el.checked; saveView(); paintChart(); }
   });
   main.addEventListener('click', (e) => {
