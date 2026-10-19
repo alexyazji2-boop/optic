@@ -251,7 +251,7 @@ table.t td { padding: 12px 8px; border-bottom: 1px solid var(--c-line-2); text-a
 table.t th:first-child, table.t td:first-child { text-align: left; }
 .tscroll { overflow-x: auto; position: relative; }   /* a visually hidden label in a far column (.sr is absolute) escaped the box and widened a phone's page by 335 px (market hours, 2026-10-19) */
 /* On a phone a table's first column (the name) kept wrapping to a word a line; it keeps a readable width and the table scrolls inside its box. */
-@media (max-width: 640px) { .tscroll .t:not(.contracts):not(.scen) td:first-child, .tscroll .t:not(.contracts):not(.scen) th:first-child { min-width: 9.5em; } }
+@media (max-width: 640px) { .tscroll .t:not(.contracts):not(.scen):not(.chw-table) td:first-child, .tscroll .t:not(.contracts):not(.scen):not(.chw-table) th:first-child { min-width: 9.5em; } }
 ul.plain { margin: 0; padding-left: 18px; } ul.plain li { margin-bottom: 7px; }
 
 /* ---------- drawer: one inspector for every object ---------- */

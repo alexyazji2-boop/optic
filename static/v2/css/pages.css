@@ -340,7 +340,7 @@ table.scen td { font-weight: 600; }
 .dhead.bar .acts .btn { min-height: 34px; padding: 0 12px; font-size: 13.5px; }
 .dh-sk-sm { width: 120px; height: 26px; border-radius: 8px; }
 .chart-page { margin-top: 10px; }
-#main section.chart-page { padding: 10px 12px 12px; }   /* tighter than a reading panel: the plot is the content */
+#main section.chart-page { padding: 10px 12px 12px; container: chartpage / inline-size; }   /* tighter than a reading panel: the plot is the content */
 .ctools { gap: 8px !important; }
 .ctools .select select { min-height: 34px; }
 .ctools .seg button { min-height: 32px; padding: 0 11px; font-size: 13.5px; }
@@ -355,8 +355,8 @@ table.scen td { font-weight: 600; }
 .ch-drawtoggle { display: none !important; }
 .ch-stage { display: flex; gap: 8px; align-items: flex-start; margin-top: 8px; }
 .ch-stage > #ch-body { flex: 1 1 auto; min-width: 0; }
-/* The chart read (ui/chartread.js): beside the plot on a wide screen, under it otherwise */
-.ch-read { flex: 0 0 280px; align-self: flex-start; padding: 14px 16px; border: 1px solid var(--c-line-2); border-radius: 10px; background: var(--c-plane-2); position: sticky; top: 72px; }
+/* The chart read (ui/chartread.js), first in the side column */
+.ch-read { padding: 14px 16px; border: 1px solid var(--c-line-2); border-radius: 10px; background: var(--c-plane-2); }
 .ch-read[hidden] { display: none; }
 .cr-title { margin: 0 0 6px; }
 .cr-trend { margin: 0 0 8px; font: 650 20px/1.2 var(--f-sans); }
@@ -365,10 +365,83 @@ table.scen td { font-weight: 600; }
 .cr-rows > div { display: flex; justify-content: space-between; gap: 12px; padding: 7px 0; border-top: 1px solid var(--c-line-2); font-size: 14px; }
 .cr-rows dt { color: var(--c-ink-3); } .cr-rows dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
 .cr-note { margin: 0; font-size: 13px; color: var(--c-ink-3); line-height: 1.45; }
-@media (max-width: 1180px) { .ch-stage { flex-wrap: wrap; } .ch-read { flex: 1 1 100%; position: static; } }
 .ch-draw { display: flex; flex-direction: column; gap: 2px; padding: 4px; border: 1px solid var(--c-line-2); border-radius: 10px; background: var(--c-plane-2); position: sticky; top: 72px; }
 .ch-sep { display: block; width: 24px; height: 1px; margin: 4px auto; background: var(--c-line); }
 .ch-confirm { margin: 8px 0 0; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+/* The side widgets (pages/chart-widgets.js). Wide: the rail down the right edge and the open panels in a
+   column between it and the plot, both kept in view while the page scrolls. Narrower: the rail as a row
+   under the chart and the panels under it. A phone: one panel, the rail a strip that scrolls sideways. */
+.ch-side { order: 3; flex: 0 0 300px; min-width: 0; display: flex; flex-direction: column; gap: 8px; position: sticky; top: 72px; max-height: min(calc(100vh - 88px), var(--ch-h, 100vh)); overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; }
+.ch-side[hidden] { display: none; }
+/* no taller than the chart beside them (--ch-h, set when the chart is drawn): past that they scroll */
+.ch-wrail { order: 4; flex: none; position: sticky; top: 72px; max-height: min(calc(100vh - 88px), var(--ch-h, 100vh)); overflow-y: auto; scrollbar-width: thin; }
+.chw-rail { display: flex; flex-direction: column; gap: 1px; padding: 3px; border: 1px solid var(--c-line-2); border-radius: 10px; background: var(--c-plane-2); }
+.chw-btn { width: 60px; min-height: 34px; padding: 2px; display: grid; justify-items: center; align-content: center; gap: 1px; border: 0; border-radius: var(--r-ctl-in); background: none; color: var(--c-ink-2); font: 500 12px/1.05 var(--f-label); text-align: center; cursor: pointer; }
+.chw-btn:hover { background: var(--c-sunk); color: var(--c-ink); }
+.chw-btn[aria-pressed="true"] { background: var(--c-active); color: var(--c-ink); box-shadow: inset 0 0 0 1px var(--c-line); }
+.chw-ic { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.chw { min-width: 0; border: 1px solid var(--c-line-2); border-radius: 10px; background: var(--c-plane-2); }
+.chw-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 4px 4px 4px 14px; border-bottom: 1px solid var(--c-line-2); }
+.chw-t { margin: 0; display: flex; align-items: center; gap: 8px; font: 600 14.5px/1.2 var(--f-label); }
+.chw-t .chw-ic { color: var(--c-ink-3); }
+.chw-body { padding: 10px 14px 14px; display: grid; gap: 10px; min-width: 0; font-size: 14px; line-height: 1.4; }
+.chw-body > *, .chw-body p, .chw-body h4 { margin: 0; }
+.chw-none { color: var(--c-ink-2); }
+.chw-fine { font-size: 13px; line-height: 1.45; color: var(--c-ink-3); }
+ul.chw-fine { padding-left: 18px; display: grid; gap: 4px; }
+.chw-more { font-size: 13.5px; justify-self: start; }
+.chw-sub { font: 600 13px/1.2 var(--f-label); color: var(--c-ink-2); }
+.chw-verdict { line-height: 1.45; }
+.chw-rows { display: grid; }
+.chw-rows > div { display: flex; justify-content: space-between; gap: 12px; padding: 6px 0; border-top: 1px solid var(--c-line-2); }
+.chw-rows > div:first-child { border-top: 0; padding-top: 0; }
+.chw-rows dt { color: var(--c-ink-3); } .chw-rows dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
+.chw-list { list-style: none; margin: 0; padding: 0; display: grid; }
+.chw-list > li { display: grid; gap: 2px; min-width: 0; padding: 7px 0; border-top: 1px solid var(--c-line-2); overflow-wrap: anywhere; }
+.chw-list > li:first-child { border-top: 0; padding-top: 0; }
+.chw-list small { font-size: 12.5px; line-height: 1.35; }
+.chw-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; }
+.chw-news a, .chw-list li > a { color: var(--c-ink); text-decoration: none; } .chw-news a:hover, .chw-list li > a:hover { text-decoration: underline; }
+.chw-watch > li { grid-template-columns: minmax(0, 1fr) auto; align-items: center; padding: 1px 0; }
+.chw-watch .tick { color: var(--c-ink); text-decoration: none; padding: 8px 0; } .chw-watch .tick[aria-current="page"] { color: var(--c-gold-ink); }
+.chw-x, .chw-close { width: 32px; height: 32px; }
+.chw-add { display: flex; gap: 6px; align-items: flex-end; } .chw-add .field, .chw-add .chw-field { flex: 1; min-width: 0; }
+.chw-fields { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; }
+.chw-field { display: grid; gap: 4px; min-width: 0; font-size: 13px; color: var(--c-ink-3); }
+.chw-field input, .chw-field select { width: 100%; min-height: 36px; padding: 0 8px; border: 1px solid var(--c-line); border-radius: var(--r-ctl-in); background: var(--c-raised); color: var(--c-ink); font: 400 14px/1.2 var(--f-sans); }
+.chw-wide { grid-column: 1 / -1; justify-self: stretch; }
+.chw-sel select { width: 100%; }
+.chw-tiles { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 6px; }
+.chw-tile { display: grid; gap: 2px; align-content: start; padding: 8px 10px; border: 1px solid var(--c-line-2); border-radius: 8px; background: var(--c-raised); }
+.chw-tile b { font: 650 18px/1.15 var(--f-label); font-variant-numeric: tabular-nums; } .chw-tile span { font-size: 13px; color: var(--c-ink-2); } .chw-tile small { font-size: 12px; line-height: 1.3; color: var(--c-ink-3); }
+.chw-spark { display: block; width: 100%; height: auto; } .chw-spark path { fill: none; stroke-width: 1.6; }
+.chw-spark .st { stroke: var(--c-gold); } .chw-spark .bh { stroke: var(--c-ink-3); stroke-dasharray: 4 3; } .chw-spark .zero { stroke: var(--c-line); } .chw-spark .band { stroke: var(--c-line); stroke-dasharray: 3 3; }
+.chw-key { display: flex; flex-wrap: wrap; gap: 2px 12px; font-size: 12.5px; color: var(--c-ink-3); }
+.chw-key i { display: inline-block; width: 14px; height: 0; margin-right: 6px; vertical-align: middle; border-top: 2px solid var(--c-gold); } .chw-key i.bh { border-top: 2px dashed var(--c-ink-3); }
+table.chw-table { font-size: 13px; } table.chw-table th { padding: 6px 4px; font-size: 12.5px; } table.chw-table td { padding: 6px 4px; }
+.chw-details > summary { cursor: pointer; font-size: 13.5px; color: var(--c-ink-2); padding: 4px 0; }   /* a list item, so it keeps its disclosure triangle */
+.chw-details[open] { display: grid; gap: 8px; }
+.chw-note { width: 100%; min-height: 128px; resize: vertical; padding: 8px 10px; border: 1px solid var(--c-line); border-radius: var(--r-ctl-in); background: var(--c-raised); color: var(--c-ink); font: 400 14px/1.45 var(--f-sans); }
+.chw-checks { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.chw-checks .check { align-items: flex-start; }
+.chw-seas { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 2px; }
+.chw-scol { display: grid; justify-items: center; gap: 2px; min-width: 0; }
+.chw-shit, .chw-slab { font: 500 12px/1 var(--f-label); color: var(--c-ink-3); font-variant-numeric: tabular-nums; }
+.chw-shalf { width: 100%; height: 28px; display: flex; justify-content: center; align-items: flex-end; }
+.chw-shalf.dn { align-items: flex-start; border-top: 1px solid var(--c-ink-3); }
+.chw-shalf i { display: block; width: 72%; border-radius: 2px; background: var(--c-line); }
+.chw-shalf i.up { background: var(--c-pos); } .chw-shalf i.down { background: var(--c-neg); }
+.chw-sugg { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; } .chw-sugg .chip { min-height: 32px; font-size: 13.5px; }
+.chw-def { line-height: 1.5; }
+.chw-body .btn-milo { justify-self: start; }
+@container chartpage (max-width: 1020px) {
+  .ch-stage { flex-wrap: wrap; }
+  .ch-stage > #ch-body { flex: 1 1 0; }
+  .ch-wrail { order: 3; flex: 1 1 100%; position: static; max-height: none; overflow: visible; }
+  .chw-rail { display: grid; grid-template-columns: repeat(auto-fill, minmax(60px, 1fr)); }
+  .chw-btn { width: auto; min-height: 44px; }
+  .ch-side { order: 4; flex: 1 1 100%; position: static; max-height: none; overflow: visible; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr)); align-items: start; }
+}
 @media (max-width: 860px) {
   .dhead.bar { gap: 6px 12px; }
   .dhead.bar .acts { margin-left: 0; width: 100%; }
@@ -378,6 +451,12 @@ table.scen td { font-weight: 600; }
   .ch-stage { flex-direction: column; gap: 6px; }
   .ch-stage > #ch-draw { width: 100%; }
   .ch-draw { flex-direction: row; position: static; overflow-x: auto; scrollbar-width: none; }
+  .ch-stage > #ch-body, .ch-wrail, .ch-side { flex: none; width: 100%; }
+  .chw-rail { display: flex; flex-direction: row; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+  .chw-btn { flex: none; width: 58px; min-height: 48px; }   /* five and a part in view at 390, so the strip reads as one that scrolls */
+  .ch-side { grid-template-columns: minmax(0, 1fr); }
+  .chw-x, .chw-close { width: 44px; height: 44px; }
+  .chw-field input, .chw-field select { min-height: 44px; }
   .ch-sep { width: 1px; height: 24px; margin: auto 4px; }
   .ch-tool { width: 44px; height: 44px; flex: none; }
   /* one row of controls under the bar size: style, indicators, draw and fit as named icons */
@@ -410,6 +489,9 @@ table.scen td { font-weight: 600; }
 .pc .rsi, .pc .macd { stroke: var(--c-chart-ink); } .pc .macds { stroke: var(--c-gold); }
 .pc .mh.u { fill: var(--c-pos); opacity: .5; } .pc .mh.d { fill: var(--c-neg); opacity: .5; }
 .pc .lv { stroke-width: 1; stroke-dasharray: 6 4; } .pc .lv.fib { stroke: var(--c-gold); } .pc .lv.sup { stroke: var(--c-pos); } .pc .lv.res { stroke: var(--c-neg); } .pc .lv.gex { stroke: #8a5fb8; }
+.pc .lv.stop { stroke: var(--c-neg); } .pc .lv.stopb { stroke: var(--c-neg); stroke-dasharray: none; stroke-width: 1.5; } .pc .lv.round { stroke: var(--c-ink-3); stroke-dasharray: 2 3; }
+.pc .tm circle { fill: var(--c-plane); stroke-width: 1.6; } .pc .tm.pos circle { stroke: var(--c-pos); } .pc .tm.neg circle { stroke: var(--c-neg); }
+.pc .tm text { font: 700 12px/1 var(--f-label); } .pc .tm.pos text { fill: var(--c-pos); } .pc .tm.neg text { fill: var(--c-neg); }
 .pc .lv-t { font: 500 12px/1 var(--f-label); fill: var(--c-ink-2); paint-order: stroke; stroke: var(--c-plane); stroke-width: 3px; }
 /* market structure breaks: the level, its label, and the breaking close; direction is also in the label's title */
 .pc .msb line { stroke-width: 1.4; }

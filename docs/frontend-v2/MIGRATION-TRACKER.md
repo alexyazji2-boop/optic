@@ -36,18 +36,18 @@ Kept current as each milestone lands. Source of truth for status: this file. The
 | C9 | Track record slots | Options and Investing | M4 | open |
 | C10 | Chart drawing tools | channel, Fib extension, pitchfork, arrow, ruler, risk box, position sizing, snap, moving | M1 | open |
 | C11 | Chart studies | 14 studies (EMA clouds through insider marks) | M1 | open |
-| C12 | Chart widgets and chrome | 18 widgets; colours, legend, full screen, navigator | M1 | open |
+| C12 | Chart widgets and chrome | 18 widgets; colours, legend, full screen, navigator | M1 | in progress: the 18 widgets verified 2026-10-19 (`pages/chart-widgets.js`, `tests/test_v2_chart_widgets.py`, browser check at 1440, 1024 and 390 against the local server); colours, legend, full screen and navigator are open |
 | C13 | Valuation editors | DCF editor, saved models, RI, FFO, DDM, comps, SOTP, valuation Milo | M2 | open |
 | C14 | Earnings this week | the page with no symbol | M3 | in progress: the workspace panel lists this week and next with consensus and on-request implied moves; the standalone page and before-open/after-close timing are open |
 | C15 | Signal history | Alerts | M4 | open |
 | C16 | Alerts owner controls | mark read, clear all, e-mail delivery | M6 | open |
-| C17 | Glossary tooltips and Learn widget | dotted-underline definitions (`app.js:433-573`), the Learn widget. Missing from the matrix until the 2026-10-18 audit | M7 | open |
+| C17 | Glossary tooltips and Learn widget | dotted-underline definitions (`app.js:433-573`), the Learn widget. Missing from the matrix until the 2026-10-18 audit | M7 | in progress: the Learn widget is on the Chart page (2026-10-19, the glossary copied word for word and compared by test); the tooltips are open |
 | C18 | Free chart read | Classic's deterministic "Chart read" popover (`app.js:23060-23135`) | M1 | verified 2026-10-19: `ui/chartread.js` on the Chart page's toolbar, the classic model and words, no model call; browser check at 1440 and 390 |
 
 ## By milestone
 | Milestone | Rows | Status |
 |---|---|---|
-| M1 Advanced charting | I6, C10, C11, C12, C18 | open (MSB added as a new study, 2026-10-18; C18 verified 2026-10-19) |
+| M1 Advanced charting | I6, C10, C11, C12, C18 | open (MSB added as a new study, 2026-10-18; C18 verified 2026-10-19; C12's 18 widgets verified 2026-10-19, its chrome open) |
 | M2 Valuation editors | C13 | open |
 | M3 Research tools | I4, I5, C7 (not the chip), C8, C14 | open |
 | M4 Track record | C9, C15 (after the validation branch) | open |

@@ -18,7 +18,7 @@ Row-level detail per page is in COVERAGE.md.
 | Home as the research workspace: layouts (Market Overview the default, My Desk the reader's own), panels, move, resize, hide, lock, reset, save, linked ticker, phone priority, state kept on Back (new) | Implemented and tested (private preview) | WORKSPACE.md; `ws_verify_home.py` 52 checks and `walkthrough.py` 18 checks, cold and cached; v2_check audit 0 faults on its 20 captures (5 Home views, desktop and phone, dark and light) |
 | Dark visual system, a sidebar of destinations only, one page system across every page (new direction; dark accepted 2026-10-18) | Implemented and tested (private preview) | VISUAL-SPEC-DARK.md; `style_audit.py` on 8 pages × 2 sizes; v2_check audit 0 faults on 168 captures (42 views, desktop and phone, dark and light), 2026-10-18 |
 | Notifications bell with unseen count | Incomplete | Backend counts exist; v2 has no bell (I11, W2) |
-| Glossary tooltips and Learn widget | Classic-only | C17, M7 (found by the 2026-10-18 audit) |
+| Glossary tooltips and Learn widget | Incomplete | C17. The Learn widget is on the Chart page since 2026-10-19, with the classic glossary word for word (`core/glossary.js`, compared with `static/app.js` by `tests/test_v2_chart_widgets.py`). The dotted-underline tooltips are M7 |
 | Sign in, create account, forgot and reset password, verify email | Implemented and tested | Stage 0 (auth), real local flows |
 | Google and Apple sign-in (start, callback, error) | Implemented and tested, locally | The callback returns to v2. Providers are not configured locally, so the real Google and Apple round trip is an owner check in the preview (LAUNCH-REQUIREMENTS L7) |
 | Passkeys: sign in, add, rename, remove | Implemented and tested | Stage 0, through Chrome's virtual authenticator |
@@ -74,7 +74,8 @@ Row-level detail per page is in COVERAGE.md.
 | Chart: free deterministic chart read | Implemented and tested | C18, carried over 2026-10-19 (`ui/chartread.js`, the classic `chartReadModel` and its words): the Chart read button beside the plot; daily trend and its facts, nearest support and resistance, RSI and MACD, from the ticker payload already loaded, no model call. Browser check at 1440 and 390; `tests/test_v2_p3.py` |
 | Chart: channel, Fib extension, pitchfork, arrow, ruler, risk box, position sizing, snap, moving a drawing | Classic-only | M1 |
 | Chart studies: EMA clouds, MA Trend, TSO, VWAP, Keltner, Donchian, regression, stages, accumulation, auto trends, VBP, zones, sessions, insider marks | Classic-only | M1 |
-| Chart widgets (18), colours, legend, full screen, navigator | Classic-only | M1 |
+| Chart: the 18 side widgets (Watch, Alerts, News, Analysts, Season, Notes, Insiders, Reports, Checklist, Stop check, Options, Key levels, Stats, Patterns, Pairs, Backtest, Trading, Learn) | Implemented and tested | C12, carried over 2026-10-19 (`pages/chart-widgets.js`): a rail beside the plot with the classic names, order and marks; any number open on a wide screen, one at a time on a phone; nothing open to start, the open ones remembered. Nine read the ticker payload the page already loads (Analysts and Stop check also ask a free endpoint once open); Alerts, Season, Pairs, Backtest and Trading ask their own free endpoints once open; Watch uses the watchlists; Notes, Checklist and Learn ask the server nothing. The backtest's trades and the stop check's lines are drawn on the price. Inputs kept in the classic keys. `tests/test_v2_chart_widgets.py` (each widget drawn from a real AAPL payload, trade placement by day, minute and week); browser check at 1440, 1024 and 390 against the local server (keyboard along the rail, focus kept through a redraw, no sideways scroll), and the sweep with all 18 open on AAPL and SPY at 1440, 1280, 768, 390 and 375 × 549: no console errors, raw text, small text, em dashes or overflow, and the launch audit at 0 faults |
+| Chart: colours, legend, full screen, navigator | Classic-only | M1 |
 | Investing: long-term view, return and risk, drawdown, valuation history, fair value, scenarios (saved, shared with Classic) | Implemented and tested | v2_check, plus the round trip |
 | Weekly structure | Incomplete | Candle style, levels menu and pan: M1 |
 | DCF editor, saved models, RI, FFO, DDM, comps, SOTP, valuation Milo | Classic-only | v2 shows the summary. Editing: M2 |
@@ -111,16 +112,16 @@ Lines in this matrix:
 
 | Class | Lines |
 |---|---|
-| Implemented and tested (including partly tested) | 38 |
-| Incomplete | 11 |
-| Classic-only | 17 |
+| Implemented and tested (including partly tested) | 39 |
+| Incomplete | 12 |
+| Classic-only | 16 |
 
 Many lines are groups. Counted one by one, the Classic-only capabilities are:
 - 7 chart drawing tools, plus snap and moving a drawing;
 - 14 chart studies;
-- 18 chart widgets;
+- 4 pieces of chart chrome: colours, legend, full screen, navigator;
 - 8 valuation editors and methods;
 - 6 Milo features;
-- 11 others (research tools, Home extras, alerts). The free chart read (C18) moved across on 2026-10-19.
+- 11 others (research tools, Home extras, alerts). The free chart read (C18) moved across on 2026-10-19, and so did the 18 chart widgets (C12) with the Learn widget (part of C17).
 
 All of them are scheduled in MIGRATION.md.

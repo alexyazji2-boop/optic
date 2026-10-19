@@ -6,12 +6,14 @@
 // from /api/weekly-bars, intraday from /api/intraday. Like the classic app the
 // page opens on hourly bars. Drawings are kept per symbol in the classic key,
 // so a line drawn here shows there and the other way round. The view choices
-// are a setting of this browser (optic.v2.chart.v1).
-import { $, $$, html, render as draw, isPhone } from '../core/dom.js';
+// are a setting of this browser (optic.v2.chart.v1). The side widgets, from the
+// rail beside the plot, are in chart-widgets.js.
+import { $, $$, html, render as draw, isPhone, announce, reducedMotion } from '../core/dom.js';
 import { CLASSIC } from '../core/classic.js';
 import * as api from '../core/api.js';
 import * as store from '../core/store.js';
 import { holds } from '../core/device.js';
+import { marketSession } from '../core/status.js';
 import { num, clean, isNum } from '../core/format.js';
 import { skeleton, failed } from '../ui/states.js';
 import { icon } from '../ui/icons.js';
@@ -20,6 +22,7 @@ import { button as miloButton, provideContext, openMilo } from '../ui/milo.js';
 import { toast } from '../ui/toast.js';
 import { createPriceChart } from '../ui/pricechart.js';
 import { core, header, tabs, isFund } from './dossier-frame.js';
+import * as W from './chart-widgets.js';
 
 const VIEW_KEY = 'optic.v2.chart.v1';
 const DRAW_KEY = 'optic.chart.drawings.v2';
@@ -36,15 +39,16 @@ const TOOL_GROUP_STARTS = new Set(['hline', 'rect', 'text']);   // pointer | lin
 const OVERLAYS = [['ma', 'MA 20, 50, 200'], ['ema', 'EMA 9, 21, 50'], ['bb', 'Bollinger 20, 2'], ['fib', 'Fibonacci'], ['sr', 'Support and resistance'], ['gex', 'Dealer gamma levels'], ['msb', 'Market structure breaks'], ['events', 'Earnings']];
 const PANES = [['volume', 'Volume'], ['rsi', 'RSI 14'], ['macd', 'MACD 12, 26, 9']];
 
-let D = {}, V = {}, live = true, mainEl = null, chart = null;
+let D = {}, V = {}, live = true, mainEl = null, chart = null, unsub = null, phoneMq = null;
 
 function readView() {
-  const d = { interval: '60', range: '6M', style: 'candles', session: 'regular', read: false, overlays: { ma: true, ema: false, bb: false, fib: false, sr: false, gex: false, msb: false, events: true }, panes: { volume: true, rsi: false, macd: false }, msbK: 5 };
+  const d = { interval: '60', range: '6M', style: 'candles', session: 'regular', read: false, dock: [], overlays: { ma: true, ema: false, bb: false, fib: false, sr: false, gex: false, msb: false, events: true }, panes: { volume: true, rsi: false, macd: false }, msbK: 5 };
   try { const s = JSON.parse(localStorage.getItem(VIEW_KEY) || 'null'); if (s && typeof s === 'object') { Object.assign(d, s, { overlays: Object.assign(d.overlays, s.overlays || {}), panes: Object.assign(d.panes, s.panes || {}) }); } } catch (e) { /* private */ }
   d.interval = '60'; // the Chart page opens on hourly bars, as in the classic app
+  d.dock = Array.isArray(d.dock) ? d.dock.filter((id, i, a) => W.IDS.includes(id) && a.indexOf(id) === i) : [];
   return d;
 }
-function saveView() { try { localStorage.setItem(VIEW_KEY, JSON.stringify({ range: V.range, style: V.style, session: V.session, read: V.read, overlays: V.overlays, panes: V.panes, msbK: V.msbK })); } catch (e) { /* private */ } }
+function saveView() { try { localStorage.setItem(VIEW_KEY, JSON.stringify({ range: V.range, style: V.style, session: V.session, read: V.read, dock: V.dock, overlays: V.overlays, panes: V.panes, msbK: V.msbK })); } catch (e) { /* private */ } }
 
 function readDrawings(sym) {
   if (!holds(store.state.user)) return [];
@@ -162,12 +166,13 @@ function paintChart() {
   const room = Math.round(window.innerHeight - top - 40);   // 40: the reading line above the plot
   chart = createPriceChart(host.firstChild, {
     bars: D.bars, intraday: !!iv.intraday, msbK: V.msbK || 5, style: V.style, overlays: V.overlays, panes: V.panes, levels: levels(), events: events(),
-    drawings: D.drawings, tool: V.tool, window: windowBars(), label: `${D.sym}, ${iv.label} bars`,
+    drawings: D.drawings, tool: V.tool, window: windowBars(), label: `${D.sym}, ${iv.label} bars`, ...extras(),
     height: isPhone() ? Math.round(Math.max(300, Math.min(room, window.innerHeight * 0.62))) : Math.round(Math.max(400, Math.min(room, 900))),
     onDrawings: (list) => { D.drawings = list; saveDrawings(D.sym, list); paintTools(); },
     askText: (dr, done) => { D.textFor = done; paintTools(); const i = $('[data-v2-ch-text] input', mainEl); if (i) i.focus(); },
     onEscape: () => { V.tool = 'select'; chart.set({ tool: 'select' }); paintTools(); },
   });
+  const stage = $('.ch-stage', mainEl); if (stage) stage.style.setProperty('--ch-h', `${host.offsetHeight}px`);
   const n = $('#ch-note', mainEl); if (n) n.textContent = clean(D.note || '');
   const k = $('#ch-key', mainEl);
   if (k) draw(k, html`${V.overlays.ma ? html`<span><i class="m1"></i>SMA 20</span><span><i class="m2"></i>SMA 50</span><span><i class="m3"></i>SMA 200</span>` : ''}${V.overlays.ema ? html`<span><i class="e1"></i>EMA 9</span><span><i class="e2"></i>EMA 21</span><span><i class="e3"></i>EMA 50</span>` : ''}${V.overlays.bb ? html`<span><i class="o2"></i>Bollinger 20, 2</span>` : ''}${V.overlays.events ? html`<span><b class="kE">E</b> earnings</span>` : ''}`);
@@ -178,20 +183,83 @@ function paint() {
   draw(mainEl, html`${header(D.sym, D, 'chart', { bar: true })}${tabs(D.sym, 'chart', { fund: isFund(D) })}
     <section class="section chart-page" aria-label="${D.sym} chart">
       <div id="ch-tools">${toolbar()}</div>
-      <div class="ch-stage"><div id="ch-draw">${drawbar()}</div><div id="ch-body"></div><aside class="ch-read" id="ch-read" aria-labelledby="cr-h" ${V.read ? '' : 'hidden'}></aside></div>
+      <div class="ch-stage"><div id="ch-draw">${drawbar()}</div><div id="ch-body"></div>
+        <div class="ch-wrail" id="ch-wrail">${W.rail(shown(), isPhone())}</div>
+        <div class="ch-side" id="ch-side" ${V.read || shown().length ? '' : 'hidden'}><aside class="ch-read" id="ch-read" aria-labelledby="cr-h" ${V.read ? '' : 'hidden'}></aside></div></div>
       <p class="legend-line" id="ch-key" aria-label="Key"></p>
       <div class="split ch-foot"><p class="asof" id="ch-note"></p>
         <div class="cluster">${miloButton('Explain this chart', { ask: `Explain the ${D.sym} chart: the trend, support, resistance, momentum, volume and risk, and what would invalidate the read.`, context: `${D.sym} Dossier, Chart`, symbol: D.sym })}<a class="textlink" href="${CLASSIC}#/${D.sym}/chart">More chart tools in the current app ${icon('out')}</a></div></div>
-      <p class="asof">Wheel or pinch to zoom, drag to move along, arrows to read each bar, plus and minus to zoom. Studies, stages, MA Trend, volume by price, backtests, pairs, the stop check and the side widgets are in the current app.</p>
+      <p class="asof">Wheel or pinch to zoom, drag to move along, arrows to read each bar, plus and minus to zoom. Studies such as stages, MA Trend and volume by price, the other drawing tools, chart colours and full screen are in the current app.</p>
     </section>`);
-  paintChart(); paintRead();
+  paintChart(); paintRead(); syncSide();
 }
 // The chart read (ui/chartread.js), from the daily technicals this page already loads.
 function paintRead() {
   const h = $('#ch-read', mainEl); if (!h) return;
   h.hidden = !V.read;
+  const side = $('#ch-side', mainEl); if (side) side.hidden = !V.read && !shown().length;
   if (V.read) draw(h, chartReadCard(D.sym, D.t, D.t ? undefined : D.tErr ? 'failed' : 'loading'));
 }
+
+/* ---------------- the side widgets (chart-widgets.js) ---------------- */
+// Wide: every widget the reader opened, in the rail's order, between the plot and the rail. A phone: the
+// last one opened, under the chart.
+const shown = () => (isPhone() ? V.dock.slice(-1) : V.dock.slice());
+function syncSide() {
+  const side = $('#ch-side', mainEl); if (!side) return;
+  W.flush(side);
+  const want = W.IDS.filter((id) => shown().includes(id)), added = [];
+  $$('.chw', side).forEach((el) => { if (!want.includes(el.dataset.chwPanel)) el.remove(); });
+  let prev = $('#ch-read', side);
+  want.forEach((id) => {
+    let el = $(`#chw-${id}`, side);
+    if (!el) { const tmp = document.createElement('div'); draw(tmp, W.panel(id)); el = tmp.firstElementChild; added.push(id); }
+    if (prev.nextElementSibling !== el) prev.after(el);
+    prev = el;
+  });
+  side.hidden = !V.read && !want.length;
+  added.forEach((id) => W.need(id));
+}
+// Pressed states in place, so the button that was pressed keeps the focus.
+function paintRail() { const s = shown(); $$('[data-chw]', mainEl).forEach((b) => b.setAttribute('aria-pressed', String(s.includes(b.dataset.chw)))); }
+function toggleWidget(id) {
+  const on = shown().includes(id);
+  V.dock = on ? V.dock.filter((x) => x !== id) : isPhone() ? [id] : [...V.dock.filter((x) => x !== id), id];
+  saveView(); paintRail(); syncSide(); paintExtras();
+  if (on) { announce(`${W.label(id)} closed.`); return; }
+  const el = $(`#chw-${id}`, mainEl);
+  if (el) el.scrollIntoView({ block: 'nearest', behavior: reducedMotion() ? 'auto' : 'smooth' });
+  announce(`${W.label(id)} opened${isPhone() ? ', under the chart' : ''}.`);
+}
+// A widget's answer arrived: redraw its body after the event that caused it has settled (a change from Tab
+// fires before the focus moves), keeping the control that had the focus and any details left open.
+const pending = new Set(); let pendingT = 0;
+function repaintWidget(id) { pending.add(id); if (!pendingT) pendingT = setTimeout(flushRepaints, 0); }
+function flushRepaints() {
+  pendingT = 0;
+  const ids = [...pending]; pending.clear();
+  if (!live) return;
+  ids.forEach((id) => {
+    const el = $(`#chw-${id}-b`, mainEl); if (!el) return;
+    const a = document.activeElement, attr = a && el.contains(a) ? [...a.attributes].find((x) => x.name.startsWith('data-chw')) : null;
+    const sel = attr ? `[${attr.name}="${CSS.escape(attr.value)}"]` : null;
+    const opened = $$('details[open] > summary', el).map((x) => x.textContent);
+    if (id === 'notes') W.flush(el);
+    draw(el, W.body(id));
+    $$('details > summary', el).forEach((x) => { if (opened.includes(x.textContent)) x.parentElement.open = true; });
+    const n = sel && $(sel, el); if (n) n.focus({ preventScroll: true });
+  });
+}
+// The backtest's fills and the stop check's lines, placed on the bars this chart is drawing.
+function extras() {
+  const { marks, lines } = W.onChart(shown());
+  if (!D.bars || !marks.length) return { marks: [], lines };
+  const intraday = !!INTERVALS.find((x) => x.key === V.interval).intraday;
+  if (D.keysOf !== D.bars) { D.keysOf = D.bars; D.keys = D.bars.map((b) => W.barKey(b.t, intraday)); }
+  return { marks: marks.map((m) => Object.assign({}, m, { t: W.barTime(D.bars, D.keys, m.at, { intraday, weekly: V.interval === 'weekly' }) })).filter((m) => m.t !== null), lines };
+}
+function paintExtras() { if (chart) chart.set(extras()); }
+const phase = () => ((D.session || {}).prices || {}).phase || ((D.session || {}).session || {}).phase || (marketSession() || {}).phase || null;
 
 export async function render(main, route) {
   live = true; mainEl = main;
@@ -205,28 +273,55 @@ export async function render(main, route) {
   if (kind === 'ov' && id in V.overlays) V.overlays[id] = true;
   if (kind === 'pane' && id in V.panes) V.panes[id] = true;
   D = { sym, drawings: readDrawings(sym) };
+  W.bind({ sym: () => D.sym, t: () => D.t, tErr: () => D.tErr, phase, repaint: repaintWidget, chart: paintExtras,
+    overlayOn: (k) => !!V.overlays[k], overlay: (k, on) => { V.overlays[k] = on; saveView(); paintTools(); if (chart) chart.set({ overlays: V.overlays }); } });
+  W.reset();
+  if (unsub) unsub();
+  unsub = store.subscribe((what) => { if (what === 'lists') repaintWidget('watchlist'); });
+  if (!phoneMq) { phoneMq = matchMedia('(max-width: 860px)'); phoneMq.addEventListener('change', onPhoneChange); }
   store.pushRecent(sym);
   document.title = `${sym} Chart, Optic`;
-  provideContext(() => ({ view: 'chart', ticker: sym, chart: { symbol: sym, interval: V.interval, range: V.range, drawings: D.drawings.length, bars: (D.bars || []).length, market_structure_breaks: V.overlays.msb && chart ? { method: `Swing high or low with ${V.msbK || 5} bars either side. The swing forms at its own bar but is only known once the ${V.msbK || 5} bars after it have closed; a close beyond the latest known, unbroken swing is a break. Earlier breaks never change as new bars arrive.`, in_view: chart.structure().slice(-6) } : undefined }, technicals: D.t ? { bias: D.t.technicals.bias, rsi: D.t.technicals.rsi, macd: D.t.technicals.macd, support_resistance: D.t.technicals.support_resistance, moving_averages: D.t.technicals.moving_averages } : null }));
+  provideContext(() => ({ view: 'chart', ticker: sym, chart: { symbol: sym, interval: V.interval, range: V.range, drawings: D.drawings.length, bars: (D.bars || []).length, market_structure_breaks: V.overlays.msb && chart ? { method: `Swing high or low with ${V.msbK || 5} bars either side. The swing forms at its own bar but is only known once the ${V.msbK || 5} bars after it have closed; a close beyond the latest known, unbroken swing is a break. Earlier breaks never change as new bars arrive.`, in_view: chart.structure().slice(-6) } : undefined }, technicals: D.t ? { bias: D.t.technicals.bias, rsi: D.t.technicals.rsi, macd: D.t.technicals.macd, support_resistance: D.t.technicals.support_resistance, moving_averages: D.t.technicals.moving_averages } : null, widgets: W.context(shown()) }));
   paint(); wire(main);
-  core(sym).then((c) => { if (D.sym !== sym || !live) return; Object.assign(D, { quote: c.quote, session: c.session, quoteError: c.quoteError }); const h = $('.dhead', mainEl); if (h) { const tmp = document.createElement('div'); draw(tmp, header(sym, D, 'chart', { bar: true })); h.replaceWith(tmp.firstElementChild); } });
-  tickerData().then(() => { if (live && D.sym === sym) { if (D.bars) paintChart(); paintRead(); } }).catch(() => { if (live && D.sym === sym) { D.tErr = true; paintRead(); } });
+  core(sym).then((c) => { if (D.sym !== sym || !live) return; Object.assign(D, { quote: c.quote, session: c.session, quoteError: c.quoteError }); const h = $('.dhead', mainEl); if (h) { const tmp = document.createElement('div'); draw(tmp, header(sym, D, 'chart', { bar: true })); h.replaceWith(tmp.firstElementChild); } repaintWidget('stats'); });
+  loadTicker(sym);
   loadBars();
 }
-export function dispose() { live = false; if (chart) { chart.destroy(); chart = null; } }
-export const retry = { bars: () => loadBars() };
+function loadTicker(sym) {
+  D.tErr = null;
+  tickerData().then(() => { if (live && D.sym === sym) { if (D.bars) paintChart(); paintRead(); afterTicker(); } }).catch((e) => { if (live && D.sym === sym) { D.tErr = e || true; D.tPromise = null; paintRead(); afterTicker(); } });
+}
+// The widgets that read the ticker payload are drawn again, and the stop check can start once it knows the plan's stop.
+function afterTicker() { shown().forEach((id) => { if (W.FROM_TICKER.includes(id)) { repaintWidget(id); W.need(id); } }); }
+function onPhoneChange() {
+  if (!live) return;
+  const r = $('#ch-wrail', mainEl); if (r) draw(r, W.rail(shown(), isPhone()));
+  syncSide(); paintExtras();
+}
+export function dispose() {
+  live = false; W.flush(mainEl || document);
+  if (unsub) { unsub(); unsub = null; }
+  if (phoneMq) { phoneMq.removeEventListener('change', onPhoneChange); phoneMq = null; }
+  if (chart) { chart.destroy(); chart = null; }
+}
+export const retry = Object.assign({ bars: () => loadBars(), ticker: () => { D.tPromise = null; D.tErr = null; afterTicker(); paintRead(); loadTicker(D.sym); } },
+  Object.fromEntries(W.IDS.map((id) => [`w-${id}`, () => W.retry(id)])));
 
 function wire(main) {
   main.addEventListener('change', (e) => {
     const el = e.target;
+    if (el.closest('.chw') && W.onChange(e)) return;
     if (el.matches('[data-v2-ch-iv]')) { V.interval = el.value; if (V.interval === 'weekly' && !RANGES.weekly[V.range]) V.range = '1Y'; paintTools(); loadBars(); return; }
     if (el.matches('[data-v2-ch-msbk]')) { V.msbK = Number(el.value) || 5; saveView(); paintChart(); return; }
-    if (el.matches('[data-v2-ch-ov]')) { V.overlays[el.dataset.v2ChOv] = el.checked; saveView(); if (chart) chart.set({ overlays: V.overlays }); return; }
+    if (el.matches('[data-v2-ch-ov]')) { V.overlays[el.dataset.v2ChOv] = el.checked; saveView(); if (chart) chart.set({ overlays: V.overlays }); if (el.dataset.v2ChOv === 'sr') repaintWidget('levels'); return; }
     if (el.matches('[data-v2-ch-pane]')) { V.panes[el.dataset.v2ChPane] = el.checked; saveView(); paintChart(); }
   });
   main.addEventListener('click', (e) => {
     const t = (s) => e.target.closest(s);
     let b;
+    if ((b = t('[data-chw]'))) { toggleWidget(b.dataset.chw); return; }
+    if ((b = t('[data-chw-close]'))) { const id = b.dataset.chwClose; toggleWidget(id); const r = $(`[data-chw="${id}"]`, mainEl); if (r) r.focus(); return; }
+    if (t('.chw') && W.onClick(e)) return;
     if ((b = t('[data-v2-ch-range]'))) { const was = V.range; V.range = b.dataset.v2ChRange; saveView(); paintTools(); if (V.range === 'All' || was === 'All') loadBars(); else paintChart(); return; }
     if ((b = t('[data-v2-ch-session]'))) { V.session = b.dataset.v2ChSession; saveView(); paintTools(); loadBars(); return; }
     if ((b = t('[data-v2-ch-read]'))) { V.read = !V.read; saveView(); paintTools(); paintRead(); paintChart(); const again = $('[data-v2-ch-read]', mainEl); if (again) again.focus(); return; }
@@ -240,7 +335,19 @@ function wire(main) {
     if ((b = t('[data-v2-ch-clear]'))) { const v = b.dataset.v2ChClear; if (v === 'ask') { D.confirmClear = true; paintTools(); const k = $('[data-v2-ch-clear="no"]', mainEl); if (k) k.focus(); } else { D.confirmClear = false; if (v === 'yes' && chart) chart.clearDrawings(); paintTools(); } return; }
     if (t('[data-v2-ch-textcancel]')) { D.textFor = null; paintTools(); }
   });
+  // the widget rail is one toolbar stop: arrows move along it, Home and End jump to its ends
+  main.addEventListener('keydown', (e) => {
+    const b = e.target.closest && e.target.closest('.chw-btn'); if (!b) return;
+    const all = $$('.chw-btn', mainEl), i = all.indexOf(b);
+    const j = { ArrowDown: i + 1, ArrowRight: i + 1, ArrowUp: i - 1, ArrowLeft: i - 1, Home: 0, End: all.length - 1 }[e.key];
+    if (j === undefined) return;
+    e.preventDefault();
+    const k = (j + all.length) % all.length;
+    all.forEach((x, n) => { x.tabIndex = n === k ? 0 : -1; });
+    all[k].focus();
+  });
   main.addEventListener('submit', (e) => {
+    if (e.target.closest('.chw') && W.onSubmit(e)) return;
     const f = e.target.closest('[data-v2-ch-text]'); if (!f) return;
     e.preventDefault();
     const done = D.textFor; D.textFor = null; done(String(f.t.value || '').trim()); paintTools();

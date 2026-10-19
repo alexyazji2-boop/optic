@@ -33,7 +33,7 @@ New products P1 to P12 (NEW-PRODUCTS.md) are outside this sequence. Each needs i
 - **Studies:** EMA clouds 9/21 and 21/50, MA Trend, TSO, VWAP, Keltner, Donchian, regression, stages, accumulation zones, auto trends, VBP, zones, sessions and insider marks.
 - **Chart chrome:** colours, legend, full screen and the navigator.
 - **Weekly structure** (Investing): candles, the levels menu and pan.
-- **The 18 chart widgets:** each becomes a v2 side panel, reached from a "Tools" drawer on the Chart page so the default chart stays uncluttered.
+- **The 18 chart widgets:** each becomes a v2 side panel. Built 2026-10-19 as a rail beside the plot rather than the "Tools" drawer first planned, because the owner asked where the side widgets had gone: the rail is where the classic app shows them. The default chart stays uncluttered because nothing is open until the reader opens it.
 
 **Acceptance:**
 - **Study values:** each study's series matches Classic's on the fixture day (`work/hover-fix/fixtures`) within 1e-6, compared numerically from both apps' computed arrays, not by eye.

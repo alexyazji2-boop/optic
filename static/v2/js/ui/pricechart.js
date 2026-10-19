@@ -1,6 +1,7 @@
 // The interactive price chart for the Chart page. SVG, redrawn on demand:
 // a price pane (candles, line or area, with averages, bands, levels, earnings
-// markers and the reader's drawings), volume, and optional RSI and MACD panes.
+// markers, what an open side widget asks for (`marks`, `lines`) and the reader's
+// drawings), volume, and optional RSI and MACD panes.
 //
 // Interaction: wheel or pinch to zoom, drag to pan, a crosshair that drives an
 // OHLC readout, and the keyboard (arrows move the crosshair, Shift+arrows pan,
@@ -77,7 +78,7 @@ export function marketStructure(bars, k = 3) {
 }
 
 export function createPriceChart(host, opts) {
-  const S = Object.assign({ style: 'candles', overlays: {}, panes: { volume: true, rsi: false, macd: false }, levels: {}, events: [], drawings: [], tool: 'select', intraday: false }, opts);
+  const S = Object.assign({ style: 'candles', overlays: {}, panes: { volume: true, rsi: false, macd: false }, levels: {}, events: [], marks: [], lines: [], drawings: [], tool: 'select', intraday: false }, opts);
   const bars = S.bars;
   const N = bars.length;
   const closes = bars.map((b) => b.c);
@@ -140,9 +141,12 @@ export function createPriceChart(host, opts) {
     }
     // levels
     const L = S.levels || {};
-    const hline = (v, cls, t) => { if (!Number.isFinite(v) || v < ps.lo || v > ps.hi) return ''; const y = ps.Y(v).toFixed(1); return `<line class="lv ${cls}" x1="0" x2="${W - layout.r}" y1="${y}" y2="${y}"/><text class="lv-t ${cls}" x="6" y="${(y - 4)}">${esc(t)}</text>`; };
+    // a label sits over its line at the left, or under it (`below`) or at the right (`end`) where lines run close
+    const hline = (v, cls, t, at = {}) => { if (!Number.isFinite(v) || v < ps.lo || v > ps.hi) return ''; const y = ps.Y(v).toFixed(1); return `<line class="lv ${cls}" x1="0" x2="${W - layout.r}" y1="${y}" y2="${y}"/><text class="lv-t ${cls}" x="${at.end ? W - layout.r - 6 : 6}" y="${at.below ? Number(y) + 14 : y - 4}"${at.end ? ' text-anchor="end"' : ''}>${esc(t)}</text>`; };
     if (S.overlays.fib && L.fib) (L.fib.levels || []).forEach((f) => { o += hline(f.price, 'fib', `Fib ${f.label}`); });
     if (S.overlays.sr && L.sr) L.sr.slice(0, 8).forEach((s) => { o += hline(s.price, s.role === 'support' ? 'sup' : 'res', `${s.role === 'support' ? 'Support' : 'Resistance'} ${num(s.price)}`); });
+    // lines a side widget asks for (the stop check's stop, buffered stop and round number)
+    (S.lines || []).forEach((l) => { o += hline(l.price, l.cls, l.label, l); });
     if (S.overlays.gex && L.gex) { const g = L.gex; if (g.call_wall) o += hline(g.call_wall, 'gex', `Call wall ${num(g.call_wall, 0)}`); if (g.put_wall) o += hline(g.put_wall, 'gex', `Put wall ${num(g.put_wall, 0)}`); if (g.flip) o += hline(g.flip, 'gex', `Gamma flip ${num(g.flip, 0)}`); }
     // bands and averages
     if (S.overlays.bb) o += `<path class="ov bb" d="${path(ind.bb.up, X, ps.Y)}"/><path class="ov bb" d="${path(ind.bb.dn, X, ps.Y)}"/><path class="ov bbm" d="${path(ind.bb.mid, X, ps.Y)}"/>`;
@@ -176,6 +180,13 @@ export function createPriceChart(host, opts) {
     });
     // earnings and other events
     (S.overlays.events === false ? [] : S.events).forEach((e) => { const i = idxOfT(e.t); if (i < from || i > to) return; const x = X(i).toFixed(1); o += `<g class="evm"><line x1="${x}" x2="${x}" y1="${pp.y0}" y2="${pp.y1}"/><text x="${x}" y="${pp.y1 - 4}" text-anchor="middle">${esc(e.kind)}</text><title>${esc(e.label)}</title></g>`; });
+    // fills a side widget asks for (the backtest's entries and exits): B under the bar's low, S over its high
+    (S.marks || []).forEach((m) => {
+      const i = idxOfT(m.t); if (i < from || i > to || !bars[i]) return;
+      const b = bars[i], x = X(i), r = 8, buy = m.kind === 'B';
+      const y = Math.max(pp.y0 + r, Math.min(pp.y1 - r, buy ? ps.Y(b.l) + r + 4 : ps.Y(b.h) - r - 4));
+      o += `<g class="tm ${m.tone === 'neg' ? 'neg' : 'pos'}"><circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${r}"/><text x="${x.toFixed(1)}" y="${(y + 4).toFixed(1)}" text-anchor="middle">${esc(m.kind)}</text><title>${esc(m.label)}</title></g>`;
+    });
     // drawings
     S.drawings.forEach((dr, k) => { o += drawing(dr, k === sel); });
     if (pending && pending.points.length && cross >= 0) o += drawing({ kind: pending.kind, points: [...pending.points, { t: bars[cross].t, p: crossY }] }, false, true);
