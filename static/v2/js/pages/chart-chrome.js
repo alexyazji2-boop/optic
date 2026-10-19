@@ -9,7 +9,8 @@ import { icon } from '../ui/icons.js';
 // keeps the light and dark themes' own colours and one who chose orange gets orange in both (classic CHART_COLORS_KEY)
 export const COLOURS_KEY = 'optic.chart.colors.v1';
 export const SLOTS = [['up', 'Candle up'], ['down', 'Candle down'], ['line', 'Line']];
-const DEFAULT = { up: '--c-pos', down: '--c-neg', line: '--c-chart-ink' };
+// the line's default follows the view, green up and red down as the classic line does; its swatch shows the up one
+const DEFAULT = { up: '--c-pos', down: '--c-neg', line: '--c-pos' };
 // the theme's own colours, then the classic chart's series colours (their dark values) under the classic picker's names
 const PRESETS = [['Green', '--c-pos'], ['Red', '--c-neg'], ['Gold', '--c-gold'], ['Blue', '#4a93ea'], ['Orange', '#d95926'], ['Teal', '#199e70'], ['Amber', '#c98500'], ['Pink', '#d55181'], ['Violet', '#9085e9'], ['Ink', '--c-ink'], ['Grey', '--c-ink-3']];
 

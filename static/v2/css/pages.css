@@ -488,6 +488,8 @@ table.chw-table { font-size: 13px; } table.chw-table th { padding: 6px 4px; font
 .pc .wick.u, .pc .body.u { stroke: var(--pc-up, var(--c-pos)); fill: var(--pc-up, var(--c-pos)); } .pc .wick.d, .pc .body.d { stroke: var(--pc-down, var(--c-neg)); fill: var(--pc-down, var(--c-neg)); }
 .pc .body.u { fill: color-mix(in srgb, var(--pc-up, var(--c-pos)) 85%, transparent); }
 .pc .pline { fill: none; stroke: var(--pc-line, var(--c-chart-ink)); stroke-width: 1.8; } .pc .area { fill: var(--pc-area, var(--c-area-top)); }
+.pc .pline.up { stroke: var(--pc-line, var(--pc-up, var(--c-pos))); } .pc .pline.dn { stroke: var(--pc-line, var(--pc-down, var(--c-neg))); }
+.pc .area.up { fill: var(--pc-area, color-mix(in srgb, var(--pc-up, var(--c-pos)) 18%, transparent)); } .pc .area.dn { fill: var(--pc-area, color-mix(in srgb, var(--pc-down, var(--c-neg)) 18%, transparent)); }
 .pc .vol { opacity: .28; } .pc .vol.u { fill: var(--pc-up, var(--c-pos)); } .pc .vol.d { fill: var(--pc-down, var(--c-neg)); }
 .pc .ov { fill: none; stroke-width: 1.4; } .pc .m1 { stroke: var(--c-gold); } .pc .m2 { stroke: #5b7fbf; } .pc .m3 { stroke: var(--c-ink-2); stroke-dasharray: 5 3; }
 .pc .e1 { stroke: #c27a2c; } .pc .e2 { stroke: #8a5fb8; } .pc .e3 { stroke: #3d8f8a; }

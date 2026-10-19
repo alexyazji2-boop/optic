@@ -243,8 +243,11 @@ export function createPriceChart(host, opts) {
       }
     } else {
       const d = path(closes, X, ps.Y);
-      if (S.style === 'area') o += `<path class="area" d="${d}L${X(to).toFixed(1)} ${pp.y1}L${X(from).toFixed(1)} ${pp.y1}Z"/>`;
-      o += `<path class="pline" d="${d}"/>`;
+      // green while the view ends at or above where it starts, red below, as the classic line is (a colour the
+      // reader chose wins, through --pc-line)
+      const way = bars[to] && bars[from] && bars[to].c >= bars[from].c ? 'up' : 'dn';
+      if (S.style === 'area') o += `<path class="area ${way}" d="${d}L${X(to).toFixed(1)} ${pp.y1}L${X(from).toFixed(1)} ${pp.y1}Z"/>`;
+      o += `<path class="pline ${way}" d="${d}"/>`;
     }
     // the last price, as the classic chart marks it: a dashed line across the plot and its value tagged on the axis
     // green or red with the day's move: on intraday bars against the last close of the session before
