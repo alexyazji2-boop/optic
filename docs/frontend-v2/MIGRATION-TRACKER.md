@@ -36,7 +36,7 @@ Kept current as each milestone lands. Source of truth for status: this file. The
 | C9 | Track record slots | Options and Investing | M4 | open |
 | C10 | Chart drawing tools | channel, Fib extension, pitchfork, arrow, ruler, risk box, position sizing, snap, moving | M1 | open |
 | C11 | Chart studies | 14 studies (EMA clouds through insider marks) | M1 | in progress: insider marks verified 2026-10-19 (arrows on the price with a box naming each trade, `ui/pricechart.js` and `pages/chart-widgets.js` `insiderMarks`, browser check at 1440 and 390); the other 13 are open |
-| C12 | Chart widgets and chrome | 18 widgets; colours, legend, full screen, navigator | M1 | in progress: the 18 widgets verified 2026-10-19 (`pages/chart-widgets.js`, `tests/test_v2_chart_widgets.py`, browser check at 1440, 1024 and 390 against the local server); colours, legend, full screen and navigator are open |
+| C12 | Chart widgets and chrome | 18 widgets; colours, legend, full screen, navigator | M1 | verified 2026-10-19: the 18 widgets (`pages/chart-widgets.js`, `tests/test_v2_chart_widgets.py`, commit 724b705) and the chrome: colours, the legend, full screen and the navigator (`pages/chart-chrome.js`, `ui/pricechart.js`, `tests/test_v2_chart_chrome.py`), each checked at 1440, 1024 and 390 against the local server, signed in (112 of 112), and the widget sweep at five sizes |
 | C13 | Valuation editors | DCF editor, saved models, RI, FFO, DDM, comps, SOTP, valuation Milo | M2 | open |
 | C14 | Earnings this week | the page with no symbol | M3 | in progress: the workspace panel lists this week and next with consensus and on-request implied moves; the standalone page and before-open/after-close timing are open |
 | C15 | Signal history | Alerts | M4 | open |
@@ -47,7 +47,7 @@ Kept current as each milestone lands. Source of truth for status: this file. The
 ## By milestone
 | Milestone | Rows | Status |
 |---|---|---|
-| M1 Advanced charting | I6, C10, C11, C12, C18 | open (MSB added as a new study, 2026-10-18; C18 verified 2026-10-19; C12's 18 widgets verified 2026-10-19, its chrome open) |
+| M1 Advanced charting | I6, C10, C11, C12, C18 | open (MSB added as a new study, 2026-10-18; C18 verified 2026-10-19; C12 verified 2026-10-19, its 18 widgets and its chrome) |
 | M2 Valuation editors | C13 | open |
 | M3 Research tools | I4, I5, C7 (not the chip), C8, C14 | open |
 | M4 Track record | C9, C15 (after the validation branch) | open |

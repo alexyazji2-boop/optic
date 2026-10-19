@@ -6,9 +6,13 @@
 // Interaction: wheel or pinch to zoom, drag to pan, a crosshair that drives an
 // OHLC readout, and the keyboard (arrows move the crosshair, Shift+arrows pan,
 // + and - zoom, Home and End jump, Delete removes the selected drawing).
+// Asked for by the Chart page (`names`, `navigator`): the classic chart's legend
+// over the plot's corner and its navigator, the whole history small under the
+// plot for moving along it.
 // Drawings are stored as {kind, points:[{t: epoch ms, p: price}]}, the classic
 // app's format, so they line up whatever the bar size.
 import { num, esc, compact } from '../core/format.js';
+import { icon } from './icons.js';
 
 /* ---------- indicators (the textbook definitions the classic app uses) ---------- */
 export const sma = (v, n) => v.map((_, i) => (i + 1 < n ? null : v.slice(i + 1 - n, i + 1).reduce((a, b) => a + b, 0) / n));
@@ -37,6 +41,25 @@ export function bollinger(v, n = 20, k = 2) {
   return { mid: m, up: m.map((x, i) => (x === null ? null : x + k * sd[i])), dn: m.map((x, i) => (x === null ? null : x - k * sd[i])) };
 }
 
+let legendSeq = 0;   // ids for each chart's legend body
+
+/**
+ * The navigator's window after a drag: `w` ({from, to}, bar indexes) moved by `d` bars in `mode` ('move' the
+ * whole window, 'from' or 'to' one edge), kept inside the N bars of the history and ten bars wide at least
+ * (as the zoom keeps it), or the whole history when it is shorter.
+ */
+export function navWindow(mode, w, d, N) {
+  const min = Math.min(10, N);
+  let a = w.from, span = w.to - w.from + 1;
+  if (mode === 'move') a = w.from + d;
+  else if (mode === 'from') { a = Math.max(0, Math.min(w.to - min + 1, w.from + d)); span = w.to - a + 1; }
+  else span = Math.min(N - 1, Math.max(w.from + min - 1, w.to + d)) - w.from + 1;
+  span = Math.max(min, Math.min(N, Math.round(span)));
+  const from = Math.max(0, Math.min(N - span, Math.round(a)));
+  return { from, to: from + span - 1 };
+}
+/** What the legend lists: the page's names (in its menu's order) that are on, the volume pane among them. */
+export const legendKeys = (names, overlays, panes) => Object.keys(names || {}).filter((k) => (k === 'volume' ? !!(panes || {}).volume : !!(overlays || {})[k]));
 const TOOL_POINTS = { hline: 1, vline: 1, text: 1, trend: 2, ray: 2, rect: 2, fibdraw: 2 };
 const FIB = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1];
 
@@ -93,8 +116,11 @@ export function createPriceChart(host, opts) {
   const undo = [];
 
   host.classList.add('pc');
-  host.innerHTML = `<div class="pc-read" aria-live="off"></div><svg class="pc-svg" tabindex="0" role="application" aria-roledescription="price chart"></svg><div class="pc-sr sr" aria-live="polite"></div>`;
-  const svg = host.querySelector('svg'), read = host.querySelector('.pc-read'), live = host.querySelector('.pc-sr');
+  // the legend sits over the plot's top-left corner (absolute, at its place in the flow); the navigator under it
+  host.innerHTML = `<div class="pc-read" aria-live="off"></div>${S.names ? '<div class="pc-leg" role="group" aria-label="Legend"></div>' : ''}<svg class="pc-svg" tabindex="0" role="application" aria-roledescription="price chart"></svg>${S.navigator ? '<svg class="pc-nav" tabindex="0" role="slider" aria-label="Bars shown, from the whole history" aria-valuemin="1"></svg>' : ''}<div class="pc-sr sr" aria-live="polite"></div>`;
+  const svg = host.querySelector('.pc-svg'), read = host.querySelector('.pc-read'), live = host.querySelector('.pc-sr');
+  // a chart that asked for neither (the Instrument page's) gets detached stand-ins, so nothing below needs a guard
+  const leg = host.querySelector('.pc-leg') || document.createElement('div'), nav = host.querySelector('.pc-nav') || document.createElementNS('http://www.w3.org/2000/svg', 'svg');
   // the box that names an insider trade under the pointer (or the keyboard's bar); `flags` are the arrows drawn
   const tipEl = document.createElement('div'); tipEl.className = 'pc-tip'; tipEl.setAttribute('role', 'tooltip'); tipEl.hidden = true; host.appendChild(tipEl);
   let flags = [], hoverP = null;
@@ -230,6 +256,7 @@ export function createPriceChart(host, opts) {
     svg.innerHTML = o;
     svg.setAttribute('aria-label', summary());
     readout();
+    legend(); drawNav();
   }
 
   function drawing(dr, selected, ghost) {
@@ -288,6 +315,120 @@ export function createPriceChart(host, opts) {
     return `${S.label || 'Price'}, ${to - from + 1} bars from ${fmtT(a.t)} to ${fmtT(b.t)}: from ${num(a.c)} to ${num(b.c)}, ${ch >= 0 ? 'up' : 'down'} ${num(Math.abs(ch), 1)} percent.${msb}${ins} Use the arrow keys to read each bar.`;
   }
   const redraw = () => { if (!raf) raf = requestAnimationFrame(draw); };
+
+  /* ---------- legend (the classic chart's; the page keeps it open or folded in optic.chart.legend.v1) ---------- */
+  // A row for each overlay on the price, keyed in the colour it is drawn in, with its value at the crosshair's
+  // bar (the last bar shown otherwise); folded, the count alone. The rows are rebuilt only when what they list
+  // changes, so a hover never replaces a button under the pointer; the values are written in place.
+  const LINES = { ma: [['sma20', 'm1', 'SMA 20'], ['sma50', 'm2', 'SMA 50'], ['sma200', 'm3', 'SMA 200']], ema: [['ema9', 'e1', 'EMA 9'], ['ema21', 'e2', 'EMA 21'], ['ema50', 'e3', 'EMA 50']] };
+  const ARROW = (cls, d) => `<svg class="pc-la ${cls}" viewBox="0 0 12 14" aria-hidden="true"><path d="${d}"/></svg>`;
+  const KEY = {
+    bb: '<i class="o2"></i>', fib: '<i class="kfib"></i>', sr: '<i class="ksup"></i><i class="kres"></i>', gex: '<i class="kgex"></i>',
+    msb: '<i class="kbull"></i><i class="kbear"></i>', events: '<b class="kE">E</b>', volume: '<i class="kvol"></i>',
+  };
+  const VALUE = { bb: 'bb', msb: 'msb' };
+  const lid = `pc-lb-${++legendSeq}`;
+  leg.innerHTML = `<button type="button" class="pc-lt" aria-controls="${lid}">${icon('chev').s}<span></span></button><div class="pc-lb" id="${lid}"></div>`;
+  const legT = leg.querySelector('.pc-lt'), legB = leg.querySelector('.pc-lb');
+  let legSig = '';
+  function legend() {
+    if (!S.names) return;
+    const keys = legendKeys(S.names, S.overlays, S.panes), open = !!S.legendOpen, nd = S.drawings.length, sig = JSON.stringify([keys, open, nd]);
+    if (sig !== legSig) {
+      legSig = sig;
+      const names = S.names || {}, n = keys.length;
+      legT.setAttribute('aria-expanded', String(open));
+      legT.title = `${open ? 'Fold' : 'Open'} the legend`;
+      legT.lastChild.textContent = `${n ? `${n} overlay${n === 1 ? '' : 's'}` : 'No overlays'}${nd ? `, ${nd} drawing${nd === 1 ? '' : 's'}` : ''}`;
+      legB.hidden = !open;
+      legB.innerHTML = !open ? '' : (keys.map((k) => {
+        const name = esc(names[k]);
+        const what = LINES[k] ? `<span class="pc-ln">${LINES[k].map(([id, c, l]) => `<span class="pc-li"><i class="${c}"></i>${l} <b data-lv="${id}"></b></span>`).join('')}</span>`
+          : k === 'ins' ? `<span class="pc-ln"><span class="pc-li">${name}</span><span class="pc-li">${ARROW('buy', 'M6 0 12 7H7.5v7h-3V7H0Z')}purchase</span><span class="pc-li">${ARROW('sell', 'M6 14 0 7h4.5V0h3v7H12Z')}sale</span></span>`
+            : `<span class="pc-ln"><span class="pc-li">${KEY[k] || ''}${name}${VALUE[k] ? ` <b data-lv="${VALUE[k]}"></b>` : ''}</span></span>`;
+        return `<div class="pc-lr">${what}<button type="button" class="pc-lx" data-pc-off="${esc(k)}" aria-label="Remove ${name}" title="Remove ${name}">${icon('close').s}</button></div>`;
+      }).join('') || '<p class="pc-le">Nothing on the price. Add an overlay from Indicators.</p>');
+    }
+    if (!open) return;
+    const i = cross >= 0 ? cross : to;
+    legB.querySelectorAll('[data-lv]').forEach((el) => {
+      const id = el.dataset.lv;
+      let t;
+      if (id === 'bb') t = Number.isFinite(ind.bb.up[i]) ? `upper ${num(ind.bb.up[i])}, lower ${num(ind.bb.dn[i])}` : 'not enough bars';
+      else if (id === 'msb') t = `${ind.msb.filter((m) => m.at >= from && m.at <= to).length} in view`;
+      else t = Number.isFinite(ind[id][i]) ? num(ind[id][i]) : 'not enough bars';
+      if (el.textContent !== t) el.textContent = t;
+    });
+  }
+  leg.addEventListener('click', (e) => {
+    const off = e.target.closest('[data-pc-off]');
+    if (off) { legT.focus(); if (S.onRemove) S.onRemove(off.dataset.pcOff); return; }
+    if (e.target.closest('.pc-lt')) { S.legendOpen = !S.legendOpen; if (S.onLegend) S.onLegend(S.legendOpen); legend(); }
+  });
+
+  /* ---------- navigator (the classic chart's overview strip) ---------- */
+  // The whole series drawn small under the plot, across the plot's own width, with the bars on screen marked.
+  // Drag the window to move along, drag an edge to show more or fewer bars, press outside it to jump there.
+  // The line is built once for a width; a move only redraws the window.
+  let navBase = null, ndrag = null;
+  const navGeo = () => { const x0 = layout.l, x1 = W - layout.r, w = Math.max(1, x1 - x0); return { x0, x1, w, X: (i) => x0 + (N > 1 ? i / (N - 1) : 0) * w, I: (x) => Math.round(((x - x0) / w) * (N - 1)) }; };
+  function drawNav() {
+    if (!S.navigator) return;
+    const NH = S.navH || 40, g = navGeo();
+    if (!navBase || navBase.W !== W || navBase.NH !== NH) {
+      let lo = Infinity, hi = -Infinity;
+      closes.forEach((c) => { if (c < lo) lo = c; if (c > hi) hi = c; });
+      const Y = (v) => NH - 4 - ((v - lo) / ((hi - lo) || 1)) * (NH - 10);
+      const step = N > g.w * 2 ? N / g.w : 1;   // about one point a pixel on a long history
+      let d = '';
+      for (let k = 0; k < N; k += step) { const i = Math.min(N - 1, Math.round(k)); d += `${d ? 'L' : 'M'}${g.X(i).toFixed(1)} ${Y(closes[i]).toFixed(1)}`; }
+      d += `L${g.X(N - 1).toFixed(1)} ${Y(closes[N - 1]).toFixed(1)}`;
+      navBase = { W, NH, s: `<rect class="nv-bg" x="${g.x0}" y="0.5" width="${g.w.toFixed(1)}" height="${NH - 1}" rx="4"/><path class="nv-area" d="${d}L${g.x1.toFixed(1)} ${NH - 1}L${g.x0} ${NH - 1}Z"/><path class="nv-line" d="${d}"/>` };
+      nav.setAttribute('viewBox', `0 0 ${W} ${NH}`); nav.setAttribute('width', W); nav.setAttribute('height', NH);
+    }
+    const a = g.X(from), b = Math.max(a + 6, g.X(to)), gh = Math.round(NH * 0.44), gy = ((NH - gh) / 2).toFixed(1);
+    nav.innerHTML = navBase.s
+      + `<rect class="nv-mask" x="${g.x0}" y="0.5" width="${Math.max(0, a - g.x0).toFixed(1)}" height="${NH - 1}"/><rect class="nv-mask" x="${b.toFixed(1)}" y="0.5" width="${Math.max(0, g.x1 - b).toFixed(1)}" height="${NH - 1}"/>`
+      + `<rect class="nv-win" x="${a.toFixed(1)}" y="1" width="${(b - a).toFixed(1)}" height="${NH - 2}" rx="3"/>`
+      + `<rect class="nv-grip" x="${(a - 2).toFixed(1)}" y="${gy}" width="4" height="${gh}" rx="2"/><rect class="nv-grip" x="${(b - 2).toFixed(1)}" y="${gy}" width="4" height="${gh}" rx="2"/>`;
+    nav.setAttribute('aria-valuemax', String(N)); nav.setAttribute('aria-valuenow', String(to + 1));
+    nav.setAttribute('aria-valuetext', `${fmtT(bars[from].t)} to ${fmtT(bars[to].t)}, ${to - from + 1} of ${N} bars`);
+  }
+  const setView = (v) => { from = v.from; to = v.to; redraw(); };
+  const navX = (e) => { const r = nav.getBoundingClientRect(); return (e.clientX - r.left) * (W / (r.width || 1)); };
+  function navMode(x, touch) {
+    const g = navGeo(), a = g.X(from), b = Math.max(a + 6, g.X(to)), grab = touch ? 16 : 8, inner = Math.min(grab, (b - a) / 3);
+    if (x > a + inner && x < b - inner) return 'move';
+    if (Math.abs(x - a) <= grab && Math.abs(x - a) <= Math.abs(x - b)) return 'from';
+    if (Math.abs(x - b) <= grab) return 'to';
+    return 'jump';
+  }
+  nav.addEventListener('pointerdown', (e) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    try { nav.setPointerCapture(e.pointerId); } catch (err) { /* a pointer the browser no longer tracks */ }
+    const x = navX(e), g = navGeo();
+    let mode = navMode(x, e.pointerType === 'touch');
+    // a press outside the window centres it there, and the same press can go on to drag it
+    if (mode === 'jump') { const half = Math.floor((to - from + 1) / 2); setView(navWindow('move', { from, to }, g.I(x) - half - from, N)); mode = 'move'; }
+    ndrag = { mode, x, from, to, per: (N - 1) / g.w };
+    nav.dataset.drag = mode;
+  });
+  nav.addEventListener('pointermove', (e) => {
+    const x = navX(e);
+    if (!ndrag) { nav.dataset.hover = navMode(x, e.pointerType === 'touch'); return; }
+    setView(navWindow(ndrag.mode, ndrag, Math.round((x - ndrag.x) * ndrag.per), N));
+  });
+  const navUp = () => { ndrag = null; delete nav.dataset.drag; };
+  nav.addEventListener('pointerup', navUp); nav.addEventListener('pointercancel', navUp);
+  // a slider for the keyboard: arrows move a tenth of the view, Page Up and Page Down a whole view, Home and End
+  // go to the ends, plus and minus show fewer or more bars
+  nav.addEventListener('keydown', (e) => {
+    const span = to - from + 1, step = Math.max(1, Math.round(span / 10)), k = e.key, mid = Math.round((from + to) / 2);
+    const d = { ArrowLeft: -step, ArrowDown: -step, ArrowRight: step, ArrowUp: step, PageDown: -span, PageUp: span, Home: -from, End: N - 1 - to }[k];
+    if (d !== undefined) { e.preventDefault(); setView(navWindow('move', { from, to }, d, N)); return; }
+    if (k === '+' || k === '=') { e.preventDefault(); zoom(1 / 1.25, mid); } else if (k === '-' || k === '_') { e.preventDefault(); zoom(1.25, mid); }
+  });
 
   /* ---------- view changes ---------- */
   function zoom(factor, anchor = null) {
@@ -379,6 +520,7 @@ export function createPriceChart(host, opts) {
     set(next) { Object.assign(S, next); if (next.tool) pending = null; redraw(); },
     zoom: (f) => zoom(f, cross >= 0 ? cross : to), fit, pan,
     view: () => ({ from, to }),
+    height: () => S.height, navH: () => S.navH || 40,
     /** The market structure breaks in view, newest last, for Milo and the page. */
     structure: () => ind.msb.filter((m) => m.at >= from && m.at <= to).map((m) => ({ direction: m.dir === 'bull' ? 'bullish' : 'bearish', swing_formed_on: fmtT(bars[m.from].t), swing_known_on: fmtT(bars[m.known].t), broke_on: fmtT(bars[m.at].t), close: bars[m.at].c, level: m.price })),
     undo() { const prev = undo.pop(); if (prev) { S.drawings = prev; if (S.onDrawings) S.onDrawings(prev); redraw(); } },

@@ -31,7 +31,7 @@ New products P1 to P12 (NEW-PRODUCTS.md) are outside this sequence. Each needs i
 **Scope:**
 - **Drawing tools:** channel, Fib extension, pitchfork, arrow, ruler, risk box and position sizing, plus snap and moving a drawing.
 - **Studies:** EMA clouds 9/21 and 21/50, MA Trend, TSO, VWAP, Keltner, Donchian, regression, stages, accumulation zones, auto trends, VBP, zones, sessions and insider marks.
-- **Chart chrome:** colours, legend, full screen and the navigator.
+- **Chart chrome:** colours, legend, full screen and the navigator. Built 2026-10-19 (C12, `pages/chart-chrome.js`), in the classic keys for the colours and the legend.
 - **Weekly structure** (Investing): candles, the levels menu and pan.
 - **The 18 chart widgets:** each becomes a v2 side panel. Built 2026-10-19 as a rail beside the plot rather than the "Tools" drawer first planned, because the owner asked where the side widgets had gone: the rail is where the classic app shows them. The default chart stays uncluttered because nothing is open until the reader opens it.
 

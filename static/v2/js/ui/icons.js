@@ -27,7 +27,11 @@ const P = {
   milo: '<path d="M4 5h16v11H9l-5 4z"/><path d="M8 10h8M8 13h5"/>',
   // the chart's tools (pages/chart.js): each button carries its name, so these stay decorative
   minus: '<path d="M5 12h14"/>',
-  fit: '<path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>',
+  // Fit is the whole range between two edges; the four corners are full screen, as in the classic chart
+  fit: '<path d="M4 5v14M20 5v14M8 12h8M10.5 9.5 8 12l2.5 2.5M13.5 9.5 16 12l-2.5 2.5"/>',
+  expand: '<path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>',
+  shrink: '<path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/>',
+  palette: '<path d="M12 3.5a8.5 8.5 0 1 0 0 17c1.2 0 1.9-.8 1.9-1.8 0-1.2-1.1-1.6-1.1-2.8 0-1 .8-1.8 1.9-1.8h2.4a3.4 3.4 0 0 0 3.4-3.4c0-4-3.8-7.2-8.5-7.2Z"/><circle cx="7.6" cy="11.2" r="1.1"/><circle cx="10.4" cy="7.4" r="1.1"/><circle cx="15" cy="7.6" r="1.1"/>',
   candles: '<path d="M7 3.5v3.5M7 17v3.5M17 6v4M17 18v2.5"/><rect x="5" y="7" width="4" height="10" rx="1"/><rect x="15" y="10" width="4" height="8" rx="1"/>',
   lineChart: '<path d="M3 17l5-6 4 3 8-9"/>',
   area: '<path d="M3 17l5-6 4 3 8-9v15H3z"/>',

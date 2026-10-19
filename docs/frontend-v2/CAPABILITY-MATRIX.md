@@ -76,7 +76,7 @@ Row-level detail per page is in COVERAGE.md.
 | Chart: insider trades on the price | Implemented and tested | C11's insider marks, 2026-10-19: a green arrow under the bar for a purchase, a red one over it for a sale (option exercises, grants and gifts left out, as in Classic), one arrow per side per bar; pointing at or tapping one, or reaching its bar with the keyboard, opens a box naming each trade (who, role, shares, value, the filing's own words) and the screen-reader line reads it. From the ticker payload's filings of the last two years (at most 200; it kept the 12 latest until 2026-10-19, about a month): 81 for AAPL, Nov 2024 to Oct 2026, which the Insiders panel states. The longer list is shared with Classic: its chart's insider marks go back as far, and its Financials table lists every row in its scroll box; the watches still read the 12 latest (`tests/test_insider_history.py`). The Insider trades overlay, on by default, in Indicators and the Insiders panel. `tests/test_v2_chart_widgets.py`; browser check on AAPL (sales) and FUL (purchases) at 1440 and 390 |
 | Chart studies: EMA clouds, MA Trend, TSO, VWAP, Keltner, Donchian, regression, stages, accumulation, auto trends, VBP, zones, sessions | Classic-only | M1 |
 | Chart: the 18 side widgets (Watch, Alerts, News, Analysts, Season, Notes, Insiders, Reports, Checklist, Stop check, Options, Key levels, Stats, Patterns, Pairs, Backtest, Trading, Learn) | Implemented and tested | C12, carried over 2026-10-19 (`pages/chart-widgets.js`): a rail beside the plot with the classic names, order and marks; any number open on a wide screen, one at a time on a phone; nothing open to start, the open ones remembered. Nine read the ticker payload the page already loads (Analysts and Stop check also ask a free endpoint once open); Alerts, Season, Pairs, Backtest and Trading ask their own free endpoints once open; Watch uses the watchlists; Notes, Checklist and Learn ask the server nothing. The backtest's trades and the stop check's lines are drawn on the price. Inputs kept in the classic keys. `tests/test_v2_chart_widgets.py` (each widget drawn from a real AAPL payload, trade placement by day, minute and week); browser check at 1440, 1024 and 390 against the local server (keyboard along the rail, focus kept through a redraw, no sideways scroll), and the sweep with all 18 open on AAPL and SPY at 1440, 1280, 768, 390 and 375 × 549: no console errors, raw text, small text, em dashes or overflow, and the launch audit at 0 faults |
-| Chart: colours, legend, full screen, navigator | Classic-only | M1 |
+| Chart: colours, legend, full screen, navigator | Implemented and tested | C12's chrome, carried over 2026-10-19 (`pages/chart-chrome.js`, drawn by `ui/pricechart.js`): Colours in the toolbar (candle up, candle down and the line, with presets, any colour from the wheel, a note under 3:1 against the chart background, Default and Reset), kept in the classic key `optic.chart.colors.v1`; the legend on the plot's corner, folded to its count unless opened (`optic.chart.legend.v1`, shared), a row per overlay with its value at the crosshair and a cross that takes it off; full screen (the page takes the window, the browser's own full screen on top where it is allowed; Escape, the button or leaving the page goes back); the navigator under the plot (drag the window, drag an edge, press outside to jump; a slider for the keyboard). `tests/test_v2_chart_chrome.py`; browser check at 1440, 1024 and 390 against the local server, signed in, with real pointer, touch and key events (112 of 112, no sideways scroll after any step); the widget sweep on AAPL at 1440, 1280, 768, 390 and 375 × 549, and again on AAPL and SPY with the legend open and a chosen colour, and in full screen: no faults |
 | Investing: long-term view, return and risk, drawdown, valuation history, fair value, scenarios (saved, shared with Classic) | Implemented and tested | v2_check, plus the round trip |
 | Weekly structure | Incomplete | Candle style, levels menu and pan: M1 |
 | DCF editor, saved models, RI, FFO, DDM, comps, SOTP, valuation Milo | Classic-only | v2 shows the summary. Editing: M2 |
@@ -113,16 +113,15 @@ Lines in this matrix:
 
 | Class | Lines |
 |---|---|
-| Implemented and tested (including partly tested) | 40 |
+| Implemented and tested (including partly tested) | 41 |
 | Incomplete | 12 |
-| Classic-only | 16 |
+| Classic-only | 15 |
 
 Many lines are groups. Counted one by one, the Classic-only capabilities are:
 - 7 chart drawing tools, plus snap and moving a drawing;
 - 13 chart studies (insider marks moved across on 2026-10-19);
-- 4 pieces of chart chrome: colours, legend, full screen, navigator;
 - 8 valuation editors and methods;
 - 6 Milo features;
-- 11 others (research tools, Home extras, alerts). The free chart read (C18) moved across on 2026-10-19, and so did the 18 chart widgets (C12) with the Learn widget (part of C17).
+- 11 others (research tools, Home extras, alerts). The free chart read (C18) moved across on 2026-10-19, and so did the 18 chart widgets with the Learn widget (part of C17) and the chart's colours, legend, full screen and navigator (all of C12).
 
 All of them are scheduled in MIGRATION.md.

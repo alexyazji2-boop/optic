@@ -7,7 +7,10 @@
 // page opens on hourly bars. Drawings are kept per symbol in the classic key,
 // so a line drawn here shows there and the other way round. The view choices
 // are a setting of this browser (optic.v2.chart.v1). The side widgets, from the
-// rail beside the plot, are in chart-widgets.js.
+// rail beside the plot, are in chart-widgets.js. The classic chart's chrome is in
+// chart-chrome.js: colours (optic.chart.colors.v1) and the legend's open or folded
+// state (optic.chart.legend.v1) in the classic keys, and full screen; the legend
+// and the navigator under the plot are drawn by ui/pricechart.js.
 import { $, $$, html, render as draw, isPhone, announce, reducedMotion } from '../core/dom.js';
 import { CLASSIC } from '../core/classic.js';
 import * as api from '../core/api.js';
@@ -23,6 +26,7 @@ import { toast } from '../ui/toast.js';
 import { createPriceChart } from '../ui/pricechart.js';
 import { core, header, tabs, isFund } from './dossier-frame.js';
 import * as W from './chart-widgets.js';
+import * as C from './chart-chrome.js';
 
 const VIEW_KEY = 'optic.v2.chart.v1';
 const DRAW_KEY = 'optic.chart.drawings.v2';
@@ -133,10 +137,11 @@ function toolbar() {
         <label class="ws-sel menu-help">Swing strength <select data-v2-ch-msbk aria-label="Market structure swing strength">${[3, 5, 10].map((k) => html`<option value="${k}" ${V.msbK === k ? 'selected' : ''}>${k} bars each side${k === 3 ? ', more breaks' : k === 10 ? ', fewer' : ''}</option>`)}</select></label>` : ''}`)}
       <p class="t-label">Panes</p>${PANES.map(([k, l]) => html`<label class="check"><input type="checkbox" data-v2-ch-pane="${k}" ${V.panes[k] ? 'checked' : ''}> <span>${l}</span></label>`)}
     </div></details>
+    <details class="menu ch-colours"><summary class="btn btn-sm" aria-label="Chart colours" title="Colour of the candles and the line">${icon('palette')}<span class="ch-lbl">Colours</span></summary><div class="menu-body ch-cmenu" id="ch-cmenu"></div></details>
     <button type="button" class="btn btn-sm" data-v2-ch-read aria-pressed="${!!V.read}" aria-controls="ch-read">${icon('trend')}<span class="ch-lbl">Chart read</span></button>
     <button type="button" class="btn btn-sm ch-drawtoggle" data-v2-ch-drawtoggle aria-expanded="${drawOpen()}" aria-controls="ch-draw">${icon('pencil')}<span class="ch-lbl">Draw</span></button>
     <span class="spacer"></span>
-    <div class="ch-zoom" role="group" aria-label="Zoom"><button type="button" class="ch-tool" data-v2-ch-zoom="out" aria-label="Zoom out" title="Zoom out">${icon('minus')}</button><button type="button" class="ch-tool" data-v2-ch-zoom="in" aria-label="Zoom in" title="Zoom in">${icon('plus')}</button><button type="button" class="ch-tool" data-v2-ch-fit aria-label="Fit the whole range" title="Fit">${icon('fit')}</button></div>
+    <div class="ch-zoom" role="group" aria-label="Zoom"><button type="button" class="ch-tool" data-v2-ch-zoom="out" aria-label="Zoom out" title="Zoom out">${icon('minus')}</button><button type="button" class="ch-tool" data-v2-ch-zoom="in" aria-label="Zoom in" title="Zoom in">${icon('plus')}</button><button type="button" class="ch-tool" data-v2-ch-fit aria-label="Fit the whole range" title="Fit the whole range">${icon('fit')}</button>${C.maxButton()}</div>
   </div>
   ${D.confirmClear ? html`<p class="confirm ch-confirm" role="alert">Remove all ${D.drawings.length} drawings on ${D.sym}? <button type="button" class="btn btn-sm" data-v2-ch-clear="yes">Remove</button><button type="button" class="btn btn-sm" data-v2-ch-clear="no">Keep them</button></p>` : ''}
   ${D.textFor ? html`<form class="cluster textform" data-v2-ch-text><label class="field field-sm"><span class="sr">Note text</span><input name="t" maxlength="120" placeholder="Note on the chart" required></label><button class="btn btn-sm btn-primary" type="submit">Place it</button><button class="btn btn-sm" type="button" data-v2-ch-textcancel>Cancel</button></form>` : ''}`;
@@ -162,20 +167,105 @@ function paintChart() {
   const iv = INTERVALS.find((x) => x.key === V.interval);
   host.innerHTML = '<div class="pc-host"></div>';
   if (chart) chart.destroy();
-  const top = host.getBoundingClientRect().top + window.scrollY;
-  const room = Math.round(window.innerHeight - top - 40);   // 40: the reading line above the plot
   chart = createPriceChart(host.firstChild, {
     bars: D.bars, intraday: !!iv.intraday, msbK: V.msbK || 5, style: V.style, overlays: V.overlays, panes: V.panes, levels: levels(), events: events(),
     drawings: D.drawings, tool: V.tool, window: windowBars(), label: `${D.sym}, ${iv.label} bars`, ...extras(),
-    height: isPhone() ? Math.round(Math.max(300, Math.min(room, window.innerHeight * 0.62))) : Math.round(Math.max(400, Math.min(room, 900))),
+    height: plotHeight(host),
     onDrawings: (list) => { D.drawings = list; saveDrawings(D.sym, list); paintTools(); },
     askText: (dr, done) => { D.textFor = done; paintTools(); const i = $('[data-v2-ch-text] input', mainEl); if (i) i.focus(); },
     onEscape: () => { V.tool = 'select'; chart.set({ tool: 'select' }); paintTools(); },
+    // the legend names what the Indicators menu lists, in its order; folded or open is kept in the classic key
+    names: LEGEND_NAMES, legendOpen: V.legend, navigator: true, onLegend: (open) => { V.legend = open; C.saveLegend(open); }, onRemove: removeOverlay, navH: navH(),
   });
-  const stage = $('.ch-stage', mainEl); if (stage) stage.style.setProperty('--ch-h', `${host.offsetHeight}px`);
+  // the reading line above the plot is one line or two: measured now it is drawn, the plot takes what is left
+  refit();
+  syncHeight();
   const n = $('#ch-note', mainEl); if (n) n.textContent = clean(D.note || '');
-  const k = $('#ch-key', mainEl);
-  if (k) draw(k, html`${V.overlays.ma ? html`<span><i class="m1"></i>SMA 20</span><span><i class="m2"></i>SMA 50</span><span><i class="m3"></i>SMA 200</span>` : ''}${V.overlays.ema ? html`<span><i class="e1"></i>EMA 9</span><span><i class="e2"></i>EMA 21</span><span><i class="e3"></i>EMA 50</span>` : ''}${V.overlays.bb ? html`<span><i class="o2"></i>Bollinger 20, 2</span>` : ''}${V.overlays.events ? html`<span><b class="kE">E</b> earnings</span>` : ''}`);
+}
+// The plot fills the window under the toolbar, less the reading line above it (40 until it is drawn) and the
+// navigator under it; in full screen all of what is left, less the page's padding under the navigator.
+const navH = () => (isPhone() ? 44 : 40);
+function plotHeight(host) {
+  const svg = $('.pc-svg', host), nav = navH() + 6;
+  const top = (svg ? svg.getBoundingClientRect().top : host.getBoundingClientRect().top + 40) + window.scrollY;
+  const room = Math.round(window.innerHeight - top - nav - 8);
+  if (C.isMax()) return Math.max(isPhone() ? 240 : 320, room - 14);
+  return isPhone() ? Math.round(Math.max(280, Math.min(room, window.innerHeight * 0.62 - nav))) : Math.round(Math.max(340, Math.min(room, 900)));
+}
+// the side widgets are no taller than the chart beside them (--ch-h, in pages.css)
+function syncHeight() { const host = $('#ch-body', mainEl), stage = $('.ch-stage', mainEl); if (host && stage) stage.style.setProperty('--ch-h', `${host.offsetHeight}px`); }
+// a new height for the chart it has, keeping the bars in view (full screen in and out, a window resized in it)
+let fitT = 0;
+function refit() {
+  if (fitT) return;
+  fitT = requestAnimationFrame(() => {
+    fitT = 0;
+    const host = $('#ch-body', mainEl); if (!live || !chart || !host) return;
+    const h = plotHeight(host);
+    if (h !== chart.height() || navH() !== chart.navH()) chart.set({ height: h, navH: navH() });
+    requestAnimationFrame(syncHeight);
+  });
+}
+const LEGEND_NAMES = Object.fromEntries([...OVERLAYS, ['volume', 'Volume']]);
+// the legend's cross: the overlay (or the volume pane) off, as unticking it in Indicators does
+function removeOverlay(k) {
+  if (k === 'volume') V.panes.volume = false; else V.overlays[k] = false;
+  saveView(); paintTools(); if (chart) chart.set({ overlays: V.overlays, panes: V.panes });
+  if (k === 'sr') repaintWidget('levels'); if (k === 'ins') repaintWidget('insiders');
+  announce(`${LEGEND_NAMES[k]} taken off the chart.`);
+}
+
+/* ---------------- colours and full screen (chart-chrome.js) ---------------- */
+const chartBg = () => C.surface($('#ch-body', mainEl) || mainEl);
+function applyColours() { C.applyColours($('.chart-page', mainEl), V.colours); }
+// the menu's rows, drawn when it opens and again after a choice (pressed states, Default, Reset), the focus
+// kept on the control that had it
+function paintColours(focus) {
+  const m = $('#ch-cmenu', mainEl); if (!m) return;
+  draw(m, C.colourRows(V.colours, chartBg()));
+  const f = focus && $(focus, m); if (f) f.focus();
+}
+function pickColour(slot, value, focus) {
+  V.colours = value === null ? C.resetColours() : C.setColour(slot, value);
+  // the rows are drawn again once this click has finished: drawn at once, the pressed button would be gone from
+  // the page by the time the click reaches the rule that closes a menu on a click outside it
+  applyColours(); setTimeout(() => { if (live) paintColours(focus); }, 0);
+}
+// a menu that would run past the right of the window opens to the left of its button instead
+function placeMenu(d) {
+  const m = d.querySelector('.menu-body'); if (!m || isPhone()) return;
+  m.style.left = ''; m.style.right = '';
+  if (m.getBoundingClientRect().right > document.documentElement.clientWidth - 8) { m.style.left = 'auto'; m.style.right = '0'; }
+}
+function paintMax() {
+  const b = $('[data-v2-ch-max]', mainEl); if (!b) return;
+  const on = C.isMax();
+  b.setAttribute('aria-pressed', String(on)); b.title = C.maxTitle(on); draw(b, icon(on ? 'shrink' : 'expand'));
+}
+function toggleMax(on) {
+  C.setMax(on);
+  if (on) window.scrollTo({ top: 0, behavior: 'instant' });
+  paintMax(); refit();
+  announce(on ? 'Full screen. Escape or the full screen button goes back.' : 'Out of full screen.');
+}
+// leaving by a way the page did not choose (Escape or the browser's own exit in its full screen) takes the class too
+function onFullChange() { if (!C.nativeFull() && C.isMax()) { C.setMax(false, false); paintMax(); } refit(); }
+// Escape leaves full screen, unless it is already cancelling something: a drawing, a note, a menu or a dialog.
+// Seen on the way down (capture), before the chart's own Escape puts the tool back to select.
+function onMaxKey(e) {
+  if (e.key !== 'Escape' || !C.isMax() || C.nativeFull()) return;
+  if (V.tool !== 'select' || D.textFor || D.confirmClear || document.querySelector('details.menu[open]')) return;
+  if ([...document.querySelectorAll('[aria-modal="true"]')].some((el) => el.getClientRects().length)) return;
+  toggleMax(false);
+  // after the chart's own Escape, which draws the toolbar again
+  setTimeout(() => { const b = $('[data-v2-ch-max]', mainEl); if (b) b.focus(); }, 0);
+}
+const onResize = () => { if (C.isMax()) refit(); };
+// the classic app, or this page in another tab, changed the colours or the legend
+function onStorage(e) {
+  if (!live) return;
+  if (e.key === C.COLOURS_KEY || e.key === null) { V.colours = C.readColours(); applyColours(); paintColours(); }
+  if (e.key === C.LEGEND_KEY || e.key === null) { V.legend = C.legendOpen(); if (chart) chart.set({ legendOpen: V.legend }); }
 }
 function paintTools() { const h = $('#ch-tools', mainEl); if (h) draw(h, toolbar()); const d = $('#ch-draw', mainEl); if (d) draw(d, drawbar()); }
 
@@ -186,12 +276,11 @@ function paint() {
       <div class="ch-stage"><div id="ch-draw">${drawbar()}</div><div id="ch-body"></div>
         <div class="ch-wrail" id="ch-wrail">${W.rail(shown(), isPhone())}</div>
         <div class="ch-side" id="ch-side" ${V.read || shown().length ? '' : 'hidden'}><aside class="ch-read" id="ch-read" aria-labelledby="cr-h" ${V.read ? '' : 'hidden'}></aside></div></div>
-      <p class="legend-line" id="ch-key" aria-label="Key"></p>
       <div class="split ch-foot"><p class="asof" id="ch-note"></p>
         <div class="cluster">${miloButton('Explain this chart', { ask: `Explain the ${D.sym} chart: the trend, support, resistance, momentum, volume and risk, and what would invalidate the read.`, context: `${D.sym} Dossier, Chart`, symbol: D.sym })}<a class="textlink" href="${CLASSIC}#/${D.sym}/chart">More chart tools in the current app ${icon('out')}</a></div></div>
-      <p class="asof">Wheel or pinch to zoom, drag to move along, arrows to read each bar, plus and minus to zoom. Studies such as stages, MA Trend and volume by price, the other drawing tools, chart colours and full screen are in the current app.</p>
+      <p class="asof">Wheel or pinch to zoom, drag the chart or the strip under it to move along, arrows to read each bar, plus and minus to zoom. Studies such as stages, MA Trend and volume by price, and the other drawing tools, are in the current app.</p>
     </section>`);
-  paintChart(); paintRead(); syncSide();
+  applyColours(); paintChart(); paintRead(); syncSide();
 }
 // The chart read (ui/chartread.js), from the daily technicals this page already loads.
 function paintRead() {
@@ -267,7 +356,7 @@ const phase = () => ((D.session || {}).prices || {}).phase || ((D.session || {})
 export async function render(main, route) {
   live = true; mainEl = main;
   const sym = route.symbol;
-  V = Object.assign(readView(), { tool: 'select' });
+  V = Object.assign(readView(), { tool: 'select', colours: C.readColours(), legend: C.legendOpen() });
   // #/SYM/chart?interval=daily&range=1Y&show=ov:ma (from Milo's chart and study cards)
   const pr = route.params || {};
   if (INTERVALS.some((x) => x.key === pr.interval)) V.interval = pr.interval;
@@ -282,6 +371,9 @@ export async function render(main, route) {
   if (unsub) unsub();
   unsub = store.subscribe((what) => { if (what === 'lists') repaintWidget('watchlist'); });
   if (!phoneMq) { phoneMq = matchMedia('(max-width: 860px)'); phoneMq.addEventListener('change', onPhoneChange); }
+  document.addEventListener('keydown', onMaxKey, true);
+  ['fullscreenchange', 'webkitfullscreenchange'].forEach((n) => document.addEventListener(n, onFullChange));
+  window.addEventListener('resize', onResize); window.addEventListener('storage', onStorage);
   store.pushRecent(sym);
   document.title = `${sym} Chart, Optic`;
   provideContext(() => ({ view: 'chart', ticker: sym, chart: { symbol: sym, interval: V.interval, range: V.range, drawings: D.drawings.length, bars: (D.bars || []).length, market_structure_breaks: V.overlays.msb && chart ? { method: `Swing high or low with ${V.msbK || 5} bars either side. The swing forms at its own bar but is only known once the ${V.msbK || 5} bars after it have closed; a close beyond the latest known, unbroken swing is a break. Earlier breaks never change as new bars arrive.`, in_view: chart.structure().slice(-6) } : undefined }, technicals: D.t ? { bias: D.t.technicals.bias, rsi: D.t.technicals.rsi, macd: D.t.technicals.macd, support_resistance: D.t.technicals.support_resistance, moving_averages: D.t.technicals.moving_averages } : null, widgets: W.context(shown()) }));
@@ -299,10 +391,14 @@ function afterTicker() { shown().forEach((id) => { if (W.FROM_TICKER.includes(id
 function onPhoneChange() {
   if (!live) return;
   const r = $('#ch-wrail', mainEl); if (r) draw(r, W.rail(shown(), isPhone()));
-  syncSide(); paintExtras();
+  syncSide(); paintExtras(); refit();
 }
 export function dispose() {
   live = false; W.flush(mainEl || document);
+  if (C.isMax()) C.setMax(false);
+  document.removeEventListener('keydown', onMaxKey, true);
+  ['fullscreenchange', 'webkitfullscreenchange'].forEach((n) => document.removeEventListener(n, onFullChange));
+  window.removeEventListener('resize', onResize); window.removeEventListener('storage', onStorage);
   if (unsub) { unsub(); unsub = null; }
   if (phoneMq) { phoneMq.removeEventListener('change', onPhoneChange); phoneMq = null; }
   if (chart) { chart.destroy(); chart = null; }
@@ -314,6 +410,7 @@ function wire(main) {
   main.addEventListener('change', (e) => {
     const el = e.target;
     if (el.closest('.chw') && W.onChange(e)) return;
+    if (el.matches('[data-v2-cc-pick]')) { pickColour(el.dataset.v2CcPick, el.value, `[data-v2-cc-pick="${el.dataset.v2CcPick}"]`); return; }
     if (el.matches('[data-v2-ch-iv]')) { V.interval = el.value; if (V.interval === 'weekly' && !RANGES.weekly[V.range]) V.range = '1Y'; paintTools(); loadBars(); return; }
     if (el.matches('[data-v2-ch-msbk]')) { V.msbK = Number(el.value) || 5; saveView(); paintChart(); return; }
     if (el.matches('[data-v2-ch-ov]')) { V.overlays[el.dataset.v2ChOv] = el.checked; saveView(); if (chart) chart.set({ overlays: V.overlays }); if (el.dataset.v2ChOv === 'sr') repaintWidget('levels'); if (el.dataset.v2ChOv === 'ins') repaintWidget('insiders'); return; }
@@ -331,6 +428,10 @@ function wire(main) {
     if ((b = t('[data-v2-ch-style]'))) { V.style = b.dataset.v2ChStyle; saveView(); paintTools(); if (chart) chart.set({ style: V.style }); return; }
     if ((b = t('[data-v2-ch-zoom]'))) { if (chart) chart.zoom(b.dataset.v2ChZoom === 'in' ? 0.75 : 1.33); return; }
     if (t('[data-v2-ch-fit]')) { if (chart) chart.fit(); return; }
+    if (t('[data-v2-ch-max]')) { toggleMax(!C.isMax()); return; }
+    if ((b = t('[data-v2-cc]'))) { pickColour(b.dataset.v2Cc, b.dataset.v2CcV, `[data-v2-cc="${b.dataset.v2Cc}"][data-v2-cc-v="${b.dataset.v2CcV}"]`); return; }
+    if ((b = t('[data-v2-cc-clear]'))) { pickColour(b.dataset.v2CcClear, '', `[data-v2-cc-pick="${b.dataset.v2CcClear}"]`); return; }
+    if (t('[data-v2-cc-reset]')) { pickColour(null, null, '[data-v2-cc]'); return; }
     if (t('[data-v2-ch-drawtoggle]')) { D.drawOpen = !drawOpen(); paintTools(); const f = $('#ch-draw .ch-tool', mainEl); if (D.drawOpen && f) f.focus(); return; }
     if ((b = t('[data-v2-tool]'))) { V.tool = b.dataset.v2Tool; paintTools(); if (chart) { chart.set({ tool: V.tool }); } if (V.tool !== 'select') toast(`${TOOLS.find((x) => x[0] === V.tool)[1]}: click the chart to place it. Escape cancels.`); return; }
     if (t('[data-v2-ch-undo]')) { if (chart) chart.undo(); return; }
@@ -349,6 +450,11 @@ function wire(main) {
     all.forEach((x, n) => { x.tabIndex = n === k ? 0 : -1; });
     all[k].focus();
   });
+  main.addEventListener('input', (e) => {
+    const p = e.target.closest && e.target.closest('[data-v2-cc-pick]'); if (!p) return;
+    V.colours = Object.assign({}, V.colours, { [p.dataset.v2CcPick]: p.value }); applyColours(); C.liveRow(p, chartBg());
+  });
+  main.addEventListener('toggle', (e) => { if (e.target.matches && e.target.matches('details.ch-colours') && e.target.open) { paintColours(); placeMenu(e.target); } }, true);
   main.addEventListener('submit', (e) => {
     if (e.target.closest('.chw') && W.onSubmit(e)) return;
     const f = e.target.closest('[data-v2-ch-text]'); if (!f) return;
