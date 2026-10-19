@@ -12,7 +12,7 @@ import { num, compact, clean, shortDate, isNum } from '../core/format.js';
 import { signedBars } from '../ui/bars.js';
 import { mountCharts } from '../ui/chart.js';
 import { provideContext } from '../ui/milo.js';
-import { groupTabs } from './tabs.js';
+import { sectionHead } from './tabs.js';
 
 const KEY = 'optic.paper.v1', MAX = 50, KEEP_CLOSED = 200, R_SHOWN = 30, EXPIRY_DAYS = 7, CONCENTRATED = 0.4;
 
@@ -168,7 +168,7 @@ function recordBlock() {
 function paint() {
   if (!live) return;
   const a = document.activeElement, keep = a && mainEl.contains(a) ? (a.name ? `[name="${a.name}"]` : a.id ? `#${a.id}` : null) : null, caret = a && 'selectionStart' in a ? a.selectionStart : null;
-  draw(mainEl, html`<header class="page-head"><h1 class="t-display-m">Paper Desk</h1>${groupTabs('portfolio', 'paper')}
+  draw(mainEl, html`<header class="page-head">${sectionHead('portfolio', 'paper')}
       <p class="section-sub">Your own book, entered by hand and priced by the terminal. It lives in this browser${store.signedIn() ? ', kept apart for your account and put away when you sign out' : ''}: no server copy, and no connection to Optic Portfolio.</p></header>
     ${healthBlock()}${ticketForm()}${openTable()}${recordBlock()}`);
   if (keep) { const el = mainEl.querySelector(keep); if (el) { el.focus({ preventScroll: true }); if (caret !== null && 'setSelectionRange' in el) { try { el.setSelectionRange(caret, caret); } catch (e) { /* number inputs */ } } } }

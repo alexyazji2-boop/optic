@@ -12,7 +12,7 @@ import { skeleton, failed } from '../ui/states.js';
 import { xyChart } from '../ui/xychart.js';
 import { mountCharts } from '../ui/chart.js';
 import { provideContext } from '../ui/milo.js';
-import { groupTabs } from './tabs.js';
+import { sectionHead } from './tabs.js';
 
 const KEY = 'optic.roth.inputs';
 const DEFAULTS = { years: 30, risk: 'balanced', annual: 7000, holdings: '', stock_candidates: '' };
@@ -110,7 +110,7 @@ function sections(d) {
 function paint() {
   if (!live) return;
   const d = D.d, y = window.scrollY;
-  draw(mainEl, html`<header class="page-head"><h1 class="t-display-m">Retirement</h1>${groupTabs('portfolio', 'roth')}
+  draw(mainEl, html`<header class="page-head">${sectionHead('portfolio', 'roth')}
       <p class="section-sub">A rules-based model allocation to compare your own against. Not retirement or tax advice.</p></header>
     <section class="section first" aria-labelledby="rm-h"><h2 class="t-h2" id="rm-h">Roth IRA model allocation</h2><p class="section-sub">Set your horizon and risk tolerance. The model is derived from those, not assumed.</p>
       ${form()}${d && d.limit_note ? html`<p class="asof">${clean(d.limit_note)}</p>` : ''}

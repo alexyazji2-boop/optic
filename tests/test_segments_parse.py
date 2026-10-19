@@ -147,7 +147,7 @@ def _cells(facts, metric, axis):
 def test_a_segment_qualified_as_an_operating_segment_is_kept(parsed):
     """The 20 revenue facts that were being thrown away."""
     rev = _rows(parsed, "revenue")
-    assert rev["Datacenter And AI"] == 6_260_000_000
+    assert rev["Datacenter and AI"] == 6_260_000_000
     assert rev["Intel Foundry"] == 5_760_000_000
 
 
@@ -156,7 +156,7 @@ def test_the_reconciling_lines_become_rows_of_their_own(parsed):
     consolidated total, which is why the reference terminals print
     "Eliminations from revenue" as a row."""
     assert _rows(parsed, "revenue")["Intersegment Elimination"] == -5_480_000_000
-    assert _rows(parsed, "operating_income")["Corporate Non Segment"] == -1_420_000_000
+    assert _rows(parsed, "operating_income")["Corporate, not in a segment"] == -1_420_000_000
 
 
 # ------------------------------------------------------ and what stays out
@@ -185,7 +185,7 @@ def test_a_fair_value_hierarchy_is_still_skipped(parsed):
 def test_a_fact_on_two_tracked_axes_still_feeds_both_tables(parsed):
     """Unchanged by the fix, and worth holding: requiring exactly one
     dimension is what once hid Meta's entire product breakdown."""
-    assert _cells(parsed, "revenue", "product")["Assembly And Test"] == 290_000_000
+    assert _cells(parsed, "revenue", "product")["Assembly and Test"] == 290_000_000
     cross = [f for f in parsed if f["value"] == 290_000_000]
     assert {f["axis"] for f in cross} == {"segment", "product"}
     assert all(f["cross"] == 2 for f in cross), \

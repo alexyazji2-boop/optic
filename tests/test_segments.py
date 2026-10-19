@@ -53,7 +53,18 @@ def test_revenue_reuses_the_tag_list_that_already_exists():
 
 @pytest.mark.parametrize("raw,expected", [
     ("us-gaap:USCanadaMember", "US Canada"),
-    ("meta:FamilyOfAppsMember", "Family Of Apps"),
+    ("meta:FamilyOfAppsMember", "Family of Apps"),
+    # the owner's review of Apple's segments, 2026-10-19
+    ("aapl:IPhoneMember", "iPhone"),
+    ("aapl:IPadMember", "iPad"),
+    ("aapl:WearablesHomeandAccessoriesMember", "Wearables Home and Accessories"),
+    ("aapl:GreaterChinaMember", "Greater China"),
+    ("aapl:RestOfAsiaPacificMember", "Rest of Asia Pacific"),
+    ("us-gaap:ITServicesMember", "IT Services"),
+    ("xyz:MainlandChinaMember", "Mainland China"),
+    ("xyz:ThailandMember", "Thailand"),
+    ("xyz:BrandLicensingMember", "Brand Licensing"),
+    ("xyz:OilandGasMember", "Oiland Gas"),   # "Oil" + "and" cannot be told from a "-land" word; left as filed
     ("meta:RealityLabsMember", "Reality Labs"),
     ("us-gaap:AdvertisingMember", "Advertising"),
     ("us-gaap:EuropeMember", "Europe"),
@@ -299,3 +310,15 @@ def test_the_wide_table_scrolls_sideways():
     """Twelve quarters plus a label column does not fit a panel."""
     body = APP_JS.split("function renderSegments(", 1)[1].split("\nasync function ", 1)[0]
     assert 'class="table-scroll"' in body
+
+
+@pytest.mark.parametrize("stored,expected", [
+    ("I Phone", "iPhone"), ("I Pad", "iPad"), ("Wearables Homeand Accessories", "Wearables Home and Accessories"),
+    ("Family Of Apps", "Family of Apps"), ("Mainland China", "Mainland China"), ("Tier I Capital", "Tier I Capital"),
+    ("Greater China", "Greater China"), ("Rest Of World", "Rest of World"),
+    ("Americas Segment", "Americas"), ("Rest of Asia Pacific Segment", "Rest of Asia Pacific"),
+    ("Corporate Non Segment", "Corporate, not in a segment"), ("Segment", "Segment"),
+])
+def test_a_label_parsed_before_the_fix_is_tidied_when_read(stored, expected):
+    """Parses are kept forever, so a label made before 2026-10-19 is tidied on the way out."""
+    assert segments._tidy(stored) == expected

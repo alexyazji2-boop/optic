@@ -45,6 +45,8 @@ kbd { font: 500 12px/1 var(--f-sans); padding: 4px 7px; border-radius: 6px; bord
 .btn-milo:hover { background: var(--c-gold-wash); border-color: var(--c-gold-light); }
 .btn[aria-pressed="true"] { background: var(--c-gold-wash); border-color: var(--c-gold-light); }
 .btn-sm { min-height: 40px; padding: 0 14px; font-size: 14.5px; }
+.btn-quiet { border-color: transparent; background: transparent; color: var(--c-ink-2); font-weight: 500; }
+.btn-quiet:hover { border-color: transparent; background: var(--c-sunk); color: var(--c-ink); }
 .textlink { display: inline-flex; align-items: center; gap: 6px; min-height: var(--tap); padding: 0; border: 0; background: none; color: var(--c-gold-ink); font-weight: 600; font-size: 15.5px; cursor: pointer; text-decoration: none; }
 .textlink:hover { text-decoration: underline; text-underline-offset: 3px; }
 .textlink svg, .go svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.8; flex: none; }
@@ -190,6 +192,18 @@ body.drawer-open .rows:has([aria-expanded="true"]) .row:not([aria-expanded="true
 .tabs a:hover { color: var(--c-ink); }
 .tabs a[aria-current="page"] { color: var(--c-ink); border-bottom-color: var(--c-gold); }
 .tabs .legacy-mark { font: 500 12px/1 var(--f-label); color: var(--c-ink-3); }
+/* The phone's view selector (pages/tabs.js): under 640 px it replaces the row, which clipped its labels. */
+.tabsel { display: none; }
+@media (max-width: 640px) {
+  .tabs:has(.tabsel) { border-bottom: 0; overflow: visible; }
+  .tabs:has(.tabsel) > a { display: none; }
+  .tabsel { display: flex; align-items: center; gap: 10px; position: relative; width: 100%; min-height: 48px; padding: 0 14px; border: 1px solid var(--c-line-2); border-radius: 10px; background: var(--c-raised); }
+  .tabsel:focus-within { outline: 2px solid var(--c-focus); outline-offset: 2px; }
+  .tabsel-k { flex: none; font: 500 12px/1 var(--f-label); color: var(--c-ink-3); }
+  .tabsel select { appearance: none; -webkit-appearance: none; flex: 1; min-width: 0; min-height: 46px; padding: 0 28px 0 0; border: 0; background: transparent; color: var(--c-ink); font: 600 16px/1.2 var(--f-sans); cursor: pointer; }
+  .tabsel select:focus-visible { outline: 0; }
+  .tabsel::after { content: ''; position: absolute; right: 18px; top: calc(50% - 6px); width: 7px; height: 7px; border-right: 2px solid var(--c-ink-2); border-bottom: 2px solid var(--c-ink-2); transform: rotate(45deg); pointer-events: none; }
+}
 .answers { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border-top: 1px solid var(--c-line); margin-top: 32px; }
 .answer { display: block; padding: 0; text-align: left; border: 0; border-right: 1px solid var(--c-line-2); background: none; cursor: pointer; min-height: 220px; transition: background-color var(--d), opacity var(--d); }
 .answer:last-child { border-right: 0; }
@@ -229,6 +243,8 @@ table.t th { font: 500 13.5px/1.2 var(--f-label); color: var(--c-ink-3); padding
 table.t td { padding: 12px 8px; border-bottom: 1px solid var(--c-line-2); text-align: right; }
 table.t th:first-child, table.t td:first-child { text-align: left; }
 .tscroll { overflow-x: auto; }
+/* On a phone a table's first column (the name) kept wrapping to a word a line; it keeps a readable width and the table scrolls inside its box. */
+@media (max-width: 640px) { .tscroll .t:not(.contracts):not(.scen) td:first-child, .tscroll .t:not(.contracts):not(.scen) th:first-child { min-width: 9.5em; } }
 ul.plain { margin: 0; padding-left: 18px; } ul.plain li { margin-bottom: 7px; }
 
 /* ---------- drawer: one inspector for every object ---------- */
@@ -403,7 +419,8 @@ ul.plain { margin: 0; padding-left: 18px; } ul.plain li { margin-bottom: 7px; }
   /* compact company header on phones: name, price and change on two lines */
   .dhead { padding-top: 12px; gap: 12px; }
   .dhead .t-display { font-size: 40px; }
-  .dhead .acts { width: 100%; } .dhead .acts .btn { flex: 1; }
+  .dhead .acts { width: 100%; flex-wrap: nowrap; justify-content: stretch; }
+  .dhead .acts > .btn { flex: 1 1 0; min-width: 0; } .dhead .acts > .acts-milo { flex-grow: 1.4; }
   .tabs { margin-top: 16px; }
   /* onboarding: headline and search first, a short illustration after */
   .welcome { grid-template-columns: 1fr; min-height: 0; border-radius: 20px; }
@@ -461,9 +478,12 @@ ul.plain { margin: 0; padding-left: 18px; } ul.plain li { margin-bottom: 7px; }
 .hb-n { grid-column: 1 / -1; font-size: 14px; color: var(--c-ink-3); }
 
 @media (max-width: 860px) {
-  .readings { display: flex; overflow-x: auto; scroll-snap-type: x proximity; scrollbar-width: none; margin-right: -16px; padding-right: 16px; }
-  .rd { flex: 0 0 auto; min-width: 150px; max-width: 220px; scroll-snap-align: start; padding: 12px 14px 10px 0; }
-  .rd + .rd { padding-left: 14px; }
+  /* two columns that wrap: the row used to scroll sideways inside its card, clipping a label with no sign
+     that more was there */
+  .readings { grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 14px; }
+  .rd { padding: 10px 0; }
+  .rd.main { grid-column: 1 / -1; }
+  .rd + .rd { padding-left: 0; border-left: 0; border-top: 1px solid var(--c-line-2); }
   .rd .v { font-size: 21px; } .rd.main .v { font-size: 26px; }
   .rd .d { font-size: 13.5px; }
   .hbars li { grid-template-columns: minmax(80px, 120px) minmax(0, 1fr) 60px; }

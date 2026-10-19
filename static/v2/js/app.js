@@ -186,6 +186,21 @@ function wireGlobal() {
       if (fn) fn(current.view, current.route); else show(current.route);
     }
   });
+  // an open ⋯ or Indicators menu closes on a click elsewhere, or on Escape (focus returns to its button)
+  document.addEventListener('click', (e) => {
+    document.querySelectorAll('details.menu[open]').forEach((d) => { if (!d.contains(e.target)) d.open = false; });
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    const d = e.target.closest && e.target.closest('details.menu[open]');
+    if (d) { d.open = false; const s = d.querySelector('summary'); if (s) s.focus(); }
+  });
+  // the phone's view selector in a tab list (pages/tabs.js)
+  document.addEventListener('change', (e) => {
+    const sel = e.target.closest && e.target.closest('select[data-v2-tabsel]');
+    if (!sel || !sel.value) return;
+    if (sel.value.startsWith('#')) location.hash = sel.value.slice(1); else location.href = sel.value;
+  });
   document.addEventListener('keydown', (e) => {
     const typing = /^(INPUT|TEXTAREA|SELECT)$/.test((e.target && e.target.tagName) || '') || (e.target && e.target.isContentEditable);
     if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); if (palette.isOpen()) palette.close(); else { const f = document.activeElement; const seed = f && f.matches && f.matches('input[type=search], input[type=text]:not([name=password])') && !f.closest('.palette') ? f.value : ''; palette.open(null, { seed, symbol: current && current.route.symbol }); } }

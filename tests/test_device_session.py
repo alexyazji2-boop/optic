@@ -518,6 +518,10 @@ SETTINGS = {
     # The rebuilt frontend's chart view: bar range, style, indicators, panes.
     "optic.v2.chart.v1",
     "optic.v2.workspace.v1",       # Home's workspace: layouts, lock, panels folded on a phone, the linked ticker
+    # Whether this browser has dismissed Home's first-visit welcome: like the dismissed notices above.
+    "optic.v2.onboard.v1",
+    # Which of the Options page's three tool groups was open last: where things are on the screen.
+    "optic.options.group.v1",
     # Swing setups: the panel's filters, and the rule parameters a reader
     # changed. Preferences about the tool, like the chart's beside them.
     "optic.setups.view.v1", "optic.setups.params.v1",

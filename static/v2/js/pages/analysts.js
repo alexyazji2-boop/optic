@@ -7,7 +7,7 @@ import { num, clean, ago } from '../core/format.js';
 import { skeleton, failed } from '../ui/states.js';
 import { table, nextSort } from '../ui/table.js';
 import { provideContext } from '../ui/milo.js';
-import { groupTabs } from './tabs.js';
+import { sectionHead } from './tabs.js';
 
 const SHOWS = [['', 'All'], ['upgrades', 'Upgrades'], ['downgrades', 'Downgrades'], ['initiations', 'Initiations'], ['raised', 'Target raised'], ['lowered', 'Target lowered']];
 const RATINGS = [['', 'Any'], ['buy', 'Buy'], ['hold', 'Hold'], ['sell', 'Sell']];
@@ -38,7 +38,7 @@ function body() {
 function paint() {
   if (!live) return;
   const days = Q.ticker ? [[1, 'Day'], [7, '7 days'], [30, '30 days'], [365, 'Year']] : [[1, 'Day'], [7, '7 days'], [30, '30 days']];
-  draw(mainEl, html`<header class="page-head"><h1 class="t-display-m">Analysts</h1>${groupTabs('discover', 'analysts')}</header>
+  draw(mainEl, html`<header class="page-head">${sectionHead('discover', 'analysts')}</header>
     <section class="section first" aria-labelledby="an-h"><h2 class="t-h2" id="an-h">Analyst actions${Q.ticker ? `: ${Q.ticker}` : ''}</h2>
       <form class="op-filters" data-v2-an-form role="search"><label class="field field-sm"><span class="sr">Symbol</span><input name="t" value="${Q.ticker}" placeholder="Symbol, such as NVDA" maxlength="12" autocomplete="off"></label><button type="submit" class="btn btn-sm">Search</button>${Q.ticker ? html`<button type="button" class="btn btn-sm" data-v2-an-clear>All names</button>` : ''}</form>
       <div class="cluster an-filters">

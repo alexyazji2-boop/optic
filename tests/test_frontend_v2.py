@@ -60,7 +60,12 @@ def test_sections_and_phone_bar_are_the_classic_ones():
     classic = re.findall(r"label: '([^']+)', (?:nav|more)", APP[APP.index("const MOBILE_TABS = ["):][:600])
     block = NAV[NAV.index("export const MOBILE_TABS = ["):]
     v2 = re.findall(r"label: '([^']+)'", block[:block.index("];")])
-    assert v2 == classic == ["Home", "Dossier", "Markets", "Discover", "More"]
+    assert classic == ["Home", "Dossier", "Markets", "Discover", "More"]     # Classic is unchanged
+    # The owner's order for v2's bar (2026-10-19): "Home · Markets · Watchlist · Dossier · More, with
+    # Discover accessible through More and search". Same names; More lists every group the bar does not.
+    assert v2 == ["Home", "Markets", "Watchlist", "Dossier", "More"]
+    shell = (V2 / "js/ui/shell.js").read_text()
+    assert "visibleGroups(flags).filter((g) => !shown.has(g.id))" in shell, "Discover must stay reachable in More"
 
 
 def test_every_navigation_page_is_in_the_coverage_tracker():

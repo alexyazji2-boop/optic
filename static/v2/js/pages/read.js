@@ -11,12 +11,12 @@ import * as api from '../core/api.js';
 import { num, signed, clean, capFirst, ago, shortDate, fullDate, isNum } from '../core/format.js';
 import { skeleton, empty, failed } from '../ui/states.js';
 import { icon } from '../ui/icons.js';
-import { tabset } from '../ui/tabset.js';
+import { groupedTabs } from '../ui/grouptabs.js';
 import { toast } from '../ui/toast.js';
 import { button as miloButton, provideContext } from '../ui/milo.js';
-import { groupTabs } from './tabs.js';
+import { sectionHead } from './tabs.js';
 
-let D = {}, live = true, mainEl = null, tabState = 0, cal = { impact: 'all', range: 'week' }, cat = { status: 'relevant', category: '', sector: '', theme: '', q: '' };
+let D = {}, live = true, mainEl = null, tabState = { g: 0, s: {} }, cal = { impact: 'all', range: 'week' }, cat = { status: 'relevant', category: '', sector: '', theme: '', q: '' };
 const ask = (label, q) => miloButton(label, { ask: q, context: 'Markets, Read' });
 const kv = (rows, n = 3) => html`<dl class="kv" style="--kv:${n}">${rows.filter(Boolean).map(([k, v]) => html`<div><dt>${k}</dt><dd>${v}</dd></div>`)}</dl>`;
 const etTime = (iso) => { try { return new Date(iso).toLocaleString('en-US', { weekday: 'short', hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' }) + ' ET'; } catch (e) { return ''; } };
@@ -52,7 +52,8 @@ function readHero() {
         <p class="section-sub">Updated ${ago(b.built_at)}${b.previous_day ? '. This is the previous day\'s Read while today\'s is built' : b.stale ? '. A newer one is due on the server\'s next pass' : ''}.${w.window_hours ? ` Covering the ${w.window_hours} hours since the previous session closed${w.window_hours >= 48 ? ', the whole weekend' : ''}.` : ''}</p></div>
         ${ask('Ask Milo about the Read', 'What matters most in today\'s Read, and what period does it cover?')}</div>
       <div class="read-prose">${(s.paragraphs || []).map((p) => (String(p).startsWith('## ') ? html`<h3>${clean(p.slice(3))}</h3>` : html`<p>${clean(p)}</p>`))}</div>
-      <p class="asof">${s.written_at ? `Written ${ago(s.written_at)}. ` : ''}${clean(s.method || '')} ${clean((b.overview || {}).note || '')}</p>
+      <p class="asof">${s.written_at ? `Written ${ago(s.written_at)}.` : ''}</p>
+      ${s.method || (b.overview || {}).note ? html`<details class="more-inline"><summary>How the Read is made</summary><p class="asof">${clean(s.method || '')} ${clean((b.overview || {}).note || '')}</p></details>` : ''}
       <form class="read-search" role="search" data-v2-read-search><label class="field">${icon('search')}<span class="sr">Search the headlines</span><input name="q" placeholder="Search the headlines" autocomplete="off" value="${D.q || ''}"></label></form>
       <div id="read-results" aria-live="polite">${searchResults()}</div>
     </section>`;
@@ -196,16 +197,23 @@ const TABS = [
 function paint() {
   if (!live) return;
   const y = window.scrollY;
-  draw(mainEl, html`<header class="page-head"><h1 class="t-display-m">Read</h1>${groupTabs('market', 'brief')}</header>
-    ${desk()}${readHero()}
-    <section class="section" aria-label="More from today"><h2 class="t-h2">More from today</h2><div id="rd-more"></div></section>`);
+  draw(mainEl, html`<header class="page-head">${sectionHead('market', 'brief')}</header>
+    ${readHero()}${desk()}
+    <section class="section" aria-labelledby="rd-more-h"><h2 class="t-h2" id="rd-more-h">More from today</h2><div id="rd-more"></div></section>`);
   paintMore();
   if (Math.abs(window.scrollY - y) > 2) window.scrollTo(0, y);
 }
+// The ten views in three groups (item 13); every view and its name is kept.
+const RGROUPS = [
+  ['Today', ["Today's priority", 'Overnight, worldwide', 'Headlines', 'Official releases and sources']],
+  ['Catalysts and calendar', ['On the calendar', 'Market catalyst', 'Catalyst library']],
+  ['Sentiment and regime', ['Fear and Greed', 'Market regime', 'Weekly analysis']],
+];
 function paintMore() {
   const h = $('#rd-more', mainEl); if (!h) return;
-  const ts = tabset(TABS.map(([label, fn]) => ({ label, render: () => fn() })), { label: 'More from today', selected: tabState });
-  draw(h, ts.html); ts.wire(h, (i) => { tabState = i; });
+  const item = (name) => { const [label, fn] = TABS.find((x) => x[0] === name); return { label, render: () => fn() }; };
+  const ts = groupedTabs(RGROUPS.map(([label, names]) => ({ label, items: names.map(item) })), { label: 'More from today', state: tabState });
+  draw(h, ts.html); ts.wire(h);
 }
 
 async function loadCats() {
@@ -216,7 +224,7 @@ async function loadCats() {
 }
 
 export async function render(main) {
-  live = true; mainEl = main; tabState = 0;
+  live = true; mainEl = main; tabState = { g: 0, s: {} };
   D = {};
   document.title = 'Read, Optic';
   provideContext(() => ({ view: 'brief', read: D.brief ? { day: D.brief.day, summary: D.brief.summary, overview: D.brief.overview, calendar: D.brief.calendar } : null, sentiment: D.sent }));

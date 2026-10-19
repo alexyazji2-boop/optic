@@ -11,7 +11,7 @@ import { clean, ago, num } from '../core/format.js';
 import { skeleton, empty, failed } from '../ui/states.js';
 import { toast } from '../ui/toast.js';
 import { provideContext } from '../ui/milo.js';
-import { groupTabs } from './tabs.js';
+import { sectionHead } from './tabs.js';
 
 const LOCAL_KEY = 'optic.watches.v1';
 let S = {};
@@ -154,7 +154,7 @@ export async function render(main, route) {
   S = { checks: {}, draftSym: (route.params || {}).symbol || '' };
   provideContext(() => ({ view: 'alerts' }));
   document.title = 'Alerts, Optic';
-  draw(main, html`<header class="page-head"><h1 class="t-display-m">Alerts</h1>${groupTabs('follow', 'alerts')}</header><div id="al-body"></div>`);
+  draw(main, html`<header class="page-head">${sectionHead('follow', 'alerts')}</header><div id="al-body"></div>`);
   paint(main);
   wire(main);
   await loadAll(main);

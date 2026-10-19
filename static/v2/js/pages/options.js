@@ -1,6 +1,6 @@
-// Dossier, Options. Readings first (what options are pricing, compact so the
-// builder is close on a phone), then the position builder, the research
-// table of contracts, and the deeper analysis in tabs.
+// Dossier, Options. Readings first (what options are pricing), then the page's tools in three groups
+// near the top (owner's brief, 2026-10-19, item 12): Contracts and pricing (the chain at one expiry, the
+// position builder on the same expiry, what options cost), Positioning and flow, and Setups and strategy.
 //
 // Data: /api/ticker (the same snapshot as the Overview), /api/options/{T}/
 // research for one expiry and side, POST /api/options/{T}/analyze for a
@@ -17,7 +17,6 @@ import { xyChart } from '../ui/xychart.js';
 import { skeleton, empty, failed, staleLine } from '../ui/states.js';
 import { icon } from '../ui/icons.js';
 import { button as miloButton, provideContext } from '../ui/milo.js';
-import { tabset } from '../ui/tabset.js';
 import { toast } from '../ui/toast.js';
 import { core, header, tabs, isFund } from './dossier-frame.js';
 import * as P from './options-panels.js';
@@ -84,9 +83,8 @@ function builder(sym) {
   const exps = ((R.data || {}).listed_expiries) || [];
   const a = B.analysis;
   return html`<section class="section builder" aria-labelledby="pb-h">
-    <div class="section-head"><div><h2 class="t-h2" id="pb-h">Position builder</h2><p class="section-sub">Pick a template or add contracts from the table below. Every figure is per position, from the server's own pricing.</p></div>
-      <label class="select"><span class="t-label">Expiry</span><select data-v2-op-expiry aria-label="Expiry for templates and the table">${exps.map((x) => html`<option value="${x.expiry}" ${x.expiry === R.expiry ? 'selected' : ''}>${shortDate(x.expiry)}, ${x.dte} days${x.monthly ? ', monthly' : ''}</option>`)}</select></label></div>
-    <div class="tpl" role="group" aria-label="Templates">${TEMPLATES.map(([id, label]) => html`<button type="button" class="chip" data-v2-tpl="${id}" aria-pressed="${B.template === id}">${label}</button>`)}</div>
+    <div class="section-head"><div><h2 class="t-h2" id="pb-h">Position builder</h2><p class="section-sub">${R.expiry ? `On the ${shortDate(R.expiry)} expiry chosen above.` : 'On the expiry chosen above, once the contracts load.'} Pick a template or press Add in the table. Every figure is per position, from the server's own pricing.</p></div></div>
+    <div class="tpl" role="group" aria-label="Templates">${TEMPLATES.map(([id, label]) => html`<button type="button" class="chip" data-v2-tpl="${id}" aria-pressed="${B.template === id}" ${R.expiry ? '' : 'disabled'}>${label}</button>`)}</div>
     ${B.legs.length ? html`<ul class="legs-list" aria-label="Legs">${B.legs.map((l, i) => html`<li><span class="leg-l">${legLabel(l)}</span>
         <button type="button" class="textlink" data-v2-leg-flip="${i}">${l.side === 'long' ? 'Make it a sale' : 'Make it a buy'}</button>
         <label class="field field-xs"><span class="sr">Quantity for ${legLabel(l)}</span><input type="number" min="1" max="${l.type === 'stock' ? 100000 : 100}" value="${l.qty}" data-v2-leg-qty="${i}"></label>
@@ -98,7 +96,7 @@ function builder(sym) {
       <label class="field field-sm"><span class="t-label">Days from now for the grid</span><input name="days" inputmode="numeric" placeholder="Halfway" value="${B.days || ''}"></label>
       <button type="submit" class="btn btn-sm">Apply</button></form></details>
   </section>`;
-  void a;
+  void a; void exps;
 }
 
 function result(sym) {
@@ -159,7 +157,8 @@ async function rows(expiry, side) {
 const nearest = (list, target) => list.filter((r) => r.mid).reduce((best, r) => (!best || Math.abs(Math.abs(r.delta) - target) < Math.abs(Math.abs(best.delta) - target) ? r : best), null);
 
 async function template(id) {
-  const exp = R.expiry; if (!exp) return;
+  const exp = R.expiry;
+  if (!exp) { B.analyzing = false; B.error = 'The contracts for an expiry have not loaded yet, so there is nothing to build from.'; paintBuilder(); return; }
   B.error = null; B.template = id;
   const g = GEN, mine = B;
   try {
@@ -187,7 +186,7 @@ async function template(id) {
     if (legs.some((l) => !l)) throw new Error('This expiry has no quoted contract near the deltas the template needs.');
     B.legs = legs;
     await analyze();
-  } catch (e) { if (!stillHere(g) || mine !== B) return; B.error = e.message; paintBuilder(); }
+  } catch (e) { if (!stillHere(g) || mine !== B) return; B.analyzing = false; B.error = e.message; paintBuilder(); }
 }
 
 async function analyze() {
@@ -206,11 +205,21 @@ async function analyze() {
 }
 
 /* ---------------- research table ---------------- */
+// One expiry for the table and the builder. Before the chain answers it says so, and if it fails it says
+// that, instead of an empty list.
+function expirySelect() {
+  const exps = ((R.data || {}).listed_expiries) || [];
+  const opts = exps.length ? exps.map((x) => html`<option value="${x.expiry}" ${x.expiry === R.expiry ? 'selected' : ''}>${shortDate(x.expiry)}, ${x.dte} days${x.monthly ? ', monthly' : ''}</option>`)
+    : html`<option>${R.error ? 'Expiries unavailable' : 'Loading expiries'}</option>`;
+  return html`<label class="select"><span class="t-label">Expiry</span><select data-v2-op-expiry aria-label="Expiry for the table and the position builder" ${exps.length ? '' : 'disabled'}>${opts}</select></label>`;
+}
+
 function research() {
   const d = R.data;
   const f = DELTAS[R.delta] || DELTAS.any;
-  const head = html`<div class="section-head"><div><h2 class="t-h2" id="rc-h">Research contracts</h2><p class="section-sub">One expiry and side at a time, in strike order. Nothing here is ranked best.</p></div></div>
+  const head = html`<div class="section-head"><div><h2 class="t-h2" id="rc-h">Research contracts</h2><p class="section-sub">One expiry and side at a time, in strike order. Nothing here is ranked best. The position builder below uses the same expiry.</p></div></div>
     <form class="op-filters" data-v2-op-form>
+      ${expirySelect()}
       <div class="seg" role="group" aria-label="Side"><button type="button" data-v2-op-side="call" aria-pressed="${R.side === 'call'}">Calls</button><button type="button" data-v2-op-side="put" aria-pressed="${R.side === 'put'}">Puts</button></div>
       <label class="select"><span class="t-label">Delta</span><select data-v2-op-set="delta">${Object.entries(DELTAS).map(([k, v]) => html`<option value="${k}" ${R.delta === k ? 'selected' : ''}>${v[2]}</option>`)}</select></label>
       <label class="select"><span class="t-label">Widest spread</span><select data-v2-op-set="maxSpread">${[[0, 'Any'], [5, '5%'], [10, '10%'], [25, '25%']].map(([v, l]) => html`<option value="${v}" ${Number(R.maxSpread) === v ? 'selected' : ''}>${l}</option>`)}</select></label>
@@ -280,24 +289,49 @@ function paintTop() {
     ${readings(D.sym)}`);
 }
 
-const PANELS = [
-  ['What options are pricing', (t, s) => P.pricing(t, s)],
-  ['Dealer gamma', (t, s) => P.gex(t, s), (t) => P.gexCharts(t)],
-  ['Flow', (t, s) => P.flow(t, s), (t) => P.flowCharts(t)],
-  ['Delta and gamma', (t, s) => P.greeksPanel(t, s)],
-  ['Ideas', (t, s) => P.ideas(t, s, D.budget), (t) => P.ideaCharts(t, (t.quote || {}).price)],
-  ['Strike and entry', (t, s) => P.entry(t, s)],
-  ['Swing verdict', (t, s) => P.verdict(t, s)],
-  ['Levels and momentum', (t, s) => P.levels(t, s)],
-  ['How value moves', () => P.lab(D.lab), () => P.labCharts(D.lab)],
-  ['Setups and patterns', (t, s) => P.setups(t, s, D.extra), null, () => loadExtra()],
+const OPT_GROUPS = [
+  { id: 'contracts', label: 'Contracts and pricing', sub: 'The chain at one expiry, a position built from it, and what options cost.', panels: [
+    ['What options are pricing', (t, s) => P.pricing(t, s)],
+    ['How value moves', () => P.lab(D.lab), () => P.labCharts(D.lab)],
+  ] },
+  { id: 'positioning', label: 'Positioning and flow', sub: "Dealer gamma estimated from open interest, the day's options volume, and delta and gamma by strike and expiry.", panels: [
+    ['Dealer gamma', (t, s) => P.gex(t, s), (t) => P.gexCharts(t)],
+    ['Flow', (t, s) => P.flow(t, s), (t) => P.flowCharts(t)],
+    ['Delta and gamma', (t, s) => P.greeksPanel(t, s)],
+  ] },
+  { id: 'strategy', label: 'Setups and strategy', sub: "Optic's swing read, the strikes and entry it points to, strategy ideas sized to a budget, levels, and recent setups.", panels: [
+    ['Swing verdict', (t, s) => P.verdict(t, s)],
+    ['Strike and entry', (t, s) => P.entry(t, s)],
+    ['Ideas', (t, s) => P.ideas(t, s, D.budget), (t) => P.ideaCharts(t, (t.quote || {}).price)],
+    ['Levels and momentum', (t, s) => P.levels(t, s)],
+    ['Setups and patterns', (t, s) => P.setups(t, s, D.extra), null, () => loadExtra()],
+  ] },
 ];
+const GROUP_KEY = 'optic.options.group.v1';   // a tool setting
+const readGroup = () => { try { const i = OPT_GROUPS.findIndex((x) => x.id === localStorage.getItem(GROUP_KEY)); return i < 0 ? 0 : i; } catch (e) { return 0; } };
+
+function groupBar() {
+  return html`<div class="op-groups" role="tablist" aria-label="Options tools">${OPT_GROUPS.map((x, i) => html`<button type="button" role="tab" id="opg-t${i}" aria-controls="opg-p${i}" aria-selected="${i === panelState}" tabindex="${i === panelState ? 0 : -1}" data-v2-opg="${i}">${x.label}</button>`)}</div>`;
+}
+// The sections of the selected group after its fixed parts (the table and builder, for Contracts). A group
+// is drawn when it is shown, so its charts measure a visible width.
 function paintMore() {
-  const h = $('#op-more', mainEl); if (!h || !D.t) { if (h) draw(h, skeleton('lines', 3)); return; }
-  if (D.t.gex && D.t.gex.error && !(D.t.vol_surface || {}).available) { draw(h, empty('No options analysis right now', clean(D.t.gex.error))); return; }
-  const ts = tabset(PANELS.map(([label, body, charts, onOpen]) => ({ label, render: () => body(D.t, D.sym), mount: (p) => { if (charts) mountCharts(p, charts(D.t)); if (onOpen) onOpen(); } })), { label: 'More options analysis', selected: panelState });
-  draw(h, html`<section class="section" aria-label="More options analysis"><h2 class="t-h2">More options analysis</h2>${ts.html}</section>`);
-  ts.wire(h, (i) => { panelState = i; });
+  const i = panelState, grp = OPT_GROUPS[i];
+  const h = $(`#opg-x${i}`, mainEl); if (!h) return;
+  if (!D.t) { draw(h, D.tErr ? '' : skeleton('lines', 3, `Loading ${grp.label.toLowerCase()}`)); return; }
+  // An unquoted chain (the free feed outside market hours) leaves every positioning panel with the same
+  // reason; it is said once for the group.
+  if (grp.id === 'positioning' && D.t.gex && D.t.gex.error && !(D.t.vol_surface || {}).available) { draw(h, empty('No positioning read right now', clean(D.t.gex.error))); return; }
+  draw(h, grp.panels.map(([label, body], k) => html`<section class="section op-sec" aria-labelledby="opg-h${i}-${k}"><h2 class="t-h2" id="opg-h${i}-${k}">${label}</h2><div data-opg-body="${k}">${body(D.t, D.sym)}</div></section>`));
+  grp.panels.forEach(([, , charts, onOpen], k) => { const b = $(`[data-opg-body="${k}"]`, h); if (charts && b) mountCharts(b, charts(D.t)); if (onOpen) onOpen(); });
+}
+function showGroup(i, focus) {
+  panelState = i;
+  try { localStorage.setItem(GROUP_KEY, OPT_GROUPS[i].id); } catch (e) { /* private mode */ }
+  $$('.op-groups [role=tab]', mainEl).forEach((t, j) => { t.setAttribute('aria-selected', String(i === j)); t.tabIndex = i === j ? 0 : -1; if (focus && i === j) t.focus(); });
+  $$('.op-gpanel', mainEl).forEach((p, j) => { p.hidden = i !== j; });
+  if (i === 0) { paintResult(); }
+  paintMore();
 }
 async function loadExtra() {
   if (D.extra.loading) return;
@@ -306,7 +340,7 @@ async function loadExtra() {
   const [st, se, rp] = await Promise.allSettled([api.get(`/api/setups?symbols=${enc}&status=recent`, { ttl: 300000 }), api.get(`/api/seasonality/${enc}`, { ttl: 3600000 }), api.get(`/api/relperf/${enc}`, { ttl: 600000 })]);
   if (!stillHere(g)) return;
   D.extra = { loading: true, setups: st.status === 'fulfilled' ? st.value : null, seasonality: se.status === 'fulfilled' ? se.value : null, relperf: rp.status === 'fulfilled' ? rp.value : null };
-  if (live && panelState === PANELS.length - 1) paintMore();
+  if (live && panelState === 2) paintMore();
 }
 
 async function loadTicker({ quiet } = {}) {
@@ -322,7 +356,7 @@ async function loadTicker({ quiet } = {}) {
 }
 
 export async function render(main, route) {
-  live = true; mainEl = main; panelState = 0; GEN += 1;
+  live = true; mainEl = main; panelState = readGroup(); GEN += 1;
   const sym = route.symbol, g = GEN;
   const f = readFilters();
   D = { sym, extra: {}, budget: readBudget() };
@@ -332,7 +366,9 @@ export async function render(main, route) {
   document.title = `${sym} Options, Optic`;
   provideContext(() => ({ view: 'swing', ticker: sym, quote: D.quote, gex: (D.t || {}).gex, greeks: (D.t || {}).greeks, flow: (D.t || {}).flow, vol_surface: (D.t || {}).vol_surface, iv_rank: (D.t || {}).iv_rank, entry_plan: (D.t || {}).entry_plan, verdict: (D.t || {}).verdict, naked_ideas: (D.t || {}).naked_ideas, strategy_ideas: (D.t || {}).strategy_ideas, rate: (D.t || {}).rate,
     options_research: R.data ? { expiry: R.expiry, side: R.side, summary: R.data.summary, events: R.data.events, rows: ((R.data.table || {}).rows || []).slice(0, 20), position: B.analysis ? { legs: B.legs, analysis: { entry: B.analysis.entry, max_profit: B.analysis.max_profit, max_loss: B.analysis.max_loss, breakevens: B.analysis.breakevens_at_expiry, greeks: B.analysis.greeks, scenarios: B.analysis.scenarios, flags: B.analysis.flags } } : null } : null }));
-  draw(main, html`<div id="op-top"></div><div id="op-builder"></div><section class="section" id="op-research" aria-labelledby="rc-h"></section><div id="op-more"></div>`);
+  draw(main, html`<div id="op-top"></div>${groupBar()}
+    ${OPT_GROUPS.map((x, i) => html`<div class="op-gpanel" id="opg-p${i}" role="tabpanel" aria-labelledby="opg-t${i}" ${i === panelState ? '' : 'hidden'}><p class="section-sub op-gsub">${x.sub}</p>
+      ${i === 0 ? html`<section class="section" id="op-research" aria-labelledby="rc-h"></section><div id="op-builder"></div>` : ''}<div id="opg-x${i}"></div></div>`)}`);
   paintTop(); paintBuilder(); paintResearch(); paintMore();
   wire(main);
   core(sym).then((c) => { if (!stillHere(g)) return; D.quote = Object.assign({}, c.quote || {}, D.quote || {}); D.session = c.session; D.quoteError = c.quoteError; paintTop(); });
@@ -372,8 +408,16 @@ function wire(main) {
       const s = $('#pb-h', main); if (s) s.scrollIntoView({ behavior: 'smooth', block: 'start' });
       return;
     }
-    if ((b = t('[data-v2-budget]'))) { D.budget = Number(b.dataset.v2Budget) || 0; saveBudget(D.budget); toast(D.budget ? `Ideas sized to ${money(D.budget, 0)} a contract.` : 'Ideas shown with no budget limit.'); panelState = 4; await loadTicker(); return; }
+    if ((b = t('[data-v2-opg]'))) { showGroup(Number(b.dataset.v2Opg)); return; }
+    if ((b = t('[data-v2-budget]'))) { D.budget = Number(b.dataset.v2Budget) || 0; saveBudget(D.budget); toast(D.budget ? `Ideas sized to ${money(D.budget, 0)} a contract.` : 'Ideas shown with no budget limit.'); panelState = 2; await loadTicker(); return; }
     if ((b = t('[data-v2-lab]'))) { const [k, v] = b.dataset.v2Lab.split(':'); D.lab[k] = k === 'dte' ? Number(v) : v; paintMore(); const again = $(`[data-v2-lab="${b.dataset.v2Lab}"]`, main); if (again) again.focus(); }
+  });
+  main.addEventListener('keydown', (e) => {
+    const tab = e.target.closest && e.target.closest('.op-groups [role=tab]');
+    if (!tab) return;
+    const i = Number(tab.dataset.v2Opg), n = OPT_GROUPS.length;
+    const to = e.key === 'ArrowRight' ? (i + 1) % n : e.key === 'ArrowLeft' ? (i - 1 + n) % n : e.key === 'Home' ? 0 : e.key === 'End' ? n - 1 : -1;
+    if (to >= 0) { e.preventDefault(); showGroup(to, true); }
   });
   main.addEventListener('change', async (e) => {
     const el = e.target;
@@ -392,7 +436,7 @@ function wire(main) {
       B.slippage = s; B.fee = f; B.days = d && d > 0 ? d : null; saveFilters(); await analyze(); return;
     }
     const bf = e.target.closest('[data-v2-budget-form]');
-    if (bf) { e.preventDefault(); const v = Math.round(Number(bf.b.value)); if (!(v >= 1 && v <= 1e6)) { toast('A budget is whole dollars, 1 to 1,000,000.'); return; } D.budget = v; saveBudget(v); panelState = 4; await loadTicker(); }
+    if (bf) { e.preventDefault(); const v = Math.round(Number(bf.b.value)); if (!(v >= 1 && v <= 1e6)) { toast('A budget is whole dollars, 1 to 1,000,000.'); return; } D.budget = v; saveBudget(v); panelState = 2; await loadTicker(); }
   });
 }
 void $$; void staleLine;

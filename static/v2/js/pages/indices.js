@@ -8,7 +8,7 @@ import { num, signed, clean, capFirst, isNum } from '../core/format.js';
 import { lineChart, mountCharts } from '../ui/chart.js';
 import { skeleton, failed } from '../ui/states.js';
 import { button as miloButton, provideContext } from '../ui/milo.js';
-import { groupTabs } from './tabs.js';
+import { sectionHead } from './tabs.js';
 import { sectorBoard, sectorReadBlock, loadSectorRead } from './market-shared.js';
 
 let D = {}, live = true, mainEl = null;
@@ -41,7 +41,7 @@ function regime(x) {
 function paint() {
   if (!live) return;
   const y = window.scrollY;
-  draw(mainEl, html`<header class="page-head"><h1 class="t-display-m">Indices</h1>${groupTabs('market', 'indices')}</header>
+  draw(mainEl, html`<header class="page-head">${sectionHead('market', 'indices')}</header>
     ${D.err ? failed('The index picture', D.err, { retry: 'indices' }) : !D.x ? skeleton('lines', 5, 'Loading ten years per index') : readings(D.x)}
     <section class="section" aria-labelledby="mf-h"><h2 class="t-h2" id="mf-h">Major index funds</h2>${sectorBoard(D.board, 'Index Read')}${sectorReadBlock(D.sread)}</section>
     ${D.x ? regime(D.x) : ''}`);

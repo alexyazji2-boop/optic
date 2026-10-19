@@ -10,12 +10,12 @@ import * as api from '../core/api.js';
 import { num, signed, compact, clean, capFirst, shortDate, isNum, esc } from '../core/format.js';
 import { lineChart, spark, mountCharts } from '../ui/chart.js';
 import { skeleton, empty, failed } from '../ui/states.js';
-import { tabset } from '../ui/tabset.js';
+import { groupedTabs } from '../ui/grouptabs.js';
 import { button as miloButton, provideContext } from '../ui/milo.js';
-import { groupTabs } from './tabs.js';
+import { sectionHead } from './tabs.js';
 import { sectorBoard, sectorReadBlock, loadSectorRead } from './market-shared.js';
 
-let D = {}, live = true, mainEl = null, tabState = 0, refresh = null;
+let D = {}, live = true, mainEl = null, tabState = { g: 0, s: {} }, refresh = null;
 const kv = (rows, n = 3) => html`<dl class="kv" style="--kv:${n}">${rows.filter(Boolean).map(([k, v]) => html`<div><dt>${k}</dt><dd>${v}</dd></div>`)}</dl>`;
 const ask = (label, q) => miloButton(label, { ask: q, context: 'Markets, Macro' });
 const pct = (v, dp = 1) => (isNum(v) ? `${num(v, dp)}%` : 'n/a');
@@ -36,8 +36,8 @@ function regimeBlock(m) {
   return html`<section class="section" aria-labelledby="mr-h"><div class="section-head"><div><p class="t-label">Macro regime</p><h2 class="t-display-m" id="mr-h">${capFirst(x.regime || '')}</h2></div>${ask('Ask Milo about the regime', 'What is driving the macro regime right now, and what would change it?')}</div>
     ${kv([['Risk score', html`<b>${signed(x.risk_score, 1, '')}</b>`], ['3-month to 10-year curve', html`<span class="${x.curve_3m10y < 0 ? 'down' : ''}">${signed(x.curve_3m10y, 2, ' pts')}</span>`], ['VIX', num((inst['^VIX'] || {}).last, 2)]], 3)}
     <p>${clean(x.stance || '')}</p><ul class="plain">${(x.notes || []).map((n) => html`<li>${clean(n)}</li>`)}</ul>
-    <h3>What makes up this score</h3><ul class="factor-bars">${facs.map((f) => html`<li><span class="fb-l">${f.factor} <small class="t-muted">${clean(f.rule || '')}</small></span><span class="fb-track"><span class="fb-bar ${f.contribution >= 0 ? 'pos' : 'neg'}" style="width:${(Math.abs(f.contribution) / peak) * 50}%"></span></span><span class="fb-v">${signed(f.contribution, 1, '')}</span></li>`)}</ul>
-    <p class="asof">${facs.length} terms add to ${signed(x.risk_score, 1, '')}.${x.score_unattributed ? ` ${signed(x.score_unattributed, 1, '')} is not attributed to a term.` : ''}</p>
+    <details class="more-inline"><summary>How the score is built, ${facs.length} terms</summary><ul class="factor-bars">${facs.map((f) => html`<li><span class="fb-l">${f.factor} <small class="t-muted">${clean(f.rule || '')}</small></span><span class="fb-track"><span class="fb-bar ${f.contribution >= 0 ? 'pos' : 'neg'}" style="width:${(Math.abs(f.contribution) / peak) * 50}%"></span></span><span class="fb-v">${signed(f.contribution, 1, '')}</span></li>`)}</ul>
+    <p class="asof">${facs.length} terms add to ${signed(x.risk_score, 1, '')}.${x.score_unattributed ? ` ${signed(x.score_unattributed, 1, '')} is not attributed to a term.` : ''}</p></details>
     ${expected(x.expected_move)}</section>`;
 }
 function expected(em) {
@@ -167,6 +167,7 @@ function themes() {
     <p class="asof">A z-score beyond ±2 is stretched against the last 60 sessions; it is not a call.</p>`;
 }
 
+// The twelve views in four groups (item 13); every view and its name is kept.
 const TABS = [
   ['Breadth', breadth, () => { const evc = ((((D.m || {}).sectors || {}).breadth || {}).equal_vs_cap) || {}; return evc.series ? { rsp: (w) => lineChart((evc.dates || []).map((d, i) => ({ d: String(d).slice(0, 10), c: evc.series[i] })), { w, h: 190, dp: 3, label: 'RSP against SPY' }) } : {}; }],
   ['Yield curve', curve], ['Rotation', rotation, () => (D.rot && D.rot.sectors ? { rrg: rrgChart(D.rot) } : {})],
@@ -176,18 +177,25 @@ const TABS = [
   ['Sector board', () => html`${sectorBoard(D.board, 'Sector Read')}${sectorReadBlock(D.sread)}`], ['Sector strength', strength], ['Themes and pairs', themes],
 ];
 
+const MGROUPS = [
+  ['Breadth and sectors', ['Breadth', 'Sector board', 'Sector strength', 'Rotation', 'Themes and pairs']],
+  ['Rates and the economy', ['Yield curve', 'Economic data']],
+  ['Cross-asset', ['Cross-asset', 'Currencies', 'Ratios', 'Correlation and dispersion']],
+  ['Stock maps', ['Stock maps']],
+];
 function paintMore() {
   const h = $('#mc-more', mainEl); if (!h) return;
-  const ts = tabset(TABS.map(([label, fn, charts]) => ({ label, render: () => fn(), mount: (p) => { if (charts) mountCharts(p, charts()); } })), { label: 'More macro', selected: tabState });
-  draw(h, ts.html); ts.wire(h, (i) => { tabState = i; });
+  const item = (name) => { const [label, fn, charts] = TABS.find((x) => x[0] === name); return { label, render: () => fn(), mount: (p) => { if (charts) mountCharts(p, charts()); } }; };
+  const ts = groupedTabs(MGROUPS.map(([label, names]) => ({ label, items: names.map(item) })), { label: 'Macro in depth', state: tabState });
+  draw(h, ts.html); ts.wire(h);
 }
 function paint() {
   if (!live) return;
   const y = window.scrollY;
-  draw(mainEl, html`<header class="page-head"><h1 class="t-display-m">Macro</h1>${groupTabs('market', 'market')}</header>
+  draw(mainEl, html`<header class="page-head">${sectionHead('market', 'market')}</header>
     ${D.err ? failed('The macro picture', D.err, { retry: 'market' }) : !D.m ? html`${skeleton('lines', 5, 'Loading about 40 instruments')}<p class="asof" role="status">This reads about 40 instruments and can take half a minute after a restart.</p>`
     : html`<section class="section" aria-label="The market today"><h2 class="t-h2">The market today, in brief</h2>${plain(D.m)}</section>${regimeBlock(D.m)}`}
-    <section class="section" aria-label="More macro"><h2 class="t-h2">More</h2><div id="mc-more"></div></section>`);
+    <section class="section" aria-labelledby="mc-more-h"><h2 class="t-h2" id="mc-more-h">In depth</h2><div id="mc-more"></div></section>`);
   paintMore();
   if (Math.abs(window.scrollY - y) > 2) window.scrollTo(0, y);
 }
@@ -197,7 +205,7 @@ async function loadMarket(quiet) {
   if (live) paint();
 }
 export async function render(main) {
-  live = true; mainEl = main; tabState = 0;
+  live = true; mainEl = main; tabState = { g: 0, s: {} };
   D = { econCode: 'CPIAUCSL' };
   document.title = 'Macro, Optic';
   provideContext(() => ({ view: 'market', macro: (D.m || {}).macro, sectors: (D.m || {}).sectors, dispersion: D.disp ? Object.assign({}, D.disp, { history: undefined }) : null }));

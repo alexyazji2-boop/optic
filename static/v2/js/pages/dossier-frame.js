@@ -6,10 +6,10 @@
 import { html, render as draw } from '../core/dom.js';
 import * as api from '../core/api.js';
 import { num, signed, dir, clean, capFirst, isNum } from '../core/format.js';
-import { icon } from '../ui/icons.js';
 import { watchButton } from '../ui/company.js';
 import { button as miloButton } from '../ui/milo.js';
-import { GROUPS, hrefFor, pageOf } from '../nav.js';
+import { GROUPS, pageOf } from '../nav.js';
+import { tabSelect, tabLinks } from './tabs.js';
 import { learn, kindOf, can, onLearn } from '../core/instrument.js';
 import { etStamp, etDay, sessionWord } from '../core/marketTime.js';
 
@@ -38,6 +38,18 @@ export async function core(sym) {
   return out;
 }
 
+// The ticker's actions, grouped at the right of its header (owner, 2026-10-19). Alert and Compare are
+// quieter than Watch, and sit under ⋯ on a phone. The Milo button names the ticker, so it reads as a
+// question about this company and not as the top bar's general "Ask Milo".
+function actions(sym, label, sm) {
+  const s = sm ? 'btn-sm' : '';
+  return html`<div class="acts" role="group" aria-label="${sym} actions">
+    <span class="acts-2"><a class="btn btn-quiet ${s}" href="#/alerts?symbol=${sym}">Alert</a><a class="btn btn-quiet ${s}" href="#/compare?t=${sym}">Compare</a></span>
+    ${watchButton(sym, { compact: sm })}${miloButton(`Ask about ${sym}`, { ask: `What is the case for ${sym} right now?`, context: `${sym} Dossier, ${label}`, symbol: sym, cls: `${s} acts-milo` })}
+    <details class="menu acts-more"><summary class="btn btn-quiet ${s}" aria-label="More actions for ${sym}">⋯</summary><div class="menu-body menu-end"><a href="#/alerts?symbol=${sym}">Alert</a><a href="#/compare?t=${sym}">Compare</a></div></details>
+  </div>`;
+}
+
 export function header(sym, D, view = 'overview', { compact = false, bar = false } = {}) {
   const q = D.quote || {};
   const s = (D.session && D.session.prices) || {};
@@ -51,7 +63,7 @@ export function header(sym, D, view = 'overview', { compact = false, bar = false
       <p class="dh-price">${isNum(q.price) ? html`<span class="dh-px">${num(q.price)}</span>` : D.quoteError ? '' : html`<span class="sk dh-sk dh-sk-sm" role="status" aria-label="Loading the price"></span>`}
         <span class="dh-chg ${dir(q.change_pct)}">${isNum(q.change_pct) ? html`${signed(q.change, 2, '')} (${signed(q.change_pct)})` : ''}</span>
         ${ext ? html`<span class="dh-ext">${capFirst(ext.kind)} ${num(ext.price)} <span class="${dir(ext.change_pct)}">${signed(ext.change_pct)}</span>${ext.as_of ? `, ${etStamp(ext.as_of)}` : ''}</span>` : s.phase_label ? html`<span class="dh-ext">Close of ${etDay(((D.session || {}).session || {}).last_close && D.session.session.last_close.date) || 'the last session'}</span>` : ''}</p>
-      <div class="cluster acts">${watchButton(sym, { compact: true })}<a class="btn btn-sm" href="#/alerts?symbol=${sym}">Alert</a><a class="btn btn-sm" href="#/compare?t=${sym}">Compare</a>${miloButton('Ask Milo', { ask: `What is the case for ${sym} right now?`, context: `${sym} Dossier, ${label}`, symbol: sym, cls: 'btn-sm' })}</div>
+      ${actions(sym, label, true)}
     </header>`;
   }
   return html`<header class="dhead ${compact ? 'compact' : ''}">
@@ -61,7 +73,7 @@ export function header(sym, D, view = 'overview', { compact = false, bar = false
         <span class="dh-chg ${dir(q.change_pct)}">${isNum(q.change_pct) ? html`${signed(q.change, 2, '')} (${signed(q.change_pct)})` : ''}</span></p>
       <p class="dh-state">${stateLine(D).base}${ext ? html` ${capFirst(ext.kind)} ${num(ext.price)}, <span class="${dir(ext.change_pct)}">${signed(ext.change_pct)}</span>${ext.as_of ? `, struck ${etStamp(ext.as_of)}` : ''}.` : ''}</p>
     </div>
-    <div class="cluster acts">${watchButton(sym)}<a class="btn" href="#/alerts?symbol=${sym}">Alert</a><a class="btn" href="#/compare?t=${sym}">Compare</a>${miloButton('Ask Milo', { ask: `What is the case for ${sym} right now?`, context: `${sym} Dossier, ${label}`, symbol: sym })}</div>
+    ${actions(sym, label, false)}
   </header>`;
 }
 
@@ -70,7 +82,7 @@ export function header(sym, D, view = 'overview', { compact = false, bar = false
 const eligible = (sym, fund) => { const k = fund ? 'fund' : kindOf(sym); return GROUPS.find((x) => x.id === 'security').pages.filter((p) => p.view !== 'financials' || can(k).financials); };
 export function tabs(sym, current, { fund = false } = {}) {
   const pages = eligible(sym, fund);
-  return html`<nav class="tabs" aria-label="${sym} Dossier" data-v2-dtabs="${sym}" data-v2-dcur="${current}">${pages.map((p) => html`<a href="${hrefFor(p.view, sym)}" ${p.view === current ? html`aria-current="page"` : ''}>${p.label}${p.v2 ? '' : html`<span class="legacy-mark" aria-hidden="true">${icon('out')}</span><span class="sr">, opens in the current app</span>`}</a>`)}</nav>`;
+  return html`<nav class="tabs" aria-label="${sym} Dossier" data-v2-dtabs="${sym}" data-v2-dcur="${current}">${tabSelect(`${sym} Dossier`, pages, current, sym)}${tabLinks(pages, current, sym)}</nav>`;
 }
 
 export const isFund = (D) => kindOf(D.sym, D) === 'fund';

@@ -131,16 +131,54 @@ METHOD = ("Read from the XBRL instance document of each 10-Q and 10-K, which "
           "reported quarters, because a 10-K reports the year rather than Q4.")
 
 
+# Words that end in "and" and are not two words run together ("Mainland", "Brand").
+_AND_WORDS = ("land", "hand", "band", "brand", "mand", "pand", "stand", "rand", "sand", "wand", "grand")
+_SMALL = {"And", "Of", "The", "For", "In", "To", "On", "At", "By"}
+
+
 def _member(raw: str) -> str:
-    """A dimension member as words. "USCanadaMember" -> "US Canada"."""
+    """A dimension member as words. "USCanadaMember" -> "US Canada".
+
+    Three things the owner saw in Apple's segments (2026-10-19): "IPhoneMember" read "I Phone" (a product
+    spelled with a lowercase i is camel-cased with a capital one in XBRL), "WearablesHomeandAccessories"
+    read "Wearables Homeand Accessories" (the filer wrote "and" in lowercase, so no boundary was seen),
+    and joining words kept their capitals ("Family Of Apps")."""
     name = (raw or "").split(":")[-1]
     name = re.sub(r"Member$", "", name)
+    # "IPhone", "IPad": a lone capital I before a capitalised word is the product's lowercase i.
+    # A marker until the word splits below are done, so they do not split "i" from "Phone".
+    name = re.sub(r"(?<![A-Za-z])I(?=[A-Z][a-z])", "\x00", name)
+    # "Homeand" + a capital: a lowercase "and" run into the word before it, unless the word is one that
+    # ends in "and" ("Mainland", "Brand").
+    def _and(m: "re.Match[str]") -> str:
+        word = m.group(1)
+        return m.group(0) if (word + "and").lower().endswith(_AND_WORDS) else f"{word} and "
+    name = re.sub(r"([A-Za-z]*[a-z])and(?=[A-Z])", _and, name)
     # Two splits, not one. The lookbehind on a lowercase letter alone leaves
     # "USCanadaMember" as "USCanada": an acronym followed by a word has no
     # lowercase at the boundary.
     name = re.sub(r"(?<=[a-z0-9])(?=[A-Z])", " ", name)
     name = re.sub(r"(?<=[A-Z])(?=[A-Z][a-z])", " ", name)
-    return name.strip() or raw
+    return _tidy(name.replace("\x00", "i")) or raw
+
+
+def _tidy(label: str) -> str:
+    """The same cleaning for a label already made into words. A filing's parse is kept forever, so labels
+    stored before 2026-10-19 ("I Phone", "Wearables Homeand Accessories", "Family Of Apps") are tidied
+    when they are read back rather than parsed again."""
+    name = re.sub(r"^I (?=[A-Z][a-z])", "i", (label or "").strip())
+
+    def _and(m: "re.Match[str]") -> str:
+        word = m.group(1)
+        return m.group(0) if (word + "and").lower().endswith(_AND_WORDS) else f"{word} and"
+    name = re.sub(r"\b([A-Za-z]*[a-z])and\b(?= [A-Z])", _and, name)
+    words = re.sub(r"\s+", " ", name).strip().split(" ")
+    name = " ".join(w.lower() if i and w in _SMALL else w for i, w in enumerate(words))
+    # On a table of segments, "Americas Segment" says "segment" twice; the reconciling line is named for
+    # what it is.
+    if name == "Corporate Non Segment":
+        return "Corporate, not in a segment"
+    return re.sub(r"(?<=\w) Segment$", "", name)
 
 
 def _days(start: Optional[str], end: Optional[str]) -> Optional[int]:
@@ -481,6 +519,7 @@ def build(ticker: str, force: bool = False, budget: int = PARSE_BUDGET,
         direct: Dict[Tuple[str, str, str], float] = {}
         summed: Dict[Tuple[str, str, str], float] = {}
         for fact in parsed.get("facts", []):
+            fact = {**fact, "member": _tidy(fact["member"])}
             series = "{}|{}|{}".format(fact["metric"], fact["axis"], fact["member"])
             labels[series] = {"metric": fact["metric"], "axis": fact["axis"],
                               "member": fact["member"]}

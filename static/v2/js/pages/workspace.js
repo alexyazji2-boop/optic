@@ -11,35 +11,41 @@
 import { $, $$, html, raw, render as draw } from '../core/dom.js';
 import * as api from '../core/api.js';
 import * as store from '../core/store.js';
-import { num, signed, money, compact, dir, isNum, ago, clean, shortDate } from '../core/format.js';
+import { num, signed, money, compact, dir, isNum, ago, clean, shortDate, longDate, capFirst } from '../core/format.js';
 import { etDay } from '../core/marketTime.js';
+import { kindOf, kindWord } from '../core/instrument.js';
+import { row30, skewWords } from './options-panels.js';
 import { skeleton, failed } from '../ui/states.js';
 import { lineChart, spark, mountCharts, meter } from '../ui/chart.js';
 import { provideContext } from '../ui/milo.js';
 import { toast } from '../ui/toast.js';
 import { icon } from '../ui/icons.js';
 import { go } from '../core/router.js';
-import { hello, etDate, portfolio, eventsBlock, welcome, starters, modes, STARTERS, setScene, portfolioSeries, wireForms } from './home.js';
+import { hello, etDate, portfolio, eventsBlock, STARTERS, portfolioSeries } from './home.js';
 
 const KEY = 'optic.v2.workspace.v1';
-const VERSION = 3;   // 3: default heights per panel type (2026-10-18, second review); the link, the lock and My Desk carry over
+const VERSION = 4;   // 3: default heights per panel type (2026-10-18, second review); the link, the lock and My Desk carry over
 const SPANS = [3, 4, 6, 8, 12];
 const HEIGHTS = ['s', 'm', 'l'];
 const HEIGHT_WORDS = { s: 'compact', m: 'standard', l: 'tall' };
 
 /* ---------------- presets: [panel, span, height] ---------------- */
 export const PRESETS = {
-  // Each row pairs a panel that sizes to its content with a list that fills the rest of the row's height,
-  // so no panel stands half empty beside a cramped one (LIST below; VISUAL-SPEC-DARK.md section 4).
-  market: { label: 'Market Overview', panels: [['indices', 12, 'm'], ['portfolio', 12, 'm'], ['quote', 8, 'm'], ['watch', 4, 's'], ['priority', 8, 'm'], ['cnews', 4, 's'], ['contracts', 12, 'l'], ['regime', 8, 'm'], ['expected', 4, 'm'], ['sectors', 6, 'm'], ['calendar', 6, 's'], ['desk', 6, 'm'], ['earnings', 6, 's'], ['movers', 4, 's'], ['news', 4, 's'], ['alerts', 4, 's'], ['economy', 12, 'l']] },
-  options: { label: 'Options Research', panels: [['watch', 4, 's'], ['quote', 8, 'm'], ['contracts', 12, 'l'], ['expected', 4, 'm'], ['earnings', 8, 's'], ['cnews', 6, 's'], ['movers', 6, 's']] },
-  longterm: { label: 'Long-Term Investing', panels: [['portfolio', 12, 'm'], ['quote', 8, 'm'], ['watch', 4, 's'], ['value', 6, 'm'], ['sectors', 6, 'm'], ['regime', 8, 'm'], ['cnews', 4, 's'], ['economy', 12, 'l']] },
+  // Each layout answers its own question with the most useful panels first (owner, 2026-10-19). A panel that
+  // sizes to its content sits beside lists that fill the rest of the row (LIST below). Any other panel is one
+  // Add panel away in Customize.
+  // Market Overview: conditions, then the ticker you are watching, then what is scheduled, then context.
+  market: { label: 'Market Overview', panels: [['indices', 12, 'm'], ['regime', 4, 'm'], ['expected', 4, 'm'], ['sectors', 4, 'm'], ['quote', 8, 'm'], ['watch', 4, 's'], ['calendar', 6, 's'], ['earnings', 6, 's'], ['priority', 6, 'm'], ['news', 6, 's'], ['desk', 6, 'm'], ['movers', 6, 's'], ['portfolio', 12, 'm']] },
+  // Options Research: the linked instrument, its chain, what the options price, positioning, its earnings.
+  options: { label: 'Options Research', panels: [['quote', 8, 'm'], ['watch', 4, 's'], ['contracts', 12, 'l'], ['vol', 6, 'm'], ['gex', 6, 'm'], ['tearn', 6, 'm'], ['cnews', 6, 's']] },
+  // Long-Term Investing: the business, its valuation, its financial trends, who owns it, what is happening.
+  longterm: { label: 'Long-Term Investing', panels: [['quote', 8, 'm'], ['watch', 4, 's'], ['biz', 6, 'm'], ['value', 6, 'm'], ['fin', 6, 'm'], ['own', 6, 'm'], ['cnews', 12, 's'], ['portfolio', 12, 'm']] },
   mine: { label: 'My Desk', panels: null },     // the reader's own; starts as a copy of Market Overview
 };
 
 // Open on a phone without asking: what a reader checks first. The rest fold to
 // their title and one line, and load only when opened.
-const ESSENTIAL = { market: ['indices', 'portfolio', 'quote', 'watch', 'priority'], options: ['watch', 'quote', 'contracts'], longterm: ['portfolio', 'watch', 'quote', 'value'], mine: ['indices', 'portfolio', 'priority', 'watch', 'quote'] };
+const ESSENTIAL = { market: ['indices', 'regime', 'quote', 'watch'], options: ['quote', 'contracts', 'vol'], longterm: ['quote', 'biz', 'value'], mine: ['indices', 'regime', 'quote', 'watch'] };
 const PHONE = '(max-width: 860px)';
 const isPhone = () => { try { return matchMedia(PHONE).matches; } catch (e) { return false; } };
 const folded = (id) => isPhone() && ((S.fold[S.preset] || {})[id] ?? !(ESSENTIAL[S.preset] || []).includes(id));
@@ -65,14 +71,21 @@ const FRESH = {
   alerts: 'From the scheduled scan.',
   economy: 'FRED series change on release days; Optic re-reads them at most every 6 hours.',
   value: 'Earnings data re-read at most every 6 hours; price delayed about 15 minutes.',
+  vol: 'Chain delayed about 15 minutes; re-read at most every 2 minutes. Outside market hours the free feed can serve it unquoted.',
+  gex: 'From open interest in the delayed chain, re-read at most every 2 minutes. Open interest itself updates once a day.',
+  tearn: 'Report dates and consensus re-read at most every 10 minutes; the implied move from the delayed chain.',
+  biz: 'From the latest annual and quarterly filings; re-read at most every 5 minutes, changing when a new filing lands.',
+  fin: 'Reported statements; they change when the company files.',
+  own: 'Insider filings arrive within days; 13F holdings about 45 days after each quarter.',
 };
 // The footer's one line: a short source and a status in a word or two. The full source, FRESH and
 // any calculation note are in the panel's "About this panel" explanation (owner, 2026-10-18).
 const SRC = { indices: 'Yahoo Finance', portfolio: 'Your brokerage', priority: 'Optic', watch: 'Yahoo Finance', quote: 'Yahoo Finance', cnews: 'Publisher feeds',
   contracts: 'Yahoo Finance chain', regime: 'Optic rules', expected: 'Yahoo Finance', sectors: 'Yahoo Finance', calendar: 'Agency schedules', desk: 'Optic Desk',
-  earnings: 'Yahoo Finance', movers: 'Optic scan', news: 'Wire feeds', alerts: 'Optic scan', economy: 'FRED', value: 'Yahoo Finance, SEC' };
-const QUOTED = new Set(['indices', 'portfolio', 'watch', 'quote', 'contracts', 'regime', 'expected', 'sectors', 'value']);
-const CADENCE = { priority: 'Every 10 min', cnews: 'Every 10 min', calendar: 'Every 20 min', news: 'Every 20 min', desk: 'Latest edition', earnings: 'Hourly', movers: 'Nightly scan', alerts: 'Scheduled scan', economy: 'Every 6 h' };
+  earnings: 'Yahoo Finance', movers: 'Optic scan', news: 'Wire feeds', alerts: 'Optic scan', economy: 'FRED', value: 'Yahoo Finance, SEC',
+  vol: 'Yahoo Finance chain', gex: 'Optic estimate', tearn: 'Yahoo Finance', biz: 'SEC filings', fin: 'Company statements', own: 'SEC filings' };
+const QUOTED = new Set(['indices', 'portfolio', 'watch', 'quote', 'contracts', 'regime', 'expected', 'sectors', 'value', 'vol', 'gex']);
+const CADENCE = { priority: 'Every 10 min', cnews: 'Every 10 min', calendar: 'Every 20 min', news: 'Every 20 min', desk: 'Latest edition', earnings: 'Hourly', movers: 'Nightly scan', alerts: 'Scheduled scan', economy: 'Every 6 h', tearn: 'Every 10 min', biz: 'As filed', fin: 'As filed', own: 'As filed' };
 // How often each cadence panel's source is rebuilt; data older than three of these says its age instead.
 const CADENCE_MS = { priority: 6e5, cnews: 6e5, calendar: 12e5, news: 12e5, earnings: 36e5, economy: 216e5 };
 const marketOpen = () => !!(((DATA.indices || {}).session) || {}).is_regular;
@@ -83,6 +96,11 @@ const statusOf = (id) => (QUOTED.has(id) ? (marketOpen() ? 'Delayed 15 min' : (l
 // Lists and tables take a default height for their kind and fill the rest of their row; the other
 // panels size to their content.
 const LIST = new Set(['watch', 'cnews', 'contracts', 'calendar', 'earnings', 'movers', 'news', 'alerts']);
+// The instrument or universe behind each market panel, named in its header so no figure is anonymous
+// (owner, 2026-10-19). Linked panels name their ticker in the gold chip instead.
+const SCOPE = { indices: 'US indices and cross-asset', regime: 'US market', expected: 'S&P 500', sectors: '11 SPDR sector funds', calendar: 'US releases',
+  earnings: 'Widely followed US companies', priority: 'US market and your names', news: 'Market wires', desk: 'US market', movers: 'Optic\'s scanned universe',
+  economy: 'US economy, FRED', alerts: 'Optic\'s scheduled scan', portfolio: 'Your linked accounts', watch: 'Your open list' };
 // Chart heights by the panel's height choice, desktop and phone.
 const CH = { portfolio: { s: 150, m: 200, l: 280, phone: 150 }, quote: { s: 170, m: 230, l: 340, phone: 170 }, economy: { s: 160, m: 220, l: 300, phone: 150 } };
 const portfolioMarks = () => ((((DATA.portfolio || {}).perf || {}).sources || {}).switches || []).map((x) => ({ d: String(x.date).slice(0, 10), label: 'Source changes', detail: 'estimated balances before, Optic\'s own snapshots after; the step is not a gain or loss' }));
@@ -95,6 +113,8 @@ const BLURB = {
   regime: 'The regime score with its factors, and the sentiment gauge.', expected: 'What index options price for one day.', sectors: 'The 11 sector funds by their move.',
   calendar: 'Scheduled U.S. releases this week.', desk: 'The day\'s Optic Desk edition.', earnings: 'Who reports this week and next.', movers: 'The largest one-month moves.',
   news: 'The day\'s wire headlines.', alerts: 'The scheduled scan\'s latest alerts.', economy: 'U.S. indicators with their history.', value: 'The linked ticker against its own valuation history.',
+  vol: 'What the linked ticker\'s options price.', gex: 'Dealer gamma walls and flip for the linked ticker.', tearn: 'The linked ticker\'s next report and its history.',
+  biz: 'The linked company\'s business, graded.', fin: 'Four years of revenue, profit and cash flow.', own: 'Insider and institutional activity.',
 };
 
 /* ---------------- state, persisted ---------------- */
@@ -105,7 +125,7 @@ function load() {
   try { v = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch (e) { v = null; }
   const ok = v && v.v === VERSION && PRESETS[v.preset];
   S = ok ? v : { v: VERSION, preset: 'market', layouts: {}, locked: false, link: '', fold: {} };
-  if (!ok && v && v.v === 2) Object.assign(S, { link: v.link || '', locked: !!v.locked, layouts: v.layouts && Array.isArray(v.layouts.mine) ? { mine: v.layouts.mine } : {}, preset: v.preset === 'mine' ? 'mine' : 'market' });
+  if (!ok && v && (v.v === 2 || v.v === 3)) Object.assign(S, { link: v.link || '', locked: !!v.locked, layouts: v.layouts && Array.isArray(v.layouts.mine) ? { mine: v.layouts.mine } : {}, preset: v.preset === 'mine' ? 'mine' : 'market' });
   S.fold = S.fold || {};
   Object.keys(PRESETS).forEach((p) => { if (!Array.isArray(S.layouts[p])) S.layouts[p] = defaults(p); });
   // a panel a later version adds appears hidden in older saved layouts, never lost
@@ -231,13 +251,16 @@ export const PANELS = {
     load: async () => { const [h, s] = await Promise.all([get('/api/home'), get('/api/sentiment', { ttl: 120000 }).catch((e) => ({ available: false, reason: api.explain(e, 'Sentiment') }))]); return { h, s }; },
     body: ({ h, s }) => {
       const m = (h || {}).macro || {};
-      const factors = (m.factors || []).slice().sort((a, b) => Math.abs(b.contribution) - Math.abs(a.contribution)).slice(0, 5);
+      // The conclusion and its three largest reasons first; every factor and the sentiment inputs one step away,
+      // so the panel fits a third of the row (owner, 2026-10-19).
+      const all = (m.factors || []).slice().sort((a, b) => Math.abs(b.contribution) - Math.abs(a.contribution)), top = all.slice(0, 3);
+      const frow = (f) => html`<tr><td>${f.factor}<span class="ws-rule ws-clip" title="${f.rule || ''}">${f.rule || ''}</span></td><td class="n">${num(f.value, 2)}</td><td class="n ${dir(f.contribution)}">${f.contribution > 0 ? '+' : ''}${num(f.contribution, 1)}</td></tr>`;
       return html`<div class="ws-two">
         <div><p class="ws-k">Regime</p><p class="ws-big">${capitalize(m.regime || 'n/a')}</p><p class="ws-sub">Score ${num(m.risk_score, 1)} on −100 to +100</p>
-          <table class="ws-t"><caption class="sr">Regime factors, largest first</caption><thead><tr><th scope="col">Factor</th><th scope="col" class="n">Reading</th><th scope="col" class="n">Effect</th></tr></thead>
-          <tbody>${factors.map((f) => html`<tr><td>${f.factor}<span class="ws-rule ws-clip" title="${f.rule || ''}">${f.rule || ''}</span></td><td class="n">${num(f.value, 2)}</td><td class="n ${dir(f.contribution)}">${f.contribution > 0 ? '+' : ''}${num(f.contribution, 1)}</td></tr>`)}</tbody></table></div>
+          <table class="ws-t"><caption class="sr">The three largest regime factors</caption><thead><tr><th scope="col">Largest factors</th><th scope="col" class="n">Reading</th><th scope="col" class="n">Effect</th></tr></thead><tbody>${top.map(frow)}</tbody></table>
+          ${all.length > 3 ? html`<details class="ws-more"><summary>All ${all.length} factors</summary><table class="ws-t"><caption class="sr">Every regime factor</caption><tbody>${all.slice(3).map(frow)}</tbody></table></details>` : ''}</div>
         <div><p class="ws-k">Sentiment</p>${s && s.available !== false ? html`<p class="ws-big">${num(s.score, 0)} <span class="ws-word">${s.label}</span></p><p class="ws-sub">0 is extreme fear, 100 extreme greed</p>
-          <ul class="ws-bars">${(s.components || []).map((c) => html`<li><span>${c.label}</span><span class="ws-gauge" aria-hidden="true"><i style="width:${Math.max(2, Math.min(100, c.score || 0))}%"></i></span><b>${num(c.score, 0)}</b></li>`)}</ul>`
+          <details class="ws-more"><summary>Its ${(s.components || []).length} inputs</summary><ul class="ws-bars">${(s.components || []).map((c) => html`<li><span>${c.label}</span><span class="ws-gauge" aria-hidden="true"><i style="width:${Math.max(2, Math.min(100, c.score || 0))}%"></i></span><b>${num(c.score, 0)}</b></li>`)}</ul></details>`
           : html`<p class="ws-note">${(s && s.reason) || 'The sentiment gauge is not available right now.'}</p>`}</div></div>`;
     },
     foot: ({ h, s }) => ({ source: 'Optic regime rules; Optic sentiment gauge', at: (s && s.generated_at) || (h || {}).generated_at }),
@@ -439,7 +462,115 @@ export const PANELS = {
     foot: (d) => ({ source: 'Optic fair-value method on Yahoo Finance and SEC data', at: (d || {}).generated_at }),
     milo: (link) => `How does ${link}'s price compare with its own valuation history, and what would justify the gap?`,
   },
+
+  // ---- the linked ticker's options and its business, so each layout answers its own question (2026-10-19).
+  // vol, gex, fin and own share one /api/ticker read through the API cache.
+  vol: {
+    title: 'Volatility', span: 6, linked: true,
+    how: 'What the linked ticker\'s options price: the move through the nearest monthly expiry, 30-day implied volatility and where it ranks against its own year, and skew (whether puts or calls cost more). From the delayed option chain.',
+    load: (link) => tickerRead(link),
+    body: (t, P, link) => {
+      const vs = t.vol_surface || {}, r30 = row30(vs), iv = vs.iv30 || {}, rk = t.iv_rank || {};
+      if (!vs.available && !iv.available) return html`<p class="ws-note">${optionsReason(t, link)}</p>`;
+      return html`<dl class="ws-kv">
+        ${r30 ? html`<div><dt>Implied move to ${shortDate(r30.expiry)}</dt><dd>±${num(r30.straddle_move_pct, 1)}%</dd><small>${r30.dte} days${r30.contains_event ? ', includes earnings' : ''}</small></div>` : ''}
+        <div><dt>Implied volatility, 30 days</dt><dd>${iv.available ? `${num(iv.iv_pct, 1)}%` : 'n/a'}</dd><small>${rk.available ? `Rank ${num(rk.rank, 0)} of 100 over a year` : 'No rank yet: history still building'}</small></div>
+        ${r30 ? html`<div><dt>Skew, ${shortDate(r30.expiry)}</dt><dd>${skewWords(r30.rr25_pts)}</dd><small>25-delta risk reversal ${signed(r30.rr25_pts, 1, ' pts')}</small></div>` : ''}</dl>
+        <p><a class="textlink" href="#/${enc(link)}/options">${link} options in full ${icon('arrow')}</a></p>`;
+    },
+    foot: (t) => ({ source: 'Yahoo Finance option chain; Optic\'s volatility surface', at: (t || {}).generated_at }),
+    milo: (link) => `What are ${link}'s options pricing right now, and is that expensive against its own history?`,
+  },
+  gex: {
+    title: 'Positioning', span: 6, linked: true,
+    how: 'Where dealers\' hedging may hold or push the price, estimated from open interest in the delayed chain: net dealer gamma, the call and put walls (the strikes with the most gamma), and the flip point where net gamma changes sign. An estimate from public open interest, not reported positions.',
+    load: (link) => tickerRead(link),
+    body: (t, P, link) => {
+      const g = t.gex || {};
+      if (g.error || !g.regime) return html`<p class="ws-note">${optionsReason(t, link)}</p>`;
+      const reg = g.regime || {}, lv = g.levels || {}, w = (x) => (x && isNum(x.strike) ? html`${num(x.strike, 0)} <small>${signed(x.distance_pct, 1)}</small>` : 'n/a');
+      return html`<dl class="ws-kv">
+        <div><dt>Dealer gamma</dt><dd>${capFirst(reg.state || 'n/a')}</dd><small>${reg.state === 'positive' ? 'Hedging tends to damp moves' : reg.state === 'negative' ? 'Hedging tends to extend moves' : ''}</small></div>
+        <div><dt>Call wall</dt><dd>${w(lv.call_wall)}</dd></div><div><dt>Put wall</dt><dd>${w(lv.put_wall)}</dd></div>
+        <div><dt>Flip point</dt><dd>${isNum(reg.flip_point) ? num(reg.flip_point) : 'None within 12%'}</dd></div></dl>
+        <p class="ws-read">${clean(reg.note || '')}</p>`;
+    },
+    foot: (t) => ({ source: 'Optic dealer-gamma estimate from Yahoo Finance open interest', at: (t || {}).generated_at }),
+    milo: (link) => `Where could options positioning hold or push ${link}'s price, and how reliable is that read?`,
+  },
+  tearn: {
+    title: 'Earnings', span: 6, linked: true,
+    how: 'The linked ticker\'s next report, what its options price for it, and how it has moved after past reports. Two different figures, kept apart: the implied move is a price today; the report-day average is history.',
+    load: (link) => get(`/api/earnings/${enc(link)}`, { ttl: 600000, timeout: 45000 }),
+    body: (e, P, link) => {
+      if (e.not_applicable) return html`<p class="ws-note">${clean(e.reason || `${link} does not report earnings.`)}</p>`;
+      const nr = e.next_report || {}, pr = e.pricing || {}, su = e.surprise || {};
+      return html`<dl class="ws-kv">
+        <div><dt>Next report</dt><dd>${nr.date ? longDate(nr.date) : 'No date yet'}</dd><small>${nr.date ? `${nr.days_away} days${nr.confirmed ? ', confirmed' : ', not confirmed'}` : ''}</small></div>
+        <div><dt>Options price for it</dt><dd>${pr.available && isNum(pr.implied_move_pct) ? `±${num(pr.implied_move_pct, 1)}%` : 'n/a'}</dd><small>${pr.available && isNum(pr.ratio) ? `${num(pr.ratio, 2)}× its usual move` : ''}</small></div>
+        <div><dt>Average report-day move</dt><dd>${isNum(pr.event_day_avg_pct) ? `±${num(pr.event_day_avg_pct, 1)}%` : 'n/a'}</dd><small>${su.quarters ? `Last ${su.quarters} reports` : ''}</small></div>
+        <div><dt>Beat rate</dt><dd>${isNum(su.beat_rate_pct) ? `${num(su.beat_rate_pct, 0)}%` : 'n/a'}</dd><small>${isNum(su.beat_count) ? `${su.beat_count} of ${su.quarters}` : ''}</small></div></dl>
+        <p><a class="textlink" href="#/${enc(link)}/earnings">${link} earnings in full ${icon('arrow')}</a></p>`;
+    },
+    foot: (e) => ({ source: 'Company calendars and consensus via Yahoo Finance; the option chain', at: (e || {}).generated_at }),
+    milo: (link) => `What matters for ${link}'s next report, and what are options pricing for it?`,
+  },
+  biz: {
+    title: 'Business quality', span: 6, linked: true,
+    how: 'Seven measures of the linked company\'s business, each graded A to F from its filings: returns on capital, margins, growth, cash generation, the balance sheet, dilution and moat evidence. Beside it, how its valuation reads. Quality and price are kept apart on purpose.',
+    load: (link) => get(`/api/framework/${enc(link)}?mode=combined`, { ttl: 300000, timeout: 60000 }),
+    body: (d, P, link) => {
+      if (kindOf(link) === 'fund') return notCompany(link);
+      const lt = (d || {}).long_term || {}, q = lt.quality || {}, v = lt.valuation || {};
+      if (!q.grade) return html`<p class="ws-note">${clean(q.summary || ((lt.conviction || {}).why) || `No business grade for ${link}.`)}</p>`;
+      return html`<p class="ws-big">Grade ${q.grade}${v.label ? html` <span class="ws-word">Valuation: ${v.label.toLowerCase()}</span>` : ''}</p>
+        <table class="ws-t"><caption class="sr">${link} business measures</caption><tbody>${(q.components || []).map((c) => html`<tr><td>${c.label}</td><td class="n"><b>${c.grade || ''}</b></td></tr>`)}</tbody></table>
+        <p class="ws-read">${clean(((lt.conviction || {}).why) || '')}</p>`;
+    },
+    foot: (d) => ({ source: 'Optic research framework on SEC filings (XBRL)', at: (d || {}).generated_at }),
+    milo: (link) => `What are ${link}'s business strengths and weaknesses, and is the valuation asking too much?`,
+  },
+  fin: {
+    title: 'Financial trends', span: 6, linked: true,
+    how: 'Revenue, net income and free cash flow for the linked company\'s last four fiscal years, with its margins and growth. From the company\'s reported statements.',
+    load: (link) => tickerRead(link),
+    body: (t, P, link) => {
+      const f = ((t.company || {}).financials) || {};
+      if (kindOf(link) === 'fund') return notCompany(link);
+      if (!f.available) return html`<p class="ws-note">No statements for ${link} in the feed.</p>`;
+      const yrs = (f.annual_periods || []).slice(0, 4), a = f.annual || {}, m = f.margins || {}, g = f.growth || {};
+      const row = (label, key) => html`<tr><th scope="row">${label}</th>${yrs.map((_, i) => html`<td class="n">${isNum((a[key] || [])[i]) ? compact(a[key][i]) : 'n/a'}</td>`)}</tr>`;
+      return html`<table class="ws-t"><caption class="sr">${link} annual figures</caption><thead><tr><th scope="col">Fiscal year</th>${yrs.map((y) => html`<th scope="col" class="n">${String(y).slice(0, 4)}</th>`)}</tr></thead>
+        <tbody>${row('Revenue', 'revenue')}${row('Net income', 'net_income')}${row('Free cash flow', 'free_cash_flow')}</tbody></table>
+        <p class="ws-read">Operating margin ${num(m.operating_pct, 1)}%, net margin ${num(m.net_pct, 1)}%. Revenue ${signed(g.revenue_yoy_pct, 1)} on the year.</p>
+        <p><a class="textlink" href="#/${enc(link)}/financials">${link} financials in full ${icon('arrow')}</a></p>`;
+    },
+    foot: (t) => ({ source: 'Company statements via Yahoo Finance', at: (t || {}).generated_at }),
+    milo: (link) => `What do ${link}'s last four years of revenue, profit and cash flow say about the business?`,
+  },
+  own: {
+    title: 'Ownership', span: 6, linked: true,
+    how: 'Who owns the linked company and which way they moved: insider buying and selling over six months, the institutional share, and how many of the largest holders raised or cut their stake at the last 13F. 13F filings arrive about 45 days after the quarter.',
+    load: (link) => tickerRead(link),
+    body: (t, P, link) => {
+      const o = ((t.company || {}).ownership) || {};
+      if (kindOf(link) === 'fund') return notCompany(link);
+      if (!o.available) return html`<p class="ws-note">No ownership data for ${link} in the feed.</p>`;
+      const i6 = o.insider_6m || {};
+      return html`<dl class="ws-kv">
+        <div><dt>Insiders, 6 months</dt><dd>${capFirst(o.insider_signal || 'n/a')}</dd><small>${num(i6.purchase_count, 0)} buys, ${num(i6.sale_count, 0)} sales</small></div>
+        <div><dt>Held by institutions</dt><dd>${isNum(o.institutional_pct_held) ? `${num(o.institutional_pct_held * 100, 0)}%` : 'n/a'}</dd></div>
+        <div><dt>Largest holders</dt><dd>${o.holders_adding} raised, ${o.holders_trimming} cut</dd><small>of ${o.holders_counted || (o.top_holders || []).length}, by more than ${num(o.holder_change_threshold_pct || 2, 0)}%</small></div></dl>`;
+    },
+    foot: (t) => ({ source: 'SEC Form 4 and 13F via Yahoo Finance', at: (t || {}).generated_at }),
+    milo: (link) => `What does recent insider and institutional activity in ${link} suggest, if anything?`,
+  },
 };
+// One /api/ticker read for the linked ticker's options and business panels; the API cache shares it.
+function tickerRead(link) { return get(`/api/ticker/${enc(link)}?max_expiries=4&macro=true`, { ttl: 120000, timeout: 60000 }); }
+// The chain's own reason when it is unusable (the free feed serves it unquoted outside market hours).
+function optionsReason(t, link) { return clean(((t.gex || {}).error) || `Options readings for ${link} are not available right now.`); }
+const notCompany = (link) => html`<p class="ws-note">${link} is a ${kindWord(kindOf(link))}, so it has no business of its own to grade or statements to chart. <a class="textlink" href="#/${enc(link)}/investing">Its long-term record</a>.</p>`;
 const capitalize = (s) => (s ? String(s).charAt(0).toUpperCase() + String(s).slice(1) : s);
 const impSeg = (P) => html`<div class="seg ws-seg" role="group" aria-label="Impact">${[['all', 'All'], ['high', 'Medium and high']].map(([k, l]) => html`<button type="button" data-ws-set="calendar:imp:${k}" aria-pressed="${P.imp === k}">${l}</button>`)}</div>`;
 
@@ -452,42 +583,47 @@ const ps = (id) => (PS[id] || (PS[id] = JSON.parse(JSON.stringify(PANELS[id].sta
 const NEW = { starters: undefined, modes: undefined };
 const isNew = () => !store.allSymbols().length && !(DATA.portfolio && !DATA.portfolio.absent);
 
+// Three levels, each in its own place (owner, 2026-10-19): the sidebar holds destinations; this row holds
+// Home's layouts, with Customize at its right; the toolbar under it holds the linked ticker, or, while
+// customizing, the editing actions. Normal Home shows no editing controls at all.
+let EDIT = false;
 function bar() {
   const hidden = layout().filter((x) => x.hidden && !(PANELS[x.id].optional && (DATA[x.id] || {}).absent));
-  return html`<div class="ws-bar" role="toolbar" aria-label="Layout">
+  const recent = [...new Set([...(store.recent() || []), ...((store.activeList() || {}).symbols || [])])].filter((x) => x !== S.link).slice(0, 5);
+  return html`<div class="ws-layoutbar">
     <div class="ws-presets" role="tablist" aria-label="Layout">${Object.entries(PRESETS).map(([k, p]) => html`<button type="button" role="tab" aria-selected="${S.preset === k}" data-ws-preset="${k}">${p.label}</button>`)}</div>
-    <form class="ws-linkform" data-ws-linkform><label for="ws-link">Linked ticker</label><input id="ws-link" name="link" value="${S.link}" autocomplete="off" spellcheck="false" maxlength="12" aria-describedby="ws-link-help"><button type="submit" class="btn btn-sm">Link</button><span id="ws-link-help" class="sr">Panels marked with the ticker follow it</span></form>
-    <span class="spacer"></span>
-    <div class="ws-tools">
-      <details class="ws-add"><summary class="btn btn-sm">Add panel${hidden.length ? ` (${hidden.length})` : ''}</summary><div class="ws-menu-body">${hidden.length ? hidden.map((x) => html`<button type="button" data-ws-show="${x.id}">${PANELS[x.id].title}</button>`) : html`<p class="ws-rule">Every panel is showing.</p>`}</div></details>
-      <button type="button" class="btn btn-sm" data-ws-lock aria-pressed="${!!S.locked}">${S.locked ? 'Unlock layout' : 'Lock layout'}</button>
-      <button type="button" class="btn btn-sm" data-ws-reset>Reset</button>
-      ${S.preset === 'mine' ? '' : html`<button type="button" class="btn btn-sm" data-ws-save>Save as My Desk</button>`}
-    </div>
-    <details class="ws-menu ws-toolmenu"><summary class="btn btn-sm">Layout options</summary><div class="ws-menu-body">
-      ${hidden.map((x) => html`<button type="button" data-ws-show="${x.id}">Add ${PANELS[x.id].title}</button>`)}
-      <button type="button" data-ws-reset>Reset this layout</button>
-      ${S.preset === 'mine' ? '' : html`<button type="button" data-ws-save>Save as My Desk</button>`}</div></details>
+    <button type="button" class="btn btn-sm ws-edit" data-ws-edit aria-pressed="${EDIT}">${EDIT ? 'Done' : 'Customize'}</button>
   </div>
+  ${EDIT ? html`<div class="ws-toolbar ws-editbar" role="group" aria-label="Customize ${PRESETS[S.preset].label}">
+      <p class="ws-sub">Customizing ${PRESETS[S.preset].label}. Drag a panel by its grip or its corner, or use its menu.</p>
+      <details class="ws-add"><summary class="btn btn-sm">Add panel${hidden.length ? ` (${hidden.length})` : ''}</summary><div class="ws-menu-body">${hidden.length ? hidden.map((x) => html`<button type="button" data-ws-show="${x.id}">${PANELS[x.id].title}</button>`) : html`<p class="ws-rule">Every panel is showing.</p>`}</div></details>
+      ${S.preset === 'mine' ? '' : html`<button type="button" class="btn btn-sm" data-ws-save>Save as My Desk</button>`}
+      <details class="ws-menu"><summary class="ws-hbtn" aria-label="More layout actions">⋯</summary><div class="ws-menu-body"><button type="button" data-ws-reset>Reset ${PRESETS[S.preset].label} to its standard panels</button></div></details>
+      <button type="button" class="btn btn-sm btn-primary" data-ws-edit>Done</button>
+    </div>`
+  : html`<div class="ws-toolbar">
+      <form class="ws-linkform" data-ws-linkform><label for="ws-link">Linked ticker</label><input id="ws-link" name="link" value="${S.link}" autocomplete="off" spellcheck="false" maxlength="12" aria-describedby="ws-link-help"><button type="submit" class="btn btn-sm">Link</button><span id="ws-link-help" class="sr">Panels showing the ticker chip follow it</span></form>
+      ${recent.length ? html`<div class="ws-recent" role="group" aria-label="Link a recent ticker">${recent.map((sym) => tickBtn(sym))}</div>` : ''}
+    </div>`}
   <p class="ws-live sr" role="status" aria-live="polite" id="ws-live"></p>`;
 }
 
 function panelShell(x, i, n) {
-  const p = PANELS[x.id], locked = !!S.locked, link = S.link, fold = folded(x.id), P = ps(x.id);
+  const p = PANELS[x.id], locked = !EDIT, link = S.link, fold = folded(x.id), P = ps(x.id);
   const ask = typeof p.milo === 'function' ? p.milo(link) : p.milo;
   const hasTable = !!CONTRACT_COLS && ['watch', 'earnings', 'movers', 'contracts'].includes(x.id);
   return html`<section class="ws-panel ${P.allCols ? 'all-cols' : ''}" data-ws-panel="${x.id}" data-h="${x.h}" data-kind="${LIST.has(x.id) ? 'list' : 'fit'}" style="--span:${x.span}" aria-labelledby="wsh-${x.id}" ${p.optional && (DATA[x.id] || {}).absent ? 'hidden' : ''}>
     <header class="ws-head">
       ${locked ? '' : html`<button type="button" class="ws-grip" data-ws-grip="${x.id}" aria-label="Move ${p.title}: arrow keys move it earlier or later">⠿</button>`}
       <h2 class="ws-title" id="wsh-${x.id}"><span class="ws-tt">${p.title}</span><button type="button" class="ws-tbtn" data-ws-fold="${x.id}" aria-expanded="${!fold}" aria-controls="wsb-${x.id}"><span>${p.title}</span>${icon('chev')}</button></h2>
-      ${p.linked ? html`<span class="ws-linkchip" title="Follows the linked ticker">${link}</span>` : ''}
+      ${p.linked ? html`<span class="ws-linkchip" title="Follows the linked ticker">${link}</span>` : SCOPE[x.id] ? html`<span class="ws-scope">${SCOPE[x.id]}</span>` : ''}
       <span class="spacer"></span>
       <button type="button" class="ws-ibtn ws-howbtn" data-ws-how="${x.id}" aria-expanded="false" aria-controls="wsw-${x.id}" aria-label="About ${p.title}: how to read it, its source and how fresh it is" title="About this panel">?</button>
       <button type="button" class="btn btn-milo btn-sm ws-ask" data-v2-milo="${ask}" data-v2-milo-ctx="Home: ${p.title}" data-v2-milo-sym="${p.linked ? link : ''}" aria-label="Ask Milo about ${p.title}">${icon('milo')}<span class="ws-ask-t">Ask Milo</span></button>
       <details class="ws-menu"><summary class="ws-hbtn" aria-label="${p.title} options">⋯</summary><div class="ws-menu-body">
         <button type="button" class="ws-phone-only" data-ws-how="${x.id}" aria-controls="wsw-${x.id}">About this panel</button>
         <button type="button" class="ws-phone-only ws-menu-milo" data-v2-milo="${ask}" data-v2-milo-ctx="Home: ${p.title}" data-v2-milo-sym="${p.linked ? link : ''}">${icon('milo')}Ask Milo about this</button>
-        ${locked ? html`<p class="ws-rule">The layout is locked.</p>` : html`
+        ${locked ? '' : html`
         <button type="button" data-ws-move="${x.id}:-1" ${i === 0 ? 'disabled' : ''}>Move earlier</button><button type="button" data-ws-move="${x.id}:1" ${i === n - 1 ? 'disabled' : ''}>Move later</button>
         <button type="button" class="ws-wide-only" data-ws-span="${x.id}:-1" ${x.span <= SPANS[0] ? 'disabled' : ''}>Narrower</button><button type="button" class="ws-wide-only" data-ws-span="${x.id}:1" ${x.span >= 12 ? 'disabled' : ''}>Wider</button>
         <button type="button" data-ws-h="${x.id}:-1" ${x.h === 's' ? 'disabled' : ''}>Shorter</button><button type="button" data-ws-h="${x.id}:1" ${x.h === 'l' ? 'disabled' : ''}>Taller</button>
@@ -496,7 +632,7 @@ function panelShell(x, i, n) {
         ${hasTable ? html`<button type="button" class="ws-phone-only" data-ws-cols="${x.id}">${P.allCols ? 'Fewer columns' : 'All columns'}</button>` : ''}
         <button type="button" data-ws-reload="${x.id}">Refresh</button></div></details>
     </header>
-    <div class="ws-how" id="wsw-${x.id}" hidden><p>${p.how}</p><dl class="ws-srcd" id="wsd-${x.id}"></dl></div>
+    <div class="ws-how" id="wsw-${x.id}" hidden>${SCOPE[x.id] && !p.linked ? html`<p class="ws-k">${SCOPE[x.id]}</p>` : ''}<p>${p.how}</p><dl class="ws-srcd" id="wsd-${x.id}"></dl></div>
     <p class="ws-blurb" ${fold ? '' : 'hidden'}>${BLURB[x.id] || ''}</p>
     <div class="ws-body" id="wsb-${x.id}" tabindex="-1" ${fold ? 'hidden' : ''}>${skeleton(x.id === 'indices' ? 'lines' : 'rows', x.id === 'indices' ? 2 : 4, `Loading ${p.title}`)}</div>
     <footer class="ws-foot" id="wsf-${x.id}" ${fold ? 'hidden' : ''}></footer>
@@ -504,14 +640,23 @@ function panelShell(x, i, n) {
   </section>`;
 }
 
-// Home's first visit: the welcome, a few names to follow, and how Optic should speak (pages/home.js)
-function newBand() {
-  return html`<div class="ws-new" id="ws-new">
-    <div id="ws-welcome">${DATA.indices ? welcome(DATA.indices) : skeleton('chart', 1, 'Loading')}</div>
-    <section class="ws-panel ws-newpanel" aria-labelledby="st-h"><header class="ws-head"><h2 class="ws-title" id="st-h">Follow a few names to start</h2></header>
-      <div class="ws-body"><p class="ws-sub">${store.signedIn() ? 'They go into your account\'s watchlist.' : 'Kept in this browser. Sign in to keep them on your account.'} Home fills in around what you follow.</p><div id="ws-starters">${NEW.starters ? starters(NEW.starters) : skeleton('rows', 2)}</div></div></section>
-    ${NEW.modes && NEW.modes.length ? html`<section class="ws-panel ws-newpanel" id="ws-modes" aria-labelledby="md-h"><header class="ws-head"><h2 class="ws-title" id="md-h">How should Optic speak to you?</h2></header><div class="ws-body"><p class="ws-sub">Change it any time in Settings.</p>${modes(NEW.modes)}</div></section>` : ''}
-  </div>`;
+// The first visit: one compact band that gets out of the way (owner, 2026-10-19: the welcome hero, the starter
+// cards and five language cards pushed the workspace a screen down, and on a phone the language choice took
+// nearly the whole screen). Follow a few names, choose how Optic explains things, or dismiss it; it does not
+// come back once dismissed. The explanation level stays in Settings.
+const ONBOARD_KEY = 'optic.v2.onboard.v1';
+const onboarded = () => { try { return localStorage.getItem(ONBOARD_KEY) === 'done'; } catch (e) { return false; } };
+const showOnboard = () => isNew() && !onboarded();
+function onboard() {
+  let cur = null; try { cur = localStorage.getItem('optic.knowledge.v1'); } catch (e) { /* private */ }
+  const following = store.allSymbols();
+  return html`<section class="ws-onboard" id="ws-new" aria-labelledby="ob-h">
+    <div class="ob-text"><h2 class="ws-title" id="ob-h">New to Optic? Start with a few names.</h2>
+      <p class="ws-sub">Search any company, fund or index at the top, or follow one of these and Home fills in around them. ${store.signedIn() ? 'They go into your watchlist.' : 'Kept in this browser; sign in to keep them on your account.'}</p></div>
+    <div class="ob-row"><div class="ob-picks" role="group" aria-label="Follow a starter name">${STARTERS.map((sym) => html`<button type="button" class="ws-tick ob-follow" data-v2-watch="${sym}" aria-pressed="${store.isFollowed(sym)}">${store.isFollowed(sym) ? 'Following' : 'Follow'} ${sym}</button>`)}</div>
+    ${NEW.modes && NEW.modes.length ? html`<label class="ws-sel ob-mode">How Optic explains things <select data-ws-mode><option value="">Choose a level</option>${NEW.modes.map((m) => html`<option value="${m.id}" ${cur === m.id ? 'selected' : ''}>${m.label}</option>`)}</select></label>` : ''}</div>
+    <button type="button" class="btn btn-sm" data-ws-onboard-done>${following.length ? 'Done' : 'Not now'}</button>
+  </section>`;
 }
 
 // A row the next panel cannot join ends early; its last panel widens to the end of the row so the
@@ -532,32 +677,20 @@ function paintAll() {
   const ses = ((DATA.indices || {}).session) || {};
   draw(root, html`<div class="ws-page">
     <header class="ws-pagehead"><div><h1 class="t-h2" tabindex="-1">${hello()}</h1><p class="ws-sub" id="ws-date">${etDate(ses.now_et)}${ses.label ? `. ${clean(ses.label)}.` : ''}</p></div>
-      <p class="ws-sub ws-about">Connected to Optic's existing data sources. Each panel says where its figures come from and how fresh they are. Your layout is kept in this browser.</p></header>
-    ${isNew() ? newBand() : ''}
+      <p class="ws-sub ws-about">Connected to Optic's existing data sources; each panel names its source and how fresh it is.</p></header>
+    ${showOnboard() ? onboard() : ''}
     ${bar()}
-    <div class="ws-grid ${S.locked ? 'is-locked' : ''}">${shown.length ? shown.map((x, i) => panelShell(x, i, shown.length)) : html`<p class="ws-note">Every panel is hidden. Use Add panel, or Reset.</p>`}</div></div>`);
-  if (isNew()) { wireForms(root); loadNew(); }
+    <div class="ws-grid ${EDIT ? 'is-editing' : 'is-locked'}">${shown.length ? shown.map((x, i) => panelShell(x, i, shown.length)) : html`<p class="ws-note">Every panel is hidden. Use Add panel, or Reset.</p>`}</div></div>`);
+  if (showOnboard()) loadNew();
   shown.forEach((x) => { if (DATA[x.id] !== undefined || ERR[x.id]) paintBody(x.id); if (!folded(x.id)) loadPanel(x.id, { quiet: DATA[x.id] !== undefined }); });
   fillRows();
   provideContext(miloContext);
 }
 
 async function loadNew() {
-  if (NEW.starters === undefined) {
-    NEW.starters = null;
-    get(`/api/watchlist?symbols=${STARTERS.join(',')}`, { ttl: 60000 }).then((r) => { NEW.starters = r.rows || []; }, () => { NEW.starters = []; }).then(() => { const h = $('#ws-starters', root); if (h && live) draw(h, starters(NEW.starters)); });
-  }
   if (NEW.modes === undefined) {
     NEW.modes = null;
-    let asked = null; try { asked = localStorage.getItem('optic.knowledge.asked.v1'); } catch (e) { /* private */ }
-    if (!asked) get('/api/knowledge/modes', { ttl: 3600000 }).then((r) => { NEW.modes = r.modes || []; if (live && isNew() && NEW.modes.length) paintAll(); }, () => {});
-  }
-  if (!NEW.scene) {
-    NEW.scene = true;
-    get('/api/instrument?symbol=%5EGSPC&range=6mo', { ttl: 300000, timeout: 15000 }).then((r) => {
-      setScene((r.dates || []).map((dd, i) => ({ d: String(dd).slice(0, 10), c: Number(r.close[i]) })).filter((q) => isNum(q.c)));
-      const w = $('#ws-welcome', root); if (w && live && DATA.indices) { draw(w, welcome(DATA.indices)); wireForms(root); }
-    }, () => {});
+    get('/api/knowledge/modes', { ttl: 3600000 }).then((r) => { NEW.modes = r.modes || []; if (live && showOnboard() && NEW.modes.length) paintAll(); }, () => {});
   }
 }
 
@@ -568,7 +701,10 @@ function paintBody(id) {
   if (sec && sec.hidden) { sec.hidden = false; fillRows(); }
   if (ERR[id]) {
     // a linked panel's 404 means the provider had nothing for this ticker just now, not that the panel is missing
-    if (p.linked && ERR[id].kind === 'notfound') draw(body, html`<div class="state err" role="alert"><p class="t-h3">${p.title} did not load</p><p>The data provider returned nothing for ${ERRLINK[id] || S.link} just now. This is usually brief.</p></div>`);
+    if (p.linked && ERR[id].kind === 'notfound') {
+      const optionsPanel = ['contracts', 'vol', 'gex'].includes(id);
+      draw(body, html`<div class="state err" role="alert"><p class="t-h3">${p.title} did not load</p><p>The data provider has nothing for ${ERRLINK[id] || S.link} just now. ${optionsPanel && !marketOpen() ? 'Outside market hours the free feed often serves option chains without quotes; they return when trading resumes.' : 'This is usually brief.'}</p></div>`);
+    }
     else draw(body, failed(p.title, ERR[id], {}));
     body.insertAdjacentHTML('beforeend', `<button type="button" class="btn btn-sm" data-ws-reload="${id}">Try again</button>`);
     draw(foot, ''); return;
@@ -609,8 +745,7 @@ async function loadPanel(id, { force = false, quiet = false } = {}) {
   }
   if (!ERR[id]) delete RETRIED[id];
   paintBody(id);
-  if (id === 'portfolio' && isNew() !== !!$('#ws-new', root)) paintAll();   // a linked portfolio makes this a returning reader's Home
-  if (id === 'indices' && isNew()) { const w = $('#ws-welcome', root); if (w && !w.querySelector('form')) { draw(w, welcome(DATA.indices)); wireForms(root); } }
+  if (id === 'portfolio' && showOnboard() !== !!$('#ws-new', root)) paintAll();   // a linked portfolio makes this a returning reader's Home
 }
 
 /* ---------------- linking ---------------- */
@@ -713,11 +848,13 @@ function wire() {
     if ((b = t('[data-ws-hide]'))) { const id = b.dataset.wsHide; mutate((L) => { L.find((y) => y.id === id).hidden = true; }, `${PANELS[id].title} hidden. Add panel brings it back.`); return; }
     if ((b = t('[data-ws-show]'))) { const id = b.dataset.wsShow; mutate((L) => { const x = L.find((y) => y.id === id); x.hidden = false; L.splice(L.indexOf(x), 1); L.push(x); }, `${PANELS[id].title} added at the end.`); return; }
     if ((b = t('[data-ws-reload]'))) { loadPanel(b.dataset.wsReload, { force: true }); return; }
-    if (t('[data-ws-lock]')) { S.locked = !S.locked; save(); paintAll(); say(S.locked ? 'Layout locked.' : 'Layout unlocked.'); return; }
+    if (t('[data-ws-edit]')) { EDIT = !EDIT; paintAll(); say(EDIT ? `Customizing ${PRESETS[S.preset].label}.` : 'Done customizing.'); const b = $('[data-ws-edit]', root); if (b) b.focus(); return; }
+    if (t('[data-ws-onboard-done]')) { try { localStorage.setItem(ONBOARD_KEY, 'done'); localStorage.setItem('optic.knowledge.asked.v1', '1'); } catch (err) { /* private mode */ } paintAll(); say('Welcome dismissed. How Optic explains things is in Settings.'); return; }
     if (t('[data-ws-reset]')) { S.layouts[S.preset] = defaults(S.preset); S.fold[S.preset] = {}; save(); paintAll(); toast(`${PRESETS[S.preset].label} is back to its standard layout.`); return; }
-    if (t('[data-ws-save]')) { S.layouts.mine = JSON.parse(JSON.stringify(layout())); S.fold.mine = Object.assign({}, S.fold[S.preset]); S.preset = 'mine'; save(); paintAll(); toast('Saved as My Desk.'); return; }
+    if (t('[data-ws-save]')) { S.layouts.mine = JSON.parse(JSON.stringify(layout())); S.fold.mine = Object.assign({}, S.fold[S.preset]); S.preset = 'mine'; EDIT = false; save(); paintAll(); toast('Saved as My Desk.'); return; }
   });
   root.addEventListener('change', (e) => {
+    if (e.target.matches('[data-ws-mode]')) { try { if (e.target.value) localStorage.setItem('optic.knowledge.v1', e.target.value); localStorage.setItem('optic.knowledge.asked.v1', '1'); } catch (err) { /* private mode */ } say('Saved. You can change it in Settings.'); return; }
     if (e.target.matches('[data-ws-expiry]')) { ps('contracts').expiry = e.target.value; loadPanel('contracts', { force: true }); }
   });
   root.addEventListener('submit', (e) => { const f = e.target.closest('[data-ws-linkform]'); if (!f) return; e.preventDefault(); setLink(f.link.value); });
@@ -730,7 +867,7 @@ function wire() {
   // pointer: drag a grip to reorder, drag the corner to resize
   root.addEventListener('pointerdown', (e) => {
     const g = e.target.closest('[data-ws-grip]'), r = e.target.closest('[data-ws-resize]');
-    if ((!g && !r) || S.locked || e.button !== 0) return;
+    if ((!g && !r) || !EDIT || e.button !== 0) return;
     e.preventDefault();
     const id = (g || r).dataset.wsGrip || (g || r).dataset.wsResize, el = $(`[data-ws-panel="${id}"]`, root), grid = $('.ws-grid', root);
     const col = grid.clientWidth / 12, startX = e.clientX, startSpan = layout().find((x) => x.id === id).span;
@@ -775,7 +912,7 @@ export function dispose() { lastScroll = window.scrollY; live = false; clearInte
 export function onLists() {
   if (!live) return;
   if (!!$('#ws-new', root) !== isNew()) { paintAll(); return; }
-  const h = $('#ws-starters', root); if (h && NEW.starters) draw(h, starters(NEW.starters));
+  const ob = $('#ws-new', root); if (ob) { const tmp = document.createElement('div'); draw(tmp, onboard()); ob.replaceWith(tmp.firstElementChild); }
   if (layout().some((x) => x.id === 'watch' && !x.hidden)) loadPanel('watch', { force: !folded('watch') });
 }
 export const _test = { PRESETS, PANELS, ESSENTIAL, FRESH, load: () => { load(); return S; }, defaults };

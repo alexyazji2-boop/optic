@@ -12,7 +12,7 @@ import { signedBars, hbars } from '../ui/bars.js';
 import { mountCharts } from '../ui/chart.js';
 import { button as miloButton, provideContext } from '../ui/milo.js';
 import { toast } from '../ui/toast.js';
-import { groupTabs } from './tabs.js';
+import { sectionHead } from './tabs.js';
 
 let book = 'balanced', month = null, D = {}, live = true, mainEl = null, poll = null, scanning = false, notice = null;
 const $0 = (v) => (isNum(v) ? money(v, 0) : 'n/a');
@@ -237,7 +237,7 @@ function paint() {
   // a background repaint (risk, a scan poll) must not take focus away from the reader
   const a = document.activeElement, fid = a && mainEl.contains(a) ? a.id || (a.dataset && Object.keys(a.dataset).length ? a.outerHTML.match(/data-v2-[a-z-]+="[^"]*"/)?.[0] : '') : '';
   const empty = d && !(d.open || []).length && !(d.closed || []).length;
-  draw(mainEl, html`<header class="page-head"><h1 class="t-display-m">Optic Portfolio</h1>${groupTabs('portfolio', 'tracker')}
+  draw(mainEl, html`<header class="page-head">${sectionHead('portfolio', 'tracker')}
       <p class="section-sub">The terminal's own paper-traded record. Hypothetical performance: these positions were never placed with real money.</p></header>
     ${D.err ? failed("Optic's position ledger", D.err, { retry: 'load' }) : !d ? skeleton('rows', 6, "Loading Optic's own position ledger") : html`
       ${books(d)}${ledger(d)}${openPositions(d.open || [])}${months(d)}${funnel(d)}

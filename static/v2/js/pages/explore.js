@@ -8,7 +8,7 @@ import { num, signed, clean, isNum } from '../core/format.js';
 import { skeleton, empty } from '../ui/states.js';
 import { icon } from '../ui/icons.js';
 import { button as miloButton, provideContext } from '../ui/milo.js';
-import { groupTabs } from './tabs.js';
+import { sectionHead } from './tabs.js';
 
 const RANGE_PER_SIGMA = 1.6;
 let D = {}, live = true, mainEl = null;
@@ -69,7 +69,7 @@ function crossAsset() {
 function paint() {
   if (!live) return;
   const missing = [D.scans === null && 'the screen catalogue', D.board === null && 'the sector board', D.home === null && 'the cross-asset instruments'].filter(Boolean);
-  draw(mainEl, html`<header class="page-head"><h1 class="t-display-m">Explore</h1>${groupTabs('discover', 'explore')}</header>
+  draw(mainEl, html`<header class="page-head">${sectionHead('discover', 'explore')}</header>
     ${missing.length === 3 ? '' : html`${readings()}${screens()}${sectors()}${crossAsset()}`}
     ${missing.length === 3 ? html`<div class="state err" role="alert"><p class="t-h3">Explore did not load</p><p>None of its sources answered: ${missing.join(', ')}.</p><button type="button" class="btn btn-sm" data-v2-retry="explore">Try again</button></div>`
       : missing.length ? html`<p class="stale">Unavailable right now: ${missing.join(', ')}. Everything else on this page still works.</p>` : ''}`);

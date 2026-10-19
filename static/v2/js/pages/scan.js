@@ -14,7 +14,7 @@ import { num, signed, compact, clean, capFirst } from '../core/format.js';
 import { skeleton, empty, failed } from '../ui/states.js';
 import { button as miloButton, provideContext } from '../ui/milo.js';
 import { toast } from '../ui/toast.js';
-import { groupTabs } from './tabs.js';
+import { sectionHead } from './tabs.js';
 
 const RECENT_KEY = 'optic.scan.recent.v1', SCREEN_KEY = 'optic.screener.v1';
 const EXAMPLES = ['Strong stocks on the 200-day average right now', 'Near 52-week highs on heavy volume', 'Pullbacks in strong uptrends', 'Under $20 and up 20% in the last 3 months', '10% pull back after 20% rally', '2% or more above prev close'];
@@ -136,7 +136,7 @@ function evaluation() {
 function paint() {
   if (!live) return;
   const y = window.scrollY;
-  draw(mainEl, html`<header class="page-head"><h1 class="t-display-m">Scan</h1>${groupTabs('discover', 'scan')}</header>
+  draw(mainEl, html`<header class="page-head">${sectionHead('discover', 'scan')}</header>
     ${ask()}
     <section class="section" aria-labelledby="sc-h"><div class="section-head"><h2 class="t-h2" id="sc-h">${S.mode === 'build' ? 'Build a screen' : 'Scanners'}</h2>
       <div class="seg" role="group" aria-label="Mode"><button type="button" data-v2-scan-mode="named" aria-pressed="${S.mode !== 'build'}">Named scans</button><button type="button" data-v2-scan-mode="build" aria-pressed="${S.mode === 'build'}">Build a screen</button></div></div>

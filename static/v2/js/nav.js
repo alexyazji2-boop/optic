@@ -56,12 +56,14 @@ export const GROUPS = [
 
 export const SETTINGS = { view: 'settings', label: 'Settings', slug: 'settings', icon: 'settings', v2: true };
 
-// The phone bar, as in the classic app.
+// The phone bar, in the owner's order (2026-10-19): "Home · Markets · Watchlist · Dossier · More, with
+// Discover accessible through More and search". The names are unchanged; Discover moves into More, which
+// lists every destination the bar does not.
 export const MOBILE_TABS = [
   { label: 'Home', group: 'home', icon: 'home' },
-  { label: 'Dossier', group: 'security', icon: 'dossier' },
   { label: 'Markets', group: 'market', icon: 'markets' },
-  { label: 'Discover', group: 'discover', icon: 'discover' },
+  { label: 'Watchlist', group: 'follow', icon: 'watchlist' },
+  { label: 'Dossier', group: 'security', icon: 'dossier' },
   { label: 'More', more: true, icon: 'more' },
 ];
 
