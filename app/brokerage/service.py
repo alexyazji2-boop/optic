@@ -184,6 +184,17 @@ def status() -> Dict[str, Any]:
     return {"enabled": True, "provider": prov.name, "label": prov.label, "mode": prov.mode}
 
 
+# The development sandbox's price source (main.py sets it to Optic's own delayed quotes); None in tests.
+_sandbox_prices: Optional[Callable[[List[str]], Dict[str, Any]]] = None
+
+
+def set_sandbox_prices(fn: Optional[Callable[[List[str]], Dict[str, Any]]]) -> None:
+    global _sandbox_prices
+    _sandbox_prices = fn
+    if isinstance(_provider, SandboxProvider):
+        _provider.prices_of = fn
+
+
 def provider() -> Provider:
     global _provider, _provider_key
     choice = (os.environ.get("BROKERAGE_PROVIDER") or "").strip().lower()
@@ -193,7 +204,7 @@ def provider() -> Provider:
         from .snaptrade import SnapTradeProvider
         _provider = SnapTradeProvider.from_env()
     elif choice == "sandbox":
-        _provider = SandboxProvider()
+        _provider = SandboxProvider(prices_of=_sandbox_prices)
     else:
         raise NotAvailable(NOT_SWITCHED_ON)
     _provider_key = choice

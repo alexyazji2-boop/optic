@@ -1458,7 +1458,7 @@ _ORDER_BASE = [
     # The reader's linked accounts lead: when attached, the question is about them. They were in no
     # order at all, so they went last, where a crowded budget drops first.
     "brokerage_linked", "brokerage_portfolio",
-    "portfolio_summary", "reader_holdings", "auto_loaded", "auto_loaded_note", "screen_candidates",
+    "portfolio_summary", "reader_holdings", "auto_loaded", "auto_loaded_note", "auto_load_skipped", "screen_candidates",
     "desk_section", "research", "framework", "market", "compare", "ticker", "quote", "chart_levels", "pulse", "verdict", "track_record", "cases", "why", "digest",
     "whats_next", "next_earnings_date", "options_research", "vol_surface", "iv_rank", "iv_hv", "rate",
     "reader_watchlist", "active_view", "chart", "technicals",

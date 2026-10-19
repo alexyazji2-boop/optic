@@ -24,7 +24,7 @@ import secrets
 import threading
 import urllib.parse
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 
 class ProviderError(RuntimeError):
@@ -310,10 +310,34 @@ class SandboxProvider(Provider):
     mode = "sandbox"
     label = "Optic sandbox brokerage"
 
-    def __init__(self) -> None:
+    def __init__(self, prices_of: Optional[Callable[[List[str]], Dict[str, Any]]] = None) -> None:
         self._lock = threading.Lock()
         self._users: Dict[str, Dict[str, Any]] = {}
         self._sessions: Dict[str, Dict[str, str]] = {}
+        # Optional: symbols -> {symbol: price}, Optic's own delayed quotes. The demo's holdings were priced at
+        # fixed early-2026 figures, so the broker's total ($56,562) disagreed with Home's value at current
+        # quotes ($78,734) on the same account (2026-10-19). With a source the sandbox reports current prices
+        # and the two meet; without one, or for a symbol whose quote fails, the fixed prices (and their
+        # per-sync drift) stand, which keeps the unit tests' pinned numbers.
+        self.prices_of = prices_of
+
+    def _prices(self, symbols: List[str]) -> Dict[str, float]:
+        if not self.prices_of:
+            return {}
+        try:
+            got = self.prices_of(sorted(set(symbols))) or {}
+        except Exception:   # noqa: BLE001  a failing quote source leaves the fixed prices
+            return {}
+        out: Dict[str, float] = {}
+        for sym, q in got.items():
+            v = q.get("price") if isinstance(q, dict) else q
+            try:
+                f = float(v)
+            except (TypeError, ValueError):
+                continue
+            if f > 0 and f == f:
+                out[str(sym).upper()] = round(f, 2)
+        return out
 
     # The scenario is encoded in the connection id so a restart of the dev
     # server does not orphan connections the accounts database still holds.
@@ -438,27 +462,32 @@ class SandboxProvider(Provider):
                 raise AuthExpired("The broker needs you to sign in again.")
         # Prices drift a little on each sync, and the second sync trims NVDA and
         # opens AMD, so "what changed since my last sync" has something to say.
+        # With a price source, the current quote replaces the fixed price and its drift.
         drift = 1.0 + 0.012 * n
+        live = self._prices(["AAPL", "MSFT", "NVDA", "VOO", "AMD", "SCHD"]) if which in ("ind", "roth") else {}
+
+        def px(sym: str, fixed: float, drifts: bool = True) -> float:
+            return live.get(sym) or round(fixed * (drift if drifts else 1.0), 2)
         h = Holdings()
         if which == "ind":
             nvda = 60 if n == 0 else 45
             h.positions = [
-                _p("AAPL", "equity", 40, round(227.50 * drift, 2), 150.10, "Apple Inc.", raw="cs"),
-                _p("MSFT", "equity", 15, round(418.20 * drift, 2), 301.00, "Microsoft Corp.", raw="cs"),
-                _p("NVDA", "equity", nvda, round(132.40 * drift, 2), 48.25, "NVIDIA Corp.", raw="cs"),
-                _p("VOO", "etf", 20, round(512.00 * drift, 2), 380.00, "Vanguard S&P 500 ETF", raw="et"),
+                _p("AAPL", "equity", 40, px("AAPL", 227.50), 150.10, "Apple Inc.", raw="cs"),
+                _p("MSFT", "equity", 15, px("MSFT", 418.20), 301.00, "Microsoft Corp.", raw="cs"),
+                _p("NVDA", "equity", nvda, px("NVDA", 132.40), 48.25, "NVIDIA Corp.", raw="cs"),
+                _p("VOO", "etf", 20, px("VOO", 512.00), 380.00, "Vanguard S&P 500 ETF", raw="et"),
             ]
             if n >= 1:
-                h.positions.append(_p("AMD", "equity", 25, 158.30, 158.30, "Advanced Micro Devices", raw="cs"))
+                h.positions.append(_p("AMD", "equity", 25, px("AMD", 158.30, drifts=False), 158.30, "Advanced Micro Devices", raw="cs"))
             h.options = [OptionPosition(underlying="AAPL", occ="AAPL  261218C00250000", option_type="call",
                                         strike=250.0, expiry="2026-12-18", contracts=2, price=6.40,
                                         avg_cost=4.10, currency="USD", multiplier=100)]
             h.cash = [Cash("USD", 2400.0 if n == 0 else 4386.0, None)]
         elif which == "roth":
             h.positions = [
-                _p("VOO", "etf", 30, round(512.00 * drift, 2), 401.20, "Vanguard S&P 500 ETF", raw="et"),
-                _p("SCHD", "etf", 50, round(27.80 * drift, 2), 24.10, "Schwab US Dividend Equity ETF", raw="et"),
-                _p("AAPL", "equity", 10, round(227.50 * drift, 2), 172.00, "Apple Inc.", raw="cs"),
+                _p("VOO", "etf", 30, px("VOO", 512.00), 401.20, "Vanguard S&P 500 ETF", raw="et"),
+                _p("SCHD", "etf", 50, px("SCHD", 27.80), 24.10, "Schwab US Dividend Equity ETF", raw="et"),
+                _p("AAPL", "equity", 10, px("AAPL", 227.50), 172.00, "Apple Inc.", raw="cs"),
             ]
             h.cash = [Cash("USD", 300.0, None)]
         elif which == "tfsa":

@@ -3870,6 +3870,12 @@ _CHAT_NOT_TICKERS = {
 # One lookup per message. Each analysis is a full chain fetch — several seconds
 # and real quota — so "compare these six names" deliberately does not trigger six.
 _CHAT_MAX_LOOKUPS = 1
+# How long the chat waits for a named ticker's snapshot before calling the model without it. Cold, the
+# snapshot (four expiries and the macro read) took 108 s on the dev server (2026-10-19), all of it before
+# the model was asked anything, so the reader watched "Thinking" for nearly two minutes. Past the budget
+# Milo is told the data was not fetched in time and uses its tools, which carry their own limits; the
+# fetch carries on in the background and warms the cache for them.
+_CHAT_AUTOLOAD_BUDGET = 20.0
 
 
 def _symbols_in(text: str) -> List[str]:
@@ -6558,10 +6564,17 @@ async def _augment_chat_context_lookups(history: List[Dict[str, Any]],
 
     out = dict(context or {})
     fetched: Dict[str, Any] = {}
+    slow: List[str] = []
     picked = wanted[:_CHAT_MAX_LOOKUPS]
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + _CHAT_AUTOLOAD_BUDGET
     for symbol in picked:
         try:
-            snap = await _run(_swing_snapshot, symbol, None, 4, True)   # the Options tab's four expiries
+            snap = await asyncio.wait_for(_run(_swing_snapshot, symbol, None, 4, True),   # the Options tab's four expiries
+                                          timeout=max(0.05, deadline - loop.time()))
+        except asyncio.TimeoutError:
+            slow.append(symbol)
+            continue
         except Exception as exc:                       # a bad symbol must not 500 the chat
             logging.getLogger("uvicorn.error").warning(
                 "chat auto-load failed for %s: %s", symbol, exc)
@@ -6571,6 +6584,11 @@ async def _augment_chat_context_lookups(history: List[Dict[str, Any]],
         # for AMD's flow, walls and gamma from Home and Milo was sent only this note saying
         # the data had been fetched (2026-10-15). Each symbol now gets its share of the room.
         fetched[symbol] = milo_tools.compact_snapshot(snap, text, limit=_AUTO_LOADED_CHARS // len(picked))
+    if slow:
+        out["auto_load_skipped"] = {
+            "symbols": slow,
+            "note": "Not fetched in time ({:.0f} s): the data sources were slow. Use the tools for these "
+                    "symbols, and say plainly if they cannot be retrieved.".format(_CHAT_AUTOLOAD_BUDGET)}
     if fetched:
         out["auto_loaded"] = fetched
         out["auto_loaded_note"] = (
@@ -7462,6 +7480,10 @@ def _ws_price(sym: str) -> Optional[Dict[str, Any]]:
     q = YF_PROVIDER.quote(sym) or {}
     return {"price": q.get("price"), "as_of": q.get("as_of"), "sector": q.get("sector")} if q.get("price") else None
 
+
+# The development sandbox prices its demo holdings at the same delayed quotes Home values them at, so the
+# broker's total and Home's figure agree (no effect with SnapTrade).
+brokerage_service.set_sandbox_prices(_ws_quotes)
 
 brokerage_workspace.set_market(
     sector_of=lambda s: (YF_PROVIDER.profile(s) or {}).get("sector"),

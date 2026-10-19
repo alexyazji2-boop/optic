@@ -290,3 +290,11 @@ def _no_framework_build(monkeypatch, request):
         return context
     monkeypatch.setattr(m, "_with_framework", passthrough)
 
+
+
+@pytest.fixture(autouse=True)
+def _sandbox_keeps_fixed_prices(monkeypatch):
+    """The dev server prices the demo sandbox at Optic's delayed quotes (app/main.py, 2026-10-19). Tests keep
+    the sandbox's fixed prices, so their pinned numbers hold and nothing reaches the network."""
+    from app.brokerage import service as brokerage_service
+    monkeypatch.setattr(brokerage_service, "_sandbox_prices", None)

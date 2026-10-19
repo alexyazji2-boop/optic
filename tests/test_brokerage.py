@@ -1184,3 +1184,56 @@ def test_the_context_budget_keeps_every_linked_holding():
     assert all('"symbol":"{}","description"'.format(s) in sent for s in syms)
     assert all('"symbol":"{}","weight_pct"'.format(s) in sent for s in syms)
 
+
+
+# ------------------------------------------------------------ the sandbox at current prices (2026-10-19)
+
+def _ind(p):
+    reg = p.register_user()
+    puid, secret = reg["user_id"], reg["secret"]
+    url = p.portal_url(puid, secret, "http://localhost/back")
+    session = parse_qs(urlparse(url).query)["session"][0]
+    p.authorize(session, "standard")
+    acct = next(a for a in p.list_accounts(puid, secret) if a.id.endswith(":ind"))
+    return p.holdings(puid, secret, acct.id)
+
+
+def test_the_sandbox_reports_current_prices_when_given_a_source():
+    """The demo broker's total ($56,562 at fixed early-2026 prices) disagreed with Home's value at current
+    quotes ($78,734) on the same account."""
+    live = {"AAPL": {"price": 343.46}, "MSFT": {"price": 510.0}, "NVDA": 183.2, "VOO": {"price": 600.0}}
+    h = _ind(SandboxProvider(prices_of=lambda syms: {s: live[s] for s in syms if s in live}))
+    px = {p.symbol: p.price for p in h.positions}
+    assert px == {"AAPL": 343.46, "MSFT": 510.0, "NVDA": 183.2, "VOO": 600.0}
+
+
+def test_the_sandbox_keeps_its_fixed_prices_without_a_source_or_when_it_fails():
+    fixed = {p.symbol: p.price for p in _ind(SandboxProvider()).positions}
+    assert fixed["AAPL"] == 227.50 and fixed["VOO"] == 512.00
+
+    def broken(syms):
+        raise RuntimeError("quote feed down")
+    assert {p.symbol: p.price for p in _ind(SandboxProvider(prices_of=broken)).positions} == fixed
+    # a symbol the source has no usable price for keeps its fixed price
+    part = _ind(SandboxProvider(prices_of=lambda syms: {"AAPL": {"price": None}, "MSFT": {"price": 0}, "NVDA": "x"}))
+    assert {p.symbol: p.price for p in part.positions} == fixed
+
+
+def test_the_running_app_wires_the_sandbox_to_optics_quotes():
+    src = open(main.__file__).read()
+    assert "brokerage_service.set_sandbox_prices(_ws_quotes)" in src
+
+
+def test_a_new_sandbox_connection_at_current_prices_has_no_step():
+    """The estimated history eases to the holdings' value, which is now at current prices, so the chart and
+    the broker's total meet on a new connection."""
+    live = {"AAPL": 343.46, "MSFT": 510.0, "NVDA": 183.2, "VOO": 600.0, "SCHD": 27.9, "AMD": 240.0}
+    p = SandboxProvider(prices_of=lambda syms: {s: live[s] for s in syms if s in live})
+    reg = p.register_user()
+    puid, secret = reg["user_id"], reg["secret"]
+    session = parse_qs(urlparse(p.portal_url(puid, secret, "http://localhost/back")).query)["session"][0]
+    p.authorize(session, "standard")
+    for acct in p.list_accounts(puid, secret):
+        total = p._total(p.holdings(puid, secret, acct.id))
+        pts = p.balance_history(puid, secret, acct.id)["points"]
+        assert pts and abs(pts[-1][1] - total) < 0.01, (acct.id, pts[-1], total)

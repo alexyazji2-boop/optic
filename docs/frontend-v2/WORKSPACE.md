@@ -36,6 +36,8 @@ A fund linked to a company-only panel (Business quality, Financial trends, Owner
 
 **Your portfolio** shows only when an account is linked. A reader with no linked account does not see an empty panel.
 
+**The demo sandbox (development only, 2026-10-19):** the sandbox brokerage now prices its holdings at the same delayed quotes Home values them at (`SandboxProvider(prices_of=...)`, wired in `app/main.py`; no effect with SnapTrade). The broker's total and Home's value agree: checked on the :8076 instance after a sync, $91,510.30 against $91,510.07 (before: $56,562 against $79,032). Without quotes, or for a quote that fails, the sandbox keeps its fixed early-2026 prices, which the tests pin. A new connection's chart starts level; the demo account, whose snapshot of 2026-10-18 was stored at the old fixed prices, shows one step on the day it moves to current prices. After a dev-server restart the sandbox forgets its connections: reconnect (the connection keeps its id), then sync.
+
 **What Home carried over from the old Home:** the greeting and date, the first-visit welcome and starters (shown to a new reader above the layout), What matters today with its filters, the Optic Desk, the portfolio value with its chart, Latest scan alerts and Moved most this month. Their copy is unchanged; the panels reuse the old Home's own renderers (`pages/home.js`).
 
 **The bar:** the layout tabs on their own row with Customize at its right; under them a toolbar with the linked ticker and the last few tickers as quick picks.
@@ -130,9 +132,11 @@ Measured with `cold_load.py`, signed in, straight after a server restart (cold) 
 
 ## Milo
 - **Ask Milo:** each panel's button sends the panel ("Home: Contracts") as `focus.asked_from`, plus the linked ticker for linked panels. The question is drafted in the drawer, not sent.
+- **Re-run 2026-10-19** (`~/Optic/work/v2-overnight/milo_e2e2.py`, Contracts now on Options Research, plus a check that no Milo button says Off when a model is available): 8 of 8 warm. Cold, before the auto-load budget below, the answer took 109 s (the 60 s wait of the first run failed 3 checks). After it, a cold start answered in 2.7 s, 8 of 8, though Yahoo answered normally that time; the slow path itself is checked by `test_a_slow_named_ticker_does_not_hold_the_answer`.
 - **End to end, with a stand-in model** (`milo_e2e.py`, 7 of 7): the drawer sends; the route accepts it within the allowance; CONTEXT tells the model the reader is on "AAPL's Home: Contracts"; the model asks for Optic's `get_quote`, Optic runs it on real data (343.46) and hands it back; the answer streams into the drawer with its sources. A real model's answers are not checked here: that needs the key, in the private preview (PREVIEW-PACKAGE.md section 7).
 - **Context:** carries the layout, the visible panels, the regime, the expected move, sentiment and the linked quote.
 - **Paid calls:** only when the reader sends.
+- **A slow source never holds the answer:** a ticker the question names but the page does not carry (asking from Home) is loaded for at most 20 s before Milo is asked (`_CHAT_AUTOLOAD_BUDGET`); past that Milo is told it was not fetched in time and uses its tools, which have their own limits. Cold, with Yahoo refusing the first requests, that load had taken 108 s before the model was asked anything (2026-10-19).
 
 ## Not yet
 - several link groups;

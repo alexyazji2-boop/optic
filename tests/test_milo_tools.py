@@ -413,3 +413,23 @@ def test_times_reach_the_model_in_eastern_time():
     snap = snapshot(quote=dict(snapshot()["quote"], post_market_time="2026-10-15T20:01:35+00:00"))
     assert milo_tools.compact_options(snap)["underlying"]["post_market_time"] == "Oct 15, 4:01 PM ET"
     assert milo_tools.et("not a time") == "not a time"
+
+
+def test_a_slow_named_ticker_does_not_hold_the_answer(monkeypatch):
+    """Cold, the snapshot for a named ticker took 108 s before the model was asked anything (2026-10-19)."""
+    import time as _t
+    import app.main as m
+
+    def snap(sym, *a, **k):
+        _t.sleep(1.5)
+        return snapshot(ticker=sym)
+    monkeypatch.setattr(m, "_swing_snapshot", snap)
+    monkeypatch.setattr(m, "_CHAT_AUTOLOAD_BUDGET", 0.2)
+    async def ask():
+        t0 = _t.monotonic()   # timed inside the loop: asyncio.run itself waits for the fetch's thread to finish
+        got = await m._augment_chat_context_lookups([{"role": "user", "content": "What's NVDA's gamma doing?"}], {"focus": {"scope": "auto"}})
+        return got, _t.monotonic() - t0
+    ctx, took = asyncio.run(ask())
+    assert ctx["auto_load_skipped"]["symbols"] == ["NVDA"] and "auto_loaded" not in ctx
+    assert "Use the tools" in ctx["auto_load_skipped"]["note"]
+    assert took < 1.2, took
