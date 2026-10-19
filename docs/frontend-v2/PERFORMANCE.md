@@ -67,3 +67,18 @@ Times are in seconds: the median, then the interquartile range (p25 to p75) in b
 - T2 on the phone warm Dossier;
 - T6 on desktop cold Home, where the slow request has to be found first;
 - a production measurement in the owner preview, using Server-Timing on `/api/ticker` and the same scripts against the live URL, with the owner's session.
+## Home's first load, cold and cached (2026-10-18, second review)
+
+The owner asked for cold and cached results shown apart: "a successful cached retry does not establish reliable first use." Measured with `~/Optic/work/v2-2026-10-17/workspace/cold_load.py` against the local server (signed in, desktop, Market Overview), straight after a restart (cold) and once more (cached). Times are when each panel stopped showing its skeleton.
+
+| Run | What matters today | Earnings this week | `/api/home` panels | Your portfolio | Slowest other panel |
+|---|---|---|---|---|---|
+| Cold, before the change | never (90 s limit) | never (90 s limit) | 0.5 s | 4.8 s | 1.5 s |
+| Cold, first build ever, after | 6.5 s, "gathering", then filled on its own | 7.5 s, likewise | 0.4 s | 4.5 s | 1.7 s |
+| Cold, after a restart, after | 0.3 s | 0.5 s | 1.8 s | 6.3 s | 2.8 s |
+| Cached, after | 0.3 s | 0.3 s | 0.8 s | 1.0 s | 1.0 s |
+
+- **The fix:** the two boards (the priority board and each earnings week, about 150 companies a scan) are served from their last build with its age while a fresh one runs in the jobs' lane, and kept on disk so a deploy starts from them; a build from another New York day is never served. Only Home's `quick=true` request is told "building" on a first build ever; Classic waits as before (`main._served_while_rebuilt`; `tests/test_board_serving.py`).
+- **Variance:** the cold runs race the server's own boot warm-up, so `/api/home` and the portfolio move by a second or two between runs.
+- **Still open:** Your portfolio cold (the brokerage overview prices every holding); a production measurement in the private preview.
+- **The Home checks** (`ws_verify_home.py`) passed 52 of 52 cold and 52 of 52 cached; the walkthrough 18 of 18 both ways. The earlier "47 of 47" was a cached retry after a cold run of 44 of 47.

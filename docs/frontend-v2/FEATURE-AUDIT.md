@@ -64,7 +64,7 @@
 ## Workspace, help, learning, community
 | # | Feature | Class | Evidence | Level |
 |---|---|---|---|---|
-| 33 | Workspace (layouts, panels, lock, home screen, linked panels) | **A in private preview** (new 2026-10-18) | **Home is the workspace** (owner, 2026-10-18), `pages/workspace.js`: 4 layouts (Market Overview the default, Options Research, Long-Term Investing, My Desk), 18 panels including the old Home's own, move (drag and keys), resize, hide, lock, reset, save as My Desk, one linked ticker, phone priority | Verified (47 Home checks, 18 walkthrough checks) |
+| 33 | Workspace (layouts, panels, lock, home screen, linked panels) | **A in private preview** (new 2026-10-18) | **Home is the workspace** (owner, 2026-10-18), `pages/workspace.js`: 4 layouts (Market Overview the default, Options Research, Long-Term Investing, My Desk), 18 panels including the old Home's own, move (drag and keys), resize, hide, lock, reset, save as My Desk, one linked ticker, phone priority | Verified (52 Home checks and 18 walkthrough checks, cold and cached) |
 | 34 | Command palette and ticker search | A | `ui/palette.js` | Verified (Stage 0) |
 | 35 | "How to read this" per tool | C | Every workspace panel has it. Elsewhere v2 has method notes on some panels | Verified (workspace) |
 | 30a | Glossary tooltips and Learn widget | **B** | Classic `GLOSSARY` (`app.js:433-573`), Learn widget (`app.js:26385`). **This was missing from CAPABILITY-MATRIX.md; added as C17** | Code |

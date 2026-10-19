@@ -169,7 +169,7 @@ def _no_written_piece_carried_over(monkeypatch, _ai_store_dir):
 
 
 @pytest.fixture(autouse=True)
-def _no_live_calls(monkeypatch):
+def _no_live_calls(monkeypatch, _ai_store_dir):
     """No test asks Anthropic about the key or reads the live site.
 
     `ai.key_usable` makes a real call to the Models API, and `live_mirror`
@@ -202,6 +202,11 @@ def _no_live_calls(monkeypatch):
     if main is not None:
         monkeypatch.setattr(main, "_spawn_ranking_build",
                             lambda: main._RANKING_BUILD.update(running=False))
+        # The boards Home serves while they rebuild are kept on disk
+        # (main._served_while_rebuilt): a directory per test, so one test's
+        # fake board is never the next one's answer and nothing reaches data/.
+        monkeypatch.setattr(main, "_BOARD_DIR", str(_ai_store_dir / "boards-{}".format(next(_AI_STORE_FILES))))
+        monkeypatch.setattr(main, "_BOARD_BUSY", {})
 
 
 @pytest.fixture(autouse=True)

@@ -83,7 +83,8 @@ export async function get(path, { ttl = 60000, force = false, onUpdate, timeout 
     return hit.data;
   }
   if (hit && hit.promise && !force) return hit.promise;
-  const p = request('GET', path, { timeout }).then((d) => { cache.set(path, { at: Date.now(), data: d }); return d; })
+  // An answer that says it is still being built is never cached: the next ask goes to the server.
+  const p = request('GET', path, { timeout }).then((d) => { if (d && d.building) cache.delete(path); else cache.set(path, { at: Date.now(), data: d }); return d; })
     .catch((e) => { cache.delete(path); throw e; });
   cache.set(path, { at: 0, data: undefined, promise: p });
   return p;

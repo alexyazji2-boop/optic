@@ -32,6 +32,18 @@ export function lineChart(series, opts = {}) {
   const Y = (v) => pad.t + (1 - (v - lo) / (hi - lo)) * (H - pad.t - pad.b);
   const dp = opts.dp == null ? 2 : opts.dp;
   const path = pts.map((p, i) => `${i ? 'L' : 'M'}${X(i).toFixed(1)} ${Y(p.c).toFixed(1)}`).join('');
+  // marks: a point where the series' source changes. The line breaks there, a dashed bridge joins the two
+  // sides, and a rule with a label says so, so a jump is never read as a move.
+  const index0 = new Map(pts.map((p, i) => [p.d, i]));
+  const marks = (opts.marks || []).map((m) => { let i = index0.has(m.d) ? index0.get(m.d) : pts.findIndex((p) => p.d >= m.d); return i > 0 ? Object.assign({ i }, m) : null; }).filter(Boolean);
+  const cuts = marks.map((m) => m.i).sort((a, b) => a - b);
+  const seg = (a, b) => pts.slice(a, b + 1).map((p, j) => `${j ? 'L' : 'M'}${X(a + j).toFixed(1)} ${Y(p.c).toFixed(1)}`).join('');
+  let lineSvg = `<path class="line" d="${path}"/>`;
+  if (cuts.length) {
+    const bounds = [0, ...cuts, pts.length]; lineSvg = '';
+    for (let k = 0; k < bounds.length - 1; k++) { const a = bounds[k], b = bounds[k + 1] - 1; if (b > a) lineSvg += `<path class="line" d="${seg(a, b)}"/>`; }
+    lineSvg += cuts.map((i) => `<path class="line-gap" d="M${X(i - 1).toFixed(1)} ${Y(pts[i - 1].c).toFixed(1)}L${X(i).toFixed(1)} ${Y(pts[i].c).toFixed(1)}"/>`).join('');
+  }
   const last = pts[pts.length - 1];
   const ticks = [0.1, 0.5, 0.9].map((f) => lo + (hi - lo) * f);
   const index = new Map(pts.map((p, i) => [p.d, i]));
@@ -81,9 +93,11 @@ export function lineChart(series, opts = {}) {
   const change = last.c - first.c;
   const summary = opts.summary || `${opts.label || 'Chart'}: from ${num(first.c, dp)} on ${fullDate(first.d)} to ${num(last.c, dp)} on ${fullDate(last.d)}, ${change >= 0 ? 'up' : 'down'} ${num(Math.abs(change / first.c * 100), 1)} percent. Low ${num(Math.min(...pts.map((p) => p.c)), dp)}, high ${num(Math.max(...pts.map((p) => p.c)), dp)}.`;
 
-  const svg = `<svg class="chart" id="${id}" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="${esc(summary)}" tabindex="0">
+  const markSvg = marks.map((m) => { const x = X(m.i).toFixed(1); return `<g class="mark"><line class="mark-rule" x1="${x}" x2="${x}" y1="${pad.t}" y2="${H - pad.b}"/><text class="mark-t" x="${(X(m.i) - 6).toFixed(1)}" y="${pad.t + 12}" text-anchor="end">${esc(m.label)}</text></g>`; }).join('');
+  const markWords = marks.map((m) => ` ${m.label} on ${fullDate(pts[m.i].d)}${m.detail ? `: ${m.detail}` : ''}.`).join('');
+  const svg = `<svg class="chart" id="${id}" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="${esc(summary + markWords)}" tabindex="0">
     ${ticks.map((t) => `<line class="grid" x1="${pad.l}" x2="${W - pad.r}" y1="${Y(t).toFixed(1)}" y2="${Y(t).toFixed(1)}"/>${opts.noTicks ? '' : `<text class="ax" x="${W - pad.r + 6}" y="${(Y(t) + 4).toFixed(1)}">${num(t, dp > 0 && t < 1000 ? 0 : 0)}</text>`}`).join('')}
-    ${months.join('')}${area}${overlays.map((o) => { let d = '', pen = false; o.values.forEach((v, i) => { if (Number.isFinite(v)) { d += `${pen ? 'L' : 'M'}${X(i).toFixed(1)} ${Y(v).toFixed(1)}`; pen = true; } else pen = false; }); return d ? `<path class="ov ${o.cls || ''}" d="${d}"/>` : ''; }).join('')}<path class="line" d="${path}"/>${coneSvg}${events}${tags}
+    ${months.join('')}${area}${overlays.map((o) => { let d = '', pen = false; o.values.forEach((v, i) => { if (Number.isFinite(v)) { d += `${pen ? 'L' : 'M'}${X(i).toFixed(1)} ${Y(v).toFixed(1)}`; pen = true; } else pen = false; }); return d ? `<path class="ov ${o.cls || ''}" d="${d}"/>` : ''; }).join('')}${lineSvg}${markSvg}${coneSvg}${events}${tags}
     ${opts.focusEnd ? `<circle class="focus-ring" cx="${X(pts.length - 1)}" cy="${Y(last.c)}" r="10"/>` : ''}
     <circle class="end" cx="${X(pts.length - 1)}" cy="${Y(last.c)}" r="3.5"/>
     <g class="xh" style="display:none"><line class="xh-v" y1="${pad.t}" y2="${H - pad.b}"/><circle class="xh-dot" r="4"/></g>
@@ -99,7 +113,7 @@ export function lineChart(series, opts = {}) {
       xh.style.display = '';
       xh.querySelector('.xh-v').setAttribute('x1', x); xh.querySelector('.xh-v').setAttribute('x2', x);
       xh.querySelector('.xh-dot').setAttribute('cx', x); xh.querySelector('.xh-dot').setAttribute('cy', y);
-      const ev = (opts.events || []).find((e) => at(e.d) === i);
+      const ev = (opts.events || []).find((e) => at(e.d) === i) || (() => { const m = marks.find((x) => x.i === i); return m ? { label: m.label, detail: m.detail } : null; })();
       tip.style.display = '';
       tip.innerHTML = `<b>${num(p.c, dp)}</b> <span>${fullDate(p.d)}</span>${ev ? `<em>${esc(ev.label)}${ev.detail ? ', ' + esc(ev.detail) : ''}</em>` : ''}`;
       const box = el.getBoundingClientRect();

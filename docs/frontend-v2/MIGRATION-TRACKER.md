@@ -63,7 +63,7 @@ Built on existing data only (NEW-PRODUCTS.md). Status is updated here as each it
 | # | Item | Status |
 |---|---|---|
 | W0 | Dark visual system, sidebar of destinations only, one page system | built locally (`v2-dark-workspace`); X1 accepted, X2 rejected and reverted, X3 resolved (2026-10-18); awaiting the owner's review of the real experience |
-| W1 | Home as the research workspace: layouts, panels, linking, persistence, phone priority, freshness per panel | built locally; 47 Home checks, 18 walkthrough checks; v2_check audit 0 faults on its 20 captures (5 Home views, desktop and phone, dark and light) |
+| W1 | Home as the research workspace: layouts, panels, linking, persistence, phone priority, freshness per panel | built locally; 52 Home checks and 18 walkthrough checks, each passing cold (straight after a restart) and cached; v2_check audit 0 faults on its 20 captures (5 Home views, desktop and phone, dark and light) |
 | W1a | Market Structure Break study on the chart | built; swing formed vs swing known shown apart; prefix-stability test (a later bar never changes a recorded break); browser check |
 | W2 | Notifications bell (I11) | open |
 | W3 | Explainable contract suitability ranking on criteria the reader chooses (the transparent, sortable comparison is already built) | open; needs its method note |

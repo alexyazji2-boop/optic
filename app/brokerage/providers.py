@@ -353,9 +353,13 @@ class SandboxProvider(Provider):
             user = self._user(found["user"])
             if scenario == "unsupported":
                 return _with_query(found["redirect"], status="ERROR", reason="UNSUPPORTED_BROKER")
-            if found["reconnect"] and found["reconnect"] in user["connections"]:
-                user["connections"][found["reconnect"]]["disabled"] = False
-                user["syncs"][found["reconnect"]] = -1
+            rc = found["reconnect"]
+            # A connection the dev server forgot when it restarted comes back under
+            # the same id (its scenario is in the id), so its history continues
+            # rather than starting over as a new link.
+            if rc and (rc in user["connections"] or self._scenario(rc) != "standard" or rc.startswith("sbx-standard-")):
+                user["connections"][rc] = {"disabled": False}
+                user["syncs"][rc] = -1
                 return _with_query(found["redirect"], status="SUCCESS")
             scenario = scenario if scenario in SANDBOX_SCENARIOS else "standard"
             cid = "sbx-{}-{}".format(scenario, secrets.token_hex(4))
@@ -501,10 +505,21 @@ class SandboxProvider(Provider):
         out = [_sandbox_activity(r) for r in SANDBOX_ACTIVITIES.get(which, [])]
         return [a for a in out if not start_date or (a.trade_date or "") >= start_date]
 
+    @staticmethod
+    def _total(h: "Holdings") -> float:
+        """An account's value at the sandbox's own prices: what Optic's snapshot of it records."""
+        v = sum((p.quantity or 0) * (p.price or 0) for p in h.positions if (p.currency or "USD") == "USD")
+        v += sum((o.contracts or 0) * (o.price or 0) * (o.multiplier or 100) for o in h.options)
+        v += sum(c.amount or 0 for c in h.cash if c.currency == "USD")
+        return round(v, 2)
+
     def balance_history(self, provider_user_id, secret, account_id) -> Dict[str, Any]:
         """Daily totals from the first deposit to yesterday: the money put in so
-        far, grown along a gentle wave. Shaped like SnapTrade's estimate (one
-        value a day, weekends included), not meant to match the holdings."""
+        far, grown along a gentle wave, and eased toward the account's value at
+        the sandbox's prices so the last day meets the holdings. Shaped like
+        SnapTrade's estimate (one value a day, weekends included). A real
+        estimate ends near the account's value too; the demo's chart showed a
+        step where Optic's own snapshots take over until it did (2026-10-18)."""
         import math
         from datetime import date, timedelta
         cid, _, which = account_id.rpartition(":")
@@ -523,6 +538,13 @@ class SandboxProvider(Provider):
             k = (day - start).days
             points.append((day.isoformat(), round(base * (1 + 0.12 * k / 365 + 0.02 * math.sin(k / 9)), 2)))
             day += timedelta(days=1)
+        try:
+            target = self._total(self.holdings(provider_user_id, secret, account_id))
+        except Exception:   # noqa: BLE001  a failing holdings read leaves the plain estimate
+            target = None
+        if target and len(points) > 1 and points[-1][1]:
+            n, ratio = len(points) - 1, target / points[-1][1]
+            points = [(d, round(v * (1 + (ratio - 1) * i / n), 2)) for i, (d, v) in enumerate(points)]
         return {"currency": "USD", "points": points}
 
 

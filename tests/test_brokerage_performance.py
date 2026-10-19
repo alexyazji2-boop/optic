@@ -8,7 +8,6 @@ formula as readily as a right one.
 
 from __future__ import annotations
 
-import math
 from dataclasses import asdict
 from datetime import date
 
@@ -495,22 +494,24 @@ def test_sandbox_provider_history_gives_a_return_with_the_transfer_netted():
     user = prov.register_user()
     session = prov.portal_url(user["user_id"], user["secret"], "http://localhost/cb").split("session=")[1]
     prov.authorize(session, "standard")
-    hists = {}
-    for a in prov.list_accounts(user["user_id"], user["secret"]):
+    hists, totals = {}, {}
+    for a in prov.list_accounts(user["user_id"], user["secret"]):   # listing accounts is a sync in the sandbox
         hists[a.id.rsplit(":", 1)[1]] = prov.balance_history(user["user_id"], user["secret"], a.id)
+        totals[a.id.rsplit(":", 1)[1]] = SandboxProvider._total(prov.holdings(user["user_id"], user["secret"], a.id))
     out = run([acct("ind", "Individual"), acct("roth", "Roth IRA")], sandbox_rows(), hists, "2026-10-15",
               period="ytd")
     assert out["sources"]["values"] == "provider_estimate"
     assert out["returns"]["twr"]["pct"] is not None
-    # The sandbox's estimate is the money put in so far times 1 + 0.12 * k / 365 + 0.02 * sin(k / 9), k days
-    # after 2026-01-02. Day 0 is the two deposits; on 2026-10-14 (k = 285) the money in view is
-    # 40,799.55 - 1,500 = 39,299.55, because the 1,000 left one account and arrived in the other.
+    # The sandbox's estimate is the money put in so far, grown along a wave and eased toward the account's
+    # value at the sandbox's prices. Day 0 is the two deposits; the 1,000 transfer left one account and
+    # arrived in the other, so it is not money in or out.
     rows = {r["date"]: r for r in out["series"]}
     assert rows["2026-01-02"]["value"] == 40799.55
-    k = 285
-    assert rows["2026-10-14"]["value"] == pytest.approx(
-        39299.55 * (1 + 0.12 * k / 365 + 0.02 * math.sin(k / 9)), abs=0.02)
     assert rows["2026-04-15"]["net_flow"] == -1500.0 and rows["2026-05-01"]["net_flow"] == 0.0
+    # Each account's estimate ends at its holdings' value, so the demo's history meets Optic's own snapshot
+    # without a step (the owner saw one on 2026-10-18).
+    for which, h in hists.items():
+        assert h["points"][-1][1] == pytest.approx(totals[which], abs=0.01)
 
 
 # ------------------------------------------------------------ house rules

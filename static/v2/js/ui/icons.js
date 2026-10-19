@@ -25,6 +25,25 @@ const P = {
   bell: '<path d="M6 16V11a6 6 0 1 1 12 0v5l2 2H4z"/><path d="M10 20a2 2 0 0 0 4 0"/>',
   user: '<circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/>',
   milo: '<path d="M4 5h16v11H9l-5 4z"/><path d="M8 10h8M8 13h5"/>',
+  // the chart's tools (pages/chart.js): each button carries its name, so these stay decorative
+  minus: '<path d="M5 12h14"/>',
+  fit: '<path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>',
+  candles: '<path d="M7 3.5v3.5M7 17v3.5M17 6v4M17 18v2.5"/><rect x="5" y="7" width="4" height="10" rx="1"/><rect x="15" y="10" width="4" height="8" rx="1"/>',
+  lineChart: '<path d="M3 17l5-6 4 3 8-9"/>',
+  area: '<path d="M3 17l5-6 4 3 8-9v15H3z"/>',
+  cursor: '<path d="M6 3.5l12 8.8-5.4 1.3 2.9 6.4-2.3 1-2.9-6.4L6 18.4z"/>',
+  hline: '<path d="M3 12h18"/><circle cx="7" cy="12" r="1.8"/>',
+  vline: '<path d="M12 3v18"/><circle cx="12" cy="8" r="1.8"/>',
+  trend: '<path d="M5 19 19 5"/><circle cx="5" cy="19" r="1.8"/><circle cx="19" cy="5" r="1.8"/>',
+  ray: '<path d="M5 19 20 4"/><circle cx="5" cy="19" r="1.8"/><path d="M15 4h5v5"/>',
+  rect: '<rect x="4" y="6" width="16" height="12" rx="1.5"/>',
+  fib: '<path d="M3 5h18M3 10h18M3 14h18M3 19h18"/><path d="M6 5v14" stroke-dasharray="2 2"/>',
+  text: '<path d="M5 7V4.5h14V7M12 4.5V20M9 20h6"/>',
+  undo: '<path d="M9 5 4 10l5 5"/><path d="M4 10h10a5.5 5.5 0 0 1 0 11h-3"/>',
+  trash: '<path d="M4 7h16M9 7V4.5h6V7M6 7l1 13h10l1-13"/>',
+  clear: '<path d="M4 7h16M9 7V4.5h6V7M6 7l1 13h10l1-13M10 11l4 5M14 11l-4 5"/>',
+  layers: '<path d="m12 4 9 5-9 5-9-5z"/><path d="m3 14 9 5 9-5"/>',
+  pencil: '<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="m13.5 6.5 4 4"/>',
 };
 
 export function icon(name, label = '') {

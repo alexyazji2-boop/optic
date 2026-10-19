@@ -24,13 +24,16 @@ The owner reviewed X1 to X3 on 2026-10-18 and decided them; the table records th
 |---|---|---|
 | `--c-plane` | #0b0b0a | the canvas (near-black) |
 | `--c-plane-2` | #0f0f0e | the sidebar |
-| `--c-raised` | #151513 | panels |
-| `--c-sunk` | #1c1b19 | inputs, hovered rows, segmented controls |
-| `--c-line` | #2a2926 | panel borders, table rules |
-| `--c-line-2` | #1f1e1c | quiet dividers inside panels |
-| `--c-ink` | #eceae4 | figures, titles |
-| `--c-ink-2` | #bdb9b0 | body text |
-| `--c-ink-3` | #918d85 | labels and timestamps (5.4:1 on a panel; never smaller than 12 px) |
+| `--c-raised` | #161614 | panels |
+| `--c-sunk` | #201f1c | inputs, hovered rows |
+| `--c-active` | #2d2c28 | a chosen segment, tab or drawing tool (with a 1 px line or the gold edge) |
+| `--c-line` | #363430 | panel borders, table rules (1.46:1 against a panel, was 1.26:1) |
+| `--c-line-2` | #272623 | quiet dividers inside panels |
+| `--c-ink` | #f3f1eb | headings and primary figures (16:1 on a panel) |
+| `--c-ink-2` | #c9c5bc | supporting text and inactive controls (10.5:1) |
+| `--c-ink-3` | #a29e95 | labels and timestamps (6.8:1 on a panel, was 5.5:1; never smaller than 12 px) |
+
+**Four steps of emphasis** (owner, 2026-10-18 second review: "secondary text and borders look subdued"): headings and figures in `--c-ink` and semibold; supporting text in `--c-ink-2`; labels and times in `--c-ink-3`; an inactive control reads in `--c-ink-2` and a chosen one is `--c-active` with full ink and semibold, so chosen and not chosen differ by more than a shade.
 | `--c-gold` | #d4b144 | selection, focus, Milo, the mark |
 | `--c-pos` / `--c-neg` | #4cc38a / #f07a66 | direction only, always with a sign or arrow, never colour alone |
 | `--c-warn` | #e7b25a | stale or unavailable data |
@@ -46,19 +49,24 @@ The owner reviewed X1 to X3 on 2026-10-18 and decided them; the table records th
   - headline figures 22 to 28 px.
 - **Every other page:** 15 px reading text; tables 13.5 px with 12 px headers; a second line inside a cell (a mid, a share count) never under 12 px.
 - **Page titles:** 28 px semibold (24 px on a phone) on Home, Macro, Watchlist, Alerts and Settings. A company's pages lead with the price instead (44 px, 34 px on a phone), with the name and sector above it.
-- **No all-caps labels.** Panel titles are 14 px semibold in sentence case.
+- **No all-caps labels.** Home's panel titles are 15 px semibold in sentence case, in full ink.
 
 ## 4. Layout and density
 - **Shell:** a labelled sidebar of destinations only (236 px, or 76 px collapsed), a 56 px top bar, and the content area. A destination's views are its page tabs, never listed again in the sidebar.
 - **One page system:** every page sits on Home's canvas. Each top-level section is a bordered charcoal panel (`--c-raised`, 1 px `--c-line`, 10 px radius, 16/18 px padding, 12 px apart; 12 px padding on a phone). Section titles are 18 px. Measured on all eight representative pages at both sizes (`style_audit.py`).
 - **Home (the workspace):** a 12-column grid with 12 px gutters.
   - **Width:** each panel spans 3, 4, 6, 8 or 12 columns.
-  - **Height:** compact (260 px), standard (380 px) or tall (560 px). The panel body scrolls inside itself.
+  - **Default heights by kind** (owner, 2026-10-18 second review: "identical styling doesn't require identical proportions"):
+    - **Lists and tables** (Watchlist, Company news, Contracts, Economic calendar, Earnings this week, Moved most this month, Market news, Latest scan alerts) start at a height for their kind (compact 210 px, standard 300 px, tall 470 px of body), fill the rest of their row, and scroll inside.
+    - **Everything else** (Indices, Your portfolio, What matters today, Quote and chart, Sentiment and regime, Expected move, Sector heatmap, Optic Desk, Economy, Fair value) sizes to its content and never stretches, so it is never half empty. Charts take their height from the panel's height choice (Quote and chart 170, 230 or 340 px).
+    - **The default layouts pair them:** a panel that sizes to its content beside a list that fills the row (Quote and chart with Watchlist, What matters today with Company news, Sector heatmap with Economic calendar, Optic Desk with Earnings).
+    - **No holes:** a row the next panel cannot join ends early, and its last panel widens to the row's end (for example when Your portfolio is absent). Saved widths are unchanged.
+    - **Your portfolio** spans the width with its value and chart beside the holdings.
 - **Panel anatomy:** one border, no shadow, 10 px radius, and no card inside a card.
-  - **Header (40 px):** a grip, the title, the linked-ticker chip, "How to read this", Ask Milo and a ⋯ menu.
+  - **Header (40 px):** a grip, the title, the linked-ticker chip, "?" (About this panel), Ask Milo and a ⋯ menu.
   - **Body:** padded 12 px.
-  - **Footer:** the source, the as-of time, how fresh the source is, and any delayed or stale state.
-  - **Rows:** panels in one row share its height, and each footer sits at the bottom, so a row reads as one band.
+  - **Footer: one line.** A short source, the as-of time (with the date when it is not today), and a status in a word or two: "Delayed 15 min" or "Market closed" for quoted panels, the source's cadence for the rest ("Every 10 min", "Hourly", "Nightly scan"), "Updating" while a board is rebuilt, and "Built 22 hours ago" in `--c-warn` when a source is more than three of its cycles old.
+  - **About this panel** ("?"): how to read it, then the full source, how fresh it is, any calculation note, and what Optic does not have (for example licensed consensus forecasts).
   - **Narrow panels** (under 420 px): Ask Milo shows as its mark, with the words kept for screen readers, so the title is never cut.
 - **Compact and generous space:**
   - Comparisons (tables, metric strips, heatmaps) are compact.
@@ -79,6 +87,11 @@ The owner reviewed X1 to X3 on 2026-10-18 and decided them; the table records th
 - **Empty, stale and unavailable** each have their own line in words, never a dash alone.
 
 ## 6. Charts
+- **The Chart page** (owner, 2026-10-18 second review: "the large company header and multiple rows of text buttons push the chart downward"):
+  - a one-line header: ticker, name, price, change, the extended-hours price, and small Watch, Alert, Compare and Ask Milo;
+  - one row of settings: bar size, range or session, style as three named icons, Indicators, and zoom out, zoom in and fit as named icons;
+  - the drawing tools as a column of named icon buttons beside the plot, grouped as pointer, lines (horizontal, vertical, trend, ray), shapes (rectangle, Fibonacci) and notes, then undo, delete selected and remove all; on a phone they are a row behind "Draw";
+  - the plot fills the rest of the window: it starts 275 px down at 1440 by 900 (it started about 475 px down) and is 614 px tall.
 - **One engine per kind:**
   - `ui/pricechart.js` for prices;
   - `ui/chart.js` for lines, sparklines and meters;
@@ -97,19 +110,22 @@ The owner reviewed X1 to X3 on 2026-10-18 and decided them; the table records th
 - **Error:** says what did not load, with "Try again".
 - **Loading:** shaped skeletons, never spinners.
 - **Fixture data** (the preview only, and only where no live source exists): labelled "Sample data" in the panel footer.
-- **How fresh, per panel:** every Home panel's footer names its source and how often that source is refreshed, taken from the server's own cache periods (quotes delayed about 15 minutes and refreshed every minute in session, option chains re-read at most once a minute, headlines every 10 minutes, earnings data and FRED series every 6 hours, movers from the nightly scan). The words are in `FRESH` in `pages/workspace.js`. The page says it is connected to Optic's existing data sources; it never says "live" for a whole page.
+- **How fresh, per panel:** the footer gives the status in a word or two; About this panel gives the full sentence from the server's own cache periods (quotes delayed about 15 minutes and refreshed every minute in session, option chains re-read at most once a minute, headlines every 10 minutes, earnings data and FRED series every 6 hours, movers from the nightly scan). The words are in `FRESH`, `CADENCE` and `SRC` in `pages/workspace.js`. The page says it is connected to Optic's existing data sources; it never says "live" for a whole page.
+- **A change of source inside a chart:** the line breaks there, a dashed bridge joins the two sides, and a rule says "Source changes", so a step is never read as a gain or loss (Your portfolio, where the provider's estimated balances give way to Optic's own snapshots).
 
 ## 8. Help
-- **"How to read this":** every panel has it, in two or three plain sentences, opened in place.
+- **"About this panel":** every panel has it, opened in place: two or three plain sentences on how to read it, then where its figures come from and how fresh they are.
 - **Depth on demand:** the glossary and Milo.
 
 ## 9. Responsive
 - **Under 1100 px:** panels are 6 or 12 columns wide.
 - **Under 860 px:**
   - **Layout:** one column. The sidebar becomes the phone bar (names unchanged), and Home shows panels in their saved order, at full width.
-  - **What opens first:** each layout names its essential panels (Market Overview: indices, portfolio, today's priority, watchlist, the linked quote). Those are open; the rest are folded to a title bar and load only when opened. What the reader opens or folds is kept per layout.
+  - **What opens first:** each layout names its essential panels (Market Overview: indices, portfolio, the linked quote, watchlist, today's priority). Those are open; the rest are folded to a title bar and load only when opened. What the reader opens or folds is kept per layout.
+  - **Panel header:** two controls, both 44 px: the title itself (which folds or opens the panel) and the ⋯ menu. About this panel, Ask Milo about this, moving, hiding, All columns and Refresh are in the menu.
   - **Chart heights:** 170 px for the linked quote and 150 px for economic series, so a chart never fills the screen.
-  - **Tables:** secondary columns (mid, IV, volume; revenue estimates; volume on movers) are hidden on a phone; "All columns" in the ⋯ menu shows them.
+  - **Contracts:** the row shows strike, cost, delta and liquidity, which fit a 375 px screen; a button at the row's end opens every other figure (mid, spread, IV, open interest, volume) beneath it. "All columns" in the ⋯ menu shows the full table, and says to scroll sideways.
+  - **Other tables:** secondary columns (revenue estimates; volume on movers; the watchlist's last change) are hidden on a phone; "All columns" shows them.
   - **Controls:** resizing is hidden. Reordering stays available through the ⋯ menu (Move up, Move down).
   - **Tables:** scroll sideways inside the panel and keep their first column fixed.
   - **Charts:** redraw at the panel's width.

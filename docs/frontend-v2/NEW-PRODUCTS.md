@@ -23,7 +23,7 @@ These need no new feed. Home as the workspace is the first piece. The next step 
 | Item | Status | Data it uses |
 |---|---|---|
 | Dark visual system (accepted by the owner, 2026-10-18), a sidebar of destinations only, compact top bar, one page system across all pages | Built (private preview) | n/a |
-| Home as the workspace: layouts (Market Overview the default, My Desk the reader's own), panels, linking, persistence, phone priority, per-panel freshness | Built (private preview; 47 Home checks, 18 walkthrough checks) | existing APIs |
+| Home as the workspace: layouts (Market Overview the default, My Desk the reader's own), panels, linking, persistence, phone priority, per-panel freshness | Built (private preview; 52 Home checks and 18 walkthrough checks, cold and cached) | existing APIs |
 | Market Overview panels (indices, regime, sentiment, expected move, heatmap, calendar with actual and prior, earnings week with implied move on request, movers, watchlist, quote and chart, news, economy) | Built (preview) | existing APIs |
 | Options Research panels (contracts at one expiry with Optic's liquidity label, sortable by every column, no grades) | Built (private preview) | `/api/options/{t}/research` |
 | Market Structure Break on the chart | Built | bars Optic already loads |

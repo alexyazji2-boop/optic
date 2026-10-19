@@ -16,7 +16,7 @@ import threading
 import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import pandas as pd
 from fastapi import Body, FastAPI, HTTPException, Query, Request
@@ -3701,7 +3701,17 @@ async def _warm_home() -> None:
         # it, because both pull on the same provider and racing them at boot
         # would just make the first reader wait for a busier thread pool.
         await priority_board()
+        busy = _BOARD_BUSY.get("priority")
+        if busy is not None:
+            await busy
         log.info("priority board warmed")
+        # This week's and next week's report lists, the two Home shows.
+        for off in (0, 1):
+            await earnings_week_calendar(offset=off, quick=False)
+            busy = [t for k, t in _BOARD_BUSY.items() if k.startswith("earnings-week-")]
+            for t in busy:
+                await t
+        log.info("earnings weeks warmed")
     except asyncio.CancelledError:                              # noqa: PERF203
         raise
     except Exception as exc:                                    # noqa: BLE001
@@ -4687,7 +4697,9 @@ PRIORITY_TTL = 600.0
 
 
 @app.get("/api/priority")
-async def priority_board() -> Dict[str, Any]:
+async def priority_board(
+    quick: bool = Query(False, description="Answer 'building' after a few seconds on a first build instead of waiting"),
+) -> Dict[str, Any]:
     """Today's four-column triage board.
 
     Cached for ten minutes, because one of its four legs is an earnings scan.
@@ -4707,19 +4719,97 @@ async def priority_board() -> Dict[str, Any]:
     other 70.
     """
     def build() -> Dict[str, Any]:
-        hit = _PRIORITY_CACHE.get("board")
-        if hit and (time.time() - hit["at"]) < PRIORITY_TTL:
-            return hit["data"]
         # In the jobs' lane whoever asked, a reader or the warm-up after a
         # deploy: its earnings leg is about a hundred and fifty requests, and a
         # reader loading a symbol meanwhile should not queue behind them.
         ranking = _cached_ranking()
         _ensure_ranking(ranking)                  # the movers column reads it too
         with yf_provider_mod.background():
-            out = priority_mod.build(YF_PROVIDER, scanners_mod, ranking)
-        _PRIORITY_CACHE["board"] = {"at": time.time(), "data": out}
-        return out
-    return await _run(build)
+            return priority_mod.build(YF_PROVIDER, scanners_mod, ranking)
+    return await _served_while_rebuilt(
+        "priority", _PRIORITY_CACHE, "board", PRIORITY_TTL, build,
+        "Gathering this week's events and report dates. The first build scans about 150 companies and takes a minute or two.",
+        quick=quick is True)   # called directly (the boot warm-up, tests), the default is FastAPI's Query object
+
+
+# Boards no reader should wait on (owner, 2026-10-18: Home's first load waited
+# 90 s on the earnings scan, measured cold). The last build is served at once,
+# with its age, while a fresh one runs in the jobs' lane; it is kept on disk so
+# a deploy starts from it rather than from nothing. Report dates move over days
+# and the board's sector column says its own time, so an hour-old answer is not
+# wrong; it is labelled with when it was built. A build from another New York
+# day is never served: its rows say "today" and "past" as of the day it was
+# built. With no usable build, a `quick` request (v2, which asks again by
+# itself) answers "building" after BOARD_WAIT seconds; any other request
+# (Classic, which keeps its answer for half an hour) waits for the build, as
+# it always has.
+_BOARD_DIR = os.path.join(os.path.dirname(screen_mod.CACHE_PATH), "boards")
+_BOARD_BUSY: Dict[str, "asyncio.Task[Any]"] = {}
+BOARD_WAIT = 6.0
+
+
+def _board_read(key: str) -> Optional[Dict[str, Any]]:
+    try:
+        with open(os.path.join(_BOARD_DIR, key + ".json")) as fh:
+            entry = json.load(fh)
+        return entry if isinstance(entry, dict) and "at" in entry and "data" in entry else None
+    except (OSError, ValueError):
+        return None
+
+
+def _board_write(key: str, entry: Dict[str, Any]) -> None:
+    try:
+        os.makedirs(_BOARD_DIR, exist_ok=True)
+        tmp = os.path.join(_BOARD_DIR, key + ".json.tmp")
+        with open(tmp, "w") as fh:
+            json.dump(entry, fh)
+        os.replace(tmp, os.path.join(_BOARD_DIR, key + ".json"))
+    except OSError as exc:
+        logging.getLogger("uvicorn.error").info("board %s not kept on disk: %s", key, exc)
+
+
+def _same_market_day(at: float) -> bool:
+    return (datetime.fromtimestamp(at, timezone.utc).astimezone(session_mod.ET).date()
+            == datetime.now(timezone.utc).astimezone(session_mod.ET).date())
+
+
+async def _served_while_rebuilt(key: str, cache: Dict[Any, Any], ckey: Any, ttl: float,
+                                build: Callable[[], Dict[str, Any]], building: str, quick: bool = False,
+                                usable: Callable[[float], bool] = _same_market_day) -> Dict[str, Any]:
+    hit = cache.get(ckey)
+    if hit is None:
+        hit = await _run(_board_read, key)
+        if hit is not None:
+            cache[ckey] = hit
+    if hit is not None and not usable(hit["at"]):
+        hit = None
+    now = time.time()
+    if hit is not None and now - hit["at"] < ttl:
+        return hit["data"]
+    task = _BOARD_BUSY.get(key)
+    if task is None or task.done():
+        async def rebuild() -> None:
+            _BACKGROUND_JOB.set(True)              # this task's own context: the jobs' lane
+            try:
+                data = await _run(build)
+                entry = {"at": time.time(), "data": data}
+                cache[ckey] = entry
+                await _run(_board_write, key, entry)
+            except Exception as exc:               # noqa: BLE001  the last build stays served
+                logging.getLogger("uvicorn.error").info("board %s rebuild failed: %s", key, exc)
+        task = asyncio.create_task(rebuild())
+        _BOARD_BUSY[key] = task
+    if hit is not None:
+        return dict(hit["data"], served_stale=True, built_seconds_ago=round(now - hit["at"]))
+    if not quick:
+        await asyncio.shield(task)
+    else:
+        try:
+            await asyncio.wait_for(asyncio.shield(task), timeout=BOARD_WAIT)
+        except asyncio.TimeoutError:
+            return {"available": False, "building": True, "reason": building}
+    done = cache.get(ckey)
+    return done["data"] if done else {"available": False, "reason": "The board could not be built just now."}
 
 
 _EW_CACHE: Dict[int, Dict[str, Any]] = {}
@@ -4729,6 +4819,7 @@ EW_TTL = 3600.0
 @app.get("/api/earnings-week")
 async def earnings_week_calendar(
     offset: int = Query(0, ge=-8, le=8, description="Weeks from this one"),
+    quick: bool = Query(False, description="Answer 'building' after a few seconds on a first build instead of waiting"),
 ) -> Dict[str, Any]:
     """Who reports this week, grouped by day. Needs no ticker loaded.
 
@@ -4737,15 +4828,17 @@ async def earnings_week_calendar(
     earnings dates move on the scale of days, not minutes.
     """
     def build() -> Dict[str, Any]:
-        hit = _EW_CACHE.get(offset)
-        if hit and (time.time() - hit["at"]) < EW_TTL:
-            return hit["data"]
         with yf_provider_mod.background():                # the same scan
             out = earnings_week_mod.build(YF_PROVIDER, offset=offset)
         out["generated_at"] = datetime.now(timezone.utc).isoformat()
-        _EW_CACHE[offset] = {"at": time.time(), "data": out}
         return out
-    return await _run(build)
+    # Served from the last build while a fresh one runs (_served_while_rebuilt).
+    # The week a cached answer covers is part of its key, so a Monday never
+    # serves last week's list as this week's.
+    week = earnings_week_mod.week_bounds(offset)[0].strftime("%Y-%m-%d")
+    return await _served_while_rebuilt(
+        f"earnings-week-{week}", _EW_CACHE, (offset, week), EW_TTL, build,
+        "Gathering report dates for about 150 companies. The first scan takes a minute or two.", quick=quick is True)
 
 
 @app.get("/api/compare")

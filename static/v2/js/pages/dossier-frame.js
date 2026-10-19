@@ -24,12 +24,22 @@ export async function core(sym) {
   return out;
 }
 
-export function header(sym, D, view = 'overview', { compact = false } = {}) {
+export function header(sym, D, view = 'overview', { compact = false, bar = false } = {}) {
   const q = D.quote || {};
   const s = (D.session && D.session.prices) || {};
   const name = q.name || (D.session && D.session.name) || '';
   const ext = s.extended && isNum(s.extended.price) ? s.extended : null;
   const label = (pageOf(view) || {}).label || 'Overview';
+  // The Chart page's header is one line, so the plot gets the screen (owner, 2026-10-18 second review).
+  if (bar) {
+    return html`<header class="dhead bar">
+      <h1 class="name"><b class="tick">${sym}</b>${name && name !== sym ? html`<span>${name}</span>` : ''}<span class="sr">, ${label}</span></h1>
+      <p class="dh-price">${isNum(q.price) ? html`<span class="dh-px">${num(q.price)}</span>` : D.quoteError ? '' : html`<span class="sk dh-sk dh-sk-sm" role="status" aria-label="Loading the price"></span>`}
+        <span class="dh-chg ${dir(q.change_pct)}">${isNum(q.change_pct) ? html`${signed(q.change, 2, '')} (${signed(q.change_pct)})` : ''}</span>
+        ${ext ? html`<span class="dh-ext">${capFirst(ext.kind)} ${num(ext.price)} <span class="${dir(ext.change_pct)}">${signed(ext.change_pct)}</span></span>` : s.phase_label ? html`<span class="dh-ext">${clean(s.phase_label)}</span>` : ''}</p>
+      <div class="cluster acts">${watchButton(sym, { compact: true })}<a class="btn btn-sm" href="#/alerts?symbol=${sym}">Alert</a><a class="btn btn-sm" href="#/compare?t=${sym}">Compare</a>${miloButton('Ask Milo', { ask: `What is the case for ${sym} right now?`, context: `${sym} Dossier, ${label}`, symbol: sym, cls: 'btn-sm' })}</div>
+    </header>`;
+  }
   return html`<header class="dhead ${compact ? 'compact' : ''}">
     <div class="dh-id">
       <h1 class="name"><b class="tick">${sym}</b>${name && name !== sym ? html`<span>${name}</span>` : ''}${q.sector ? html`<span class="t-muted dh-sector">${q.sector}</span>` : ''}<span class="sr">, ${label}</span></h1>

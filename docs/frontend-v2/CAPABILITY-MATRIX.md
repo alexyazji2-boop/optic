@@ -15,7 +15,7 @@ Row-level detail per page is in COVERAGE.md.
 | Rail, groups, page tabs, phone bar (names unchanged) | Implemented and tested | v2_check, 40 views × 2 sizes |
 | Rail Collapse (`optic.rail.tight.v2`, shared with Classic) | Implemented and tested | Stage 0 |
 | Command palette: exact page names, symbols with actions, saved research, screens, Ask Milo row, quick actions | Implemented and tested | Stage 0 (palette) |
-| Home as the research workspace: layouts (Market Overview the default, My Desk the reader's own), panels, move, resize, hide, lock, reset, save, linked ticker, phone priority, state kept on Back (new) | Implemented and tested (private preview) | WORKSPACE.md; `ws_verify_home.py` 47 checks; `walkthrough.py` 18 checks; v2_check audit 0 faults on its 20 captures (5 Home views, desktop and phone, dark and light) |
+| Home as the research workspace: layouts (Market Overview the default, My Desk the reader's own), panels, move, resize, hide, lock, reset, save, linked ticker, phone priority, state kept on Back (new) | Implemented and tested (private preview) | WORKSPACE.md; `ws_verify_home.py` 52 checks and `walkthrough.py` 18 checks, cold and cached; v2_check audit 0 faults on its 20 captures (5 Home views, desktop and phone, dark and light) |
 | Dark visual system, a sidebar of destinations only, one page system across every page (new direction; dark accepted 2026-10-18) | Implemented and tested (private preview) | VISUAL-SPEC-DARK.md; `style_audit.py` on 8 pages × 2 sizes; v2_check audit 0 faults on 168 captures (42 views, desktop and phone, dark and light), 2026-10-18 |
 | Notifications bell with unseen count | Incomplete | Backend counts exist; v2 has no bell (I11, W2) |
 | Glossary tooltips and Learn widget | Classic-only | C17, M7 (found by the 2026-10-18 audit) |
@@ -35,6 +35,7 @@ Row-level detail per page is in COVERAGE.md.
 |---|---|---|
 | Conversations and saved history (`optic.pulse.history.v1`, shared with Classic) | Implemented and tested | Stage 0 and the round trip |
 | Rendered answers: sources, charts in answers, follow-ups, action cards | Implemented and tested | Stage 0, through a stubbed stream |
+| Ask Milo from a Home panel through to the answer, with Optic's own tools | Implemented and tested with a stand-in model | `milo_e2e.py`, 7 of 7 (2026-10-18): the route, the allowance, CONTEXT naming the panel and ticker, a real `get_quote` round trip, the streamed answer and its sources. **Not tested: a real model's answers.** That needs the key and is a private-preview check (PREVIEW-PACKAGE.md section 7) |
 | Page and ticker context; no leak from the previous page | Implemented and tested | Stage 0 (AAPL to MSFT Options) |
 | Scope (this page, market only, none), Level, Analyst, Timeframe | Implemented and tested | Stage 0 |
 | Allowance, switched off, sign-in required, spent | Implemented and tested | Stage 0 |

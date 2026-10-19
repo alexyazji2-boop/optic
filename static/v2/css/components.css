@@ -49,8 +49,9 @@ kbd { font: 500 12px/1 var(--f-sans); padding: 4px 7px; border-radius: 6px; bord
 .textlink:hover { text-decoration: underline; text-underline-offset: 3px; }
 .textlink svg, .go svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.8; flex: none; }
 .seg { display: inline-flex; flex-wrap: wrap; padding: 3px; border-radius: var(--r-pill); background: var(--c-plane-2); border: 1px solid var(--c-line-2); }
-.seg button { min-height: 40px; min-width: var(--tap); padding: 0 14px; border: 0; border-radius: var(--r-pill); background: none; color: var(--c-ink-3); cursor: pointer; font: 500 14.5px/1 var(--f-sans); }
-.seg button[aria-pressed="true"] { background: var(--c-raised); color: var(--c-ink); box-shadow: 0 1px 2px rgba(0, 0, 0, .08), 0 0 0 1px var(--c-line-2); }
+.seg button { min-height: 40px; min-width: var(--tap); padding: 0 14px; border: 0; border-radius: var(--r-pill); background: none; color: var(--c-ink-2); cursor: pointer; font: 500 14.5px/1 var(--f-sans); }
+.seg button:hover:not([aria-pressed="true"]) { color: var(--c-ink); }
+.seg button[aria-pressed="true"] { background: var(--c-active); color: var(--c-ink); font-weight: 600; box-shadow: 0 1px 2px rgba(0, 0, 0, .08), 0 0 0 1px var(--c-line); }
 .chips { display: flex; flex-wrap: wrap; gap: var(--s-2); }
 .chip { display: inline-flex; align-items: center; gap: 8px; min-height: 42px; padding: 0 14px; border-radius: var(--r-pill); border: 1px solid var(--c-line); background: transparent; cursor: pointer; font: 500 14.5px/1 var(--f-sans); color: var(--c-ink-2); }
 .chip:hover { border-color: var(--c-ink-3); }
@@ -73,6 +74,10 @@ kbd { font: 500 12px/1 var(--f-sans); padding: 4px 7px; border-radius: 6px; bord
 .chart { display: block; width: 100%; height: auto; overflow: visible; }
 .chart:focus-visible { outline: 2px solid var(--c-focus); outline-offset: 4px; border-radius: 4px; }
 .chart .line { fill: none; stroke: var(--c-chart-ink); stroke-width: 2; stroke-linejoin: round; }
+/* a change of source: the dashed bridge is not a move, and the rule says where it happens */
+.chart .line-gap { fill: none; stroke: var(--c-warn); stroke-width: 1.5; stroke-dasharray: 3 4; }
+.chart .mark-rule { stroke: var(--c-warn); stroke-width: 1; stroke-dasharray: 2 3; }
+.chart .mark-t { fill: var(--c-warn); font: 600 12px/1 var(--f-label); paint-order: stroke; stroke: var(--c-raised); stroke-width: 3px; }
 .chart .area { stroke: none; }
 .chart .end { fill: var(--c-chart-ink); }
 .chart .grid { stroke: var(--c-chart-grid); stroke-width: 1; }

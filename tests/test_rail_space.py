@@ -143,10 +143,11 @@ def test_the_priority_board_is_cached_like_its_neighbour():
     Timed cold, per leg: earnings 66.6s, events 3.9s, sectors 0.8s, movers
     0.01s. Measured on the live server: 42s."""
     assert "_PRIORITY_CACHE" in MAIN and "PRIORITY_TTL" in MAIN
-    fn = MAIN[MAIN.index("async def priority_board()"):]
+    fn = MAIN[MAIN.index("async def priority_board("):]
     fn = fn[:fn.index("\n\n\n")]
-    assert 'hit = _PRIORITY_CACHE.get("board")' in fn
-    assert "time.time() - hit[\"at\"]) < PRIORITY_TTL" in fn
+    # Since 2026-10-18 the cache is served while it rebuilds and kept on disk
+    # (_served_while_rebuilt; tests/test_board_serving.py has the behaviour).
+    assert "_served_while_rebuilt(" in fn and '_PRIORITY_CACHE, "board", PRIORITY_TTL' in fn
     # Shorter than the hour its neighbour uses: the sector leg reads current
     # price against the prior session's range and is the one a reader could
     # catch being wrong. It rebuilds in 0.8s.

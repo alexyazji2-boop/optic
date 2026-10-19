@@ -105,17 +105,17 @@ export function portfolio(ov, perf) {
   const src = ((perf || {}).sources || {});
   const srcWords = { provider_estimate: "your data provider's estimated daily balances", collected: 'snapshots Optic collected at each sync', mixed: "the provider's estimates, then Optic's own snapshots", none: 'no value history yet' }[src.values] || src.values || '';
   const switches = (src.switches || []).map((x) => shortDate(x.date));
-  return html`<section class="figure hero" aria-labelledby="pf-h">
+  return html`<section class="figure hero pf" aria-labelledby="pf-h"><div class="pf-main">
     <p class="t-label" id="pf-h">Your portfolio, value now${ov.holdings_count ? html`<span class="pill">${ov.holdings_count} holdings</span>` : ''}</p>
     <p class="t-display">${money(v)}</p>
     <p class="delta">${isNum(today.total) ? html`<span class="${dir(today.total)}">${signedMoney(today.total)} (${signed(today.total_pct)}) on the day</span>` : ''}${isNum(brokerTotal) && Math.abs(brokerTotal - v) > 1 ? html`<span class="t-muted">Your broker's own total: ${money(brokerTotal)}${sync ? `, ${ago(sync)}` : ''}</span>` : ''}</p>
-    ${series.length > 1 ? html`<p class="pf-chart-k">Account value as your broker reported it, three months. It includes your own deposits and withdrawals, so it is not a return.${switches.length ? ` The source changes on ${switches.join(', ')}.` : ''}</p><div class="chart-slot" data-chart="portfolio"></div>` : html`<p class="asof">The value chart fills in as daily snapshots accumulate.</p>`}
+    ${series.length > 1 ? html`<p class="pf-chart-k">Account value as your broker reported it, three months. It includes your own deposits and withdrawals, so it is not a return.${switches.length ? ` The source changes on ${switches.join(', ')}, marked on the chart; the step there is not a gain or loss.` : ''}</p><div class="chart-slot" data-chart="portfolio"></div>` : html`<p class="asof">The value chart fills in as daily snapshots accumulate.</p>`}
     ${isNum(twr) ? html`<p class="pf-twr"><b>${signed(twr)}</b> time-weighted over the period, measured from ${srcWords}.${switches.length ? ' A change of source inside the period moves this figure, so read it with the chart.' : ''}</p>` : ''}
-    ${rows.length ? html`<div class="pf-rows" role="table" aria-label="Holdings, by their effect on the day">
+    </div><div class="pf-side">${rows.length ? html`<div class="pf-rows" role="table" aria-label="Holdings, by their effect on the day">
       <div class="pf-row pf-head" role="row"><span role="columnheader">Holding</span><span role="columnheader" class="num">Price</span><span role="columnheader" class="num">Day</span><span role="columnheader" class="num">Effect</span></div>
       ${rows.slice(0, 6).map((r) => html`<a class="pf-row" role="row" href="#/${r.symbol}"><span role="cell"><b class="tick">${r.symbol}</b> <small class="t-muted">${num(r.quantity, 0)} shares</small></span><span role="cell" class="num">${num(r.price)}</span><span role="cell" class="num ${dir(r.change_pct)}">${signed(r.change_pct)}</span><span role="cell" class="num ${dir(r.contribution)}">${signedMoney(r.contribution, 0)}</span></a>`)}</div>` : ''}
     <p class="asof">${clean((vn && vn.basis) || '')}${sync ? ` Last sync ${ago(sync)}.` : ''}</p>
-    <div class="cluster"><a class="textlink" href="#/brokerage/holdings">All holdings ${icon('arrow')}</a><a class="textlink" href="#/brokerage/performance">Performance ${icon('arrow')}</a></div>
+    <div class="cluster"><a class="textlink" href="#/brokerage/holdings">All holdings ${icon('arrow')}</a><a class="textlink" href="#/brokerage/performance">Performance ${icon('arrow')}</a></div></div>
   </section>`;
 }
 

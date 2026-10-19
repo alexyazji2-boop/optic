@@ -281,6 +281,26 @@ def test_expired_authorisation_then_reconnect():
     assert store.connection(user["id"], conn["id"])["status"] == "active"
 
 
+def test_a_dev_server_restart_then_reconnect_keeps_the_same_connection():
+    """The sandbox holds its connections in memory, so a restart of the dev
+    server forgot them and every sync failed ("no longer exists at the
+    provider"). Reconnecting made a second link and the demo's history started
+    over beside the old one (2026-10-18). The id carries its scenario, so the
+    same connection comes back."""
+    c, user = reader()
+    paid(user)
+    link(c)
+    conn = store.connections(user["id"])[0]
+    prov = service.provider()
+    prov._users.clear()                         # what a restart does to the sandbox
+    r = c.post("/api/brokerage/connections/{}/sync".format(conn["id"])).json()
+    assert r["result"] == "error"
+    link(c, reconnect=conn["id"])
+    assert len(store.connections(user["id"])) == 1
+    after = store.connection(user["id"], conn["id"])
+    assert after["status"] == "active" and after["provider_connection_id"] == conn["provider_connection_id"]
+
+
 def test_provider_outage_keeps_last_good_data():
     c, user = reader()
     paid(user)

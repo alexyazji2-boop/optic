@@ -65,6 +65,13 @@ Checked side by side against production (`b8d3b50`) unless the line says otherwi
 - **Page errors:** 0 new on the branch, against 0 in production.
 - **Link counts:** one page's count differed. That was live-data timing: an extra headlines panel loaded, and every link in it is a valid address.
 
+### 2a. If the dark workspace (`v2-dark-workspace`) joins the preview: what else a Classic reader would meet
+
+| # | Change | What a non-owner sees | Evidence |
+|---|---|---|---|
+| D1 | `/api/priority` and `/api/earnings-week` are served from their last build while a fresh one runs, and the build is kept on disk (`data/boards/`) | **After a deploy:** Classic's What matters today and Earnings tab answer at once from the last build (labelled with its time) instead of waiting up to 90 s for a scan. **Never:** a build from another New York day. **The very first build ever:** unchanged, Classic waits for it as today; only v2 asks for the quick "building" answer (`quick=true`) | `tests/test_board_serving.py` (8 tests); cold timings in PERFORMANCE.md |
+| D2 | The sandbox brokerage (development only) eases its balance estimate into the account's value, and a reconnect after a dev-server restart keeps the same connection | Nothing in production, which uses SnapTrade | `tests/test_brokerage.py`, `tests/test_brokerage_performance.py` |
+
 ## 3. Verification results
 
 Run against the real app on this machine, with each scratch server on its own copy of the local data.
@@ -166,6 +173,7 @@ These cannot be done locally:
 
 | Area | Check on the real account or device | Why only live |
 |---|---|---|
+| Milo, a real model | The end-to-end path is checked locally with a stand-in model (`milo_e2e.py`, 7 of 7); the answers themselves are not. Ask from three Home panels (Contracts, Quote and chart, What matters today) with a linked ticker: the answer is about that panel and that ticker, uses Optic's figures rather than invented ones, and its sources open | The local server has no model key on purpose |
 | Milo | Ask a real question on the Dossier and on Options. Check it streams, the sources open, an answer chart draws, and "Watch"/"Save" cards work. Ask a follow-up after moving to another symbol: the panel names the new symbol | No model key locally (stubbed streams only) |
 | Milo, mobile | On an iPhone in Safari, type a question with the keyboard up. The box stays above it; Stop works; History reopens the conversation | Emulation only so far |
 | Sign-in | On the iPhone: sign out, then sign in with the passkey. If Google or Apple is configured, start sign-in from `/v2/` and land back on `/v2/`. Password reset only if mail is configured (L2) | Virtual authenticator only; providers not configured locally |

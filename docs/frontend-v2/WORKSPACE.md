@@ -5,16 +5,20 @@
 **What the owner decided (2026-10-18):** Home *is* the workspace. It opens on the Market Overview layout with a visible layout selector. My Desk is the reader's own saved layout. There is no separate workspace destination, no new sidebar name and no top-bar button. Old `#/workspace` links land on Home.
 
 **Checked by** (in `~/Optic/work/v2-2026-10-17/workspace/`):
-- `ws_verify_home.py`: 47 checks on Home's layouts, linking, panels, states and phone folding.
-- `walkthrough.py`: the owner's review flow, step by step, on a desktop and a narrow screen (18 checks).
+- `ws_verify_home.py`: 52 checks on Home's layouts, linking, panels, proportions, footers, states, phone folding, the phone header and contract rows. Run both straight after a server restart (cold) and again (cached): 52 of 52 each.
+- `walkthrough.py`: the owner's review flow, step by step, on a desktop and a narrow screen (18 checks), cold and cached: 18 of 18 each.
+- `cold_load.py`: Home's first load timed request by request, cold and cached (PERFORMANCE.md).
+- `milo_e2e.py` with `milo_standin.py`: Ask Milo from a panel through to the answer, against a stand-in model (7 checks).
 - `style_audit.py`: Home measured against the other seven representative pages.
 
 ## Layouts
 | Layout | Panels, in order | Open first on a phone |
 |---|---|---|
-| Market Overview (the default) | Indices, Your portfolio, What matters today, Watchlist, Quote and chart, Company news, Contracts, Sentiment and regime, Expected move, Sector heatmap, Economic calendar, Optic Desk, Earnings this week, Moved most this month, Market news, Latest scan alerts, Economy | Indices, Your portfolio, What matters today, Watchlist, Quote and chart |
-| Options Research | Watchlist, Quote and chart, Contracts, Expected move, Earnings this week, Company news, Moved most this month | Watchlist, Quote and chart, Contracts |
-| Long-Term Investing | Your portfolio, Watchlist, Quote and chart, Fair value, Sector heatmap, Economy, Sentiment and regime, Company news | Your portfolio, Watchlist, Quote and chart, Fair value |
+| Market Overview (the default) | Indices; Your portfolio; Quote and chart with Watchlist; What matters today with Company news; Contracts; Sentiment and regime with Expected move; Sector heatmap with Economic calendar; Optic Desk with Earnings this week; Moved most this month, Market news and Latest scan alerts; Economy | Indices, Your portfolio, Quote and chart, Watchlist, What matters today |
+| Options Research | Watchlist with Quote and chart; Contracts; Expected move with Earnings this week; Company news with Moved most this month | Watchlist, Quote and chart, Contracts |
+| Long-Term Investing | Your portfolio; Quote and chart with Watchlist; Fair value with Sector heatmap; Sentiment and regime with Company news; Economy | Your portfolio, Watchlist, Quote and chart, Fair value |
+
+Panels named "with" share a row. Lists and tables fill their row's height; the other panel sizes to its content (VISUAL-SPEC-DARK.md section 4). Layout version 3 (2026-10-18) brought these defaults; a reader's linked ticker, lock and My Desk carried over.
 | My Desk | the reader's own: a copy of Market Overview, or whatever "Save as My Desk" stores | as Market Overview |
 
 **Your portfolio** shows only when an account is linked. A reader with no linked account does not see an empty panel.
@@ -54,12 +58,13 @@ Opening detailed research (the ticker in Quote and chart opens the Dossier) and 
 
 ## Contracts: transparent comparison now, ranking later
 - **Now:** the 14 contracts nearest the money at one expiry (by the size of delta, so puts work too), with strike, mid, cost, spread, delta, IV, open interest, volume and Optic's liquidity label. Every column sorts, in either direction. There is no pick, grade or score.
-- **On a phone:** mid, IV and volume are hidden; "All columns" in the ⋯ menu shows them.
+- **On a phone:** the row shows strike, cost, delta and liquidity, which fit a 375 px screen; the button at its end opens mid, spread, IV, open interest and volume beneath it. "All columns" in the ⋯ menu shows the full table.
 - **Later (W3 in MIGRATION-TRACKER.md, not built):** an explainable suitability ranking. The reader chooses the criteria (for example the delta range, the most spread they accept, the least open interest, days to expiry); the ranking shows each contract's standing on each criterion and why it ranks where it does. It ranks fit to the reader's stated criteria, never the chance a trade works.
 
 ## Data and states
 - **Wording:** Home says it is "connected to Optic's existing data sources". It never calls the page "live".
-- **Freshness, per panel:** every footer names the source, the as-of time, and how fresh that source is, from the server's own cache periods (`FRESH` in `workspace.js`):
+- **The footer is one line:** a short source, the as-of time (with the date when it is not today), and a status: "Delayed 15 min" or "Market closed", the source's cadence, "Updating" while a board is rebuilt, or the data's age in the warning colour when it is more than three cycles old ("Built 22 hours ago").
+- **About this panel** (the "?" button, or the ⋯ menu on a phone) holds the rest: the full source, how fresh it is, any calculation note, and what Optic does not have. How fresh, from the server's own cache periods (`FRESH` in `workspace.js`):
 
 | Panel | How fresh |
 |---|---|
@@ -83,8 +88,24 @@ Opening detailed research (the ticker in Quote and chart opens the Dossier) and 
 - **States:** each panel has its own loading skeleton, error with "Try again", unavailable (what is missing and why) and stale state. A linked panel whose source returns nothing for the ticker says so in those words.
 - **Fixture data:** none. Nothing on Home uses sample data.
 
+## The first load, cold and cached
+Measured with `cold_load.py`, signed in, straight after a server restart (cold) and again (cached), 2026-10-18:
+
+| | Cold, before | Cold, now | Cached, now |
+|---|---|---|---|
+| What matters today | never: the request hit the 90 s limit | 0.3 s | 0.3 s |
+| Earnings this week | never: the request hit the 90 s limit | 0.5 s | 0.3 s |
+| Indices, regime, expected move, Desk, alerts (`/api/home`) | 0.5 s | 1.8 s | 0.8 s |
+| Your portfolio | 4.8 s | 6.3 s | 1.0 s |
+| Every other panel | under 1.6 s | under 2.8 s | under 1.1 s |
+
+- **What changed:** the two scans (about 150 companies each) are served from their last build at once, labelled "Updating", while a fresh build runs in the jobs' lane; the build is kept on disk (`data/boards/`), so a deploy starts from it. A build from another New York day is never served, since its rows say "today" as of the day it was built. On the very first build ever, Home asks with `quick=true`, says it is gathering after 6 s and asks again every 12 s instead of waiting; Classic, which keeps its answer for half an hour, waits for the build as before (`main._served_while_rebuilt`, tests in `tests/test_board_serving.py`).
+- **Still slow cold:** Your portfolio (6.3 s, the brokerage overview prices every holding) and, in the first seconds after a deploy, `/api/home` while the boot warm-up runs. `/api/home` is not served stale on purpose: it carries the session and the alert list, which must be current.
+- **A provider blip:** when the provider briefly returns nothing for a ticker, a linked panel says so and tries once more by itself after 5 s.
+
 ## On a phone (under 860 px)
 - One column, panels in the layout's order.
+- The header shows two controls, both 44 px: the title (which folds or opens the panel) and the ⋯ menu, which holds About this panel, Ask Milo about this, moving, hiding, All columns and Refresh.
 - The layout's essential panels are open; the rest are folded to their title and one line, and load only when opened. What the reader opens or folds is kept per layout.
 - The layout tabs scroll in one row. Add panel, Lock, Reset and Save as My Desk sit under "Layout options".
 - Charts are kept short: 170 px for Quote and chart, 150 px for Economy.
@@ -92,6 +113,7 @@ Opening detailed research (the ticker in Quote and chart opens the Dossier) and 
 
 ## Milo
 - **Ask Milo:** each panel's button sends the panel ("Home: Contracts") as `focus.asked_from`, plus the linked ticker for linked panels. The question is drafted in the drawer, not sent.
+- **End to end, with a stand-in model** (`milo_e2e.py`, 7 of 7): the drawer sends; the route accepts it within the allowance; CONTEXT tells the model the reader is on "AAPL's Home: Contracts"; the model asks for Optic's `get_quote`, Optic runs it on real data (343.46) and hands it back; the answer streams into the drawer with its sources. A real model's answers are not checked here: that needs the key, in the private preview (PREVIEW-PACKAGE.md section 7).
 - **Context:** carries the layout, the visible panels, the regime, the expected move, sentiment and the linked quote.
 - **Paid calls:** only when the reader sends.
 
