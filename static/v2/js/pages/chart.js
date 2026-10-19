@@ -38,9 +38,25 @@ const INTERVALS = [
   { key: 'daily', label: '1D' }, { key: 'weekly', label: '1W' },
 ];
 const RANGES = { daily: { '1M': 21, '3M': 63, '6M': 126, '1Y': 252, All: Infinity }, weekly: { '1M': 5, '3M': 13, '6M': 26, '1Y': 52, All: Infinity } };
-const TOOLS = [['select', 'Select and move'], ['hline', 'Horizontal line'], ['vline', 'Vertical line'], ['trend', 'Trend line'], ['ray', 'Ray'], ['rect', 'Rectangle'], ['fibdraw', 'Fibonacci retracement'], ['text', 'Text note']];
-const TOOL_ICON = { select: 'cursor', hline: 'hline', vline: 'vline', trend: 'trend', ray: 'ray', rect: 'rect', fibdraw: 'fib', text: 'text' };
-const TOOL_GROUP_STARTS = new Set(['hline', 'rect', 'text']);   // pointer | lines | shapes | notes
+// The classic tool rail's fifteen (C10 added the last seven, 2026-10-19), in its groups: select, lines, shapes and
+// the Fibonacci tools, notes, and the three that measure (ui/drawings.js has their geometry).
+const TOOLS = [['select', 'Select and move'], ['trend', 'Trend line'], ['ray', 'Ray'], ['hline', 'Horizontal line'], ['vline', 'Vertical line'], ['channel', 'Channel'],
+  ['rect', 'Rectangle'], ['fibdraw', 'Fibonacci retracement'], ['fibext', 'Fibonacci extension'], ['pitchfork', 'Pitchfork'], ['arrow', 'Arrow'], ['text', 'Text note'],
+  ['ruler', 'Measure'], ['rr', 'Risk / reward'], ['position', 'Position size']];
+const TOOL_ICON = { select: 'cursor', hline: 'hline', vline: 'vline', trend: 'trend', ray: 'ray', rect: 'rect', fibdraw: 'fib', text: 'text', channel: 'channel', fibext: 'fibext', pitchfork: 'pitchfork', arrow: 'arrowdraw', ruler: 'ruler', rr: 'rr', position: 'position' };
+const TOOL_GROUP_STARTS = new Set(['trend', 'rect', 'arrow', 'ruler']);   // pointer | lines | shapes | notes | measures
+// what each new tool asks for, said when it is picked
+const TOOL_HOW = {
+  channel: 'Channel: click two points for the base line, then a third for its parallel.', fibext: 'Fibonacci extension: click the start and end of the move, then where the pullback ended.',
+  pitchfork: 'Pitchfork: click the first pivot, then the two after it.', arrow: 'Arrow: click where it starts, then what it points at.',
+  ruler: 'Measure: click two points for the move, the bars and the dates between them.', rr: 'Risk / reward: click the entry, the stop, then the target.',
+  position: 'Position size: click the entry, the stop, then a third point for the risk budget, $100 for each dollar from the entry.',
+};
+// The classic toolbar's split: the averages and bands under Indicators, everything else drawn on the price in
+// Layers, a second row that the button opens, with Panes and Colours beside them.
+const IND_KEYS = ['ma', 'ema', 'cloud921', 'cloud2150', 'bb', 'keltner', 'donchian', 'sec', 'vwap'];
+const LAYER_MENUS = [['levels', 'Levels', ['fib', 'sr', 'gex', 'zones', 'accum', 'trends', 'vbp']], ['events', 'Events', ['msb', 'events', 'ins', 'sessions']], ['candles', 'Candle colours', ['stages', 'matrend']]];
+const SNAP_KEY = 'optic.chart.snap.v1';   // the classic key: 'off', or on
 // The classic studies (C11) joined these on 2026-10-19, under the classic names; chart-studies.js has their data.
 const OVERLAYS = [['ma', 'MA 20, 50, 200'], ['ema', 'EMA 9, 21, 50'], ['cloud921', 'EMA 9 / 21 cloud'], ['cloud2150', 'EMA 21 / 50 cloud'], ['bb', 'Bollinger 20, 2'], ['keltner', 'Keltner channel'], ['donchian', 'Donchian channel'], ['sec', 'Regression channel'], ['vwap', 'Anchored VWAP'],
   ['fib', 'Fibonacci'], ['sr', 'Support and resistance'], ['gex', 'Dealer gamma levels'], ['zones', 'Supply and demand'], ['accum', 'Accumulation zones'], ['trends', 'Auto trend lines'], ['vbp', 'Volume by price'],
@@ -54,13 +70,14 @@ const PANES = [['volume', 'Volume'], ['rsi', 'RSI 14'], ['macd', 'MACD 12, 26, 9
 let D = {}, V = {}, live = true, mainEl = null, chart = null, unsub = null, phoneMq = null;
 
 function readView() {
-  const d = { interval: '60', range: '6M', style: 'candles', session: 'regular', read: false, dock: [], overlays: { ma: true, ema: false, bb: false, fib: false, sr: false, gex: false, msb: false, events: true, ins: true, cloud921: false, cloud2150: false, keltner: false, donchian: false, sec: false, vwap: false, zones: false, accum: false, trends: false, vbp: false, sessions: false, stages: false, matrend: false }, panes: { volume: true, rsi: false, macd: false, tso: false, adx: false, stochastic: false, obv: false, mfi: false, rs: false }, msbK: 5 };
+  const d = { interval: '60', range: '6M', style: 'candles', session: 'regular', read: false, layers: false, dock: [], overlays: { ma: true, ema: false, bb: false, fib: false, sr: false, gex: false, msb: false, events: true, ins: true, cloud921: false, cloud2150: false, keltner: false, donchian: false, sec: false, vwap: false, zones: false, accum: false, trends: false, vbp: false, sessions: false, stages: false, matrend: false }, panes: { volume: true, rsi: false, macd: false, tso: false, adx: false, stochastic: false, obv: false, mfi: false, rs: false }, msbK: 5 };
   try { const s = JSON.parse(localStorage.getItem(VIEW_KEY) || 'null'); if (s && typeof s === 'object') { Object.assign(d, s, { overlays: Object.assign(d.overlays, s.overlays || {}), panes: Object.assign(d.panes, s.panes || {}) }); } } catch (e) { /* private */ }
   d.interval = '60'; // the Chart page opens on hourly bars, as in the classic app
+  try { d.snap = localStorage.getItem(SNAP_KEY) !== 'off'; } catch (e) { d.snap = true; }   // on, as it always was in the classic app
   d.dock = Array.isArray(d.dock) ? d.dock.filter((id, i, a) => W.IDS.includes(id) && a.indexOf(id) === i) : [];
   return d;
 }
-function saveView() { try { localStorage.setItem(VIEW_KEY, JSON.stringify({ range: V.range, style: V.style, session: V.session, read: V.read, dock: V.dock, overlays: V.overlays, panes: V.panes, msbK: V.msbK })); } catch (e) { /* private */ } }
+function saveView() { try { localStorage.setItem(VIEW_KEY, JSON.stringify({ range: V.range, style: V.style, session: V.session, read: V.read, layers: V.layers, dock: V.dock, overlays: V.overlays, panes: V.panes, msbK: V.msbK })); } catch (e) { /* private */ } }
 
 function readDrawings(sym) {
   if (!holds(store.state.user)) return [];
@@ -133,50 +150,87 @@ function events() {
 }
 
 /* ---------------- page ---------------- */
+// One overlay's row in a menu: its box, its name, what it is, and for MSB the swing strength.
+const ovRow = (k) => { const l = (OVERLAYS.find((x) => x[0] === k) || [])[1]; return html`<label class="check"><input type="checkbox" data-v2-ch-ov="${k}" ${V.overlays[k] ? 'checked' : ''} ${k === 'msb' ? html`aria-describedby="ch-msb-help"` : ST.HELP[k] ? html`aria-describedby="ch-help-${k}"` : ''}> <span>${l}</span></label>${ST.HELP[k] ? html`<p class="menu-help" id="ch-help-${k}">${ST.HELP[k]}</p>` : ''}${k === 'msb' ? html`<p class="menu-help" id="ch-msb-help">Marks where a close moved beyond the latest swing high (bullish) or swing low (bearish). A swing is a bar above or below the bars on each side. Its level is drawn back to where it formed, but it only became known once those later bars had closed: the line is dotted before then, with a tick where it became known, and only a close after that counts as a break.</p>
+  <label class="ws-sel menu-help">Swing strength <select data-v2-ch-msbk aria-label="Market structure swing strength">${[3, 5, 10].map((n) => html`<option value="${n}" ${V.msbK === n ? 'selected' : ''}>${n} bars each side${n === 3 ? ', more breaks' : n === 10 ? ', fewer' : ''}</option>`)}</select></label>` : ''}`; };
+const countOf = (keys) => keys.filter((k) => V.overlays[k]).length;
+// what is drawing inside Layers, for the count on its button: a closed drawer must not hide what is on
+const layersOn = () => LAYER_MENUS.reduce((n, [, , ks]) => n + countOf(ks), 0) + PANES.filter(([k]) => k !== 'volume' && V.panes[k]).length;
+// price and volume and nothing else, the state Reset goes back to
+const isClean = () => !Object.values(V.overlays).some(Boolean) && PANES.every(([k]) => (k === 'volume' ? V.panes.volume : !V.panes[k]));
+// The counts on Indicators, the Layers menus and Layers, and whether Reset can act, updated in place after a box
+// is ticked, so a menu that is open stays open with the focus where it was.
+function syncToolbar() {
+  const setCount = (el, n) => {
+    if (!el) return;
+    let c = el.querySelector('.ch-count');
+    if (!n) { if (c) c.remove(); return; }
+    if (!c) { c = document.createElement('span'); c.className = 'ch-count'; el.insertBefore(c, el.querySelector(':scope > .ic')); }
+    c.textContent = String(n);
+  };
+  setCount($('[data-ch-menu="ind"] > summary', mainEl), countOf(IND_KEYS));
+  LAYER_MENUS.forEach(([id, , ks]) => setCount($(`[data-ch-menu="${id}"] > summary`, mainEl), countOf(ks)));
+  setCount($('[data-ch-menu="panes"] > summary', mainEl), PANES.filter(([k]) => k !== 'volume' && V.panes[k]).length);
+  setCount($('[data-v2-ch-layers]', mainEl), layersOn());
+  const r = $('[data-v2-ch-reset]', mainEl); if (r) r.disabled = isClean();
+}
+const menu = (id, label, n, body, cls = '') => html`<details class="menu ${cls}" data-ch-menu="${id}"><summary class="btn btn-sm">${label}${n ? html` <span class="ch-count">${n}</span>` : ''}</summary><div class="menu-body ch-imenu">${body}</div></details>`;
+
 function toolbar() {
-  const daily = !INTERVALS.find((x) => x.key === V.interval).intraday;
+  const iv = INTERVALS.find((x) => x.key === V.interval), n = layersOn();
   return html`<div class="ctools" role="toolbar" aria-label="Chart settings">
-    <label class="select ch-iv"><span class="sr">Bar size</span><select data-v2-ch-iv title="Bar size">${INTERVALS.map((x) => html`<option value="${x.key}" ${x.key === V.interval ? 'selected' : ''}>${x.label}</option>`)}</select></label>
-    ${daily ? html`<div class="seg" role="group" aria-label="Range">${Object.keys(RANGES.daily).map((r) => html`<button type="button" data-v2-ch-range="${r}" aria-pressed="${V.range === r}">${r}</button>`)}</div>`
-    : html`<div class="seg" role="group" aria-label="Session">${[['regular', 'Regular'], ['extended', 'Extended']].map(([k, l]) => html`<button type="button" data-v2-ch-session="${k}" aria-pressed="${V.session === k}">${l}</button>`)}</div>`}
-    <div class="seg seg-ic" role="group" aria-label="Style">${[['candles', 'Candles', 'candles'], ['line', 'Line', 'lineChart'], ['area', 'Area', 'area']].map(([k, l, ic]) => html`<button type="button" data-v2-ch-style="${k}" aria-pressed="${V.style === k}" aria-label="${l}" title="${l}">${icon(ic)}</button>`)}</div>
-    <details class="menu"><summary class="btn btn-sm" aria-label="Indicators and levels">${icon('layers')}<span class="ch-lbl">Indicators</span></summary><div class="menu-body ch-imenu">
-      ${OVERLAYS.map(([k, l]) => html`${OV_GROUP[k] ? html`<p class="t-label">${OV_GROUP[k]}</p>` : ''}<label class="check"><input type="checkbox" data-v2-ch-ov="${k}" ${V.overlays[k] ? 'checked' : ''} ${k === 'msb' ? html`aria-describedby="ch-msb-help"` : ST.HELP[k] ? html`aria-describedby="ch-help-${k}"` : ''}> <span>${l}</span></label>${ST.HELP[k] ? html`<p class="menu-help" id="ch-help-${k}">${ST.HELP[k]}</p>` : ''}${k === 'msb' ? html`<p class="menu-help" id="ch-msb-help">Marks where a close moved beyond the latest swing high (bullish) or swing low (bearish). A swing is a bar above or below the bars on each side. Its level is drawn back to where it formed, but it only became known once those later bars had closed: the line is dotted before then, with a tick where it became known, and only a close after that counts as a break.</p>
-        <label class="ws-sel menu-help">Swing strength <select data-v2-ch-msbk aria-label="Market structure swing strength">${[3, 5, 10].map((k) => html`<option value="${k}" ${V.msbK === k ? 'selected' : ''}>${k} bars each side${k === 3 ? ', more breaks' : k === 10 ? ', fewer' : ''}</option>`)}</select></label>` : ''}`)}
-      <p class="t-label">Panes</p>${PANES.map(([k, l]) => html`<label class="check"><input type="checkbox" data-v2-ch-pane="${k}" ${V.panes[k] ? 'checked' : ''} ${ST.HELP[k] ? html`aria-describedby="ch-help-${k}"` : ''}> <span>${l}</span></label>${ST.HELP[k] ? html`<p class="menu-help" id="ch-help-${k}">${ST.HELP[k]}</p>` : ''}`)}
-    </div></details>
-    <details class="menu ch-colours"><summary class="btn btn-sm" aria-label="Chart colours" title="Colour of the candles and the line">${icon('palette')}<span class="ch-lbl">Colours</span></summary><div class="menu-body ch-cmenu" id="ch-cmenu"></div></details>
-    <button type="button" class="btn btn-sm" data-v2-ch-read aria-pressed="${!!V.read}" aria-controls="ch-read">${icon('trend')}<span class="ch-lbl">Chart read</span></button>
-    <button type="button" class="btn btn-sm ch-drawtoggle" data-v2-ch-drawtoggle aria-expanded="${drawOpen()}" aria-controls="ch-draw">${icon('pencil')}<span class="ch-lbl">Draw</span></button>
+    ${menu('ind', 'Indicators', countOf(IND_KEYS), IND_KEYS.map(ovRow))}
+    <button type="button" class="btn btn-sm ch-layers-btn" data-v2-ch-layers aria-expanded="${!!V.layers}" aria-controls="ch-layers" title="Levels, events, candle colours, panes and colours">Layers${n ? html` <span class="ch-count">${n}</span>` : ''}${icon('down')}</button>
+    <button type="button" class="btn btn-sm" data-v2-ch-read aria-pressed="${!!V.read}" aria-controls="ch-read" title="The trend, the nearest levels, RSI and MACD, from daily sessions">Chart read</button>
+    <button type="button" class="btn btn-sm" data-v2-ch-reset ${isClean() ? 'disabled' : ''} title="Back to price and volume. Your drawings are kept.">Reset</button>
+    <button type="button" class="btn btn-sm ch-drawtoggle" data-v2-ch-drawtoggle aria-expanded="${drawOpen()}" aria-controls="ch-draw">${icon('pencil')}<span>Draw</span></button>
     <span class="spacer"></span>
-    <div class="ch-zoom" role="group" aria-label="Zoom"><button type="button" class="ch-tool" data-v2-ch-zoom="out" aria-label="Zoom out" title="Zoom out">${icon('minus')}</button><button type="button" class="ch-tool" data-v2-ch-zoom="in" aria-label="Zoom in" title="Zoom in">${icon('plus')}</button><button type="button" class="ch-tool" data-v2-ch-fit aria-label="Fit the whole range" title="Fit the whole range">${icon('fit')}</button>${C.maxButton()}</div>
+    <label class="select ch-iv"><span class="sr">Bar size</span><select data-v2-ch-iv title="Bar size">${INTERVALS.map((x) => html`<option value="${x.key}" ${x.key === V.interval ? 'selected' : ''}>${x.label}</option>`)}</select></label>
+    ${iv.intraday ? html`<label class="select ch-ses"><span class="sr">Session</span><select data-v2-ch-sessionsel title="Which hours the bars cover">${[['regular', 'Regular hours'], ['extended', 'Extended hours']].map(([k, l]) => html`<option value="${k}" ${V.session === k ? 'selected' : ''}>${l}</option>`)}</select></label>`
+    : html`<div class="seg" role="group" aria-label="Range">${Object.keys(RANGES.daily).map((r) => html`<button type="button" data-v2-ch-range="${r}" aria-pressed="${V.range === r}">${r}</button>`)}</div>`}
+    <button type="button" class="btn btn-sm" data-v2-ch-fit title="Every loaded bar on screen">Fit</button>
+    <button type="button" class="btn btn-sm ch-home" data-v2-ch-home ${D.zoomed ? '' : 'hidden'} title="Back to the ${iv.intraday ? iv.label : V.range} view">Reset zoom</button>
+    <div class="seg seg-ic" role="group" aria-label="Style">${[['candles', 'Candles', 'candles'], ['line', 'Line', 'lineChart'], ['area', 'Area', 'area']].map(([k, l, ic]) => html`<button type="button" data-v2-ch-style="${k}" aria-pressed="${V.style === k}" aria-label="${l}" title="${l}">${icon(ic)}</button>`)}</div>
+  </div>
+  <div class="ctools ch-layers" id="ch-layers" role="group" aria-label="Layers" ${V.layers ? '' : 'hidden'}>
+    ${LAYER_MENUS.map(([id, label, ks]) => menu(id, label, countOf(ks), ks.map(ovRow)))}
+    ${menu('panes', 'Panes', PANES.filter(([k]) => k !== 'volume' && V.panes[k]).length, html`${PANES.map(([k, l]) => html`<label class="check"><input type="checkbox" data-v2-ch-pane="${k}" ${V.panes[k] ? 'checked' : ''} ${ST.HELP[k] ? html`aria-describedby="ch-help-${k}"` : ''}> <span>${l}</span></label>${ST.HELP[k] ? html`<p class="menu-help" id="ch-help-${k}">${ST.HELP[k]}</p>` : ''}`)}<p class="menu-help">Drawn under the price on the same bars.</p>`)}
+    <details class="menu ch-colours"><summary class="btn btn-sm" aria-label="Chart colours" title="Colour of the candles and the line">${icon('palette')}<span>Colours</span></summary><div class="menu-body ch-cmenu" id="ch-cmenu"></div></details>
   </div>
   ${D.confirmClear ? html`<p class="confirm ch-confirm" role="alert">Remove all ${D.drawings.length} drawings on ${D.sym}? <button type="button" class="btn btn-sm" data-v2-ch-clear="yes">Remove</button><button type="button" class="btn btn-sm" data-v2-ch-clear="no">Keep them</button></p>` : ''}
   ${D.textFor ? html`<form class="cluster textform" data-v2-ch-text><label class="field field-sm"><span class="sr">Note text</span><input name="t" maxlength="120" placeholder="Note on the chart" required></label><button class="btn btn-sm btn-primary" type="submit">Place it</button><button class="btn btn-sm" type="button" data-v2-ch-textcancel>Cancel</button></form>` : ''}`;
 }
 
-// The drawing tools: a column of named icon buttons beside the plot, grouped as pointer, lines, shapes
-// and notes; on a phone a row above it, shown when Draw is on (or while a tool other than select is in use).
+// The drawing tools: the classic rail, two columns of named icons beside the plot in their groups, then snap,
+// undo, redo, delete and remove all; on a phone a row above the plot, shown when Draw is on (or while a tool other
+// than select is in use).
 const drawOpen = () => !isPhone() || !!D.drawOpen || V.tool !== 'select';
 function drawbar() {
   return html`<div class="ch-draw" role="toolbar" aria-label="Drawing tools" aria-orientation="${isPhone() ? 'horizontal' : 'vertical'}" ${drawOpen() ? '' : 'hidden'}>
     ${TOOLS.map(([k, l]) => html`${TOOL_GROUP_STARTS.has(k) ? html`<span class="ch-sep" aria-hidden="true"></span>` : ''}<button type="button" class="ch-tool" data-v2-tool="${k}" aria-pressed="${V.tool === k}" aria-label="${l}" title="${l}">${icon(TOOL_ICON[k])}</button>`)}
     <span class="ch-sep" aria-hidden="true"></span>
+    <button type="button" class="ch-tool ch-snap" data-v2-ch-snap aria-pressed="${!!V.snap}" aria-label="Snap to candles" title="${V.snap ? 'Snapping on: points land on a candle and its open, high, low or close. Click to place freely.' : 'Snapping off: points land exactly where you click. Click to snap to candles.'}">${icon('magnet')}</button>
     <button type="button" class="ch-tool" data-v2-ch-undo aria-label="Undo the last drawing change" title="Undo">${icon('undo')}</button>
+    <button type="button" class="ch-tool" data-v2-ch-redo aria-label="Redo" title="Redo">${icon('redo')}</button>
     <button type="button" class="ch-tool" data-v2-ch-del aria-label="Delete the selected drawing" title="Delete selected">${icon('trash')}</button>
     <button type="button" class="ch-tool" data-v2-ch-clear="ask" aria-label="Remove all drawings on ${D.sym}" title="Remove all" ${D.drawings.length ? '' : 'disabled'}>${icon('clear')}</button>
   </div>`;
 }
 
+// what the plot's header line names: the symbol, the bar size and the style, as the classic chart's does
+const titleOf = () => ({ sym: D.sym, what: `${INTERVALS.find((x) => x.key === V.interval).label} · ${{ candles: 'Candles', line: 'Line', area: 'Area' }[V.style]}` });
 function paintChart() {
   const host = $('#ch-body', mainEl); if (!host) return;
   if (D.barsErr) { if (chart) { chart.destroy(); chart = null; } draw(host, failed('The bars', D.barsErr, { retry: 'bars' })); return; }
   if (!D.bars) { if (chart) { chart.destroy(); chart = null; } draw(host, skeleton('chart', 1, 'Loading bars')); return; }
   const iv = INTERVALS.find((x) => x.key === V.interval);
-  host.innerHTML = '<div class="pc-host"></div>';
+  // the plot's own header controls, at its top right as in the classic chart: Explain (Milo) and full screen
+  host.innerHTML = '<div class="ch-pacts"></div><div class="pc-host"></div>';
+  draw(host.firstChild, html`${miloButton('Explain', { ask: `Explain the ${D.sym} chart: the trend, support, resistance, momentum, volume and risk, and what would invalidate the read.`, context: `${D.sym} Dossier, Chart`, symbol: D.sym, cls: 'btn-sm' })}${C.maxButton()}`);
   if (chart) chart.destroy();
-  chart = createPriceChart(host.firstChild, {
-    bars: D.bars, intraday: !!iv.intraday, msbK: V.msbK || 5, style: V.style, overlays: V.overlays, panes: V.panes, levels: levels(), events: events(),
+  chart = createPriceChart(host.lastChild, {
+    bars: D.bars, intraday: !!iv.intraday, msbK: V.msbK || 5, style: V.style, snap: V.snap, title: titleOf(),
+    onView: (v) => { D.zoomed = v.zoomed; const z = $('[data-v2-ch-home]', mainEl); if (z) z.hidden = !v.zoomed; }, overlays: V.overlays, panes: V.panes, levels: levels(), events: events(),
     drawings: D.drawings, tool: V.tool, window: windowBars(), label: `${D.sym}, ${iv.label} bars`, ...extras(), ...studies(),
     height: plotHeight(host),
     onDrawings: (list) => { D.drawings = list; saveDrawings(D.sym, list); paintTools(); },
@@ -287,11 +341,10 @@ function paint() {
     <section class="section chart-page" aria-label="${D.sym} chart">
       <div id="ch-tools">${toolbar()}</div>
       <div class="ch-stage"><div id="ch-draw">${drawbar()}</div><div id="ch-body"></div>
-        <div class="ch-wrail" id="ch-wrail">${W.rail(shown(), isPhone())}</div>
+        <div class="ch-wrail" id="ch-wrail">${W.rail(shown(), isPhone())}${miloButton('Ask Milo', { context: `${D.sym} Dossier, Chart`, symbol: D.sym, cls: 'chw-milo' })}</div>
         <div class="ch-side" id="ch-side" ${V.read || shown().length ? '' : 'hidden'}><aside class="ch-read" id="ch-read" aria-labelledby="cr-h" ${V.read ? '' : 'hidden'}></aside></div></div>
-      <div class="split ch-foot"><div><p class="asof" id="ch-note"></p><p class="asof ch-snote" id="ch-snote" aria-live="polite"></p></div>
-        <div class="cluster">${miloButton('Explain this chart', { ask: `Explain the ${D.sym} chart: the trend, support, resistance, momentum, volume and risk, and what would invalidate the read.`, context: `${D.sym} Dossier, Chart`, symbol: D.sym })}<a class="textlink" href="${CLASSIC}#/${D.sym}/chart">More chart tools in the current app ${icon('out')}</a></div></div>
-      <p class="asof">Wheel or pinch to zoom, drag the chart or the strip under it to move along, arrows to read each bar, plus and minus to zoom. The other drawing tools are in the current app.</p>
+      <div class="ch-foot"><p class="asof" id="ch-note"></p><p class="asof ch-snote" id="ch-snote" aria-live="polite"></p>
+        <p class="asof">Wheel or pinch to zoom, drag the chart or the strip under it to move along, arrows to read each bar, plus and minus to zoom. Click a drawing to select it; drag it to move it, or drag a handle to move one point.</p></div>
     </section>`);
   applyColours(); paintChart(); paintRead(); syncSide();
 }
@@ -432,10 +485,11 @@ function wire(main) {
     const el = e.target;
     if (el.closest('.chw') && W.onChange(e)) return;
     if (el.matches('[data-v2-cc-pick]')) { pickColour(el.dataset.v2CcPick, el.value, `[data-v2-cc-pick="${el.dataset.v2CcPick}"]`); return; }
+    if (el.matches('[data-v2-ch-sessionsel]')) { V.session = el.value; saveView(); loadBars(); return; }
     if (el.matches('[data-v2-ch-iv]')) { V.interval = el.value; if (V.interval === 'weekly' && !RANGES.weekly[V.range]) V.range = '1Y'; paintTools(); loadBars(); return; }
     if (el.matches('[data-v2-ch-msbk]')) { V.msbK = Number(el.value) || 5; saveView(); paintChart(); return; }
-    if (el.matches('[data-v2-ch-ov]')) { V.overlays[el.dataset.v2ChOv] = el.checked; saveView(); ST.need(ticked()); paintStudies(); if (el.dataset.v2ChOv === 'sr') repaintWidget('levels'); if (el.dataset.v2ChOv === 'ins') repaintWidget('insiders'); return; }
-    if (el.matches('[data-v2-ch-pane]')) { V.panes[el.dataset.v2ChPane] = el.checked; saveView(); paintChart(); }
+    if (el.matches('[data-v2-ch-ov]')) { V.overlays[el.dataset.v2ChOv] = el.checked; saveView(); ST.need(ticked()); paintStudies(); syncToolbar(); if (el.dataset.v2ChOv === 'sr') repaintWidget('levels'); if (el.dataset.v2ChOv === 'ins') repaintWidget('insiders'); return; }
+    if (el.matches('[data-v2-ch-pane]')) { V.panes[el.dataset.v2ChPane] = el.checked; saveView(); paintChart(); syncToolbar(); }
   });
   main.addEventListener('click', (e) => {
     const t = (s) => e.target.closest(s);
@@ -444,17 +498,20 @@ function wire(main) {
     if ((b = t('[data-chw-close]'))) { const id = b.dataset.chwClose; toggleWidget(id); const r = $(`[data-chw="${id}"]`, mainEl); if (r) r.focus(); return; }
     if (t('.chw') && W.onClick(e)) return;
     if ((b = t('[data-v2-ch-range]'))) { const was = V.range; V.range = b.dataset.v2ChRange; saveView(); paintTools(); if (V.range === 'All' || was === 'All') loadBars(); else paintChart(); return; }
-    if ((b = t('[data-v2-ch-session]'))) { V.session = b.dataset.v2ChSession; saveView(); paintTools(); loadBars(); return; }
+    if (t('[data-v2-ch-layers]')) { V.layers = !V.layers; saveView(); paintTools(); const again = $('[data-v2-ch-layers]', mainEl); if (again) again.focus(); return; }
+    if (t('[data-v2-ch-reset]')) { Object.keys(V.overlays).forEach((k) => { V.overlays[k] = false; }); Object.keys(V.panes).forEach((k) => { V.panes[k] = k === 'volume'; }); saveView(); paintTools(); paintChart(); repaintWidget('levels'); repaintWidget('insiders'); announce('Back to price and volume. Your drawings are kept.'); const f = $('[data-v2-ch-layers]', mainEl); if (f) f.focus(); return; }
+    if (t('[data-v2-ch-home]')) { if (chart) chart.home(); const f = $('[data-v2-ch-fit]', mainEl); if (f) f.focus(); return; }
+    if (t('[data-v2-ch-snap]')) { V.snap = !V.snap; try { localStorage.setItem(SNAP_KEY, V.snap ? 'on' : 'off'); } catch (e) { /* private */ } paintTools(); if (chart) chart.set({ snap: V.snap }); const again = $('[data-v2-ch-snap]', mainEl); if (again) again.focus(); return; }
+    if (t('[data-v2-ch-redo]')) { if (chart) chart.redo(); return; }
     if ((b = t('[data-v2-ch-read]'))) { V.read = !V.read; saveView(); paintTools(); paintRead(); paintChart(); const again = $('[data-v2-ch-read]', mainEl); if (again) again.focus(); return; }
-    if ((b = t('[data-v2-ch-style]'))) { V.style = b.dataset.v2ChStyle; saveView(); paintTools(); if (chart) chart.set({ style: V.style }); return; }
-    if ((b = t('[data-v2-ch-zoom]'))) { if (chart) chart.zoom(b.dataset.v2ChZoom === 'in' ? 0.75 : 1.33); return; }
+    if ((b = t('[data-v2-ch-style]'))) { V.style = b.dataset.v2ChStyle; saveView(); paintTools(); if (chart) chart.set({ style: V.style, title: titleOf() }); return; }
     if (t('[data-v2-ch-fit]')) { if (chart) chart.fit(); return; }
     if (t('[data-v2-ch-max]')) { toggleMax(!C.isMax()); return; }
     if ((b = t('[data-v2-cc]'))) { pickColour(b.dataset.v2Cc, b.dataset.v2CcV, `[data-v2-cc="${b.dataset.v2Cc}"][data-v2-cc-v="${b.dataset.v2CcV}"]`); return; }
     if ((b = t('[data-v2-cc-clear]'))) { pickColour(b.dataset.v2CcClear, '', `[data-v2-cc-pick="${b.dataset.v2CcClear}"]`); return; }
     if (t('[data-v2-cc-reset]')) { pickColour(null, null, '[data-v2-cc]'); return; }
     if (t('[data-v2-ch-drawtoggle]')) { D.drawOpen = !drawOpen(); paintTools(); const f = $('#ch-draw .ch-tool', mainEl); if (D.drawOpen && f) f.focus(); return; }
-    if ((b = t('[data-v2-tool]'))) { V.tool = b.dataset.v2Tool; paintTools(); if (chart) { chart.set({ tool: V.tool }); } if (V.tool !== 'select') toast(`${TOOLS.find((x) => x[0] === V.tool)[1]}: click the chart to place it. Escape cancels.`); return; }
+    if ((b = t('[data-v2-tool]'))) { V.tool = b.dataset.v2Tool; paintTools(); if (chart) { chart.set({ tool: V.tool }); } if (V.tool !== 'select') toast(`${TOOL_HOW[V.tool] || `${TOOLS.find((x) => x[0] === V.tool)[1]}: click the chart to place it.`} Escape cancels.`); return; }
     if (t('[data-v2-ch-undo]')) { if (chart) chart.undo(); return; }
     if (t('[data-v2-ch-del]')) { if (chart) chart.deleteSelected(); return; }
     if ((b = t('[data-v2-ch-clear]'))) { const v = b.dataset.v2ChClear; if (v === 'ask') { D.confirmClear = true; paintTools(); const k = $('[data-v2-ch-clear="no"]', mainEl); if (k) k.focus(); } else { D.confirmClear = false; if (v === 'yes' && chart) chart.clearDrawings(); paintTools(); } return; }

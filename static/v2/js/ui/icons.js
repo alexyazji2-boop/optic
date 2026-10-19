@@ -48,6 +48,16 @@ const P = {
   clear: '<path d="M4 7h16M9 7V4.5h6V7M6 7l1 13h10l1-13M10 11l4 5M14 11l-4 5"/>',
   layers: '<path d="m12 4 9 5-9 5-9-5z"/><path d="m3 14 9 5 9-5"/>',
   pencil: '<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="m13.5 6.5 4 4"/>',
+  // the drawing tools the classic app adds (C10), its own marks
+  channel: '<path d="M3.5 14.5 17 4.5M7 19.5 20.5 9.5"/>',
+  fibext: '<path d="M4 19.5h9M4 14.5h9M4 9.5h16M4 4.5h16"/><path d="M17 19.5V12"/><path d="m14.5 14.5 2.5-2.5 2.5 2.5"/>',
+  pitchfork: '<path d="M3.5 20.5 9.5 14.5"/><path d="M9.5 14.5 20 7M9.5 14.5H20M9.5 14.5 20 21"/>',
+  arrowdraw: '<path d="M5 19 18.5 5.5"/><path d="M11 5.5h7.5V13"/>',
+  ruler: '<path d="M4 12h16"/><path d="m7 9-3 3 3 3M17 9l3 3-3 3"/>',
+  rr: '<rect x="5" y="3.5" width="14" height="17" rx="1"/><path d="M5 11h14"/>',
+  position: '<rect x="5" y="3.5" width="14" height="17" rx="1.5"/><path d="M8 7.5h8"/><path d="M8.5 12h.01M12 12h.01M15.5 12h.01M8.5 16h.01M12 16h.01M15.5 16h.01" stroke-width="2.4"/>',
+  magnet: '<path d="M6 3v9a6 6 0 0 0 12 0V3M6 7.5h3.75M14.25 7.5H18"/>',
+  redo: '<path d="M15 5l5 5-5 5"/><path d="M20 10H10a5.5 5.5 0 0 0 0 11h3"/>',
 };
 
 export function icon(name, label = '') {

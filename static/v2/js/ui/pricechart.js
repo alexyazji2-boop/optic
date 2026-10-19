@@ -12,7 +12,8 @@
 // Drawings are stored as {kind, points:[{t: epoch ms, p: price}]}, the classic
 // app's format, so they line up whatever the bar size.
 import { num, esc, compact } from '../core/format.js';
-import { tsoSeries, maTrendSeries, volumeByPrice, sessionStarts, TSO_LEVEL } from './studies.js';
+import { tsoSeries, maTrendSeries, volumeByPrice, sessionStarts, nyDate, TSO_LEVEL } from './studies.js';
+import { TOOL_POINTS, channel, fibExt, pitchfork, riskReward, positionSize, measure, snap, moved, segDist } from './drawings.js';
 import { icon } from './icons.js';
 
 /* ---------- indicators (the textbook definitions the classic app uses) ---------- */
@@ -68,7 +69,6 @@ export function navWindow(mode, w, d, N) {
 }
 /** What the legend lists: the page's names (in its menu's order) that are on, the volume pane among them. */
 export const legendKeys = (names, overlays, panes) => Object.keys(names || {}).filter((k) => (k === 'volume' ? !!(panes || {}).volume : !!(overlays || {})[k]));
-const TOOL_POINTS = { hline: 1, vline: 1, text: 1, trend: 2, ray: 2, rect: 2, fibdraw: 2 };
 const FIB = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1];
 
 /**
@@ -123,8 +123,10 @@ export function createPriceChart(host, opts) {
     sess: S.intraday ? sessionStarts(bars) : [],
   };
   let from = Math.max(0, N - (S.window || 126)), to = N - 1;
+  const home0 = { from, to };   // the view the chart opened on, which Reset zoom goes back to
+  let zoomedWas = null;
   let cross = -1, crossY = null, sel = -1, pending = null, W = 0, H = 0, layout = null, drag = null, raf = 0;
-  const undo = [];
+  const undo = [], redo = [];
   const CLIP = `pc-clip-${++clipSeq}`;
 
   host.classList.add('pc');
@@ -148,7 +150,10 @@ export function createPriceChart(host, opts) {
     // each pane a sixth of the height, or a share of half of it once there are more than three
     const paneH = extra ? Math.round(H * Math.min(0.17, 0.5 / extra)) : 0;
     const priceH = H - 26 - extra * (paneH + 8);
-    panes.push({ id: 'price', y0: 8, y1: 8 + priceH });
+    // volume in its own band at the foot of the price, labelled, as the classic chart draws it
+    const volH = S.panes.volume ? Math.round(priceH * 0.2) : 0;
+    panes.push({ id: 'price', y0: 8, y1: 8 + priceH - (volH ? volH + 6 : 0) });
+    if (volH) panes.push({ id: 'vol', y0: 8 + priceH - volH, y1: 8 + priceH });
     let y = 8 + priceH + 8;
     if (S.panes.rsi) { panes.push({ id: 'rsi', y0: y, y1: y + paneH }); y += paneH + 8; }
     if (S.panes.macd) { panes.push({ id: 'macd', y0: y, y1: y + paneH }); y += paneH + 8; }
@@ -177,12 +182,6 @@ export function createPriceChart(host, opts) {
     // time axis
     const step = Math.max(1, Math.round((to - from) / Math.max(3, Math.floor(W / 120))));
     for (let i = from; i <= to; i += step) o += `<text class="ax" x="${X(i).toFixed(1)}" y="${H - 6}" text-anchor="middle">${esc(S.intraday ? new Date(bars[i].t).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'America/New_York' }) : new Date(bars[i].t).toLocaleDateString('en-US', { month: 'short', year: '2-digit', timeZone: 'UTC' }))}</text>`;
-    // volume, under the price
-    if (S.panes.volume) {
-      let vmax = 0; for (let i = from; i <= to; i++) vmax = Math.max(vmax, bars[i].v || 0);
-      const vh = (pp.y1 - pp.y0) * 0.18;
-      for (let i = from; i <= to; i++) { const b = bars[i]; if (!b.v) continue; const h = (b.v / (vmax || 1)) * vh; o += `<rect class="vol ${b.c >= b.o ? 'u' : 'd'}" x="${(X(i) - bw * 0.38).toFixed(1)}" y="${(pp.y1 - h).toFixed(1)}" width="${Math.max(0.6, bw * 0.76).toFixed(1)}" height="${h.toFixed(1)}"/>`; }
-    }
     // everything on the price stays in the price pane: a 200-bar average or a channel below the scale ran into
     // the panes under it
     o += `<defs><clipPath id="${CLIP}"><rect x="0" y="${pp.y0}" width="${W - layout.r}" height="${pp.y1 - pp.y0}"/></clipPath></defs><g clip-path="url(#${CLIP})">`;
@@ -247,6 +246,9 @@ export function createPriceChart(host, opts) {
       if (S.style === 'area') o += `<path class="area" d="${d}L${X(to).toFixed(1)} ${pp.y1}L${X(from).toFixed(1)} ${pp.y1}Z"/>`;
       o += `<path class="pline" d="${d}"/>`;
     }
+    // the last price, as the classic chart marks it: a dashed line across the plot and its value tagged on the axis
+    // green or red with the day's move: on intraday bars against the last close of the session before
+    { const lb = bars[N - 1], v = lb && lb.c; let pb = bars[N - 2]; if (S.intraday && lb) { const d = nyDate(lb.t); for (let j = N - 2; j >= 0; j--) if (nyDate(bars[j].t) !== d) { pb = bars[j]; break; } } if (Number.isFinite(v) && v >= ps.lo && v <= ps.hi) { const y = ps.Y(v).toFixed(1), up = !pb || v >= pb.c; o += `<line class="lastp ${up ? 'up' : 'dn'}" x1="0" x2="${W - layout.r}" y1="${y}" y2="${y}"/>`; layout.last = { y, up, v }; } else layout.last = null; }
     // the stage of each run named along the foot of the price, where there is room
     if (OV.stages && !OV.matrend && SD.stages && S.style === 'candles') { let a = from; for (let i = from; i <= to + 1; i++) { if (i <= to && SD.stages[i] === SD.stages[a]) continue; const n = SD.stages[a]; if (n && (i - a) * bw > 96) o += `<text class="st-t st${n}" x="${(X(a) - bw / 2 + 4).toFixed(1)}" y="${(pp.y1 - 5).toFixed(1)}">Stage ${n}, ${esc((S.stageNames || {})[n] || '')}</text>`; a = i; } }
     // market structure breaks: the level dotted from the swing bar to the bar that confirmed it (before it
@@ -289,10 +291,18 @@ export function createPriceChart(host, opts) {
     });
     // drawings
     S.drawings.forEach((dr, k) => { o += drawing(dr, k === sel); });
-    if (pending && pending.points.length && cross >= 0) o += drawing({ kind: pending.kind, points: [...pending.points, { t: bars[cross].t, p: crossY }] }, false, true);
+    // the tool being placed, to the pointer (snapped as a click there would be)
+    if (pending && pending.points.length && cross >= 0 && crossY !== null) o += drawing({ kind: pending.kind, points: [...pending.points, { t: bars[cross].t, p: S.snap ? snap(bars[cross], crossY, ps.Y).price : crossY }] }, false, true);
     o += '</g>';
     // panes
     panes.slice(1).forEach((p) => {
+      if (p.id === 'vol') {
+        let vmax = 0; for (let i = from; i <= to; i++) vmax = Math.max(vmax, bars[i].v || 0);
+        const vh = p.y1 - p.y0 - 14;
+        for (let i = from; i <= to; i++) { const b = bars[i]; if (!b.v) continue; const h = (b.v / (vmax || 1)) * vh; o += `<rect class="vol ${b.c >= b.o ? 'u' : 'd'}" x="${(X(i) - bw * 0.38).toFixed(1)}" y="${(p.y1 - h).toFixed(1)}" width="${Math.max(0.6, bw * 0.76).toFixed(1)}" height="${h.toFixed(1)}"/>`; }
+        o += `<text class="pane-t" x="6" y="${p.y0 + 11}">Volume</text>`;
+        return;
+      }
       o += `<line class="pane-sep" x1="0" x2="${W}" y1="${p.y0 - 4}" y2="${p.y0 - 4}"/>`;
       if (p.id === 'rsi') {
         const Y = (v) => p.y0 + (1 - v / 100) * (p.y1 - p.y0);
@@ -325,6 +335,7 @@ export function createPriceChart(host, opts) {
         o += `<text class="pane-t" x="6" y="${p.y0 + 12}">MACD 12, 26, 9</text><path class="ov macd" d="${path(m.line, X, Y)}"/><path class="ov macds" d="${path(m.signal, X, Y)}"/>`;
       }
     });
+    if (layout.last) o += `<rect class="lastp-tag ${layout.last.up ? 'up' : 'dn'}" x="${W - layout.r + 2}" y="${layout.last.y - 9}" width="${layout.r - 4}" height="18" rx="3"/><text class="lastp-t" x="${W - layout.r + 6}" y="${Number(layout.last.y) + 4}">${num(layout.last.v, layout.last.v < 10 ? 2 : layout.last.v < 1000 ? 2 : 0)}</text>`;
     // crosshair
     if (cross >= from && cross <= to) {
       const x = X(cross).toFixed(1);
@@ -335,26 +346,57 @@ export function createPriceChart(host, opts) {
     svg.innerHTML = o;
     svg.setAttribute('aria-label', summary());
     readout();
+    const zoomed = from !== home0.from || to !== home0.to;
+    if (S.onView && zoomed !== zoomedWas) { zoomedWas = zoomed; S.onView({ zoomed }); }
     legend(); drawNav();
   }
 
+  // One drawing as SVG: its shape, its labels, and on the selected one a handle at each point (drag one to move
+  // that point, drag the shape to move it all). A tool still being placed draws what its points so far make.
   function drawing(dr, selected, ghost) {
-    const ps = layout.ps, X = layout.X;
-    const pts = dr.points.map((q) => ({ x: X(idxOfT(q.t)), y: ps.Y(q.p), p: q.p }));
+    const ps = layout.ps, X = layout.X, right = W - layout.r, last = N - 1;
+    const q = dr.points.map((x) => ({ i: idxOfT(x.t), p: x.p, t: x.t }));
+    const pts = q.map((x) => ({ x: X(x.i), y: ps.Y(x.p), p: x.p }));
     const cls = `dr ${selected ? 'sel' : ''} ${ghost ? 'ghost' : ''}`;
-    if (dr.kind === 'hline') return `<line class="${cls}" x1="0" x2="${W - layout.r}" y1="${pts[0].y}" y2="${pts[0].y}"/><text class="dr-t" x="${W - layout.r - 4}" y="${pts[0].y - 4}" text-anchor="end">${num(pts[0].p)}${dr.origin === 'milo' ? ' Milo' : ''}</text>`;
-    if (dr.kind === 'vline') return `<line class="${cls}" x1="${pts[0].x}" x2="${pts[0].x}" y1="${layout.panes[0].y0}" y2="${layout.panes[0].y1}"/>`;
-    if (dr.kind === 'text') return `<text class="dr-text ${selected ? 'sel' : ''}" x="${pts[0].x}" y="${pts[0].y}">${esc(dr.text || '')}</text>`;
-    if (pts.length < 2) return '';
-    const [a, b] = pts;
-    if (dr.kind === 'trend') return `<line class="${cls}" x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}"/>`;
-    if (dr.kind === 'ray') { const k = (b.y - a.y) / ((b.x - a.x) || 1e-6), x2 = b.x >= a.x ? W - layout.r : 0; return `<line class="${cls}" x1="${a.x}" y1="${a.y}" x2="${x2}" y2="${a.y + k * (x2 - a.x)}"/>`; }
-    if (dr.kind === 'rect') return `<rect class="${cls} dr-rect" x="${Math.min(a.x, b.x)}" y="${Math.min(a.y, b.y)}" width="${Math.abs(b.x - a.x)}" height="${Math.abs(b.y - a.y)}"/>`;
-    // 0% at the first point, as the classic app draws it
-    if (dr.kind === 'fibdraw') return FIB.map((f) => { const p = a.p + (b.p - a.p) * f, y = ps.Y(p); return `<line class="${cls}" x1="${Math.min(a.x, b.x)}" x2="${W - layout.r}" y1="${y}" y2="${y}"/><text class="dr-t" x="${Math.min(a.x, b.x) + 4}" y="${y - 3}">${num(f * 100, 1)}% ${num(p)}</text>`; }).join('');
-    // kinds only the classic app draws (channel, pitchfork, ruler, risk box...): shown as their first line
-    return `<line class="${cls} dr-other" x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}"><title>${esc(dr.kind)}, drawn in full in the current app</title></line>`;
+    const seg = (g, c = cls) => `<line class="${c}" x1="${X(g.i1).toFixed(1)}" y1="${ps.Y(g.p1).toFixed(1)}" x2="${X(g.i2).toFixed(1)}" y2="${ps.Y(g.p2).toFixed(1)}"/>`;
+    const handles = selected && !ghost ? pts.map((x) => `<circle class="dr-h" cx="${x.x.toFixed(1)}" cy="${x.y.toFixed(1)}" r="5"/>`).join('') : '';
+    const lab = (x, y, t, c = 'dr-t', anchor = '') => `<text class="${c}" x="${x.toFixed(1)}" y="${y.toFixed(1)}"${anchor ? ` text-anchor="${anchor}"` : ''}>${esc(t)}</text>`;
+    const need = TOOL_POINTS[dr.kind] || 2;
+    let out = '';
+    if (dr.kind === 'hline') out = `<line class="${cls}" x1="0" x2="${right}" y1="${pts[0].y}" y2="${pts[0].y}"/>${lab(right - 4, pts[0].y - 4, `${num(pts[0].p)}${dr.origin === 'milo' ? ' Milo' : ''}`, 'dr-t', 'end')}`;
+    else if (dr.kind === 'vline') out = `<line class="${cls}" x1="${pts[0].x}" x2="${pts[0].x}" y1="${layout.panes[0].y0}" y2="${layout.panes[0].y1}"/>`;
+    else if (dr.kind === 'text') out = `<text class="dr-text ${selected ? 'sel' : ''}" x="${pts[0].x}" y="${pts[0].y}">${esc(dr.text || '')}</text>`;
+    else if (pts.length < 2) out = '';
+    else if (pts.length < need) out = `<line class="${cls}" x1="${pts[0].x}" y1="${pts[0].y}" x2="${pts[1].x}" y2="${pts[1].y}"/>`;   // the first leg of a three-point tool
+    else {
+      const [a, b] = pts;
+      if (dr.kind === 'trend') out = `<line class="${cls}" x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}"/>`;
+      else if (dr.kind === 'ray') { const k = (b.y - a.y) / ((b.x - a.x) || 1e-6), x2 = b.x >= a.x ? right : 0; out = `<line class="${cls}" x1="${a.x}" y1="${a.y}" x2="${x2}" y2="${a.y + k * (x2 - a.x)}"/>`; }
+      else if (dr.kind === 'rect') out = `<rect class="${cls} dr-rect" x="${Math.min(a.x, b.x)}" y="${Math.min(a.y, b.y)}" width="${Math.abs(b.x - a.x)}" height="${Math.abs(b.y - a.y)}"/>`;
+      // 0% at the first point, as the classic app draws it
+      else if (dr.kind === 'fibdraw') out = FIB.map((f) => { const pr = a.p + (b.p - a.p) * f, y = ps.Y(pr); return `<line class="${cls}" x1="${Math.min(a.x, b.x)}" x2="${right}" y1="${y}" y2="${y}"/>${lab(Math.min(a.x, b.x) + 4, y - 3, `${num(f * 100, 1)}% ${num(pr)}`)}`; }).join('');
+      else if (dr.kind === 'channel') { const [l1, l2] = channel(q[0], q[1], q[2], last); out = `<path class="dr-fill" d="M${X(l1.i1).toFixed(1)} ${ps.Y(l1.p1).toFixed(1)}L${X(l1.i2).toFixed(1)} ${ps.Y(l1.p2).toFixed(1)}L${X(l2.i2).toFixed(1)} ${ps.Y(l2.p2).toFixed(1)}L${X(l2.i1).toFixed(1)} ${ps.Y(l2.p1).toFixed(1)}Z"/>${seg(l1)}${seg(l2)}`; }
+      else if (dr.kind === 'fibext') { const x1 = Math.min(pts[0].x, pts[2].x); out = `<line class="${cls} dr-thin" x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}"/><line class="${cls} dr-thin" x1="${b.x}" y1="${b.y}" x2="${pts[2].x}" y2="${pts[2].y}"/>` + fibExt(q[0], q[1], q[2]).map((l) => { const y = ps.Y(l.price); return `<line class="${cls}${l.r === 1 || l.r === 1.618 ? '' : ' dr-thin'}" x1="${x1}" x2="${right}" y1="${y}" y2="${y}"/>${lab(x1 + 4, y - 3, `${l.r} ${num(l.price)}`)}`; }).join(''); }
+      else if (dr.kind === 'pitchfork') { const f = pitchfork(q[0], q[1], q[2], last); out = seg(f.handle, `${cls} dr-dash`) + f.tines.map((g, k) => seg(g, k ? `${cls} dr-thin` : cls)).join(''); }
+      else if (dr.kind === 'arrow') { const ang = Math.atan2(b.y - a.y, b.x - a.x), h = 10; out = `<line class="${cls}" x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}"/><path class="dr-head" d="M${b.x} ${b.y}L${(b.x - h * Math.cos(ang - 0.4)).toFixed(1)} ${(b.y - h * Math.sin(ang - 0.4)).toFixed(1)}L${(b.x - h * Math.cos(ang + 0.4)).toFixed(1)} ${(b.y - h * Math.sin(ang + 0.4)).toFixed(1)}Z"/>`; }
+      else if (dr.kind === 'ruler') {
+        const m = measure(q[0], q[1]), lo = Math.min(a.x, b.x), hi = Math.max(a.x, b.x), y0 = layout.panes[0].y0, y1 = layout.panes[0].y1, tone = m.change > 0 ? 'up' : m.change < 0 ? 'dn' : '';
+        const early = q[0].t <= q[1].t ? q[0] : q[1], late = early === q[0] ? q[1] : q[0], mx = Math.min(Math.max((lo + hi) / 2, 70), right - 70);
+        const span = `${fmtT(early.t)} to ${fmtT(late.t)}, ${m.bars} bar${m.bars === 1 ? '' : 's'}`, fig = `${m.change > 0 ? '+' : m.change < 0 ? '−' : ''}${num(Math.abs(m.change))}, ${m.change > 0 ? '+' : m.change < 0 ? '−' : ''}${num(Math.abs(m.pct))}%`;
+        out = `<rect class="dr-rng ${tone}" x="${lo.toFixed(1)}" y="${y0}" width="${Math.max(1, hi - lo).toFixed(1)}" height="${y1 - y0}"/><line class="dr-edge ${tone}" x1="${lo}" x2="${lo}" y1="${y0}" y2="${y1}"/><line class="dr-edge ${tone}" x1="${hi}" x2="${hi}" y1="${y0}" y2="${y1}"/>`
+          + pts.map((x) => `<circle class="dr-dot ${tone}" cx="${x.x}" cy="${x.y}" r="4"/>`).join('')
+          + `<rect class="dr-plate" x="${(mx - 92).toFixed(1)}" y="${y0 + 6}" width="184" height="36" rx="6"/>${lab(mx, y0 + 20, span, 'dr-pt', 'middle')}${lab(mx, y0 + 36, fig, `dr-pf ${tone}`, 'middle')}`;
+      } else if (dr.kind === 'rr') {
+        const [e, st, tg] = q, k = riskReward(e, st, tg), x1 = X(Math.min(e.i, st.i, tg.i)), yE = ps.Y(e.p), yS = ps.Y(st.p), yT = ps.Y(tg.p);
+        out = `<rect class="dr-risk" x="${x1.toFixed(1)}" y="${Math.min(yE, yS).toFixed(1)}" width="${(right - x1).toFixed(1)}" height="${Math.abs(yS - yE).toFixed(1)}"/><rect class="dr-reward" x="${x1.toFixed(1)}" y="${Math.min(yE, yT).toFixed(1)}" width="${(right - x1).toFixed(1)}" height="${Math.abs(yT - yE).toFixed(1)}"/>${lab(x1 + 5, yE - 5, `${k.r === null ? 'n/a' : `${num(k.r, 2)}R`}, risk ${num(k.risk)}, reward ${num(k.reward)}`, 'dr-tb')}`;
+      } else if (dr.kind === 'position') {
+        const [e, st, bp] = q, k = positionSize(e, st, bp), x1 = X(Math.min(e.i, st.i)), yE = ps.Y(e.p), yS = ps.Y(st.p);
+        out = `<rect class="dr-risk" x="${x1.toFixed(1)}" y="${Math.min(yE, yS).toFixed(1)}" width="${(right - x1).toFixed(1)}" height="${Math.abs(yS - yE).toFixed(1)}"/><line class="${cls} dr-dash" x1="${x1}" x2="${right}" y1="${pts[2].y}" y2="${pts[2].y}"/>${lab(x1 + 5, Math.min(yE, yS) - 5, `${num(k.shares, 0)} shares, ${num(k.perShare)} a share at risk, risk $${num(k.budget, 0)}`, 'dr-tb')}${lab(x1 + 5, pts[2].y - 4, `Budget line: $100 a dollar from the entry`)}`;
+      } else out = `<line class="${cls} dr-other" x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}"><title>${esc(dr.kind)}</title></line>`;
+    }
+    return out + handles;
   }
+
 
   // The hover box: the arrow nearest the pointer, or with the keyboard the arrow on the crosshair's bar.
   function insiderTip() {
@@ -382,7 +424,7 @@ export function createPriceChart(host, opts) {
     const i = cross >= 0 ? cross : to, b = bars[i];
     if (!b) { read.textContent = ''; return; }
     const prev = bars[i - 1], chg = prev ? (b.c / prev.c - 1) * 100 : null;
-    read.innerHTML = `<b>${esc(fmtT(b.t))}</b> <span>O ${num(b.o)}</span> <span>H ${num(b.h)}</span> <span>L ${num(b.l)}</span> <span>C ${num(b.c)}</span>${chg !== null ? ` <span class="${chg >= 0 ? 'up' : 'down'}">${chg >= 0 ? '+' : '−'}${num(Math.abs(chg))}%</span>` : ''}${b.v ? ` <span class="t-muted">Vol ${num(b.v / 1e6, 1)}M</span>` : ''}`;
+    read.innerHTML = `${S.title ? `<b class="pc-sym">${esc(S.title.sym)}</b> <span class="pc-what">${esc(S.title.what)}</span> ` : ''}<b>${esc(fmtT(b.t))}</b> <span>O ${num(b.o)}</span> <span>H ${num(b.h)}</span> <span>L ${num(b.l)}</span> <span>C ${num(b.c)}</span>${chg !== null ? ` <span class="${chg >= 0 ? 'up' : 'down'}">${chg >= 0 ? '+' : '−'}${num(Math.abs(chg))}%</span>` : ''}${b.v ? ` <span class="t-muted">Vol ${num(b.v / 1e6, 1)}M</span>` : ''}`;
   }
   function summary() {
     const a = bars[from], b = bars[to]; if (!a || !b) return 'Price chart';
@@ -531,47 +573,83 @@ export function createPriceChart(host, opts) {
     pointers.set(e.pointerId, pt(e));
     hoverP = pt(e);   // a tap on an arrow opens its box on a touch screen
     if (pointers.size === 2) { const [p1, p2] = [...pointers.values()]; drag = { pinch: Math.abs(p1.x - p2.x), span: to - from + 1 }; return; }
-    const p = pt(e), i = Math.max(0, Math.min(N - 1, layout.I(p.x))), price = layout.ps.P(p.y);
+    const p = pt(e);
     if (S.tool !== 'select') {
       if (!pending) pending = { kind: S.tool, points: [] };
-      pending.points.push({ t: bars[i].t, p: +price.toFixed(4) });
+      const at = pointAt(p);
+      pending.points.push({ t: at.t, p: at.p });
       if (pending.points.length >= TOOL_POINTS[S.tool]) finishDrawing();
       redraw(); return;
     }
+    // on the selected drawing's handle: move that point; on a drawing: select it and move it all; else pan
+    const h = handleAt(p);
+    if (h >= 0) { drag = { mode: 'handle', k: sel, h, before: S.drawings, moved: false }; return; }
     const hit = hitTest(p);
     sel = hit; if (S.onSelect) S.onSelect(hit >= 0 ? S.drawings[hit] : null);
-    drag = { x: p.x, from, moved: false };
+    drag = hit >= 0 ? { mode: 'body', k: hit, x: p.x, y: p.y, pts: S.drawings[hit].points, before: S.drawings, moved: false } : { x: p.x, from, moved: false };
     redraw();
   });
   svg.addEventListener('pointermove', (e) => {
     const p = pt(e);
     if (pointers.has(e.pointerId)) pointers.set(e.pointerId, p);
     if (drag && drag.pinch && pointers.size === 2) { const [p1, p2] = [...pointers.values()]; const d = Math.abs(p1.x - p2.x) || 1; const ns = Math.max(10, Math.min(N, Math.round(drag.span * drag.pinch / d))); const c = to; from = Math.max(0, c - ns + 1); to = c; redraw(); return; }
-    if (drag && !drag.pinch) { const dx = p.x - drag.x; if (Math.abs(dx) > 3) drag.moved = true; const span = to - from; from = Math.max(0, Math.min(N - 1 - span, drag.from - Math.round(dx / layout.bw))); to = from + span; }
+    if (drag && drag.mode === 'handle') { const at = pointAt(p), dr = S.drawings[drag.k]; S.drawings = S.drawings.map((x, j) => (j === drag.k ? Object.assign({}, dr, { points: dr.points.map((q, n) => (n === drag.h ? { t: at.t, p: at.p } : q)) }) : x)); drag.moved = true; }
+    else if (drag && drag.mode === 'body') { const di = Math.round((p.x - drag.x) / layout.bw), dp = layout.ps.P(p.y) - layout.ps.P(drag.y); if (Math.abs(p.x - drag.x) > 3 || Math.abs(p.y - drag.y) > 3) { drag.moved = true; S.drawings = S.drawings.map((x, j) => (j === drag.k ? Object.assign({}, x, { points: moved(drag.pts, di, dp, bars, idxOfT) }) : x)); } }
+    else if (drag && !drag.pinch) { const dx = p.x - drag.x; if (Math.abs(dx) > 3) drag.moved = true; const span = to - from; from = Math.max(0, Math.min(N - 1 - span, drag.from - Math.round(dx / layout.bw))); to = from + span; }
     cross = Math.max(from, Math.min(to, layout.I(p.x))); crossY = p.y <= layout.panes[0].y1 ? layout.ps.P(p.y) : null;
     hoverP = p;
     redraw();
   });
-  const up = (e) => { pointers.delete(e.pointerId); if (pointers.size < 2 && drag && drag.pinch) drag = null; else if (pointers.size === 0) drag = null; };
+  const up = (e) => {
+    pointers.delete(e.pointerId);
+    // a drawing moved is one change to undo, kept when the pointer lifts
+    if (drag && drag.mode && drag.moved) { undo.push(drag.before); if (undo.length > 40) undo.shift(); redo.length = 0; if (S.onDrawings) S.onDrawings(S.drawings); }
+    if (pointers.size < 2 && drag && drag.pinch) drag = null; else if (pointers.size === 0) drag = null;
+  };
   svg.addEventListener('pointerup', up); svg.addEventListener('pointercancel', up);
   // a finger lifting also leaves: the box it opened stays until the next touch
   svg.addEventListener('pointerleave', (e) => { if (e.pointerType !== 'touch') hoverP = null; if (!drag) { cross = -1; crossY = null; redraw(); } });
   svg.addEventListener('wheel', (e) => { e.preventDefault(); const p = pt(e); zoom(e.deltaY > 0 ? 1.15 : 1 / 1.15, Math.max(from, Math.min(to, layout.I(p.x)))); }, { passive: false });
 
+  // The drawing under the pointer, or -1: within 9 px of a line, or inside a box or a measured range.
   function hitTest(p) {
-    const ps = layout.ps, X = layout.X;
+    const ps = layout.ps, X = layout.X, right = W - layout.r, last = N - 1;
     let best = -1, bd = 9;
+    const segD = (g) => segDist(p.x, p.y, X(g.i1), ps.Y(g.p1), X(g.i2), ps.Y(g.p2));
+    const inBox = (x1, x2, y1, y2) => (p.x >= Math.min(x1, x2) - 4 && p.x <= Math.max(x1, x2) + 4 && p.y >= Math.min(y1, y2) - 4 && p.y <= Math.max(y1, y2) + 4 ? 0 : Infinity);
     S.drawings.forEach((dr, k) => {
-      const pts = dr.points.map((q) => ({ x: X(idxOfT(q.t)), y: ps.Y(q.p) }));
+      const q = dr.points.map((x) => ({ i: idxOfT(x.t), p: x.p })), pts = q.map((x) => ({ x: X(x.i), y: ps.Y(x.p) }));
       let d = Infinity;
-      if (dr.kind === 'hline' || dr.kind === 'fibdraw') d = Math.min(...pts.map((q) => Math.abs(q.y - p.y)));
+      if (dr.kind === 'hline' || dr.kind === 'fibdraw') d = Math.min(...pts.map((x) => Math.abs(x.y - p.y)));
       else if (dr.kind === 'vline') d = Math.abs(pts[0].x - p.x);
       else if (dr.kind === 'text') d = Math.hypot(pts[0].x - p.x, pts[0].y - p.y) / 2;
-      else if (pts.length > 1) { const [a, b] = pts; if (dr.kind === 'rect') d = (p.x >= Math.min(a.x, b.x) - 4 && p.x <= Math.max(a.x, b.x) + 4 && p.y >= Math.min(a.y, b.y) - 4 && p.y <= Math.max(a.y, b.y) + 4) ? 0 : Infinity; else { const t = Math.max(0, Math.min(1, ((p.x - a.x) * (b.x - a.x) + (p.y - a.y) * (b.y - a.y)) / (((b.x - a.x) ** 2 + (b.y - a.y) ** 2) || 1))); d = Math.hypot(p.x - (a.x + t * (b.x - a.x)), p.y - (a.y + t * (b.y - a.y))); } }
+      else if (pts.length > 1) {
+        const [a, b] = pts;
+        if (dr.kind === 'rect') d = inBox(a.x, b.x, a.y, b.y);
+        else if (dr.kind === 'ruler') d = inBox(a.x, b.x, layout.panes[0].y0, layout.panes[0].y1);
+        else if ((dr.kind === 'rr' || dr.kind === 'position') && q.length === 3) d = dr.kind === 'rr' ? inBox(X(Math.min(q[0].i, q[1].i, q[2].i)), right, Math.min(...pts.map((x) => x.y)), Math.max(...pts.map((x) => x.y))) : inBox(X(Math.min(q[0].i, q[1].i)), right, a.y, b.y);
+        else if (dr.kind === 'channel' && q.length === 3) d = Math.min(...channel(q[0], q[1], q[2], last).map(segD));
+        else if (dr.kind === 'pitchfork' && q.length === 3) { const f = pitchfork(q[0], q[1], q[2], last); d = Math.min(segD(f.handle), ...f.tines.map(segD)); }
+        else if (dr.kind === 'fibext' && q.length === 3) d = Math.min(...fibExt(q[0], q[1], q[2]).map((l) => (p.x >= Math.min(pts[0].x, pts[2].x) - 4 ? Math.abs(ps.Y(l.price) - p.y) : Infinity)));
+        else d = segDist(p.x, p.y, a.x, a.y, b.x, b.y);
+      }
       if (d < bd) { bd = d; best = k; }
     });
     return best;
   }
+  // The handle of the selected drawing under the pointer, or -1.
+  function handleAt(p) {
+    if (sel < 0 || !S.drawings[sel]) return -1;
+    const ps = layout.ps, X = layout.X;
+    return S.drawings[sel].points.findIndex((x) => Math.hypot(X(idxOfT(x.t)) - p.x, ps.Y(x.p) - p.y) <= 9);
+  }
+  // A point placed or dragged: on its bar, and with snapping on at the bar's open, high, low or close when one is close.
+  function pointAt(p) {
+    const i = Math.max(0, Math.min(N - 1, layout.I(p.x))), price = layout.ps.P(p.y);
+    const at = S.snap ? snap(bars[i], price, layout.ps.Y) : { price, field: null };
+    return { t: bars[i].t, p: +at.price.toFixed(4), field: at.field };
+  }
+
 
   function finishDrawing() {
     const dr = { id: 'd' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), kind: pending.kind, points: pending.points, color: 'accent', width: 1.6 };
@@ -579,7 +657,9 @@ export function createPriceChart(host, opts) {
     if (dr.kind === 'text') { if (S.askText) S.askText(dr, (text) => { if (text) { dr.text = text.slice(0, 120); commit([...S.drawings, dr]); } }); return; }
     commit([...S.drawings, dr]);
   }
-  function commit(next) { undo.push(S.drawings); if (undo.length > 40) undo.shift(); S.drawings = next; if (S.onDrawings) S.onDrawings(next); redraw(); }
+  function commit(next) { undo.push(S.drawings); if (undo.length > 40) undo.shift(); redo.length = 0; S.drawings = next; if (S.onDrawings) S.onDrawings(next); redraw(); }
+  function undoOne() { const prev = undo.pop(); if (prev) { redo.push(S.drawings); S.drawings = prev; sel = -1; if (S.onDrawings) S.onDrawings(prev); redraw(); } }
+  function redoOne() { const next = redo.pop(); if (next) { undo.push(S.drawings); S.drawings = next; sel = -1; if (S.onDrawings) S.onDrawings(next); redraw(); } }
 
   /* ---------- keyboard ---------- */
   svg.addEventListener('keydown', (e) => {
@@ -590,7 +670,8 @@ export function createPriceChart(host, opts) {
     else if (k === 'Home') { cross = from; crossY = bars[cross].c; announce(); e.preventDefault(); } else if (k === 'End') { cross = to; crossY = bars[cross].c; announce(); e.preventDefault(); }
     else if ((k === 'Delete' || k === 'Backspace') && sel >= 0) { commit(S.drawings.filter((_, j) => j !== sel)); sel = -1; e.preventDefault(); }
     else if (k === 'Escape') { pending = null; sel = -1; if (S.onEscape) S.onEscape(); }
-    else if ((e.metaKey || e.ctrlKey) && k.toLowerCase() === 'z') { const prev = undo.pop(); if (prev) { S.drawings = prev; if (S.onDrawings) S.onDrawings(prev); } e.preventDefault(); }
+    else if ((e.metaKey || e.ctrlKey) && k.toLowerCase() === 'z') { if (e.shiftKey) redoOne(); else undoOne(); e.preventDefault(); }
+    else if ((e.metaKey || e.ctrlKey) && k.toLowerCase() === 'y') { redoOne(); e.preventDefault(); }
     redraw();
   });
   function announce() { const b = bars[cross], ins = flags.filter((g) => g.i === cross).map((g) => `${g.items.length} insider ${g.side === 'buy' ? 'purchase' : 'sale'}${g.items.length === 1 ? '' : 's'}: ${g.items.map((it) => `${it.who}, ${it.amount}`).join('; ')}`).join('. '); live.textContent = `${fmtT(b.t)}: open ${num(b.o)}, high ${num(b.h)}, low ${num(b.l)}, close ${num(b.c)}.${ins ? ` ${ins}.` : ''}`; }
@@ -600,12 +681,12 @@ export function createPriceChart(host, opts) {
 
   return {
     set(next) { Object.assign(S, next); if (next.tool) pending = null; redraw(); },
-    zoom: (f) => zoom(f, cross >= 0 ? cross : to), fit, pan,
+    zoom: (f) => zoom(f, cross >= 0 ? cross : to), fit, pan, home() { from = home0.from; to = home0.to; redraw(); },
     view: () => ({ from, to }),
     height: () => S.height, navH: () => S.navH || 40,
     /** The market structure breaks in view, newest last, for Milo and the page. */
     structure: () => ind.msb.filter((m) => m.at >= from && m.at <= to).map((m) => ({ direction: m.dir === 'bull' ? 'bullish' : 'bearish', swing_formed_on: fmtT(bars[m.from].t), swing_known_on: fmtT(bars[m.known].t), broke_on: fmtT(bars[m.at].t), close: bars[m.at].c, level: m.price })),
-    undo() { const prev = undo.pop(); if (prev) { S.drawings = prev; if (S.onDrawings) S.onDrawings(prev); redraw(); } },
+    undo: undoOne, redo: redoOne, canUndo: () => undo.length > 0, canRedo: () => redo.length > 0,
     deleteSelected() { if (sel >= 0) { commit(S.drawings.filter((_, j) => j !== sel)); sel = -1; } },
     clearDrawings() { commit([]); },
     destroy() { ro.disconnect(); },

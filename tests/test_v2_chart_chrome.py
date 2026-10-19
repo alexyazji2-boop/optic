@@ -156,7 +156,7 @@ def test_full_screen_takes_the_window_and_gives_it_back():
     fit = re.search(r"fit: '([^']+)'", icons).group(1)
     assert expand == '<path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>' and fit != expand
     assert "enter: 'M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4'" in CLASSIC, "the classic button is the four corners too"
-    assert "${C.maxButton()}</div>" in CH
+    assert "${C.maxButton()}`);" in CH, "in the plot's own header, at its top right, as the classic chart has it (2026-10-19)"
 
 
 def test_the_chrome_follows_the_house_rules():

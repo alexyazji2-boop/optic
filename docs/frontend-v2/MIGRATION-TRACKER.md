@@ -34,7 +34,7 @@ Kept current as each milestone lands. Source of truth for status: this file. The
 | C7 | Overview extras | Optic Score (short term), Factors and What to look at next, Fund view; Weinstein stage chip | M3; M7 for the chip | open |
 | C8 | Thesis check | Dossier thesis form and check | M3 | open |
 | C9 | Track record slots | Options and Investing | M4 | open |
-| C10 | Chart drawing tools | channel, Fib extension, pitchfork, arrow, ruler, risk box, position sizing, snap, moving | M1 | open |
+| C10 | Chart drawing tools | channel, Fib extension, pitchfork, arrow, ruler, risk box, position sizing, snap, moving | M1 | verified 2026-10-19: the seven tools (`ui/drawings.js`, the classic geometry, stored in the classic form), snap to a candle's open, high, low or close (on by default, the classic key `optic.chart.snap.v1`), moving a drawing by its body or one handle, redo; placed, moved and undone with pointer events at 1440 and 390; `tests/test_v2_drawings.py`. Laid out as the classic chart the same day, at the owner's request: the classic toolbar and Layers row, the two-column rail, the plot's own header, the last-price tag, a volume band |
 | C11 | Chart studies | 14 studies (EMA clouds through insider marks) | M1 | verified 2026-10-19: insider marks (arrows with a box naming each trade) and then the other 13: EMA clouds, MA Trend, TSO, anchored VWAP, Keltner, Donchian, the regression channel, Weinstein stages, accumulation zones, auto trend lines, volume by price, supply and demand, session dividers (`ui/studies.js`, `pages/chart-studies.js`; the maths run against the classic functions in `tests/test_v2_studies.py`; browser check on AAPL daily and hourly with every study on; the sweep at five sizes on AAPL and SPY) |
 | C12 | Chart widgets and chrome | 18 widgets; colours, legend, full screen, navigator | M1 | verified 2026-10-19: the 18 widgets (`pages/chart-widgets.js`, `tests/test_v2_chart_widgets.py`, commit 724b705) and the chrome: colours, the legend, full screen and the navigator (`pages/chart-chrome.js`, `ui/pricechart.js`, `tests/test_v2_chart_chrome.py`), each checked at 1440, 1024 and 390 against the local server, signed in (112 of 112), and the widget sweep at five sizes |
 | C13 | Valuation editors | DCF editor, saved models, RI, FFO, DDM, comps, SOTP, valuation Milo | M2 | open |
@@ -48,7 +48,7 @@ Kept current as each milestone lands. Source of truth for status: this file. The
 ## By milestone
 | Milestone | Rows | Status |
 |---|---|---|
-| M1 Advanced charting | I6, C10, C11, C12, C18, C19 | open (MSB added as a new study, 2026-10-18; C18 verified 2026-10-19; C12 verified 2026-10-19, its 18 widgets and its chrome; C11 and C19 verified 2026-10-19) |
+| M1 Advanced charting | I6, C10, C11, C12, C18, C19 | open (MSB added as a new study, 2026-10-18; C18 verified 2026-10-19; C12 verified 2026-10-19, its 18 widgets and its chrome; C11, C19 and C10 verified 2026-10-19; I6 is left) |
 | M2 Valuation editors | C13 | open |
 | M3 Research tools | I4, I5, C7 (not the chip), C8, C14 | open |
 | M4 Track record | C9, C15 (after the validation branch) | open |

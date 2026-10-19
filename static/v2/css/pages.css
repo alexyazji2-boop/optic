@@ -365,7 +365,10 @@ table.scen td { font-weight: 600; }
 .cr-rows > div { display: flex; justify-content: space-between; gap: 12px; padding: 7px 0; border-top: 1px solid var(--c-line-2); font-size: 14px; }
 .cr-rows dt { color: var(--c-ink-3); } .cr-rows dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
 .cr-note { margin: 0; font-size: 13px; color: var(--c-ink-3); line-height: 1.45; }
-.ch-draw { display: flex; flex-direction: column; gap: 2px; padding: 4px; border: 1px solid var(--c-line-2); border-radius: 10px; background: var(--c-plane-2); position: sticky; top: 72px; }
+/* the drawing rail as the classic chart has it: two columns of tools in their groups, then snap, undo, redo, delete */
+.ch-draw { display: grid; grid-template-columns: repeat(2, 36px); align-content: start; gap: 2px; padding: 4px; border: 1px solid var(--c-line-2); border-radius: 10px; background: var(--c-plane-2); position: sticky; top: 72px; }
+.ch-draw .ch-sep { grid-column: 1 / -1; width: auto; height: 1px; margin: 4px 2px; }
+.ch-snap[aria-pressed="true"] { color: var(--c-pos); border-color: color-mix(in srgb, var(--c-pos) 55%, transparent); background: color-mix(in srgb, var(--c-pos) 12%, transparent); }
 .ch-sep { display: block; width: 24px; height: 1px; margin: 4px auto; background: var(--c-line); }
 .ch-confirm { margin: 8px 0 0; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 /* The side widgets (pages/chart-widgets.js). Wide: the rail down the right edge and the open panels in a
@@ -436,6 +439,7 @@ table.chw-table { font-size: 13px; } table.chw-table th { padding: 6px 4px; font
 .chw-body .btn-milo { justify-self: start; }
 @container chartpage (max-width: 1020px) {
   .ch-stage { flex-wrap: wrap; }
+  .chw-milo { display: none; }   /* the rail is a row here; Milo is in the top bar and Explain over the plot */
   .ch-stage > #ch-body { flex: 1 1 0; }
   .ch-wrail { order: 3; flex: 1 1 100%; position: static; max-height: none; overflow: visible; }
   .chw-rail { display: grid; grid-template-columns: repeat(auto-fill, minmax(60px, 1fr)); }
@@ -450,7 +454,9 @@ table.chw-table { font-size: 13px; } table.chw-table th { padding: 6px 4px; font
   .ch-zoom [data-v2-ch-zoom] { display: none; }
   .ch-stage { flex-direction: column; gap: 6px; }
   .ch-stage > #ch-draw { width: 100%; }
-  .ch-draw { flex-direction: row; position: static; overflow-x: auto; scrollbar-width: none; }
+  .ch-draw { display: flex; flex-direction: row; position: static; overflow-x: auto; scrollbar-width: none; }
+  #ch-body > .ch-pacts { position: static; justify-content: flex-end; margin-bottom: 4px; }   /* over the readout on a phone, so above it */
+  .ch-draw .ch-sep { width: 1px; height: 24px; margin: auto 4px; }
   .ch-stage > #ch-body, .ch-wrail, .ch-side { flex: none; width: 100%; }
   .chw-rail { display: flex; flex-direction: row; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
   .chw-btn { flex: none; width: 58px; min-height: 48px; }   /* five and a part in view at 390, so the strip reads as one that scrolls */
@@ -492,6 +498,19 @@ table.chw-table { font-size: 13px; } table.chw-table th { padding: 6px 4px; font
 .pc .lv.stop { stroke: var(--c-neg); } .pc .lv.stopb { stroke: var(--c-neg); stroke-dasharray: none; stroke-width: 1.5; } .pc .lv.round { stroke: var(--c-ink-3); stroke-dasharray: 2 3; }
 .pc .tm circle { fill: var(--c-plane); stroke-width: 1.6; } .pc .tm.pos circle { stroke: var(--c-pos); } .pc .tm.neg circle { stroke: var(--c-neg); }
 .pc .tm text { font: 700 12px/1 var(--f-label); } .pc .tm.pos text { fill: var(--c-pos); } .pc .tm.neg text { fill: var(--c-neg); }
+/* the classic toolbar (2026-10-19): Indicators, Layers with its count and its row, Chart read, Reset; bar size,
+   session or range, Fit, Reset zoom and the style at the right; Explain and full screen over the plot's corner */
+.ch-count { display: inline-grid; place-items: center; min-width: 18px; height: 18px; margin-left: 6px; padding: 0 5px; border-radius: 6px; background: color-mix(in srgb, var(--c-pos) 22%, transparent); color: var(--c-ink); font: 600 12px/1 var(--f-label); }
+.ch-layers-btn .ic { width: 14px; height: 14px; margin-left: 4px; fill: none; stroke: currentColor; stroke-width: 2; }
+.ch-layers-btn[aria-expanded="true"] { background: var(--c-active); border-color: var(--c-line); } .ch-layers-btn[aria-expanded="true"] .ic { transform: rotate(180deg); }
+.ch-layers { margin-top: 8px; } .ch-layers[hidden] { display: none; }
+.ch-stage > #ch-body { position: relative; }
+.ch-pacts { position: absolute; top: 0; right: 60px; display: flex; gap: 6px; align-items: center; z-index: 5; }
+.ch-pacts .btn-sm { min-height: 30px; padding: 0 10px; font-size: 13px; }
+.chw-milo.btn { width: 60px; min-height: 40px; margin-top: 4px; padding: 2px; font: 600 12px/1.1 var(--f-label); white-space: normal; text-align: center; }
+.pc .lastp { stroke-width: 1; stroke-dasharray: 3 3; } .pc .lastp.up { stroke: var(--pc-up, var(--c-pos)); } .pc .lastp.dn { stroke: var(--pc-down, var(--c-neg)); }
+.pc .lastp-tag.up { fill: var(--pc-up, var(--c-pos)); } .pc .lastp-tag.dn { fill: var(--pc-down, var(--c-neg)); } .pc .lastp-t { fill: var(--c-plane); font: 650 12px/1 var(--f-label); font-variant-numeric: tabular-nums; }
+.pc-read .pc-sym { font: 650 15px/1 var(--f-label); } .pc-read .pc-what { color: var(--c-ink-3); }
 /* the classic studies (C11; ui/studies.js, pages/chart-studies.js) */
 .ch-imenu { max-height: min(72vh, 660px); overflow-y: auto; overscroll-behavior: contain; }
 .ch-snote:empty { display: none; }
@@ -546,6 +565,18 @@ table.chw-table { font-size: 13px; } table.chw-table th { padding: 6px 4px; font
 .ch-foot { margin-top: 10px; align-items: center; }
 @media (max-width: 860px) { .drail { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; margin-right: -16px; padding-right: 16px; } .drail .chip { flex: none; } .menu-body { position: fixed; left: 16px; right: 16px; top: auto; bottom: 90px; } }
 .pc .dr-other { stroke-dasharray: 2 3; }
+/* the drawings the classic app adds (C10; ui/drawings.js): handles on the selected one, channel fill, measure,
+   risk and reward boxes */
+.pc .dr-h { fill: var(--c-plane); stroke: var(--c-focus); stroke-width: 2; cursor: grab; }
+.pc .dr.dr-thin { stroke-width: 1.1; opacity: .8; } .pc .dr.dr-dash { stroke-dasharray: 4 3; }
+.pc .dr-fill { fill: var(--c-gold-wash); stroke: none; } .pc .dr-head { fill: var(--c-gold-ink); stroke: none; }
+.pc .dr-rng { fill: color-mix(in srgb, var(--c-ink-3) 12%, transparent); } .pc .dr-rng.up { fill: color-mix(in srgb, var(--c-pos) 12%, transparent); } .pc .dr-rng.dn { fill: color-mix(in srgb, var(--c-neg) 12%, transparent); }
+.pc .dr-edge { stroke: var(--c-ink-3); stroke-width: 1.5; } .pc .dr-edge.up { stroke: var(--c-pos); } .pc .dr-edge.dn { stroke: var(--c-neg); }
+.pc .dr-dot { fill: var(--c-ink-3); stroke: var(--c-plane); stroke-width: 2; } .pc .dr-dot.up { fill: var(--c-pos); } .pc .dr-dot.dn { fill: var(--c-neg); }
+.pc .dr-plate { fill: var(--c-raised); stroke: var(--c-line); } .pc .dr-pt { fill: var(--c-ink-3); font: 500 12px/1 var(--f-label); }
+.pc .dr-pf { fill: var(--c-ink); font: 650 14px/1 var(--f-label); font-variant-numeric: tabular-nums; } .pc .dr-pf.up { fill: var(--c-pos); } .pc .dr-pf.dn { fill: var(--c-neg); }
+.pc .dr-risk { fill: color-mix(in srgb, var(--c-neg) 16%, transparent); stroke: var(--c-neg); stroke-width: 1; } .pc .dr-reward { fill: color-mix(in srgb, var(--c-pos) 16%, transparent); stroke: var(--c-pos); stroke-width: 1; }
+.pc .dr-tb { fill: var(--c-ink); font: 600 12px/1 var(--f-label); paint-order: stroke; stroke: var(--c-plane); stroke-width: 3px; }
 
 /* The chart's chrome, from the classic Charting tab (C12): the legend over the plot's corner, the navigator under
    it, the colours menu and full screen. The reader's colours (optic.chart.colors.v1) reach the plot as --pc-up,
