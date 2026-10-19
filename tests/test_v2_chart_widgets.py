@@ -94,7 +94,7 @@ def test_each_widget_draws_from_a_real_ticker_payload(tmp_path):
     assert "Gross margin 46.9%" in o["reports"] and "Revenue growth, year on year +6.4%" in o["reports"] and "EPS beat rate 100% of 8 quarters" in o["reports"]
     assert "ATM IV, 7 days 21.6%" in o["options"] and "Call wall 350.00 (+2.3%)" in o["options"] and "Net GEX $" in o["options"]
     assert "Short float 0.83%" in o["insiders"] and "Sold NEWSTEAD JENNIFER" in o["insiders"] and "Net shares +248,641" in o["insiders"]
-    assert "The chart marks the 1 sale among the 2 latest filings Optic has, Oct 2 to Oct 6, 2026" in o["insiders"]
+    assert "The chart marks the 1 sale among the 2 filings Optic has from the last two years, Oct 2, 2026 to Oct 6, 2026" in o["insiders"]
     assert "High today $345.99" in o["stats"] and "52-week low $243.42" in o["stats"]
     assert "Double top not confirmed" in o["patterns"] and "Inverted hammer" in o["patterns"]
     assert "276.13 Support −19.3% 61" in o["levels"]

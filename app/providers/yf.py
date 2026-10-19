@@ -1785,7 +1785,11 @@ class YFinanceProvider(MarketDataProvider):
 
         return _cached("splits:" + ticker, 86400, build)
 
-    def insiders(self, ticker: str, limit: int = 12) -> Dict[str, Any]:
+    # Two years of Form 4 rows, newest first and at most 200: the span of daily bars the charts draw them on.
+    # It kept the 12 latest until 2026-10-19, about a month for a large company, so the v2 chart's insider arrows
+    # stopped a month back. Yahoo lists roughly 70 to 150 rows for one. The watches still read only the latest
+    # 12 (analytics/watches.py RECENT_FILINGS).
+    def insiders(self, ticker: str, limit: int = 200, days: int = 730) -> Dict[str, Any]:
         def build() -> Dict[str, Any]:
             t = yf.Ticker(ticker)
             summary: Dict[str, Any] = {}
@@ -1806,7 +1810,10 @@ class YFinanceProvider(MarketDataProvider):
             try:
                 frame = t.insider_transactions
                 if frame is not None and not frame.empty:
-                    for _, row in frame.head(limit).iterrows():
+                    cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).date().isoformat()
+                    for _, row in frame.iterrows():
+                        if str(row.get("Start Date") or "")[:10] < cutoff:
+                            continue
                         text = str(row.get("Text") or "")
                         lowered = text.lower()
                         action = (
@@ -1827,8 +1834,10 @@ class YFinanceProvider(MarketDataProvider):
                         )
             except Exception:
                 trades = []
+            # newest first whatever order the frame came in, so the first rows are the latest filings
+            trades.sort(key=lambda r: r["date"], reverse=True)
 
-            return {"summary_6m": summary, "transactions": trades}
+            return {"summary_6m": summary, "transactions": trades[:limit]}
 
         return _cached("insider:" + ticker, 3600, build)
 

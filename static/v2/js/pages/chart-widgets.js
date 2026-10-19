@@ -467,7 +467,7 @@ function spanLine(t) {
   const sp = insiderSpan(t);
   if (!sp.n) return '';
   return html`<label class="check chw-show"><input type="checkbox" data-chw-ins ${C.overlayOn('ins') ? 'checked' : ''}> <span>Show on the chart</span></label>
-    ${fine(sp.marked ? `The chart marks the ${[sp.buys ? `${sp.buys} purchase${sp.buys === 1 ? '' : 's'}` : '', sp.sells ? `${sp.sells} sale${sp.sells === 1 ? '' : 's'}` : ''].filter(Boolean).join(' and ')} among the ${sp.n} latest filings Optic has, ${shortDate(sp.from)} to ${fullDate(sp.to)}: a green arrow under the bar for a purchase, a red one over it for a sale. Point at or tap one to see the trade.` : `None of the ${sp.n} latest filings is a purchase or a sale, so the chart has nothing to mark.`)}`;
+    ${fine(sp.marked ? `The chart marks the ${[sp.buys ? `${sp.buys} purchase${sp.buys === 1 ? '' : 's'}` : '', sp.sells ? `${sp.sells} sale${sp.sells === 1 ? '' : 's'}` : ''].filter(Boolean).join(' and ')} among the ${sp.n} filings Optic has from the last two years, ${fullDate(sp.from)} to ${fullDate(sp.to)}: a green arrow under the bar for a purchase, a red one over it for a sale. Point at or tap one to see the trade.` : `None of the ${sp.n} filings Optic has from the last two years is a purchase or a sale, so the chart has nothing to mark.`)}`;
 }
 const checkCount = (n, sym) => `${n} of ${CHECKS.length} for ${sym}. Fixed questions on purpose. A checklist you can edit becomes a list of the questions you already like the answers to.`;
 
@@ -598,7 +598,7 @@ export function barTime(bars, keys, stamp, { intraday = false, weekly = false, w
   return within && !intraday && Date.parse(want.slice(0, 10)) - Date.parse(keys[at].slice(0, 10)) <= within * 86400000 ? bars[at].t : null;
 }
 /**
- * The insider trades the chart marks, from the ticker payload's latest filings (company.ownership.
+ * The insider trades the chart marks, from the ticker payload's filings of the last two years (company.ownership.
  * recent_transactions). Only purchases and sales: "other" is option exercises, grants and gifts, which are
  * pay rather than a view on the price, as the classic chart's insider marks have it. Each carries the words
  * for its hover box; the date is the trade's own, not its bar's (a weekly bar holds five days).

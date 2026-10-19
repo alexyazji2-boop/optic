@@ -380,10 +380,15 @@ def _analyst_revisions(d, p):
             "evidence": "estimates {}{}".format(direction, ". " + detail if detail else "")}
 
 
+# The filings an insider watch reads: the latest 12, all the payload carried until it kept two years
+# (2026-10-19). A watch on purchases means a recent purchase, not one from last year.
+RECENT_FILINGS = 12
+
+
 def _insider_activity(d, p):
     want = str(p.get("side") or "any").lower()
     own = ((d.get("company") or {}).get("ownership")) or {}
-    rows = own.get("recent_transactions") or []
+    rows = (own.get("recent_transactions") or [])[:RECENT_FILINGS]
     if want != "any":
         # `action`, not `kind` or `type`. The provider labels each row
         # purchase / sale / other (see providers/yf.py:insiders), and filtering
