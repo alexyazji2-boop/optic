@@ -11,8 +11,8 @@ import { lineChart, mountCharts } from '../ui/chart.js';
 import { signedBars, hbars } from '../ui/bars.js';
 import { skeleton, empty, failed } from '../ui/states.js';
 import { button as miloButton, provideContext } from '../ui/milo.js';
-import { go } from '../core/router.js';
 import { core, header, tabs, isFund } from './dossier-frame.js';
+import { kindOf, can, kindWord } from '../core/instrument.js';
 
 let D = {}, live = true, mainEl = null;
 const kv = (rows, n = 3) => html`<dl class="kv" style="--kv:${n}">${rows.filter(Boolean).map(([k, v]) => html`<div><dt>${k}</dt><dd>${v}</dd></div>`)}</dl>`;
@@ -68,7 +68,7 @@ function ownership(sym) {
   const i6 = ow.insider_6m || {};
   return html`<section class="section" aria-labelledby="ow-h"><div class="section-head"><h2 class="t-h2" id="ow-h">Insider and institutional activity</h2>${ask(sym, 'Ask Milo about insiders', `What does recent insider and institutional activity in ${sym} suggest?`)}</div>
     ${kv([['Insider signal, 6 months', capFirst(ow.insider_signal || '')], ['Insider net shares', compact(i6.net_shares)], ['Purchases', `${num(i6.purchase_count, 0)} (${compact(i6.purchase_shares)} shares)`], ['Sales', `${num(i6.sale_count, 0)} (${compact(i6.sale_shares)} shares)`], ['Held by institutions', pct((ow.institutional_pct_held || 0) * 100)], ['Held by insiders', pct((ow.insider_pct_held || 0) * 100, 2)]], 3)}
-    <p>Of the largest holders, ${ow.holders_adding} added and ${ow.holders_trimming} trimmed at their last report.</p>
+    <p>Of the ${ow.holders_counted || (ow.top_holders || []).length} largest holders, ${ow.holders_adding} raised and ${ow.holders_trimming} cut their stake by more than ${num(ow.holder_change_threshold_pct || 2, 0)}% at their last 13F; the rest changed by less. ${(ow.top_holders || []).length > 6 ? `The bars show the ${6} largest.` : ''}</p>
     ${raw(hbars((ow.top_holders || []).slice(0, 6).map((h) => ({ label: h.holder, v: (h.pct_held || 0) * 100, note: `${compact(h.shares)} shares, ${signed((h.pct_change || 0) * 100, 1)} at ${fullDate(h.date_reported)}` }))))}
     <details class="more-inline"><summary>Recent insider transactions</summary><div class="tscroll"><table class="t"><thead><tr><th>Date</th><th>Insider</th><th>Role</th><th>Action</th><th>Shares</th><th>Value</th></tr></thead><tbody>${(ow.recent_transactions || []).map((t) => html`<tr><td>${fullDate(t.date)}</td><td>${t.insider}</td><td>${t.position || ''}</td><td>${capFirst(t.action || '')}</td><td>${compact(t.shares)}</td><td>${usd(t.value)}</td></tr>`)}</tbody></table></div></details>
     <ul class="plain">${(ow.notes || []).map((n) => html`<li>${clean(n)}</li>`)}</ul><p class="asof">${clean(ow.caveat || '')}</p></section>`;
@@ -127,12 +127,21 @@ function paint() {
   if (!live) return;
   const sym = D.sym, y = window.scrollY;
   let body;
-  if (D.tErr) body = failed('The financial statements', D.tErr, { retry: 'ticker' });
+  if (D.na) body = notApplicable(sym, D.na);
+  else if (D.tErr) body = failed('The financial statements', D.tErr, { retry: 'ticker' });
   else if (!D.t) body = skeleton('lines', 6, 'Loading the statements');
   else body = html`${readings()}${statements(sym)}${record()}${ownership(sym)}${filings()}${extras()}${congress()}${segments()}`;
   draw(mainEl, html`${header(sym, D, 'financials')}${tabs(sym, 'financials', { fund: isFund(D) })}${body}`);
   mountCharts(mainEl, Object.assign({}, statementCharts(), extraCharts()));
   if (Math.abs(window.scrollY - y) > 2) window.scrollTo(0, y);
+}
+
+function notApplicable(sym, kind) {
+  const name = (D.quote || {}).name || sym;
+  return html`<section class="section na" aria-labelledby="na-h"><h2 class="t-h2" id="na-h">Financials do not apply to ${sym}</h2>
+    <p>${name} is ${kind === 'fund' ? 'a fund: it holds other companies\' shares and has no income statement, balance sheet or cash flow of its own' : kind === 'index' ? 'an index: a calculated level, with no business behind it' : `a ${kindWord(kind)}, with no company statements behind it`}.</p>
+    <p>${kind === 'fund' ? 'Its long-term record, drawdowns and its holdings\' valuation are on Investing; what it is and how it trades are on Overview.' : 'Its price history and setups are on Overview and Chart.'}</p>
+    <div class="cluster">${kind === 'fund' ? html`<a class="btn" href="#/${sym}/investing">Open Investing</a>` : ''}<a class="btn" href="#/${sym}">Open Overview</a></div></section>`;
 }
 
 async function loadSegments(sym, round = 0) {
@@ -156,7 +165,10 @@ export async function render(main, route) {
   const c = await core(sym).catch(() => ({}));
   if (D.sym !== sym) return;
   Object.assign(D, { quote: c.quote, session: c.session, quoteError: c.quoteError });
-  if (isFund(D) || ((c.quote || {}).quote_type && ['ETF', 'MUTUALFUND', 'INDEX'].includes(c.quote.quote_type))) { go(`#/${sym}`); return; }
+  // A direct link to a fund's or an index's Financials says why the view does not apply, and where the
+  // useful figures are, rather than bouncing to Overview with no word (owner, 2026-10-19).
+  const kind = kindOf(sym, D);
+  if (!can(kind).financials) { D.na = kind; paint(); return; }
   paint();
   const step = (p, ok, bad) => p.then((d) => { if (D.sym === sym) ok(d); }, (e) => { if (D.sym === sym) bad(e); }).finally(() => { if (D.sym === sym) paint(); });
   step(api.get(`/api/ticker/${enc}?max_expiries=4&macro=true`, { ttl: 120000, timeout: 60000 }), (d) => { D.t = d; }, (e) => { D.tErr = e; });

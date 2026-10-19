@@ -18,6 +18,7 @@ import { button as miloButton, provideContext } from '../ui/milo.js';
 import { toast } from '../ui/toast.js';
 import { core, header, tabs, isFund } from './dossier-frame.js';
 import * as VS from './valuation-scenarios.js';
+import { kindOf, can } from '../core/instrument.js';
 
 const RANGES = { '1Y': 52, '3Y': 156, '5Y': 260, '10Y': 520, All: Infinity };
 let D = {}, live = true, mainEl = null;
@@ -45,7 +46,7 @@ function trend(sym) {
   const conv = (((D.fw || {}).long_term) || {}).conviction || {};
   const clash = s !== null && s >= 60 && ((st.available && st.stars <= 2) || (vh.available && vh.percentile >= 80));
   return html`<section class="section" aria-labelledby="lt-h">
-    <div class="section-head"><div><h2 class="t-h2" id="lt-h">Long-term trend score, from price history</h2><p class="section-sub">How the stock has behaved over years. It does not say whether the price is low.</p></div>${ask(sym, 'Ask Milo about this score', `What is ${sym}'s long-term trend score built from, and what does it leave out?`)}</div>
+    <div class="section-head"><div><h2 class="t-h2" id="lt-h">Long-term trend score, from price history</h2><p class="section-sub">How the ${kindOf(sym, D) === 'fund' ? 'fund' : 'stock'} has behaved over years. It does not say whether the price is low.</p></div>${ask(sym, 'Ask Milo about this score', `What is ${sym}'s long-term trend score built from, and what does it leave out?`)}</div>
     <div class="figure"><p class="t-display-m">${s === null ? 'n/a' : num(s, 0)} <small class="t-muted">of 100</small></p><p class="delta"><span>${capFirst(h.conviction || '')} conviction</span><span class="t-muted">${capFirst((h.long_trend || {}).phase || '')}</span></p></div>
     <p><b>The model's rule:</b> ${clean(h.plan || '')}</p>
     ${clash ? html`<p class="reconcile"><b>Read it beside the price.</b> The score is built from trend and the five-year record${st.available ? `, while the price earns ${st.stars} of 5 stars against its own usual valuation` : ''}${vh.available ? ` and the P/E sits at the ${num(vh.percentile, 0)}th percentile of its own history` : ''}.${conv.label ? ` The business-and-price case on the Overview reads ${conv.label}.` : ''}</p>` : ''}
@@ -143,6 +144,16 @@ function fairValue(sym) {
   </section>`;
 }
 
+// A fund has no business to value: its holdings' multiples stand in, labelled as theirs (core/instrument.js).
+function fundValuation(sym) {
+  const h = (D.lt || {}).holding; if (!h) return '';
+  const v = h.valuation || {}, q = D.quote || {};
+  const y = isNum(q.dividend_yield) ? q.dividend_yield * 100 : isNum(v.dividend_yield) ? v.dividend_yield * 100 : null;
+  return html`<section class="section" aria-labelledby="fvl-h"><div class="section-head"><div><h2 class="t-h2" id="fvl-h">What its holdings cost</h2><p class="section-sub">The fund's holdings, weighted. A fund has no business of its own, so there is no fair value range, cash-flow model or P/E history here.</p></div></div>
+    ${kv([['P/E of the holdings, trailing', num(v.trailing_pe, 1)], ['Price to book', num(v.price_to_book, 2)], ['Distribution yield', isNum(y) ? `${num(y, 2)}%` : 'n/a']])}
+    <p class="asof">${clean(v.caveat || '')} Source: Yahoo Finance's fund figures.</p></section>`;
+}
+
 function dcf(sym) {
   const v = D.val;
   if (v === undefined) return html`<section class="section">${skeleton('lines', 3, 'Loading the cash flow model')}</section>`;
@@ -186,8 +197,9 @@ function paint() {
   const keep = document.activeElement && mainEl.contains(document.activeElement) ? document.activeElement : null;
   const keepKey = keep && (keep.name || Object.entries(keep.dataset || {}).map((e) => e.join('=')).join('&'));
   const y = window.scrollY;
+  const company = can(kindOf(sym, D)).valuation;
   draw(mainEl, html`${header(sym, D, 'long')}${tabs(sym, 'long', { fund: isFund(D) })}
-    ${trend(sym)}${returnsRisk()}${weekly(sym)}${drawdown()}${multiple(sym)}${fairValue(sym)}${dcf(sym)}${scenarios(sym)}${accumulation()}`);
+    ${trend(sym)}${returnsRisk()}${weekly(sym)}${drawdown()}${company ? html`${multiple(sym)}${fairValue(sym)}${dcf(sym)}${scenarios(sym)}` : fundValuation(sym)}${accumulation()}`);
   mountCharts(mainEl, Object.assign({}, weeklyMaker(), ddMaker(), peMaker()));
   if (keepKey) {
     const el = keep.name ? mainEl.querySelector(`[name="${CSS.escape(keep.name)}"]`) : null;
@@ -208,12 +220,15 @@ export async function render(main, route) {
   const step = (p, ok, bad) => p.then((d) => { if (D.sym === sym) ok(d); }, (e) => { if (D.sym === sym) bad(e); }).finally(() => { if (D.sym === sym) paint(); });
   step(core(sym), (c) => { D.quote = c.quote; D.session = c.session; D.quoteError = c.quoteError; }, () => {});
   step(api.get(`/api/longterm/${enc}?indices=false`, { ttl: 600000, timeout: 60000 }), (d) => { D.lt = d; }, (e) => { D.ltErr = e; });
-  step(api.get(`/api/pe-history/${enc}?years=10`, { ttl: 3600000, timeout: 45000 }), (d) => { D.pe = d; }, () => { D.pe = null; });
-  step(api.get(`/api/fair-value/${enc}`, { ttl: 600000, timeout: 30000 }), (d) => { D.fv = d; }, () => { D.fv = null; });
-  step(api.get(`/api/valuation/${enc}`, { ttl: 600000, timeout: 45000 }), (d) => { D.val = d; }, () => { D.val = null; });
-  step(api.get(`/api/valuation-inputs/${enc}`, { ttl: 600000, timeout: 30000 }), (d) => { D.vin = d; }, () => { D.vin = null; });
+  // A symbol already known to be a fund skips the company valuation reads it would only show as failures.
+  if (kindOf(sym) !== 'fund') {
+    step(api.get(`/api/pe-history/${enc}?years=10`, { ttl: 3600000, timeout: 45000 }), (d) => { D.pe = d; }, () => { D.pe = null; });
+    step(api.get(`/api/fair-value/${enc}`, { ttl: 600000, timeout: 30000 }), (d) => { D.fv = d; }, () => { D.fv = null; });
+    step(api.get(`/api/valuation/${enc}`, { ttl: 600000, timeout: 45000 }), (d) => { D.val = d; }, () => { D.val = null; });
+    step(api.get(`/api/valuation-inputs/${enc}`, { ttl: 600000, timeout: 30000 }), (d) => { D.vin = d; }, () => { D.vin = null; });
+    step(VS.load(sym), (b) => { D.vsBody = b || null; }, () => {});
+  }
   step(api.get(`/api/framework/${enc}?mode=combined`, { ttl: 300000, timeout: 60000 }), (d) => { D.fw = d; }, () => {});
-  step(VS.load(sym), (b) => { D.vsBody = b || null; }, () => {});
   if (setting('optic.lt.range', '5Y') === 'All') loadAll();
 }
 async function loadAll() {

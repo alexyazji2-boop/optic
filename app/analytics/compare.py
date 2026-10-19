@@ -412,8 +412,13 @@ def take(payload: Dict[str, Any]) -> Dict[str, Any]:
             "name": (horizons.get(hid) or {}).get("name", hid),
         }
 
-    tickers = [w["ticker"] for w in winners.values()]
-    unanimous = len(set(tickers)) == 1 and len(tickers) > 1
+    # Only a decisive horizon has a leader. A close call is level everywhere it is said: the headline, the
+    # overall pick, the cards, the bars and the table (owner, 2026-10-19: the headline named SPY the
+    # long-term leader by 0.3 points while the table called the two level).
+    decisive = [w for w in winners.values() if w["decisive"]]
+    level = [w for w in winners.values() if not w["decisive"]]
+    tickers = [w["ticker"] for w in decisive]
+    unanimous = not level and len(set(tickers)) == 1 and len(tickers) > 1
 
     # Most horizons won, not the highest score.
     #
@@ -457,14 +462,22 @@ def take(payload: Dict[str, Any]) -> Dict[str, Any]:
     # The sentence. Assembled rather than templated over one shape, because
     # "they all agree" and "they disagree by horizon" are different findings and
     # flattening them into one phrasing loses the distinction.
+    level_bit = ""
+    if level:
+        names = [w["name"].lower() for w in level]
+        level_bit = "the {} {} level".format(" and the ".join(names), "is" if len(names) == 1 else "are")
     if unanimous:
         headline = "{} leads every horizon.".format(tickers[0])
+    elif decisive and len(set(tickers)) == 1:
+        headline = "{} leads the {}{}.".format(tickers[0], " and the ".join(w["name"].lower() for w in decisive),
+                                               "; " + level_bit if level_bit else "")
+    elif decisive:
+        bits = ", ".join("{} on the {}".format(w["ticker"], w["name"].lower()) for w in decisive)
+        headline = "No name leads throughout: {}{}.".format(bits, "; " + level_bit if level_bit else "")
     elif len(winners) > 1:
-        bits = ", ".join("{} on the {}".format(w["ticker"], w["name"].lower())
-                         for w in winners.values())
-        headline = "No name leads throughout: {}.".format(bits)
+        headline = "No name leads: the scores are level on every horizon."
     else:
-        headline = "{} leads on the one horizon with enough data.".format(overall or "Neither")
+        headline = "The one horizon with enough data is level." if level else "Neither name has enough data to rank."
 
     weak = [w for w in winners.values() if not w["decisive"]]
     return {

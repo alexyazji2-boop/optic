@@ -65,8 +65,25 @@ export function ago(iso, now = Date.now()) {
   return `${d} days ago`;
 }
 
+// Provider exceptions never reach a reader (owner, 2026-10-19: "SEC XBRL unavailable: HTTP Error 404:
+// Not Found" on SPY's Overview). Each fragment becomes a plain sentence; the original is kept for
+// diagnostics in window.__opticDiag (read it from the console).
+const RAW = [
+  [/SEC XBRL unavailable:?\s*HTTP Error 404:?\s*Not Found\.?/gi, 'The SEC has no company figures for this symbol.'],
+  [/SEC XBRL unavailable:?[^.]*\.?/gi, 'The SEC company figures did not load just now.'],
+  [/HTTP Error (\d{3}):?\s*[A-Za-z ]*\.?/g, (m, c) => (c === '404' ? 'The source has nothing for this symbol.' : c === '429' ? 'The source is limiting requests; try again shortly.' : 'The source did not answer just now.')],
+  [/<urlopen error[^>]*>\.?/gi, 'The source could not be reached.'],
+  [/\b(?:HTTPSConnectionPool|ConnectionError|ReadTimeout|TimeoutError|JSONDecodeError|KeyError|TypeError|ValueError|AttributeError|Traceback)\b[^.]*\.?/g, 'The source did not answer in a usable form.'],
+];
+function plain(t) {
+  let out = t;
+  for (const [re, to] of RAW) out = out.replace(re, to);
+  if (out !== t) { try { (window.__opticDiag = window.__opticDiag || []).push(t); } catch (e) { /* no window in tests */ } }
+  return out;
+}
+
 export function clean(s) {
-  return String(s == null ? '' : s).replace(/\s*—\s*/g, ': ').replace(/–/g, ' to ');
+  return plain(String(s == null ? '' : s)).replace(/\s*—\s*/g, ': ').replace(/–/g, ' to ');
 }
 
 export function capFirst(s) {

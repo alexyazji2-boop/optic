@@ -61,34 +61,37 @@ function saveDrawings(sym, list) {
 
 /* ---------------- bars ---------------- */
 async function loadBars() {
-  const sym = D.sym, enc = encodeURIComponent(sym), iv = INTERVALS.find((x) => x.key === V.interval);
+  // seq: a slower answer for the bar size or range chosen before must not replace the one chosen after
+  const sym = D.sym, enc = encodeURIComponent(sym), iv = INTERVALS.find((x) => x.key === V.interval), seq = (D.barSeq = (D.barSeq || 0) + 1);
+  const current = () => D.sym === sym && D.barSeq === seq;
   D.bars = null; D.barsErr = null; paintChart();
+  let note = '';
   try {
     let bars;
     if (iv.intraday) {
       const d = await api.get(`/api/intraday/${enc}?range=${iv.key}&window=${iv.history}&session=${V.session}`, { ttl: 60000, timeout: 45000 });
       if (!d.available) throw new api.ApiError('notfound', 404, clean(d.reason || 'No intraday bars right now.'));
       bars = d.times.map((t, i) => ({ t: Date.parse(t), o: d.opens[i], h: d.highs[i], l: d.lows[i], c: d.closes[i], v: d.volumes[i] }));
-      D.note = d.session_note;
+      note = d.session_note;
     } else if (V.interval === 'weekly') {
       const d = await api.get(`/api/weekly-bars/${enc}?span=${V.range === 'All' ? 'max' : '10y'}`, { ttl: 3600000, timeout: 45000 });
       bars = d.dates.map((t, i) => ({ t: Date.parse(t), o: d.open[i], h: d.high[i], l: d.low[i], c: d.close[i], v: d.volume[i] }));
-      D.note = 'Weekly bars.';
+      note = 'Weekly bars.';
     } else if (V.range === 'All') {
       const d = await api.get(`/api/daily-bars/${enc}`, { ttl: 3600000, timeout: 60000 });
       bars = d.dates.map((t, i) => ({ t: Date.parse(t), o: d.open[i], h: d.high[i], l: d.low[i], c: d.close[i], v: d.volume[i] }));
-      D.note = 'Every daily bar since the listing.';
+      note = 'Every daily bar since the listing.';
     } else {
       const t = await tickerData();
       const ps = (t.technicals || {}).price_series || {};
       bars = (ps.dates || []).map((x, i) => ({ t: Date.parse(x), o: ps.open[i], h: ps.high[i], l: ps.low[i], c: ps.close[i], v: ps.volume[i] }));
-      D.note = 'Daily bars, split-adjusted.';
+      note = 'Daily bars, split-adjusted.';
     }
     bars = bars.filter((b) => isNum(b.c) && isNum(b.t) && b.c > 0).map((b) => ({ t: b.t, o: isNum(b.o) ? b.o : b.c, h: isNum(b.h) ? b.h : b.c, l: isNum(b.l) ? b.l : b.c, c: b.c, v: b.v || 0 }));
     if (bars.length < 5) throw new api.ApiError('notfound', 404, 'Not enough bars to draw.');
-    if (D.sym !== sym) return;
-    D.bars = bars;
-  } catch (e) { if (D.sym === sym) D.barsErr = e; }
+    if (!current()) return;
+    D.bars = bars; D.note = note;
+  } catch (e) { if (!current()) return; D.barsErr = e; }
   paintChart();
 }
 async function tickerData() {

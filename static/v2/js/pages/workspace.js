@@ -12,6 +12,7 @@ import { $, $$, html, raw, render as draw } from '../core/dom.js';
 import * as api from '../core/api.js';
 import * as store from '../core/store.js';
 import { num, signed, money, compact, dir, isNum, ago, clean, shortDate } from '../core/format.js';
+import { etDay } from '../core/marketTime.js';
 import { skeleton, failed } from '../ui/states.js';
 import { lineChart, spark, mountCharts, meter } from '../ui/chart.js';
 import { provideContext } from '../ui/milo.js';
@@ -75,7 +76,10 @@ const CADENCE = { priority: 'Every 10 min', cnews: 'Every 10 min', calendar: 'Ev
 // How often each cadence panel's source is rebuilt; data older than three of these says its age instead.
 const CADENCE_MS = { priority: 6e5, cnews: 6e5, calendar: 12e5, news: 12e5, earnings: 36e5, economy: 216e5 };
 const marketOpen = () => !!(((DATA.indices || {}).session) || {}).is_regular;
-const statusOf = (id) => (QUOTED.has(id) ? (marketOpen() ? 'Delayed 15 min' : 'Market closed') : (CADENCE[id] || ''));
+// Quoted panels say which prices they hold: delayed in session, otherwise the close they are from
+// (the footer's "Updated" time is when Optic fetched them, not when they traded).
+const lastClose = () => ((((DATA.indices || {}).session) || {}).last_close || {}).date;
+const statusOf = (id) => (QUOTED.has(id) ? (marketOpen() ? 'Delayed 15 min' : (lastClose() ? `${etDay(lastClose()).replace(/^\w+ /, '')} close` : 'Last close')) : (CADENCE[id] || ''));
 // Lists and tables take a default height for their kind and fill the rest of their row; the other
 // panels size to their content.
 const LIST = new Set(['watch', 'cnews', 'contracts', 'calendar', 'earnings', 'movers', 'news', 'alerts']);
@@ -144,9 +148,9 @@ const econChg = (v, unit, code) => (isNum(v) ? `${v > 0 ? '+' : v < 0 ? '−' : 
 const asof = (iso) => {
   if (!iso) return '';
   // a bare date (a daily close) has no time to show, and read as a moment it lands on the evening before
-  if (/^\d{4}-\d{2}-\d{2}$/.test(String(iso))) return `As of ${shortDate(iso)}`;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(String(iso))) return `Through ${shortDate(iso)}`;
   const t = new Date(iso), today = new Date().toDateString() === t.toDateString();
-  return `As of ${today ? '' : `${t.toLocaleDateString([], { month: 'short', day: 'numeric' })}, `}${t.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`;
+  return `Updated ${today ? '' : `${t.toLocaleDateString([], { month: 'short', day: 'numeric' })}, `}${t.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`;
 };
 
 /* ---------------- the panels ---------------- */
@@ -371,7 +375,7 @@ export const PANELS = {
       const items = [w.lead, ...(w.desks || []).flatMap((k) => k.entries || [])].filter((x) => x && x.title && !seen.has(x.url) && seen.add(x.url))
         .sort((a, b) => String(b.published || '').localeCompare(String(a.published || ''))).slice(0, 14);
       if (!items.length) return html`<p class="ws-note">No wire headlines in the last built Read.</p>`;
-      return html`<ul class="ws-news">${items.map((a) => html`<li><a href="${a.url}" target="_blank" rel="noopener noreferrer">${a.title}</a><span class="ws-rule">${a.source || ''}${a.published ? `, ${ago(a.published)}` : ''}${a.tone_label ? `, ${a.tone_label}` : ''}</span></li>`)}</ul>`;
+      return html`<ul class="ws-news">${items.map((a) => html`<li><a href="${a.url}" target="_blank" rel="noopener noreferrer">${a.title}</a><span class="ws-rule">${a.source || ''}${a.published ? `, ${ago(a.published)}` : ''}${(a.tone_terms || []).length ? `, ${a.tone_label === 'positive' ? 'leans positive' : a.tone_label === 'negative' ? 'leans negative' : 'mixed'}` : ''}</span></li>`)}</ul>`;
     },
     foot: (d) => ({ source: 'Public wire feeds via Optic\'s Read', at: (d || {}).built_at }),
     milo: 'What are the market-moving headlines today?',
@@ -441,7 +445,9 @@ const impSeg = (P) => html`<div class="seg ws-seg" role="group" aria-label="Impa
 
 /* ---------------- rendering ---------------- */
 let root = null, live = false, timer = null, lastScroll = 0, mq = null, mq2 = null;
-const DATA = {}, ERR = {}, PS = {}, AT = {}, RETRIED = {};
+// DLINK: the ticker a linked panel's data was fetched for. A panel never paints data for another ticker
+// under the current link (owner, 2026-10-19: Quote and chart showed SPY's name and price under AAPL).
+const DATA = {}, ERR = {}, PS = {}, AT = {}, RETRIED = {}, DLINK = {}, ERRLINK = {};
 const ps = (id) => (PS[id] || (PS[id] = JSON.parse(JSON.stringify(PANELS[id].state || {}))));
 const NEW = { starters: undefined, modes: undefined };
 const isNew = () => !store.allSymbols().length && !(DATA.portfolio && !DATA.portfolio.absent);
@@ -562,14 +568,16 @@ function paintBody(id) {
   if (sec && sec.hidden) { sec.hidden = false; fillRows(); }
   if (ERR[id]) {
     // a linked panel's 404 means the provider had nothing for this ticker just now, not that the panel is missing
-    if (p.linked && ERR[id].kind === 'notfound') draw(body, html`<div class="state err" role="alert"><p class="t-h3">${p.title} did not load</p><p>The data provider returned nothing for ${S.link} just now. This is usually brief.</p></div>`);
+    if (p.linked && ERR[id].kind === 'notfound') draw(body, html`<div class="state err" role="alert"><p class="t-h3">${p.title} did not load</p><p>The data provider returned nothing for ${ERRLINK[id] || S.link} just now. This is usually brief.</p></div>`);
     else draw(body, failed(p.title, ERR[id], {}));
     body.insertAdjacentHTML('beforeend', `<button type="button" class="btn btn-sm" data-ws-reload="${id}">Try again</button>`);
     draw(foot, ''); return;
   }
   const d = DATA[id]; if (d === undefined) return;
-  draw(body, p.body(d, P, S.link));
-  if (p.charts) mountCharts(body, p.charts(d, P, S.link));
+  if (p.linked && DLINK[id] !== S.link) { draw(body, skeleton('rows', 4, `Loading ${p.title} for ${S.link}`)); draw(foot, ''); return; }
+  const forLink = p.linked ? DLINK[id] : S.link;
+  draw(body, p.body(d, P, forLink));
+  if (p.charts) mountCharts(body, p.charts(d, P, forLink));
   const f = p.foot ? p.foot(d, P) : {};
   const old = f.at && CADENCE_MS[id] && Date.now() - Date.parse(f.at) > 3 * CADENCE_MS[id] ? `Built ${ago(f.at)}` : '';
   const st = d && d.building ? 'Building' : d && d.served_stale ? 'Updating' : old ? '' : (f.status || statusOf(id));
@@ -582,19 +590,20 @@ function paintBody(id) {
 async function loadPanel(id, { force = false, quiet = false } = {}) {
   const p = PANELS[id]; const P = ps(id);
   if (folded(id) && !force) return;
-  const linkAt = S.link; delete ERR[id];
+  const linkAt = S.link; delete ERR[id]; ERRLINK[id] = linkAt;
   if (force) { DATA[id] = undefined; const b = $(`#wsb-${id}`, root); if (b) draw(b, skeleton('rows', 4, `Loading ${p.title}`)); }
   try {
     const d = await p.load(S.link, P);
     if (!live || (p.linked && linkAt !== S.link)) return;   // the link moved on while this loaded
-    const was = DATA[id];
-    DATA[id] = d; AT[id] = Date.now();
+    const was = DATA[id], wasLink = DLINK[id];
+    DATA[id] = d; AT[id] = Date.now(); DLINK[id] = linkAt;
     // a board the server is still building: ask again shortly, quietly, while this panel is on screen
     if (d && d.building) setTimeout(() => { if (live && DATA[id] === d && !folded(id)) loadPanel(id, { quiet: true }); }, 12000);
     // a quiet refresh that changed nothing repaints nothing, so a reader mid-scroll keeps their place
-    if (quiet && was !== undefined && JSON.stringify(was) === JSON.stringify(d)) return;
+    if (quiet && was !== undefined && wasLink === linkAt && JSON.stringify(was) === JSON.stringify(d)) return;
   } catch (e) {
-    if (!live) return; if (quiet && DATA[id] !== undefined) return; ERR[id] = e; DATA[id] = undefined;
+    if (!live || (p.linked && linkAt !== S.link)) return;   // an error for a ticker no longer linked
+    if (quiet && DATA[id] !== undefined) return; ERR[id] = e; DATA[id] = undefined;
     // the provider sometimes has nothing for a ticker for a moment: one quiet retry before the reader has to
     if (p.linked && e.kind === 'notfound' && !RETRIED[id]) { RETRIED[id] = true; setTimeout(() => { if (live && ERR[id] === e) loadPanel(id, { force: true }); }, 5000); }
   }
@@ -656,7 +665,7 @@ function miloContext() {
     workspace: { layout: PRESETS[S.preset].label, linked_ticker: S.link, panels: layout().filter((x) => !x.hidden).map((x) => PANELS[x.id].title) },
     macro: m.regime ? { regime: m.regime, risk_score: m.risk_score, stance: m.stance, expected_move: m.expected_move } : undefined,
     sentiment: (DATA.regime || {}).s && DATA.regime.s.available !== false ? { score: DATA.regime.s.score, label: DATA.regime.s.label } : undefined,
-    linked_quote: q ? { ticker: S.link, price: q.price, change_pct: q.change_pct } : undefined,
+    linked_quote: q && DLINK.quote === S.link ? { ticker: S.link, price: q.price, change_pct: q.change_pct } : undefined,
     read: home && home.read ? home.read : undefined,
   };
 }

@@ -31,7 +31,10 @@ const TEMPLATES = [
 ];
 const DELTAS = { any: [0, 1, 'Any'], far: [0.1, 0.3, 'Far, .10 to .30'], mid: [0.3, 0.5, 'Middle, .30 to .50'], atm: [0.4, 0.6, 'At the money, .40 to .60'], deep: [0.6, 0.9, 'Deep, .60 to .90'] };
 
-let D = {}, R = {}, B = {}, live = true, refresh = null, mainEl = null, panelState = 0;
+// GEN: one per render. Every await checks it, so an answer for the symbol (or page) before never lands on this one:
+// a slow AAPL ticker load used to paint into MSFT's Options page (owner's cross-ticker audit, 2026-10-19).
+let D = {}, R = {}, B = {}, live = true, refresh = null, mainEl = null, panelState = 0, GEN = 0;
+const stillHere = (g) => live && g === GEN;
 
 function readFilters() {
   try { return Object.assign({ side: 'call', delta: 'any', maxSpread: 25, minOi: 0, unquoted: false, slippage: 0.25, fee: 0.65 }, JSON.parse(localStorage.getItem(FILTER_KEY) || '{}')); }
@@ -147,17 +150,18 @@ function payoffMaker() {
 }
 
 async function rows(expiry, side) {
-  const key = `${expiry}|${side}`;
-  if (B.cache[key]) return B.cache[key];
+  const key = `${expiry}|${side}`, mine = B;
+  if (mine.cache[key]) return mine.cache[key];
   const d = await api.get(`/api/options/${encodeURIComponent(D.sym)}/research?side=${side}&expiry=${expiry}&delta_lo=0&delta_hi=1`, { ttl: 120000, timeout: 30000 });
-  B.cache[key] = (d.table || {}).rows || [];
-  return B.cache[key];
+  mine.cache[key] = (d.table || {}).rows || [];   // into this render's cache, never the next symbol's
+  return mine.cache[key];
 }
 const nearest = (list, target) => list.filter((r) => r.mid).reduce((best, r) => (!best || Math.abs(Math.abs(r.delta) - target) < Math.abs(Math.abs(best.delta) - target) ? r : best), null);
 
 async function template(id) {
   const exp = R.expiry; if (!exp) return;
   B.error = null; B.template = id;
+  const g = GEN, mine = B;
   try {
     const calls = await rows(exp, 'call'), puts = await rows(exp, 'put');
     const L = (r, side, qty = 1) => (r ? { type: r.type, side, qty, strike: r.strike, expiry: r.expiry } : null);
@@ -179,20 +183,24 @@ async function template(id) {
       const back = await rows(later.expiry, 'call'); const k = c(0.5);
       legs = [L(k, 'short'), L(back.find((r) => r.strike === (k || {}).strike) || nearest(back, 0.5), 'long')];
     }
+    if (!stillHere(g) || mine !== B) return;
     if (legs.some((l) => !l)) throw new Error('This expiry has no quoted contract near the deltas the template needs.');
     B.legs = legs;
     await analyze();
-  } catch (e) { B.error = e.message; paintBuilder(); }
+  } catch (e) { if (!stillHere(g) || mine !== B) return; B.error = e.message; paintBuilder(); }
 }
 
 async function analyze() {
   if (!B.legs.length) { B.analysis = null; paintBuilder(); return; }
   B.analyzing = true; B.error = null; paintResult();
+  const g = GEN, mine = B;
   try {
-    B.analysis = await api.post(`/api/options/${encodeURIComponent(D.sym)}/analyze`, { legs: B.legs, slippage: B.slippage, fee_per_contract: B.fee, days_forward: B.days || undefined }, { timeout: 45000 });
+    const out = await api.post(`/api/options/${encodeURIComponent(D.sym)}/analyze`, { legs: B.legs, slippage: B.slippage, fee_per_contract: B.fee, days_forward: B.days || undefined }, { timeout: 45000 });
+    if (!stillHere(g) || mine !== B) return;
+    B.analysis = out;
     const whens = [...new Set(((B.analysis.scenarios || {}).rows || []).map((r) => r.when))];
     if (!whens.includes(B.when)) B.when = whens[0] || 'now';
-  } catch (e) { B.analysis = null; B.error = e.message || 'The server could not price it.'; }
+  } catch (e) { if (!stillHere(g) || mine !== B) return; B.analysis = null; B.error = e.message || 'The server could not price it.'; }
   B.analyzing = false;
   paintBuilder();
 }
@@ -241,16 +249,16 @@ function research() {
 
 async function loadResearch() {
   R.loading = true; R.error = null; paintResearch();
-  const my = ++R.seq;
+  const my = ++R.seq, g = GEN;
   const [lo, hi] = DELTAS[R.delta] || DELTAS.any;
   const q = new URLSearchParams({ side: R.side, delta_lo: lo, delta_hi: hi, min_oi: R.minOi || 0, include_unquoted: R.unquoted ? 'true' : 'false' });
   if (R.expiry) q.set('expiry', R.expiry);
   if (Number(R.maxSpread)) q.set('max_spread', R.maxSpread);
   try {
     const d = await api.get(`/api/options/${encodeURIComponent(D.sym)}/research?${q}`, { ttl: 60000, timeout: 30000 });
-    if (my !== R.seq || !live) return;
+    if (my !== R.seq || !stillHere(g)) return;
     R.data = d; R.expiry = d.expiry;
-  } catch (e) { if (my !== R.seq) return; R.error = e; }
+  } catch (e) { if (my !== R.seq || !stillHere(g)) return; R.error = e; }
   R.loading = false;
   paintResearch(); paintBuilder();
 }
@@ -294,27 +302,28 @@ function paintMore() {
 async function loadExtra() {
   if (D.extra.loading) return;
   D.extra.loading = true;
-  const enc = encodeURIComponent(D.sym);
+  const enc = encodeURIComponent(D.sym), g = GEN;
   const [st, se, rp] = await Promise.allSettled([api.get(`/api/setups?symbols=${enc}&status=recent`, { ttl: 300000 }), api.get(`/api/seasonality/${enc}`, { ttl: 3600000 }), api.get(`/api/relperf/${enc}`, { ttl: 600000 })]);
+  if (!stillHere(g)) return;
   D.extra = { loading: true, setups: st.status === 'fulfilled' ? st.value : null, seasonality: se.status === 'fulfilled' ? se.value : null, relperf: rp.status === 'fulfilled' ? rp.value : null };
   if (live && panelState === PANELS.length - 1) paintMore();
 }
 
 async function loadTicker({ quiet } = {}) {
-  const enc = encodeURIComponent(D.sym);
+  const enc = encodeURIComponent(D.sym), g = GEN;
   try {
     const t = await api.get(`/api/ticker/${enc}?max_expiries=4&macro=true${D.budget ? `&budget=${D.budget}` : ''}`, { ttl: quiet ? 0 : 120000, force: !!quiet, timeout: 60000 });
-    if (!live) return;
+    if (!stillHere(g)) return;
     D.t = t; D.tErr = null; D.lab = D.lab || P.labDefaults(t);
     if (t.quote) D.quote = Object.assign({}, D.quote || {}, t.quote);
-  } catch (e) { if (!quiet) D.tErr = e; }
+  } catch (e) { if (!stillHere(g)) return; if (!quiet) D.tErr = e; }
   paintTop();
   if (!quiet) paintMore();
 }
 
 export async function render(main, route) {
-  live = true; mainEl = main; panelState = 0;
-  const sym = route.symbol;
+  live = true; mainEl = main; panelState = 0; GEN += 1;
+  const sym = route.symbol, g = GEN;
   const f = readFilters();
   D = { sym, extra: {}, budget: readBudget() };
   R = { side: f.side, delta: f.delta, maxSpread: f.maxSpread, minOi: f.minOi, unquoted: f.unquoted, more: false, expiry: null, data: null, seq: 0 };
@@ -326,8 +335,8 @@ export async function render(main, route) {
   draw(main, html`<div id="op-top"></div><div id="op-builder"></div><section class="section" id="op-research" aria-labelledby="rc-h"></section><div id="op-more"></div>`);
   paintTop(); paintBuilder(); paintResearch(); paintMore();
   wire(main);
-  core(sym).then((c) => { if (!live || D.sym !== sym) return; D.quote = Object.assign({}, c.quote || {}, D.quote || {}); D.session = c.session; D.quoteError = c.quoteError; paintTop(); });
-  api.get(`/api/earnings/${encodeURIComponent(sym)}`, { ttl: 600000, timeout: 45000 }).then((e) => { if (live && D.sym === sym) { D.earn = e; paintTop(); } }).catch(() => {});
+  core(sym).then((c) => { if (!stillHere(g)) return; D.quote = Object.assign({}, c.quote || {}, D.quote || {}); D.session = c.session; D.quoteError = c.quoteError; paintTop(); });
+  api.get(`/api/earnings/${encodeURIComponent(sym)}`, { ttl: 600000, timeout: 45000 }).then((e) => { if (stillHere(g)) { D.earn = e; paintTop(); } }).catch(() => {});
   loadTicker();
   loadResearch();
   // A light refresh while the market trades, of the readings only.

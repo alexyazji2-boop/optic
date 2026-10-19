@@ -127,3 +127,23 @@ def test_the_method_explains_the_close_call_threshold():
     out = _take({"swing": [{"ticker": "NVDA", "score": 81.0},
                            {"ticker": "KO", "score": 40.0}]})
     assert "five points" in out["method"]
+
+
+def test_a_level_horizon_is_called_level_in_the_headline():
+    """SPY against MSFT, 2026-10-19: the long-term scores were 0.3 points apart, the table said level, and
+    the headline still named SPY its leader."""
+    out = _take({
+        "swing": [{"ticker": "MSFT", "score": 68.0}, {"ticker": "SPY", "score": 43.0}],
+        "position": [{"ticker": "MSFT", "score": 69.0}, {"ticker": "SPY", "score": 52.0}],
+        "longterm": [{"ticker": "SPY", "score": 66.3}, {"ticker": "MSFT", "score": 66.0}],
+    })
+    assert out["headline"] == "MSFT leads the swing setup and the position setup; the long-term trend is level."
+    assert out["unanimous"] is False and out["overall"] == "MSFT"
+    assert "SPY on the long-term" not in out["headline"]
+
+
+def test_every_horizon_level_names_no_leader():
+    out = _take({"swing": [{"ticker": "NVDA", "score": 61.0}, {"ticker": "KO", "score": 59.8}],
+                 "position": [{"ticker": "KO", "score": 50.0}, {"ticker": "NVDA", "score": 48.0}]})
+    assert out["headline"] == "No name leads: the scores are level on every horizon."
+    assert out["overall"] is None

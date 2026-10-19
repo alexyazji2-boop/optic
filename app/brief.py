@@ -359,6 +359,9 @@ def _classify(entry: Dict[str, Any], allowed: Optional[set] = None) -> Dict[str,
         **entry,
         "catalysts": tags,
         "tone": verdict["tone"],
+        # The lexicon terms behind the tone, so a page can tell "no term matched" (say nothing) from terms
+        # that cancelled (mixed); "neutral" alone claimed a judgment the lexicon never made (2026-10-19).
+        "tone_terms": verdict["terms"],
         # Sorting and colour only — the raw lexicon sum is not a number to show.
         "tone_label": ("positive" if verdict["tone"] >= 2
                        else "negative" if verdict["tone"] <= -2 else "neutral"),

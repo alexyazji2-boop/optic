@@ -24,7 +24,7 @@ function timeline(articles) {
   const lanes = [['About the company', 50], ['Market context', 110]];
   const marks = pts.map(({ a, t }, i) => {
     const y = a.about_company === false ? 110 : 50, x = X(t), s = 4 + 2.5 * (TIER_W[a.tier] || 1), shape = toneShape(a.tone);
-    const label = `${clean(a.title)}. ${a.publisher}, ${a.age_words || ''}. ${capFirst(a.tier || '')}, ${a.tone || 'neutral'}.`;
+    const label = `${clean(a.title)}. ${a.publisher}, ${a.age_words || ''}. ${capFirst(a.tier || '')}, ${(a.keywords || []).length ? a.tone : 'not scored'}.`;
     const g = shape === 'up' ? `<path d="M${x} ${y - s}L${x + s} ${y + s * 0.8}L${x - s} ${y + s * 0.8}Z"/>` : shape === 'down' ? `<path d="M${x} ${y + s}L${x + s} ${y - s * 0.8}L${x - s} ${y - s * 0.8}Z"/>` : `<circle cx="${x}" cy="${y}" r="${s * 0.8}"/>`;
     return `<g class="tl-m tl-${shape}">${g}<title>${esc(label)}</title></g>`;
   }).join('');
@@ -35,7 +35,9 @@ function timeline(articles) {
 }
 
 function row(a) {
-  return html`<li class="nw"><div class="nw-top"><span class="pill" title="${a.tier_why || ''}">${capFirst(a.tier || '')}</span><span class="nw-tone ${toneShape(a.tone)}">${capFirst(a.tone || 'neutral')}</span></div>
+  // A tone is shown only when a scored term supports it; the terms are its evidence (owner, 2026-10-19).
+  const terms = (a.keywords || []).map((k) => `${k.slice(1)} (${k[0] === '+' ? 'positive' : 'negative'})`);
+  return html`<li class="nw"><div class="nw-top"><span class="pill" title="${a.tier_why || ''}">${capFirst(a.tier || '')}</span>${terms.length ? html`<span class="nw-tone ${toneShape(a.tone)}" title="Scored on: ${terms.join(', ')}">${capFirst(a.tone || 'mixed') === 'Neutral' ? 'Mixed' : capFirst(a.tone)}</span>` : html`<span class="nw-tone flat" title="No word in Optic's list of scored terms appears in this headline">Not scored</span>`}</div>
     <a class="nw-title" href="${a.url}" target="_blank" rel="noopener">${clean(a.title)}</a>
     <p class="t-muted">${a.publisher}, ${a.age_words || ''}</p>
     ${a.summary ? html`<p>${clean(a.summary).slice(0, 220)}${a.summary.length > 220 ? '…' : ''}</p>` : ''}

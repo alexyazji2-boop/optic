@@ -19,6 +19,7 @@ import { header as frameHeader, tabs as frameTabs, isFund } from './dossier-fram
 import { button as miloButton, provideContext } from '../ui/milo.js';
 import * as drawer from '../ui/drawer.js';
 import { hrefFor } from '../nav.js';
+import { kindOf, learn } from '../core/instrument.js';
 
 let live = true;
 let D = {};
@@ -76,6 +77,24 @@ function mountChart(main, sym) {
 }
 
 /* ---------------- the four answers ---------------- */
+// A fund gets a fund's questions (core/instrument.js): what it holds, what its holdings cost, whether there
+// is a trade, what it pays. The company questions answered "Not graded" and printed an SEC 404 (2026-10-19).
+const isFundHere = (sym) => kindOf(sym, D) === 'fund';
+function fundAnswers(sym, tradeItem) {
+  const prof = (D.session || {}).profile || {}, h = (D.longterm || {}).holding || {}, val = h.valuation || {}, q = D.quote || {};
+  const yieldPct = isNum(q.dividend_yield) ? q.dividend_yield * 100 : isNum(val.dividend_yield) ? val.dividend_yield * 100 : null;
+  return [
+    { k: 'quality', q: 'What is it?', a: !D.session ? null : `${prof.category ? `A ${prof.category.toLowerCase()} fund` : 'A fund'}${prof.fund_family ? ` from ${prof.fund_family}` : ''}.`,
+      because: clip(clean(prof.summary || 'The feed has no description for this fund.'), 190) },
+    { k: 'price', q: 'What do its holdings cost?', a: !D.longterm ? null : isNum(val.trailing_pe) ? `${num(val.trailing_pe, 1)} times trailing earnings.` : 'No valuation for its holdings in the feed.',
+      because: `${isNum(val.price_to_book) ? `Price to book ${num(val.price_to_book, 2)}. ` : ''}A fund's price follows what it holds, so Optic gives no fair value range of its own.` },
+    tradeItem,
+    { k: 'next', q: 'What does it pay?', a: !D.quote && !D.longterm ? null : isNum(yieldPct) ? `${num(yieldPct, 2)}% a year.` : 'No yield in the feed.',
+      because: 'Distributions pass on what the holdings pay. A fund reports no earnings of its own; its holdings do.' },
+  ];
+}
+const clip = (t, n) => (t.length > n ? `${t.slice(0, t.lastIndexOf(' ', n))}…` : t);
+
 function answers(sym) {
   const fw = D.framework || {}, lt = fw.long_term || {}, sw = fw.swing || {};
   const qy = lt.quality || {}, fv = (D.fairValue || {}).fair_value || {}, st = (D.fairValue || {}).stars || {};
@@ -92,11 +111,16 @@ function answers(sym) {
       : clean([st.reason, fv.wide ? fv.wide_note : fv.reason].filter(Boolean).join(' ')) });
   const setup = sw.setup || {};
   const tradeA = !D.framework ? null : sw.grade === 'S' || sw.grade === 'A' ? `Yes. A grade ${sw.grade} ${setup.kind || 'setup'}.` : sw.grade === 'B' ? `Not yet. ${capFirst(setup.kind || 'a setup')} is forming.` : sw.grade ? 'No clear trade.' : 'Not graded.';
-  out.push({ k: 'trade', q: 'Is there a trade?', a: tradeA,
-    because: sw.grade ? html`<span class="chip-tag">Grade ${sw.grade}</span>${clean(setup.why || sw.why || '')}` : '' });
+  const tradeItem = { k: 'trade', q: 'Is there a trade?', a: tradeA,
+    because: sw.grade ? html`<span class="chip-tag">Grade ${sw.grade}</span>${clean(setup.why || sw.why || '')}` : '' };
+  if (isFundHere(sym)) { out.length = 0; out.push(...fundAnswers(sym, tradeItem)); return answerGrid(out); }
+  out.push(tradeItem);
   const nextA = !D.earnings ? null : nr.date ? `Earnings on ${longDate(nr.date)}.` : 'No report date yet.';
   out.push({ k: 'next', q: "What's next?", a: nextA,
     because: nr.date ? html`${capFirst(timing[nr.timing] || '')}${timing[nr.timing] ? ', ' : ''}in ${nr.days_away} days${nr.confirmed ? ', confirmed' : ''}.${im ? html` Options price ±${num(im.pct)}% through the ${shortDate(im.expiry)} expiry; report days have averaged ±${num(pr.event_day_avg_pct)}%.` : ''}` : '' });
+  return answerGrid(out);
+}
+function answerGrid(out) {
   return html`<section class="answers" aria-label="Four questions, answered">${out.map((x) => x.a === null
     ? html`<div class="answer is-loading"><span class="answer-in"><span class="q">${x.q}</span>${skeleton('lines', 3)}</span></div>`
     : html`<button type="button" class="answer" data-v2-answer="${x.k}" aria-expanded="false" aria-labelledby="aq-${x.k} aa-${x.k}" aria-describedby="ab-${x.k}"><span class="answer-in"><span class="q" id="aq-${x.k}">${x.q}</span><span class="a" id="aa-${x.k}">${x.a}</span><span class="because" id="ab-${x.k}">${x.because}</span><span class="go">Evidence and method ${icon('arrow')}</span></span></button>`)}</section>`;
@@ -117,7 +141,26 @@ export function historyRatio(pr, im, quartersIn) {
     <p class="t-note">Options are ${stanceWord[pr.stance] || pr.stance}.</p></div>`;
 }
 
+function fundEvidence(k, sym) {
+  const prof = (D.session || {}).profile || {}, h = (D.longterm || {}).holding || {}, val = h.valuation || {}, q = D.quote || {};
+  if (k === 'quality') {
+    return html`<p>${clean(prof.summary || 'The feed has no description for this fund.')}</p>
+      <dl class="kv"><div><dt>Category</dt><dd>${prof.category || 'n/a'}</dd></div><div><dt>Fund family</dt><dd>${prof.fund_family || 'n/a'}</dd></div><div><dt>Type</dt><dd>${prof.kind_label || 'Fund'}</dd></div></dl>
+      <p class="asof">Source: the fund's profile in Yahoo Finance's feed. Its holdings list is not in Optic's feed.</p>`;
+  }
+  if (k === 'price') {
+    return html`<dl class="kv"><div><dt>P/E of its holdings, trailing</dt><dd>${num(val.trailing_pe, 1)}</dd></div><div><dt>Price to book</dt><dd>${num(val.price_to_book, 2)}</dd></div><div><dt>52-week range</dt><dd>${num((h.fundamentals || {}).fifty_two_low)} to ${num((h.fundamentals || {}).fifty_two_high)}</dd></div></dl>
+      <p>These are the holdings' figures, weighted by the fund. A fund's price follows what it holds, so there is no business of its own to value and no fair value range.</p><p class="asof">${clean(val.caveat || '')}</p>`;
+  }
+  if (k === 'next') {
+    return html`<p>${isNum(q.dividend_yield) ? html`<b>${num(q.dividend_yield * 100, 2)}% a year</b>, the trailing distribution yield.` : 'No distribution yield in the feed.'}</p>
+      <p>A fund reports no earnings; the companies it holds do. Their reports this week are on Home's Earnings panel and in Markets.</p>`;
+  }
+  return null;
+}
+
 function evidence(k, sym) {
+  if (isFundHere(sym)) { const f = fundEvidence(k, sym); if (f) return f; }
   const fw = D.framework || {}, lt = fw.long_term || {}, sw = fw.swing || {};
   const qy = lt.quality || {}, val = lt.valuation || {};
   const fvd = D.fairValue || {}, fv = fvd.fair_value || {}, st = fvd.stars || {};
@@ -158,7 +201,28 @@ function evidence(k, sym) {
 }
 
 /* ---------------- two long-term views (point 3) ---------------- */
+function fundRecord(sym) {
+  const h = (D.longterm || {}).holding;
+  if (!h) return html`<section class="section">${skeleton('lines', 3, 'Loading the long-term record')}</section>`;
+  const sc = h.conviction_scale || {}, s100 = !h.error ? score100(h.conviction_score, sc.min_possible, sc.max_possible) : null;
+  const hz = h.horizons || {}, dd = h.drawdown || {}, rk = h.risk || {};
+  const pct = (v) => (isNum(v) ? signed(v, 1) : 'n/a');
+  return html`<section class="section" aria-labelledby="lv-h">
+    <div class="section-head"><div><h2 class="t-h2" id="lv-h">The long-term record</h2><p class="section-sub">From ${num((h.data_quality || {}).history_years, 0)} years of daily closes.</p></div></div>
+    <div class="views">
+      <div class="view"><p class="t-label">Long-term trend score, from price history</p>
+        <p class="n">${s100 === null ? 'n/a' : num(s100, 0)}<small> of 100</small></p><p>${clean(h.plan || '')}</p>
+        <p class="asof">The 200-week and 40-week trends, return per unit of risk and distance from the high.</p></div>
+      <div class="view"><p class="t-label">Returns a year, and the falls along the way</p>
+        <dl class="kv"><div><dt>1 year</dt><dd>${pct(hz.return_1y_pct)}</dd></div><div><dt>3 years</dt><dd>${pct(hz.cagr_3y_pct)}</dd></div><div><dt>5 years</dt><dd>${pct(hz.cagr_5y_pct)}</dd></div><div><dt>10 years</dt><dd>${pct(hz.cagr_10y_pct)}</dd></div>
+          <div><dt>Largest fall</dt><dd>${pct(dd.max_drawdown_pct)}${dd.max_drawdown_date ? html` <small>to ${shortDate(dd.max_drawdown_date)} ${String(dd.max_drawdown_date).slice(0, 4)}</small>` : ''}</dd></div><div><dt>Below its high now</dt><dd>${pct(dd.current_drawdown_pct)}</dd></div>
+          <div><dt>Volatility, annualised</dt><dd>${isNum(rk.annualised_vol_pct) ? `${num(rk.annualised_vol_pct, 1)}%` : 'n/a'}</dd></div></dl>
+        <p class="asof">Compound annual returns from closing prices, before tax; distributions are not reinvested in these figures.</p></div>
+    </div></section>`;
+}
+
 function longViews(sym) {
+  if (isFundHere(sym)) return fundRecord(sym);
   const h = (D.longterm || {}).holding;
   const lt = (D.framework || {}).long_term || {};
   if (!h && !D.framework) return html`<section class="section">${skeleton('lines', 3, 'Loading the long-term views')}</section>`;
@@ -189,7 +253,7 @@ function longViews(sym) {
 
 function combined() {
   const c = (D.framework || {}).combined;
-  if (!c) return '';
+  if (!c || isFundHere(D.sym)) return '';   // the combined verdict weighs a business case a fund does not have
   return html`<section class="section verdict" aria-labelledby="cv-h"><h2 class="t-h3" id="cv-h">Taken together</h2>
     <p class="verdict-line">${clean(c.verdict)}</p>
     <ul class="plain">${(c.lines || []).map((l) => html`<li>${clean(l)}</li>`)}</ul>
@@ -216,12 +280,15 @@ function more(sym) {
   const t = D.ticker || {}, q = D.quote || {}, prof = (D.session || {}).profile || {};
   const cases = t.cases || {}, news = t.news || {}, fil = (t.filings || {}).filings || [];
   const name = q.name || sym;
-  const kv = [['Market cap', compact(q.market_cap)], ['P/E, trailing', num(q.trailing_pe, 1)], ['P/E, forward', num(q.forward_pe, 1)], ['52-week range', `${num(q.fifty_two_low)} to ${num(q.fifty_two_high)}`],
-    ['Volume', compact(q.volume)], ['Average volume', compact(q.avg_volume)], ['Dividend yield', isNum(q.dividend_yield) ? `${num(q.dividend_yield * 100, 2)}%` : 'n/a'], ['Beta', num(q.beta, 2)]];
+  const kv = isFundHere(sym)
+    ? [['P/E of its holdings', num(q.trailing_pe, 1)], ['Distribution yield', isNum(q.dividend_yield) ? `${num(q.dividend_yield * 100, 2)}%` : 'n/a'], ['52-week range', `${num(q.fifty_two_low)} to ${num(q.fifty_two_high)}`],
+      ['Volume', compact(q.volume)], ['Average volume', compact(q.avg_volume)], ['Category', prof.category || 'n/a']]
+    : [['Market cap', compact(q.market_cap)], ['P/E, trailing', num(q.trailing_pe, 1)], ['P/E, forward', num(q.forward_pe, 1)], ['52-week range', `${num(q.fifty_two_low)} to ${num(q.fifty_two_high)}`],
+      ['Volume', compact(q.volume)], ['Average volume', compact(q.avg_volume)], ['Dividend yield', isNum(q.dividend_yield) ? `${num(q.dividend_yield * 100, 2)}%` : 'n/a'], ['Beta', num(q.beta, 2)]];
   const items = [
     ['Key figures', html`<dl class="kv">${kv.map(([k, v]) => html`<div><dt>${k}</dt><dd>${v}</dd></div>`)}</dl>`, ''],
     ...(cases.available ? [['Bull case and bear case', html`<div class="cases"><div><h3>For</h3><ul class="plain">${(cases.bull || []).map((c) => html`<li><b>${clean(c.claim)}.</b> ${clean(c.detail)}</li>`)}</ul></div><div><h3>Against</h3><ul class="plain">${(cases.bear || []).map((c) => html`<li><b>${clean(c.claim)}.</b> ${clean(c.detail)}</li>`)}</ul></div></div>`, `${(cases.bull || []).length} for, ${(cases.bear || []).length} against`]] : []),
-    ...(prof.summary ? [[`What does ${name} do?`, html`<p>${clean(prof.summary)}</p>`, '']] : []),
+    ...(prof.summary ? [[isFundHere(sym) ? `What is ${name}?` : `What does ${name} do?`, html`<p>${clean(prof.summary)}</p>`, '']] : []),
     ...((news.articles || []).length ? [['Latest headlines', html`<ul class="plain">${news.articles.slice(0, 6).map((a) => html`<li><a href="${a.url}" target="_blank" rel="noopener">${clean(a.title)}</a> <span class="t-muted">${a.publisher}, ${a.age_words || ''}, ${a.tone || ''}</span></li>`)}</ul><a class="textlink" href="${hrefFor('news', sym)}">All headlines on News ${icon('out')}</a>`, news.overall_tone || '']] : []),
     ...(fil.length ? [['Recent SEC filings', html`<ul class="plain">${fil.slice(0, 5).map((f) => html`<li><a href="${f.url}" target="_blank" rel="noopener">${f.form}</a> ${clean(f.what)}, filed ${fullDate(f.filed)}</li>`)}</ul>`, `${Math.min(5, fil.length)} newest`]] : []),
     ['Thesis check', html`<p>Save the conditions your idea depends on, and Optic marks each one as holding or broken. Theses are in the current app for now.</p><a class="textlink" href="${CLASSIC}#/${sym}">Open the thesis check ${icon('out')}</a>`, ''],
@@ -265,7 +332,7 @@ export async function render(main, route) {
   const enc = encodeURIComponent(sym);
   const step = (p, ok, bad) => { p.then((d) => { if (D.sym === sym) ok(d); }, (e) => { if (D.sym === sym) bad(e); }).finally(() => { if (D.sym === sym) paint(main, sym); }); };
   step(api.get(`/api/quote/${enc}`, { ttl: 20000, timeout: 15000 }), (d) => { if (d && d.available !== false) D.quote = Object.assign({}, d.quote || d, D.quote || {}); else D.quoteError = new api.ApiError('notfound', 404, `No quote for ${sym}`); }, (e) => { D.quoteError = e; });
-  step(api.get(`/api/session/${enc}`, { ttl: 60000 }), (d) => { D.session = d; }, () => {});
+  step(api.get(`/api/session/${enc}`, { ttl: 60000 }), (d) => { D.session = d; learn(sym, { session: d, quote: D.quote }); }, () => {});
   step(api.get(`/api/ticker/${enc}?max_expiries=4&macro=true`, { ttl: 120000, timeout: 60000 }), (d) => {
     D.ticker = d; if (d.quote) D.quote = Object.assign({}, D.quote || {}, d.quote);
     if (d.data_caveat) D.freshText = clean(d.data_caveat);

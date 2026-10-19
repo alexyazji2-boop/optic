@@ -72,6 +72,16 @@ export function leader(row, cols) {
   const hit = cols.find((r) => r[row.key] === best);
   return hit ? hit.ticker : null;
 }
+// One tie rule for the prose, the winner cards, the bars and the table (owner, 2026-10-19: "too close to
+// separate" sat beside "best" and "#2"). Names within TIE points of the top share first place, so nobody
+// is "best" alone then; the server's winner cards use the same 5 points (analytics/compare.py, decisive).
+export function standing(ranks) {
+  const r = (ranks || []).slice().sort((a, b) => b.score - a.score), out = {};
+  if (!r.length) return out;
+  const level = r.filter((x) => r[0].score - x.score < TIE);
+  r.forEach((x, i) => { out[x.ticker] = level.includes(x) ? (level.length > 1 ? 'level' : 'best') : `#${i + 1}`; });
+  return out;
+}
 export function rankRead(ranks) {
   if (!ranks || ranks.length < 2) return '';
   const [a, b] = ranks, gap = a.score - b.score;
@@ -99,7 +109,7 @@ function take(c) {
   return html`<section class="section" aria-labelledby="ct-h"><div class="section-head"><div><h2 class="t-h2" id="ct-h">Optic's take <span class="pill">${t.unanimous ? 'all horizons agree' : 'horizons disagree'}</span></h2></div>
       ${miloButton('Ask Milo about this comparison', { ask: `Compare ${c.tickers.join(', ')}. ${t.headline || ''} Which would you look at first for my timeframe, and what is each one's biggest risk?`, context: 'Compare' })}</div>
     <p class="lead-line">${clean(t.headline || '')}</p>
-    <div class="cmp-winners">${Object.entries(t.winners || {}).map(([hid, w]) => html`<div class="cmp-win ${w.decisive ? '' : 'is-close'}"><p class="t-label">${(hz[hid] || {}).name || w.name || hid}</p><p class="cmp-win-t">${w.ticker}</p><p class="t-muted">${w.decisive ? `ahead by ${num(w.gap, 1)} points` : `only ${num(w.gap, 1)} points clear, a close call rather than a ranking`}</p></div>`)}</div>
+    <div class="cmp-winners">${Object.entries(t.winners || {}).map(([hid, w]) => html`<div class="cmp-win ${w.decisive ? '' : 'is-close'}"><p class="t-label">${(hz[hid] || {}).name || w.name || hid}</p><p class="cmp-win-t">${w.decisive ? w.ticker : 'Level'}</p><p class="t-muted">${w.decisive ? `ahead by ${num(w.gap, 1)} points` : `${num(w.gap, 1)} points apart, under ${TIE}: not a ranking`}</p></div>`)}</div>
     ${(t.standouts || []).length ? html`<ul class="plain">${t.standouts.map((s) => html`<li><b>${s.ticker}</b> has ${clean(s.phrase)}</li>`)}</ul>` : ''}
     ${t.method ? html`<p class="asof">${clean(t.method)}</p>` : ''}</section>`;
 }
@@ -130,7 +140,7 @@ function bars(c) {
   return html`<section class="section" aria-labelledby="cb-h"><h2 class="t-h2" id="cb-h">Where each name leads</h2>
     <p class="section-sub">Every bar is the same 0-100 composite for its horizon, so the bars compare across names within a horizon. Two scores within ${TIE} points are treated as level.</p>
     <div class="cmp-bars">${(c.horizons || []).map((h) => { const r = ((c.ranks || {})[h.id] || []).slice().sort((a, b) => b.score - a.score); const gap = r.length > 1 ? r[0].score - r[1].score : 0;
-      return html`<div class="cmp-hz ${gap >= TIE ? 'is-clear' : ''}"><h3>${h.name} <span class="t-muted">${h.horizon}</span></h3><p class="t-muted">${gap < 0.05 ? 'level' : `${num(gap, 1)} point${num(gap, 1) === '1.0' ? '' : 's'} clear`}</p>
+      return html`<div class="cmp-hz ${gap >= TIE ? 'is-clear' : ''}"><h3>${h.name} <span class="t-muted">${h.horizon}</span></h3><p class="t-muted">${gap < TIE ? `level: ${num(gap, 1)} point${num(gap, 1) === '1.0' ? '' : 's'} apart, under ${TIE}` : `${r[0].ticker} ${num(gap, 1)} points clear`}</p>
         ${raw(hbars(r.map((x) => ({ label: x.ticker, v: Math.max(1, Math.min(100, x.score)) })), { fmt: (v) => num(v, 0), max: 100 }))}</div>`; })}</div></section>`;
 }
 
@@ -142,7 +152,8 @@ function grid(c) {
     <div class="tscroll"><table class="t cmp-t"><caption class="sr">Every metric for ${c.tickers.join(', ')}</caption>
       <thead><tr><th scope="col">Metric</th>${rows.map((r) => html`<th scope="col"><a href="#/${r.ticker}">${r.ticker}</a>${r.name && r.name !== r.ticker ? html`<br><small class="t-muted">${r.name}</small>` : ''}${r.sector ? html`<br><small class="t-muted">${r.sector}</small>` : ''}</th>`)}</tr></thead>
       <tbody>${(c.horizons || []).map((h) => { const rk = (c.ranks || {})[h.id] || [];
-        return html`<tr class="cmp-rank"><th scope="row">${h.name}<br><small class="t-muted">${rankRead(rk)}</small></th>${rows.map((r) => { const x = rk.find((y) => y.ticker === r.ticker); return html`<td>${x ? html`<span class="${x.rank === 1 ? 'cmp-best' : 't-muted'}">${x.rank === 1 ? 'best' : `#${x.rank}`}</span> ${num(x.score, 0)}` : 'n/a'}</td>`; })}</tr>`; })}
+        const st = standing(rk);
+        return html`<tr class="cmp-rank"><th scope="row">${h.name}<br><small class="t-muted">${rankRead(rk.slice().sort((x, y) => y.score - x.score))}</small></th>${rows.map((r) => { const x = rk.find((y) => y.ticker === r.ticker), w = x ? st[x.ticker] : ''; return html`<td>${x ? html`<span class="${w === 'best' ? 'cmp-best' : w === 'level' ? 'cmp-level' : 't-muted'}">${w}</span> ${num(x.score, 0)}` : 'n/a'}</td>`; })}</tr>`; })}
       ${GROUPS.map((g) => html`<tr class="cmp-group"><th scope="rowgroup" colspan="${rows.length + 1}">${g.title}</th></tr>
         ${g.rows.map((m) => { const lead = leader(m, rows);
           return html`<tr><th scope="row">${m.label}${m.note ? html` <small class="t-muted">${m.note}</small>` : ''}<br><small class="t-muted">${m.means}</small></th>${rows.map((r) => html`<td>${cell(m.kind, r[m.key])}${lead === r.ticker ? html` <span class="cmp-dot" title="${m.lead === 'high' ? 'Higher' : 'Lower'} on this measure">·<span class="sr">, leads this row</span></span>` : ''}${m.sub && r[m.sub] ? html`<br><small class="t-muted">${clean(r[m.sub])}</small>` : ''}</td>`)}</tr>`; })}`)}</tbody></table></div>

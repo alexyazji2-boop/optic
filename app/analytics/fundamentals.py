@@ -37,6 +37,10 @@ ROW_ALIASES = {
 }
 
 
+
+# A holder "added" or "trimmed" when its stake changed by more than this fraction of itself at the last 13F.
+HOLDER_CHANGE = 0.02
+
 def _f(value: Any, digits: int = 4) -> Optional[float]:
     try:
         out = float(value)
@@ -356,13 +360,15 @@ def analyse_ownership(insiders: Dict[str, Any], institutions: Dict[str, Any]) ->
         else:
             notes.append("{:.0f}% institutionally held.".format(pct))
 
-    accumulating = [h for h in holders if (h.get("pct_change") or 0) > 0.02]
-    trimming = [h for h in holders if (h.get("pct_change") or 0) < -0.02]
+    # Counted against a 2% change in the holder's own stake, so small rebalancing is not "adding". The scope and
+    # the threshold travel with the counts: a page said "two added" above a list with six positive changes and
+    # said neither (owner, 2026-10-19).
+    accumulating = [h for h in holders if (h.get("pct_change") or 0) > HOLDER_CHANGE]
+    trimming = [h for h in holders if (h.get("pct_change") or 0) < -HOLDER_CHANGE]
     if accumulating or trimming:
         notes.append(
-            "Among the largest reported holders, {} added and {} trimmed at the last 13F.".format(
-                len(accumulating), len(trimming)
-            )
+            "Of the {} largest reported holders, {} raised and {} cut their stake by more than {:.0f}% at the "
+            "last 13F; the rest changed by less.".format(len(holders), len(accumulating), len(trimming), HOLDER_CHANGE * 100)
         )
 
     return {
@@ -381,6 +387,8 @@ def analyse_ownership(insiders: Dict[str, Any], institutions: Dict[str, Any]) ->
         "top_holders": holders,
         "holders_adding": len(accumulating),
         "holders_trimming": len(trimming),
+        "holders_counted": len(holders),
+        "holder_change_threshold_pct": HOLDER_CHANGE * 100,
         "notes": notes,
         "caveat": "13F institutional holdings are filed quarterly with a 45-day lag; insider filings are "
         "prompt but often reflect pre-scheduled plans.",

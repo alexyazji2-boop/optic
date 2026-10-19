@@ -30,7 +30,9 @@ export function lineChart(series, opts = {}) {
   const slots = pts.length - 1 + (opts.future || 0);
   const X = (i) => pad.l + (i / slots) * (W - pad.l - pad.r);
   const Y = (v) => pad.t + (1 - (v - lo) / (hi - lo)) * (H - pad.t - pad.b);
-  const dp = opts.dp == null ? 2 : opts.dp;
+  // The figure's own decimals: the caller's, or enough for the series' range (a ratio near 0.26 needs four).
+  const rng = Math.max(...pts.map((p) => p.c)) - Math.min(...pts.map((p) => p.c));
+  const dp = opts.dp == null ? (rng >= 2 ? 2 : rng >= 0.2 ? 3 : 4) : opts.dp;
   const path = pts.map((p, i) => `${i ? 'L' : 'M'}${X(i).toFixed(1)} ${Y(p.c).toFixed(1)}`).join('');
   // marks: a point where the series' source changes. The line breaks there, a dashed bridge joins the two
   // sides, and a rule with a label says so, so a jump is never read as a move.
@@ -46,6 +48,12 @@ export function lineChart(series, opts = {}) {
   }
   const last = pts[pts.length - 1];
   const ticks = [0.1, 0.5, 0.9].map((f) => lo + (hi - lo) * f);
+  // Axis labels get the decimals the range needs, so three ticks never print the same number: a ratio near
+  // 0.26 drew "0 / 0 / 0" when every label was rounded to a whole number (owner, 2026-10-19). A unit from
+  // the caller (opts.unit: '%', ' pts') follows the figure.
+  const tickGap = (hi - lo) * 0.4;
+  const tickDp = tickGap >= 20 ? 0 : tickGap >= 2 ? 1 : tickGap >= 0.2 ? 2 : tickGap >= 0.02 ? 3 : 4;
+  const tickText = (t) => `${num(t, Math.max(tickDp, 0))}${opts.unit || ''}`;
   const index = new Map(pts.map((p, i) => [p.d, i]));
   const at = (iso) => { if (index.has(iso)) return index.get(iso); let b = -1; pts.forEach((p, i) => { if (p.d <= iso) b = i; }); return b; };
 
@@ -96,7 +104,7 @@ export function lineChart(series, opts = {}) {
   const markSvg = marks.map((m) => { const x = X(m.i).toFixed(1); return `<g class="mark"><line class="mark-rule" x1="${x}" x2="${x}" y1="${pad.t}" y2="${H - pad.b}"/><text class="mark-t" x="${(X(m.i) - 6).toFixed(1)}" y="${pad.t + 12}" text-anchor="end">${esc(m.label)}</text></g>`; }).join('');
   const markWords = marks.map((m) => ` ${m.label} on ${fullDate(pts[m.i].d)}${m.detail ? `: ${m.detail}` : ''}.`).join('');
   const svg = `<svg class="chart" id="${id}" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="${esc(summary + markWords)}" tabindex="0">
-    ${ticks.map((t) => `<line class="grid" x1="${pad.l}" x2="${W - pad.r}" y1="${Y(t).toFixed(1)}" y2="${Y(t).toFixed(1)}"/>${opts.noTicks ? '' : `<text class="ax" x="${W - pad.r + 6}" y="${(Y(t) + 4).toFixed(1)}">${num(t, dp > 0 && t < 1000 ? 0 : 0)}</text>`}`).join('')}
+    ${ticks.map((t) => `<line class="grid" x1="${pad.l}" x2="${W - pad.r}" y1="${Y(t).toFixed(1)}" y2="${Y(t).toFixed(1)}"/>${opts.noTicks ? '' : `<text class="ax" x="${W - pad.r + 6}" y="${(Y(t) + 4).toFixed(1)}">${tickText(t)}</text>`}`).join('')}
     ${months.join('')}${area}${overlays.map((o) => { let d = '', pen = false; o.values.forEach((v, i) => { if (Number.isFinite(v)) { d += `${pen ? 'L' : 'M'}${X(i).toFixed(1)} ${Y(v).toFixed(1)}`; pen = true; } else pen = false; }); return d ? `<path class="ov ${o.cls || ''}" d="${d}"/>` : ''; }).join('')}${lineSvg}${markSvg}${coneSvg}${events}${tags}
     ${opts.focusEnd ? `<circle class="focus-ring" cx="${X(pts.length - 1)}" cy="${Y(last.c)}" r="10"/>` : ''}
     <circle class="end" cx="${X(pts.length - 1)}" cy="${Y(last.c)}" r="3.5"/>

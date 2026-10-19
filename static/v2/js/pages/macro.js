@@ -25,7 +25,7 @@ function plain(m) {
   const s = m.sectors || {}, b = s.breadth || {}, evc = b.equal_vs_cap || {}, rg = (m.macro || {}).regime || '';
   return html`<ul class="desk-lead">
     <li>The market leans ${/off/.test(rg) ? 'cautious (risk-off)' : /on/.test(rg) ? 'confident (risk-on)' : 'neither way'}: ${clean((m.macro || {}).stance || '')}</li>
-    <li>${isNum(b.pct_sectors_above_200sma) ? `${num(b.pct_sectors_above_200sma, 0)}% of sectors are above their 200-day average${b.pct_sectors_above_200sma >= 50 ? ', so most of the market is in an uptrend' : ', so most of the market is not in an uptrend'}` : ''}${isNum(evc.chg_3m_pct) ? `, and the average stock is ${evc.chg_3m_pct >= 0 ? 'keeping up with' : 'falling behind'} the index (${signed(evc.chg_3m_pct)} over 3 months).` : '.'}</li>
+    <li>${isNum(b.pct_sectors_above_200sma) ? `${num(b.pct_sectors_above_200sma, 0)}% of the 11 sector funds are above their 200-day average` : ''}${isNum(evc.chg_3m_pct) ? `${isNum(b.pct_sectors_above_200sma) ? '; ' : ''}the equal-weight S&P 500 is ${evc.chg_3m_pct >= 0 ? 'keeping up with' : 'falling behind'} the cap-weighted index (${signed(evc.chg_3m_pct)} over 3 months).` : '.'}</li>
     ${s.rotation_note ? html`<li>${clean(s.rotation_note)}</li>` : ''}</ul>`;
 }
 

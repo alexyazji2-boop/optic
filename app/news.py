@@ -16,7 +16,10 @@ BULLISH_TERMS = {
     "beat": 3, "beats": 3, "tops": 3, "surge": 3, "surges": 3, "soar": 3, "soars": 3,
     "jump": 2, "jumps": 2, "rally": 2, "rallies": 2, "climb": 2, "climbs": 2,
     "upgrade": 3, "upgraded": 3, "outperform": 3, "buy rating": 3, "overweight": 2,
-    "raises guidance": 4, "raised guidance": 4, "hikes forecast": 4, "record": 2,
+    "raises guidance": 4, "raised guidance": 4, "hikes forecast": 4,
+    # "Record" only as an achievement: "Nasdaq 100 Records Worst Week In 18 Months" scored +2 as "record"
+    # and read mildly bullish (owner, 2026-10-19).
+    "record high": 3, "record revenue": 3, "record sales": 3, "record profit": 3, "record earnings": 3, "record quarter": 2,
     "all-time high": 3, "breakout": 2, "strong demand": 3, "expansion": 2,
     "approval": 3, "approved": 3, "wins": 2, "won": 2, "awarded": 2, "contract": 1,
     "partnership": 2, "acquisition": 2, "buyback": 3, "repurchase": 3,
@@ -38,6 +41,8 @@ BEARISH_TERMS = {
     "delisting": 4, "fraud": 4, "restatement": 3, "bearish": 3, "concerns": 1,
     "headwind": 2, "headwinds": 2, "slowdown": 2, "weak demand": 3, "shortfall": 3,
     "price target cut": 3, "dilution": 2, "offering": 1, "short seller": 3,
+    "worst week": 3, "worst day": 3, "worst month": 3, "worst session": 3, "worst since": 3,
+    "biggest drop": 3, "biggest decline": 3, "sell-off": 3, "selloff": 3, "rout": 3, "steer clear": 2,
 }
 
 # The band is +/-1 because that is where the per-article scale already stops
@@ -905,8 +910,8 @@ def analyse(provider, ticker: str, limit: int = 12) -> Dict[str, Any]:
                 else "in {} days".format(days_to_earnings)
             )
             earnings_warning = (
-                "Earnings on {}, {}. IV will stay bid into the print and collapse after it; "
-                "long premium held through earnings usually loses even when the direction is right.".format(
+                "Earnings on {}, {}. Implied volatility usually stays high into the report and drops after it, "
+                "so long options held through it often lose value even when the direction is right.".format(
                     earnings, when
                 )
             )

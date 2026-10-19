@@ -169,7 +169,7 @@ def score(overview: Dict[str, Any]) -> Dict[str, Any]:
     # support; what it means for any given setup is the next line's job.
     if composite >= VERY_SUPPORTIVE:
         label, stance = "supportive", "strongly supportive"
-        plain = "Broad uptrend, and most of the market is taking part"
+        plain = "Broad uptrend, with most sectors taking part"
         effect = ("Conditions favour buyers: the trend, the breadth and the "
                   "volatility reading all point the same way.")
     elif composite >= SUPPORTIVE:
@@ -179,7 +179,7 @@ def score(overview: Dict[str, Any]) -> Dict[str, Any]:
                   "its own.")
     elif composite <= VERY_DEFENSIVE:
         label, stance = "defensive", "strongly defensive"
-        plain = "Broad downtrend, and most of the market is falling with it"
+        plain = "Broad downtrend, with most sectors falling with it"
         effect = ("Conditions favour sellers. A long setup here is going against "
                   "the trend, the breadth and the volatility reading at once.")
     elif composite <= DEFENSIVE:

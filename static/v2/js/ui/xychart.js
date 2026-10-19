@@ -14,8 +14,7 @@ export function xyChart(series, opts = {}) {
   const id = 'xy' + (++seq);
   const W = Math.max(280, Math.round(opts.w || 640)), H = Math.round(opts.h || 260);
   const pad = Object.assign({ t: 16, r: 14, b: 28, l: 62 }, opts.pad || {});
-  const yfmt = opts.yfmt || ((v) => num(v, 0));
-  const xfmt = opts.xfmt || ((x) => num(x, 0));
+  let yfmt = opts.yfmt, xfmt = opts.xfmt;   // defaults below take the decimals each axis's range needs
   const S = series.map((s) => {
     const pts = s.xs.map((x, i) => [Number(x), Number(s.ys[i])]).filter(([x, y]) => Number.isFinite(x) && Number.isFinite(y)
       && (opts.xlo == null || x >= opts.xlo) && (opts.xhi == null || x <= opts.xhi));
@@ -26,6 +25,10 @@ export function xyChart(series, opts = {}) {
   const x0 = opts.xlo ?? Math.min(...allX), x1 = opts.xhi ?? Math.max(...allX);
   let y0 = Math.min(0, ...allY), y1 = Math.max(0, ...allY);
   const sp = (y1 - y0) || 1; y0 -= sp * 0.06; y1 += sp * 0.06;
+  // Enough decimals that neighbouring ticks differ: a delta axis (0 to 1) printed "0 / 0 / 1" (2026-10-19).
+  const dpFor = (gap) => (gap >= 20 ? 0 : gap >= 2 ? 1 : gap >= 0.2 ? 2 : 3);
+  if (!yfmt) { const d = dpFor((y1 - y0) * 0.4); yfmt = (v) => num(v, d); }
+  if (!xfmt) { const d = dpFor((x1 - x0) * 0.25); xfmt = (x) => num(x, d); }
   const X = (x) => pad.l + ((x - x0) / ((x1 - x0) || 1)) * (W - pad.l - pad.r);
   const Y = (y) => pad.t + (1 - (y - y0) / ((y1 - y0) || 1)) * (H - pad.t - pad.b);
   const path = (pts) => pts.map(([x, y], i) => `${i ? 'L' : 'M'}${X(x).toFixed(1)} ${Y(y).toFixed(1)}`).join('');

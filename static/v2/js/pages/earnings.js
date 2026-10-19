@@ -14,6 +14,7 @@ import { signedBars } from '../ui/bars.js';
 import { skeleton, empty, failed } from '../ui/states.js';
 import { button as miloButton, provideContext } from '../ui/milo.js';
 import { core, header, tabs, isFund } from './dossier-frame.js';
+import { etStamp, sessionWord } from '../core/marketTime.js';
 import { historyRatio } from './dossier.js';
 
 let D = {}, live = true, mainEl = null;
@@ -37,7 +38,7 @@ function hero(sym) {
     ${nr.dispersion_note ? html`<p>${clean(nr.dispersion_note)}</p>` : ''}
     ${lr.reaction_fights_result ? html`<p class="stale">The stock moved against the result: a beat that fell or a miss that rose.</p>` : ''}
     ${v.headline ? html`<p><b>${clean(v.headline)}</b></p><ul class="plain">${(v.reasons || []).map((r) => html`<li>${clean(r)}</li>`)}</ul>` : ''}
-    ${(e.extended_hours || {}).available ? html`<p class="asof">${capFirst(e.extended_hours.kind)} ${num(e.extended_hours.price)}, ${signed(e.extended_hours.move_pct)}. ${clean(e.extended_hours.caveat)}</p>` : ''}
+    ${(e.extended_hours || {}).available ? html`<p class="asof">${sessionWord(e.extended_hours.kind)} ${num(e.extended_hours.price)}, ${signed(e.extended_hours.move_pct)} from the close${e.extended_hours.as_of ? `, struck ${etStamp(e.extended_hours.as_of)}` : ''}. The header shows the latest print, which can be from a later session. ${clean(e.extended_hours.caveat || '')}</p>` : ''}
   </section>`;
 }
 
