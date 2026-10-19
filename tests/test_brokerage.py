@@ -1237,3 +1237,12 @@ def test_a_new_sandbox_connection_at_current_prices_has_no_step():
         total = p._total(p.holdings(puid, secret, acct.id))
         pts = p.balance_history(puid, secret, acct.id)["points"]
         assert pts and abs(pts[-1][1] - total) < 0.01, (acct.id, pts[-1], total)
+
+
+def test_the_consent_record_keeps_a_hash_of_the_address_not_the_address():
+    """brokerage_consents.ip_hash held "k:<address>" in plain text (found 2026-10-19)."""
+    from app.auth import ratelimit
+    h = ratelimit.hashed_ip("203.0.113.7")
+    assert "203.0.113.7" not in h and len(h) == 32 and h == ratelimit.hashed_ip("203.0.113.7")
+    src = open(broute.__file__).read()
+    assert "auth_ratelimit.hashed_ip(auth_ratelimit.client_ip(request))" in src

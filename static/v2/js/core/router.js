@@ -7,6 +7,8 @@ const SLUG_VIEW = {};
 GROUPS.forEach((g) => { if (!g.symbol) g.pages.forEach((p) => { if (p.slug) SLUG_VIEW[p.slug] = p.view; }); });
 SLUG_VIEW[SETTINGS.slug] = SETTINGS.view;
 SLUG_VIEW.signin = 'signin';
+SLUG_VIEW.terms = 'terms';       // the drafts in pages/legalpages.js (owner's checklist, 2026-10-19)
+SLUG_VIEW.privacy = 'privacy';
 SLUG_VIEW.instrument = 'instrument';
 SLUG_VIEW.workspace = 'home';   // the workspace is Home (owner, 2026-10-18); old #/workspace links land there
 const TAB_VIEW = {};

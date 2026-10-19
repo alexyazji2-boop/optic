@@ -39,6 +39,7 @@ import * as reportsPage from './pages/reports.js';
 import * as watchlist from './pages/watchlist.js';
 import * as alerts from './pages/alerts.js';
 import * as signin from './pages/signin.js';
+import * as legalPages from './pages/legalpages.js';
 import * as workspacePage from './pages/workspace.js';
 import { startReset } from './pages/signin.js';
 import { handleAuthLinks } from './core/authlinks.js';
@@ -49,7 +50,7 @@ import { openReport } from './pages/settings.js';
 import * as bridge from './pages/bridge.js';
 
 // Home is the research workspace (Market Overview by default); pages/home.js supplies its blocks
-const PAGES = { home: workspacePage, overview: dossier, swing: options, long: investing, earnings, financials, news, chart: chartPage, brief: readPage, market: macroPage, indices: indicesPage, instrument: instrumentPage, explore: explorePage, scan: scanPage, insiders: insidersPage, analysts: analystsPage, settings: settingsPage, compare: comparePage, tracker: trackerPage, paper: paperPage, roth: retirementPage, brokerage: brokeragePage, reports: reportsPage, usage: reportsPage, accounts: reportsPage, watchlist, alerts, signin };
+const PAGES = { home: workspacePage, overview: dossier, swing: options, long: investing, earnings, financials, news, chart: chartPage, brief: readPage, market: macroPage, indices: indicesPage, instrument: instrumentPage, explore: explorePage, scan: scanPage, insiders: insidersPage, analysts: analystsPage, settings: settingsPage, compare: comparePage, tracker: trackerPage, paper: paperPage, roth: retirementPage, brokerage: brokeragePage, reports: reportsPage, usage: reportsPage, accounts: reportsPage, watchlist, alerts, signin, terms: legalPages, privacy: legalPages };
 let current = null;   // { page, view, route }
 let noticeWatch = null;
 

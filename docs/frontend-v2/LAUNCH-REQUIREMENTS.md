@@ -7,7 +7,7 @@ read as proof of readiness. Each needs the owner; none is solved by v2 code.
 
 | # | Requirement | State on 2026-10-18 | Who | Effect in v2 |
 |---|---|---|---|---|
-| L1 | Published Terms of Service and Privacy Policy, linked from the product | Not written. `TERMS_URL`, `PRIVACY_URL` unset (launch audit B3) | Owner, with legal review | Sign-up has no terms to agree to; brokerage consent says the documents "are not published yet"; the footer links to neither |
+| L1 | Published Terms of Service and Privacy Policy, linked from the product | Drafted 2026-10-19 at v2 `#/terms` and `#/privacy`, linked from every footer, marked not in force (LEGAL-DRAFTS.md: fields to fill, evidence, steps). `TERMS_URL`, `PRIVACY_URL` unset (launch audit B3) | Owner, with legal review | Sign-up has no terms to agree to; brokerage consent says the documents "are not published yet"; the footer links to neither |
 | L2 | Email delivery | Production mail backend is `log` (no `SMTP_HOST`) (B1) | Owner | Confirmation, password reset, alert and problem-report emails are never sent. v2 says so on screen, as Classic does |
 | L3 | Billing | Off ("Plans are not on sale yet") (B2); live needs Stripe keys and `BILLING_LIVE_APPROVED` | Owner | Upgrade buttons are hidden behind the server's own "not on sale" reason |
 | L4 | Legal review of the notices themselves | The text is the classic app's, unchanged; no review is recorded. v2 shows the same footer, full disclaimer, per-page notices and Milo notice | Owner, ideally counsel | Placement differs from Classic in one way: per-page notices sit at the foot of each page rather than inside the first panel |

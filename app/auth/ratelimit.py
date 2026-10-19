@@ -84,6 +84,12 @@ def key_bucket(value: str) -> str:
     return "k:" + str(value).strip().lower()
 
 
+def hashed_ip(ip: str) -> str:
+    """An address kept only to show that two records came from the same place, never where: the brokerage
+    consent record called its column ip_hash and stored "k:<address>" in plain text (found 2026-10-19)."""
+    return _bucket("ip:" + str(ip or ""))
+
+
 def _bucket(raw: str) -> str:
     """Buckets are hashed before storage.
 

@@ -41,5 +41,6 @@ export function areaNotice(view) {
 }
 export const miloNotice = () => html`<details class="legal-milo"><summary>${raw('<strong>Not financial advice.</strong>')} What Milo's reading is, and is not</summary><p>${raw(LEGAL.areas.pulse.replace('<strong>Not financial advice.</strong> ', ''))}</p></details>`;
 export const footer = () => html`<p class="legal-line">${raw(FOOTER_LINE)} <button type="button" class="textlink" data-v2-legal-more aria-expanded="false" aria-controls="legal-full">Full disclaimer</button></p>
+  <p class="legal-links"><a class="textlink" href="#/terms">Terms of use</a> <a class="textlink" href="#/privacy">Privacy</a></p>
   <p class="legal-switch"><a class="textlink" href="/classic" data-v2-use-classic>Use the classic app</a> <span>The same account and data; you can come back from its footer.</span></p>
   <div class="legal-full" id="legal-full" hidden>${LEGAL.full.map((p) => html`<p>${p}</p>`)}</div>`;

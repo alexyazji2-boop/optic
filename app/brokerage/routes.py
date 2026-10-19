@@ -121,7 +121,7 @@ async def connect(request: Request, payload: Dict[str, Any] = Body(default={})) 
     deps.csrf_guard(request)
     auth_ratelimit.spend("brokerage_connect", auth_ratelimit.key_bucket(user["id"]), 10, 3600,
                          "That is a lot of connection attempts in an hour. Wait a while and try again.")
-    ip_hash = auth_ratelimit.key_bucket(auth_ratelimit.client_ip(request))
+    ip_hash = auth_ratelimit.hashed_ip(auth_ratelimit.client_ip(request))
     try:
         url = await run_in_threadpool(service.start_link, user, runtime.base_url(),
                                       (payload or {}).get("reconnect") or None,

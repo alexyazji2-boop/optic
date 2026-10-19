@@ -13,6 +13,8 @@ import { holds } from '../core/device.js';
 import { hrefFor } from '../nav.js';
 import { getFlags } from './shell.js';
 import { openMilo } from './milo.js';
+// Row markers are the app's own line icons: the sparkle and arrow characters read as emoji (owner's checklist, 2026-10-19).
+import { icon } from './icons.js';
 
 // The classic labels and search words, so nothing becomes unfindable by the word it was found by.
 export const PLACES = [
@@ -84,10 +86,10 @@ function savedFor(sym) {
   return list0.filter((r) => String(r.ticker || r.symbol || '').toUpperCase() === sym).slice(0, 3).map((r) => String(r.question || r.title || ''));
 }
 function symbolRows(sym, detail, exact) {
-  const out = [{ group: 'Open', lead: '◎', label: sym, detail, tag: exact ? '' : 'enter', run: go(`#/${sym}`) }];
+  const out = [{ group: 'Open', lead: icon('dossier'), label: sym, detail, tag: exact ? '' : 'enter', run: go(`#/${sym}`) }];
   [['Chart', 'Charting workspace', `#/${sym}/chart`], ['News', 'Headlines for this symbol', `#/${sym}/news`], ['Earnings', 'History, estimates and the read', `#/${sym}/earnings`], ['Investing', 'Valuation and the decade view', `#/${sym}/investing`], ['Compare', 'Put it beside other names', `#/compare?t=${sym}`]]
-    .forEach(([label, d, href]) => out.push({ group: sym, lead: '→', label, detail: d, run: go(href) }));
-  savedFor(sym).forEach((q) => out.push({ group: sym, lead: '✧', label: q.slice(0, 60), detail: 'Saved research', run: () => openMilo({ question: q, opener }) }));
+    .forEach(([label, d, href]) => out.push({ group: sym, lead: icon('arrow'), label, detail: d, run: go(href) }));
+  savedFor(sym).forEach((q) => out.push({ group: sym, lead: icon('milo'), label: q.slice(0, 60), detail: 'Saved research', run: () => openMilo({ question: q, opener }) }));
   return out;
 }
 
@@ -95,21 +97,21 @@ async function build(q, early) {
   const rows = [];
   const places = PLACES.filter(allowed);
   if (!q) {
-    store.recent().slice(0, 5).forEach((s) => rows.push({ group: 'Recent', lead: '◎', label: s, detail: 'Open again', run: go(`#/${s}`) }));
-    QUICK.forEach((a) => rows.push({ group: 'Actions', lead: '✦', label: a.label, detail: a.detail, run: a.run }));
-    places.slice(0, 6).forEach((p) => rows.push({ group: 'Go to', lead: '→', label: p.label, run: go(placeHref(p)) }));
+    store.recent().slice(0, 5).forEach((s) => rows.push({ group: 'Recent', lead: icon('dossier'), label: s, detail: 'Open again', run: go(`#/${s}`) }));
+    QUICK.forEach((a) => rows.push({ group: 'Actions', lead: icon('arrow'), label: a.label, detail: a.detail, run: a.run }));
+    places.slice(0, 6).forEach((p) => rows.push({ group: 'Go to', lead: icon('arrow'), label: p.label, run: go(placeHref(p)) }));
     return rows;
   }
   const upper = q.toUpperCase(), lower = q.toLowerCase(), isTicker = looksLikeTicker(q), isQuestion = looksLikeQuestion(q);
   const matched = places.filter((p) => p.label.toLowerCase().includes(lower) || p.terms.includes(lower));
   const exact = exactPlace(q, matched);
-  const placeRow = (p) => ({ group: 'Go to', lead: '→', label: p.label, detail: p.symbol && symFor() ? symFor() : '', tag: p === exact ? 'enter' : '', run: go(placeHref(p)) });
+  const placeRow = (p) => ({ group: 'Go to', lead: icon('arrow'), label: p.label, detail: p.symbol && symFor() ? symFor() : '', tag: p === exact ? 'enter' : '', run: go(placeHref(p)) });
   if (exact) rows.push(placeRow(exact));
   const from = rows.length;
   if (isTicker) rows.push(...symbolRows(upper, 'Analyse this symbol', !!exact));
   const to = rows.length;
   matched.forEach((p) => { if (p !== exact) rows.push(placeRow(p)); });
-  const ask = (isQuestion || (!isTicker && q.length > 2)) ? { group: 'Ask Milo', lead: '✧', label: q, detail: ctxSym ? `With ${ctxSym} and this page in context` : 'Milo answers with this page in context', tag: isQuestion && !exact ? 'enter' : '', run: () => openMilo({ question: q, opener }) } : null;
+  const ask = (isQuestion || (!isTicker && q.length > 2)) ? { group: 'Ask Milo', lead: icon('milo'), label: q, detail: ctxSym ? `With ${ctxSym} and this page in context` : 'Milo answers with this page in context', tag: isQuestion && !exact ? 'enter' : '', run: () => openMilo({ question: q, opener }) } : null;
   if (ask) { if (isQuestion && !exact) rows.unshift(ask); else rows.push(ask); }
   if (early) early(rows.slice());
   const my = seq;
@@ -120,15 +122,15 @@ async function build(q, early) {
     const top = results[0]; rows.splice(from + (ask && isQuestion && !exact ? 1 : 0), to - from, ...symbolRows(String(top.symbol).toUpperCase(), top.name || 'Analyse this symbol', !!exact)); results = results.slice(1);
   }
   const insertAt = rows.findIndex((r) => r.group === 'Ask Milo' && !isQuestion);
-  const symRows = results.filter((r) => !(isTicker && r.symbol === upper)).map((r) => ({ group: 'Symbols', lead: r.etf ? 'ETF' : '◎', label: r.symbol, detail: r.name, run: go(`#/${r.symbol}`) }));
+  const symRows = results.filter((r) => !(isTicker && r.symbol === upper)).map((r) => ({ group: 'Symbols', lead: r.etf ? 'ETF' : icon('dossier'), label: r.symbol, detail: r.name, run: go(`#/${r.symbol}`) }));
   if (insertAt >= 0) rows.splice(insertAt, 0, ...symRows); else rows.push(...symRows);
   if (looksLikeScreen(q)) {
     if (!catalogue) { try { catalogue = await api.get('/api/scanners', { ttl: 600000 }); } catch (e) { catalogue = { scans: [] }; } }
     if (my !== seq) return null;
     const found = screenMatches(q, catalogue.scans), sector = sectorMentioned(q), caveat = sector ? `Does not filter by ${sector}: these run over the whole ranked universe. ` : '';
     if (found.length) rows.forEach((r) => { if (r.group === 'Ask Milo') r.tag = ''; });
-    [...found].reverse().forEach((s, i) => rows.unshift({ group: 'Screen', lead: '≡', label: s.name, detail: caveat + String(s.looks_for || '').slice(0, 120), tag: i === found.length - 1 && !exact ? 'enter' : '', run: go(`#/scan?id=${encodeURIComponent(s.id)}`) }));
-    if (sector && found.length) rows.push({ group: 'Screen', lead: '→', label: 'Sector board', detail: `For ${sector} specifically. Macro groups the whole market by sector and drills into one.`, run: go('#/macro') });
+    [...found].reverse().forEach((s, i) => rows.unshift({ group: 'Screen', lead: icon('discover'), label: s.name, detail: caveat + String(s.looks_for || '').slice(0, 120), tag: i === found.length - 1 && !exact ? 'enter' : '', run: go(`#/scan?id=${encodeURIComponent(s.id)}`) }));
+    if (sector && found.length) rows.push({ group: 'Screen', lead: icon('arrow'), label: 'Sector board', detail: `For ${sector} specifically. Macro groups the whole market by sector and drills into one.`, run: go('#/macro') });
   }
   return rows;
 }

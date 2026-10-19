@@ -61,6 +61,9 @@
   /* space and shape */
   --s-1: 4px; --s-2: 8px; --s-3: 12px; --s-4: 16px; --s-5: 20px; --s-6: 24px; --s-7: 32px; --s-8: 40px; --s-9: 56px; --s-10: 72px;
   --r-1: 8px; --r-2: 12px; --r-3: 16px; --r-4: 22px; --r-pill: 999px;
+  /* controls (buttons, segmented controls, chips, inputs, selects): squared-off, not pill-shaped (owner's
+     checklist, 2026-10-19). --r-pill stays for tags, badges, bars and the sidebar's gold hover pill. */
+  --r-ctl: 10px; --r-ctl-in: 8px;
   --tap: 44px;
   --rail: 236px;
   --page: 1560px;   /* one canvas for every page, Home's workspace included (2026-10-18) */
