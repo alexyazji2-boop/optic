@@ -47,6 +47,9 @@ kbd { font: 500 12px/1 var(--f-sans); padding: 4px 7px; border-radius: 6px; bord
    which says why, but no longer look ready to answer */
 html[data-milo="off"] .btn-milo, html[data-milo="off"] [data-v2-milo].btn { border-style: dashed; border-color: var(--c-line); color: var(--c-ink-2); }
 html[data-milo="off"] .btn-milo::after, html[data-milo="off"] [data-v2-milo].btn::after { content: "Off"; margin-left: 2px; padding: 3px 6px; border-radius: 5px; background: var(--c-sunk); color: var(--c-ink-3); font: 600 12px/1 var(--f-label); }
+/* Home's panel headers: thirteen "Off" tags on one screen was noise; the dashed outline and the description
+   say it, and the top bar's launcher carries the tag */
+html[data-milo="off"] [data-v2-milo].btn.ws-ask::after { content: none; }
 .btn[aria-pressed="true"] { background: var(--c-gold-wash); border-color: var(--c-gold-light); }
 .btn-sm { min-height: 40px; padding: 0 14px; font-size: 14.5px; }
 .btn-quiet { border-color: transparent; background: transparent; color: var(--c-ink-2); font-weight: 500; }

@@ -145,7 +145,7 @@ Three levels, each with one look (owner's placement review: "sidebar destination
 
 ## 11. States added 2026-10-19
 - **Coverage line** (`.ins-cover`): before the rows, what a view covers (which filings, which dates) and how much of it is read. A partial result is marked "Partial." in the warning colour, with what is still to read.
-- **Milo off:** when the deployment has no model, every Milo button has a dashed outline and an "Off" tag (a corner badge on the phone's icon button) and is described for screen readers. It still opens Milo, which says why.
+- **Milo off:** when the deployment has no model, every Milo button has a dashed outline and is described for screen readers; the top bar's launcher and the contextual buttons also carry an "Off" tag (a corner badge on the phone's icon button). Home's panel-header buttons show the outline only: thirteen tags on one screen was noise. Every button still opens Milo, which says why.
 - **One reason, said once:** when every panel in a group fails for the same reason (an unquoted option chain outside market hours), the group says it once.
 - **Disabled until ready:** controls that need data not yet loaded (the Options templates before an expiry has loaded) are disabled, and the select names what it is waiting for ("Loading expiries", "Expiries unavailable").
 

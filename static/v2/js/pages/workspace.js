@@ -596,14 +596,13 @@ function bar() {
   return html`<div class="ws-layoutbar">
     <div class="ws-presets" role="tablist" aria-label="Layout">${Object.entries(PRESETS).map(([k, p]) => html`<button type="button" role="tab" aria-selected="${S.preset === k}" data-ws-preset="${k}">${p.label}</button>`)}</div>
     <label class="tabsel ws-presetsel"><span class="tabsel-k">Layout</span><select data-ws-presetsel aria-label="Layout">${Object.entries(PRESETS).map(([k, p]) => html`<option value="${k}" ${S.preset === k ? 'selected' : ''}>${p.label}</option>`)}</select></label>
-    <button type="button" class="btn btn-sm ws-edit" data-ws-edit aria-pressed="${EDIT}">${EDIT ? 'Done' : 'Customize'}</button>
+    <button type="button" class="btn btn-sm ws-edit ${EDIT ? 'btn-primary' : ''}" data-ws-edit aria-pressed="${EDIT}">${EDIT ? 'Done' : 'Customize'}</button>
   </div>
   ${EDIT ? html`<div class="ws-toolbar ws-editbar" role="group" aria-label="Customize ${PRESETS[S.preset].label}">
       <p class="ws-sub">Customizing ${PRESETS[S.preset].label}. Drag a panel by its grip or its corner, or use its menu.</p>
       <details class="ws-add"><summary class="btn btn-sm">Add panel${hidden.length ? ` (${hidden.length})` : ''}</summary><div class="ws-menu-body">${hidden.length ? hidden.map((x) => html`<button type="button" data-ws-show="${x.id}">${PANELS[x.id].title}</button>`) : html`<p class="ws-rule">Every panel is showing.</p>`}</div></details>
       ${S.preset === 'mine' ? '' : html`<button type="button" class="btn btn-sm" data-ws-save>Save as My Desk</button>`}
       <details class="ws-menu"><summary class="ws-hbtn" aria-label="More layout actions">⋯</summary><div class="ws-menu-body"><button type="button" data-ws-reset>Reset ${PRESETS[S.preset].label} to its standard panels</button></div></details>
-      <button type="button" class="btn btn-sm btn-primary" data-ws-edit>Done</button>
     </div>`
   : html`<div class="ws-toolbar">
       <form class="ws-linkform" data-ws-linkform><label for="ws-link">Linked ticker</label><input id="ws-link" name="link" value="${S.link}" autocomplete="off" spellcheck="false" maxlength="12" aria-describedby="ws-link-help"><button type="submit" class="btn btn-sm">Link</button><span id="ws-link-help" class="sr">Panels showing the ticker chip follow it</span></form>

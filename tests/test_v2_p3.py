@@ -91,6 +91,7 @@ def test_milo_buttons_say_milo_is_off_before_a_press():
     assert "/api/ai-allowance" in chk and "enabled === false" in chk and "MutationObserver" in chk
     assert "checkAvailability();" in _src("app.js")
     assert 'html[data-milo="off"] .btn-milo::after' in CSS
+    assert 'html[data-milo="off"] [data-v2-milo].btn.ws-ask::after { content: none; }' in CSS, "no tag in each Home panel header"
     # the drawer still explains, and still opens
     assert "Milo is switched off on this deployment" in milo
 
