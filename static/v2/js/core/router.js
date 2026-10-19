@@ -8,7 +8,7 @@ GROUPS.forEach((g) => { if (!g.symbol) g.pages.forEach((p) => { if (p.slug) SLUG
 SLUG_VIEW[SETTINGS.slug] = SETTINGS.view;
 SLUG_VIEW.signin = 'signin';
 SLUG_VIEW.instrument = 'instrument';
-SLUG_VIEW.workspace = 'workspace';   // the research workspace preview; no rail entry until the owner names one
+SLUG_VIEW.workspace = 'home';   // the workspace is Home (owner, 2026-10-18); old #/workspace links land there
 const TAB_VIEW = {};
 GROUPS.find((g) => g.id === 'security').pages.forEach((p) => { TAB_VIEW[p.slug || ''] = p.view; });
 const BROKERAGE_SECTIONS = ['overview', 'holdings', 'performance', 'events', 'scenarios', 'connections'];

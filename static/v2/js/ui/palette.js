@@ -16,8 +16,7 @@ import { openMilo } from './milo.js';
 
 // The classic labels and search words, so nothing becomes unfindable by the word it was found by.
 export const PLACES = [
-  { view: 'home', label: 'Home', terms: 'home start' },
-  { view: 'workspace', label: 'Research workspace (preview)', href: '#/workspace', terms: 'workspace dashboard desk layout panels market overview options research long-term investing my desk' },
+  { view: 'home', label: 'Home', terms: 'home start workspace dashboard layout panels market overview options research long-term investing my desk' },
   { view: 'brief', label: "Optic's Read", terms: 'read brief daily market news morning' },
   { view: 'market', label: 'Macro & sectors', terms: 'macro sectors rotation regime economy' },
   { view: 'indices', label: 'Indices', terms: 'indices index spy qqq cycle' },

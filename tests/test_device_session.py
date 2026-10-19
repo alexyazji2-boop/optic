@@ -517,8 +517,7 @@ SETTINGS = {
     "optic.chart.snap.v1",
     # The rebuilt frontend's chart view: bar range, style, indicators, panes.
     "optic.v2.chart.v1",
-    "optic.v2.rail.open.v1",       # which rail groups are open
-    "optic.v2.workspace.v1",       # workspace layouts, lock, start-page choice and the linked ticker
+    "optic.v2.workspace.v1",       # Home's workspace: layouts, lock, panels folded on a phone, the linked ticker
     # Swing setups: the panel's filters, and the rule parameters a reader
     # changed. Preferences about the tool, like the chart's beside them.
     "optic.setups.view.v1", "optic.setups.params.v1",

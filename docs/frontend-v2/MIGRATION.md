@@ -11,10 +11,10 @@ Stage 0, 2026-10-18. Classic is a temporary bridge, not the destination. Each mi
 - no em dashes in user-facing copy, and names in the rail and phone bar unchanged.
 
 ## Sequence from 2026-10-18 (TapeDash direction)
-Order of work. Each step is local or staging until the owner approves a deploy; Classic stays the bridge throughout.
+Order of work. Each step is local or staging until the owner approves a deploy; Classic stays the bridge throughout. **The next deploy, when approved, is a private preview only** (PREVIEW-PACKAGE.md); public rollout follows visual acceptance, functional verification and the migration requirements below.
 
-1. **Owner decisions:** X1 to X3 in VISUAL-SPEC-DARK.md (dark default, the expandable sidebar, the workspace's name and place).
-2. **W0 and W1:** the dark system and the workspace, already built in preview, ship with or after the pending owner-only preview.
+1. **Owner decisions, made 2026-10-18:** X1 accepted (v2 opens dark); X2 rejected (navigation is never repeated: the sidebar lists destinations, a destination's tabs are its views); X3 resolved (Home is the workspace, with Market Overview as its default layout and My Desk as the reader's saved one).
+2. **W0 and W1:** the dark system and Home as the workspace, built locally on `v2-dark-workspace`. The owner reviews the real experience in the preview before any further features; they join the private preview only with the owner's approval.
 3. **M1, advanced charting:** the largest Classic-only area, including C18's free chart read. MSB is already built as a new study.
 4. **W2 and M6:** the notifications bell, with alert filters, "Why this fired" and the owner controls.
 5. **M3 with W3 and W4:** research tools, guided contract comparison and the ranked setups view.

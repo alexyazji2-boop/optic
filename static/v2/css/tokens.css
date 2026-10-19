@@ -62,7 +62,7 @@
   --r-1: 8px; --r-2: 12px; --r-3: 16px; --r-4: 22px; --r-pill: 999px;
   --tap: 44px;
   --rail: 236px;
-  --page: 1180px;
+  --page: 1560px;   /* one canvas for every page, Home's workspace included (2026-10-18) */
 
   /* motion */
   --ease: cubic-bezier(.2, .7, .2, 1);

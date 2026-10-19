@@ -4,6 +4,13 @@
 **Status:** prepared and verified locally. **Not deployed.** The live app is unchanged until the owner approves this deployment.
 **Supersedes:** PREVIEW-PROPOSAL.md. Its rollback section predated fail-closed access and the emergency shutdown.
 
+**The next step is a private preview only** (owner, 2026-10-18). v2 is reachable by the owner's account alone (`OPTIC_V2_ACCESS=owner`), Classic stays everyone's default, and nothing about it is public. Public rollout comes later and only after all three of:
+1. **Visual acceptance:** the owner accepts the real experience in the preview (Home, the representative pages side by side, desktop and phone), not screenshots of a prototype.
+2. **Functional verification:** the checks in §7 pass on the live preview, and the v2_check audit, the full test suite and the paid-call probe pass on the deployed commit.
+3. **Migration requirements:** every capability in CAPABILITY-MATRIX.md is implemented and tested in v2 (M1 to M8 in MIGRATION.md), and launch requirements L1 to L11 are met.
+
+The dark workspace (branch `v2-dark-workspace`, on top of this package) is not part of this package. Whether it joins the private preview is its own approval.
+
 This is a preview of a rebuild still in progress, not a finished rebuild. Ten capabilities are incomplete in v2 and sixteen groups are Classic-only (MIGRATION-TRACKER.md). Classic stays the default for everyone, the owner included, until the owner opts in.
 
 ## 1. What would be deployed

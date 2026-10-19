@@ -1,4 +1,5 @@
-// The frame around every page: the labelled, expandable rail, the top bar
+// The frame around every page: the labelled rail (destinations only; a
+// group's pages are its page tabs, never listed twice), the top bar
 // (search, Ask Milo, account) and the phone bar. Pages render into #main.
 import { html, render, $, $$ } from '../core/dom.js';
 import { icon, brandMark } from './icons.js';
@@ -13,17 +14,6 @@ export const getFlags = () => ({ ...flags });
 const RAIL_KEY = 'optic.rail.tight.v2';
 export function railTight() { try { return localStorage.getItem(RAIL_KEY) === '1'; } catch (e) { return false; } }
 export function setRailTight(on) { try { localStorage.setItem(RAIL_KEY, on ? '1' : '0'); } catch (e) { /* private mode */ } const sh = $('.shell'); if (sh) sh.classList.toggle('is-tight', on); }
-
-// Groups opened in the rail (VISUAL-SPEC-DARK.md, X2): the group on screen is
-// always open; others stay as the reader left them.
-const OPEN_KEY = 'optic.v2.rail.open.v1';
-const openGroups = () => { try { const v = JSON.parse(localStorage.getItem(OPEN_KEY) || '[]'); return new Set(Array.isArray(v) ? v : []); } catch (e) { return new Set(); } };
-export function toggleGroup(id, btn) {
-  const open = openGroups(); const on = !open.has(id);
-  if (on) open.add(id); else open.delete(id);
-  try { localStorage.setItem(OPEN_KEY, JSON.stringify([...open])); } catch (e) { /* private mode */ }
-  if (btn) { btn.setAttribute('aria-expanded', String(on)); const sub = document.getElementById(btn.getAttribute('aria-controls')); if (sub) sub.hidden = !on; }
-}
 
 function groupHref(g, symbol) {
   const first = g.pages[0];
@@ -41,7 +31,6 @@ export function mount(app) {
         <a class="brand-sm" href="#/" aria-label="Optic Terminal, Home">${brandMark()}</a>
         <button type="button" class="search-btn" data-v2-open-palette aria-label="Search companies, tickers and pages, or ask Milo">${icon('search')}<span class="sb-long">Search or ask</span><span class="sb-short" aria-hidden="true">Search</span><kbd>⌘K</kbd></button>
         <span class="spacer"></span><span class="session-chip" id="session-chip" role="status" aria-live="off"></span>
-        <a class="btn btn-sm topbar-ws" href="#/workspace">Workspace</a>
         <button type="button" class="btn btn-milo btn-sm topbar-milo" data-v2-milo="" data-v2-milo-ctx="" data-v2-milo-sym="" aria-label="Ask Milo">${icon('milo')}<span class="tm-label" aria-hidden="true">Ask Milo</span></button>
         <button type="button" class="account-btn" data-v2-account aria-haspopup="dialog">Sign in</button>
       </header>
@@ -57,7 +46,6 @@ export function paint(route) {
   const g = route.view === 'settings' ? null : groupOf(route.view);
   const sym = route.symbol || recent()[0] || null;
   const groups = visibleGroups(flags);
-  const opened = openGroups();
   let lastSec = '';
   const rows = [];
   groups.forEach((gr) => {
@@ -68,15 +56,9 @@ export function paint(route) {
     const out = !groupIsV2(gr);
     const inner = html`${icon(gr.icon)}<span>${gr.label}</span>${out ? html`<span class="legacy" aria-hidden="true">${icon('out')}</span>` : ''}`;
     const name = out ? `${gr.label}, opens in the current app` : gr.label;
-    const main = href
-      ? html`<a class="rail-row" href="${href}" aria-label="${name}" ${cur ? html`aria-current="${g && g.pages.length > 1 ? 'true' : 'page'}"` : ''}>${inner}</a>`
-      : html`<button type="button" class="rail-row" data-v2-open-palette aria-label="${name}, search for a company" ${cur ? html`aria-current="true"` : ''}>${inner}</button>`;
-    // a group with several pages opens to list them, by the same names as its page tabs
-    const subs = gr.pages.length > 1 && (!gr.symbol || sym) ? gr.pages : null;
-    if (!subs) { rows.push(main); return; }
-    const open = !!cur || opened.has(gr.id), id = `rail-sub-${gr.id}`;
-    rows.push(html`<div class="rail-item">${main}<button type="button" class="rail-disc" data-v2-rail-disc="${gr.id}" aria-expanded="${open}" aria-controls="${id}" aria-label="${gr.label} pages">${icon('chev')}</button></div>
-      <ul class="rail-sub" id="${id}" ${open ? '' : 'hidden'}>${subs.map((p) => html`<li><a class="rail-subrow" href="${hrefFor(p.view, sym)}" ${route.view === p.view ? html`aria-current="page"` : ''}>${p.label}${p.v2 ? '' : html`<span class="sr">, opens in the current app</span>`}</a></li>`)}</ul>`);
+    rows.push(href
+      ? html`<a class="rail-row" href="${href}" aria-label="${name}" ${cur ? html`aria-current="page"` : ''}>${inner}</a>`
+      : html`<button type="button" class="rail-row" data-v2-open-palette aria-label="${name}, search for a company" ${cur ? html`aria-current="page"` : ''}>${inner}</button>`);
   });
   render($('.rail'), html`<a class="brand" href="#/" aria-label="Optic Terminal, Home">${brandMark()}<span class="brand-word" aria-hidden="true">OPTIC <span>TERMINAL</span></span></a>
     <nav class="rail-nav" aria-label="Sections">${rows}</nav>

@@ -1,9 +1,13 @@
-// The research workspace (#/workspace): panels on a 12-column grid, chosen by
-// preset, moved, resized, hidden, locked and reset by the reader, and kept in
-// this browser (optic.v2.workspace.v1, a setting, not personal data). Panels
-// marked `linked` follow one shared ticker; the rest are about the market.
-// Every panel reads live data through the existing API; none invents a
-// figure, a grade or a probability. VISUAL-SPEC-DARK.md and WORKSPACE.md.
+// Home, as the research workspace (owner, 2026-10-18): panels on a 12-column
+// grid, chosen by a layout (Market Overview by default), moved, resized,
+// hidden, locked and reset by the reader, and kept in this browser
+// (optic.v2.workspace.v1, a setting, not personal data). Panels marked
+// `linked` follow one shared ticker; the rest are about the market. Home's
+// own blocks (the welcome, What matters today, the Desk, the portfolio) come
+// from pages/home.js unchanged. Every panel reads Optic's existing data
+// sources and says how fresh they are; none invents a figure, a grade or a
+// probability. On a phone the essential panels are open and the rest folded,
+// loading only when opened. VISUAL-SPEC-DARK.md and WORKSPACE.md.
 import { $, $$, html, raw, render as draw } from '../core/dom.js';
 import * as api from '../core/api.js';
 import * as store from '../core/store.js';
@@ -12,18 +16,60 @@ import { skeleton, failed } from '../ui/states.js';
 import { lineChart, spark, mountCharts, meter } from '../ui/chart.js';
 import { provideContext } from '../ui/milo.js';
 import { toast } from '../ui/toast.js';
+import { icon } from '../ui/icons.js';
+import { go } from '../core/router.js';
+import { hello, etDate, portfolio, eventsBlock, welcome, starters, modes, STARTERS, setScene, portfolioSeries, wireForms } from './home.js';
 
 const KEY = 'optic.v2.workspace.v1';
+const VERSION = 2;   // 2: Home's layout (2026-10-18); earlier preview layouts start again
 const SPANS = [3, 4, 6, 8, 12];
 const HEIGHTS = ['s', 'm', 'l'];
 const HEIGHT_WORDS = { s: 'compact', m: 'standard', l: 'tall' };
 
 /* ---------------- presets: [panel, span, height] ---------------- */
 export const PRESETS = {
-  market: { label: 'Market Overview', panels: [['indices', 12, 's'], ['regime', 6, 'm'], ['expected', 6, 'm'], ['sectors', 6, 'm'], ['calendar', 6, 'm'], ['earnings', 8, 'm'], ['movers', 4, 'm'], ['watch', 4, 'm'], ['quote', 8, 'm'], ['news', 6, 'm'], ['cnews', 6, 'm'], ['economy', 12, 'l']] },
+  market: { label: 'Market Overview', panels: [['indices', 12, 's'], ['portfolio', 12, 'm'], ['priority', 8, 'm'], ['watch', 4, 'm'], ['quote', 8, 'm'], ['cnews', 4, 'm'], ['contracts', 12, 'm'], ['regime', 6, 'm'], ['expected', 6, 'm'], ['sectors', 6, 'm'], ['calendar', 6, 'm'], ['desk', 6, 'm'], ['earnings', 6, 'm'], ['movers', 4, 'm'], ['news', 4, 'm'], ['alerts', 4, 'm'], ['economy', 12, 'l']] },
   options: { label: 'Options Research', panels: [['watch', 4, 'm'], ['quote', 8, 'm'], ['contracts', 12, 'l'], ['expected', 6, 's'], ['earnings', 6, 'm'], ['cnews', 6, 'm'], ['movers', 6, 'm']] },
-  longterm: { label: 'Long-Term Investing', panels: [['watch', 4, 'm'], ['quote', 8, 'm'], ['value', 6, 'm'], ['sectors', 6, 'm'], ['economy', 12, 'l'], ['regime', 6, 'm'], ['cnews', 6, 'm']] },
+  longterm: { label: 'Long-Term Investing', panels: [['portfolio', 12, 'm'], ['watch', 4, 'm'], ['quote', 8, 'm'], ['value', 6, 'm'], ['sectors', 6, 'm'], ['economy', 12, 'l'], ['regime', 6, 'm'], ['cnews', 6, 'm']] },
   mine: { label: 'My Desk', panels: null },     // the reader's own; starts as a copy of Market Overview
+};
+
+// Open on a phone without asking: what a reader checks first. The rest fold to
+// their title and one line, and load only when opened.
+const ESSENTIAL = { market: ['indices', 'portfolio', 'priority', 'watch', 'quote'], options: ['watch', 'quote', 'contracts'], longterm: ['portfolio', 'watch', 'quote', 'value'], mine: ['indices', 'portfolio', 'priority', 'watch', 'quote'] };
+const PHONE = '(max-width: 860px)';
+const isPhone = () => { try { return matchMedia(PHONE).matches; } catch (e) { return false; } };
+const folded = (id) => isPhone() && ((S.fold[S.preset] || {})[id] ?? !(ESSENTIAL[S.preset] || []).includes(id));
+
+// How fresh each panel's figures are, from the server's own caches
+// (providers/yf.py TTLs, fred.py, the route docstrings), not a guess.
+const FRESH = {
+  indices: 'Quotes delayed about 15 minutes; refreshed every minute while the market is open.',
+  portfolio: 'Valued at Optic\'s delayed prices, refreshed every minute in session; quantities as of the last broker sync.',
+  priority: 'Rebuilt at most every 10 minutes.',
+  watch: 'Quotes delayed about 15 minutes; refreshed every minute while the market is open.',
+  quote: 'Quote delayed about 15 minutes; daily closes re-read at most every 5 minutes.',
+  cnews: 'Headlines re-read at most every 10 minutes.',
+  contracts: 'Chain delayed about 15 minutes; re-read at most once a minute.',
+  regime: 'From delayed quotes and daily closes; refreshed every minute while the market is open.',
+  expected: 'From the delayed VIX and index; refreshed every minute while the market is open.',
+  sectors: 'Fund prices delayed about 15 minutes; refreshed every minute while the market is open.',
+  calendar: 'Schedule from the last built Read (built every 20 minutes); actual and prior from FRED, re-read at most every 6 hours.',
+  desk: 'Written before the open and after the close; this is the latest edition.',
+  earnings: 'Rebuilt at most once an hour; report dates move on the scale of days.',
+  movers: 'From Optic\'s nightly universe scan.',
+  news: 'From the last built Read, built every 20 minutes.',
+  alerts: 'From the scheduled scan.',
+  economy: 'FRED series change on release days; Optic re-reads them at most every 6 hours.',
+  value: 'Earnings data re-read at most every 6 hours; price delayed about 15 minutes.',
+};
+// What a folded panel says in its one line on a phone.
+const BLURB = {
+  indices: 'The main indices, volatility, yields, oil, gold and bitcoin.', portfolio: 'Your linked accounts\' value and the day\'s move.', priority: 'Releases, reports and sector moves, by when they land.',
+  watch: 'Your open list with the day\'s move.', quote: 'The linked ticker\'s price and chart.', cnews: 'Headlines about the linked ticker.', contracts: 'Option contracts for the linked ticker at one expiry.',
+  regime: 'The regime score with its factors, and the sentiment gauge.', expected: 'What index options price for one day.', sectors: 'The 11 sector funds by their move.',
+  calendar: 'Scheduled U.S. releases this week.', desk: 'The day\'s Optic Desk edition.', earnings: 'Who reports this week and next.', movers: 'The largest one-month moves.',
+  news: 'The day\'s wire headlines.', alerts: 'The scheduled scan\'s latest alerts.', economy: 'U.S. indicators with their history.', value: 'The linked ticker against its own valuation history.',
 };
 
 /* ---------------- state, persisted ---------------- */
@@ -32,21 +78,34 @@ function defaults(preset) { const p = PRESETS[preset].panels || PRESETS.market.p
 function load() {
   let v = null;
   try { v = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch (e) { v = null; }
-  const ok = v && v.v === 1 && PRESETS[v.preset];
-  S = ok ? v : { v: 1, preset: 'market', layouts: {}, locked: false, link: '', home: false };
+  const ok = v && v.v === VERSION && PRESETS[v.preset];
+  S = ok ? v : { v: VERSION, preset: 'market', layouts: {}, locked: false, link: '', fold: {} };
+  S.fold = S.fold || {};
   Object.keys(PRESETS).forEach((p) => { if (!Array.isArray(S.layouts[p])) S.layouts[p] = defaults(p); });
   // a panel a later version adds appears hidden in older saved layouts, never lost
   Object.keys(PRESETS).forEach((p) => { const have = new Set(S.layouts[p].map((x) => x.id)); Object.keys(PANELS).forEach((id) => { if (!have.has(id)) S.layouts[p].push({ id, span: PANELS[id].span || 6, h: 'm', hidden: true }); }); S.layouts[p] = S.layouts[p].filter((x) => PANELS[x.id]); });
-  if (!S.link) S.link = (store.recent()[0] || 'SPY');
+  if (!S.link) S.link = (((store.activeList() || {}).symbols || [])[0] || store.recent()[0] || 'SPY');
 }
 function save() { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { /* private mode: the layout lasts this visit */ } }
 const layout = () => S.layouts[S.preset];
-export function isHome() { try { const v = JSON.parse(localStorage.getItem(KEY) || 'null'); return !!(v && v.home); } catch (e) { return false; } }
 
 /* ---------------- shared data ---------------- */
 const get = (u, o = {}) => api.get(u, Object.assign({ ttl: 30000, timeout: 30000 }, o));
 const enc = encodeURIComponent;
 const pct = (v, dp = 2) => (isNum(v) ? signed(v, dp) : 'n/a');
+// The contract table's columns. Sorting is the reader's choice; Optic ranks nothing (contracts.py).
+const LIQ = { good: 3, fair: 2, poor: 1, not_tradable: 0 };   // analytics/liquidity.py grades
+const CONTRACT_COLS = [
+  { key: 'strike', label: 'Strike', num: true, v: (r) => r.strike, cell: (r) => num(r.strike) },
+  { key: 'mid', label: 'Mid', num: true, sec: true, v: (r) => r.mid, cell: (r) => num(r.mid) },
+  { key: 'cost', label: 'Cost', num: true, v: (r) => r.mid * 100, cell: (r) => money(r.mid * 100, 0) },
+  { key: 'spread', label: 'Spread', num: true, v: (r) => r.spread_pct, cell: (r) => `${num(r.spread_pct, 1)}%` },
+  { key: 'delta', label: 'Delta', num: true, v: (r) => r.delta, cell: (r) => num(r.delta, 2) },
+  { key: 'iv', label: 'IV', num: true, sec: true, v: (r) => r.iv_pct, cell: (r) => `${num(r.iv_pct, 1)}%` },
+  { key: 'oi', label: 'Open int.', num: true, v: (r) => r.open_interest, cell: (r) => compact(r.open_interest) },
+  { key: 'vol', label: 'Volume', num: true, sec: true, v: (r) => r.volume, cell: (r) => compact(r.volume) },
+  { key: 'liq', label: 'Liquidity', v: (r) => LIQ[String((r.liquidity || {}).grade || '').toLowerCase()], cell: (r) => (r.liquidity || {}).label || '' },
+];
 // An indicator in its own unit. /api/econ passes FRED's raw scale for levels, which differs by
 // series: claims in persons, payrolls, openings and starts in thousands, the Fed's balance
 // sheet already in billions (econ.py divides it). [multiplier to the shown unit, suffix]
@@ -72,6 +131,55 @@ function moveText(i) {
 const tickBtn = (sym, label) => html`<button type="button" class="ws-tick" data-ws-pick="${sym}" aria-pressed="${S.link === sym}">${label || sym}</button>`;
 
 export const PANELS = {
+  portfolio: {
+    title: 'Your portfolio', span: 12, optional: true,
+    how: 'Your linked brokerage accounts at Optic\'s delayed prices, the day\'s move, and the holdings that moved the total most. The chart is the account value your broker reported, which includes your own deposits and withdrawals, so it is not a return.',
+    load: async () => {
+      const st = await get('/api/brokerage/status', { ttl: 60000 }).catch(() => null);
+      const linked = st && st.available && (st.connections || []).some((c) => c.status !== 'disconnected');
+      if (!linked) return { absent: true };
+      const [ov, perf] = await Promise.all([get('/api/brokerage/workspace/overview', { ttl: 60000 }), get('/api/brokerage/workspace/performance?period=3m', { ttl: 300000 }).catch(() => null)]);
+      return { ov, perf };
+    },
+    body: (d) => portfolio(d.ov, d.perf),
+    charts: () => ({ portfolio: (w) => { const s2 = portfolioSeries(); return s2.length > 1 ? lineChart(s2, { w, h: isPhone() ? 160 : 220, area: true, label: 'Portfolio value', dp: 0 }) : ''; } }),
+    foot: () => ({ source: 'Your linked brokerage, read-only' }),
+    milo: 'What moved my portfolio today, and is anything concentrated?',
+  },
+  priority: {
+    title: 'What matters today', span: 8, state: { filter: 'all' },
+    how: 'The calendar, this week\'s earnings and the sector board, sorted by when they land: now, today, this week. Choose an item for why it matters. Your names shows only events for companies you follow.',
+    load: () => get('/api/priority', { ttl: 300000, timeout: 90000 }),
+    body: (d, P) => (!d || d.available === false ? html`<p class="ws-note">${clean((d && d.reason) || 'The calendar did not return anything.')}</p>` : eventsBlock(d, store.allSymbols(), P.filter)),
+    foot: (d) => ({ source: 'Agency calendars, company report dates and the sector board, via Optic', at: (d || {}).generated_at }),
+    milo: 'Of what is coming up this week, what matters most for the market and for my names?',
+  },
+  desk: {
+    title: 'Optic Desk', span: 6,
+    how: 'The day\'s edition: the lead lines first, the full read one step away. On a day with no written edition it is built from the numbers by fixed rules, and says so.',
+    load: () => get('/api/home'),
+    body: (d) => {
+      const md = (d || {}).morning_desk;
+      if (!md || !md.available) return html`<p class="ws-note">${clean((md && md.reason) || 'No Desk edition is available right now.')}</p>`;
+      return html`<p class="ws-sub">${md.voice === 'mechanical' ? 'Written from the numbers by fixed rules today.' : 'The day\'s edition.'} ${md.date ? `For ${shortDate(md.date)}.` : ''}</p>
+        <ul class="desk-lead">${(md.lead || []).map((l) => html`<li>${clean(l)}</li>`)}</ul>
+        ${md.overall ? html`<details class="more"><summary>The full read ${icon('chev')}</summary><div class="inner"><p>${clean(md.overall)}</p>${md.note ? html`<p class="t-muted">${clean(md.note)}</p>` : ''}</div></details>` : ''}`;
+    },
+    foot: (d) => ({ source: 'Optic Desk', at: (d || {}).generated_at }),
+    milo: 'Walk me through today\'s Desk.',
+  },
+  alerts: {
+    title: 'Latest scan alerts', span: 4,
+    how: 'What Optic\'s scheduled scan flagged most recently. Choose one to open the company; the full list and your own watches are in Alerts.',
+    load: () => get('/api/home'),
+    body: (d) => {
+      const al = ((d || {}).alerts || []).slice(0, 6);
+      if (!al.length) return html`<p class="ws-note">The scheduled scan has not flagged anything recently.</p>`;
+      return html`<ul class="ws-news">${al.map((a) => html`<li><a href="#/${a.ticker || ''}"><b class="tick">${a.ticker || ''}</b> ${clean(a.title)}</a><span class="ws-rule">${ago(a.created_at)}</span></li>`)}</ul><p><a class="textlink" href="#/alerts">Alerts ${icon('arrow')}</a></p>`;
+    },
+    foot: () => ({ source: 'Optic scheduled scan' }),
+    milo: 'Explain the latest scan alerts.',
+  },
   indices: {
     title: 'Indices', span: 12,
     how: 'The day\'s move for the main U.S. indices, volatility, the 10-year yield, oil, gold and bitcoin. Yields move in basis points (0.01 percentage points). Outside the regular session most of these are at the last close; futures and crypto keep trading.',
@@ -160,10 +268,12 @@ export const PANELS = {
       if (!d || d.available === false) return html`${tabs}<p class="ws-note">${(d && d.reason) || 'The earnings calendar is not available right now.'}</p>`;
       const rows = (d.days || []).flatMap((day) => (day.rows || []).map((r) => Object.assign({ day: `${day.short} ${day.day_number}`, past: day.is_past }, r)));
       if (!rows.length) return html`${tabs}<p class="ws-note">No reports found for ${d.week_label || 'this week'} among the ${d.checked || ''} companies checked.</p>`;
-      return html`${tabs}<table class="ws-t"><caption class="sr">Earnings, ${d.week_label}</caption><thead><tr><th scope="col">Day</th><th scope="col">Company</th><th scope="col" class="n">EPS est.</th><th scope="col" class="n">Revenue est.</th><th scope="col" class="n">Implied move</th></tr></thead><tbody>
+      // the week is Monday to Friday of the calendar week, so on a weekend "this week" has already reported
+      const done = P.offset === 0 && rows.every((r) => r.past);
+      return html`${tabs}${done ? html`<p class="ws-note">Every report in ${d.week_label || 'this week'} is out. The coming week is under Next week.</p>` : ''}<table class="ws-t"><caption class="sr">Earnings, ${d.week_label}</caption><thead><tr><th scope="col">Day</th><th scope="col">Company</th><th scope="col" class="n">EPS est.</th><th scope="col" class="n ws-sec">Revenue est.</th><th scope="col" class="n">Implied move</th></tr></thead><tbody>
         ${rows.map((r) => { const im = P.im[r.ticker];
-          return html`<tr class="${r.past ? 'ws-past' : ''}"><td class="ws-time">${r.day}</td><td>${tickBtn(r.ticker)} <span class="ws-name">${r.name || ''}</span>${r.confirmed ? '' : html` <span class="ws-flag">Unconfirmed</span>`}</td><td class="n">${isNum(r.eps_consensus) ? num(r.eps_consensus) : ''}</td><td class="n">${isNum(r.revenue_consensus) ? compact(r.revenue_consensus) : ''}</td>
-            <td class="n">${im === undefined ? html`<button type="button" class="textlink" data-ws-im="${r.ticker}" aria-label="Load the implied move for ${r.ticker}">Load</button>` : im === 'loading' ? 'Reading the chain...' : im && isNum(im.pct) ? html`±${num(im.pct)}%<span class="ws-rule">to ${shortDate(im.expiry)}</span>` : html`<span class="ws-rule">${(im && im.reason) || 'Not available'}</span>`}</td></tr>`; })}</tbody></table>`;
+          return html`<tr class="${r.past ? 'ws-past' : ''}"><td class="ws-time">${r.day}</td><td>${tickBtn(r.ticker)} <span class="ws-name">${r.name || ''}</span>${r.confirmed ? '' : html` <span class="ws-flag">Unconfirmed</span>`}</td><td class="n">${isNum(r.eps_consensus) ? num(r.eps_consensus) : ''}</td><td class="n ws-sec">${isNum(r.revenue_consensus) ? compact(r.revenue_consensus) : ''}</td>
+            <td class="n">${r.past ? html`<span class="ws-rule">Reported</span>` : im === undefined ? html`<button type="button" class="textlink" data-ws-im="${r.ticker}" aria-label="Load the implied move for ${r.ticker}">Load</button>` : im === 'loading' ? 'Reading the chain...' : im && isNum(im.pct) ? html`±${num(im.pct)}%<span class="ws-rule">to ${shortDate(im.expiry)}</span>` : html`<span class="ws-rule">${(im && im.reason) || 'Not available'}</span>`}</td></tr>`; })}</tbody></table>`;
     },
     foot: (d) => ({ source: 'Company calendars and consensus via Yahoo Finance', at: (d || {}).generated_at, note: d && d.checked ? `${d.checked} companies checked${d.failed ? `, ${d.failed} could not be read` : ''}.` : '' }),
     milo: 'Which of this week\'s earnings reports matter most, and what do their options price?',
@@ -174,8 +284,8 @@ export const PANELS = {
     load: () => get('/api/scanners/movers', { ttl: 300000 }),
     body: (d) => {
       if (!d || d.available === false) return html`<p class="ws-note">${(d && (d.reason || (d.building && `Building the universe ranking: ${d.building.done} of ${d.building.total}.`))) || 'The movers scan is not available right now.'}</p>`;
-      return html`<table class="ws-t"><caption class="sr">Moved most this month</caption><thead><tr><th scope="col">Ticker</th><th scope="col" class="n">1 month</th><th scope="col" class="n">Volume</th></tr></thead><tbody>
-        ${(d.rows || []).slice(0, 12).map((r) => html`<tr><td>${tickBtn(r.symbol)}</td><td class="n ${dir(r.roc20)}">${pct(r.roc20, 1)}</td><td class="n">${isNum(r.volume_expansion) ? `${num(r.volume_expansion, 2)}×` : ''}</td></tr>`)}</tbody></table>`;
+      return html`<table class="ws-t"><caption class="sr">Moved most this month</caption><thead><tr><th scope="col">Ticker</th><th scope="col" class="n">1 month</th><th scope="col" class="n ws-sec">Volume</th></tr></thead><tbody>
+        ${(d.rows || []).slice(0, 12).map((r) => html`<tr><td>${tickBtn(r.symbol)}</td><td class="n ${dir(r.roc20)}">${pct(r.roc20, 1)}</td><td class="n ws-sec">${isNum(r.volume_expansion) ? `${num(r.volume_expansion, 2)}×` : ''}</td></tr>`)}</tbody></table>`;
     },
     foot: (d) => ({ source: 'Optic universe scan', note: d && isNum(d.age_hours) ? `Scan is ${num(d.age_hours, 0)} hours old${d.stale ? ', older than usual' : ''}.` : '', stale: d && d.stale ? 'Stale scan' : '' }),
     milo: 'What do this month\'s biggest movers have in common?',
@@ -186,10 +296,10 @@ export const PANELS = {
     load: async () => { const syms = (store.activeList() || {}).symbols || []; if (!syms.length) return { empty: true }; return get(`/api/watchlist?symbols=${enc(syms.slice(0, 30).join(','))}`, { ttl: 30000 }); },
     body: (d) => {
       if (d.empty) return html`<p class="ws-note">Your open watchlist is empty. Follow a company from its Dossier, or <a href="#/watchlist">open Watchlist</a>.</p>`;
-      return html`<table class="ws-t"><caption class="sr">Watchlist</caption><thead><tr><th scope="col">Ticker</th><th scope="col" class="n">Price</th><th scope="col" class="n">Day</th><th scope="col">Changed</th></tr></thead><tbody>
-        ${(d.rows || []).map((r) => html`<tr><td>${tickBtn(r.symbol)}</td><td class="n">${r.available === false ? '' : num(r.price)}</td><td class="n ${dir(r.change_pct)}">${r.available === false ? 'n/a' : pct(r.change_pct)}</td><td class="ws-rule">${((r.changed || {}).text) || ''}</td></tr>`)}</tbody></table>`;
+      return html`<table class="ws-t"><caption class="sr">Watchlist</caption><thead><tr><th scope="col">Ticker</th><th scope="col" class="n">Price</th><th scope="col" class="n">Day</th><th scope="col" class="ws-sec">Changed</th></tr></thead><tbody>
+        ${(d.rows || []).map((r) => html`<tr><td>${tickBtn(r.symbol)}</td><td class="n">${r.available === false ? '' : num(r.price)}</td><td class="n ${dir(r.change_pct)}">${r.available === false ? 'n/a' : pct(r.change_pct)}</td><td class="ws-rule ws-sec">${((r.changed || {}).text) || ''}</td></tr>`)}</tbody></table>`;
     },
-    foot: () => ({ source: 'Your open list; prices from Yahoo Finance', note: 'Delayed about 15 minutes.' }),
+    foot: () => ({ source: 'Your open list; prices from Yahoo Finance' }),
     milo: 'Summarise what changed across my watchlist today.',
   },
   quote: {
@@ -206,10 +316,10 @@ export const PANELS = {
     charts: ({ c }) => ({ 'ws-quote': (w) => {
       const ch = (c || {}).chart || {}; const dates = ch.dates || [];
       const levels = [...(c.supports || []).slice(0, 2), ...(c.resistances || []).slice(0, 1)].map((l) => l.price).filter(Number.isFinite);
-      return lineChart(dates.map((d, i) => ({ d, c: ch.close[i] })), { w, h: 220, label: `${c.ticker} daily closes`, overlays: levels.map((v) => ({ values: dates.map(() => v), cls: 'c0' })), summary: `${c.ticker} daily closes over ${c.span_words || ''}; dashed lines are support and resistance.` });
+      return lineChart(dates.map((d, i) => ({ d, c: ch.close[i] })), { w, h: isPhone() ? 170 : 220, label: `${c.ticker} daily closes`, overlays: levels.map((v) => ({ values: dates.map(() => v), cls: 'c0' })), summary: `${c.ticker} daily closes over ${c.span_words || ''}; dashed lines are support and resistance.` });
     } }),
-    foot: ({ q, c }) => ({ source: 'Yahoo Finance; levels by Optic', at: (c || {}).as_of, note: 'Quotes delayed about 15 minutes.' }),
-    milo: (link) => `Read the ${link} chart in the workspace: trend, levels and what would change the picture.`,
+    foot: ({ q, c }) => ({ source: 'Yahoo Finance; levels by Optic', at: (c || {}).as_of }),
+    milo: (link) => `Read the ${link} chart on my Home: trend, levels and what would change the picture.`,
   },
   cnews: {
     title: 'Company news', span: 6, linked: true,
@@ -257,26 +367,31 @@ export const PANELS = {
         <div class="ws-edetail">${sel && sel.d ? html`<p class="ws-k">${sel.groupLabel}</p><p class="ws-big">${sel.label} <span class="ws-word">${econVal((d.latest || {}).value, sel.unit, sel.code)}</span></p><p class="ws-sub">${d.form_label || ''}; latest ${shortDate((d.latest || {}).date)}, previous ${econVal((d.previous || {}).value, sel.unit, sel.code)}; high ${econVal(d.max, sel.unit, sel.code)}, low ${econVal(d.min, sel.unit, sel.code)} over ${d.points} readings</p>
           <div class="chart-slot" data-chart="ws-econ"></div><p class="ws-read">${clean(d.note || '')}</p>` : html`<p class="ws-note">That series did not come back from FRED.</p>`}</div></div>`;
     },
-    charts: ({ series }, P) => ({ 'ws-econ': (w) => { const s = series.find((x) => x.code === P.code) || series[0]; const d = (s || {}).d || {}; return lineChart((d.values || []).map((v, i) => ({ d: d.dates[i], c: v })), { w, h: 200, years: (d.values || []).length > 36, label: `${s.label} history`, summary: `${s.label}, ${d.form_label || ''}, ${d.points} readings` }); } }),
+    charts: ({ series }, P) => ({ 'ws-econ': (w) => { const s = series.find((x) => x.code === P.code) || series[0]; const d = (s || {}).d || {}; return lineChart((d.values || []).map((v, i) => ({ d: d.dates[i], c: v })), { w, h: isPhone() ? 150 : 200, years: (d.values || []).length > 36, label: `${s.label} history`, summary: `${s.label}, ${d.form_label || ''}, ${d.points} readings` }); } }),
     foot: () => ({ source: 'FRED, St. Louis Fed' }),
     milo: 'Which of these economic indicators matter most for stocks right now?',
   },
   contracts: {
-    title: 'Contracts', span: 12, linked: true, state: { side: 'call', expiry: '', sort: 'delta' },
-    how: 'Option contracts for the linked ticker at one expiry, with what each costs to own, the spread you pay to get in and out, delta (how much the option moves per $1 in the stock) and open interest. Optic\'s liquidity label judges how tradeable a contract is, not whether the trade will work.',
+    title: 'Contracts', span: 12, linked: true, state: { side: 'call', expiry: '', sort: { key: 'strike', dir: 'asc' } },
+    how: 'Option contracts for the linked ticker at one expiry, nearest the money first: what each costs to own, the spread you pay to get in and out, delta (how much the option moves per $1 in the stock) and open interest. Sort by any column. Optic\'s liquidity label judges how tradeable a contract is, not whether the trade will work; there is no grade or pick.',
     load: (link, P) => get(`/api/options/${enc(link)}/research?side=${P.side}&delta_lo=0.15&delta_hi=0.85${P.expiry ? `&expiry=${P.expiry}` : ''}`, { ttl: 60000, timeout: 60000 }),
     body: (d, P, link) => {
       if (!d || !d.table) return html`<p class="ws-note">${(d && (d.reason || d.detail)) || `No option chain for ${link}.`}</p>`;
-      const rows = (d.table.rows || []).slice().sort((a, b) => Math.abs((b.delta || 0) - 0.5) < Math.abs((a.delta || 0) - 0.5) ? 1 : -1).slice(0, 14);
+      // the 14 nearest the money (delta's size nearest 0.5; a put's delta is negative), then in the order the reader chose
+      const atm = (r) => Math.abs(Math.abs(r.delta || 0) - 0.5);
+      const near = (d.table.rows || []).slice().sort((a, b) => atm(a) - atm(b)).slice(0, 14);
+      const col = CONTRACT_COLS.find((c) => c.key === P.sort.key) || CONTRACT_COLS[0];
+      const rows = near.sort((a, b) => { const x = col.v(a), y = col.v(b); if (!isNum(x) || !isNum(y)) return isNum(x) ? -1 : isNum(y) ? 1 : 0; return (x - y) * (P.sort.dir === 'asc' ? 1 : -1); });
       const sm = d.summary || {};
       return html`<div class="ws-toolrow"><div class="seg ws-seg" role="group" aria-label="Side">${[['call', 'Calls'], ['put', 'Puts']].map(([k, l]) => html`<button type="button" data-ws-set="contracts:side:${k}" aria-pressed="${P.side === k}">${l}</button>`)}</div>
           <label class="ws-sel">Expiry <select data-ws-expiry>${(d.listed_expiries || []).slice(0, 14).map((e) => html`<option value="${e.expiry}" ${e.expiry === d.expiry ? 'selected' : ''}>${shortDate(e.expiry)} (${e.dte}d${e.monthly ? ', monthly' : ''})</option>`)}</select></label>
           <span class="ws-rule">ATM IV ${num(sm.atm_iv_pct, 1)}%, straddle prices ±${num(sm.straddle_move_pct, 1)}% to expiry</span></div>
-        <table class="ws-t"><caption class="sr">${link} ${P.side}s, ${d.expiry}</caption><thead><tr><th scope="col" class="n">Strike</th><th scope="col" class="n">Mid</th><th scope="col" class="n">Cost</th><th scope="col" class="n">Spread</th><th scope="col" class="n">Delta</th><th scope="col" class="n">IV</th><th scope="col" class="n">Open int.</th><th scope="col" class="n">Volume</th><th scope="col">Liquidity</th></tr></thead><tbody>
-          ${rows.map((r) => html`<tr><td class="n">${num(r.strike)}</td><td class="n">${num(r.mid)}</td><td class="n">${money(r.mid * 100, 0)}</td><td class="n">${num(r.spread_pct, 1)}%</td><td class="n">${num(r.delta, 2)}</td><td class="n">${num(r.iv_pct, 1)}%</td><td class="n">${compact(r.open_interest)}</td><td class="n">${compact(r.volume)}</td><td>${(r.liquidity || {}).label || ''}</td></tr>`)}</tbody></table>`;
+        <table class="ws-t"><caption class="sr">${link} ${P.side}s, ${d.expiry}, sorted by ${col.label}</caption><thead><tr>${CONTRACT_COLS.map((c) => { const on = c.key === P.sort.key;
+          return html`<th scope="col" class="${c.num ? 'n' : ''} ${c.sec ? 'ws-sec' : ''}" aria-sort="${on ? (P.sort.dir === 'asc' ? 'ascending' : 'descending') : 'none'}"><button type="button" class="th-sort" data-ws-sort="${c.key}">${c.label}${on ? icon(P.sort.dir === 'asc' ? 'up' : 'down') : ''}</button></th>`; })}</tr></thead><tbody>
+          ${rows.map((r) => html`<tr>${CONTRACT_COLS.map((c) => html`<td class="${c.num ? 'n' : ''} ${c.sec ? 'ws-sec' : ''}">${c.cell(r)}</td>`)}</tr>`)}</tbody></table>`;
     },
-    foot: (d) => ({ source: 'Option chain from Yahoo Finance; greeks computed by Optic', at: (d || {}).fetched_at, note: 'Quotes delayed about 15 minutes. Mid is between bid and ask; you usually pay more.' }),
-    milo: (link) => `Compare the ${link} contracts in the workspace for tradeability: spread, liquidity, delta and expiry fit.`,
+    foot: (d) => ({ source: 'Option chain from Yahoo Finance; greeks computed by Optic', at: (d || {}).fetched_at, note: 'Mid is between bid and ask; you usually pay more.' }),
+    milo: (link) => `Compare the ${link} contracts on my Home for tradeability: spread, liquidity, delta and expiry fit.`,
   },
   value: {
     title: 'Fair value', span: 6, linked: true,
@@ -295,36 +410,44 @@ const capitalize = (s) => (s ? String(s).charAt(0).toUpperCase() + String(s).sli
 const impSeg = (P) => html`<div class="seg ws-seg" role="group" aria-label="Impact">${[['all', 'All'], ['high', 'Medium and high']].map(([k, l]) => html`<button type="button" data-ws-set="calendar:imp:${k}" aria-pressed="${P.imp === k}">${l}</button>`)}</div>`;
 
 /* ---------------- rendering ---------------- */
-let root = null, live = false, timer = null;
-const DATA = {}, ERR = {}, PS = {};
+let root = null, live = false, timer = null, lastScroll = 0, mq = null;
+const DATA = {}, ERR = {}, PS = {}, AT = {};
 const ps = (id) => (PS[id] || (PS[id] = JSON.parse(JSON.stringify(PANELS[id].state || {}))));
+const NEW = { starters: undefined, modes: undefined };
+const isNew = () => !store.allSymbols().length && !(DATA.portfolio && !DATA.portfolio.absent);
 
 function bar() {
-  const hidden = layout().filter((x) => x.hidden);
-  return html`<div class="ws-bar" role="toolbar" aria-label="Workspace">
-    <div class="ws-presets" role="tablist" aria-label="Layouts">${Object.entries(PRESETS).map(([k, p]) => html`<button type="button" role="tab" aria-selected="${S.preset === k}" data-ws-preset="${k}">${p.label}</button>`)}</div>
+  const hidden = layout().filter((x) => x.hidden && !(PANELS[x.id].optional && (DATA[x.id] || {}).absent));
+  return html`<div class="ws-bar" role="toolbar" aria-label="Layout">
+    <div class="ws-presets" role="tablist" aria-label="Layout">${Object.entries(PRESETS).map(([k, p]) => html`<button type="button" role="tab" aria-selected="${S.preset === k}" data-ws-preset="${k}">${p.label}</button>`)}</div>
     <form class="ws-linkform" data-ws-linkform><label for="ws-link">Linked ticker</label><input id="ws-link" name="link" value="${S.link}" autocomplete="off" spellcheck="false" maxlength="12" aria-describedby="ws-link-help"><button type="submit" class="btn btn-sm">Link</button><span id="ws-link-help" class="sr">Panels marked with the ticker follow it</span></form>
     <span class="spacer"></span>
-    <details class="ws-add"><summary class="btn btn-sm">Add panel${hidden.length ? ` (${hidden.length})` : ''}</summary><div class="ws-menu-body">${hidden.length ? hidden.map((x) => html`<button type="button" data-ws-show="${x.id}">${PANELS[x.id].title}</button>`) : html`<p class="ws-rule">Every panel is showing.</p>`}</div></details>
-    <button type="button" class="btn btn-sm" data-ws-lock aria-pressed="${!!S.locked}">${S.locked ? 'Unlock layout' : 'Lock layout'}</button>
-    <button type="button" class="btn btn-sm" data-ws-reset>Reset</button>
-    ${S.preset === 'mine' ? '' : html`<button type="button" class="btn btn-sm" data-ws-save>Save as My Desk</button>`}
-    <label class="check ws-home"><input type="checkbox" data-ws-home ${S.home ? 'checked' : ''}> <span>Open this at Home</span></label>
+    <div class="ws-tools">
+      <details class="ws-add"><summary class="btn btn-sm">Add panel${hidden.length ? ` (${hidden.length})` : ''}</summary><div class="ws-menu-body">${hidden.length ? hidden.map((x) => html`<button type="button" data-ws-show="${x.id}">${PANELS[x.id].title}</button>`) : html`<p class="ws-rule">Every panel is showing.</p>`}</div></details>
+      <button type="button" class="btn btn-sm" data-ws-lock aria-pressed="${!!S.locked}">${S.locked ? 'Unlock layout' : 'Lock layout'}</button>
+      <button type="button" class="btn btn-sm" data-ws-reset>Reset</button>
+      ${S.preset === 'mine' ? '' : html`<button type="button" class="btn btn-sm" data-ws-save>Save as My Desk</button>`}
+    </div>
+    <details class="ws-menu ws-toolmenu"><summary class="btn btn-sm">Layout options</summary><div class="ws-menu-body">
+      ${hidden.map((x) => html`<button type="button" data-ws-show="${x.id}">Add ${PANELS[x.id].title}</button>`)}
+      <button type="button" data-ws-reset>Reset this layout</button>
+      ${S.preset === 'mine' ? '' : html`<button type="button" data-ws-save>Save as My Desk</button>`}</div></details>
   </div>
   <p class="ws-live sr" role="status" aria-live="polite" id="ws-live"></p>`;
 }
 
 function panelShell(x, i, n) {
-  const p = PANELS[x.id], locked = !!S.locked, link = S.link;
+  const p = PANELS[x.id], locked = !!S.locked, link = S.link, fold = folded(x.id), P = ps(x.id);
   const ask = typeof p.milo === 'function' ? p.milo(link) : p.milo;
-  return html`<section class="ws-panel" data-ws-panel="${x.id}" data-h="${x.h}" style="--span:${x.span}" aria-labelledby="wsh-${x.id}">
+  const hasTable = !!CONTRACT_COLS && ['watch', 'earnings', 'movers', 'contracts'].includes(x.id);
+  return html`<section class="ws-panel ${P.allCols ? 'all-cols' : ''}" data-ws-panel="${x.id}" data-h="${x.h}" style="--span:${x.span}" aria-labelledby="wsh-${x.id}" ${p.optional && (DATA[x.id] || {}).absent ? 'hidden' : ''}>
     <header class="ws-head">
       ${locked ? '' : html`<button type="button" class="ws-grip" data-ws-grip="${x.id}" aria-label="Move ${p.title}: arrow keys move it earlier or later">⠿</button>`}
       <h2 class="ws-title" id="wsh-${x.id}">${p.title}</h2>
       ${p.linked ? html`<span class="ws-linkchip" title="Follows the linked ticker">${link}</span>` : ''}
       <span class="spacer"></span>
-      <button type="button" class="ws-hbtn" data-ws-how="${x.id}" aria-expanded="false" aria-controls="wsw-${x.id}">How to read this</button>
-      <button type="button" class="btn btn-milo btn-sm ws-ask" data-v2-milo="${ask}" data-v2-milo-ctx="Workspace: ${p.title}" data-v2-milo-sym="${p.linked ? link : ''}">Ask Milo</button>
+      <button type="button" class="ws-ibtn ws-howbtn" data-ws-how="${x.id}" aria-expanded="false" aria-controls="wsw-${x.id}" aria-label="How to read ${p.title}" title="How to read this">?</button>
+      <button type="button" class="btn btn-milo btn-sm ws-ask" data-v2-milo="${ask}" data-v2-milo-ctx="Home: ${p.title}" data-v2-milo-sym="${p.linked ? link : ''}" aria-label="Ask Milo about ${p.title}">${icon('milo')}<span class="ws-ask-t">Ask Milo</span></button>
       <details class="ws-menu"><summary class="ws-hbtn" aria-label="${p.title} options">⋯</summary><div class="ws-menu-body">
         ${locked ? html`<p class="ws-rule">The layout is locked.</p>` : html`
         <button type="button" data-ws-move="${x.id}:-1" ${i === 0 ? 'disabled' : ''}>Move earlier</button><button type="button" data-ws-move="${x.id}:1" ${i === n - 1 ? 'disabled' : ''}>Move later</button>
@@ -332,30 +455,70 @@ function panelShell(x, i, n) {
         <button type="button" data-ws-h="${x.id}:-1" ${x.h === 's' ? 'disabled' : ''}>Shorter</button><button type="button" data-ws-h="${x.id}:1" ${x.h === 'l' ? 'disabled' : ''}>Taller</button>
         <button type="button" class="ws-wide-only" data-ws-full="${x.id}">${x.span === 12 ? 'Back to its width' : 'Full width'}</button>
         <button type="button" data-ws-hide="${x.id}">Hide panel</button>`}
+        ${hasTable ? html`<button type="button" class="ws-phone-only" data-ws-cols="${x.id}">${P.allCols ? 'Fewer columns' : 'All columns'}</button>` : ''}
         <button type="button" data-ws-reload="${x.id}">Refresh</button></div></details>
+      <button type="button" class="ws-ibtn ws-fold" data-ws-fold="${x.id}" aria-expanded="${!fold}" aria-controls="wsb-${x.id}" aria-label="${fold ? 'Show' : 'Fold'} ${p.title}">${icon('chev')}</button>
     </header>
     <div class="ws-how" id="wsw-${x.id}" hidden><p>${p.how}</p></div>
-    <div class="ws-body" id="wsb-${x.id}" tabindex="-1">${skeleton(x.id === 'indices' ? 'lines' : 'rows', x.id === 'indices' ? 2 : 4, `Loading ${p.title}`)}</div>
-    <footer class="ws-foot" id="wsf-${x.id}"></footer>
+    <p class="ws-blurb" ${fold ? '' : 'hidden'}>${BLURB[x.id] || ''}</p>
+    <div class="ws-body" id="wsb-${x.id}" tabindex="-1" ${fold ? 'hidden' : ''}>${skeleton(x.id === 'indices' ? 'lines' : 'rows', x.id === 'indices' ? 2 : 4, `Loading ${p.title}`)}</div>
+    <footer class="ws-foot" id="wsf-${x.id}" ${fold ? 'hidden' : ''}></footer>
     ${locked ? '' : html`<span class="ws-resize" data-ws-resize="${x.id}" aria-hidden="true" title="Drag to resize"></span>`}
   </section>`;
 }
 
+// Home's first visit: the welcome, a few names to follow, and how Optic should speak (pages/home.js)
+function newBand() {
+  return html`<div class="ws-new" id="ws-new">
+    <div id="ws-welcome">${DATA.indices ? welcome(DATA.indices) : skeleton('chart', 1, 'Loading')}</div>
+    <section class="ws-panel ws-newpanel" aria-labelledby="st-h"><header class="ws-head"><h2 class="ws-title" id="st-h">Follow a few names to start</h2></header>
+      <div class="ws-body"><p class="ws-sub">${store.signedIn() ? 'They go into your account\'s watchlist.' : 'Kept in this browser. Sign in to keep them on your account.'} Home fills in around what you follow.</p><div id="ws-starters">${NEW.starters ? starters(NEW.starters) : skeleton('rows', 2)}</div></div></section>
+    ${NEW.modes && NEW.modes.length ? html`<section class="ws-panel ws-newpanel" id="ws-modes" aria-labelledby="md-h"><header class="ws-head"><h2 class="ws-title" id="md-h">How should Optic speak to you?</h2></header><div class="ws-body"><p class="ws-sub">Change it any time in Settings.</p>${modes(NEW.modes)}</div></section>` : ''}
+  </div>`;
+}
+
 function paintAll() {
   const shown = layout().filter((x) => !x.hidden);
+  const ses = ((DATA.indices || {}).session) || {};
   draw(root, html`<div class="ws-page">
-    <header class="ws-pagehead"><h1 class="t-h2" tabindex="-1">${PRESETS[S.preset].label}</h1><p class="ws-sub">Research workspace, preview. Panels read live Optic data; each says its source and age. Your layout is kept in this browser.</p></header>
+    <header class="ws-pagehead"><div><h1 class="t-h2" tabindex="-1">${hello()}</h1><p class="ws-sub" id="ws-date">${etDate(ses.now_et)}${ses.label ? `. ${clean(ses.label)}.` : ''}</p></div>
+      <p class="ws-sub ws-about">Connected to Optic's existing data sources. Each panel says where its figures come from and how fresh they are. Your layout is kept in this browser.</p></header>
+    ${isNew() ? newBand() : ''}
     ${bar()}
     <div class="ws-grid ${S.locked ? 'is-locked' : ''}">${shown.length ? shown.map((x, i) => panelShell(x, i, shown.length)) : html`<p class="ws-note">Every panel is hidden. Use Add panel, or Reset.</p>`}</div></div>`);
-  shown.forEach((x) => { if (DATA[x.id] !== undefined || ERR[x.id]) paintBody(x.id); else loadPanel(x.id); });
+  if (isNew()) { wireForms(root); loadNew(); }
+  shown.forEach((x) => { if (DATA[x.id] !== undefined || ERR[x.id]) paintBody(x.id); if (!folded(x.id)) loadPanel(x.id, { quiet: DATA[x.id] !== undefined }); });
   provideContext(miloContext);
 }
 
+async function loadNew() {
+  if (NEW.starters === undefined) {
+    NEW.starters = null;
+    get(`/api/watchlist?symbols=${STARTERS.join(',')}`, { ttl: 60000 }).then((r) => { NEW.starters = r.rows || []; }, () => { NEW.starters = []; }).then(() => { const h = $('#ws-starters', root); if (h && live) draw(h, starters(NEW.starters)); });
+  }
+  if (NEW.modes === undefined) {
+    NEW.modes = null;
+    let asked = null; try { asked = localStorage.getItem('optic.knowledge.asked.v1'); } catch (e) { /* private */ }
+    if (!asked) get('/api/knowledge/modes', { ttl: 3600000 }).then((r) => { NEW.modes = r.modes || []; if (live && isNew() && NEW.modes.length) paintAll(); }, () => {});
+  }
+  if (!NEW.scene) {
+    NEW.scene = true;
+    get('/api/instrument?symbol=%5EGSPC&range=6mo', { ttl: 300000, timeout: 15000 }).then((r) => {
+      setScene((r.dates || []).map((dd, i) => ({ d: String(dd).slice(0, 10), c: Number(r.close[i]) })).filter((q) => isNum(q.c)));
+      const w = $('#ws-welcome', root); if (w && live && DATA.indices) { draw(w, welcome(DATA.indices)); wireForms(root); }
+    }, () => {});
+  }
+}
+
 function paintBody(id) {
-  const body = $(`#wsb-${id}`, root), foot = $(`#wsf-${id}`, root); if (!body) return;
+  const sec = $(`[data-ws-panel="${id}"]`, root), body = $(`#wsb-${id}`, root), foot = $(`#wsf-${id}`, root); if (!body) return;
   const p = PANELS[id], P = ps(id);
+  if (p.optional && (DATA[id] || {}).absent) { sec.hidden = true; return; }
+  if (sec) sec.hidden = false;
   if (ERR[id]) {
-    draw(body, failed(p.title, ERR[id], {}));
+    // a linked panel's 404 means the provider had nothing for this ticker just now, not that the panel is missing
+    if (p.linked && ERR[id].kind === 'notfound') draw(body, html`<div class="state err" role="alert"><p class="t-h3">${p.title} did not load</p><p>The data provider returned nothing for ${S.link} just now. This is usually brief.</p></div>`);
+    else draw(body, failed(p.title, ERR[id], {}));
     body.insertAdjacentHTML('beforeend', `<button type="button" class="btn btn-sm" data-ws-reload="${id}">Try again</button>`);
     draw(foot, ''); return;
   }
@@ -363,19 +526,26 @@ function paintBody(id) {
   draw(body, p.body(d, P, S.link));
   if (p.charts) mountCharts(body, p.charts(d, P, S.link));
   const f = p.foot ? p.foot(d, P) : {};
-  draw(foot, html`<span>${f.source || ''}</span>${f.at ? html`<span>${asof(f.at)}</span>` : ''}${f.note ? html`<span>${f.note}</span>` : ''}${f.stale ? html`<span class="ws-stale">${f.stale}</span>` : ''}${f.gap ? html`<span class="ws-gap">${f.gap}</span>` : ''}`);
+  draw(foot, html`<span>${f.source || ''}</span>${f.at ? html`<span>${asof(f.at)}</span>` : ''}${FRESH[id] ? html`<span class="ws-fresh">${FRESH[id]}</span>` : ''}${f.note ? html`<span>${f.note}</span>` : ''}${f.stale ? html`<span class="ws-stale">${f.stale}</span>` : ''}${f.gap ? html`<span class="ws-gap">${f.gap}</span>` : ''}`);
+  if (id === 'indices') { const dt = $('#ws-date', root), ses = d.session || {}; if (dt) dt.textContent = `${etDate(ses.now_et)}${ses.label ? `. ${clean(ses.label)}.` : ''}`; }
 }
 
-async function loadPanel(id, { force = false } = {}) {
+async function loadPanel(id, { force = false, quiet = false } = {}) {
   const p = PANELS[id]; const P = ps(id);
+  if (folded(id) && !force) return;
   const linkAt = S.link; delete ERR[id];
   if (force) { DATA[id] = undefined; const b = $(`#wsb-${id}`, root); if (b) draw(b, skeleton('rows', 4, `Loading ${p.title}`)); }
   try {
     const d = await p.load(S.link, P);
     if (!live || (p.linked && linkAt !== S.link)) return;   // the link moved on while this loaded
-    DATA[id] = d;
-  } catch (e) { if (!live) return; ERR[id] = e; DATA[id] = undefined; }
+    const was = DATA[id];
+    DATA[id] = d; AT[id] = Date.now();
+    // a quiet refresh that changed nothing repaints nothing, so a reader mid-scroll keeps their place
+    if (quiet && was !== undefined && JSON.stringify(was) === JSON.stringify(d)) return;
+  } catch (e) { if (!live) return; if (quiet && DATA[id] !== undefined) return; ERR[id] = e; DATA[id] = undefined; }
   paintBody(id);
+  if (id === 'portfolio' && isNew() !== !!$('#ws-new', root)) paintAll();   // a linked portfolio makes this a returning reader's Home
+  if (id === 'indices' && isNew()) { const w = $('#ws-welcome', root); if (w && !w.querySelector('form')) { draw(w, welcome(DATA.indices)); wireForms(root); } }
 }
 
 /* ---------------- linking ---------------- */
@@ -390,6 +560,7 @@ function setLink(sym) {
   layout().filter((x) => !x.hidden && PANELS[x.id].linked).forEach((x) => {
     const a = $(`[data-ws-panel="${x.id}"] .ws-ask`, root), p = PANELS[x.id];
     if (a) { a.dataset.v2MiloSym = sym; if (typeof p.milo === 'function') a.dataset.v2Milo = p.milo(sym); }
+    if (folded(x.id)) { DATA[x.id] = undefined; return; }   // a folded panel loads the new ticker when opened
     loadPanel(x.id, { force: true });
   });
   say(`Linked panels now follow ${sym}.`);
@@ -405,10 +576,18 @@ function move(id, delta) {
     if (i < 0 || j < 0 || j >= shown.length) return;
     const a = L.indexOf(shown[i]), b = L.indexOf(shown[j]); [L[a], L[b]] = [L[b], L[a]];
   }, `${PANELS[id].title} moved ${delta < 0 ? 'earlier' : 'later'}.`);
-  const g = $(`[data-ws-grip="${id}"]`, root); if (g) g.focus();
+  const g = $(`[data-ws-grip="${id}"]`, root) || $(`[data-ws-panel="${id}"] .ws-menu summary`, root); if (g) g.focus();
 }
 function resize(id, delta) {
   mutate((L) => { const x = L.find((y) => y.id === id); const i = SPANS.indexOf(SPANS.reduce((p, c) => (Math.abs(c - x.span) < Math.abs(p - x.span) ? c : p))); x.span = SPANS[Math.max(0, Math.min(SPANS.length - 1, i + delta))]; }, `${PANELS[id].title} is ${layout().find((y) => y.id === id).span} columns wide.`);
+}
+function setFold(id, on) {
+  S.fold[S.preset] = Object.assign({}, S.fold[S.preset], { [id]: on }); save();
+  const sec = $(`[data-ws-panel="${id}"]`, root); if (!sec) return;
+  const b = $('[data-ws-fold]', sec); b.setAttribute('aria-expanded', String(!on)); b.setAttribute('aria-label', `${on ? 'Show' : 'Fold'} ${PANELS[id].title}`);
+  $('.ws-body', sec).hidden = on; $('.ws-foot', sec).hidden = on; $('.ws-blurb', sec).hidden = !on;
+  if (!on) { if (DATA[id] === undefined && !ERR[id]) loadPanel(id, { force: true }); else paintBody(id); }
+  say(`${PANELS[id].title} ${on ? 'folded' : 'open'}.`);
 }
 
 /* ---------------- milo ---------------- */
@@ -417,21 +596,25 @@ function miloContext() {
   const m = (home || {}).macro || {};
   const q = ((DATA.quote || {}).q || {}).quote || null;
   return {
-    focus_label: `Workspace, ${PRESETS[S.preset].label}${S.link ? `, linked to ${S.link}` : ''}`,
+    focus_label: `Home, ${PRESETS[S.preset].label}${S.link ? `, linked to ${S.link}` : ''}`,
     workspace: { layout: PRESETS[S.preset].label, linked_ticker: S.link, panels: layout().filter((x) => !x.hidden).map((x) => PANELS[x.id].title) },
     macro: m.regime ? { regime: m.regime, risk_score: m.risk_score, stance: m.stance, expected_move: m.expected_move } : undefined,
     sentiment: (DATA.regime || {}).s && DATA.regime.s.available !== false ? { score: DATA.regime.s.score, label: DATA.regime.s.label } : undefined,
     linked_quote: q ? { ticker: S.link, price: q.price, change_pct: q.change_pct } : undefined,
+    read: home && home.read ? home.read : undefined,
   };
 }
 
 /* ---------------- events ---------------- */
 function wire() {
   root.addEventListener('click', async (e) => {
-    const t = (s) => e.target.closest(s); let b;
+    const t = (s2) => e.target.closest(s2); let b;
     if ((b = t('[data-ws-preset]'))) { if (b.dataset.wsPreset === 'mine' && !S.layouts.mine.some((x) => !x.hidden)) S.layouts.mine = JSON.parse(JSON.stringify(S.layouts.market)); S.preset = b.dataset.wsPreset; save(); paintAll(); say(`${PRESETS[S.preset].label} layout.`); return; }
     if ((b = t('[data-ws-pick]'))) { setLink(b.dataset.wsPick); return; }
+    if ((b = t('[data-ws-fold]'))) { setFold(b.dataset.wsFold, b.getAttribute('aria-expanded') === 'true'); return; }
     if ((b = t('[data-ws-how]'))) { const w = $(`#wsw-${b.dataset.wsHow}`, root); const open = w.hidden; w.hidden = !open; b.setAttribute('aria-expanded', String(open)); return; }
+    if ((b = t('[data-ws-sort]'))) { const P = ps('contracts'); P.sort = P.sort.key === b.dataset.wsSort ? { key: P.sort.key, dir: P.sort.dir === 'asc' ? 'desc' : 'asc' } : { key: b.dataset.wsSort, dir: 'asc' }; paintBody('contracts'); const again = $(`[data-ws-sort="${P.sort.key}"]`, root); if (again) again.focus(); say(`Contracts sorted by ${(CONTRACT_COLS.find((c) => c.key === P.sort.key) || {}).label}, ${P.sort.dir === 'asc' ? 'lowest' : 'highest'} first.`); return; }
+    if ((b = t('[data-ws-cols]'))) { const id = b.dataset.wsCols, P = ps(id); P.allCols = !P.allCols; const sec = $(`[data-ws-panel="${id}"]`, root); sec.classList.toggle('all-cols', P.allCols); b.textContent = P.allCols ? 'Fewer columns' : 'All columns'; return; }
     if ((b = t('[data-ws-set]'))) {
       const [id, k, v] = b.dataset.wsSet.split(':'); const P = ps(id);
       P[k] = /^-?\d+$/.test(v) ? Number(v) : v;
@@ -445,6 +628,17 @@ function wire() {
       catch (err) { P.im[sym] = { reason: api.explain(err, 'The chain') }; }
       paintBody('earnings'); return;
     }
+    // Home's own blocks (pages/home.js): what matters today, the welcome
+    if ((b = t('[data-v2-ev]'))) { const open = b.getAttribute('aria-expanded') === 'true'; b.setAttribute('aria-expanded', String(!open)); const body = document.getElementById(b.getAttribute('aria-controls')); if (body) body.hidden = open; return; }
+    if ((b = t('[data-v2-evmore]'))) { const open = b.getAttribute('aria-expanded') === 'true'; const box = document.getElementById(b.getAttribute('aria-controls')); if (box) box.hidden = open; b.setAttribute('aria-expanded', String(!open)); b.textContent = open ? `Show ${b.dataset.v2Evmore} more` : 'Show fewer'; return; }
+    if ((b = t('[data-v2-evfilter]'))) { ps('priority').filter = b.dataset.v2Evfilter; paintBody('priority'); const again = $(`[data-v2-evfilter="${ps('priority').filter}"]`, root); if (again) again.focus(); return; }
+    if (t('[data-v2-home-ready]')) { paintAll(); window.scrollTo(0, 0); return; }
+    if ((b = t('[data-v2-mode]'))) {
+      try { if (b.dataset.v2Mode) localStorage.setItem('optic.knowledge.v1', b.dataset.v2Mode); localStorage.setItem('optic.knowledge.asked.v1', '1'); } catch (err) { /* private mode */ }
+      $$('[data-v2-mode]', root).forEach((m) => m.setAttribute('aria-checked', String(m === b && !!b.dataset.v2Mode)));
+      const sec = $('#ws-modes', root); NEW.modes = []; if (sec) setTimeout(() => { sec.hidden = true; }, b.dataset.v2Mode ? 600 : 0);
+      return;
+    }
     if ((b = t('[data-ws-move]'))) { const [id, d] = b.dataset.wsMove.split(':'); move(id, Number(d)); return; }
     if ((b = t('[data-ws-span]'))) { const [id, d] = b.dataset.wsSpan.split(':'); resize(id, Number(d)); return; }
     if ((b = t('[data-ws-h]'))) { const [id, d] = b.dataset.wsH.split(':'); mutate((L) => { const x = L.find((y) => y.id === id); x.h = HEIGHTS[Math.max(0, Math.min(2, HEIGHTS.indexOf(x.h) + Number(d)))]; }, `${PANELS[id].title} is ${HEIGHT_WORDS[layout().find((y) => y.id === id).h]} height.`); return; }
@@ -453,11 +647,10 @@ function wire() {
     if ((b = t('[data-ws-show]'))) { const id = b.dataset.wsShow; mutate((L) => { const x = L.find((y) => y.id === id); x.hidden = false; L.splice(L.indexOf(x), 1); L.push(x); }, `${PANELS[id].title} added at the end.`); return; }
     if ((b = t('[data-ws-reload]'))) { loadPanel(b.dataset.wsReload, { force: true }); return; }
     if (t('[data-ws-lock]')) { S.locked = !S.locked; save(); paintAll(); say(S.locked ? 'Layout locked.' : 'Layout unlocked.'); return; }
-    if (t('[data-ws-reset]')) { S.layouts[S.preset] = defaults(S.preset); save(); paintAll(); toast(`${PRESETS[S.preset].label} is back to its standard layout.`); return; }
-    if (t('[data-ws-save]')) { S.layouts.mine = JSON.parse(JSON.stringify(layout())); S.preset = 'mine'; save(); paintAll(); toast('Saved as My Desk.'); return; }
+    if (t('[data-ws-reset]')) { S.layouts[S.preset] = defaults(S.preset); S.fold[S.preset] = {}; save(); paintAll(); toast(`${PRESETS[S.preset].label} is back to its standard layout.`); return; }
+    if (t('[data-ws-save]')) { S.layouts.mine = JSON.parse(JSON.stringify(layout())); S.fold.mine = Object.assign({}, S.fold[S.preset]); S.preset = 'mine'; save(); paintAll(); toast('Saved as My Desk.'); return; }
   });
   root.addEventListener('change', (e) => {
-    if (e.target.matches('[data-ws-home]')) { S.home = e.target.checked; save(); toast(S.home ? 'Home opens this workspace in this browser.' : 'Home is back to the usual page.'); }
     if (e.target.matches('[data-ws-expiry]')) { ps('contracts').expiry = e.target.value; loadPanel('contracts', { force: true }); }
   });
   root.addEventListener('submit', (e) => { const f = e.target.closest('[data-ws-linkform]'); if (!f) return; e.preventDefault(); setLink(f.link.value); });
@@ -487,26 +680,34 @@ function wire() {
       el.classList.remove('is-dragging');
       if (r) { const span = Number(el.dataset.dragSpan || startSpan); mutate((L) => { L.find((x) => x.id === id).span = span; }, `${PANELS[id].title} is ${span} columns wide.`); return; }
       const order = $$('[data-ws-panel]', grid).map((p) => p.dataset.wsPanel);
-      mutate((L) => { const shown = order.map((pid) => L.find((x) => x.id === pid)); const rest = L.filter((x) => x.hidden); L.splice(0, L.length, ...shown, ...rest); }, `${PANELS[id].title} moved.`);
+      mutate((L) => { const shown = order.map((pid) => L.find((x) => x.id === pid)).filter(Boolean); const rest = L.filter((x) => !shown.includes(x)); L.splice(0, L.length, ...shown, ...rest); }, `${PANELS[id].title} moved.`);
     };
     document.addEventListener('pointermove', onMove); document.addEventListener('pointerup', onUp);
   });
 }
 
 /* ---------------- page ---------------- */
-const MARKET_PANELS = ['indices', 'regime', 'expected', 'watch', 'quote', 'movers', 'contracts'];
+const MARKET_PANELS = ['indices', 'regime', 'expected', 'sectors', 'watch', 'quote', 'contracts', 'portfolio'];
 export async function render(main) {
   root = main; live = true; load();
-  document.title = `${PRESETS[S.preset].label}, Optic`;
+  document.title = 'Home, Optic';
   wire(); paintAll();
+  // coming back from research: the layout, the figures and the place on the page are as left
+  if (lastScroll) requestAnimationFrame(() => window.scrollTo(0, lastScroll));
+  try { mq = matchMedia(PHONE); mq.onchange = () => { if (live) paintAll(); }; } catch (e) { mq = null; }
   clearInterval(timer);
   // refresh the market panels every minute while the regular session is open and the tab is visible
   timer = setInterval(() => {
     const open = (((DATA.indices || {}).session) || {}).is_regular;
     if (!live || document.hidden || !open) return;
-    layout().filter((x) => !x.hidden && MARKET_PANELS.includes(x.id)).forEach((x) => loadPanel(x.id));
+    layout().filter((x) => !x.hidden && MARKET_PANELS.includes(x.id)).forEach((x) => loadPanel(x.id, { quiet: true }));
   }, 60000);
 }
-export function dispose() { live = false; clearInterval(timer); }
-export function onLists() { if (live && layout().some((x) => x.id === 'watch' && !x.hidden)) loadPanel('watch', { force: true }); }
-export const _test = { PRESETS, PANELS, load: () => { load(); return S; }, defaults };
+export function dispose() { lastScroll = window.scrollY; live = false; clearInterval(timer); if (mq) mq.onchange = null; }
+export function onLists() {
+  if (!live) return;
+  if (!!$('#ws-new', root) !== isNew()) { paintAll(); return; }
+  const h = $('#ws-starters', root); if (h && NEW.starters) draw(h, starters(NEW.starters));
+  if (layout().some((x) => x.id === 'watch' && !x.hidden)) loadPanel('watch', { force: !folded('watch') });
+}
+export const _test = { PRESETS, PANELS, ESSENTIAL, FRESH, load: () => { load(); return S; }, defaults };

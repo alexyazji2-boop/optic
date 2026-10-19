@@ -148,8 +148,40 @@ def test_market_structure_breaks_follow_confirmed_swings_only(tmp_path):
       print(JSON.stringify({{ all, early }}));
     """)
     breaks = got["all"]
-    assert breaks[0] == {"dir": "bull", "from": 5, "at": 12, "price": 110}   # close 111 above the 110 swing high of bar 5
+    # close 111 above the 110 swing high of bar 5, which became knowable at bar 8 (3 bars later)
+    assert breaks[0] == {"dir": "bull", "from": 5, "known": 8, "at": 12, "price": 110}
+    assert all(b["from"] < b["known"] < b["at"] for b in breaks)            # formed, then known, then broken
     bears = [b for b in breaks if b["dir"] == "bear"]
     assert bears and bears[0]["price"] < 105 and bears[0]["at"] >= 15     # a later close below the latest swing low
     assert len({(b["dir"], b["from"]) for b in breaks}) == len(breaks)     # each level breaks once
     assert got["early"] == []
+
+
+def test_a_later_bar_never_changes_a_recorded_structure_break(tmp_path):
+    """Run the MSB study on every prefix of 40 random series at swing strengths
+    3, 5 and 10: the breaks found on a prefix must be exactly the full series'
+    breaks up to that bar. If a future bar could move, add or remove an earlier
+    break, the indicator would be repainting history."""
+    got = _run(tmp_path, f"""
+      const p = await import('{(V2 / "js/ui/pricechart.js").as_posix()}');
+      let seed = 7; const rnd = () => ((seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648);
+      let bad = [], checked = 0, total = 0;
+      for (let s = 0; s < 40; s++) {{
+        let c = 100; const bars = [];
+        for (let i = 0; i < 160; i++) {{ const o = c; c = Math.max(1, c * (1 + (rnd() - 0.5) * 0.06)); const h = Math.max(o, c) * (1 + rnd() * 0.02), l = Math.min(o, c) * (1 - rnd() * 0.02); bars.push({{ t: i, o, h, l, c }}); }}
+        for (const k of [3, 5, 10]) {{
+          const full = JSON.stringify(p.marketStructure(bars, k));
+          const all = p.marketStructure(bars, k); total += all.length;
+          for (let n = 1; n <= bars.length; n++) {{
+            const pre = JSON.stringify(p.marketStructure(bars.slice(0, n), k));
+            const want = JSON.stringify(all.filter((b) => b.at < n));
+            checked++;
+            if (pre !== want) bad.push([s, k, n]);
+          }}
+        }}
+      }}
+      print(JSON.stringify({{ bad: bad.slice(0, 5), checked, total }}));
+    """)
+    assert got["checked"] == 40 * 3 * 160
+    assert got["total"] > 100            # the series do produce breaks to test
+    assert got["bad"] == [], got["bad"]

@@ -41,12 +41,17 @@ const FIB = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1];
 
 /**
  * Market structure breaks. A swing high is a bar whose high is above the
- * highs of the `k` bars on each side (a swing low, below the lows); it is
- * known only once those `k` later bars have closed, so nothing looks ahead.
- * The structure level is the latest swing high (low) not yet broken. A close
- * above it is a bullish break; a close below the swing low, a bearish one.
- * Each level breaks once. Returns [{dir, from, at, price}] with bar indexes:
- * `from` is the swing bar, `at` the bar whose close broke it.
+ * highs of the `k` bars on each side (a swing low, below the lows). Where the
+ * swing formed and when it became knowable are different bars: the level is
+ * drawn back to the swing bar, but no one could know it was a swing until
+ * the `k` bars after it had closed. The structure level is the latest
+ * confirmed swing high (low) not yet broken; a close above it is a bullish
+ * break, a close below the swing low a bearish one, and only a close after
+ * confirmation counts. Each level breaks once. One forward pass over closed
+ * bars, so a later bar never changes a break already recorded (the prefix
+ * test in tests/test_frontend_v2_stage0.py). Returns
+ * [{dir, from, known, at, price}] as bar indexes: `from` the swing bar,
+ * `known` the bar whose close confirmed it, `at` the bar whose close broke it.
  */
 export function marketStructure(bars, k = 3) {
   const out = [], n = bars.length;
@@ -61,12 +66,12 @@ export function marketStructure(bars, k = 3) {
         if (!(bars[m].h < h)) isHi = false;
         if (!(bars[m].l > l)) isLo = false;
       }
-      if (isHi) hi = { i, price: h };
-      if (isLo) lo = { i, price: l };
+      if (isHi) hi = { i, known: j, price: h };
+      if (isLo) lo = { i, known: j, price: l };
     }
     const c = bars[j].c;
-    if (hi && j > hi.i + k - 1 && c > hi.price) { out.push({ dir: 'bull', from: hi.i, at: j, price: hi.price }); hi = null; }
-    if (lo && j > lo.i + k - 1 && c < lo.price) { out.push({ dir: 'bear', from: lo.i, at: j, price: lo.price }); lo = null; }
+    if (hi && j > hi.known && c > hi.price) { out.push({ dir: 'bull', from: hi.i, known: hi.known, at: j, price: hi.price }); hi = null; }
+    if (lo && j > lo.known && c < lo.price) { out.push({ dir: 'bear', from: lo.i, known: lo.known, at: j, price: lo.price }); lo = null; }
   }
   return out;
 }
@@ -154,16 +159,20 @@ export function createPriceChart(host, opts) {
       if (S.style === 'area') o += `<path class="area" d="${d}L${X(to).toFixed(1)} ${pp.y1}L${X(from).toFixed(1)} ${pp.y1}Z"/>`;
       o += `<path class="pline" d="${d}"/>`;
     }
-    // market structure breaks: the swing level from its bar to the break, labelled, with a mark on the breaking close
+    // market structure breaks: the level dotted from the swing bar to the bar that confirmed it (before it
+    // was knowable), solid from confirmation to the break, a tick where it became known, a mark on the breaking close
     if (S.overlays.msb) ind.msb.forEach((m) => {
       if (m.at < from || m.from > to) return;
-      const x1 = X(Math.max(m.from, from)), x2 = X(Math.min(m.at, to)), y = ps.Y(m.price), bull = m.dir === 'bull';
+      const xa = X(Math.max(m.from, from)), xk = X(Math.min(Math.max(m.known, from), to)), xb = X(Math.min(m.at, to)), y = ps.Y(m.price), bull = m.dir === 'bull';
       if (y < pp.y0 || y > pp.y1) return;
       const word = bull ? 'Bullish' : 'Bearish', at = bars[m.at];
-      o += `<g class="msb ${bull ? 'bull' : 'bear'}"><line x1="${x1.toFixed(1)}" x2="${x2.toFixed(1)}" y1="${y.toFixed(1)}" y2="${y.toFixed(1)}"/>`
-        + `<text x="${(x1 + 2).toFixed(1)}" y="${(bull ? y - 5 : y + 13).toFixed(1)}">MSB</text>`
+      o += `<g class="msb ${bull ? 'bull' : 'bear'}">`
+        + (m.known > from ? `<line class="pre" x1="${xa.toFixed(1)}" x2="${xk.toFixed(1)}" y1="${y.toFixed(1)}" y2="${y.toFixed(1)}"/>` : '')
+        + `<line x1="${xk.toFixed(1)}" x2="${xb.toFixed(1)}" y1="${y.toFixed(1)}" y2="${y.toFixed(1)}"/>`
+        + (m.known >= from && m.known <= to ? `<line class="known" x1="${xk.toFixed(1)}" x2="${xk.toFixed(1)}" y1="${(y - 5).toFixed(1)}" y2="${(y + 5).toFixed(1)}"/>` : '')
+        + `<text x="${(xk + 3).toFixed(1)}" y="${(bull ? y - 6 : y + 14).toFixed(1)}">MSB</text>`
         + (m.at <= to ? `<circle cx="${X(m.at).toFixed(1)}" cy="${ps.Y(at.c).toFixed(1)}" r="${Math.max(5, Math.min(10, bw * 0.9)).toFixed(1)}"/>` : '')
-        + `<title>${word} market structure break: ${fmtT(at.t)} closed at ${num(at.c)}, ${bull ? 'above the swing high' : 'below the swing low'} of ${num(m.price)} from ${fmtT(bars[m.from].t)}</title></g>`;
+        + `<title>${word} market structure break. Swing ${bull ? 'high' : 'low'} of ${num(m.price)} formed ${fmtT(bars[m.from].t)}; known as a swing from ${fmtT(bars[m.known].t)}, once the bars after it had closed (dotted before then); broken ${fmtT(at.t)} by a close of ${num(at.c)}.</title></g>`;
     });
     // earnings and other events
     (S.overlays.events === false ? [] : S.events).forEach((e) => { const i = idxOfT(e.t); if (i < from || i > to) return; const x = X(i).toFixed(1); o += `<g class="evm"><line x1="${x}" x2="${x}" y1="${pp.y0}" y2="${pp.y1}"/><text x="${x}" y="${pp.y1 - 4}" text-anchor="middle">${esc(e.kind)}</text><title>${esc(e.label)}</title></g>`; });
@@ -317,7 +326,7 @@ export function createPriceChart(host, opts) {
     zoom: (f) => zoom(f, cross >= 0 ? cross : to), fit, pan,
     view: () => ({ from, to }),
     /** The market structure breaks in view, newest last, for Milo and the page. */
-    structure: () => ind.msb.filter((m) => m.at >= from && m.at <= to).map((m) => ({ direction: m.dir === 'bull' ? 'bullish' : 'bearish', broke_on: fmtT(bars[m.at].t), close: bars[m.at].c, level: m.price, swing_on: fmtT(bars[m.from].t) })),
+    structure: () => ind.msb.filter((m) => m.at >= from && m.at <= to).map((m) => ({ direction: m.dir === 'bull' ? 'bullish' : 'bearish', swing_formed_on: fmtT(bars[m.from].t), swing_known_on: fmtT(bars[m.known].t), broke_on: fmtT(bars[m.at].t), close: bars[m.at].c, level: m.price })),
     undo() { const prev = undo.pop(); if (prev) { S.drawings = prev; if (S.onDrawings) S.onDrawings(prev); redraw(); } },
     deleteSelected() { if (sel >= 0) { commit(S.drawings.filter((_, j) => j !== sel)); sel = -1; } },
     clearDrawings() { commit([]); },

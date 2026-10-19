@@ -29,7 +29,7 @@ const STRIP = [
   { group: 'commodities', label: 'Gold' },
   { group: 'crypto', label: 'Bitcoin' },
 ];
-const STARTERS = ['AAPL', 'NVDA', 'MSFT', 'SPY'];
+export const STARTERS = ['AAPL', 'NVDA', 'MSFT', 'SPY'];
 const STARTER_NAMES = { AAPL: 'Apple', NVDA: 'NVIDIA', MSFT: 'Microsoft', SPY: 'S&P 500 ETF' };
 
 let timer = null;
@@ -37,8 +37,8 @@ let live = true;
 let ctx = {};
 
 const etTime = (iso) => { try { return new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' }) + ' ET'; } catch (e) { return ''; } };
-const etDate = (iso) => { try { return new Date(iso || Date.now()).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', timeZone: 'America/New_York' }); } catch (e) { return ''; } };
-function hello() {
+export const etDate = (iso) => { try { return new Date(iso || Date.now()).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', timeZone: 'America/New_York' }); } catch (e) { return ''; } };
+export function hello() {
   const h = new Date().getHours();
   const part = h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening';
   const u = store.state.user;
@@ -92,7 +92,7 @@ function scene(data, series) {
 }
 
 /* ---------------- portfolio (linked brokerage) ---------------- */
-function portfolio(ov, perf) {
+export function portfolio(ov, perf) {
   const vn = ov.value_now;
   const v = isNum(vn) ? vn : (vn && isNum(vn.value) ? vn.value : (ov.totals || {}).value);
   const today = ov.today || {};
@@ -126,7 +126,7 @@ function bucket(r) {
   if (d === 0 || r.when === 'Today') return 'Today';
   return 'This week';
 }
-function eventsBlock(pr, followed, filter) {
+export function eventsBlock(pr, followed, filter) {
   const cols = (pr.columns || []);
   const rows = [];
   cols.forEach((c) => (c.rows || []).forEach((r) => rows.push(Object.assign({ col: c.id }, r))));
@@ -155,7 +155,7 @@ function eventsBlock(pr, followed, filter) {
 }
 
 /* ---------------- the Desk ---------------- */
-function desk(md) {
+export function desk(md) {
   if (!md || !md.available) return '';
   const lead = (md.lead || []).map(clean);
   return html`<section class="section" aria-labelledby="desk-h">
@@ -176,7 +176,7 @@ function movers(m) {
 }
 
 /* ---------------- new user ---------------- */
-function welcome(data) {
+export function welcome(data) {
   const spx = inst(data, 'equity', 'S&P 500');
   return html`<section class="welcome" aria-labelledby="wel-h">
     <div class="copy">
@@ -193,7 +193,7 @@ function welcome(data) {
   </section>`;
 }
 
-function starters(rows) {
+export function starters(rows) {
   return html`<div class="starters">${STARTERS.map((s) => {
     const r = (rows || []).find((x) => x.symbol === s) || { symbol: s };
     const on = store.isFollowed(s);
@@ -206,7 +206,7 @@ function starters(rows) {
   ${store.allSymbols().length ? html`<div class="cluster st-done"><button type="button" class="btn btn-primary" data-v2-home-ready>See your Home</button><span class="t-muted">Following ${store.allSymbols().join(', ')}.</span></div>` : ''}`;
 }
 
-function modes(list) {
+export function modes(list) {
   let cur = null; try { cur = localStorage.getItem('optic.knowledge.v1'); } catch (e) { /* private */ }
   return html`<div class="modes" role="radiogroup" aria-label="How should Optic speak to you?">${list.map((m) => html`<button type="button" class="mode" role="radio" aria-checked="${cur === m.id}" data-v2-mode="${m.id}"><b>${m.label}</b><span>${clean(m.tagline || m.blurb || '')}</span></button>`)}</div>
     <button type="button" class="textlink" data-v2-mode="">Skip for now</button>`;
@@ -374,6 +374,12 @@ async function loadBrokerage(main) {
     if (ctx.portfolio && ctx.portfolio.length > 1) mountCharts(hero, { portfolio: (w) => lineChart(ctx.portfolio, { w, h: Math.round(Math.max(200, Math.min(300, w * 0.3))), area: true, label: 'Portfolio value', dp: 0 }) });
   } catch (e) { /* no portfolio block: the rest of Home is complete without it */ }
 }
+
+// Home's blocks are drawn inside the research workspace (pages/workspace.js);
+// these let it hand over the illustration's series and read the portfolio's.
+export const setScene = (series) => { ctx.sceneSeries = series || []; };
+export const portfolioSeries = () => ctx.portfolio || [];
+export { wireForms };
 
 function wireForms(main) {
   $$('[data-v2-search-form]', main).forEach((f) => f.addEventListener('submit', async (e) => {

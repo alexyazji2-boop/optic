@@ -15,8 +15,8 @@ Row-level detail per page is in COVERAGE.md.
 | Rail, groups, page tabs, phone bar (names unchanged) | Implemented and tested | v2_check, 40 views × 2 sizes |
 | Rail Collapse (`optic.rail.tight.v2`, shared with Classic) | Implemented and tested | Stage 0 |
 | Command palette: exact page names, symbols with actions, saved research, screens, Ask Milo row, quick actions | Implemented and tested | Stage 0 (palette) |
-| Research workspace: presets, panels, move, resize, hide, lock, reset, linked ticker, open at Home (new) | Implemented and tested (preview) | WORKSPACE.md; 45 checks; audit 0 faults |
-| Dark visual system and expandable sidebar (new direction) | Implemented and tested (preview) | VISUAL-SPEC-DARK.md; audit 0 faults on 64 captures |
+| Home as the research workspace: layouts (Market Overview the default, My Desk the reader's own), panels, move, resize, hide, lock, reset, save, linked ticker, phone priority, state kept on Back (new) | Implemented and tested (private preview) | WORKSPACE.md; `ws_verify_home.py` 47 checks; `walkthrough.py` 18 checks; v2_check audit 0 faults on its 20 captures (5 Home views, desktop and phone, dark and light) |
+| Dark visual system, a sidebar of destinations only, one page system across every page (new direction; dark accepted 2026-10-18) | Implemented and tested (private preview) | VISUAL-SPEC-DARK.md; `style_audit.py` on 8 pages × 2 sizes; v2_check audit 0 faults on 168 captures (42 views, desktop and phone, dark and light), 2026-10-18 |
 | Notifications bell with unseen count | Incomplete | Backend counts exist; v2 has no bell (I11, W2) |
 | Glossary tooltips and Learn widget | Classic-only | C17, M7 (found by the 2026-10-18 audit) |
 | Sign in, create account, forgot and reset password, verify email | Implemented and tested | Stage 0 (auth), real local flows |
@@ -51,7 +51,7 @@ Row-level detail per page is in COVERAGE.md.
 
 | Capability | Class | Evidence or gap |
 |---|---|---|
-| Market strip, greeting, new and returning states, watchlist feed, scan alerts, movers, expected move, portfolio | Implemented and tested | v2_check |
+| Market strip, greeting, new and returning states, watchlist feed, scan alerts, movers, expected move, portfolio | Implemented and tested | v2_check; since 2026-10-18 these are Home's panels (Indices, Watchlist, Latest scan alerts, Moved most this month, Expected move, Your portfolio), checked by `ws_verify_home.py` |
 | What matters today | Incomplete | Released results (home-released-results branch) not yet shown |
 | Optic Desk | Incomplete | Scenarios and today's reports: M7 |
 | What matters now (ranked moves) | Implemented and tested | On Explore, Cross-asset; linked from Home |
@@ -69,7 +69,7 @@ Row-level detail per page is in COVERAGE.md.
 | Swing setups | Incomplete | Lists armed, triggered and watched; filters, rule settings, back-tests and setup alerts are M3 |
 | Track record slots | Classic-only | M4 |
 | Chart: bar sizes, styles, MA, EMA, Bollinger, Fib, S/R, GEX levels, earnings marks, panes, zoom, pan, crosshair, 7 drawing tools | Implemented and tested | v2_check, plus drawings shared with Classic (round trip §7) |
-| Chart: Market structure breaks (new study) | Implemented and tested | `marketStructure` unit test; browser check (strength 3, 5, 10; Milo context) |
+| Chart: Market structure breaks (new study) | Implemented and tested | `marketStructure` unit test; prefix-stability test (a later bar never changes a recorded break); browser check (strength 3, 5, 10; formed vs known drawn apart; Milo context) |
 | Chart: free deterministic chart read | Classic-only | C18, M1 |
 | Chart: channel, Fib extension, pitchfork, arrow, ruler, risk box, position sizing, snap, moving a drawing | Classic-only | M1 |
 | Chart studies: EMA clouds, MA Trend, TSO, VWAP, Keltner, Donchian, regression, stages, accumulation, auto trends, VBP, zones, sessions, insider marks | Classic-only | M1 |

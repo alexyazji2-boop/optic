@@ -62,11 +62,11 @@ Built on existing data only (NEW-PRODUCTS.md). Status is updated here as each it
 
 | # | Item | Status |
 |---|---|---|
-| W0 | Dark visual system, expandable sidebar, workspace button | built in preview (`v2-dark-workspace`), owner decisions X1 to X3 pending |
-| W1 | Research workspace: presets, panels, linking, persistence | built in preview; 45 interaction checks; audit 0 faults |
-| W1a | Market Structure Break study on the chart | built; unit test; browser check |
+| W0 | Dark visual system, sidebar of destinations only, one page system | built locally (`v2-dark-workspace`); X1 accepted, X2 rejected and reverted, X3 resolved (2026-10-18); awaiting the owner's review of the real experience |
+| W1 | Home as the research workspace: layouts, panels, linking, persistence, phone priority, freshness per panel | built locally; 47 Home checks, 18 walkthrough checks; v2_check audit 0 faults on its 20 captures (5 Home views, desktop and phone, dark and light) |
+| W1a | Market Structure Break study on the chart | built; swing formed vs swing known shown apart; prefix-stability test (a later bar never changes a recorded break); browser check |
 | W2 | Notifications bell (I11) | open |
-| W3 | Guided contract comparison, without a composite grade | open |
+| W3 | Explainable contract suitability ranking on criteria the reader chooses (the transparent, sortable comparison is already built) | open; needs its method note |
 | W4 | Ranked setups view with a dated archive and the four outcome figures | open (archive needs M4) |
 | W5 | Alert timeline | open (needs update events recorded) |
 | W6 | Fundamentals checklist and the XBRL financial charts | open |

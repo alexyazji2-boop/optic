@@ -14,7 +14,6 @@ import { openMilo, resetContext } from './ui/milo.js';
 import { toggleWatch } from './ui/company.js';
 import { toast } from './ui/toast.js';
 import { hrefFor } from './nav.js';
-import * as home from './pages/home.js';
 import * as dossier from './pages/dossier.js';
 import * as options from './pages/options.js';
 import * as investing from './pages/investing.js';
@@ -49,7 +48,8 @@ import { watchStatus } from './core/status.js';
 import { openReport } from './pages/settings.js';
 import * as bridge from './pages/bridge.js';
 
-const PAGES = { home, overview: dossier, swing: options, long: investing, earnings, financials, news, chart: chartPage, brief: readPage, market: macroPage, indices: indicesPage, instrument: instrumentPage, explore: explorePage, scan: scanPage, insiders: insidersPage, analysts: analystsPage, settings: settingsPage, compare: comparePage, tracker: trackerPage, paper: paperPage, roth: retirementPage, brokerage: brokeragePage, reports: reportsPage, usage: reportsPage, accounts: reportsPage, watchlist, alerts, signin, workspace: workspacePage };
+// Home is the research workspace (Market Overview by default); pages/home.js supplies its blocks
+const PAGES = { home: workspacePage, overview: dossier, swing: options, long: investing, earnings, financials, news, chart: chartPage, brief: readPage, market: macroPage, indices: indicesPage, instrument: instrumentPage, explore: explorePage, scan: scanPage, insiders: insidersPage, analysts: analystsPage, settings: settingsPage, compare: comparePage, tracker: trackerPage, paper: paperPage, roth: retirementPage, brokerage: brokeragePage, reports: reportsPage, usage: reportsPage, accounts: reportsPage, watchlist, alerts, signin };
 let current = null;   // { page, view, route }
 let noticeWatch = null;
 
@@ -97,8 +97,7 @@ function show(route) {
   drawer.close({ silent: true, route: true });
   palette.close({ silent: true });
   if (route.view === 'signin' && store.signedIn() && (route.params || {}).mode !== 'reset') { router.go('#/'); return; }
-  // Home can open the workspace instead, when the reader chose that in this browser
-  const page = route.view === 'home' && workspacePage.isHome() ? workspacePage : PAGES[route.view] || bridge;
+  const page = PAGES[route.view] || bridge;
   const main = $('#main');
   const view = document.createElement('div');
   view.className = 'page-view';
@@ -154,7 +153,6 @@ function wireGlobal() {
     const t = (s) => e.target.closest(s);
     let b;
     if ((b = t('[data-v2-report-open]'))) { openReport(b, current ? document.title.replace(', Optic', '') : 'Optic'); return; }
-    if ((b = t('[data-v2-rail-disc]'))) { shell.toggleGroup(b.dataset.v2RailDisc, b); return; }
     if ((b = t('[data-v2-rail-collapse]'))) { const on = !shell.railTight(); shell.setRailTight(on); b.setAttribute('aria-pressed', String(on)); return; }
     if (t('[data-v2-use-classic]')) { e.preventDefault(); document.cookie = 'optic_ui=classic; path=/; max-age=31536000; samesite=lax'; location.href = `${CLASSIC}${location.hash}`; return; }
     if ((b = t('[data-v2-legal-more]'))) { const full = $('#legal-full'); const open = full.hidden; full.hidden = !open; b.setAttribute('aria-expanded', String(open)); b.textContent = open ? 'Hide the full disclaimer' : 'Full disclaimer'; return; }
