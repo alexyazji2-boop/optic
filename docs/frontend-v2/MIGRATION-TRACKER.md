@@ -35,7 +35,7 @@ Kept current as each milestone lands. Source of truth for status: this file. The
 | C8 | Thesis check | Dossier thesis form and check | M3 | open |
 | C9 | Track record slots | Options and Investing | M4 | open |
 | C10 | Chart drawing tools | channel, Fib extension, pitchfork, arrow, ruler, risk box, position sizing, snap, moving | M1 | open |
-| C11 | Chart studies | 14 studies (EMA clouds through insider marks) | M1 | open |
+| C11 | Chart studies | 14 studies (EMA clouds through insider marks) | M1 | in progress: insider marks verified 2026-10-19 (arrows on the price with a box naming each trade, `ui/pricechart.js` and `pages/chart-widgets.js` `insiderMarks`, browser check at 1440 and 390); the other 13 are open |
 | C12 | Chart widgets and chrome | 18 widgets; colours, legend, full screen, navigator | M1 | in progress: the 18 widgets verified 2026-10-19 (`pages/chart-widgets.js`, `tests/test_v2_chart_widgets.py`, browser check at 1440, 1024 and 390 against the local server); colours, legend, full screen and navigator are open |
 | C13 | Valuation editors | DCF editor, saved models, RI, FFO, DDM, comps, SOTP, valuation Milo | M2 | open |
 | C14 | Earnings this week | the page with no symbol | M3 | in progress: the workspace panel lists this week and next with consensus and on-request implied moves; the standalone page and before-open/after-close timing are open |

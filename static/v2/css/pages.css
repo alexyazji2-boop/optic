@@ -492,6 +492,14 @@ table.chw-table { font-size: 13px; } table.chw-table th { padding: 6px 4px; font
 .pc .lv.stop { stroke: var(--c-neg); } .pc .lv.stopb { stroke: var(--c-neg); stroke-dasharray: none; stroke-width: 1.5; } .pc .lv.round { stroke: var(--c-ink-3); stroke-dasharray: 2 3; }
 .pc .tm circle { fill: var(--c-plane); stroke-width: 1.6; } .pc .tm.pos circle { stroke: var(--c-pos); } .pc .tm.neg circle { stroke: var(--c-neg); }
 .pc .tm text { font: 700 12px/1 var(--f-label); } .pc .tm.pos text { fill: var(--c-pos); } .pc .tm.neg text { fill: var(--c-neg); }
+/* insider trades: arrows on the price and the box that names one (ui/pricechart.js insiderTip) */
+.pc .ins { stroke: var(--c-plane); stroke-width: 1.5; stroke-linejoin: round; paint-order: stroke; } .pc .ins.buy { fill: var(--c-pos); } .pc .ins.sell { fill: var(--c-neg); }
+.pc-tip { position: absolute; z-index: 6; width: max-content; max-width: min(300px, calc(100% - 8px)); padding: 10px 12px; display: grid; gap: 6px; border: 1px solid var(--c-line); border-radius: 8px; background: var(--c-raised); color: var(--c-ink); box-shadow: 0 12px 32px rgba(0, 0, 0, .28); font-size: 13px; line-height: 1.4; pointer-events: none; }
+.pc-tip[hidden] { display: none; }
+.pc-tip p { margin: 0; }
+.pc-tip-h b { font-weight: 650; }
+.pc-tip-r { display: grid; gap: 1px; padding-top: 6px; border-top: 1px solid var(--c-line-2); }
+.pc-tip .t-muted { font-size: 12.5px; }
 .pc .lv-t { font: 500 12px/1 var(--f-label); fill: var(--c-ink-2); paint-order: stroke; stroke: var(--c-plane); stroke-width: 3px; }
 /* market structure breaks: the level, its label, and the breaking close; direction is also in the label's title */
 .pc .msb line { stroke-width: 1.4; }

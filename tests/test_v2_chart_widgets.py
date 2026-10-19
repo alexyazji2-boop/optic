@@ -94,6 +94,7 @@ def test_each_widget_draws_from_a_real_ticker_payload(tmp_path):
     assert "Gross margin 46.9%" in o["reports"] and "Revenue growth, year on year +6.4%" in o["reports"] and "EPS beat rate 100% of 8 quarters" in o["reports"]
     assert "ATM IV, 7 days 21.6%" in o["options"] and "Call wall 350.00 (+2.3%)" in o["options"] and "Net GEX $" in o["options"]
     assert "Short float 0.83%" in o["insiders"] and "Sold NEWSTEAD JENNIFER" in o["insiders"] and "Net shares +248,641" in o["insiders"]
+    assert "The chart marks the 1 sale among the 2 latest filings Optic has, Oct 2 to Oct 6, 2026" in o["insiders"]
     assert "High today $345.99" in o["stats"] and "52-week low $243.42" in o["stats"]
     assert "Double top not confirmed" in o["patterns"] and "Inverted hammer" in o["patterns"]
     assert "276.13 Support −19.3% 61" in o["levels"]
@@ -171,3 +172,46 @@ def test_the_rail_follows_the_house_rules():
     sizes = [float(x) for x in re.findall(r"font(?:-size)?:[^;]*?(\d+(?:\.\d+)?)px", chw)]
     assert sizes and min(sizes) >= 12, "nothing under 12px"
     assert "@container chartpage (max-width: 1020px)" in CSS and "container: chartpage / inline-size" in CSS
+
+
+# ------------------------------------------------------------ insider trades on the price (2026-10-19)
+
+def test_insider_trades_become_arrows_with_the_words_for_their_box(tmp_path):
+    payload = {"company": {"ownership": {"recent_transactions": [
+        {"insider": "SMITH JANE", "position": "Director", "date": "2026-09-29", "shares": 2005.0, "value": 99987.0, "action": "purchase", "detail": "Purchase at price 49.87 per share."},
+        {"insider": "COOK TIMOTHY D", "position": "Officer and Director", "date": "2026-10-02", "shares": 191753.0, "value": 63845841.0, "action": "sale", "detail": "Sale at price 331.44 - 333.94 per share."},
+        {"insider": "COOK TIMOTHY D", "position": "Officer and Director", "date": "2026-10-02", "shares": 26325.0, "value": 0.0, "action": "other", "detail": "Stock Gift at price 0.00 per share."},
+        {"insider": "NO DATE", "position": "", "date": "", "shares": 1.0, "value": 1.0, "action": "sale", "detail": ""},
+    ]}}}
+    got = _run(tmp_path, f"""
+      const W = await import('{(JS / "pages/chart-widgets.js").as_posix()}');
+      const day = (s) => ({{ t: Date.parse(s) }});
+      const bars = ['2026-10-01', '2026-10-02', '2026-10-05'].map(day), keys = bars.map((b) => W.barKey(b.t, false));
+      print(JSON.stringify({{
+        marks: W.insiderMarks({json.dumps(payload)}),
+        sat: [W.barTime(bars, keys, '2026-10-03', {{ within: 4 }}), W.barTime(bars, keys, '2026-10-03')], fri: bars[1].t,
+      }}));
+    """)
+    m = got["marks"]
+    assert [x["side"] for x in m] == ["buy", "sell"], "purchases and sales only: a gift or an exercise is pay, not a view"
+    assert m[0] == {"at": "2026-09-29", "side": "buy", "date": "Sep 29, 2026", "value": 99987, "who": "SMITH JANE", "role": "Director",
+                    "amount": "2,005 shares, $100.0K", "note": "Purchase at price 49.87 per share."}
+    assert m[1]["amount"] == "191,753 shares, $63.8M"
+    assert got["sat"] == [got["fri"], None], "a trade on a day with no session goes to the bar before it"
+
+
+def test_the_arrows_their_box_and_the_switches():
+    pc = (JS / "ui/pricechart.js").read_text()
+    assert "if (S.overlays.ins !== false && (S.insiders || []).length) {" in pc
+    assert "<path class=\"ins ${buy ? 'buy' : 'sell'}\"" in pc, "a green arrow for a purchase, a red one for a sale"
+    assert "const k = `${i}${it.side}`" in pc, "one arrow for each side's trades in a bar"
+    assert "tipEl.className = 'pc-tip'; tipEl.setAttribute('role', 'tooltip')" in pc
+    assert "svg.offsetTop" not in pc, "an <svg> has no offsetTop; the box is placed from the two bounding boxes"
+    assert "insider ${g.side === 'buy' ? 'purchase' : 'sale'}" in pc, "the keyboard's bar reads its trades aloud"
+    assert "if (e.pointerType !== 'touch') hoverP = null;" in pc, "a tap opens the box and lifting the finger keeps it"
+    # on by default, in Indicators and in the Insiders panel
+    assert "['ins', 'Insider trades']" in CH and "events: true, ins: true }" in CH
+    assert "insiders: place(ins, 4)" in CH
+    assert "data-chw-ins" in CW and "if (el.matches('[data-chw-ins]')) { C.overlay('ins', el.checked); return true; }" in CW
+    css = CSS[CSS.index(".pc .ins {"):]
+    assert ".pc .ins.buy { fill: var(--c-pos); } .pc .ins.sell { fill: var(--c-neg); }" in css[:400]

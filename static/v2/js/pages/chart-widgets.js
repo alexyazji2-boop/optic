@@ -248,6 +248,7 @@ const BODY = {
     };
     return html`${rows.length ? kv(rows) : ''}
       ${tx.length ? html`<ul class="chw-list chw-ins">${tx.map(row)}</ul>${fine('Shares and value as filed. An exercise or conversion is neither a purchase nor a sale, so it is left uncoloured.')}` : ''}
+      ${spanLine(p.t)}
       ${more('#/insiders', 'Insider filings and House trades')}`;
   },
 
@@ -461,6 +462,13 @@ const BODY = {
 // The glossary's keys are lower case for matching; a term is shown as it is written ("ATM", "Forward P/E").
 const ACRONYM = new Set(['0dte', 'atm', 'atr', 'cagr', 'dte', 'ebitda', 'ema', 'eps', 'gex', 'itm', 'iv', 'macd', 'oi', 'otm', 'p/e', 'p&l', 'r1', 'r2', 'rsi', 'rvol', 's1', 's2', 'sma', 'vwap']);
 export const termName = (t) => capFirst(String(t).split(' ').map((w) => (ACRONYM.has(w) ? w.toUpperCase() : w === 'yoy' ? 'YoY' : w)).join(' '));
+// What the arrows on the chart stand for, and how far back they go, under a switch for them.
+function spanLine(t) {
+  const sp = insiderSpan(t);
+  if (!sp.n) return '';
+  return html`<label class="check chw-show"><input type="checkbox" data-chw-ins ${C.overlayOn('ins') ? 'checked' : ''}> <span>Show on the chart</span></label>
+    ${fine(sp.marked ? `The chart marks the ${[sp.buys ? `${sp.buys} purchase${sp.buys === 1 ? '' : 's'}` : '', sp.sells ? `${sp.sells} sale${sp.sells === 1 ? '' : 's'}` : ''].filter(Boolean).join(' and ')} among the ${sp.n} latest filings Optic has, ${shortDate(sp.from)} to ${fullDate(sp.to)}: a green arrow under the bar for a purchase, a red one over it for a sale. Point at or tap one to see the trade.` : `None of the ${sp.n} latest filings is a purchase or a sale, so the chart has nothing to mark.`)}`;
+}
 const checkCount = (n, sym) => `${n} of ${CHECKS.length} for ${sym}. Fixed questions on purpose. A checklist you can edit becomes a list of the questions you already like the answers to.`;
 
 /* ---------------- stop check ---------------- */
@@ -577,7 +585,7 @@ export function barKey(t, intraday) {
   const p = {}; NY.formatToParts(new Date(t)).forEach((x) => { p[x.type] = x.value; });
   return `${p.year}-${p.month}-${p.day} ${p.hour === '24' ? '00' : p.hour}:${p.minute}`;
 }
-export function barTime(bars, keys, stamp, { intraday = false, weekly = false } = {}) {
+export function barTime(bars, keys, stamp, { intraday = false, weekly = false, within = 0 } = {}) {
   const s = String(stamp || '').replace('T', ' ').slice(0, 16);
   if (!s || !bars.length) return null;
   if (intraday && s.length === 10) { const i = keys.findIndex((k) => k.slice(0, 10) === s); return i < 0 ? null : bars[i].t; }
@@ -586,8 +594,30 @@ export function barTime(bars, keys, stamp, { intraday = false, weekly = false } 
   while (lo <= hi) { const m = (lo + hi) >> 1; if (keys[m] <= want) { at = m; lo = m + 1; } else hi = m - 1; }
   if (at < 0) return null;
   if (weekly) return Date.parse(want.slice(0, 10)) - Date.parse(keys[at].slice(0, 10)) < 7 * 86400000 ? bars[at].t : null;
-  return keys[at].slice(0, 10) === want.slice(0, 10) ? bars[at].t : null;
+  if (keys[at].slice(0, 10) === want.slice(0, 10)) return bars[at].t;
+  return within && !intraday && Date.parse(want.slice(0, 10)) - Date.parse(keys[at].slice(0, 10)) <= within * 86400000 ? bars[at].t : null;
 }
+/**
+ * The insider trades the chart marks, from the ticker payload's latest filings (company.ownership.
+ * recent_transactions). Only purchases and sales: "other" is option exercises, grants and gifts, which are
+ * pay rather than a view on the price, as the classic chart's insider marks have it. Each carries the words
+ * for its hover box; the date is the trade's own, not its bar's (a weekly bar holds five days).
+ */
+export function insiderMarks(t) {
+  return (((((t || {}).company || {}).ownership || {}).recent_transactions) || []).map((x) => {
+    const a = String(x.action || '').toLowerCase(), side = a === 'purchase' ? 'buy' : a === 'sale' ? 'sell' : null, date = String(x.date || '').slice(0, 10);
+    if (!side || !/^\d{4}-\d\d-\d\d$/.test(date)) return null;
+    const amount = [isNum(x.shares) ? `${shares(x.shares)} shares` : '', isNum(x.value) && Number(x.value) ? `$${compact(x.value)}` : ''].filter(Boolean).join(', ');
+    return { at: date, side, date: fullDate(date), value: Number(x.value) || 0, who: clean(x.insider || 'An insider'), role: clean(x.position || ''), amount, note: clean(x.detail || '') };
+  }).filter(Boolean);
+}
+/** What the Insiders panel says the chart covers: the filings in the payload, and their span. */
+function insiderSpan(t) {
+  const tx = ((((t || {}).company || {}).ownership || {}).recent_transactions) || [], dates = tx.map((x) => String(x.date || '').slice(0, 10)).filter(Boolean).sort();
+  const m = insiderMarks(t);
+  return { n: tx.length, from: dates[0], to: dates[dates.length - 1], marked: m.length, buys: m.filter((x) => x.side === 'buy').length, sells: m.filter((x) => x.side === 'sell').length };
+}
+
 /** The backtest's fills as markers and the stop check's lines, for the widgets that are showing. */
 export function onChart(shown) {
   const marks = [], lines = [];
@@ -708,6 +738,7 @@ export function onChange(e) {
   }
   if (el.matches('[data-chw-btshow]')) { BT.show = el.checked; btSave(); C.chart(); return true; }
   if (el.matches('[data-chw-sr]')) { C.overlay('sr', el.checked); return true; }
+  if (el.matches('[data-chw-ins]')) { C.overlay('ins', el.checked); return true; }
   if (el.matches('[data-chw-learn]')) { G.learn = el.value; const d = el.closest('.chw-body').querySelector('[data-chw-def]'); if (d) d.textContent = GLOSSARY[el.value] || ''; return true; }
   return false;
 }

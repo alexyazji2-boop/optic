@@ -150,7 +150,8 @@ Status words:
 | Zoom (wheel, pinch, buttons), pan, fit, crosshair, OHLC readout, keyboard reading | Rebuilt | |
 | Drawings: horizontal and vertical lines, trend, ray, rectangle, Fibonacci, text; select, delete, undo, remove all | Rebuilt | Same key and format `optic.chart.drawings.v2`. Kinds only the classic app makes show as a line. |
 | Channel, Fib extension, pitchfork, arrow, ruler, risk box, position sizing; snap; moving a drawing | Not yet | |
-| EMA clouds, MA Trend, TSO, studies (VWAP, Keltner, Donchian, regression), stages, accumulation zones, auto trends, VBP, zones, sessions, insider marks | Current app | Linked. |
+| EMA clouds, MA Trend, TSO, studies (VWAP, Keltner, Donchian, regression), stages, accumulation zones, auto trends, VBP, zones, sessions | Current app | Linked. |
+| Insider marks | Rebuilt | 2026-10-19: green and red arrows for purchases and sales, with a box naming each trade on hover, tap or the keyboard (Classic's hover text never showed, under its crosshair layer). The Insider trades overlay is on by default; Classic's is off. |
 | Widgets: watch, alerts, news, analysts, season, notes, insiders, reports, checklist, stop check, options, levels, stats, patterns, pairs, backtest, trading, learn | Rebuilt | 2026-10-19, `pages/chart-widgets.js`: the classic rail beside the plot (a row under it on narrower screens, a strip on a phone), the same names, order and marks. Several open at once on a wide screen, one on a phone. Notes, checklist, stop check, backtest and pairs keep their inputs in the classic keys. Watch shows the account's watchlists, not a separate chart list. Reports, Options and Insiders read the payload's real fields, which three classic widgets missed (`financials.growth` and `margins`, `atm_greeks` as a list, `percent_of_float`). |
 | Colours, legend, full screen, navigator | Not yet | |
 | Explain chart with Milo | Rebuilt | |

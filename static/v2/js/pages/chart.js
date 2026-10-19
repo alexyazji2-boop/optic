@@ -36,13 +36,13 @@ const RANGES = { daily: { '1M': 21, '3M': 63, '6M': 126, '1Y': 252, All: Infinit
 const TOOLS = [['select', 'Select and move'], ['hline', 'Horizontal line'], ['vline', 'Vertical line'], ['trend', 'Trend line'], ['ray', 'Ray'], ['rect', 'Rectangle'], ['fibdraw', 'Fibonacci retracement'], ['text', 'Text note']];
 const TOOL_ICON = { select: 'cursor', hline: 'hline', vline: 'vline', trend: 'trend', ray: 'ray', rect: 'rect', fibdraw: 'fib', text: 'text' };
 const TOOL_GROUP_STARTS = new Set(['hline', 'rect', 'text']);   // pointer | lines | shapes | notes
-const OVERLAYS = [['ma', 'MA 20, 50, 200'], ['ema', 'EMA 9, 21, 50'], ['bb', 'Bollinger 20, 2'], ['fib', 'Fibonacci'], ['sr', 'Support and resistance'], ['gex', 'Dealer gamma levels'], ['msb', 'Market structure breaks'], ['events', 'Earnings']];
+const OVERLAYS = [['ma', 'MA 20, 50, 200'], ['ema', 'EMA 9, 21, 50'], ['bb', 'Bollinger 20, 2'], ['fib', 'Fibonacci'], ['sr', 'Support and resistance'], ['gex', 'Dealer gamma levels'], ['msb', 'Market structure breaks'], ['events', 'Earnings'], ['ins', 'Insider trades']];
 const PANES = [['volume', 'Volume'], ['rsi', 'RSI 14'], ['macd', 'MACD 12, 26, 9']];
 
 let D = {}, V = {}, live = true, mainEl = null, chart = null, unsub = null, phoneMq = null;
 
 function readView() {
-  const d = { interval: '60', range: '6M', style: 'candles', session: 'regular', read: false, dock: [], overlays: { ma: true, ema: false, bb: false, fib: false, sr: false, gex: false, msb: false, events: true }, panes: { volume: true, rsi: false, macd: false }, msbK: 5 };
+  const d = { interval: '60', range: '6M', style: 'candles', session: 'regular', read: false, dock: [], overlays: { ma: true, ema: false, bb: false, fib: false, sr: false, gex: false, msb: false, events: true, ins: true }, panes: { volume: true, rsi: false, macd: false }, msbK: 5 };
   try { const s = JSON.parse(localStorage.getItem(VIEW_KEY) || 'null'); if (s && typeof s === 'object') { Object.assign(d, s, { overlays: Object.assign(d.overlays, s.overlays || {}), panes: Object.assign(d.panes, s.panes || {}) }); } } catch (e) { /* private */ }
   d.interval = '60'; // the Chart page opens on hourly bars, as in the classic app
   d.dock = Array.isArray(d.dock) ? d.dock.filter((id, i, a) => W.IDS.includes(id) && a.indexOf(id) === i) : [];
@@ -251,12 +251,15 @@ function flushRepaints() {
   });
 }
 // The backtest's fills and the stop check's lines, placed on the bars this chart is drawing.
+// Insider trades too (the Insider trades overlay, on unless turned off): a trade on a day with no session
+// goes to the last bar before it, as the classic chart snaps them.
 function extras() {
-  const { marks, lines } = W.onChart(shown());
-  if (!D.bars || !marks.length) return { marks: [], lines };
-  const intraday = !!INTERVALS.find((x) => x.key === V.interval).intraday;
+  const { marks, lines } = W.onChart(shown()), ins = W.insiderMarks(D.t);
+  if (!D.bars || (!marks.length && !ins.length)) return { marks: [], lines, insiders: [] };
+  const intraday = !!INTERVALS.find((x) => x.key === V.interval).intraday, weekly = V.interval === 'weekly';
   if (D.keysOf !== D.bars) { D.keysOf = D.bars; D.keys = D.bars.map((b) => W.barKey(b.t, intraday)); }
-  return { marks: marks.map((m) => Object.assign({}, m, { t: W.barTime(D.bars, D.keys, m.at, { intraday, weekly: V.interval === 'weekly' }) })).filter((m) => m.t !== null), lines };
+  const place = (list, within) => list.map((m) => Object.assign({}, m, { t: W.barTime(D.bars, D.keys, m.at, { intraday, weekly, within }) })).filter((m) => m.t !== null);
+  return { marks: place(marks, 0), lines, insiders: place(ins, 4) };
 }
 function paintExtras() { if (chart) chart.set(extras()); }
 const phase = () => ((D.session || {}).prices || {}).phase || ((D.session || {}).session || {}).phase || (marketSession() || {}).phase || null;
@@ -313,7 +316,7 @@ function wire(main) {
     if (el.closest('.chw') && W.onChange(e)) return;
     if (el.matches('[data-v2-ch-iv]')) { V.interval = el.value; if (V.interval === 'weekly' && !RANGES.weekly[V.range]) V.range = '1Y'; paintTools(); loadBars(); return; }
     if (el.matches('[data-v2-ch-msbk]')) { V.msbK = Number(el.value) || 5; saveView(); paintChart(); return; }
-    if (el.matches('[data-v2-ch-ov]')) { V.overlays[el.dataset.v2ChOv] = el.checked; saveView(); if (chart) chart.set({ overlays: V.overlays }); if (el.dataset.v2ChOv === 'sr') repaintWidget('levels'); return; }
+    if (el.matches('[data-v2-ch-ov]')) { V.overlays[el.dataset.v2ChOv] = el.checked; saveView(); if (chart) chart.set({ overlays: V.overlays }); if (el.dataset.v2ChOv === 'sr') repaintWidget('levels'); if (el.dataset.v2ChOv === 'ins') repaintWidget('insiders'); return; }
     if (el.matches('[data-v2-ch-pane]')) { V.panes[el.dataset.v2ChPane] = el.checked; saveView(); paintChart(); }
   });
   main.addEventListener('click', (e) => {

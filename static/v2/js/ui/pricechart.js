@@ -8,7 +8,7 @@
 // + and - zoom, Home and End jump, Delete removes the selected drawing).
 // Drawings are stored as {kind, points:[{t: epoch ms, p: price}]}, the classic
 // app's format, so they line up whatever the bar size.
-import { num, esc } from '../core/format.js';
+import { num, esc, compact } from '../core/format.js';
 
 /* ---------- indicators (the textbook definitions the classic app uses) ---------- */
 export const sma = (v, n) => v.map((_, i) => (i + 1 < n ? null : v.slice(i + 1 - n, i + 1).reduce((a, b) => a + b, 0) / n));
@@ -95,6 +95,9 @@ export function createPriceChart(host, opts) {
   host.classList.add('pc');
   host.innerHTML = `<div class="pc-read" aria-live="off"></div><svg class="pc-svg" tabindex="0" role="application" aria-roledescription="price chart"></svg><div class="pc-sr sr" aria-live="polite"></div>`;
   const svg = host.querySelector('svg'), read = host.querySelector('.pc-read'), live = host.querySelector('.pc-sr');
+  // the box that names an insider trade under the pointer (or the keyboard's bar); `flags` are the arrows drawn
+  const tipEl = document.createElement('div'); tipEl.className = 'pc-tip'; tipEl.setAttribute('role', 'tooltip'); tipEl.hidden = true; host.appendChild(tipEl);
+  let flags = [], hoverP = null;
 
   // daily and weekly bars are dates (UTC midnight); intraday bars are moments in New York
   const fmtT = (t) => { const d = new Date(t); return S.intraday ? d.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' }) : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' }); };
@@ -180,6 +183,20 @@ export function createPriceChart(host, opts) {
     });
     // earnings and other events
     (S.overlays.events === false ? [] : S.events).forEach((e) => { const i = idxOfT(e.t); if (i < from || i > to) return; const x = X(i).toFixed(1); o += `<g class="evm"><line x1="${x}" x2="${x}" y1="${pp.y0}" y2="${pp.y1}"/><text x="${x}" y="${pp.y1 - 4}" text-anchor="middle">${esc(e.kind)}</text><title>${esc(e.label)}</title></g>`; });
+    // insider trades (S.insiders, from the ticker payload): a green arrow under the bar's low for a purchase, a red
+    // one over its high for a sale, one arrow for all of a side's trades in a bar; the box comes from insiderTip()
+    flags = [];
+    if (S.overlays.ins !== false && (S.insiders || []).length) {
+      const by = new Map();
+      S.insiders.forEach((it) => { const i = idxOfT(it.t); if (i < from || i > to || !bars[i]) return; const k = `${i}${it.side}`; if (!by.has(k)) by.set(k, { i, side: it.side, items: [] }); by.get(k).items.push(it); });
+      by.forEach((f) => {
+        const b = bars[f.i], x = X(f.i), buy = f.side === 'buy';
+        const tip = buy ? Math.min(pp.y1 - 21, ps.Y(b.l) + 6) : Math.max(pp.y0 + 21, ps.Y(b.h) - 6), d = buy ? 1 : -1;
+        const pts = [[0, 0], [7.5, 9], [2, 9], [2, 19], [-2, 19], [-2, 9], [-7.5, 9]].map(([dx, dy]) => `${(x + dx).toFixed(1)} ${(tip + d * dy).toFixed(1)}`);
+        o += `<path class="ins ${buy ? 'buy' : 'sell'}" d="M${pts.join('L')}Z"/>`;
+        flags.push(Object.assign(f, { x, y: tip + d * 10 }));
+      });
+    }
     // fills a side widget asks for (the backtest's entries and exits): B under the bar's low, S over its high
     (S.marks || []).forEach((m) => {
       const i = idxOfT(m.t); if (i < from || i > to || !bars[i]) return;
@@ -233,7 +250,29 @@ export function createPriceChart(host, opts) {
     return `<line class="${cls} dr-other" x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}"><title>${esc(dr.kind)}, drawn in full in the current app</title></line>`;
   }
 
+  // The hover box: the arrow nearest the pointer, or with the keyboard the arrow on the crosshair's bar.
+  function insiderTip() {
+    let f = null;
+    if (hoverP && !(drag && drag.moved)) { let best = 22; flags.forEach((g) => { const dx = Math.abs(g.x - hoverP.x), dy = Math.abs(g.y - hoverP.y); if (dx <= Math.max(9, layout.bw / 2 + 3) && dy < best) { best = dy; f = g; } }); }
+    else if (document.activeElement === svg && cross >= 0) f = flags.find((g) => g.i === cross) || null;
+    if (!f) { tipEl.hidden = true; return; }
+    const buy = f.side === 'buy', n = f.items.length, total = f.items.reduce((a, it) => a + (Number(it.value) || 0), 0);
+    const day = f.items.every((it) => it.date === f.items[0].date) ? f.items[0].date : '';   // a weekly bar can hold several days
+    const head = `<p class="pc-tip-h"><b class="${buy ? 'up' : 'down'}">${n === 1 ? `Insider ${buy ? 'purchase' : 'sale'}` : `${n} insider ${buy ? 'purchases' : 'sales'}`}</b>${day ? ` ${esc(day)}` : ''}</p>${n > 1 && total ? `<p class="t-muted">$${esc(compact(total))} in all</p>` : ''}`;
+    const rows = f.items.slice(0, 4).map((it) => `<div class="pc-tip-r"><p><b>${esc(it.who)}</b>${it.role ? `, ${esc(it.role)}` : ''}</p><p>${esc([day ? '' : it.date, it.amount].filter(Boolean).join(', '))}</p>${it.note ? `<p class="t-muted">${esc(it.note)}</p>` : ''}</div>`).join('');
+    tipEl.innerHTML = head + rows + (n > 4 ? `<p class="t-muted">And ${n - 4} more on this bar.</p>` : '');
+    tipEl.hidden = false;
+    // an <svg> has no offsetTop: its place in the host comes from the two boxes
+    const r = svg.getBoundingClientRect(), hr = host.getBoundingClientRect(), k = r.width / (W || 1), top0 = r.top - hr.top, hw = host.clientWidth;
+    const bw = tipEl.offsetWidth, bh = tipEl.offsetHeight, ax = f.x * k + (r.left - hr.left), ay = f.y * k + top0;
+    let left = ax + 14; if (left + bw > hw - 4) left = Math.max(4, ax - 14 - bw);
+    // inside the plot, and inside the window when the plot runs past it
+    const lo = Math.max(top0, -hr.top + 72) + 4, hi = Math.min(top0 + H * k, window.innerHeight - hr.top) - bh - 4;
+    const top = Math.max(lo, Math.min(hi, ay - bh / 2));
+    tipEl.style.left = `${Math.round(left)}px`; tipEl.style.top = `${Math.round(top)}px`;
+  }
   function readout() {
+    insiderTip();
     const i = cross >= 0 ? cross : to, b = bars[i];
     if (!b) { read.textContent = ''; return; }
     const prev = bars[i - 1], chg = prev ? (b.c / prev.c - 1) * 100 : null;
@@ -245,7 +284,8 @@ export function createPriceChart(host, opts) {
     const breaks = S.overlays.msb ? ind.msb.filter((m) => m.at >= from && m.at <= to) : [];
     const last = breaks[breaks.length - 1];
     const msb = S.overlays.msb ? (last ? ` ${breaks.length} market structure break${breaks.length === 1 ? '' : 's'} in view; the latest is ${last.dir === 'bull' ? 'bullish' : 'bearish'}, on ${fmtT(bars[last.at].t)} through ${num(last.price)}.` : ' No market structure break in view.') : '';
-    return `${S.label || 'Price'}, ${to - from + 1} bars from ${fmtT(a.t)} to ${fmtT(b.t)}: from ${num(a.c)} to ${num(b.c)}, ${ch >= 0 ? 'up' : 'down'} ${num(Math.abs(ch), 1)} percent.${msb} Use the arrow keys to read each bar.`;
+    const ins = flags.length ? ` ${flags.reduce((a, g) => a + g.items.length, 0)} insider trades marked.` : '';
+    return `${S.label || 'Price'}, ${to - from + 1} bars from ${fmtT(a.t)} to ${fmtT(b.t)}: from ${num(a.c)} to ${num(b.c)}, ${ch >= 0 ? 'up' : 'down'} ${num(Math.abs(ch), 1)} percent.${msb}${ins} Use the arrow keys to read each bar.`;
   }
   const redraw = () => { if (!raf) raf = requestAnimationFrame(draw); };
 
@@ -266,6 +306,7 @@ export function createPriceChart(host, opts) {
   svg.addEventListener('pointerdown', (e) => {
     try { svg.setPointerCapture(e.pointerId); } catch (err) { /* a pointer the browser no longer tracks */ }
     pointers.set(e.pointerId, pt(e));
+    hoverP = pt(e);   // a tap on an arrow opens its box on a touch screen
     if (pointers.size === 2) { const [p1, p2] = [...pointers.values()]; drag = { pinch: Math.abs(p1.x - p2.x), span: to - from + 1 }; return; }
     const p = pt(e), i = Math.max(0, Math.min(N - 1, layout.I(p.x))), price = layout.ps.P(p.y);
     if (S.tool !== 'select') {
@@ -285,11 +326,13 @@ export function createPriceChart(host, opts) {
     if (drag && drag.pinch && pointers.size === 2) { const [p1, p2] = [...pointers.values()]; const d = Math.abs(p1.x - p2.x) || 1; const ns = Math.max(10, Math.min(N, Math.round(drag.span * drag.pinch / d))); const c = to; from = Math.max(0, c - ns + 1); to = c; redraw(); return; }
     if (drag && !drag.pinch) { const dx = p.x - drag.x; if (Math.abs(dx) > 3) drag.moved = true; const span = to - from; from = Math.max(0, Math.min(N - 1 - span, drag.from - Math.round(dx / layout.bw))); to = from + span; }
     cross = Math.max(from, Math.min(to, layout.I(p.x))); crossY = p.y <= layout.panes[0].y1 ? layout.ps.P(p.y) : null;
+    hoverP = p;
     redraw();
   });
   const up = (e) => { pointers.delete(e.pointerId); if (pointers.size < 2 && drag && drag.pinch) drag = null; else if (pointers.size === 0) drag = null; };
   svg.addEventListener('pointerup', up); svg.addEventListener('pointercancel', up);
-  svg.addEventListener('pointerleave', () => { if (!drag) { cross = -1; crossY = null; redraw(); } });
+  // a finger lifting also leaves: the box it opened stays until the next touch
+  svg.addEventListener('pointerleave', (e) => { if (e.pointerType !== 'touch') hoverP = null; if (!drag) { cross = -1; crossY = null; redraw(); } });
   svg.addEventListener('wheel', (e) => { e.preventDefault(); const p = pt(e); zoom(e.deltaY > 0 ? 1.15 : 1 / 1.15, Math.max(from, Math.min(to, layout.I(p.x)))); }, { passive: false });
 
   function hitTest(p) {
@@ -327,7 +370,7 @@ export function createPriceChart(host, opts) {
     else if ((e.metaKey || e.ctrlKey) && k.toLowerCase() === 'z') { const prev = undo.pop(); if (prev) { S.drawings = prev; if (S.onDrawings) S.onDrawings(prev); } e.preventDefault(); }
     redraw();
   });
-  function announce() { const b = bars[cross]; live.textContent = `${fmtT(b.t)}: open ${num(b.o)}, high ${num(b.h)}, low ${num(b.l)}, close ${num(b.c)}.`; }
+  function announce() { const b = bars[cross], ins = flags.filter((g) => g.i === cross).map((g) => `${g.items.length} insider ${g.side === 'buy' ? 'purchase' : 'sale'}${g.items.length === 1 ? '' : 's'}: ${g.items.map((it) => `${it.who}, ${it.amount}`).join('; ')}`).join('. '); live.textContent = `${fmtT(b.t)}: open ${num(b.o)}, high ${num(b.h)}, low ${num(b.l)}, close ${num(b.c)}.${ins ? ` ${ins}.` : ''}`; }
 
   const ro = new ResizeObserver(() => redraw()); ro.observe(host);
   draw();

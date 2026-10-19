@@ -73,7 +73,8 @@ Row-level detail per page is in COVERAGE.md.
 | Chart: Market structure breaks (new study) | Implemented and tested | `marketStructure` unit test; prefix-stability test (a later bar never changes a recorded break); browser check (strength 3, 5, 10; formed vs known drawn apart; Milo context) |
 | Chart: free deterministic chart read | Implemented and tested | C18, carried over 2026-10-19 (`ui/chartread.js`, the classic `chartReadModel` and its words): the Chart read button beside the plot; daily trend and its facts, nearest support and resistance, RSI and MACD, from the ticker payload already loaded, no model call. Browser check at 1440 and 390; `tests/test_v2_p3.py` |
 | Chart: channel, Fib extension, pitchfork, arrow, ruler, risk box, position sizing, snap, moving a drawing | Classic-only | M1 |
-| Chart studies: EMA clouds, MA Trend, TSO, VWAP, Keltner, Donchian, regression, stages, accumulation, auto trends, VBP, zones, sessions, insider marks | Classic-only | M1 |
+| Chart: insider trades on the price | Implemented and tested | C11's insider marks, 2026-10-19: a green arrow under the bar for a purchase, a red one over it for a sale (option exercises, grants and gifts left out, as in Classic), one arrow per side per bar; pointing at or tapping one, or reaching its bar with the keyboard, opens a box naming each trade (who, role, shares, value, the filing's own words) and the screen-reader line reads it. From the ticker payload's latest filings (12 for AAPL, about a month), which the Insiders panel states. The Insider trades overlay, on by default, in Indicators and the Insiders panel. `tests/test_v2_chart_widgets.py`; browser check on AAPL (sales) and FUL (purchases) at 1440 and 390 |
+| Chart studies: EMA clouds, MA Trend, TSO, VWAP, Keltner, Donchian, regression, stages, accumulation, auto trends, VBP, zones, sessions | Classic-only | M1 |
 | Chart: the 18 side widgets (Watch, Alerts, News, Analysts, Season, Notes, Insiders, Reports, Checklist, Stop check, Options, Key levels, Stats, Patterns, Pairs, Backtest, Trading, Learn) | Implemented and tested | C12, carried over 2026-10-19 (`pages/chart-widgets.js`): a rail beside the plot with the classic names, order and marks; any number open on a wide screen, one at a time on a phone; nothing open to start, the open ones remembered. Nine read the ticker payload the page already loads (Analysts and Stop check also ask a free endpoint once open); Alerts, Season, Pairs, Backtest and Trading ask their own free endpoints once open; Watch uses the watchlists; Notes, Checklist and Learn ask the server nothing. The backtest's trades and the stop check's lines are drawn on the price. Inputs kept in the classic keys. `tests/test_v2_chart_widgets.py` (each widget drawn from a real AAPL payload, trade placement by day, minute and week); browser check at 1440, 1024 and 390 against the local server (keyboard along the rail, focus kept through a redraw, no sideways scroll), and the sweep with all 18 open on AAPL and SPY at 1440, 1280, 768, 390 and 375 × 549: no console errors, raw text, small text, em dashes or overflow, and the launch audit at 0 faults |
 | Chart: colours, legend, full screen, navigator | Classic-only | M1 |
 | Investing: long-term view, return and risk, drawdown, valuation history, fair value, scenarios (saved, shared with Classic) | Implemented and tested | v2_check, plus the round trip |
@@ -112,13 +113,13 @@ Lines in this matrix:
 
 | Class | Lines |
 |---|---|
-| Implemented and tested (including partly tested) | 39 |
+| Implemented and tested (including partly tested) | 40 |
 | Incomplete | 12 |
 | Classic-only | 16 |
 
 Many lines are groups. Counted one by one, the Classic-only capabilities are:
 - 7 chart drawing tools, plus snap and moving a drawing;
-- 14 chart studies;
+- 13 chart studies (insider marks moved across on 2026-10-19);
 - 4 pieces of chart chrome: colours, legend, full screen, navigator;
 - 8 valuation editors and methods;
 - 6 Milo features;
