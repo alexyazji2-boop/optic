@@ -43,12 +43,12 @@ Kept current as each milestone lands. Source of truth for status: this file. The
 | C16 | Alerts owner controls | mark read, clear all, e-mail delivery | M6 | open |
 | C17 | Glossary tooltips and Learn widget | dotted-underline definitions (`app.js:433-573`), the Learn widget. Missing from the matrix until the 2026-10-18 audit | M7 | in progress: the Learn widget is on the Chart page (2026-10-19, the glossary copied word for word and compared by test); the tooltips are open |
 | C18 | Free chart read | Classic's deterministic "Chart read" popover (`app.js:23060-23135`) | M1 | verified 2026-10-19: `ui/chartread.js` on the Chart page's toolbar, the classic model and words, no model call; browser check at 1440 and 390 |
-| C19 | Chart indicator panes | ADX and DI, Stochastic, on-balance volume, money flow index, relative strength line (`app.js` IND_FALLBACK_CATALOGUE, from /api/indicators). Missing from the matrix until 2026-10-19, found while carrying over C11 | M1 | open |
+| C19 | Chart indicator panes | ADX and DI, Stochastic, on-balance volume, money flow index, relative strength line (`app.js` IND_FALLBACK_CATALOGUE, from /api/indicators). Missing from the matrix until 2026-10-19, found while carrying over C11 | M1 | verified 2026-10-19: the five as panes under the price, from /api/indicators on the chart's own bars with their reference levels (`pages/chart-studies.js` `panesFrom`, `ui/pricechart.js`); values at the crosshair in each pane's title, readings under the chart; past two panes the chart grows; `tests/test_v2_studies.py`; browser check on AAPL hourly and daily at 1440 and 390; the sweep at five sizes with every pane on |
 
 ## By milestone
 | Milestone | Rows | Status |
 |---|---|---|
-| M1 Advanced charting | I6, C10, C11, C12, C18, C19 | open (MSB added as a new study, 2026-10-18; C18 verified 2026-10-19; C12 verified 2026-10-19, its 18 widgets and its chrome; C11 verified 2026-10-19) |
+| M1 Advanced charting | I6, C10, C11, C12, C18, C19 | open (MSB added as a new study, 2026-10-18; C18 verified 2026-10-19; C12 verified 2026-10-19, its 18 widgets and its chrome; C11 and C19 verified 2026-10-19) |
 | M2 Valuation editors | C13 | open |
 | M3 Research tools | I4, I5, C7 (not the chip), C8, C14 | open |
 | M4 Track record | C9, C15 (after the validation branch) | open |

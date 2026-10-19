@@ -125,7 +125,7 @@ def test_only_the_classic_endpoints_and_only_while_on():
     assert urls == {"/api/indicators", "/api/stage", "/api/trendlines", "/api/longterm"}, urls
     for k, url in (("stages", "/api/stage"), ("trends", "/api/trendlines"), ("accum", "/api/longterm")):
         assert f"if (on.{k}) get(" in CS and url in CS
-    assert "ST.need(V.overlays)" in CH, "asked for when a study is turned on, and with each new set of bars"
+    assert "ST.need(ticked())" in CH, "asked for when a study is turned on, and with each new set of bars"
 
 
 def test_the_menu_names_groups_and_defaults():
@@ -135,7 +135,7 @@ def test_the_menu_names_groups_and_defaults():
         assert f"['{k}', '{name}']" in CH, k
         assert f"{k}: false" in CH, f"{k} is off until the reader turns it on"
         assert f"  {k}: '" in CS, f"{k} says what it is in the menu"
-    assert "['tso', 'Trend Strength Oscillator']" in CH and "tso: false }" in CH
+    assert "['tso', 'Trend Strength Oscillator']" in CH and "tso: false," in CH
     assert "const OV_GROUP = { ma: 'Averages and bands', fib: 'Levels', msb: 'Structure and events', stages: 'Candle colours' };" in CH
     assert 'class="menu-body ch-imenu"' in CH, "the longer menu scrolls"
     assert "Studies such as stages, MA Trend and volume by price" not in CH, "the footnote no longer sends them to the current app"
@@ -146,3 +146,41 @@ def test_the_price_pane_is_clipped_and_tints_win():
     assert "const tint = OV.matrend ?" in PC, "MA Trend colours the candles in place of the stages"
     css = (V2 / "css/pages.css").read_text()
     assert ".pc .wick.tint.st3, .pc .body.tint.st3 { stroke: var(--c-warn); fill: var(--c-warn); }" in css
+
+
+# ------------------------------------------------------------ the indicator panes (C19, 2026-10-19)
+
+def test_the_panes_come_from_the_classic_endpoint_on_these_bars(tmp_path):
+    got = _run(tmp_path, f"""
+      const CS = await import('{(JS / "pages/chart-studies.js").as_posix()}');
+      const bars = ['2026-10-15', '2026-10-16', '2026-10-19'].map((d) => ({{ t: Date.parse(d + 'T00:00:00Z') }}));
+      const ind = {{ dates: ['2026-10-16', '2026-10-19'], indicators: {{
+        adx: {{ name: 'ADX and DI', available: true, reference: [{{ value: 25, label: '25' }}], lines: [{{ name: 'ADX', values: [20, 21] }}, {{ name: '+DI', values: [30, 31] }}, {{ name: '-DI', values: [10, null] }}] }},
+        rs: {{ name: 'Relative strength line', available: false, reason: 'No benchmark history' }},
+        keltner: {{ name: 'Keltner channel', available: true, lines: [] }},
+      }} }};
+      print(JSON.stringify({{ panes: CS.panesFrom(ind, bars), ids: CS.SERVER_PANES }}));
+    """)
+    p = got["panes"]
+    assert sorted(p) == ["adx", "rs"], "panes only; the price studies go elsewhere"
+    assert [ln["values"] for ln in p["adx"]["lines"]] == [[None, 20, 21], [None, 30, 31], [None, 10, None]], "bar for bar by time"
+    assert p["adx"]["reference"] == [{"value": 25, "label": "25"}]
+    assert p["rs"] == {"name": "Relative strength line", "reason": "No benchmark history"}, "a pane that cannot draw says why"
+    assert got["ids"] == ["adx", "stochastic", "obv", "mfi", "rs"]
+
+
+def test_the_panes_in_the_menu_and_on_the_chart():
+    for k, name in (("adx", "ADX and DI"), ("stochastic", "Stochastic"), ("obv", "On-balance volume"), ("mfi", "Money flow index"), ("rs", "Relative strength line")):
+        assert f"['{k}', '{name}']" in CH and f"{k}: false" in CH, k
+        assert f"  {k}: '" in CS, f"{k} says what it is in the menu"
+    assert "const ticked = () => Object.assign({}, V.overlays, V.panes);" in CH and "ST.need(ticked())" in CH, "fetched when a pane is ticked"
+    assert "const ids = SERVER.concat(SERVER_PANES).filter((k) => on[k]);" in CS, "one request for the price studies and the panes"
+    assert "const SERVER_PANES = ['adx', 'stochastic', 'obv', 'mfi', 'rs'];" in PC
+    assert "Math.min(0.17, 0.5 / extra)" in PC, "with every pane on the price keeps half the height"
+    assert "const BOUNDED = { stochastic: [0, 100], mfi: [0, 100], adx: [0, 50] };" in PC
+    assert "indicator panes the current app adds" not in CH
+
+
+def test_past_two_panes_the_chart_grows():
+    assert "const paneRoom = () => Math.max(0, PANES.filter(([k]) => k !== 'volume' && V.panes[k]).length - 2) * (isPhone() ? 60 : 72);" in CH
+    assert "function plotHeight(host) { return baseHeight(host) + paneRoom(); }" in CH, "five panes on a phone left the price 70 px and each pane 22 px"

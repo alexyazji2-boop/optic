@@ -43,6 +43,12 @@ export function bollinger(v, n = 20, k = 2) {
 }
 
 let legendSeq = 0;
+// The panes /api/indicators draws (C19): their names, the 0 to 100 scales kept whole, and the colour of each line
+// (ADX gold with +DI green and -DI red; otherwise gold, then blue).
+const SERVER_PANES = ['adx', 'stochastic', 'obv', 'mfi', 'rs'];
+const PANE_NAMES = { adx: 'ADX and DI', stochastic: 'Stochastic 14', obv: 'On-balance volume', mfi: 'Money flow index', rs: 'Relative strength line' };
+const BOUNDED = { stochastic: [0, 100], mfi: [0, 100], adx: [0, 50] };
+const PANE_LINE = { adx: ['ip0', 'ipu', 'ipd'] };
 let clipSeq = 0;   // ids for each chart's price-pane clip   // ids for each chart's legend body
 
 /**
@@ -138,14 +144,16 @@ export function createPriceChart(host, opts) {
   function computeLayout() {
     W = Math.max(300, host.clientWidth); H = S.height || Math.round(Math.max(340, Math.min(620, W * 0.55)));
     const panes = []; const r = 56, l = 4;
-    const extra = (S.panes.rsi ? 1 : 0) + (S.panes.macd ? 1 : 0) + (S.panes.tso ? 1 : 0);
-    const paneH = extra ? Math.round(H * 0.17) : 0;
+    const extra = (S.panes.rsi ? 1 : 0) + (S.panes.macd ? 1 : 0) + (S.panes.tso ? 1 : 0) + SERVER_PANES.filter((k) => S.panes[k]).length;
+    // each pane a sixth of the height, or a share of half of it once there are more than three
+    const paneH = extra ? Math.round(H * Math.min(0.17, 0.5 / extra)) : 0;
     const priceH = H - 26 - extra * (paneH + 8);
     panes.push({ id: 'price', y0: 8, y1: 8 + priceH });
     let y = 8 + priceH + 8;
     if (S.panes.rsi) { panes.push({ id: 'rsi', y0: y, y1: y + paneH }); y += paneH + 8; }
     if (S.panes.macd) { panes.push({ id: 'macd', y0: y, y1: y + paneH }); y += paneH + 8; }
-    if (S.panes.tso) { panes.push({ id: 'tso', y0: y, y1: y + paneH }); }
+    if (S.panes.tso) { panes.push({ id: 'tso', y0: y, y1: y + paneH }); y += paneH + 8; }
+    SERVER_PANES.filter((k) => S.panes[k]).forEach((k) => { panes.push({ id: k, y0: y, y1: y + paneH, server: true }); y += paneH + 8; });
     const span = Math.max(1, to - from + 1), bw = (W - l - r) / span;
     return { l, r, panes, bw, X: (i) => l + (i - from + 0.5) * bw, I: (x) => Math.round((x - l) / bw - 0.5 + from) };
   }
@@ -289,6 +297,22 @@ export function createPriceChart(host, opts) {
       if (p.id === 'rsi') {
         const Y = (v) => p.y0 + (1 - v / 100) * (p.y1 - p.y0);
         o += `<line class="g" x1="0" x2="${W - layout.r}" y1="${Y(70)}" y2="${Y(70)}"/><line class="g" x1="0" x2="${W - layout.r}" y1="${Y(30)}" y2="${Y(30)}"/><text class="ax" x="${W - layout.r + 6}" y="${Y(70) + 4}">70</text><text class="ax" x="${W - layout.r + 6}" y="${Y(30) + 4}">30</text><text class="pane-t" x="6" y="${p.y0 + 12}">RSI 14</text><path class="ov rsi" d="${path(ind.rsi, X, Y)}"/>`;
+      } else if (p.server) {
+        // a pane /api/indicators computed (C19): its lines, its reference levels dashed, the values at the crosshair's bar
+        const sp = ((S.studies || {}).panes || {})[p.id], name = PANE_NAMES[p.id];
+        if (!sp || !sp.lines) { o += `<text class="pane-t" x="6" y="${p.y0 + 12}">${esc(name)}: ${esc(sp ? sp.reason : 'loading')}</text>`; return; }
+        let lo = Infinity, hi = -Infinity;
+        sp.lines.forEach((ln) => { for (let i = from; i <= to; i++) { const v = ln.values[i]; if (Number.isFinite(v)) { lo = Math.min(lo, v); hi = Math.max(hi, v); } } });
+        if (BOUNDED[p.id]) { lo = Math.min(lo, BOUNDED[p.id][0]); hi = Math.max(hi, BOUNDED[p.id][1]); }
+        if (!Number.isFinite(lo)) { o += `<text class="pane-t" x="6" y="${p.y0 + 12}">${esc(name)}: not enough bars</text>`; return; }
+        const pad = (hi - lo || 1) * 0.08, a = lo - pad, z = hi + pad, Y = (v) => p.y0 + (1 - (v - a) / (z - a)) * (p.y1 - p.y0);
+        const fmtV = (v) => (Math.abs(v) >= 1e5 ? compact(v) : num(v, Math.abs(v) >= 100 ? 0 : 1));
+        (sp.reference || []).forEach((r) => { if (r.value < a || r.value > z) return; o += `<line class="g ref" x1="0" x2="${W - layout.r}" y1="${Y(r.value).toFixed(1)}" y2="${Y(r.value).toFixed(1)}"/><text class="ax" x="${W - layout.r + 6}" y="${(Y(r.value) + 4).toFixed(1)}">${esc(Number.isInteger(r.value) ? String(r.value) : fmtV(r.value))}</text>`; });
+        sp.lines.forEach((ln, j) => { o += `<path class="ov ip ${PANE_LINE[p.id] ? PANE_LINE[p.id][j] || `ip${j}` : `ip${j}`}" d="${path(ln.values, X, Y)}"/>`; });
+        const at = cross >= 0 ? cross : to;
+        // SVG collapses runs of spaces, so the values are set off with a colon and commas
+        const vals = sp.lines.filter((ln) => Number.isFinite(ln.values[at])).map((ln) => (sp.lines.length === 1 ? fmtV(ln.values[at]) : `${ln.name} ${fmtV(ln.values[at])}`));
+        o += `<text class="pane-t" x="6" y="${p.y0 + 12}">${esc(name)}${vals.length ? `: ${esc(vals.join(', '))}` : ''}</text>`;
       } else if (p.id === 'tso') {
         // Trend Strength Oscillator: past +50 or -50 a strong trend has run far and fast ("overextended")
         let mx = 100; for (let i = from; i <= to; i++) { const v = ind.tso[i]; if (Number.isFinite(v)) mx = Math.max(mx, Math.abs(v)); }

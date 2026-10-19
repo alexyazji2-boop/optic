@@ -48,12 +48,13 @@ const OVERLAYS = [['ma', 'MA 20, 50, 200'], ['ema', 'EMA 9, 21, 50'], ['cloud921
   ['stages', 'Weinstein stages'], ['matrend', 'MA Trend Identifier']];
 // where each group of the Indicators menu starts
 const OV_GROUP = { ma: 'Averages and bands', fib: 'Levels', msb: 'Structure and events', stages: 'Candle colours' };
-const PANES = [['volume', 'Volume'], ['rsi', 'RSI 14'], ['macd', 'MACD 12, 26, 9'], ['tso', 'Trend Strength Oscillator']];
+// the last five from /api/indicators (C19, 2026-10-19), under the classic catalogue's names
+const PANES = [['volume', 'Volume'], ['rsi', 'RSI 14'], ['macd', 'MACD 12, 26, 9'], ['tso', 'Trend Strength Oscillator'], ['adx', 'ADX and DI'], ['stochastic', 'Stochastic'], ['obv', 'On-balance volume'], ['mfi', 'Money flow index'], ['rs', 'Relative strength line']];
 
 let D = {}, V = {}, live = true, mainEl = null, chart = null, unsub = null, phoneMq = null;
 
 function readView() {
-  const d = { interval: '60', range: '6M', style: 'candles', session: 'regular', read: false, dock: [], overlays: { ma: true, ema: false, bb: false, fib: false, sr: false, gex: false, msb: false, events: true, ins: true, cloud921: false, cloud2150: false, keltner: false, donchian: false, sec: false, vwap: false, zones: false, accum: false, trends: false, vbp: false, sessions: false, stages: false, matrend: false }, panes: { volume: true, rsi: false, macd: false, tso: false }, msbK: 5 };
+  const d = { interval: '60', range: '6M', style: 'candles', session: 'regular', read: false, dock: [], overlays: { ma: true, ema: false, bb: false, fib: false, sr: false, gex: false, msb: false, events: true, ins: true, cloud921: false, cloud2150: false, keltner: false, donchian: false, sec: false, vwap: false, zones: false, accum: false, trends: false, vbp: false, sessions: false, stages: false, matrend: false }, panes: { volume: true, rsi: false, macd: false, tso: false, adx: false, stochastic: false, obv: false, mfi: false, rs: false }, msbK: 5 };
   try { const s = JSON.parse(localStorage.getItem(VIEW_KEY) || 'null'); if (s && typeof s === 'object') { Object.assign(d, s, { overlays: Object.assign(d.overlays, s.overlays || {}), panes: Object.assign(d.panes, s.panes || {}) }); } } catch (e) { /* private */ }
   d.interval = '60'; // the Chart page opens on hourly bars, as in the classic app
   d.dock = Array.isArray(d.dock) ? d.dock.filter((id, i, a) => W.IDS.includes(id) && a.indexOf(id) === i) : [];
@@ -142,7 +143,7 @@ function toolbar() {
     <details class="menu"><summary class="btn btn-sm" aria-label="Indicators and levels">${icon('layers')}<span class="ch-lbl">Indicators</span></summary><div class="menu-body ch-imenu">
       ${OVERLAYS.map(([k, l]) => html`${OV_GROUP[k] ? html`<p class="t-label">${OV_GROUP[k]}</p>` : ''}<label class="check"><input type="checkbox" data-v2-ch-ov="${k}" ${V.overlays[k] ? 'checked' : ''} ${k === 'msb' ? html`aria-describedby="ch-msb-help"` : ST.HELP[k] ? html`aria-describedby="ch-help-${k}"` : ''}> <span>${l}</span></label>${ST.HELP[k] ? html`<p class="menu-help" id="ch-help-${k}">${ST.HELP[k]}</p>` : ''}${k === 'msb' ? html`<p class="menu-help" id="ch-msb-help">Marks where a close moved beyond the latest swing high (bullish) or swing low (bearish). A swing is a bar above or below the bars on each side. Its level is drawn back to where it formed, but it only became known once those later bars had closed: the line is dotted before then, with a tick where it became known, and only a close after that counts as a break.</p>
         <label class="ws-sel menu-help">Swing strength <select data-v2-ch-msbk aria-label="Market structure swing strength">${[3, 5, 10].map((k) => html`<option value="${k}" ${V.msbK === k ? 'selected' : ''}>${k} bars each side${k === 3 ? ', more breaks' : k === 10 ? ', fewer' : ''}</option>`)}</select></label>` : ''}`)}
-      <p class="t-label">Panes</p>${PANES.map(([k, l]) => html`<label class="check"><input type="checkbox" data-v2-ch-pane="${k}" ${V.panes[k] ? 'checked' : ''}> <span>${l}</span></label>`)}
+      <p class="t-label">Panes</p>${PANES.map(([k, l]) => html`<label class="check"><input type="checkbox" data-v2-ch-pane="${k}" ${V.panes[k] ? 'checked' : ''} ${ST.HELP[k] ? html`aria-describedby="ch-help-${k}"` : ''}> <span>${l}</span></label>${ST.HELP[k] ? html`<p class="menu-help" id="ch-help-${k}">${ST.HELP[k]}</p>` : ''}`)}
     </div></details>
     <details class="menu ch-colours"><summary class="btn btn-sm" aria-label="Chart colours" title="Colour of the candles and the line">${icon('palette')}<span class="ch-lbl">Colours</span></summary><div class="menu-body ch-cmenu" id="ch-cmenu"></div></details>
     <button type="button" class="btn btn-sm" data-v2-ch-read aria-pressed="${!!V.read}" aria-controls="ch-read">${icon('trend')}<span class="ch-lbl">Chart read</span></button>
@@ -188,12 +189,16 @@ function paintChart() {
   refit();
   syncHeight();
   const n = $('#ch-note', mainEl); if (n) n.textContent = clean(D.note || '');
-  const sn = $('#ch-snote', mainEl); if (sn) sn.textContent = ST.notes(V.overlays).join(' ');
+  const sn = $('#ch-snote', mainEl); if (sn) sn.textContent = ST.notes(ticked()).join(' ');
 }
 // The plot fills the window under the toolbar, less the reading line above it (40 until it is drawn) and the
 // navigator under it; in full screen all of what is left, less the page's padding under the navigator.
 const navH = () => (isPhone() ? 44 : 40);
-function plotHeight(host) {
+// Past two panes under the price the chart grows instead of squeezing: each further one adds its own room, so
+// with every pane on, a phone's price and panes stay readable (the page scrolls to them).
+const paneRoom = () => Math.max(0, PANES.filter(([k]) => k !== 'volume' && V.panes[k]).length - 2) * (isPhone() ? 60 : 72);
+function plotHeight(host) { return baseHeight(host) + paneRoom(); }
+function baseHeight(host) {
   const svg = $('.pc-svg', host), nav = navH() + 6;
   const top = (svg ? svg.getBoundingClientRect().top : host.getBoundingClientRect().top + 40) + window.scrollY;
   const room = Math.round(window.innerHeight - top - nav - 8);
@@ -286,7 +291,7 @@ function paint() {
         <div class="ch-side" id="ch-side" ${V.read || shown().length ? '' : 'hidden'}><aside class="ch-read" id="ch-read" aria-labelledby="cr-h" ${V.read ? '' : 'hidden'}></aside></div></div>
       <div class="split ch-foot"><div><p class="asof" id="ch-note"></p><p class="asof ch-snote" id="ch-snote" aria-live="polite"></p></div>
         <div class="cluster">${miloButton('Explain this chart', { ask: `Explain the ${D.sym} chart: the trend, support, resistance, momentum, volume and risk, and what would invalidate the read.`, context: `${D.sym} Dossier, Chart`, symbol: D.sym })}<a class="textlink" href="${CLASSIC}#/${D.sym}/chart">More chart tools in the current app ${icon('out')}</a></div></div>
-      <p class="asof">Wheel or pinch to zoom, drag the chart or the strip under it to move along, arrows to read each bar, plus and minus to zoom. The other drawing tools, and the indicator panes the current app adds (ADX, Stochastic, OBV, MFI, relative strength), are in the current app.</p>
+      <p class="asof">Wheel or pinch to zoom, drag the chart or the strip under it to move along, arrows to read each bar, plus and minus to zoom. The other drawing tools are in the current app.</p>
     </section>`);
   applyColours(); paintChart(); paintRead(); syncSide();
 }
@@ -361,8 +366,9 @@ function extras() {
 function paintExtras() { if (chart) chart.set(extras()); }
 // The studies' data (chart-studies.js), and a line under the chart for each one that is on and has nothing to
 // draw yet, or its reading.
-function studies() { ST.need(V.overlays); return ST.data(V.overlays); }
-function paintStudies() { if (chart) chart.set(Object.assign({ overlays: V.overlays }, ST.data(V.overlays))); const n = $('#ch-snote', mainEl); if (n) n.textContent = ST.notes(V.overlays).join(' '); }
+const ticked = () => Object.assign({}, V.overlays, V.panes);
+function studies() { ST.need(ticked()); return ST.data(ticked()); }
+function paintStudies() { if (chart) chart.set(Object.assign({ overlays: V.overlays }, ST.data(ticked()))); const n = $('#ch-snote', mainEl); if (n) n.textContent = ST.notes(ticked()).join(' '); }
 const phase = () => ((D.session || {}).prices || {}).phase || ((D.session || {}).session || {}).phase || (marketSession() || {}).phase || null;
 
 export async function render(main, route) {
@@ -428,7 +434,7 @@ function wire(main) {
     if (el.matches('[data-v2-cc-pick]')) { pickColour(el.dataset.v2CcPick, el.value, `[data-v2-cc-pick="${el.dataset.v2CcPick}"]`); return; }
     if (el.matches('[data-v2-ch-iv]')) { V.interval = el.value; if (V.interval === 'weekly' && !RANGES.weekly[V.range]) V.range = '1Y'; paintTools(); loadBars(); return; }
     if (el.matches('[data-v2-ch-msbk]')) { V.msbK = Number(el.value) || 5; saveView(); paintChart(); return; }
-    if (el.matches('[data-v2-ch-ov]')) { V.overlays[el.dataset.v2ChOv] = el.checked; saveView(); ST.need(V.overlays); paintStudies(); if (el.dataset.v2ChOv === 'sr') repaintWidget('levels'); if (el.dataset.v2ChOv === 'ins') repaintWidget('insiders'); return; }
+    if (el.matches('[data-v2-ch-ov]')) { V.overlays[el.dataset.v2ChOv] = el.checked; saveView(); ST.need(ticked()); paintStudies(); if (el.dataset.v2ChOv === 'sr') repaintWidget('levels'); if (el.dataset.v2ChOv === 'ins') repaintWidget('insiders'); return; }
     if (el.matches('[data-v2-ch-pane]')) { V.panes[el.dataset.v2ChPane] = el.checked; saveView(); paintChart(); }
   });
   main.addEventListener('click', (e) => {

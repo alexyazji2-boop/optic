@@ -503,6 +503,10 @@ table.chw-table { font-size: 13px; } table.chw-table th { padding: 6px 4px; font
 .pc .vbp { fill: color-mix(in srgb, var(--c-ink-3) 26%, transparent); } .pc .vbp.poc { fill: color-mix(in srgb, var(--c-gold) 45%, transparent); }
 .pc .sdiv { stroke: var(--c-ink-3); stroke-width: 1; stroke-dasharray: 4 4; opacity: .55; }
 .pc .ov.tso { stroke: var(--c-gold); } .pc .g.z { stroke-dasharray: 2 3; }
+/* the panes from /api/indicators (C19): the first line gold, the second blue and dashed; ADX's +DI green, -DI red */
+.pc .ov.ip0 { stroke: var(--c-gold); } .pc .ov.ip1 { stroke: #5b7fbf; stroke-dasharray: 4 3; } .pc .ov.ip2 { stroke: #c27a2c; stroke-dasharray: 4 3; }
+.pc .ov.ipu { stroke: var(--c-pos); stroke-width: 1.1; } .pc .ov.ipd { stroke: var(--c-neg); stroke-width: 1.1; } .pc .g.ref { stroke-dasharray: 3 3; }
+.pc .pane-t { paint-order: stroke; stroke: var(--c-plane); stroke-width: 3px; stroke-linejoin: round; }   /* a pane's name over its lines stays readable */
 /* candle colours: MA Trend, then Weinstein stages (4 classes, so the reader's up and down colours give way) */
 .pc .wick.tint.mt1, .pc .body.tint.mt1, .pc .wick.tint.st2, .pc .body.tint.st2 { stroke: var(--c-pos); fill: var(--c-pos); }
 .pc .wick.tint.mt4, .pc .body.tint.mt4, .pc .wick.tint.st4, .pc .body.tint.st4 { stroke: var(--c-neg); fill: var(--c-neg); }
