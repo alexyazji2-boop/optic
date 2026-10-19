@@ -40,7 +40,16 @@ function flat(v) {
   if (typeof v === 'object' && v[RAW]) return v.s;
   return esc(v);
 }
-export const render = (el, tpl) => { el.innerHTML = flat(tpl); return el; };
+// A redraw used to close any menu the reader had open: in iOS Safari a Dossier's ⋯ menu closed under the
+// finger when the page's data arrived and redrew the header (2026-10-19). A ⋯ or Indicators menu
+// (`details.menu`) that the redraw draws again is reopened.
+const menuKey = (d) => { const s = d.querySelector(':scope > summary'); return s ? `${d.className}|${s.getAttribute('aria-label') || s.textContent.trim()}` : null; };
+export const render = (el, tpl) => {
+  const open = el.querySelectorAll ? [...el.querySelectorAll('details.menu[open]')].map(menuKey).filter(Boolean) : [];
+  el.innerHTML = flat(tpl);
+  if (open.length) el.querySelectorAll('details.menu').forEach((d) => { if (open.includes(menuKey(d))) d.open = true; });
+  return el;
+};
 export const toString = (tpl) => flat(tpl);
 
 // Focusable children, in tab order, that are actually visible.

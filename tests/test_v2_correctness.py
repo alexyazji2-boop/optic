@@ -156,3 +156,43 @@ def test_holder_counts_carry_their_scope_and_threshold():
     src = Path(fundamentals.__file__).read_text()
     assert '"holders_counted"' in src and '"holder_change_threshold_pct"' in src
     assert "raised and {} cut their stake by more than" in src
+
+
+def test_an_unknown_session_is_never_called_closed():
+    """Real Safari, 9:58 AM ET on a trading day (2026-10-19): the session read timed out on a cold server and
+    the header said "Closed. Price is the close of the last session.\""""
+    frame = _src("pages/dossier-frame.js")
+    fn = frame[frame.index("export function stateLine"):frame.index("\n}\n", frame.index("export function stateLine"))]
+    assert "QUOTE_PHASE[String(q.market_state" in fn, "the quote's own market state is used when the session has not answered"
+    assert "else if (!phase) base = `Delayed about 15 minutes${last}.`;" in fn
+    assert "|| 'Closed'" not in fn
+
+
+def test_the_offline_notice_gives_way_when_the_server_answers():
+    """iOS Safari (the simulator) said navigator.onLine was false while every request succeeded."""
+    api = _src("core/api.js")
+    assert "reachedAt = Date.now();" in api and "optic:reached" in api and "export const lastReached" in api
+    st = _src("core/status.js")
+    assert "Date.now() - api.lastReached() < 30000" in st and "addEventListener('optic:reached', offline)" in st
+
+
+def test_a_reader_is_not_shown_the_operators_billing_setup(tmp_path):
+    """Settings showed every reader "Billing is off: set STRIPE_SECRET_KEY, STRIPE_PRICE_ID, ...\""""
+    got = _run(tmp_path, f"""
+      const f = await import('{(JS / "core/format.js").as_posix()}');
+      const r = 'Billing is off: set STRIPE_SECRET_KEY, STRIPE_PRICE_ID, STRIPE_WEBHOOK_SECRET.';
+      print(JSON.stringify({{ reader: f.billingOff(r, false), owner: f.billingOff(r, true), none: f.billingOff('', false), plain: f.billingOff('Pro is sold out this week.', false) }}));
+    """)
+    assert got["reader"] == "Plans are not on sale yet. Every account is on Free."
+    assert "STRIPE_SECRET_KEY" in got["owner"] and got["owner"].startswith("Plans are not on sale yet.")
+    assert got["none"] == got["reader"] and got["plain"] == "Pro is sold out this week."
+    for page in ("pages/settings.js", "pages/brokerage.js"):
+        assert "billingOff(" in _src(page), page
+
+
+def test_a_redraw_keeps_an_open_menu_open():
+    """iOS Safari: a Dossier's ⋯ menu closed under the finger when the page's data arrived and redrew it."""
+    dom = _src("core/dom.js")
+    assert "details.menu[open]" in dom and "if (open.includes(menuKey(d))) d.open = true;" in dom
+    ws = _src("pages/workspace.js")
+    assert "matchMedia('(pointer: fine)').matches) again.focus()" in ws, "iOS reopens a select's menu when it is focused"

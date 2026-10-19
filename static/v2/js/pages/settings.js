@@ -12,7 +12,7 @@ import * as store from '../core/store.js';
 import * as prefs from '../core/prefs.js';
 import * as passkey from '../core/passkey.js';
 import { handDeviceSessionToGuest } from '../core/device.js';
-import { clean } from '../core/format.js';
+import { clean, billingOff } from '../core/format.js';
 import { skeleton } from '../ui/states.js';
 import * as drawer from '../ui/drawer.js';
 import { toast } from '../ui/toast.js';
@@ -72,7 +72,7 @@ function account() {
 function billing() {
   const b = D.billing;
   if (b === undefined) return html`<span class="t-muted">Checking plans...</span>`;
-  if (!b || !b.available) return html`<span class="set-row-note">${clean((b || {}).reason || 'Plans are not on sale yet. Every account is on Free.')}</span>`;
+  if (!b || !b.available) return html`<span class="set-row-note">${billingOff((b || {}).reason, !!(store.state.me && store.state.me.admin))}</span>`;
   const pro = ((b.subscription || me().subscription || {}).plan || '') === 'pro';
   const test = b.mode === 'test' ? tag(false, 'Test mode') : '';
   if (pro) return b.can_manage ? html`<button type="button" class="btn btn-sm" data-v2-billing="portal">Manage billing</button>${test}` : html`<span class="set-row-note">Pro, granted by the operator.</span>`;

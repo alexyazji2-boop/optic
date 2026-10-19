@@ -31,6 +31,11 @@ function classify(status) {
   return 'server';
 }
 
+// When the server last answered. navigator.onLine said false in iOS Safari (the simulator, 2026-10-19)
+// while every request succeeded, and the offline notice stayed up over figures that were loading.
+let reachedAt = 0;
+export const lastReached = () => reachedAt;
+
 async function request(method, path, { body, timeout = 20000, signal } = {}) {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort('timeout'), timeout);
@@ -50,6 +55,9 @@ async function request(method, path, { body, timeout = 20000, signal } = {}) {
     throw new ApiError(navigator.onLine === false ? 'offline' : 'server', 0, navigator.onLine === false ? 'You appear to be offline.' : 'Could not reach Optic.');
   }
   clearTimeout(timer);
+  // The server answered, whatever navigator.onLine says (core/status.js clears the offline notice on this)
+  reachedAt = Date.now();
+  try { window.dispatchEvent(new CustomEvent('optic:reached')); } catch (e) { /* no window in tests */ }
   // v2 closed to this reader (owner-only preview or emergency shutdown): core/build.js offers the classic app
   if (res.headers.get('X-Optic-V2') === 'closed') { try { window.dispatchEvent(new CustomEvent('optic:v2-closed')); } catch (e) { /* no window in tests */ } }
   let data = null;

@@ -12,7 +12,7 @@
 import { html, raw, render as draw } from '../core/dom.js';
 import * as api from '../core/api.js';
 import * as store from '../core/store.js';
-import { num, clean, capFirst, ago, isNum } from '../core/format.js';
+import { num, clean, capFirst, ago, isNum, billingOff } from '../core/format.js';
 import { stamp } from '../core/prefs.js';
 import { skeleton } from '../ui/states.js';
 import { lineChart, mountCharts } from '../ui/chart.js';
@@ -88,7 +88,7 @@ function permissions(st, open) {
 }
 function upgrade(ent) {
   const b = S.billing || {}, paid = (S.status || {}).paid_limits || {};
-  if (b.available === false) return html`<section class="section first"><h2 class="t-h2">Link your brokerage</h2><p>Linking is part of the paid plan. ${clean(b.reason || 'Plans are not on sale yet.')}</p></section>`;
+  if (b.available === false) return html`<section class="section first"><h2 class="t-h2">Link your brokerage</h2><p>Linking is part of the paid plan. ${billingOff(b.reason, !!(store.state.me && store.state.me.admin))}</p></section>`;
   const syncs = paid.brokerage_manual_syncs_per_day || 1;
   return html`<section class="section first"><h2 class="t-h2">Link your brokerage with Pro</h2>
     <p>Connect up to ${paid.brokerage_connections || 3} brokerages read-only, see every account in one portfolio, and ask Milo about your actual holdings: concentration, upcoming earnings, what changed since the last sync.</p>

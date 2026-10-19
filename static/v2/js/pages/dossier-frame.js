@@ -15,12 +15,19 @@ import { etStamp, etDay, sessionWord } from '../core/marketTime.js';
 
 // The price's session and time in words: the close it is, or the trade time when the session is open, and any
 // extended print with the moment it was struck (core/marketTime.js).
-function stateLine(D) {
+// The quote's own market state, for when the session read has not answered.
+const QUOTE_PHASE = { REGULAR: 'regular', PRE: 'pre', PREPRE: 'pre', POST: 'after', POSTPOST: 'after', CLOSED: 'closed' };
+export function stateLine(D) {
   const q = D.quote || {}, sess = (D.session || {}).session || {}, s = (D.session || {}).prices || {};
   const ext = s.extended && isNum(s.extended.price) ? s.extended : null;
-  const base = s.phase === 'regular' || sess.is_regular
-    ? `Regular session, delayed about 15 minutes${q.market_time ? `; last trade ${etStamp(q.market_time)}` : ''}.`
-    : `${sessionWord(s.phase_label || sess.label || '') || 'Closed'}. Price is the close of ${etDay((sess.last_close || {}).date) || 'the last session'}.`;
+  const phase = s.phase || sess.phase || QUOTE_PHASE[String(q.market_state || '').toUpperCase()] || null;
+  const last = q.market_time ? `; last trade ${etStamp(q.market_time)}` : '';
+  let base;
+  if (phase === 'regular' || sess.is_regular) base = `Regular session, delayed about 15 minutes${last}.`;
+  // In real Safari a cold server answered the session read after the client's 20 s limit, and the header
+  // said "Closed" at 9:58 AM on a trading day (2026-10-19). Not knowing the session, it claims none.
+  else if (!phase) base = `Delayed about 15 minutes${last}.`;
+  else base = `${sessionWord(s.phase_label || sess.label || phase)}. Price is the close of ${etDay((sess.last_close || {}).date) || 'the last session'}.`;
   return { base, ext };
 }
 

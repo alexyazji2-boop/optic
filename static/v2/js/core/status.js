@@ -23,9 +23,11 @@ async function health() {
     render(el, `${feed} ${milo}`);
   } catch (e) { render(el, ''); }
 }
+// The notice shows only while the browser says it is offline and the server has not answered in the last
+// 30 s: the browser's flag alone was wrong in iOS Safari (2026-10-19).
 function offline() {
   let bar = $('#offline-bar');
-  if (navigator.onLine !== false) { if (bar) bar.remove(); return; }
+  if (navigator.onLine !== false || Date.now() - api.lastReached() < 30000) { if (bar) bar.remove(); return; }
   if (bar) return;
   bar = document.createElement('div'); bar.id = 'offline-bar'; bar.className = 'offline-bar'; bar.setAttribute('role', 'status');
   bar.textContent = 'You are offline. What is on screen stays; new figures load when you are back.';
@@ -36,5 +38,7 @@ export function watchStatus() {
   setInterval(() => { if (!document.hidden) session(); }, 60000);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) session(); });
   window.addEventListener('online', offline); window.addEventListener('offline', offline);
+  window.addEventListener('optic:reached', offline);
+  setInterval(offline, 30000);   // a server that stops answering while the browser says offline brings it back
   prefs.onChange((w) => { if (w === 'timezone') session(); });
 }

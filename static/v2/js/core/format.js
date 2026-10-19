@@ -104,3 +104,11 @@ export function score100(score, min, max) {
   const s = Math.max(lo, Math.min(hi, Number(score)));
   return s >= 0 ? 50 + 50 * s / hi : 50 - 50 * s / lo;
 }
+
+// The server's reason when billing is off names the settings it needs ("set STRIPE_SECRET_KEY, ..."): an
+// operator's note. A reader is told plainly; the owner also sees the setup detail (2026-10-19).
+export function billingOff(reason, owner) {
+  const plain = 'Plans are not on sale yet. Every account is on Free.';
+  if (!reason) return plain;
+  return /[A-Z]{3,}_[A-Z_]{3,}/.test(reason) ? (owner ? `${plain} ${clean(reason)}` : plain) : clean(reason);
+}
