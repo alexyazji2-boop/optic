@@ -132,6 +132,14 @@ METHOD = ("Read from the XBRL instance document of each 10-Q and 10-K, which "
 
 
 # Words that end in "and" and are not two words run together ("Mainland", "Brand").
+COUNTRIES = {
+    "US": "United States", "CN": "China", "TW": "Taiwan", "SG": "Singapore", "JP": "Japan", "KR": "South Korea",
+    "DE": "Germany", "GB": "United Kingdom", "UK": "United Kingdom", "FR": "France", "IE": "Ireland", "NL": "Netherlands",
+    "CA": "Canada", "MX": "Mexico", "BR": "Brazil", "IN": "India", "HK": "Hong Kong", "IL": "Israel", "CH": "Switzerland",
+    "AU": "Australia", "IT": "Italy", "ES": "Spain", "MY": "Malaysia", "TH": "Thailand", "VN": "Vietnam", "PH": "Philippines",
+    "SE": "Sweden", "BE": "Belgium", "LU": "Luxembourg", "PR": "Puerto Rico",
+}
+
 _AND_WORDS = ("land", "hand", "band", "brand", "mand", "pand", "stand", "rand", "sand", "wand", "grand")
 _SMALL = {"And", "Of", "The", "For", "In", "To", "On", "At", "By"}
 
@@ -178,6 +186,9 @@ def _tidy(label: str) -> str:
     # what it is.
     if name == "Corporate Non Segment":
         return "Corporate, not in a segment"
+    # a country member is filed as its ISO code ("TW", "SG"): the page showed the code
+    if name in COUNTRIES:
+        return COUNTRIES[name]
     return re.sub(r"(?<=\w) Segment$", "", name)
 
 
@@ -392,7 +403,7 @@ def parse_instance(url: str) -> Dict[str, Any]:
     return {"available": True, "facts": facts}
 
 
-def _fill_fourth_quarters(cells: Dict[Tuple[str, str, str], float]
+def _fill_fourth_quarters(cells: Dict[Tuple[str, str, str], float], made: Optional[set] = None
                           ) -> Tuple[Dict[Tuple[str, str, str], float], int]:
     """Derive Q4 as the year minus the three quarters that were reported.
 
@@ -424,6 +435,8 @@ def _fill_fourth_quarters(cells: Dict[Tuple[str, str, str], float]
         if q4 in cells:
             continue
         cells[q4] = round(cells[key] - sum(cells[o] for o in inside), 2)
+        if made is not None:
+            made.add(q4)
         derived += 1
     return cells, derived
 
@@ -534,7 +547,8 @@ def build(ticker: str, force: bool = False, budget: int = PARSE_BUDGET,
             # first in the list, so the first value seen is the latest one.
             cells.setdefault(slot, value)
 
-    cells, derived = _fill_fourth_quarters(cells)
+    made: set = set()
+    cells, derived = _fill_fourth_quarters(cells, made)
 
     quarters = sorted({k[2] for k in cells if k[1] == "quarter"})
     tables = []
@@ -549,7 +563,9 @@ def build(ticker: str, force: bool = False, budget: int = PARSE_BUDGET,
                 values = [cells.get((s, "quarter", q)) for q in quarters]
                 if all(v is None for v in values):
                     continue
-                body.append({"member": labels[s]["member"], "values": values})
+                # which of these quarters are the year less three reported quarters, not a filed figure
+                body.append({"member": labels[s]["member"], "values": values,
+                             "derived": [(s, "quarter", q) in made for q in quarters]})
             if not body:
                 continue
             # Full fiscal years as the 10-Ks report them, beside the quarters.

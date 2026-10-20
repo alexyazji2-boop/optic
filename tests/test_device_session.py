@@ -522,6 +522,8 @@ SETTINGS = {
     "optic.v2.scroll.v1",
     # How the Watchlist page is sorted: a display choice, like the chart style.
     "optic.v2.watchlist.sort.v1",
+    # Whether Financials shows fiscal years or quarters: a display choice, like the sort above.
+    "optic.v2.financials.period.v1",
     # Whether this browser has dismissed Home's first-visit welcome: like the dismissed notices above.
     "optic.v2.onboard.v1",
     # Which of the Options page's three tool groups was open last: where things are on the screen.

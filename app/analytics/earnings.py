@@ -23,6 +23,7 @@ import numpy as np
 import pandas as pd
 
 from .greeks import implied_vol
+from . import fundamentals as fundamentals_mod
 
 
 def _f(value: Any, digits: int = 4) -> Optional[float]:
@@ -153,7 +154,8 @@ def _reaction_map(hist: pd.DataFrame, dates: List[str],
     return out
 
 
-def _surprise_history(history: List[Dict[str, Any]], hist: pd.DataFrame, limit: int = 8) -> Dict[str, Any]:
+def _surprise_history(history: List[Dict[str, Any]], hist: pd.DataFrame, limit: int = 8,
+                      fy_end: Optional[str] = None) -> Dict[str, Any]:
     reported = [
         r for r in history
         if r.get("eps_reported") is not None and r.get("eps_estimate") is not None
@@ -174,17 +176,23 @@ def _surprise_history(history: List[Dict[str, Any]], hist: pd.DataFrame, limit: 
             surprise = (r["eps_reported"] - est) / abs(est) * 100.0
         rows.append({
             "date": r["date"],
+            # the fiscal quarter the report covers ("Q1 FY26"), and when it came out: the reaction is that
+            # session for a report before the open, the next one for a report after the close
+            "fiscal": fundamentals_mod.reported_quarter(r["date"], fy_end) if fy_end else None,
+            "timing": r.get("timing"),
             "eps_estimate": _f(r.get("eps_estimate"), 2),
             "eps_reported": _f(r.get("eps_reported"), 2),
             "surprise_pct": _f(surprise, 1),
-            "beat": bool(surprise is not None and surprise > 0),
+            "beat": bool(surprise is not None and round(surprise, 1) > 0),
             "next_day_move_pct": reactions.get(r["date"]),
         })
 
     surprises = [r["surprise_pct"] for r in rows if r["surprise_pct"] is not None]
     moves = [r["next_day_move_pct"] for r in rows if r["next_day_move_pct"] is not None]
+    # one rule with Financials (fundamentals.surprise_counts): above is a beat, below a miss, on it in line
+    counts = fundamentals_mod.surprise_counts(surprises)
     beats = [r for r in rows if r["surprise_pct"] is not None and r["surprise_pct"] > 0]
-    misses = [r for r in rows if r["surprise_pct"] is not None and r["surprise_pct"] <= 0]
+    misses = [r for r in rows if r["surprise_pct"] is not None and r["surprise_pct"] < 0]
 
     def avg_move(subset):
         vals = [r["next_day_move_pct"] for r in subset if r["next_day_move_pct"] is not None]
@@ -194,8 +202,14 @@ def _surprise_history(history: List[Dict[str, Any]], hist: pd.DataFrame, limit: 
         "available": True,
         "rows": rows,
         "quarters": len(rows),
-        "beat_count": len(beats),
-        "beat_rate_pct": _f(len(beats) / len(surprises) * 100.0, 0) if surprises else None,
+        "beat_count": counts["beat_count"],
+        "miss_count": counts["miss_count"],
+        "in_line_count": counts["in_line_count"],
+        # the quarters the rate is taken over (those with an estimate to beat), which the page says
+        "rate_quarters": counts["rate_quarters"],
+        "beat_rate_pct": _f(counts["beat_rate_pct"], 0) if counts["beat_rate_pct"] is not None else None,
+        "eps_basis": ("Estimates and reported EPS on the basis analysts use, usually adjusted; it can differ "
+                      "from the statements' diluted EPS on Financials."),
         "avg_surprise_pct": _f(float(np.mean(surprises)), 1) if surprises else None,
         "avg_abs_move_pct": _f(float(np.mean([abs(m) for m in moves])), 2) if moves else None,
         "largest_move_pct": _f(max(moves, key=abs), 2) if moves else None,
@@ -207,7 +221,7 @@ def _surprise_history(history: List[Dict[str, Any]], hist: pd.DataFrame, limit: 
     if out["beat_rate_pct"] is not None:
         notes.append(
             f"Beaten consensus in {out['beat_count']} of the last {len(surprises)} quarters "
-            f"({out['beat_rate_pct']:.0f}%)."
+            f"({out['beat_rate_pct']:.0f}%)" + (f", {out['in_line_count']} in line." if out["in_line_count"] else ".")
         )
     # The interesting case: a serial beater whose stock still sells off. It means
     # expectations, not the print, are what moves this name.
@@ -400,13 +414,13 @@ def _revisions(est: Dict[str, Any]) -> Dict[str, Any]:
     elif drift_90 >= 3:
         direction = "rising"
         note = (
-            f"Analysts have raised full-year EPS estimates {drift_90:+.1f}% over 90 days . "
+            f"Analysts have raised full-year EPS estimates {drift_90:+.1f}% over 90 days. "
             "The direction of travel is positive, which usually reflects upbeat guidance."
         )
     elif drift_90 <= -3:
         direction = "falling"
         note = (
-            f"Analysts have cut full-year EPS estimates {drift_90:+.1f}% over 90 days . "
+            f"Analysts have cut full-year EPS estimates {drift_90:+.1f}% over 90 days. "
             "Estimates are moving down, which usually follows soft guidance."
         )
     else:
@@ -418,8 +432,9 @@ def _revisions(est: Dict[str, Any]) -> Dict[str, Any]:
         "rows": rows,
         "direction": direction,
         "drift_90d_pct": _f(drift_90, 2),
-        "analysts_up_30d": ups or None,
-        "analysts_down_30d": downs or None,
+        # counts, zero included: "or None" printed "4 analysts raised and  cut" when none cut (audit 2026-10-20)
+        "analysts_up_30d": ups if rows else None,
+        "analysts_down_30d": downs if rows else None,
         "note": note,
         "caveat": (
             "Company guidance text isn't available in free data. This is the analyst "
@@ -452,13 +467,18 @@ def _growth(financials: Dict[str, Any], est: Dict[str, Any]) -> Dict[str, Any]:
         if not block:
             return []
         periods = block.get("periods") or []
-        rev = _series(block, "Total Revenue", "TotalRevenue")
-        net = _series(block, "Net Income", "NetIncome", "Net Income Common Stockholders")
-        gross = _series(block, "Gross Profit", "GrossProfit")
-        op = _series(block, "Operating Income", "OperatingIncome")
+        # the same statement lines, in the same order of preference, as Financials (fundamentals.ROW_ALIASES):
+        # JPM's net income read 57.05B here and 55.68B there, NVDA's operating income 5.58B and 4.22B
+        A_ = fundamentals_mod.ROW_ALIASES
+        rev = _series(block, *A_["revenue"], "TotalRevenue")
+        net = _series(block, *A_["net_income"], "NetIncome")
+        gross = _series(block, *A_["gross_profit"], "GrossProfit")
+        op = _series(block, *A_["operating_income"], "OperatingIncome")
         out = []
+        fy = ((financials.get("income_annual") or {}).get("periods") or [None])[0]
         for i, period in enumerate(periods[:label_count]):
-            row = {"period": period}
+            row = {"period": period,
+                   "fiscal": fundamentals_mod.fiscal_label(period, fy, annual=block is annual) if fy else None}
             for key, vals in (("revenue", rev), ("net_income", net), ("gross_profit", gross), ("operating_income", op)):
                 row[key] = _f(vals[i], 0) if vals and i < len(vals) and vals[i] is not None else None
             # Margins say more than raw levels about whether growth is profitable.
@@ -1006,7 +1026,8 @@ def analyse(provider, yf_provider, ticker: str, quote: Dict[str, Any], rate: flo
 
     # Surprise history first: it establishes which dates already have results, and
     # the next-report lookup needs that to avoid announcing a print that's done.
-    surprise = _surprise_history(history, hist)
+    fy_end = ((financials.get("income_annual") or {}).get("periods") or [None])[0]
+    surprise = _surprise_history(history, hist, fy_end=fy_end)
     reported_dates = {
         str(r["date"]) for r in (surprise.get("rows") or [])
         if r.get("date") and r.get("eps_reported") is not None

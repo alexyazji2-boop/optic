@@ -8,6 +8,7 @@ who know most buying or selling, and does this company usually beat?
 
 from __future__ import annotations
 
+import datetime as dt
 from typing import Any, Dict, List, Optional
 
 import numpy as np
@@ -49,14 +50,116 @@ def _f(value: Any, digits: int = 4) -> Optional[float]:
     return None if not np.isfinite(out) else round(out, digits)
 
 
-def _pick_row(block: Optional[Dict[str, Any]], key: str) -> Optional[List[Optional[float]]]:
+def _pick_row(block: Optional[Dict[str, Any]], key: str,
+              periods: Optional[List[str]] = None) -> Optional[List[Optional[float]]]:
+    """A statement line by its aliases. With `periods`, its values in those periods' order, matched by date:
+    the cash-flow statement carries a fifth column the income statement does not, and read by position its
+    free cash flow sat under the wrong fiscal year (audit 2026-10-20)."""
     if not block:
         return None
     rows = block.get("rows") or {}
     for alias in ROW_ALIASES.get(key, ()):
         if alias in rows:
-            return rows[alias]
+            vals = rows[alias]
+            if periods is None:
+                return vals
+            return _aligned(block.get("periods") or [], vals, periods)
     return None
+
+
+def _aligned(own: List[str], vals: List[Optional[float]], want: List[str]) -> List[Optional[float]]:
+    """`vals` (on `own` period ends) placed under `want`'s period ends: the same date, or one within 15 days
+    (a 52-or-53-week filer's statements can end a few days apart); None where the statement has no column."""
+    out: List[Optional[float]] = []
+    dates = []
+    for p in own:
+        try:
+            dates.append(dt.date.fromisoformat(str(p)[:10]))
+        except ValueError:
+            dates.append(None)
+    for w in want:
+        try:
+            wd = dt.date.fromisoformat(str(w)[:10])
+        except ValueError:
+            out.append(None)
+            continue
+        best = None
+        for i, d in enumerate(dates):
+            if d is not None and abs((d - wd).days) <= 15 and i < len(vals):
+                if best is None or abs((d - wd).days) < abs((dates[best] - wd).days):
+                    best = i
+        out.append(vals[best] if best is not None else None)
+    return out
+
+
+# ------------------------------------------------------------ fiscal periods
+
+def _is_calendar(fy_end: dt.date) -> bool:
+    """A fiscal year that is the calendar year (ending in the last week of December or the first of January)."""
+    return (fy_end.month == 12 and fy_end.day >= 24) or (fy_end.month == 1 and fy_end.day <= 7)
+
+
+def fiscal_label(period_end: Any, fy_end: Any, annual: bool = False) -> Optional[str]:
+    """A period end as the company's own fiscal period: "Q1 FY26" for Microsoft's quarter to 30 September
+    2025, "Q3 2026" for a calendar-year filer, "FY26" or "2026" for a year. The same quarter used to read as
+    "Jun 30 2026" on Earnings, "Jun 27 26" on Segments and "Jul 30 2026" as a report date (audit 2026-10-20).
+    `fy_end` is any fiscal year end the company has reported (the latest annual statement's)."""
+    try:
+        d = dt.date.fromisoformat(str(period_end)[:10])
+        fe = dt.date.fromisoformat(str(fy_end)[:10])
+    except (TypeError, ValueError):
+        return None
+    cal = _is_calendar(fe)
+    # the fiscal year that holds d ends on the first anniversary of fe on or after d (10 days' tolerance for a
+    # 52-or-53-week year, whose end drifts)
+    try:
+        end = fe.replace(year=d.year)
+    except ValueError:                       # 29 February
+        end = fe.replace(year=d.year, day=28)
+    if end < d - dt.timedelta(days=10):
+        try:
+            end = end.replace(year=end.year + 1)
+        except ValueError:
+            end = end.replace(year=end.year + 1, day=28)
+    year = end.year
+    if cal and end.month == 1:
+        year = end.year - 1                  # a 52-week year ending 2 January 2027 is the year 2026
+    if annual:
+        return str(year) if cal else "FY{:02d}".format(year % 100)
+    q = 4 - int(round((end - d).days / 91.31))
+    if not 1 <= q <= 4:
+        return None
+    return "Q{} {}".format(q, year) if cal else "Q{} FY{:02d}".format(q, year % 100)
+
+
+def reported_quarter(report_date: Any, fy_end: Any) -> Optional[str]:
+    """The fiscal quarter an earnings report covers: the latest quarter end at least five days before it,
+    on the company's own quarter grid (its fiscal year end, stepped back in quarters of 91.31 days)."""
+    try:
+        r = dt.date.fromisoformat(str(report_date)[:10])
+        fe = dt.date.fromisoformat(str(fy_end)[:10])
+    except (TypeError, ValueError):
+        return None
+    cut = r - dt.timedelta(days=5)
+    k = int(np.floor((cut - fe).days / 91.31))
+    q_end = fe + dt.timedelta(days=round(k * 91.31))
+    if q_end > cut:
+        q_end = fe + dt.timedelta(days=round((k - 1) * 91.31))
+    if (r - q_end).days > 120:
+        return None
+    return fiscal_label(q_end, fe)
+
+
+# One rule for a beat: above the estimate. Exactly on it (a surprise that rounds to 0.0%) is in line, neither
+# a beat nor a miss. The Earnings page counted in line as a miss and Financials as neither, over different
+# denominators, so the two pages gave one company two beat rates (audit 2026-10-20).
+def surprise_counts(surprises: List[Optional[float]]) -> Dict[str, Any]:
+    vals = [round(float(s), 1) for s in surprises if s is not None and np.isfinite(s)]
+    beats = sum(v > 0 for v in vals)
+    misses = sum(v < 0 for v in vals)
+    return {"beat_count": beats, "miss_count": misses, "in_line_count": len(vals) - beats - misses,
+            "rate_quarters": len(vals),
+            "beat_rate_pct": _f(beats / len(vals) * 100.0, 1) if vals else None}
 
 
 def _growth(values: Optional[List[Optional[float]]]) -> Optional[float]:
@@ -169,6 +272,12 @@ def analyse_financials(raw: Dict[str, Any]) -> Dict[str, Any]:
     rev_q = _pick_row(quarterly, "revenue")
     ni_q = _pick_row(quarterly, "net_income")
     eps_q = _pick_row(quarterly, "diluted_eps")
+    gp_q = _pick_row(quarterly, "gross_profit")
+    oi_q = _pick_row(quarterly, "operating_income")
+    ebitda_q = _pick_row(quarterly, "ebitda")
+    a_periods = (annual or {}).get("periods") or []
+    q_periods = (quarterly or {}).get("periods") or []
+    fy_end = a_periods[0] if a_periods else None
 
     def margin(numer, denom, idx=0):
         if not numer or not denom or len(numer) <= idx or len(denom) <= idx:
@@ -181,7 +290,8 @@ def analyse_financials(raw: Dict[str, Any]) -> Dict[str, Any]:
     total_debt = _pick_row(balance, "total_debt")
     cash_bal = _pick_row(balance, "cash")
     equity = _pick_row(balance, "total_equity")
-    fcf = _pick_row(cash, "free_cash_flow")
+    # on the income statement's fiscal years, by date: the cash-flow statement's columns are not the same list
+    fcf = _pick_row(cash, "free_cash_flow", a_periods) if a_periods else _pick_row(cash, "free_cash_flow")
 
     net_cash = None
     if cash_bal and total_debt and cash_bal[0] is not None and total_debt[0] is not None:
@@ -224,11 +334,20 @@ def analyse_financials(raw: Dict[str, Any]) -> Dict[str, Any]:
         "available": True,
         "annual_periods": (annual or {}).get("periods"),
         "quarterly_periods": (quarterly or {}).get("periods"),
+        # each period as the company names it: "FY26", "Q1 FY26", "2026", "Q3 2026"
+        "fiscal_year_end": fy_end,
+        "annual_fiscal": [fiscal_label(p, fy_end, annual=True) for p in a_periods] if fy_end else [],
+        "quarterly_fiscal": [fiscal_label(p, fy_end) for p in q_periods] if fy_end else [],
         "annual": {
             "revenue": rev_a, "gross_profit": gp_a, "operating_income": oi_a, "ebitda": ebitda_a,
             "net_income": ni_a, "diluted_eps": eps_a, "free_cash_flow": fcf,
         },
-        "quarterly": {"revenue": rev_q, "net_income": ni_q, "diluted_eps": eps_q},
+        "quarterly": {"revenue": rev_q, "gross_profit": gp_q, "operating_income": oi_q, "ebitda": ebitda_q,
+                      "net_income": ni_q, "diluted_eps": eps_q},
+        # Yahoo carries the filings' statements; the diluted EPS here is the statement's (GAAP), which is not
+        # the basis analysts' estimates and surprises use (usually adjusted)
+        "source": "The company's annual and quarterly statements as Yahoo Finance carries them.",
+        "eps_basis": "Diluted EPS from the income statement (GAAP).",
         "margins": {"gross_pct": gm, "operating_pct": om, "ebitda_pct": em, "net_pct": nm},
         "growth": {
             "revenue_yoy_pct": rev_growth,
@@ -266,23 +385,22 @@ def analyse_earnings_history(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
     if not reported:
         return {"available": False, "upcoming": upcoming[:2]}
 
-    beats = [r for r in reported if (r.get("surprise_pct") or 0) > 0]
-    misses = [r for r in reported if (r.get("surprise_pct") or 0) < 0]
     surprises = [r["surprise_pct"] for r in reported if r.get("surprise_pct") is not None]
-
-    beat_rate = _f(len(beats) / len(reported) * 100.0, 1)
+    counts = surprise_counts(surprises)
+    beat_rate = counts["beat_rate_pct"]
     avg_surprise = _f(float(np.mean(surprises)), 2) if surprises else None
 
     notes: List[str] = []
     if beat_rate is not None:
         notes.append(
-            "Beat consensus in {} of the last {} quarters ({:.0f}%){}.".format(
-                len(beats), len(reported), beat_rate,
+            "Beat consensus in {} of the last {} quarters ({:.0f}%){}{}.".format(
+                counts["beat_count"], counts["rate_quarters"], beat_rate,
+                ", {} in line".format(counts["in_line_count"]) if counts["in_line_count"] else "",
                 ", average surprise {:+.1f}%".format(avg_surprise) if avg_surprise is not None else "",
             )
         )
-    if len(misses) >= 2:
-        notes.append("{} misses in the window. The beat streak is not dependable.".format(len(misses)))
+    if counts["miss_count"] >= 2:
+        notes.append("{} misses in the window. The beat streak is not dependable.".format(counts["miss_count"]))
     if avg_surprise is not None and avg_surprise > 5:
         notes.append(
             "A consistent large beat is usually already in the price; the reaction depends on guidance, not the print."
@@ -292,9 +410,10 @@ def analyse_earnings_history(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
         "available": True,
         "quarters": reported,
         "upcoming": upcoming[:2],
-        "beat_count": len(beats),
-        "miss_count": len(misses),
-        "sample_size": len(reported),
+        "beat_count": counts["beat_count"],
+        "miss_count": counts["miss_count"],
+        "in_line_count": counts["in_line_count"],
+        "sample_size": counts["rate_quarters"],
         "beat_rate_pct": beat_rate,
         "avg_surprise_pct": avg_surprise,
         "notes": notes,

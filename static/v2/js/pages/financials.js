@@ -16,6 +16,32 @@ import { core, header, tabs, isFund } from './dossier-frame.js';
 import { kindOf, can, kindWord } from '../core/instrument.js';
 
 let D = {}, live = true, mainEl = null;
+// Fiscal years or quarters, for the statements and the segments: a display choice kept on this device.
+const PERIOD_KEY = 'optic.v2.financials.period.v1';
+const readPeriod = () => { try { return localStorage.getItem(PERIOD_KEY) === 'quarter' ? 'quarter' : 'year'; } catch (e) { return 'year'; } };
+let period = readPeriod();
+
+/** A period end as the company's fiscal period, as app/analytics/fundamentals.py fiscal_label writes it:
+ * "Q1 FY26" for Microsoft's quarter to 30 September 2025, "Q3 2026" for a calendar-year filer, "FY26" or
+ * "2026" for a year. `fyEnd` is any fiscal year end the company has reported. */
+export function fiscalLabel(periodEnd, fyEnd, annual = false) {
+  const day = (s) => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(s || '')); return m ? Date.UTC(+m[1], +m[2] - 1, +m[3]) : null; };
+  const d = day(periodEnd), fe = day(fyEnd);
+  if (d === null || fe === null) return null;
+  const F = new Date(fe), DAY = 86400000;
+  const cal = (F.getUTCMonth() === 11 && F.getUTCDate() >= 24) || (F.getUTCMonth() === 0 && F.getUTCDate() <= 7);
+  const at = (y) => { const last = new Date(Date.UTC(y, F.getUTCMonth() + 1, 0)).getUTCDate(); return Date.UTC(y, F.getUTCMonth(), Math.min(F.getUTCDate(), last)); };
+  let end = at(new Date(d).getUTCFullYear());
+  if (end < d - 10 * DAY) end = at(new Date(end).getUTCFullYear() + 1);
+  const E = new Date(end);
+  const year = cal && E.getUTCMonth() === 0 ? E.getUTCFullYear() - 1 : E.getUTCFullYear();
+  const yy = String(year % 100).padStart(2, '0');
+  if (annual) return cal ? String(year) : `FY${yy}`;
+  const q = 4 - Math.round((end - d) / DAY / 91.31);
+  if (q < 1 || q > 4) return null;
+  return cal ? `Q${q} ${year}` : `Q${q} FY${yy}`;
+}
+const seg = (val, opts) => html`<div class="seg fin-period" role="group" aria-label="Fiscal years or quarters">${opts.map(([v, l]) => html`<button type="button" data-fin-period="${v}" aria-pressed="${val === v}">${l}</button>`)}</div>`;
 const kv = (rows, n = 3) => html`<dl class="kv" style="--kv:${n}">${rows.filter(Boolean).map(([k, v]) => html`<div><dt>${k}</dt><dd>${v}</dd></div>`)}</dl>`;
 const ask = (sym, label, q) => miloButton(label, { ask: q, context: `${sym} Dossier, Financials`, symbol: sym });
 const pct = (v, dp = 1) => (isNum(v) ? `${num(v, dp)}%` : 'n/a');
@@ -34,13 +60,13 @@ function readings() {
   const items = [];
   if (f.available) items.push(['Margins', `Gross ${pct(m.gross_pct)}, operating ${pct(m.operating_pct)}, net ${pct(m.net_pct)}.`]);
   if (f.available) items.push(['Growth', `Revenue ${signed(g.revenue_yoy_pct)} and net income ${signed(g.net_income_yoy_pct)} in the last fiscal year${isNum(g.net_income_yoy_pct) && isNum(g.revenue_yoy_pct) && g.net_income_yoy_pct - g.revenue_yoy_pct > 2 ? ': net income outpaced revenue, so the net margin widened' : isNum(g.net_income_yoy_pct) && isNum(g.revenue_yoy_pct) && g.revenue_yoy_pct - g.net_income_yoy_pct > 2 ? ': revenue outpaced net income, so the net margin narrowed' : ''}.`]);
-  if (eh.available) items.push(['Against estimates', `Beat in ${eh.beat_count} of ${eh.sample_size} quarters, by ${signed(eh.avg_surprise_pct, 1)} on average.`]);
+  if (eh.available && eh.sample_size) items.push(['Against estimates', `Beat in ${eh.beat_count} of ${eh.sample_size} quarters${eh.in_line_count ? `, in line in ${eh.in_line_count}` : ''}, by ${signed(eh.avg_surprise_pct, 1)} on average.`]);
   // only what was reported: a missing share of float is not 0%, and no squeeze reading is drawn without it
   if (si.available) { const parts = [isNum(si.percent_of_float) ? `${pct(si.percent_of_float * 100)} of float` : 'Share of float not reported', isNum(si.days_to_cover) ? `${num(si.days_to_cover, 1)} days to cover` : '', isNum(si.change_vs_prior_pct) ? `${signed(si.change_vs_prior_pct, 1)} since the last report` : ''].filter(Boolean); items.push(['Short interest', `${parts.join(', ')}.${isNum(si.percent_of_float) && si.squeeze_potential ? ` Squeeze potential ${si.squeeze_potential}.` : ''}`]); }
   if (ow.available) { const i6 = ow.insider_6m || {}; items.push(['Insiders', `${capFirst(ow.insider_signal || '')} over six months: ${num(i6.purchase_count, 0)} purchases and ${num(i6.sale_count, 0)} sales, net ${compact(i6.net_shares)} shares.`]); }
   if (!items.length && !f.available) return '';
   const a = f.annual || {}, per = f.annual_periods || [], bs = f.balance_sheet || {};
-  const yr = per[0] ? String(per[0]).slice(0, 4) : '';
+  const yr = (f.annual_fiscal || [])[0] || (per[0] ? String(per[0]).slice(0, 4) : '');
   const latest = (k) => (a[k] || [])[0];
   const cells = f.available ? [
     ['Revenue', usd(latest('revenue')), `${signed(g.revenue_yoy_pct)} on the year before`],
@@ -49,9 +75,9 @@ function readings() {
     ['Operating margin', pct(m.operating_pct), `Gross ${pct(m.gross_pct)}, net ${pct(m.net_pct)}`],
     [isNum(bs.net_cash) && bs.net_cash < 0 ? 'Net debt' : 'Net cash', usd(isNum(bs.net_cash) ? Math.abs(bs.net_cash) : null), `Cash ${usd(bs.cash)}, debt ${usd(bs.total_debt)}`],
   ] : [];
-  return html`<section class="section fin-sum" id="fin-summary" aria-labelledby="fr-h"><h2 class="t-h2" id="fr-h">Summary${yr ? `, fiscal ${yr}` : ''}</h2>
+  return html`<section class="section fin-sum" id="fin-summary" aria-labelledby="fr-h"><h2 class="t-h2" id="fr-h">Summary${yr ? `, ${/^FY/.test(yr) ? yr : `fiscal ${yr}`}` : ''}</h2>${per[0] ? html`<p class="section-sub">The fiscal year to ${fullDate(per[0])}.</p>` : ''}
     ${cells.length ? html`<div class="readings fin-figs" style="--rn:${cells.length}">${cells.map(([k, v, d]) => html`<div class="rd"><span class="k">${k}</span><span class="v">${v}</span><span class="d">${d}</span></div>`)}</div>` : ''}
-    ${items.length ? html`<h3>What the statements say</h3><dl class="reads-dl">${items.map(([k, v]) => html`<div><dt>${k}</dt><dd>${v}</dd></div>`)}</dl>` : ''}</section>`;
+    ${items.length ? html`<h3>What the figures say</h3><dl class="reads-dl">${items.map(([k, v]) => html`<div><dt>${k}</dt><dd>${v}</dd></div>`)}</dl>` : ''}</section>`;
 }
 
 // Where each section is, for the jump list: only the sections this company has.
@@ -76,29 +102,47 @@ function jumpList() {
     <label class="tabsel fin-jumpsel"><span class="tabsel-k">Jump to</span><select data-fin-jumpsel aria-label="Jump to a section of Financials"><option value="">Choose a section</option>${xs.map(([id, l]) => html`<option value="${id}">${l}</option>`)}</select></label></nav>`;
 }
 
+// The figures for the period chosen: fiscal years from the annual statements, or quarters from the quarterly
+// income statement (Yahoo carries no quarterly cash flow, so free cash flow is a yearly figure only).
+export function periodView(f, which) {
+  const q = which === 'quarter' && (f.quarterly_periods || []).length;
+  const per = q ? f.quarterly_periods : f.annual_periods || [];
+  const names = q ? f.quarterly_fiscal || [] : f.annual_fiscal || [];
+  return { q: !!q, per, vals: q ? f.quarterly || {} : f.annual || {},
+    label: (i) => names[i] || (q ? `${shortDate(per[i])} ${String(per[i]).slice(0, 4)}` : String(per[i]).slice(0, 4)),
+    // a quarter against the same quarter a year before (four columns back); a year against the one before
+    back: q ? 4 : 1, against: q ? 'on the same quarter a year before' : 'on the year before' };
+}
 function statements(sym) {
   const f = ((D.t || {}).company || {}).financials || {};
   if (!f.available) return '';
-  const a = f.annual || {}, per = f.annual_periods || [], bs = f.balance_sheet || {}, m = f.margins || {};
-  const rows = [['Revenue', 'revenue'], ['Gross profit', 'gross_profit'], ['Operating income', 'operating_income'], ['EBITDA', 'ebitda'], ['Net income', 'net_income'], ['Free cash flow', 'free_cash_flow'], ['Diluted EPS', 'diluted_eps']];
+  const V = periodView(f, period), a = V.vals, per = V.per, bs = f.balance_sheet || {}, m = f.margins || {};
+  const rows = [['Revenue', 'revenue'], ['Gross profit', 'gross_profit'], ['Operating income', 'operating_income'], ['EBITDA', 'ebitda'], ['Net income', 'net_income'], ['Free cash flow', 'free_cash_flow'], ['Diluted EPS (GAAP)', 'diluted_eps']];
   const card = (k, label, slot, fmt) => {
-    const v = a[k] || [], cur = v[0], prev = v[1];
-    const ch = isNum(cur) && isNum(prev) && prev !== 0 ? ((cur - prev) / Math.abs(prev)) * 100 : null;
-    return html`<div class="fin-card"><p class="t-label">${label}</p><p class="fin-card-v">${fmt(cur)}${isNum(ch) ? html` <span class="${dir(ch)}">${signed(ch, 1)}</span>` : ''}</p><div class="chart-slot" data-chart="${slot}"></div></div>`;
+    const v = a[k] || [], cur = v[0], prev = v[V.back];
+    if (!v.length && V.q) return html`<div class="fin-card"><p class="t-label">${label}</p><p class="fin-card-v t-muted">Yearly only</p><p class="t-muted">The quarterly statements Optic reads carry no ${label.toLowerCase()}.</p></div>`;
+    const ch = isNum(cur) && isNum(prev) && prev > 0 ? ((cur - prev) / Math.abs(prev)) * 100 : null;
+    return html`<div class="fin-card"><p class="t-label">${label}, ${V.label(0)}</p><p class="fin-card-v">${fmt(cur)}${isNum(ch) ? html` <span class="${dir(ch)}">${signed(ch, 1)}</span>` : ''}</p>${isNum(ch) ? html`<p class="t-muted fin-card-d">${V.against}</p>` : ''}<div class="chart-slot" data-chart="${slot}"></div></div>`;
   };
-  return html`<section class="section" id="fin-statements" aria-labelledby="st-h"><div class="section-head"><div><h2 class="t-h2" id="st-h">Statements</h2><p class="section-sub">Annual figures from the company's filings: the latest fiscal year and its change on the year before.</p></div>${ask(sym, 'Ask Milo about the financials', `What do ${sym}'s financial statements say about the business's health?`)}</div>
+  return html`<section class="section" id="fin-statements" aria-labelledby="st-h"><div class="section-head"><div><h2 class="t-h2" id="st-h">Statements</h2><p class="section-sub">${clean(f.source || "The company's statements as Yahoo Finance carries them.")} ${V.q ? 'The latest quarters, each against the same quarter a year before.' : 'The latest fiscal years, each against the year before.'}</p></div>${ask(sym, 'Ask Milo about the financials', `What do ${sym}'s financial statements say about the business's health?`)}</div>
+    ${(f.quarterly_periods || []).length ? seg(period, [['year', 'Fiscal years'], ['quarter', 'Quarters']]) : ''}
     <div class="chart-grid fin-cards">${card('revenue', 'Revenue', 'rev', usd)}${card('net_income', 'Net income', 'ni', usd)}${card('free_cash_flow', 'Free cash flow', 'fcf', usd)}${card('diluted_eps', 'Diluted EPS', 'eps', (x) => num(x))}</div>
-    <div class="tscroll"><table class="t fin-table"><thead><tr><th>Fiscal year</th>${per.map((p) => html`<th>${String(p).slice(0, 4)}</th>`)}</tr></thead>
-      <tbody>${rows.filter(([, k]) => (a[k] || []).length).map(([l, k]) => html`<tr><td>${l}</td>${a[k].map((v) => html`<td>${k === 'diluted_eps' ? num(v) : usd(v)}</td>`)}</tr>`)}</tbody></table></div>
+    <div class="tscroll"><table class="t fin-table"><thead><tr><th scope="col">${V.q ? 'Quarter' : 'Fiscal year'}</th>${per.map((p, i) => html`<th scope="col">${V.label(i)}<small class="t-muted fin-end">to ${shortDate(p)} ${String(p).slice(2, 4)}</small></th>`)}</tr></thead>
+      <tbody>${rows.filter(([, k]) => (a[k] || []).some(isNum)).map(([l, k]) => html`<tr><th scope="row">${l}</th>${per.map((p, i) => html`<td>${k === 'diluted_eps' ? num((a[k] || [])[i]) : usd((a[k] || [])[i])}</td>`)}</tr>`)}</tbody></table></div>
+    <p class="asof">${clean(f.eps_basis || '')} Earnings uses analysts' basis for EPS, usually adjusted, so the two can differ.</p>
     <h3>Balance sheet and margins</h3>${kv([['Cash', usd(bs.cash)], ['Debt', usd(bs.total_debt)], ['Net cash or debt', usd(bs.net_cash)], ['Debt to equity', num(bs.debt_to_equity, 2)], ['Gross margin', pct(m.gross_pct)], ['Operating margin', pct(m.operating_pct)], ['EBITDA margin', pct(m.ebitda_pct)], ['Net margin', pct(m.net_pct)]], 4)}
     <ul class="plain">${(f.notes || []).map((n) => html`<li>${clean(n)}</li>`)}</ul></section>`;
 }
 function statementCharts() {
   const f = ((D.t || {}).company || {}).financials || {};
   if (!f.available) return {};
-  const per = (f.annual_periods || []).slice().reverse(), a = f.annual || {};
-  const bars = (k, label, fmt) => (w) => signedBars(per.map((p, i) => ({ x: String(p).slice(0, 4), v: (a[k] || []).slice().reverse()[i], label: `${String(p).slice(0, 4)}: ${fmt((a[k] || []).slice().reverse()[i])}` })), { w, h: 120, label, fmt });
-  return { rev: bars('revenue', 'Revenue by fiscal year', usd), ni: bars('net_income', 'Net income by fiscal year', usd), fcf: bars('free_cash_flow', 'Free cash flow by fiscal year', usd), eps: bars('diluted_eps', 'Diluted EPS by fiscal year', (v) => num(v)) };
+  const V = periodView(f, period), a = V.vals, n = V.per.length;
+  const idx = [...Array(n).keys()].reverse();     // oldest first, left to right
+  const by = V.q ? 'by quarter' : 'by fiscal year';
+  const bars = (k, label, fmt) => ((a[k] || []).some(isNum) ? (w) => signedBars(idx.map((i) => ({ x: V.label(i), v: (a[k] || [])[i], label: `${V.label(i)}: ${fmt((a[k] || [])[i])}` })), { w, h: 120, label, fmt }) : null);
+  const out = { rev: bars('revenue', `Revenue ${by}`, usd), ni: bars('net_income', `Net income ${by}`, usd), fcf: bars('free_cash_flow', `Free cash flow ${by}`, usd), eps: bars('diluted_eps', `Diluted EPS ${by}`, (v) => num(v)) };
+  Object.keys(out).forEach((k) => { if (!out[k]) delete out[k]; });
+  return out;
 }
 
 function record(which) {
@@ -166,9 +210,23 @@ function segments() {
   const s = D.sg;
   if (s === undefined) return html`<section class="section">${skeleton('lines', 3, 'Reading segment filings')}</section>`;
   if (!s || !s.available) return s && s.reason ? html`<section class="section"><h2 class="t-h2">Segments and geography</h2><p>${clean(s.reason)}</p></section>` : '';
+  const fy = (((D.t || {}).company || {}).financials || {}).fiscal_year_end;
+  const years = period === 'year' && (s.tables || []).some((t) => ((t.annual || {}).ends || []).length);
+  const table = (t) => {
+    // newest first, as the statements read (the filings parse oldest first)
+    const ends = years ? (t.annual.ends || []).slice().reverse() : (s.quarters || []).slice().reverse();
+    const rows = years ? (t.annual.rows || []).map((r) => ({ member: r.member, values: r.values.slice().reverse(), derived: [] }))
+      : t.rows.map((r) => ({ member: r.member, values: r.values.slice().reverse(), derived: (r.derived || []).slice().reverse() }));
+    const keep = ends.map((_, i) => rows.some((r) => isNum(r.values[i])));
+    const derivedCol = ends.map((_, i) => rows.some((r) => r.derived[i]));
+    const name = (e) => (fy ? fiscalLabel(e, fy, years) : null) || `${shortDate(e)} ${String(e).slice(2, 4)}`;
+    return html`<h3>${t.metric_label}, ${t.axis_label.toLowerCase()}</h3><div class="tscroll"><table class="t fin-table"><thead><tr><th scope="col">${t.axis_label}</th>${ends.map((e, i) => (keep[i] ? html`<th scope="col">${name(e)}<small class="t-muted fin-end">${derivedCol[i] ? 'year less three quarters' : `to ${shortDate(e)} ${String(e).slice(2, 4)}`}</small></th>` : ''))}</tr></thead>
+      <tbody>${rows.map((r) => html`<tr><th scope="row">${clean(r.member)}</th>${r.values.map((v, i) => (keep[i] ? html`<td>${usd(v)}</td>` : ''))}</tr>`)}</tbody></table></div>`;
+  };
   return html`<section class="section" id="fin-segments" aria-labelledby="sg-h"><h2 class="t-h2" id="sg-h">Segments and geography</h2>
-    ${(s.tables || []).map((t) => html`<h3>${t.metric_label}, ${t.axis_label.toLowerCase()}</h3><div class="tscroll"><table class="t fin-table"><thead><tr><th>${t.axis_label}</th>${s.quarters.map((q) => html`<th>${shortDate(q)} ${String(q).slice(2, 4)}</th>`)}</tr></thead>
-      <tbody>${t.rows.map((r) => html`<tr><td>${clean(r.member)}</td>${r.values.map((v) => html`<td>${usd(v)}</td>`)}</tr>`)}</tbody></table></div>`)}
+    ${seg(years ? 'year' : 'quarter', [['year', 'Fiscal years'], ['quarter', 'Quarters']])}
+    ${(s.tables || []).map(table)}
+    ${!years && s.q4_derived ? html`<p class="asof">A 10-K reports the year, not its fourth quarter, so a fourth quarter here is the year less the three quarters filed before it, and its column says so.</p>` : ''}
     <p class="asof">Based on ${s.filings_read} of the ${s.filings_listed} most recent filings${s.filings_unread ? '; the rest are still being read' : ''}. ${clean(s.method || '')} ${clean(s.blind_spot || '')}</p></section>`;
 }
 
@@ -213,7 +271,11 @@ export async function render(main, route) {
   if (!main.dataset.finWired) {
     main.dataset.finWired = '1';
     const jump = (id) => { const sec = document.getElementById(id); if (!sec) return; sec.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' }); const h = sec.querySelector('h2'); if (h) { h.tabIndex = -1; h.focus({ preventScroll: true }); } };
-    main.addEventListener('click', (e) => { const b = e.target.closest('[data-fin-jump]'); if (b) jump(b.dataset.finJump); });
+    main.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-fin-jump]'); if (b) { jump(b.dataset.finJump); return; }
+      const p = e.target.closest('[data-fin-period]');
+      if (p) { period = p.dataset.finPeriod; try { localStorage.setItem(PERIOD_KEY, period); } catch (err) { /* private mode */ } const at = p.closest('section'); const id = at && at.id; paint(); const again = id && document.querySelector(`#${id} [data-fin-period="${period}"]`); if (again) again.focus(); }
+    });
     main.addEventListener('change', (e) => { const sl = e.target.closest('[data-fin-jumpsel]'); if (sl && sl.value) { jump(sl.value); sl.value = ''; } });
   }
   paint();

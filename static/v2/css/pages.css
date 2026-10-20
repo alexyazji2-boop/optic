@@ -347,7 +347,13 @@ table.scen td { font-weight: 600; }
 .fin-card { min-width: 0; padding: 12px 12px 6px; border: 1px solid var(--c-line-2); border-radius: var(--r-md); background: var(--c-plane-2); }
 .fin-card-v { margin: 2px 0 6px; font: 600 var(--t-lead)/1.2 var(--f-sans); letter-spacing: -0.01em; font-variant-numeric: tabular-nums; }
 .fin-card-v span { font-size: var(--t-md); font-weight: 600; }
-.fin .tscroll .t th:first-child, .fin .tscroll .t td:first-child { position: sticky; left: 0; z-index: 1; background: var(--c-raised); box-shadow: 1px 0 0 var(--c-line-2); }
+.fin .tscroll .t th:first-child, .fin .tscroll .t td:first-child,
+.earn .tscroll .t th:first-child, .earn .tscroll .t td:first-child { position: sticky; left: 0; z-index: 1; background: var(--c-raised); box-shadow: 1px 0 0 var(--c-line-2); }
+/* Financials and Earnings: each period's fiscal name, with its end date under it; the years-or-quarters switch */
+.fin-end { display: block; font-weight: 400; }
+.fin-period { margin: 4px 0 14px; }
+.fin-card-d { margin: 0; font-size: var(--t-sm); }
+.earn .t th[scope="row"], .fin .t th[scope="row"] { text-align: left; font-weight: 500; color: var(--c-ink); }
 .fin .fin-table td:not(:first-child), .fin .fin-table th:not(:first-child) { text-align: right; font-variant-numeric: tabular-nums; }
 @media (max-width: 860px) { .fin-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 640px) {
