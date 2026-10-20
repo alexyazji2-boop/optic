@@ -12,7 +12,7 @@ import * as api from '../core/api.js';
 import * as store from '../core/store.js';
 import { num, signed, dir, money, signedMoney, clean, ago, shortDate, isNum } from '../core/format.js';
 import { lineChart, spark, mountCharts } from '../ui/chart.js';
-import { skeleton, empty, failed, staleLine } from '../ui/states.js';
+import { skeleton, empty, failed, staleLine, how } from '../ui/states.js';
 import { icon } from '../ui/icons.js';
 import { row as watchRow, openCompany } from '../ui/company.js';
 import { button as miloButton, provideContext } from '../ui/milo.js';
@@ -36,7 +36,7 @@ let timer = null;
 let live = true;
 let ctx = {};
 
-const etTime = (iso) => { try { return new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' }) + ' ET'; } catch (e) { return ''; } };
+const etTime = (iso) => { const t = iso ? Date.parse(iso) : NaN; if (!Number.isFinite(t)) return 'time not reported'; return new Date(t).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' }) + ' ET'; };
 export const etDate = (iso) => { try { return new Date(iso || Date.now()).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', timeZone: 'America/New_York' }); } catch (e) { return ''; } };
 export function hello() {
   const h = new Date().getHours();
@@ -77,13 +77,14 @@ function scene(data, series) {
   const real = isNum(em.realized_pct) && em.realized_pct > 0;
   ctx.scene = { series, cone: { lo, hi } };
   return html`<section class="scene" aria-labelledby="scene-h">
-    <div class="lens"><p class="lens-k"><span>S&amp;P 500, the past three months</span><b>Gold: one session, as options price it</b></p>
+    <div class="lens"><p class="lens-k"><span>S&amp;P 500, the past three months</span><b>Gold band: the next session's range, as options price it</b></p>
       <div class="chart-slot" data-chart="spx">${series ? '' : skeleton('chart')}</div></div>
     <div class="copy">
       <p class="kicker" id="scene-h">The S&amp;P 500, next session</p>
       <p class="big">±${num(em.implied_pct, 2)}%</p>
-      <p class="big-cap">The one-day move options price, from the VIX: about ${num(em.implied_points, 0)} points either way from ${num(em.spot, 0)} (VIX ${num(em.vix, 1)} ÷ 16).</p>
-      ${real && isNum(em.ratio) ? html`<p class="second"><b>${num(em.ratio, 1)}×</b><span>= ±${num(em.implied_pct, 2)}% priced ÷ ±${num(em.realized_pct, 2)}%, the index's own recent day (its 14-day average range, ${num(em.atr_pct, 2)}%, ÷ 1.6).</span></p>` : ''}
+      <p class="big-cap">Options price about ${num(em.implied_points, 0)} points either way from ${num(em.spot, 0)} for the next session.</p>
+      ${real && isNum(em.ratio) ? html`<p class="second"><b>${num(em.ratio, 1)}×</b><span>the index's typical day over the last 14 sessions (±${num(em.realized_pct, 2)}%).</span></p>` : ''}
+      ${how(html`<p>The one-day move is the VIX (${num(em.vix, 1)}) divided by 16, the square root of about 256 trading days, as a percentage of the index level.${real ? ` The typical day is the 14-day average true range (${num(em.atr_pct, 2)}%) divided by 1.6, which puts a range on the same footing as a one-standard-deviation move.` : ''}</p>`)}
       <p class="claim">${clean(em.reading || '')}</p>
       <div class="acts"><a class="btn btn-light" href="#/macro">See the macro picture</a><a class="btn" href="#/explore">What moved most</a>${miloButton('Ask Milo about today', { ask: 'What matters for the market in the next session?', context: 'Home, the market today' })}</div>
     </div>
@@ -110,7 +111,7 @@ export function portfolio(ov, perf) {
     <p class="t-display">${money(v)}</p>
     <p class="delta">${isNum(today.total) ? html`<span class="${dir(today.total)}">${signedMoney(today.total)} (${signed(today.total_pct)}) on the day</span>` : ''}${isNum(brokerTotal) && Math.abs(brokerTotal - v) > 1 ? html`<span class="t-muted">Your broker's own total: ${money(brokerTotal)}${sync ? `, ${ago(sync)}` : ''}</span>` : ''}</p>
     ${series.length > 1 ? html`<p class="pf-chart-k">Account value as your broker reported it, three months. It includes your own deposits and withdrawals, so it is not a return.${switches.length ? ` The source changes on ${switches.join(', ')}, marked on the chart; the step there is not a gain or loss.` : ''}</p><div class="chart-slot" data-chart="portfolio"></div>` : html`<p class="asof">The value chart fills in as daily snapshots accumulate.</p>`}
-    ${isNum(twr) ? html`<p class="pf-twr"><b>${signed(twr)}</b> time-weighted over the period, measured from ${srcWords}.${switches.length ? ' A change of source inside the period moves this figure, so read it with the chart.' : ''}</p>` : ''}
+    ${isNum(twr) ? html`<p class="pf-twr"><b>${signed(twr)}</b> over the period, time-weighted, measured from ${srcWords}.${switches.length ? ' A change of source inside the period moves this figure, so read it with the chart.' : ''}</p>` : ''}
     </div><div class="pf-side">${rows.length ? html`<div class="pf-rows" role="table" aria-label="Holdings, by their effect on the day">
       <div class="pf-row pf-head" role="row"><span role="columnheader">Holding</span><span role="columnheader" class="num">Price</span><span role="columnheader" class="num">Day</span><span role="columnheader" class="num">Effect</span></div>
       ${rows.slice(0, 6).map((r) => html`<a class="pf-row" role="row" href="#/${r.symbol}"><span role="cell"><b class="tick">${r.symbol}</b> <small class="t-muted">${num(r.quantity, 0)} shares</small></span><span role="cell" class="num">${num(r.price)}</span><span role="cell" class="num ${dir(r.change_pct)}">${signed(r.change_pct)}</span><span role="cell" class="num ${dir(r.contribution)}">${signedMoney(r.contribution, 0)}</span></a>`)}</div>` : ''}
@@ -159,7 +160,7 @@ export function desk(md) {
   if (!md || !md.available) return '';
   const lead = (md.lead || []).map(clean);
   return html`<section class="section" aria-labelledby="desk-h">
-    <div class="section-head"><div><h2 class="t-h2" id="desk-h">${md.title || 'Optic Desk'}</h2><p class="section-sub">${md.voice === 'mechanical' ? 'Written from the numbers by fixed rules today.' : 'The day\'s edition.'} ${md.date ? `For ${shortDate(md.date)}.` : ''}</p></div>
+    <div class="section-head"><div><h2 class="t-h2" id="desk-h">${md.title || 'Optic Desk'}</h2><p class="section-sub">${md.date ? `For ${shortDate(md.date)}. ` : ''}${md.voice === 'mechanical' ? 'Compiled by fixed rules from the day\'s figures; no model wrote it.' : 'Written by an AI model from the day\'s figures.'}</p></div>
       ${miloButton('Ask Milo about the Desk', { ask: 'Walk me through today\'s Desk.', context: 'Home, Optic Desk' })}</div>
     <ul class="desk-lead">${lead.map((l) => html`<li>${l}</li>`)}</ul>
     ${md.overall ? html`<details class="more"><summary>The full read ${icon('chev')}</summary><div class="inner"><p>${clean(md.overall)}</p>${md.note ? html`<p class="t-muted">${clean(md.note)}</p>` : ''}</div></details>` : ''}
@@ -169,8 +170,8 @@ export function desk(md) {
 /* ---------------- movers ---------------- */
 function movers(m) {
   const rows = (m && (m.rows || m.results || m.movers)) || [];
-  if (m && m.building) return empty('The ranking is still being built', clean(m.reason || 'It runs in the background and appears here when it finishes.'));
-  if (!rows.length) return empty('Nothing to rank right now', clean((m && m.reason) || 'The month\'s movers appear once the background ranking has run.'));
+  if (m && m.building) return empty('The one-month ranking is still loading', clean(m.reason || 'It appears here when it finishes.'));
+  if (!rows.length) return empty('No one-month movers yet', clean((m && m.reason) || 'They appear once the ranking has run.'));
   return html`<ol class="movers">${rows.slice(0, 6).map((r) => html`<li><a href="#/${r.symbol || r.ticker}"><b class="tick">${r.symbol || r.ticker}</b><span class="${dir(r.roc20 ?? r.change_pct)}">${signed(r.roc20 ?? r.change_pct, 1)}</span></a></li>`)}</ol>
     <p class="asof">The 20-session change, ranked by size either way.</p>`;
 }
@@ -182,7 +183,7 @@ export function welcome(data) {
     <div class="copy">
       <p class="kicker">Stock and options research</p>
       <h1 id="wel-h">See what moves a stock, and why.</h1>
-      <p>Prices, options and filings for any US company, read in plain words, with the evidence one step away.</p>
+      <p>Prices, options, financials and filings for US stocks and funds, each figure with its source.</p>
       <form class="wel-form" role="search" data-v2-search-form>
         <label class="field">${icon('search')}<span class="sr">Company or ticker</span><input name="q" placeholder="Try AAPL or Nvidia" autocomplete="off" spellcheck="false"></label>
         <button type="submit" class="btn btn-light">Open</button>
@@ -238,7 +239,7 @@ function render_(main, isNew) {
     <div id="hm-strip">${skeleton('lines', 2, 'Loading the market')}</div>
     ${isNew ? html`<div id="hm-welcome">${skeleton('chart', 1, 'Loading')}</div>
       <section class="section" aria-labelledby="st-h"><div class="section-head"><div><h2 class="t-h2" id="st-h">Follow a few names to start</h2>
-        <p class="section-sub">${store.signedIn() ? 'They go into your account\'s watchlist.' : 'Kept in this browser. Sign in to keep them on your account.'} Home fills in around what you follow.</p></div></div>
+        <p class="section-sub">${store.signedIn() ? 'They go into your account\'s watchlist.' : 'Kept in this browser. Sign in to keep them on your account.'}</p></div></div>
         <div id="hm-starters">${skeleton('rows', 2)}</div></section>
       <section class="section" id="hm-modes" hidden aria-labelledby="md-h"><div class="section-head"><div><h2 class="t-h2" id="md-h">How should Optic speak to you?</h2><p class="section-sub">Change it any time in Settings.</p></div></div><div id="hm-modes-in"></div></section>
       <section class="section" aria-labelledby="pa-h"><h2 class="sr" id="pa-h">Ways to start</h2><div class="paths">
@@ -247,7 +248,7 @@ function render_(main, isNew) {
         <div class="path"><p class="t-h3">${store.signedIn() ? 'Set alerts' : 'Keep it on an account'}</p><p>${store.signedIn() ? 'Watches check your conditions every 30 minutes and record what fired.' : 'A free account keeps your watchlists and alerts on any device.'}</p>${store.signedIn() ? html`<a class="textlink" href="#/alerts">Alerts ${icon('arrow')}</a>` : html`<a class="textlink" href="#/signin">Sign in or create one ${icon('arrow')}</a>`}</div>
       </div></section>`
     : html`<div id="hm-hero"></div><div id="hm-scene">${skeleton('chart', 1, 'Loading the market')}</div>
-      <section class="section" aria-labelledby="wl-h"><div class="section-head"><div><h2 class="t-h2" id="wl-h">${list ? list.name : 'Your watchlist'}</h2><p class="section-sub">Price, today's move, 30 sessions and what changed. Choose a row for the detail.</p></div>
+      <section class="section" aria-labelledby="wl-h"><div class="section-head"><div><h2 class="t-h2" id="wl-h">${list ? list.name : 'Your watchlist'}</h2><p class="section-sub">Price, today's move and the last 30 sessions. Choose a row for what changed.</p></div>
         <a class="textlink" href="#/watchlist">All of it ${icon('arrow')}</a></div><div id="hm-watch">${skeleton('rows', 4)}</div></section>
       <section class="section" aria-labelledby="pr-h"><div class="section-head"><div><h2 class="t-h2" id="pr-h">What matters today</h2><p class="section-sub">The calendar, this week's earnings and the sector board, sorted by when they land.</p></div></div>
         <div id="hm-priority">${skeleton('lines', 4, 'Loading what matters today')}</div></section>
@@ -319,7 +320,7 @@ async function loadWatch(main) {
 
 async function loadPriority(main) {
   const host = $('#hm-priority', main);
-  const slow = setTimeout(() => { if ($('.sk-wrap', host)) host.insertAdjacentHTML('beforeend', '<p class="asof" role="status">Still gathering the calendar and this week\'s earnings. This can take a minute after a restart.</p>'); }, 8000);
+  const slow = setTimeout(() => { if ($('.sk-wrap', host)) host.insertAdjacentHTML('beforeend', '<p class="asof" role="status">Still loading the calendar and this week\'s earnings. It can take up to a minute.</p>'); }, 8000);
   try {
     const pr = await api.get('/api/priority', { ttl: 300000, timeout: 90000 });
     if (!live) return;

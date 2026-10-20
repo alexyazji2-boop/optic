@@ -16,6 +16,17 @@ export const skeleton = (kind = 'lines', n = 3, label = 'Loading') => html`<div 
  * conventions and caveats are one press away, under the same words everywhere.
  */
 export const how = (...parts) => html`<details class="more-inline how"><summary>How this works</summary><div class="how-body">${parts}</div></details>`;
+/**
+ * Where prose came from (editorial pass, 2026-10-19): an AI model's interpretation of the figures, or fixed rules
+ * over them. Said beside the text, in the same words everywhere, so a reader can tell generated reading from the
+ * source data and the deterministic calculations around it. Nothing is said when the payload does not say.
+ */
+export const generated = (x, { at } = {}) => {
+  const by = x && x.written_by, mech = x && x.voice === 'mechanical';
+  if (!by && !mech) return '';
+  const when = at ? `, ${ago(at)}` : '';
+  return html`<p class="gen-note">${mech ? `Compiled by fixed rules from the figures${when}; no model wrote it.` : `Written by an AI model from the figures${when}. It interprets them and can be wrong; the figures are the record.`}</p>`;
+};
 export const empty = (title, body, action) => html`<div class="state" role="note"><p class="t-h3">${title}</p>${body ? html`<p>${body}</p>` : ''}${action || ''}</div>`;
 
 export const failed = (what, err, { retry } = {}) => html`<div class="state err" role="alert">

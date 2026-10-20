@@ -55,14 +55,14 @@ export function paint(route) {
     const cur = g && g.id === gr.id ? 'page' : null;
     const out = !groupIsV2(gr);
     const inner = html`${icon(gr.icon)}<span>${gr.label}</span>${out ? html`<span class="legacy" aria-hidden="true">${icon('out')}</span>` : ''}`;
-    const name = out ? `${gr.label}, opens in the current app` : gr.label;
+    const name = out ? `${gr.label}, opens in the classic app` : gr.label;
     rows.push(href
       ? html`<a class="rail-row" href="${href}" aria-label="${name}" ${cur ? html`aria-current="page"` : ''}>${inner}</a>`
       : html`<button type="button" class="rail-row" data-v2-open-palette aria-label="${name}, search for a company" ${cur ? html`aria-current="page"` : ''}>${inner}</button>`);
   });
   render($('.rail'), html`<a class="brand" href="#/" aria-label="Optic Terminal, Home">${brandMark()}<span class="brand-word" aria-hidden="true">OPTIC <span>TERMINAL</span></span></a>
     <nav class="rail-nav" aria-label="Sections">${rows}</nav>
-    <div class="rail-foot"><a class="rail-row" href="${hrefFor('settings')}" ${SETTINGS.v2 ? '' : html`aria-label="${SETTINGS.label}, opens in the current app"`} ${route.view === 'settings' ? html`aria-current="page"` : ''}>${icon(SETTINGS.icon)}<span>${SETTINGS.label}</span>${SETTINGS.v2 ? '' : html`<span class="legacy" aria-hidden="true">${icon('out')}</span>`}</a><button type="button" class="rail-row" data-v2-rail-collapse aria-pressed="${railTight()}" aria-label="Collapse">${icon('chev')}<span>Collapse</span></button></div>`);
+    <div class="rail-foot"><a class="rail-row" href="${hrefFor('settings')}" ${SETTINGS.v2 ? '' : html`aria-label="${SETTINGS.label}, opens in the classic app"`} ${route.view === 'settings' ? html`aria-current="page"` : ''}>${icon(SETTINGS.icon)}<span>${SETTINGS.label}</span>${SETTINGS.v2 ? '' : html`<span class="legacy" aria-hidden="true">${icon('out')}</span>`}</a><button type="button" class="rail-row" data-v2-rail-collapse aria-pressed="${railTight()}" aria-label="Collapse">${icon('chev')}<span>Collapse</span></button></div>`);
 
   render($('.tabbar'), MOBILE_TABS.map((t) => {
     if (t.more) {
@@ -83,8 +83,8 @@ export function moreBody() {
   const sym = recent()[0] || null;
   return html`<nav class="more-list" aria-label="More sections">${visibleGroups(flags).filter((g) => !shown.has(g.id)).map((g) => {
     const href = groupHref(g, sym);
-    return html`<a class="rail-row" href="${href}">${icon(g.icon)}<span>${g.label}</span>${groupIsV2(g) ? '' : html`<span class="legacy">${icon('out')}<span class="sr">, opens in the current app</span></span>`}</a>`;
-  })}<a class="rail-row" href="${hrefFor('settings')}">${icon('settings')}<span>${SETTINGS.label}</span>${SETTINGS.v2 ? '' : html`<span class="legacy">${icon('out')}<span class="sr">, opens in the current app</span></span>`}</a></nav>`;
+    return html`<a class="rail-row" href="${href}">${icon(g.icon)}<span>${g.label}</span>${groupIsV2(g) ? '' : html`<span class="legacy">${icon('out')}<span class="sr">, opens in the classic app</span></span>`}</a>`;
+  })}<a class="rail-row" href="${hrefFor('settings')}">${icon('settings')}<span>${SETTINGS.label}</span>${SETTINGS.v2 ? '' : html`<span class="legacy">${icon('out')}<span class="sr">, opens in the classic app</span></span>`}</a></nav>`;
 }
 
 export function paintAccount() {

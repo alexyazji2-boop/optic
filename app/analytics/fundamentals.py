@@ -139,7 +139,7 @@ def analyse_short_interest(raw: Dict[str, Any], avg_volume: Optional[float]) -> 
         "settlement_date": raw.get("settlement_date"),
         "squeeze_potential": squeeze,
         "notes": notes,
-        "caveat": "Short interest is reported twice monthly and lags by roughly two weeks . "
+        "caveat": "Short interest is reported twice monthly and lags by roughly two weeks. "
         "Treat it as positioning background, not a live signal.",
     }
 

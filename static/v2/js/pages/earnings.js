@@ -8,10 +8,10 @@
 import { html, raw, render as draw } from '../core/dom.js';
 import * as api from '../core/api.js';
 import * as store from '../core/store.js';
-import { num, signed, compact, clean, bolded, capFirst, longDate, fullDate, shortDate, isNum, ago } from '../core/format.js';
+import { num, signed, dir, compact, clean, bolded, capFirst, longDate, fullDate, shortDate, isNum, ago } from '../core/format.js';
 import { mountCharts } from '../ui/chart.js';
 import { signedBars } from '../ui/bars.js';
-import { skeleton, empty, failed } from '../ui/states.js';
+import { skeleton, empty, failed, generated } from '../ui/states.js';
 import { button as miloButton, provideContext } from '../ui/milo.js';
 import { core, header, tabs, isFund } from './dossier-frame.js';
 import { etStamp, sessionWord } from '../core/marketTime.js';
@@ -27,8 +27,9 @@ function hero(sym) {
   const upcoming = nr.date && !lr.just_reported;
   return html`<section class="section" aria-labelledby="nr-h">
     <p class="t-label" id="nr-h">${upcoming ? 'Next report' : 'Latest result'}</p>
-    ${upcoming ? html`<p class="t-display-m">${longDate(nr.date)}</p><p class="delta"><span>${capFirst(timing[nr.timing] || '')}${timing[nr.timing] ? ', ' : ''}in ${nr.days_away} days</span><span class="t-muted">${nr.confirmed ? 'Confirmed' : 'Not yet confirmed'}</span>${pr.available ? html`<span class="pill">Priced ${pr.stance === 'fair' ? 'about in line' : pr.stance === 'expensive' ? 'rich' : 'cheap'} against history</span>` : ''}</p>`
-    : html`<p class="t-display-m">EPS ${num(lr.eps_reported)} <small class="t-muted">against ${num(lr.eps_estimate)}</small></p><p class="delta"><span class="${lr.beat ? 'up' : 'down'}">${lr.beat ? 'Beat' : 'Missed'} by ${num(Math.abs(lr.surprise_pct), 1)}%</span><span>Next day ${signed(lr.next_day_move_pct)}</span><span class="t-muted">${fullDate(lr.date)}</span></p>`}
+    ${upcoming ? html`<p class="t-display-m">${longDate(nr.date)}</p><p class="delta"><span>${capFirst(timing[nr.timing] || '')}${timing[nr.timing] ? ', ' : ''}in ${nr.days_away} days</span><span class="t-muted">${nr.confirmed ? 'Confirmed' : 'Not yet confirmed'}</span>${pr.available && ({ fair: 'about in line', expensive: 'rich', cheap: 'cheap' })[pr.stance] ? html`<span class="pill">Priced ${({ fair: 'about in line', expensive: 'rich', cheap: 'cheap' })[pr.stance]} against history</span>` : ''}</p>`
+    : !lr.date && !isNum(lr.eps_reported) ? html`<p class="t-display-m">No report on record</p><p class="delta"><span class="t-muted">There is no next report date and no latest result in the feed for this company.</span></p>`
+    : html`<p class="t-display-m">EPS ${num(lr.eps_reported)} <small class="t-muted">against ${num(lr.eps_estimate)}</small></p><p class="delta">${isNum(lr.surprise_pct) ? html`<span class="${dir(lr.surprise_pct)}">${lr.surprise_pct >= 0 ? 'Beat' : 'Missed'} by ${num(Math.abs(lr.surprise_pct), 1)}%</span>` : html`<span class="t-muted">No estimate to compare with</span>`}<span>Next day ${signed(lr.next_day_move_pct)}</span><span class="t-muted">${fullDate(lr.date)}</span></p>`}
     ${kv([
       upcoming ? ['EPS consensus', html`${num(nr.eps_consensus)} <span class="t-muted">${num(nr.eps_low)} to ${num(nr.eps_high)}</span>`] : ['Surprise', signed(lr.surprise_pct, 1)],
       upcoming ? ['Revenue consensus', nr.revenue_consensus_label || 'n/a'] : ['Move after', signed(lr.next_day_move_pct)],
@@ -44,12 +45,12 @@ function hero(sym) {
 
 function brief(sym) {
   const b = D.brief;
-  return html`<section class="section" aria-labelledby="br-h"><div class="section-head"><div><h2 class="t-h2" id="br-h">Pre-earnings brief</h2><p class="section-sub">A short written read of the facts on this page, by Optic's writer. Kept for six hours per report date.</p></div></div>
-    ${b === undefined ? html`<button type="button" class="btn" data-v2-brief>Write the pre-earnings brief</button><p class="asof">Loads only when you ask, because writing it uses a paid model.</p>`
+  return html`<section class="section" aria-labelledby="br-h"><div class="section-head"><div><h2 class="t-h2" id="br-h">Pre-earnings brief</h2><p class="section-sub">A short summary of this page's figures, written by an AI model when you ask. Kept for six hours per report date.</p></div></div>
+    ${b === undefined ? html`<button type="button" class="btn" data-v2-brief>Write the pre-earnings brief</button><p class="asof">Written only when you ask.</p>`
     : b === 'loading' ? skeleton('lines', 4, 'Writing the brief')
       : b.error ? failed('The brief', b.error, { retry: 'brief' })
         : !b.available ? html`<p class="t-muted">${clean(b.reason || 'No brief right now.')}</p>`
-          : html`<p class="t-label">${capFirst(b.stance || '')}</p><p class="t-h3">${clean(b.headline || '')}</p>${(b.paragraphs || []).map((p) => html`<p>${raw(bolded(p))}</p>`)}<p class="asof">${clean(b.method || '')} ${b.generated_at ? `Written ${ago(b.generated_at)}.` : ''} ${clean(b.disclaimer || '')}</p>`}
+          : html`<p class="t-label">${capFirst(b.stance || '')}</p><p class="t-h3">${clean(b.headline || '')}</p>${(b.paragraphs || []).map((p) => html`<p>${raw(bolded(p))}</p>`)}${generated(b.written_by ? b : Object.assign({ written_by: 'model' }, b), { at: b.generated_at })}<p class="asof">${clean(b.method || '')} ${clean(b.disclaimer || '')}</p>`}
   </section>`;
 }
 
@@ -82,7 +83,7 @@ function surprises() {
     ${kv([['Beat rate', `${num(s.beat_rate_pct, 0)}% (${s.beat_count} of ${s.quarters})`], ['Average surprise', signed(s.avg_surprise_pct, 1)], ['Average move after', `±${num(s.avg_abs_move_pct)}%`], ['Average move on a beat', signed(s.avg_move_on_beat_pct)]], 4)}
     <div class="chart-slot" data-chart="surp"></div>
     <div class="tscroll"><table class="t"><thead><tr><th>Report</th><th>Estimate</th><th>Reported</th><th>Surprise</th><th>Next day</th></tr></thead>
-      <tbody>${s.rows.map((x) => html`<tr><td>${fullDate(x.date)}</td><td>${num(x.eps_estimate)}</td><td>${num(x.eps_reported)}</td><td class="${x.surprise_pct >= 0 ? 'up' : 'down'}">${signed(x.surprise_pct, 1)}</td><td>${signed(x.next_day_move_pct)}</td></tr>`)}</tbody></table></div>
+      <tbody>${s.rows.map((x) => html`<tr><td>${fullDate(x.date)}</td><td>${num(x.eps_estimate)}</td><td>${num(x.eps_reported)}</td><td class="${dir(x.surprise_pct)}">${signed(x.surprise_pct, 1)}</td><td>${signed(x.next_day_move_pct)}</td></tr>`)}</tbody></table></div>
     <ul class="plain">${(s.notes || []).map((n) => html`<li>${clean(n)}</li>`)}</ul></section>`;
 }
 
@@ -134,9 +135,11 @@ function paint() {
 }
 
 async function loadBrief() {
-  D.brief = 'loading'; paint();
-  try { D.brief = await api.get(`/api/earnings/${encodeURIComponent(D.sym)}/brief`, { ttl: 3600000, timeout: 90000 }); }
-  catch (e) { D.brief = { error: e }; }
+  const box = D;
+  box.brief = 'loading'; paint();
+  try { box.brief = await api.get(`/api/earnings/${encodeURIComponent(box.sym)}/brief`, { ttl: 3600000, timeout: 90000 }); }
+  catch (e) { box.brief = { error: e }; }
+  if (D !== box) return;
   paint();
   const b = mainEl.querySelector('#br-h'); if (b) b.setAttribute('tabindex', '-1');
 }
@@ -152,7 +155,7 @@ export async function render(main, route) {
   main.addEventListener('click', (e) => { if (e.target.closest('[data-v2-brief]')) loadBrief(); });
   core(sym).then((c) => { if (D.sym !== sym) return; D.quote = c.quote; D.session = c.session; D.quoteError = c.quoteError; paint(); });
   try { D.e = await api.get(`/api/earnings/${encodeURIComponent(sym)}`, { ttl: 600000, timeout: 60000 }); }
-  catch (e) { D.err = e; }
+  catch (e) { if (D.sym === sym) D.err = e; }
   if (D.sym === sym) paint();
 }
 export function dispose() { live = false; }

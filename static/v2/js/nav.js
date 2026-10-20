@@ -67,7 +67,9 @@ export const MOBILE_TABS = [
   { label: 'More', more: true, icon: 'more' },
 ];
 
-export const groupOf = (view) => GROUPS.find((g) => g.pages.some((p) => p.view === view)) || null;
+// an instrument (an index, a rate, a commodity) opens from Markets, Indices, so Markets is where the reader is
+const HOME_GROUP = { instrument: 'market' };
+export const groupOf = (view) => GROUPS.find((g) => g.pages.some((p) => p.view === view)) || GROUPS.find((g) => g.id === HOME_GROUP[view]) || null;
 export const pageOf = (view) => { for (const g of GROUPS) { const p = g.pages.find((x) => x.view === view); if (p) return p; } return view === 'settings' ? SETTINGS : null; };
 
 /** The address of a page, in v2 if it has moved, otherwise in the classic app. */

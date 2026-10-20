@@ -48,6 +48,7 @@ import { watchBuild, isClosed } from './core/build.js';
 import { watchStatus } from './core/status.js';
 import { openReport } from './pages/settings.js';
 import * as bridge from './pages/bridge.js';
+import { watchTables } from './ui/align.js';
 
 // Home is the research workspace (Market Overview by default); pages/home.js supplies its blocks
 const PAGES = { home: workspacePage, overview: dossier, swing: options, long: investing, earnings, financials, news, chart: chartPage, brief: readPage, market: macroPage, indices: indicesPage, instrument: instrumentPage, explore: explorePage, scan: scanPage, insiders: insidersPage, analysts: analystsPage, settings: settingsPage, compare: comparePage, tracker: trackerPage, paper: paperPage, roth: retirementPage, brokerage: brokeragePage, reports: reportsPage, usage: reportsPage, accounts: reportsPage, watchlist, alerts, signin, terms: legalPages, privacy: legalPages };
@@ -145,7 +146,7 @@ function accountBody() {
   return html`<dl class="kv"><div><dt>Name</dt><dd>${u.name || `${u.first_name || ''} ${u.last_name || ''}`}</dd></div><div><dt>Email</dt><dd>${u.email}</dd></div>
       <div><dt>Plan</dt><dd>${plan.label || 'Free'}${(store.state.me || {}).admin ? ', owner' : ''}</dd></div></dl>
     ${u.email_verified ? '' : html`<p class="stale">Your email is not verified yet. The link is in your inbox.</p>`}
-    <nav class="more-list" aria-label="Account"><a class="rail-row" href="#/watchlist">Watchlists</a><a class="rail-row" href="#/settings">Settings</a><a class="rail-row" href="${CLASSIC}#/read">Saved research, in the current app</a></nav>
+    <nav class="more-list" aria-label="Account"><a class="rail-row" href="#/watchlist">Watchlists</a><a class="rail-row" href="#/settings">Settings</a><a class="rail-row" href="${CLASSIC}#/read">Saved research, in the classic app</a></nav>
     <button type="button" class="btn" data-v2-signout>Sign out</button>`;
 }
 
@@ -224,6 +225,7 @@ async function boot() {
   // another tab (or the classic app in one) changed a setting
   window.addEventListener('storage', (e) => { if (/^optic\.(theme|ui\.scale\.v1)$/.test(e.key || '')) { prefs.applyTheme(); prefs.applyScale(); } });
   shell.mount($('#app'));
+  watchTables($('#app'));   // every shared table aligned by what its columns hold (ui/align.js)
   wireGlobal();
   watchBuild();
   watchStatus();

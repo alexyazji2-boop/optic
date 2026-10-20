@@ -6,7 +6,7 @@ import { html, raw, render as draw } from '../core/dom.js';
 import * as api from '../core/api.js';
 import * as store from '../core/store.js';
 import { signed, num, clean, capFirst, esc, isNum } from '../core/format.js';
-import { skeleton, empty, failed } from '../ui/states.js';
+import { skeleton, empty, failed, how } from '../ui/states.js';
 import { button as miloButton, provideContext } from '../ui/milo.js';
 import { core, header, tabs, isFund } from './dossier-frame.js';
 
@@ -47,12 +47,12 @@ function row(a) {
 function body(sym) {
   const n = (D.t || {}).news || {};
   const arts = n.articles || [];
-  if (!arts.length) return empty('No headlines for this company right now', clean(n.reason || 'The feed returned nothing that names it.'));
+  if (!arts.length) return empty('No headlines for this company right now', clean(n.reason || 'No recent headlines name it.'));
   const shown = filter ? arts.filter((a) => (a.catalysts || []).some((c) => c.type === filter)) : arts;
   const about = shown.filter((a) => a.about_company !== false), ctx = shown.filter((a) => a.about_company === false);
   const tc = n.tier_counts || {};
   return html`<section class="section" aria-labelledby="nt-h"><div class="section-head"><div><h2 class="t-h2" id="nt-h">News and catalysts</h2>
-      <p class="section-sub"><span class="nw-tone ${toneShape(n.overall_tone)}">${capFirst(n.overall_tone || 'neutral')}</span> overall, net ${signed(n.net_sentiment, 2, '')} across ${n.article_count} headlines. Beyond ±0.5 leans, beyond ±2 is strong.</p></div>
+      <p class="section-sub"><span class="nw-tone ${toneShape(n.overall_tone)}">${capFirst(n.overall_tone || 'neutral')}</span> overall, net ${signed(n.net_sentiment, 2, '')} across ${n.article_count} headlines.</p>${how(html`<p>The net tone adds up each headline's score. Beyond ±0.5 it leans one way, beyond ±2 it is strong.</p>`)}</div>
       ${miloButton('Ask Milo about the news', { ask: `Which recent ${sym} headlines matter for the stock, and why?`, context: `${sym} Dossier, News`, symbol: sym })}</div>
     ${n.earnings_warning ? html`<p class="stale">${clean(n.earnings_warning)}</p>` : ''}${(n.held || {}).note ? html`<p class="stale">${clean(n.held.note)}</p>` : ''}
     <div class="chart-wrap tl-wrap">${raw(timeline(arts))}</div>

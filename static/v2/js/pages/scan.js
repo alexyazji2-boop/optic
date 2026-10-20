@@ -10,7 +10,7 @@ import { $, html, render as draw } from '../core/dom.js';
 import * as api from '../core/api.js';
 import * as store from '../core/store.js';
 import { holds } from '../core/device.js';
-import { num, signed, compact, clean, capFirst } from '../core/format.js';
+import { num, signed, compact, clean, capFirst, dir } from '../core/format.js';
 import { skeleton, empty, failed } from '../ui/states.js';
 import { button as miloButton, provideContext } from '../ui/milo.js';
 import { toast } from '../ui/toast.js';
@@ -27,11 +27,11 @@ const blankSpec = () => ({ filters: [], states: [], sort: 'score', direction: 'd
 export function scanCell(kind, v) {
   if (v === null || v === undefined) return 'n/a';
   if (kind === 'text') return clean(String(v));
-  if (kind === 'pct') return html`<span class="${v >= 0 ? 'up' : 'down'}">${signed(v, 1)}</span>`;
+  if (kind === 'pct') return html`<span class="${dir(v)}">${signed(v, 1)}</span>`;
   if (kind === 'pct_plain') return `${num(v, 2)}%`;
   if (kind === 'mult') return `${num(v, 2)}×`;
   if (kind === 'ratio') return `${num(v * 100, 0)}%`;
-  if (kind === 'score') return html`<span class="${v >= 0 ? 'up' : 'down'}">${num(v, 0)}</span>`;
+  if (kind === 'score') return html`<span class="${dir(v)}">${num(v, 0)}</span>`;
   if (kind === 'usd') return `$${compact(v)}`;
   return num(v, 2);
 }
@@ -55,7 +55,7 @@ function ask() {
   return html`<section class="section first" aria-labelledby="fs-h"><h2 class="t-h2" id="fs-h">Find stocks</h2>
     <form class="ask-form" data-v2-ask><label class="sr" for="sc-ask">Describe the stocks you want</label><textarea id="sc-ask" name="text" maxlength="300" rows="2" placeholder="Strong stocks on the 200-day average right now">${S.askText || ''}</textarea>
       <div class="cluster"><button type="submit" class="btn btn-primary" ${S.asking ? 'disabled' : ''}>${S.asking ? 'Screening…' : 'Find symbols now'}</button>${miloButton(S.ask && S.ask.result ? 'Ask Milo about the results' : 'Ask Milo to help phrase it', { ask: S.ask && S.ask.result ? `I asked for "${S.askText}". ${S.ask.result.matched} of ${S.ask.result.considered} ranked names matched: ${(S.ask.result.rows || []).slice(0, 15).map((x) => x.symbol).join(', ')}. Which fit best, and what would make each stop fitting?` : 'Help me turn my idea into a stock screen.', context: 'Discover, Scan' })}</div></form>
-    <p class="asof">A fixed reader handles most requests for free. Words it cannot read are passed to Milo, which uses one Milo question from your allowance; the same words are never charged twice.</p>
+    <p class="asof">Most requests are read by fixed rules at no cost. Words the rules cannot read go to Milo and use one question from your allowance, once.</p>
     <div class="chips chips-scroll" role="group" aria-label="Examples">${EXAMPLES.map((e) => html`<button type="button" class="chip" data-v2-ask-ex="${e}">${e}</button>`)}</div>
     ${recent.length ? html`<p class="t-label" style="margin-top:12px">Your recent requests <button type="button" class="textlink" data-v2-ask-clear>Clear</button></p><div class="chips chips-scroll">${recent.map((e) => html`<button type="button" class="chip" data-v2-ask-ex="${e}">${e}</button>`)}</div>` : ''}
     <div aria-live="polite">${r ? (r.error ? html`<div class="state err" role="alert"><p class="t-h3">The request did not run</p><p>${api.explain(r.error, 'The screen')}</p></div>` : html`
@@ -73,15 +73,15 @@ function named() {
   const g = (S.groups || {}).groups || [], sc = S.scans || {};
   const active = g.find((x) => (x.scans || []).some((s) => s.id === S.scanId)) || g[0];
   const r = S.result;
-  return html`<p class="section-sub">${sc.considered ? `Named scans over the ${sc.considered} names that cleared the screen's gates, out of a ${sc.universe_size}-symbol universe. Pick a question; the answer is already computed.` : 'The universe ranking is still building. Each scan fills once it lands; this page checks every 5 seconds.'}</p>
+  return html`<p class="section-sub">${sc.considered ? `${sc.considered} of ${sc.universe_size} symbols pass the price and volume filters. Each scan below is already computed over them.` : 'The ranking is still loading. Each scan fills when it finishes; this page checks every 5 seconds.'}</p>
     <div class="chips" role="group" aria-label="Scan groups">${g.map((x) => html`<button type="button" class="chip" data-v2-scan-group="${x.id}" aria-pressed="${active && active.id === x.id}">${x.name} <span class="t-muted">${x.count}</span></button>`)}</div>
     ${active ? html`<p class="t-muted">${clean(active.blurb || '')}</p><div class="seg scan-tabs" role="group" aria-label="Scans">${active.scans.map((s) => html`<button type="button" data-v2-scan="${s.id}" aria-pressed="${S.scanId === s.id}" title="${s.looks_for || ''}">${s.name}</button>`)}</div>` : ''}
     <div class="scan-result">${!r ? skeleton('rows', 6, 'Running the scan') : r.error ? failed('This scan', r.error, { retry: 'scan' }) : r.available === false ? html`<p>${clean(r.reason || 'This scan is unavailable.')}</p>${buildBar(r.building)}` : html`
-      <p>${clean(r.looks_for || '')}</p>${r.stale ? html`<p class="stale">The ranking is ${num(r.age_hours, 0)} hours old, so these are yesterday's positions. A scan is a claim about now.</p>` : ''}
+      <p>${clean(r.looks_for || '')}</p>${r.stale ? html`<p class="stale">The ranking is ${num(r.age_hours, 0)} hours old, so these results describe an earlier session.</p>` : ''}
       <p class="asof">${r.matched} matched, showing the first ${r.shown}. Ranking ${num(r.age_hours, 1)} hours old.</p>
       ${(r.rows || []).length ? html`<div class="tscroll"><table class="t"><thead><tr><th>Symbol</th><th>Price</th>${(r.columns || []).map((c) => html`<th aria-sort="${(r.ranked_by || {}).key === c.key ? ((r.ranked_by || {}).order === 'asc' ? 'ascending' : 'descending') : 'none'}">${c.label}${(r.ranked_by || {}).key === c.key ? ((r.ranked_by || {}).order === 'asc' ? ' ▲' : ' ▼') : ''}</th>`)}</tr></thead>
         <tbody>${r.rows.map((x) => html`<tr><td><a href="#/${x.symbol}">${x.symbol}</a></td><td>${num(x.price)}</td>${(r.columns || []).map((c) => html`<td>${scanCell(c.kind, x[c.key])}</td>`)}</tr>`)}</tbody></table></div>${readings(r)}`
-      : html`<p class="quiet">Nothing currently matches this scan. That is a result, not a failure: these conditions are meant to be selective.</p>`}
+      : html`<p class="quiet">No symbols match this scan right now. Its conditions are selective, so an empty result is common.</p>`}
       ${r.blind_spot ? html`<p class="stale">What this scan cannot see: ${clean(r.blind_spot)}</p>` : ''}<p class="asof">${clean(r.method || '')}</p>`}</div>
     ${(S.groups || {}).note ? html`<p class="asof">${clean(S.groups.note)}</p>` : ''}`;
 }
@@ -100,7 +100,7 @@ function builder() {
   const used = new Set(sp.filters.map((x) => x.field));
   const max = f.max_filters || 8;
   const res = S.screen;
-  return html`<p class="section-sub">Your own conditions over the same ranked universe the named scans use. Add up to ${max} bounds; leave either side of a bound empty to make it one-sided.</p>
+  return html`<p class="section-sub">Filter the ranked universe with up to ${max} conditions. Leave the minimum or maximum empty for a one-sided bound.</p>
     <form class="screen-form" data-v2-screen>
       ${sp.filters.length ? sp.filters.map((x, i) => { const fd = f.fields.find((y) => y.id === x.field) || {}; return html`<div class="flt"><label class="select"><span class="sr">Field</span><select data-v2-flt-field="${i}">${f.fields.map((y) => html`<option value="${y.id}" ${y.id === x.field ? 'selected' : ''}>${y.label}</option>`)}</select></label>
         <label class="field field-xs"><span class="sr">Minimum</span><input data-v2-flt-min="${i}" inputmode="decimal" placeholder="min" value="${x.min ?? ''}"></label><span>to</span>
@@ -123,8 +123,8 @@ function builder() {
 /* ---------------- evaluation ---------------- */
 function evaluation() {
   const e = S.evalD;
-  return html`<section class="section" aria-labelledby="ev-h"><div class="section-head"><div><h2 class="t-h2" id="ev-h">Does the score work?</h2><p class="section-sub">The ranking's score replayed on history against what followed.</p></div>${miloButton('Ask Milo about this test', { ask: 'How should I read the test of whether Optic\'s score works?', context: 'Discover, Scan' })}</div>
-    ${e === undefined ? html`<button type="button" class="btn btn-sm" data-v2-eval>Run the test</button><p class="asof">Free, but slow the first time: it replays the score over 220 names.</p>` : e === 'loading' ? skeleton('lines', 4, 'Replaying the score') : !e || !e.available ? html`<p>${clean((e || {}).reason || 'The test did not run.')}</p>` : html`
+  return html`<section class="section" aria-labelledby="ev-h"><div class="section-head"><div><h2 class="t-h2" id="ev-h">Does the score work?</h2><p class="section-sub">Whether higher-scored names went on to do better, replayed on past data.</p></div>${miloButton('Ask Milo about this test', { ask: 'How should I read the test of whether Optic\'s score works?', context: 'Discover, Scan' })}</div>
+    ${e === undefined ? html`<button type="button" class="btn btn-sm" data-v2-eval>Run the test</button><p class="asof">The first run takes longer: it replays the score over 220 names.</p>` : e === 'loading' ? skeleton('lines', 4, 'Replaying the score') : !e || !e.available ? html`<p>${clean((e || {}).reason || 'The test did not run.')}</p>` : html`
       <p class="${(e.comparison || []).some((c) => c.beats_single_factor) ? '' : 'stale'}"><b>Result.</b> ${clean(e.verdict || '')}</p>
       <div class="tscroll"><table class="t"><thead><tr><th>Horizon</th><th>Composite</th><th>Random</th><th>3-month return alone</th><th>Against one factor</th></tr></thead><tbody>${(e.comparison || []).map((c) => html`<tr><td>${c.horizon_sessions} sessions</td><td>${num(c.composite_ic, 3)}</td><td>${num(c.random_ic, 3)}</td><td>${num(c.single_factor_ic, 3)}</td><td>${c.beats_single_factor ? 'Beats it' : 'Loses'}</td></tr>`)}</tbody></table></div>
       <p class="asof">${clean(e.control_note || '')}</p>

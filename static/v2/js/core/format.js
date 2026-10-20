@@ -6,48 +6,63 @@ const MINUS = '−';
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
-export const isNum = (v) => v !== null && v !== undefined && v !== '' && Number.isFinite(Number(v));
+// a number, or a string that holds one; never a blank string, a boolean or an array (Number() turns all three
+// into numbers, which is how a missing value used to print as 0)
+export const isNum = (v) => (typeof v === 'number' ? Number.isFinite(v) : typeof v === 'string' ? v.trim() !== '' && Number.isFinite(Number(v)) : false);
+// rounded to what is shown, so a value that prints as zero carries no sign
+const shown = (n, dp) => { const r = Number(Math.abs(n).toFixed(dp)); return r === 0 ? 0 : n; };
 
 export function num(v, dp = 2) {
   if (!isNum(v)) return 'n/a';
-  return Number(v).toLocaleString('en-US', { minimumFractionDigits: dp, maximumFractionDigits: dp }).replace('-', MINUS);
+  return shown(Number(v), dp).toLocaleString('en-US', { minimumFractionDigits: dp, maximumFractionDigits: dp }).replace('-', MINUS);
 }
 
 export function signed(v, dp = 2, unit = '%') {
   if (!isNum(v)) return 'n/a';
-  const n = Number(v);
+  const n = shown(Number(v), dp);
   const s = n > 0 ? '+' : n < 0 ? MINUS : '';
   return s + Math.abs(n).toLocaleString('en-US', { minimumFractionDigits: dp, maximumFractionDigits: dp }) + unit;
 }
 
 export function money(v, dp = 2) {
   if (!isNum(v)) return 'n/a';
-  const n = Number(v);
+  const n = shown(Number(v), dp);
   return (n < 0 ? MINUS : '') + '$' + Math.abs(n).toLocaleString('en-US', { minimumFractionDigits: dp, maximumFractionDigits: dp });
 }
 
 export function signedMoney(v, dp = 2) {
   if (!isNum(v)) return 'n/a';
-  const n = Number(v);
+  const n = shown(Number(v), dp);
   return (n > 0 ? '+' : n < 0 ? MINUS : '') + '$' + Math.abs(n).toLocaleString('en-US', { minimumFractionDigits: dp, maximumFractionDigits: dp });
 }
 
 export function compact(v) {
   if (!isNum(v)) return 'n/a';
+  // the step is chosen after rounding, so 999,950 reads 1.0M and not 1,000.0K
   const n = Number(v), a = Math.abs(n);
-  const out = a >= 1e12 ? num(n / 1e12, 2) + 'T' : a >= 1e9 ? num(n / 1e9, 1) + 'B' : a >= 1e6 ? num(n / 1e6, 1) + 'M' : a >= 1e3 ? num(n / 1e3, 1) + 'K' : num(n, 0);
-  return out;
+  if (a >= 1e12 || Number((a / 1e9).toFixed(1)) >= 1000) return num(n / 1e12, 2) + 'T';
+  if (a >= 1e9 || Number((a / 1e6).toFixed(1)) >= 1000) return num(n / 1e9, 1) + 'B';
+  if (a >= 1e6 || Number((a / 1e3).toFixed(1)) >= 1000) return num(n / 1e6, 1) + 'M';
+  if (a >= 1e3 || Number(a.toFixed(0)) >= 1000) return num(n / 1e3, 1) + 'K';
+  return num(n, 0);
 }
 
 export const dir = (v) => (!isNum(v) ? 'flat' : Number(v) > 0 ? 'up' : Number(v) < 0 ? 'down' : 'flat');
 
 function parts(iso) {
   const [y, m, d] = String(iso).slice(0, 10).split('-').map(Number);
+  if (!(y > 0 && m >= 1 && m <= 12 && d >= 1 && d <= 31)) return null;   // not a date: print nothing, never "undefined NaN"
   return { y, m, d, dow: new Date(Date.UTC(y, m - 1, d)).getUTCDay() };
 }
-export const shortDate = (iso) => { if (!iso) return ''; const p = parts(iso); return `${MONTHS[p.m - 1]} ${p.d}`; };
-export const longDate = (iso) => { if (!iso) return ''; const p = parts(iso); return `${DAYS[p.dow]} ${MONTHS[p.m - 1]} ${p.d}`; };
-export const fullDate = (iso) => { if (!iso) return ''; const p = parts(iso); return `${MONTHS[p.m - 1]} ${p.d}, ${p.y}`; };
+export const shortDate = (iso) => { const p = iso && parts(iso); return p ? `${MONTHS[p.m - 1]} ${p.d}` : ''; };
+export const longDate = (iso) => { const p = iso && parts(iso); return p ? `${DAYS[p.dow]} ${MONTHS[p.m - 1]} ${p.d}` : ''; };
+export const fullDate = (iso) => { const p = iso && parts(iso); return p ? `${MONTHS[p.m - 1]} ${p.d}, ${p.y}` : ''; };
+/** 1st, 2nd, 3rd, 4th, 11th, 12th, 13th, 21st, 81st. */
+export function ordinal(n) {
+  if (!isNum(n)) return 'n/a';
+  const v = Math.round(Number(n)), t = v % 100, u = v % 10;
+  return `${v}${t >= 11 && t <= 13 ? 'th' : u === 1 ? 'st' : u === 2 ? 'nd' : u === 3 ? 'rd' : 'th'}`;
+}
 export const monthName = (m) => MONTHS[m - 1];
 
 // "4 minutes ago", "2 hours ago", "Fri 4:00 PM": used for freshness labels.
@@ -83,7 +98,10 @@ function plain(t) {
 }
 
 export function clean(s) {
-  return plain(String(s == null ? '' : s)).replace(/\s*—\s*/g, ': ').replace(/–/g, ' to ');
+  // server prose writes dates as 2026-11-02; Optic writes Nov 2, 2026 (editorial pass). Not inside an address,
+  // a query or an id: only a date standing alone.
+  return plain(String(s == null ? '' : s)).replace(/\s*—\s*/g, ': ').replace(/–/g, ' to ')
+    .replace(/(^|[^\w/=.-])(20\d\d)-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])(?![\w-])/g, (m, pre, y, mo, d) => `${pre}${MONTHS[Number(mo) - 1]} ${Number(d)}, ${y}`);
 }
 
 /**
@@ -91,11 +109,13 @@ export function clean(s) {
  * nothing else interpreted. The markers printed as they were on the Read (design review, 2026-10-19).
  */
 export function bolded(s) {
-  return esc(clean(s)).replace(/\*\*([^*\n]+?)\*\*/g, '<b>$1</b>').replace(/\*\*/g, '');
+  // and a hyphen before a figure is the minus sign the rest of Optic prints ("-2.0%" was the model's)
+  return esc(clean(s)).replace(/\*\*([^*\n]+?)\*\*/g, '<b>$1</b>').replace(/\*\*/g, '').replace(/(^|[\s(\[>])-(?=\d)/g, `$1${MINUS}`);
 }
 
 export function capFirst(s) {
   const t = String(s == null ? '' : s);
+  if (t === 'n/a') return t;   // a missing value is not a headline
   return t.charAt(0).toUpperCase() + t.slice(1);
 }
 

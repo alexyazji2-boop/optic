@@ -6,7 +6,7 @@
 import { html, raw, render as draw } from '../core/dom.js';
 import * as api from '../core/api.js';
 import * as store from '../core/store.js';
-import { num, signed, clean, fullDate } from '../core/format.js';
+import { num, signed, clean, fullDate, ordinal, isNum } from '../core/format.js';
 import { lineChart, mountCharts } from '../ui/chart.js';
 import { hbars } from '../ui/bars.js';
 import { button as miloButton, provideContext } from '../ui/milo.js';
@@ -50,7 +50,7 @@ export function cell(kind, v) {
   if (kind === 'pct') return html`<span class="${v > 0 ? 'up' : v < 0 ? 'down' : ''}">${signed(v, 2)}</span>`;
   if (kind === 'pct_plain') return `${num(v, 1)}%`;
   if (kind === 'pct_neutral') return `${num(v, 2)}%`;
-  if (kind === 'pctile') return `${num(v, 0)}th`;
+  if (kind === 'pctile') return `${ordinal(v)}`;
   if (kind === 'num0') return num(v, 0);
   if (kind === 'num1') return num(v, 1);
   if (kind === 'num2') return num(v, 2);
@@ -89,7 +89,7 @@ export function rankRead(ranks) {
 }
 
 // kept for the session, as the classic page keeps STATE.compare
-let inputs = ['', ''], result = null, running = false, live = true, mainEl = null, sugg = [], suggT = null;
+let inputs = ['', ''], result = null, running = false, seq = 0, live = true, mainEl = null, sugg = [], suggT = null;
 
 function controls() {
   const recent = store.recent().filter((s) => !inputs.map((x) => x.toUpperCase()).includes(s)).slice(0, 6);
@@ -118,7 +118,7 @@ function perf(c) {
   const p = c.performance || {}, s = p.series || [];
   if (s.length < 2) return html`<section class="section"><h2 class="t-h2">How they have moved</h2><p class="quiet">Not enough shared history to draw.</p></section>`;
   const sorted = s.slice().sort((a, b) => b.change_pct - a.change_pct), best = sorted[0], worst = sorted[sorted.length - 1];
-  const verb = (x) => `${x.ticker} ${x.change_pct >= 0 ? 'rose' : 'fell'} ${num(Math.abs(x.change_pct), 0)}%`;
+  const verb = (x) => (isNum(x.change_pct) ? `${x.ticker} ${x.change_pct >= 0 ? 'rose' : 'fell'} ${num(Math.abs(x.change_pct), 0)}%` : `${x.ticker}'s move is not reported`);
   return html`<section class="section" aria-labelledby="cp-h"><h2 class="t-h2" id="cp-h">How they have moved</h2>
     <p class="lead-line">${verb(best)} over the period; ${verb(worst)}.</p>
     <p class="section-sub">Each close divided by its close on ${fullDate(p.start)}, times 100, to ${fullDate(p.end)}: ${p.sessions} sessions, one point a week. Price only: dividends are not included.</p>
@@ -179,9 +179,12 @@ async function run() {
   const t = [...new Set(inputs.map((x) => x.trim().toUpperCase()).filter(Boolean))];
   if (t.length < 2) { result = { available: false, reason: 'Give at least two tickers.' }; paint(); return; }
   running = true; paint();
-  try { result = await api.get(`/api/compare?tickers=${encodeURIComponent(t.join(','))}`, { ttl: 300000, timeout: 90000 }); }
-  catch (e) { result = { available: false, reason: api.explain(e, 'The comparison') }; }
-  running = false; paint();
+  const mine = ++seq;
+  let got;
+  try { got = await api.get(`/api/compare?tickers=${encodeURIComponent(t.join(','))}`, { ttl: 300000, timeout: 90000 }); }
+  catch (e) { got = { available: false, reason: api.explain(e, 'The comparison') }; }
+  if (mine !== seq) return;
+  result = got; running = false; paint();
   const h = mainEl && mainEl.querySelector('#ct-h, #cp-h'); if (h) { h.setAttribute('tabindex', '-1'); h.focus({ preventScroll: false }); }
 }
 
@@ -190,7 +193,8 @@ export async function render(main, route) {
   document.title = 'Compare, Optic';
   // #/compare?t=AAPL,MSFT pre-fills and runs; otherwise seed the first box from the last company opened
   const pre = String((route.params || {}).t || '').split(',').map((x) => x.trim().toUpperCase()).filter(Boolean).slice(0, MAX);
-  if (pre.length) { inputs = pre.length >= 2 ? pre : [pre[0], '']; }
+  // a result is for the tickers it was asked for: another set in the address clears it
+  if (pre.length) { if (result && result.tickers && result.tickers.join(',') !== pre.join(',')) { result = null; seq++; running = false; } inputs = pre.length >= 2 ? pre : [pre[0], '']; }
   else if (inputs.every((x) => !x)) { const r = store.recent()[0]; if (r) inputs[0] = r; }
   provideContext(() => ({ view: 'compare', compare: result && result.available ? { tickers: result.tickers, take: (result.take || {}).headline, ranks: result.ranks } : null }));
   main.addEventListener('submit', (e) => { if (e.target.closest('[data-v2-cmp-form]')) { e.preventDefault(); run(); } });

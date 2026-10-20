@@ -20,8 +20,8 @@ export function render_(main, route) {
   }
   render(main, html`<header class="page-head">${g && g.symbol && route.symbol ? html`<p class="name"><b class="tick">${route.symbol}</b></p>` : ''}
       <h1 class="t-display-m">${label}</h1>${g ? groupTabs(g.id, p.view, route.symbol) : ''}</header>
-    <div class="state bridge"><p class="t-h3">${label} is still in the current app</p>
-      <p>This page has not moved to the new design yet. It works as before at the same address.</p>
+    <div class="state bridge"><p class="t-h3">${label} is in the classic app</p>
+      <p>It opens there, with the same account and data.</p>
       <a class="btn btn-primary" href="${href}">Open ${label} ${icon('out')}</a></div>`);
   document.title = `${label}, Optic`;
 }

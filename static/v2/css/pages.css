@@ -332,7 +332,9 @@ table.scen td { font-weight: 600; }
 .dhead.bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 18px; padding-top: 4px; }
 .dhead.bar .name { font: 400 var(--t-base)/1.3 var(--f-sans); gap: 8px; margin: 0; }
 .dhead.bar .name .tick { font-size: var(--t-base); }
-.dhead.bar .dh-price { display: flex; align-items: baseline; gap: 10px; margin: 0; flex-wrap: wrap; }
+.dhead.bar .dh-price { display: flex; align-items: baseline; gap: 4px 10px; margin: 0; flex-wrap: wrap; flex: 1 1 auto; min-width: 0; }
+/* the actions keep their row; the price's time wraps inside its own space */
+@media (min-width: 861px) { .dhead.bar { flex-wrap: nowrap; } .dhead.bar .acts { flex: none; } }
 .dhead.bar .dh-px { font: 600 var(--t-2xl)/1 var(--f-sans); letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
 .dhead.bar .dh-chg { font-size: var(--t-base); }
 .dhead.bar .dh-ext { font-size: var(--t-sm); color: var(--c-ink-3); }
@@ -511,7 +513,9 @@ table.chw-table { font-size: var(--t-sm); } table.chw-table th { padding: 6px 4p
 .ch-pacts + .pc-host .pc-read { padding-right: 190px; }
 .ch-pacts { position: absolute; top: 0; right: 60px; display: flex; gap: 6px; align-items: center; z-index: 5; }
 .ch-pacts .btn-sm { min-height: 30px; padding: 0 10px; font-size: var(--t-sm); }
-.chw-milo.btn { width: 60px; min-height: 40px; margin-top: 4px; padding: 2px; font: 600 var(--t-xs)/1.1 var(--f-label); white-space: normal; text-align: center; }
+/* the rail's Milo is its line icon alone, like the rail's other tools; the words stay for a screen reader */
+.chw-milo.btn { width: 60px; min-height: var(--tap); margin-top: 4px; padding: 0; gap: 0; }
+.chw-milo.btn .ic { width: 18px; height: 18px; }
 .pc .lastp { stroke-width: 1; stroke-dasharray: 3 3; } .pc .lastp.up { stroke: var(--pc-up, var(--c-pos)); } .pc .lastp.dn { stroke: var(--pc-down, var(--c-neg)); }
 .pc .lastp-tag.up { fill: var(--pc-up, var(--c-pos)); } .pc .lastp-tag.dn { fill: var(--pc-down, var(--c-neg)); } .pc .lastp-t { fill: var(--c-plane); font: 600 var(--t-xs)/1 var(--f-label); font-variant-numeric: tabular-nums; }
 .pc-read .pc-sym { font: 600 var(--t-base)/1 var(--f-label); } .pc-read .pc-what { color: var(--c-ink-3); }

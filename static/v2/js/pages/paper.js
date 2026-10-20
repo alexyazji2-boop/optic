@@ -8,7 +8,7 @@ import { html, render as draw } from '../core/dom.js';
 import * as api from '../core/api.js';
 import * as store from '../core/store.js';
 import { holds } from '../core/device.js';
-import { num, compact, clean, shortDate, isNum } from '../core/format.js';
+import { num, compact, clean, shortDate, isNum, dir } from '../core/format.js';
 import { signedBars } from '../ui/bars.js';
 import { mountCharts } from '../ui/chart.js';
 import { provideContext } from '../ui/milo.js';
@@ -151,13 +151,13 @@ function recordBlock() {
   const w = sided(true), a = sided(false);
   return html`<section class="section" aria-labelledby="pr-h"><h2 class="t-h2" id="pr-h">Record</h2>
     <p class="section-sub">${done.length} closed, ${wins.length} up, ${Math.round((wins.length / done.length) * 100)}% win rate</p>
-    <dl class="kv" style="--kv:2"><div><dt>Realised</dt><dd class="${total >= 0 ? 'up' : 'down'}">${money2(total)}</dd></div><div><dt>Average</dt><dd class="${avgR >= 0 ? 'up' : 'down'}">${rText(avgR)}</dd><p class="kv-note">per trade, in multiples of what it risked</p></div></dl>
+    <dl class="kv" style="--kv:2"><div><dt>Realised</dt><dd class="${dir(total)}">${money2(total)}</dd></div><div><dt>Average</dt><dd class="${dir(avgR)}">${rText(avgR)}</dd><p class="kv-note">per trade, in multiples of what it risked</p></div></dl>
     ${withR.length >= 2 ? html`<h3>${withR.filter((t) => t.r > 0).length} of ${withR.length} trades with a stop made more than they risked to lose${withR.length > R_SHOWN ? `; the latest ${R_SHOWN} drawn` : ''}</h3><div class="chart-slot" data-chart="r"></div><p class="asof">Each closed trade in multiples of what its stop said it could lose, oldest first. Kept in this browser only.</p>` : ''}
-    ${w || a ? html`<h3>With the terminal, and against it</h3><dl class="kv" style="--kv:2">${w ? html`<div><dt>Traded with Optic's read</dt><dd class="${w.avg >= 0 ? 'up' : 'down'}">${rText(w.avg)}</dd><p class="kv-note">${w.n} trade${w.n === 1 ? '' : 's'}</p></div>` : ''}${a ? html`<div><dt>Traded against it</dt><dd class="${a.avg >= 0 ? 'up' : 'down'}">${rText(a.avg)}</dd><p class="kv-note">${a.n} trade${a.n === 1 ? '' : 's'}</p></div>` : ''}</dl>
+    ${w || a ? html`<h3>With the terminal, and against it</h3><dl class="kv" style="--kv:2">${w ? html`<div><dt>Traded with Optic's read</dt><dd class="${dir(w.avg)}">${rText(w.avg)}</dd><p class="kv-note">${w.n} trade${w.n === 1 ? '' : 's'}</p></div>` : ''}${a ? html`<div><dt>Traded against it</dt><dd class="${dir(a.avg)}">${rText(a.avg)}</dd><p class="kv-note">${a.n} trade${a.n === 1 ? '' : 's'}</p></div>` : ''}</dl>
       <p class="asof">The read is the one Optic held when the trade was opened, not today's. Trades where it was neutral are in neither column: a neutral read was not an opinion to disagree with. Two or three trades is not a finding about anything.</p>` : ''}</section>
     <section class="section" aria-labelledby="pc-h"><h2 class="t-h2" id="pc-h">Closed</h2>
       <div class="tscroll"><table class="t"><thead><tr><th scope="col">Position</th><th scope="col">Entry</th><th scope="col">Exit</th><th scope="col">P&L</th><th scope="col">R</th><th scope="col">Optic then</th><th scope="col">Closed</th></tr></thead>
-        <tbody>${done.slice(0, 50).map((t) => { const cls = t.pnl >= 0 ? 'up' : 'down', ag = agrees(t.read, t.direction);
+        <tbody>${done.slice(0, 50).map((t) => { const cls = dir(t.pnl), ag = agrees(t.read, t.direction);
           return html`<tr><td>${posLabel(t)} <span class="pill ${t.direction === 'long' ? 'up' : 'down'}">${t.direction}</span></td><td>${num(t.entry_price)}</td><td>${num(t.exit_price)}</td><td class="${cls}">${money2(t.pnl)}</td><td class="${cls}">${rText(t.r)}</td><td>${t.read ? html`<span class="${ag === null ? 't-muted' : ag ? 'up' : 'down'}">${t.read.stance}</span>` : html`<span class="t-muted">n/a</span>`}</td><td>${shortDate(String(t.closed_at).slice(0, 10))}</td></tr>`; })}</tbody></table></div>
       ${done.length > 50 ? html`<p class="asof">The newest 50 of ${done.length}.</p>` : ''}
       ${armed ? html`<div class="cluster" role="group" aria-label="Confirm clearing the book"><button type="button" class="btn btn-danger" data-v2-pt-reset="do">Delete ${book.open.length} open and ${done.length} closed</button><button type="button" class="btn" data-v2-pt-reset="keep">Keep them</button><span class="t-muted">Optic Portfolio is not touched.</span></div>`

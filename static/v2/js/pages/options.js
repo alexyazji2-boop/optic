@@ -18,7 +18,7 @@ import { skeleton, empty, failed, staleLine, how } from '../ui/states.js';
 import { icon } from '../ui/icons.js';
 import { button as miloButton, provideContext } from '../ui/milo.js';
 import { toast } from '../ui/toast.js';
-import { core, header, tabs, isFund } from './dossier-frame.js';
+import { core, header, tabs, isFund, fresher } from './dossier-frame.js';
 import * as P from './options-panels.js';
 
 const FILTER_KEY = 'optic.options.filters.v1';   // a tool setting, as in the classic app
@@ -64,7 +64,7 @@ function readings(sym) {
   const cells = [];
   if (main && isNum(main.pct)) cells.push(html`<div class="rd main"><span class="k">Implied move through ${shortDate(main.expiry)}</span><span class="v">±${num(main.pct)}%</span><span class="d">${isNum(spot) ? `${num(spot * (1 - main.pct / 100), 0)} to ${num(spot * (1 + main.pct / 100), 0)}. ` : ''}All ${main.dte} days${main.event && e.next_report ? `, the ${shortDate(e.next_report.date)} report included` : ''}.</span></div>`);
   if (pr.available && isNum(pr.event_day_avg_pct)) cells.push(html`<div class="rd"><span class="k">Average report-day move</span><span class="v">±${num(pr.event_day_avg_pct)}%</span><span class="d">Last ${(e.surprise || {}).quarters || 8} quarters. History, not a price.</span></div>`);
-  if (pr.available && isNum(pr.ratio)) cells.push(html`<div class="rd"><span class="k">Priced against history</span><span class="v">${num(pr.ratio, 2)}×</span><span class="d">±${num(pr.implied_move_pct)}% ÷ ±${num(pr.baseline_move_pct)}% typical for ${pr.baseline_sessions} sessions</span></div>`);
+  if (pr.available && isNum(pr.ratio)) cells.push(html`<div class="rd"><span class="k">Priced against history</span><span class="v">${num(pr.ratio, 2)}×</span><span class="d">the typical ±${num(pr.baseline_move_pct)}% for ${pr.baseline_sessions} sessions</span></div>`);
   const iv = vs.iv30 || {};
   if (iv.available) cells.push(html`<div class="rd"><span class="k">Implied volatility, 30 days</span><span class="v">${num(iv.iv_pct, 1)}%</span><span class="d">${(t.iv_rank || {}).available ? `Rank ${num(t.iv_rank.rank, 0)}` : 'No rank yet: history still building'}</span></div>`);
   // one expiry across the readings where the surface has it
@@ -83,7 +83,7 @@ function builder(sym) {
   const exps = ((R.data || {}).listed_expiries) || [];
   const a = B.analysis;
   return html`<section class="section builder" aria-labelledby="pb-h">
-    <div class="section-head"><div><h2 class="t-h2" id="pb-h">Position builder</h2><p class="section-sub">${R.expiry ? `On the ${shortDate(R.expiry)} expiry chosen above.` : 'On the expiry chosen above, once the contracts load.'} Pick a template or press Add in the table. Every figure is per position, from the server's own pricing.</p></div></div>
+    <div class="section-head"><div><h2 class="t-h2" id="pb-h">Position builder</h2><p class="section-sub">${R.expiry ? `Priced on the ${shortDate(R.expiry)} expiry chosen above.` : 'Priced on the expiry chosen above, once the contracts load.'} Pick a template or press Add in the table. Figures are per position.</p></div></div>
     <div class="tpl" role="group" aria-label="Templates">${TEMPLATES.map(([id, label]) => html`<button type="button" class="chip" data-v2-tpl="${id}" aria-pressed="${B.template === id}" ${R.expiry ? '' : 'disabled'}>${label}</button>`)}</div>
     ${B.legs.length ? html`<ul class="legs-list" aria-label="Legs">${B.legs.map((l, i) => html`<li><span class="leg-l">${legLabel(l)}</span>
         <button type="button" class="textlink" data-v2-leg-flip="${i}">${l.side === 'long' ? 'Make it a sale' : 'Make it a buy'}</button>
@@ -118,7 +118,8 @@ function result(sym) {
       <div><dt>Most it can lose at expiry</dt><dd class="down">${a.bounds_note ? 'See the note' : ml}<small class="t-muted"> Not your broker's margin requirement.</small></dd></div>
       <div><dt>Breakeven at expiry</dt><dd>${(a.breakevens_at_expiry || []).length ? a.breakevens_at_expiry.map((b) => num(b)).join(' and ') : 'None in range'}</dd></div></dl>
     <div class="chart-slot" data-chart="payoff"></div>
-    <p class="asof">Solid: at expiry, exact from the mid entry. Gold: today. Dashed: halfway to the first expiry, ${num((a.first_expiry_days || 0) / 2, 0)} days. Model values hold each leg's current IV. The gold line marks the price now.</p>
+    <p class="asof">Solid: at expiry. Gold: today. Dashed: in ${num((a.first_expiry_days || 0) / 2, 0)} days. The line marked Now is the price now.</p>
+    ${how(html`<p>The expiry line is exact from the mid entry. Today's and the dashed lines are model values that hold each leg's current implied volatility; the dashed line is halfway to the first expiry.</p>`)}
     <p><b>Greeks:</b> delta ${num(gk.delta_shares, 0)} shares, gamma ${num(gk.gamma_per_dollar, 2)} per dollar, decay ${money(gk.theta_per_day, 2)} a day, ${money(gk.vega_per_vol_pt, 2)} per volatility point.</p>
     ${rows.length ? html`<h3>If the price and the volatility change</h3>
       <div class="seg" role="group" aria-label="When">${whens.map((w) => html`<button type="button" data-v2-when="${w}" aria-pressed="${w === when}">${w === 'now' ? 'Now' : w === 'expiry' || w === 'at expiry' ? 'At expiry' : `In ${num(B.days || (a.first_expiry_days || 0) / 2, 0)} days`}</button>`)}</div>
@@ -217,7 +218,7 @@ function expirySelect() {
 function research() {
   const d = R.data;
   const f = DELTAS[R.delta] || DELTAS.any;
-  const head = html`<div class="section-head"><div><h2 class="t-h2" id="rc-h">Research contracts</h2><p class="section-sub">One expiry and side at a time, in strike order. Nothing here is ranked best. The position builder below uses the same expiry.</p></div></div>
+  const head = html`<div class="section-head"><div><h2 class="t-h2" id="rc-h">Research contracts</h2><p class="section-sub">Calls or puts at one expiry, by strike. Nothing here is ranked best; the position builder below uses the same expiry.</p></div></div>
     <form class="op-filters" data-v2-op-form>
       ${expirySelect()}
       <div class="seg" role="group" aria-label="Side"><button type="button" data-v2-op-side="call" aria-pressed="${R.side === 'call'}">Calls</button><button type="button" data-v2-op-side="put" aria-pressed="${R.side === 'put'}">Puts</button></div>
@@ -261,7 +262,7 @@ function research() {
         <td><span class="liq liq-${(r.liquidity || {}).grade}" title="${((r.liquidity || {}).reasons || []).join(' ')}">${(r.liquidity || {}).label || ''}</span> <small class="t-muted">${num(r.spread_pct, 1)}%</small></td>
         <td>${num(r.iv_pct, 1)}%${r.iv_source === 'feed' || r.iv_source === 'filled' ? html` <small class="t-muted">feed</small>` : ''}</td>
         <td>${num(r.breakeven_ask)} <small class="t-muted">${signed(r.breakeven_move_pct, 1)}</small></td><td>${money(r.cost_ask_contract, 0)}</td>
-        ${R.more ? html`<td>${money(r.theta_per_contract, 2)}</td><td>${money(r.vega_per_contract, 2)}</td><td>${num((r.p_itm_model || 0) * 100, 0)}%</td><td>${num(r.open_interest, 0)} / ${num(r.volume, 0)}</td><td>${r.exercise === 'european' ? 'European' : isNum(r.early_exercise_premium_contract) ? (r.early_exercise_premium_contract < 0.5 ? 'Under $1' : money(r.early_exercise_premium_contract, 0)) : 'n/a'}</td>` : ''}
+        ${R.more ? html`<td>${money(r.theta_per_contract, 2)}</td><td>${money(r.vega_per_contract, 2)}</td><td>${isNum(r.p_itm_model) ? `${num(r.p_itm_model * 100, 0)}%` : 'n/a'}</td><td>${num(r.open_interest, 0)} / ${num(r.volume, 0)}</td><td>${r.exercise === 'european' ? 'European' : isNum(r.early_exercise_premium_contract) ? (r.early_exercise_premium_contract < 0.5 ? 'Under $1' : money(r.early_exercise_premium_contract, 0)) : 'n/a'}</td>` : ''}
         <td>${r.mid ? html`<button type="button" class="btn btn-sm" data-v2-add-leg="${r.strike}" aria-label="Add the ${num(r.strike, 0)} ${r.type} to the position">Add</button>` : ''}</td></tr>`)}</tbody></table></div>
     ${all.length > 15 ? html`<button type="button" class="textlink" data-v2-op-all aria-expanded="${!!R.allStrikes}">${R.allStrikes ? 'Show the 15 nearest the money' : `Show all ${all.length} strikes`}</button>` : ''}
     ${how((d.events || []).filter((e) => !/report/i.test(e.text || '')).map((e) => html`<p>${clean(e.text)}</p>`),
@@ -304,16 +305,16 @@ function paintTop() {
 }
 
 const OPT_GROUPS = [
-  { id: 'contracts', label: 'Contracts and pricing', sub: 'The chain at one expiry, a position built from it, and what options cost.', panels: [
+  { id: 'contracts', label: 'Contracts and pricing', sub: '', panels: [
     ['What options are pricing', (t, s) => P.pricing(t, s)],
     ['How value moves', () => P.lab(D.lab), () => P.labCharts(D.lab)],
   ] },
-  { id: 'positioning', label: 'Positioning and flow', sub: "Dealer gamma estimated from open interest, the day's options volume, and delta and gamma by strike and expiry.", panels: [
+  { id: 'positioning', label: 'Positioning and flow', sub: 'Dealer gamma is estimated from open interest, not reported positions; flow is the day\'s options volume, not a record of trades.', panels: [
     ['Dealer gamma', (t, s) => P.gex(t, s), (t) => P.gexCharts(t)],
     ['Flow', (t, s) => P.flow(t, s), (t) => P.flowCharts(t)],
     ['Delta and gamma', (t, s) => P.greeksPanel(t, s)],
   ] },
-  { id: 'strategy', label: 'Setups and strategy', sub: "Optic's swing read, the strikes and entry it points to, strategy ideas sized to a budget, levels, and recent setups.", panels: [
+  { id: 'strategy', label: 'Setups and strategy', sub: 'The swing read, the entry it points to and the ideas sized to a budget are model output from these figures, not recommendations.', panels: [
     ['Swing verdict', (t, s) => P.verdict(t, s)],
     ['Strike and entry', (t, s) => P.entry(t, s)],
     ['Ideas', (t, s) => P.ideas(t, s, D.budget), (t) => P.ideaCharts(t, (t.quote || {}).price)],
@@ -336,8 +337,14 @@ function paintMore() {
   // An unquoted chain (the free feed outside market hours) leaves every positioning panel with the same
   // reason; it is said once for the group.
   if (grp.id === 'positioning' && D.t.gex && D.t.gex.error && !(D.t.vol_surface || {}).available) { draw(h, empty('No positioning read right now', clean(D.t.gex.error))); return; }
-  draw(h, grp.panels.map(([label, body], k) => html`<section class="section op-sec" aria-labelledby="opg-h${i}-${k}"><h2 class="t-h2" id="opg-h${i}-${k}">${label}</h2><div data-opg-body="${k}">${body(D.t, D.sym)}</div></section>`));
-  grp.panels.forEach(([, , charts, onOpen], k) => { const b = $(`[data-opg-body="${k}"]`, h); if (charts && b) mountCharts(b, charts(D.t)); if (onOpen) onOpen(); });
+  draw(h, grp.panels.map(([label, body], k) => html`<section class="section op-sec" aria-labelledby="opg-h${i}-${k}"><div class="section-head"><h2 class="t-h2" id="opg-h${i}-${k}">${label}</h2><span class="op-milo" data-opg-milo="${k}"></span></div><div data-opg-body="${k}">${body(D.t, D.sym)}</div></section>`));
+  grp.panels.forEach(([label, , charts, onOpen], k) => {
+    const b = $(`[data-opg-body="${k}"]`, h); if (charts && b) mountCharts(b, charts(D.t)); if (onOpen) onOpen();
+    // a panel's Milo action sits at the right of its heading, as every section's does, and names the panel it was
+    // asked from (editorial pass, 2026-10-19); the panels write it last in their body
+    const m = b && [...b.children].reverse().find((x) => x.matches('.btn-milo')), slot = $(`[data-opg-milo="${k}"]`, h);
+    if (m && slot) { m.dataset.v2MiloCtx = `${D.sym} Dossier, Options: ${label}`; slot.appendChild(m); }
+  });
 }
 function showGroup(i, focus) {
   panelState = i;
@@ -363,7 +370,7 @@ async function loadTicker({ quiet } = {}) {
     const t = await api.get(`/api/ticker/${enc}?max_expiries=4&macro=true${D.budget ? `&budget=${D.budget}` : ''}`, { ttl: quiet ? 0 : 120000, force: !!quiet, timeout: 60000 });
     if (!stillHere(g)) return;
     D.t = t; D.tErr = null; D.lab = D.lab || P.labDefaults(t);
-    if (t.quote) D.quote = Object.assign({}, D.quote || {}, t.quote);
+    if (t.quote) D.quote = fresher(D.quote, t.quote);
   } catch (e) { if (!stillHere(g)) return; if (!quiet) D.tErr = e; }
   paintTop();
   if (!quiet) paintMore();
@@ -381,11 +388,11 @@ export async function render(main, route) {
   provideContext(() => ({ view: 'swing', ticker: sym, quote: D.quote, gex: (D.t || {}).gex, greeks: (D.t || {}).greeks, flow: (D.t || {}).flow, vol_surface: (D.t || {}).vol_surface, iv_rank: (D.t || {}).iv_rank, entry_plan: (D.t || {}).entry_plan, verdict: (D.t || {}).verdict, naked_ideas: (D.t || {}).naked_ideas, strategy_ideas: (D.t || {}).strategy_ideas, rate: (D.t || {}).rate,
     options_research: R.data ? { expiry: R.expiry, side: R.side, summary: R.data.summary, events: R.data.events, rows: ((R.data.table || {}).rows || []).slice(0, 20), position: B.analysis ? { legs: B.legs, analysis: { entry: B.analysis.entry, max_profit: B.analysis.max_profit, max_loss: B.analysis.max_loss, breakevens: B.analysis.breakevens_at_expiry, greeks: B.analysis.greeks, scenarios: B.analysis.scenarios, flags: B.analysis.flags } } : null } : null }));
   draw(main, html`<div id="op-top"></div>${groupBar()}
-    ${OPT_GROUPS.map((x, i) => html`<div class="op-gpanel" id="opg-p${i}" role="tabpanel" aria-labelledby="opg-t${i}" ${i === panelState ? '' : 'hidden'}><p class="section-sub op-gsub">${x.sub}</p>
+    ${OPT_GROUPS.map((x, i) => html`<div class="op-gpanel" id="opg-p${i}" role="tabpanel" aria-labelledby="opg-t${i}" ${i === panelState ? '' : 'hidden'}>${x.sub ? html`<p class="section-sub op-gsub">${x.sub}</p>` : ''}
       ${i === 0 ? html`<section class="section" id="op-research" aria-labelledby="rc-h"></section><div id="op-builder"></div>` : ''}<div id="opg-x${i}"></div></div>`)}`);
   paintTop(); paintBuilder(); paintResearch(); paintMore();
   wire(main);
-  core(sym).then((c) => { if (!stillHere(g)) return; D.quote = Object.assign({}, c.quote || {}, D.quote || {}); D.session = c.session; D.quoteError = c.quoteError; paintTop(); });
+  core(sym).then((c) => { if (!stillHere(g)) return; D.quote = fresher(D.quote, c.quote); D.session = c.session; D.quoteError = c.quoteError; paintTop(); });
   api.get(`/api/earnings/${encodeURIComponent(sym)}`, { ttl: 600000, timeout: 45000 }).then((e) => { if (stillHere(g)) { D.earn = e; paintTop(); } }).catch(() => {});
   loadTicker();
   loadResearch();

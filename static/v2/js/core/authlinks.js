@@ -10,7 +10,7 @@ import { toast } from '../ui/toast.js';
 export const OAUTH_ERRORS = {
   state: 'That sign-in attempt expired before it finished. Start again.',
   provider: 'The sign-in could not be completed. Try again in a moment.',
-  config: 'That sign-in method is not configured on this deployment yet.',
+  config: 'That sign-in method is not set up yet. Sign in with your email and password instead.',
   taken: 'That account is already connected to another Optic Terminal account.',
   needs_link: 'An Optic Terminal account already uses that email address. Sign in the way you did before, then connect this method under Settings, Security. That keeps one account instead of two.',
   no_email: 'No email address was shared, so there is nothing to attach an account to. Try again and choose to share your address, or create an account with an email and password.',

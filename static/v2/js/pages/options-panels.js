@@ -17,6 +17,8 @@ const pct = (v, dp = 1) => (isNum(v) ? `${num(v, dp)}%` : 'n/a');
 const usd = (v, dp = 0) => (isNum(v) ? money(v, dp) : 'n/a');
 const ask = (sym, label, q) => miloButton(label, { ask: q, context: `${sym} Dossier, Options`, symbol: sym });
 const kv = (rows, n = 3) => html`<dl class="kv" style="--kv:${n}">${rows.filter(Boolean).map(([k, v]) => html`<div><dt>${k}</dt><dd>${v}</dd></div>`)}</dl>`;
+// the average of the call's and the put's implied volatility, from the sides that have one
+const atmIv = (r) => { const v = [(r.call || {}).iv, (r.put || {}).iv].filter(isNum).map(Number); return v.length ? pct(v.reduce((a, b) => a + b, 0) / v.length * 100) : 'n/a'; };
 const note = (t) => (t ? html`<p class="asof">${clean(t)}</p>` : '');
 
 /** The expiry row the readings and pricing use: nearest 30 days. */
@@ -100,7 +102,7 @@ export function flow(t, sym) {
     <p class="asof">"Premium" here is time value, not the whole price. ${clean(f.method || '')}</p>
     <h3>Net premium by strike</h3><div class="chart-slot" data-chart="flowStrikes"></div>
     ${(f.unusual || []).length ? html`<h3>${(f.activity_screen || {}).label || 'Most active contracts'}</h3><div class="tscroll"><table class="t"><thead><tr><th>Contract</th><th>Days</th><th>Volume</th><th>Open int.</th><th>Vol / OI</th><th>Premium</th><th>IV</th></tr></thead>
-      <tbody>${f.unusual.slice(0, 10).map((u) => html`<tr><td>${num(u.strike, 0)} ${(u.type || '').toLowerCase()} ${u.moneyness || ''}${u.is_new_position ? ', new' : ''}</td><td>${num(u.dte, 0)}</td><td>${compact(u.volume)}</td><td>${compact(u.open_interest)}</td><td>${num(u.vol_oi_ratio, 1)}×</td><td>${usd(u.premium_total ?? u.premium)}</td><td>${pct((u.iv || 0) * 100)}</td></tr>`)}</tbody></table></div>
+      <tbody>${f.unusual.slice(0, 10).map((u) => html`<tr><td>${num(u.strike, 0)} ${(u.type || '').toLowerCase()} ${u.moneyness || ''}${u.is_new_position ? ', new' : ''}</td><td>${num(u.dte, 0)}</td><td>${compact(u.volume)}</td><td>${compact(u.open_interest)}</td><td>${num(u.vol_oi_ratio, 1)}×</td><td>${usd(u.premium_total ?? u.premium)}</td><td>${(isNum(u.iv) ? pct(u.iv * 100) : 'n/a')}</td></tr>`)}</tbody></table></div>
       ${note(`${(f.activity_screen || {}).rule || ''} Cannot show: ${((f.activity_screen || {}).cannot_show || []).join('; ')}.`)}` : ''}
     ${t.options_brief && t.options_brief.available ? html`<h3>Options intelligence</h3>${kv(t.options_brief.items.map((i) => [i.label, html`${i.value} <span class="t-muted">${clean(i.note)}</span>`]), 2)}${note(t.options_brief.method)}` : ''}
     ${ask(sym, 'Ask Milo about the flow', `What is the options flow saying about ${sym}?`)}`;
@@ -118,7 +120,7 @@ export function greeksPanel(t, sym) {
   return html`<h3>Delta</h3><p>${clean(d.read || '')}</p>
     ${kv([['Net delta, shares', compact(d.net_delta_shares)], ['Net delta, dollars', signedMoneyCompact(d.net_delta_notional)], ['Dealer delta (DEX)', signedMoneyCompact(((t.gex || {}).totals || {}).net_dex)], ['Open interest', compact(d.total_open_interest)]], 4)}
     <h3>At-the-money greeks by expiry</h3><div class="tscroll"><table class="t"><thead><tr><th>Expiry</th><th>Days</th><th>Strike</th><th>Call delta</th><th>Put delta</th><th>Gamma</th><th>IV</th><th>Call decay a day</th></tr></thead>
-      <tbody>${(gk.atm_greeks || []).map((r) => html`<tr><td>${shortDate(r.expiry)}</td><td>${r.dte}</td><td>${num((r.call || {}).strike, 0)}</td><td>${num((r.call || {}).delta, 2)}</td><td>${num((r.put || {}).delta, 2)}</td><td>${num((r.call || {}).gamma, 4)}</td><td>${pct((((r.call || {}).iv || 0) + ((r.put || {}).iv || 0)) * 50)}</td><td>${usd((r.call || {}).theta_per_day, 2)}</td></tr>`)}</tbody></table></div>
+      <tbody>${(gk.atm_greeks || []).map((r) => html`<tr><td>${shortDate(r.expiry)}</td><td>${r.dte}</td><td>${num((r.call || {}).strike, 0)}</td><td>${num((r.call || {}).delta, 2)}</td><td>${num((r.put || {}).delta, 2)}</td><td>${num((r.call || {}).gamma, 4)}</td><td>${atmIv(r)}</td><td>${usd((r.call || {}).theta_per_day, 2)}</td></tr>`)}</tbody></table></div>
     <h3>Gamma</h3><p>${clean(g.read || '')}</p>
     ${kv([['Peak gamma strike', html`${num(g.peak_gamma_strike, 0)} <span class="t-muted">(${signed(g.peak_gamma_distance_pct)})</span>`], ['Within 2% of the price', pct(g.gamma_within_2pct_share, 0)]], 2)}
     ${(g.by_expiry || []).length ? html`<div class="tscroll"><table class="t"><thead><tr><th>Expiry</th><th>Days</th><th>Share of gamma</th><th>Open interest</th></tr></thead><tbody>${g.by_expiry.map((r) => html`<tr><td>${shortDate(r.expiry)}</td><td>${r.dte}</td><td>${pct(r.share_pct, 0)}</td><td>${compact(r.open_interest)}</td></tr>`)}</tbody></table></div>` : ''}
@@ -220,8 +222,7 @@ export function levels(t, sym) {
     <h3>Fibonacci, ${fib.direction || ''} from ${num(fib.anchor_low)} to ${num(fib.anchor_high)}</h3><div class="tscroll"><table class="t"><thead><tr><th>Level</th><th>Price</th><th>Distance</th><th>Role</th></tr></thead>
       <tbody>${(fib.levels || []).map((l) => html`<tr><td>${l.label}${l.is_golden ? ' (golden zone)' : ''}</td><td>${num(l.price)}</td><td>${signed(l.distance_pct)}</td><td>${capFirst(l.role || '')}</td></tr>`)}</tbody></table></div>
     <h3>Moving averages</h3><div class="tscroll"><table class="t"><thead><tr><th>Average</th><th>Value</th><th>Distance</th><th>Slope, 10 days</th></tr></thead>
-      <tbody>${Object.entries(ma).map(([k, m]) => html`<tr><td>${k.toUpperCase()}</td><td>${num(m.value)}</td><td>${signed(m.distance_pct)}</td><td>${signed(m.slope_10d_pct)}</td></tr>`)}</tbody></table></div>
-    <p class="asof">The chart with these drawn on it is on the Chart page.</p>`;
+      <tbody>${Object.entries(ma).map(([k, m]) => html`<tr><td>${k.toUpperCase()}</td><td>${num(m.value)}</td><td>${signed(m.distance_pct)}</td><td>${signed(m.slope_10d_pct)}</td></tr>`)}</tbody></table></div>`;
 }
 
 /* ---------- how an option's value moves (the classic Greeks lab) ---------- */
@@ -251,7 +252,7 @@ export function lab(L) {
       <label class="field field-sm"><span class="t-label">IV</span><input type="number" min="5" max="200" value="${L.iv}" data-v2-lab-iv aria-label="Implied volatility, percent"></label></div>
     <p>An at-the-money ${L.kind} (the ${num(atm, step < 1 ? 1 : 0)} strike) with ${L.dte} days left at ${L.iv}% IV is worth about ${money(now.price)} a share (${money(now.price * 100, 0)} a contract). It loses about ${money(now.price - tomorrow.price)} a day now; ${L.dte > 7 ? `${num((last7.price / now.price) * 100, 0)}% of its value is still left with 7 days to go, and that last stretch is where decay is fastest` : 'all of its time value goes in the days left'}. Its delta is ${num(now.delta, 2)}, and at 5 days its gamma is ${num(now.gamma ? g5.gamma / now.gamma : 0, 1)} times what it is now.</p>
     <div class="chart-slot" data-chart="labDecay"></div><div class="chart-slot" data-chart="labDelta"></div>
-    <p class="asof">Black-Scholes with Optic's rate, no dividends, the price held at ${num(L.S)}. A teaching model: real contracts carry their own IV, skew and early exercise.</p>`;
+    ${how(html`<p>Black-Scholes with Optic's rate, no dividends, the price held at ${num(L.S)}. A teaching model: real contracts carry their own implied volatility, skew and early exercise.</p>`)}`;
 }
 export function labCharts(L) {
   const step = L.S > 500 ? 5 : L.S > 100 ? 1 : L.S > 20 ? 0.5 : 0.1;
@@ -274,7 +275,7 @@ export function setups(t, sym, extra) {
   return html`<h3>Swing setups</h3>
     ${st === undefined ? html`<p class="t-muted" role="status">Loading setups…</p>` : !st ? note('Setups did not load.') : live.length ? html`<div class="tscroll"><table class="t"><thead><tr><th>Setup</th><th>Direction</th><th>Status</th><th>Trigger</th><th>Invalidation</th></tr></thead>
       <tbody>${live.slice(0, 12).map((r) => html`<tr><td>${r.label}${r.experimental ? ' (experimental)' : ''}</td><td>${r.direction === 'bull' ? 'Up' : 'Down'}</td><td>${capFirst(r.status)}</td><td>${num(r.trigger_level)}</td><td>${num(r.invalidation)}</td></tr>`)}</tbody></table></div>` : html`<p>No setup is armed, triggered or being watched on ${sym} now.</p>`}
-    <p class="asof">${st ? clean(st.method || '') : ''} Filters, rule settings, back-tests and alerts for setups are in the <a href="${CLASSIC}#/${sym}/options">current app</a>.</p>
+    <p class="asof">${st ? clean(st.method || '') : ''} Filters, rule settings, back-tests and alerts for setups are in the <a href="${CLASSIC}#/${sym}/options">classic app</a>.</p>
     ${p.available ? html`<h3>Chart patterns</h3><ul class="plain">${(p.candles || []).slice(0, 6).map((c) => html`<li><b>${c.name}</b>, ${shortDate(c.date)}: ${clean(c.note)} <span class="t-muted">${c.direction}, ${clean(c.conventional)}</span></li>`)}</ul>${note(p.method)}` : ''}
     ${rp && rp.available ? html`<h3>Relative performance</h3><p>${clean(rp.headline)}</p>${note(rp.method)}` : ''}
     ${se && se.monthly ? html`<h3>Seasonality, ${num(se.years, 0)} years</h3><div class="tscroll"><table class="t"><thead><tr><th>Month</th><th>Average</th><th>Median</th><th>Up years</th><th>Against baseline</th><th>Reading</th></tr></thead>

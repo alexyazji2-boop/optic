@@ -7,7 +7,7 @@
 import { html, raw, render as draw } from '../core/dom.js';
 import * as api from '../core/api.js';
 import * as store from '../core/store.js';
-import { num, signed, money, compact, clean, capFirst, fullDate, shortDate, isNum } from '../core/format.js';
+import { num, signed, dir, money, compact, clean, capFirst, fullDate, shortDate, isNum } from '../core/format.js';
 import { lineChart, mountCharts } from '../ui/chart.js';
 import { signedBars, hbars } from '../ui/bars.js';
 import { skeleton, empty, failed } from '../ui/states.js';
@@ -19,13 +19,21 @@ let D = {}, live = true, mainEl = null;
 const kv = (rows, n = 3) => html`<dl class="kv" style="--kv:${n}">${rows.filter(Boolean).map(([k, v]) => html`<div><dt>${k}</dt><dd>${v}</dd></div>`)}</dl>`;
 const ask = (sym, label, q) => miloButton(label, { ask: q, context: `${sym} Dossier, Financials`, symbol: sym });
 const pct = (v, dp = 1) => (isNum(v) ? `${num(v, dp)}%` : 'n/a');
+// a split's ratio in words: 1.5 is 3 for 2, 0.1 a 1-for-10 reverse split (num(ratio, 0) printed "2 for 1" and "0 for 1")
+export function splitWords(r) {
+  if (!isNum(r) || Number(r) <= 0) return 'ratio not reported';
+  const x = Number(r);
+  if (x < 1) { const inv = 1 / x; for (let d = 1; d <= 10; d += 1) { const n = inv * d; if (Math.abs(n - Math.round(n)) < 0.01) return `${d} for ${Math.round(n)}, a reverse split`; } return `${num(x, 3)} for 1, a reverse split`; }
+  for (let d = 1; d <= 10; d += 1) { const n = x * d; if (Math.abs(n - Math.round(n)) < 0.01) return `${Math.round(n)} for ${d}`; }
+  return `${num(x, 3)} for 1`;
+}
 const usd = (v) => (isNum(v) ? `${v < 0 ? '−' : ''}$${compact(Math.abs(v))}` : 'n/a');
 
 function readings() {
   const c = (D.t || {}).company || {}, f = c.financials || {}, m = f.margins || {}, g = f.growth || {}, eh = c.earnings_history || {}, si = c.short_interest || {}, ow = c.ownership || {};
   const items = [];
   if (f.available) items.push(['Margins', `Gross ${pct(m.gross_pct)}, operating ${pct(m.operating_pct)}, net ${pct(m.net_pct)}.`]);
-  if (f.available) items.push(['Growth', `Revenue ${signed(g.revenue_yoy_pct)} and net income ${signed(g.net_income_yoy_pct)} in the last fiscal year${isNum(g.net_income_yoy_pct) && isNum(g.revenue_yoy_pct) && g.net_income_yoy_pct - g.revenue_yoy_pct > 2 ? ': profit grew faster than sales, so margins widened' : isNum(g.net_income_yoy_pct) && g.revenue_yoy_pct - g.net_income_yoy_pct > 2 ? ': sales grew faster than profit, so margins narrowed' : ''}.`]);
+  if (f.available) items.push(['Growth', `Revenue ${signed(g.revenue_yoy_pct)} and net income ${signed(g.net_income_yoy_pct)} in the last fiscal year${isNum(g.net_income_yoy_pct) && isNum(g.revenue_yoy_pct) && g.net_income_yoy_pct - g.revenue_yoy_pct > 2 ? ': net income outpaced revenue, so the net margin widened' : isNum(g.net_income_yoy_pct) && isNum(g.revenue_yoy_pct) && g.revenue_yoy_pct - g.net_income_yoy_pct > 2 ? ': revenue outpaced net income, so the net margin narrowed' : ''}.`]);
   if (eh.available) items.push(['Against estimates', `Beat in ${eh.beat_count} of ${eh.sample_size} quarters, by ${signed(eh.avg_surprise_pct, 1)} on average.`]);
   // only what was reported: a missing share of float is not 0%, and no squeeze reading is drawn without it
   if (si.available) { const parts = [isNum(si.percent_of_float) ? `${pct(si.percent_of_float * 100)} of float` : 'Share of float not reported', isNum(si.days_to_cover) ? `${num(si.days_to_cover, 1)} days to cover` : '', isNum(si.change_vs_prior_pct) ? `${signed(si.change_vs_prior_pct, 1)} since the last report` : ''].filter(Boolean); items.push(['Short interest', `${parts.join(', ')}.${isNum(si.percent_of_float) && si.squeeze_potential ? ` Squeeze potential ${si.squeeze_potential}.` : ''}`]); }
@@ -76,9 +84,9 @@ function statements(sym) {
   const card = (k, label, slot, fmt) => {
     const v = a[k] || [], cur = v[0], prev = v[1];
     const ch = isNum(cur) && isNum(prev) && prev !== 0 ? ((cur - prev) / Math.abs(prev)) * 100 : null;
-    return html`<div class="fin-card"><p class="t-label">${label}</p><p class="fin-card-v">${fmt(cur)}${isNum(ch) ? html` <span class="${ch >= 0 ? 'up' : 'down'}">${signed(ch, 1)}</span>` : ''}</p><div class="chart-slot" data-chart="${slot}"></div></div>`;
+    return html`<div class="fin-card"><p class="t-label">${label}</p><p class="fin-card-v">${fmt(cur)}${isNum(ch) ? html` <span class="${dir(ch)}">${signed(ch, 1)}</span>` : ''}</p><div class="chart-slot" data-chart="${slot}"></div></div>`;
   };
-  return html`<section class="section" id="fin-statements" aria-labelledby="st-h"><div class="section-head"><div><h2 class="t-h2" id="st-h">Statements</h2><p class="section-sub">Fiscal years from the company's annual statements. Each card gives the latest year and its change on the year before.</p></div>${ask(sym, 'Ask Milo about the financials', `What do ${sym}'s financial statements say about the business's health?`)}</div>
+  return html`<section class="section" id="fin-statements" aria-labelledby="st-h"><div class="section-head"><div><h2 class="t-h2" id="st-h">Statements</h2><p class="section-sub">Annual figures from the company's filings: the latest fiscal year and its change on the year before.</p></div>${ask(sym, 'Ask Milo about the financials', `What do ${sym}'s financial statements say about the business's health?`)}</div>
     <div class="chart-grid fin-cards">${card('revenue', 'Revenue', 'rev', usd)}${card('net_income', 'Net income', 'ni', usd)}${card('free_cash_flow', 'Free cash flow', 'fcf', usd)}${card('diluted_eps', 'Diluted EPS', 'eps', (x) => num(x))}</div>
     <div class="tscroll"><table class="t fin-table"><thead><tr><th>Fiscal year</th>${per.map((p) => html`<th>${String(p).slice(0, 4)}</th>`)}</tr></thead>
       <tbody>${rows.filter(([, k]) => (a[k] || []).length).map(([l, k]) => html`<tr><td>${l}</td>${a[k].map((v) => html`<td>${k === 'diluted_eps' ? num(v) : usd(v)}</td>`)}</tr>`)}</tbody></table></div>
@@ -96,7 +104,7 @@ function statementCharts() {
 function record(which) {
   const c = (D.t || {}).company || {}, eh = which === 'earnings' ? c.earnings_history || {} : {}, si = which === 'short' ? c.short_interest || {} : {};
   return html`${eh.available ? html`<section class="section" id="fin-earnings" aria-labelledby="er-h"><h2 class="t-h2" id="er-h">Earnings track record</h2>
-      <div class="tscroll"><table class="t"><thead><tr><th>Report</th><th>Estimate</th><th>Reported</th><th>Surprise</th></tr></thead><tbody>${(eh.quarters || []).map((q) => html`<tr><td>${fullDate(q.date)}</td><td>${num(q.eps_estimate)}</td><td>${num(q.eps_reported)}</td><td class="${q.surprise_pct >= 0 ? 'up' : 'down'}">${signed(q.surprise_pct, 1)}</td></tr>`)}</tbody></table></div>
+      <div class="tscroll"><table class="t"><thead><tr><th>Report</th><th>Estimate</th><th>Reported</th><th>Surprise</th></tr></thead><tbody>${(eh.quarters || []).map((q) => html`<tr><td>${fullDate(q.date)}</td><td>${num(q.eps_estimate)}</td><td>${num(q.eps_reported)}</td><td class="${dir(q.surprise_pct)}">${signed(q.surprise_pct, 1)}</td></tr>`)}</tbody></table></div>
       ${(eh.upcoming || [])[0] ? html`<p>Next report ${fullDate(eh.upcoming[0].date)}, estimate ${num(eh.upcoming[0].eps_estimate)}.</p>` : ''}<ul class="plain">${(eh.notes || []).map((n) => html`<li>${clean(n)}</li>`)}</ul></section>` : ''}
     ${si.available ? html`<section class="section" id="fin-short" aria-labelledby="si-h"><h2 class="t-h2" id="si-h">Short interest</h2>
       ${kv([['Share of float', isNum(si.percent_of_float) ? pct(si.percent_of_float * 100, 2) : 'Not reported'], ['Days to cover', isNum(si.days_to_cover) ? num(si.days_to_cover, 1) : 'Not reported'], ['Since the last report', isNum(si.change_vs_prior_pct) ? signed(si.change_vs_prior_pct, 1) : 'Not reported'], ['Shares short', isNum(si.shares_short) ? compact(si.shares_short) : 'Not reported'], ['Prior', isNum(si.shares_short_prior) ? compact(si.shares_short_prior) : 'Not reported'], ['Float', isNum(si.float_shares) ? compact(si.float_shares) : 'Not reported']], 3)}
@@ -108,9 +116,9 @@ function ownership(sym) {
   if (!ow.available) return '';
   const i6 = ow.insider_6m || {};
   return html`<section class="section" id="fin-ownership" aria-labelledby="ow-h"><div class="section-head"><h2 class="t-h2" id="ow-h">Insider and institutional activity</h2>${ask(sym, 'Ask Milo about insiders', `What does recent insider and institutional activity in ${sym} suggest?`)}</div>
-    ${kv([['Insider signal, 6 months', capFirst(ow.insider_signal || '')], ['Insider net shares', compact(i6.net_shares)], ['Purchases', `${num(i6.purchase_count, 0)} (${compact(i6.purchase_shares)} shares)`], ['Sales', `${num(i6.sale_count, 0)} (${compact(i6.sale_shares)} shares)`], ['Held by institutions', pct((ow.institutional_pct_held || 0) * 100)], ['Held by insiders', pct((ow.insider_pct_held || 0) * 100, 2)]], 3)}
-    <p>Of the ${ow.holders_counted || (ow.top_holders || []).length} largest holders, ${ow.holders_adding} raised and ${ow.holders_trimming} cut their stake by more than ${num(ow.holder_change_threshold_pct || 2, 0)}% at their last 13F; the rest changed by less. ${(ow.top_holders || []).length > 6 ? `The bars show the ${6} largest.` : ''}</p>
-    ${raw(hbars((ow.top_holders || []).slice(0, 6).map((h) => ({ label: h.holder, v: (h.pct_held || 0) * 100, note: `${compact(h.shares)} shares, ${signed((h.pct_change || 0) * 100, 1)} at ${fullDate(h.date_reported)}` }))))}
+    ${kv([['Insider signal, 6 months', capFirst(ow.insider_signal || '')], ['Insider net shares', compact(i6.net_shares)], ['Purchases', `${num(i6.purchase_count, 0)} (${compact(i6.purchase_shares)} shares)`], ['Sales', `${num(i6.sale_count, 0)} (${compact(i6.sale_shares)} shares)`], ['Held by institutions', isNum(ow.institutional_pct_held) ? pct(ow.institutional_pct_held * 100) : 'Not reported'], ['Held by insiders', isNum(ow.insider_pct_held) ? pct(ow.insider_pct_held * 100, 2) : 'Not reported']], 3)}
+    <p>${ow.holders_adding} of the ${ow.holders_counted || (ow.top_holders || []).length} largest holders raised their stake and ${ow.holders_trimming} cut it by more than ${num(ow.holder_change_threshold_pct || 2, 0)}% at their last 13F filing; the rest changed by less. ${(ow.top_holders || []).length > 6 ? `The bars show the ${6} largest.` : ''}</p>
+    ${raw(hbars((ow.top_holders || []).filter((h) => isNum(h.pct_held)).slice(0, 6).map((h) => ({ label: h.holder, v: h.pct_held * 100, note: `${compact(h.shares)} shares, ${isNum(h.pct_change) ? `${signed(h.pct_change * 100, 1)} at` : 'change not reported, filed'} ${fullDate(h.date_reported)}` }))))}
     <details class="more-inline"><summary>Recent insider transactions</summary><div class="tscroll"><table class="t"><thead><tr><th>Date</th><th>Insider</th><th>Role</th><th>Action</th><th>Shares</th><th>Value</th></tr></thead><tbody>${(ow.recent_transactions || []).slice(0, 20).map((t) => html`<tr><td>${fullDate(t.date)}</td><td>${t.insider}</td><td>${t.position || ''}</td><td>${capFirst(t.action || '')}</td><td>${compact(t.shares)}</td><td>${usd(t.value)}</td></tr>`)}</tbody></table></div>${(ow.recent_transactions || []).length > 20 ? html`<p class="asof">The latest 20 of ${(ow.recent_transactions || []).length} filings from the last two years. The Chart marks every purchase and sale among them, and the <a class="textlink" href="#/insiders">Insiders page</a> reads filings straight from EDGAR.</p>` : ''}</details>
     <ul class="plain">${(ow.notes || []).map((n) => html`<li>${clean(n)}</li>`)}</ul><p class="asof">${clean(ow.caveat || '')}</p></section>`;
 }
@@ -131,7 +139,7 @@ function extras() {
   return html`<section class="section" id="fin-actions" aria-labelledby="ca-h"><h2 class="t-h2" id="ca-h">Corporate actions and flow</h2>
     ${a.pays_dividend ? html`<h3>Dividends</h3>${kv([['Payments on record', a.payment_count], ['Years of growth', a.growth_streak_years], ['Last cut', a.last_cut_year || 'None on record'], ['Latest', (a.dividends || []).length ? `$${num(a.dividends[a.dividends.length - 1].amount, 3)} on ${fullDate(a.dividends[a.dividends.length - 1].date)}` : 'n/a']], 4)}
       ${(a.annual || []).length ? html`<div class="tscroll"><table class="t"><thead><tr><th>Year</th><th>Total a share</th></tr></thead><tbody>${a.annual.slice(-8).map((y) => html`<tr><td>${y.year}</td><td>$${num(y.total, 3)}</td></tr>`)}</tbody></table></div>` : ''}` : html`<p>No dividend on record.</p>`}
-    ${(a.splits || []).length ? html`<h3>Splits</h3><ul class="plain">${a.splits.map((s) => html`<li>${fullDate(s.date)}: ${num(s.ratio, 0)} for 1</li>`)}</ul>` : ''}
+    ${(a.splits || []).length ? html`<h3>Splits</h3><ul class="plain">${a.splits.map((s) => html`<li>${fullDate(s.date)}: ${splitWords(s.ratio)}</li>`)}</ul>` : ''}
     ${a.note ? html`<p class="asof">${clean(a.note)}</p>` : ''}
     ${(sv.rows || []).length ? html`<h3>Off-exchange short volume</h3>${kv([['Latest session', pct(sv.latest_pct)], [`Average, ${sv.days} sessions`, pct(sv.average_pct)]], 2)}<div class="chart-slot" data-chart="sv"></div><p class="asof">${clean(sv.caveat || '')}</p>` : ''}
     ${rl.excess ? html`<h3>Against ${rl.benchmark || 'the index'}</h3>${kv(Object.entries(rl.excess).map(([k, v]) => [k.replace('d', ' sessions'), signed(v)]), 5)}<p class="asof">${clean(rl.note || '')}</p>` : ''}
@@ -161,7 +169,7 @@ function segments() {
   return html`<section class="section" id="fin-segments" aria-labelledby="sg-h"><h2 class="t-h2" id="sg-h">Segments and geography</h2>
     ${(s.tables || []).map((t) => html`<h3>${t.metric_label}, ${t.axis_label.toLowerCase()}</h3><div class="tscroll"><table class="t fin-table"><thead><tr><th>${t.axis_label}</th>${s.quarters.map((q) => html`<th>${shortDate(q)} ${String(q).slice(2, 4)}</th>`)}</tr></thead>
       <tbody>${t.rows.map((r) => html`<tr><td>${clean(r.member)}</td>${r.values.map((v) => html`<td>${usd(v)}</td>`)}</tr>`)}</tbody></table></div>`)}
-    <p class="asof">${s.filings_read} of ${s.filings_listed} filings read${s.filings_unread ? ', more being read' : ''}. ${clean(s.method || '')} ${clean(s.blind_spot || '')}</p></section>`;
+    <p class="asof">Based on ${s.filings_read} of the ${s.filings_listed} most recent filings${s.filings_unread ? '; the rest are still being read' : ''}. ${clean(s.method || '')} ${clean(s.blind_spot || '')}</p></section>`;
 }
 
 function paint() {

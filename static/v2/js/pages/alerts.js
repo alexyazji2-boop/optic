@@ -125,7 +125,7 @@ function ledger() {
   const a = S.alerts.alerts || [];
   if (!a.length) return empty('Nothing has fired from the scheduled scan', 'Optic\'s own scans record setups, signal changes and unusual activity here when they find them.');
   return html`<ul class="hit-list">${a.slice(0, 20).map((x) => html`<li><a href="#/${x.ticker || ''}"><b class="tick">${x.ticker || ''}</b> ${clean(x.title)}</a><p>${clean(x.body || '')}</p><small class="t-muted">${clean(x.kind || '')}, ${ago(x.created_at)}</small></li>`)}</ul>
-    <p class="asof">The same for everyone using this deployment. Marking read and clearing are for the owner, in the current app.</p>`;
+    <p class="asof">Shared by every reader of Optic.</p>`;
 }
 
 function paint(main) {

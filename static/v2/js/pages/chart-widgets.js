@@ -167,7 +167,7 @@ const BODY = {
     const rows = (G.alerts.alerts || []).slice(0, 12);
     return html`${rows.length ? html`<ul class="chw-list chw-alerts">${rows.map((x) => html`<li class="${x.seen ? '' : 'unseen'}"><p class="chw-line"><b>${clean(x.kind_label || x.kind || '')}</b>${x.ticker ? html` <a class="tick" href="#/${encodeURIComponent(x.ticker)}/chart">${x.ticker}</a>` : ''} <small class="t-muted">${ago(x.created_at)}</small></p><p>${clean(x.title || '')}</p>${x.body ? html`<small class="t-muted">${clean(x.body)}</small>` : ''}</li>`)}</ul>`
       : none('Nothing has fired from the scheduled scan yet. Optic\'s own scans record setups, signal changes and unusual activity here when they find them.')}
-      ${fine('The same for everyone using this deployment. Marking read and clearing are for the owner, in the current app.')}
+      ${fine('Shared by every reader of Optic.')}
       ${more('#/alerts', 'Your watches and every alert')}`;
   },
 
@@ -456,7 +456,7 @@ const BODY = {
     const terms = Object.keys(GLOSSARY).sort(), word = GLOSSARY[G.learn] ? G.learn : terms[0];
     return html`<label class="select chw-sel"><span class="sr">Term</span><select data-chw-learn>${terms.map((x) => html`<option value="${x}" ${x === word ? 'selected' : ''}>${termName(x)}</option>`)}</select></label>
       <p class="chw-def" data-chw-def aria-live="polite">${GLOSSARY[word]}</p>
-      ${fine(`${terms.length} terms, the definitions the current app shows on its dotted-underlined words.`)}`;
+      ${fine(`${terms.length} terms.`)}`;
   },
 };
 // The glossary's keys are lower case for matching; a term is shown as it is written ("ATM", "Forward P/E").

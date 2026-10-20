@@ -13,9 +13,9 @@ import * as api from '../core/api.js';
 import * as store from '../core/store.js';
 import { num, signed, dir, compact, clean, capFirst, longDate, fullDate, shortDate, isNum, score100 } from '../core/format.js';
 import { lineChart, meter, mountCharts } from '../ui/chart.js';
-import { skeleton, empty, failed, staleLine } from '../ui/states.js';
+import { skeleton, empty, failed, staleLine, how } from '../ui/states.js';
 import { icon } from '../ui/icons.js';
-import { header as frameHeader, tabs as frameTabs, isFund } from './dossier-frame.js';
+import { header as frameHeader, tabs as frameTabs, isFund, fresher } from './dossier-frame.js';
 import { button as miloButton, provideContext } from '../ui/milo.js';
 import * as drawer from '../ui/drawer.js';
 import { hrefFor } from '../nav.js';
@@ -103,21 +103,25 @@ function answers(sym) {
   const im = implied();
   const q = D.quote || {};
   const out = [];
-  out.push({ k: 'quality', q: 'Is it a good business?', a: D.framework ? (qy.grade ? qualityWord[qy.grade] || `Grade ${qy.grade}.` : 'Not graded.') : null,
+  const gone = (e) => ({ a: 'Not available right now.', because: `${clean((e && e.message) || 'Its source did not answer.')} The other answers do not depend on it.` });
+  if (D.fwError) {
+    const g = gone(D.fwError);
+    out.push({ k: 'quality', q: 'Is it a good business?', ...g });
+  } else out.push({ k: 'quality', q: 'Is it a good business?', a: D.framework ? (qy.grade ? qualityWord[qy.grade] || `Grade ${qy.grade}.` : 'Not graded.') : null,
     because: qy.grade ? html`<span class="chip-tag">Grade ${qy.grade}</span>${clean(((qy.components || [])[0] || {}).headline || qy.summary || '')}` : clean(qy.summary || '') });
-  const priceA = !D.fairValue ? null : st.available ? starsWord[st.stars] || clean(st.word) : fv.available ? 'No verdict.' : 'No estimate for this company.';
+  const priceA = D.fvError ? 'Not available right now.' : !D.fairValue ? null : st.available ? starsWord[st.stars] || clean(st.word) : fv.available ? 'No verdict.' : 'No estimate for this company.';
   out.push({ k: 'price', q: 'Is the price attractive?', a: priceA,
     because: st.available && fv.available ? html`${raw(meter({ lo: fv.low, mid: fv.mid, hi: fv.high, price: q.price || fv.price, w: 214 }))}<span class="chip-tag">${st.stars} of 5 stars</span>Fair value ${num(fv.low, 0)} to ${num(fv.high, 0)}, from its own 5-year P/E.`
-      : clean([st.reason, fv.wide ? fv.wide_note : fv.reason].filter(Boolean).join(' ')) });
+      : D.fvError ? gone(D.fvError).because : clean([st.reason, fv.wide ? fv.wide_note : fv.reason].filter(Boolean).join(' ')) });
   const setup = sw.setup || {};
-  const tradeA = !D.framework ? null : sw.grade === 'S' || sw.grade === 'A' ? `Yes. A grade ${sw.grade} ${setup.kind || 'setup'}.` : sw.grade === 'B' ? `Not yet. ${capFirst(setup.kind || 'a setup')} is forming.` : sw.grade ? 'No clear trade.' : 'Not graded.';
+  const tradeA = D.fwError ? 'Not available right now.' : !D.framework ? null : sw.grade === 'S' || sw.grade === 'A' ? `Yes. A grade ${sw.grade} ${setup.kind || 'setup'}.` : sw.grade === 'B' ? `Not yet. ${capFirst(setup.kind || 'a setup')} is forming.` : sw.grade ? 'No clear trade.' : 'Not graded.';
   const tradeItem = { k: 'trade', q: 'Is there a trade?', a: tradeA,
-    because: sw.grade ? html`<span class="chip-tag">Grade ${sw.grade}</span>${clean(setup.why || sw.why || '')}` : '' };
+    because: D.fwError ? gone(D.fwError).because : sw.grade ? html`<span class="chip-tag">Grade ${sw.grade}</span>${clean(setup.why || sw.why || '')}` : '' };
   if (isFundHere(sym)) { out.length = 0; out.push(...fundAnswers(sym, tradeItem)); return answerGrid(out); }
   out.push(tradeItem);
-  const nextA = !D.earnings ? null : nr.date ? `Earnings on ${longDate(nr.date)}.` : 'No report date yet.';
+  const nextA = D.earnError ? 'Not available right now.' : !D.earnings ? null : nr.date ? `Earnings on ${longDate(nr.date)}.` : 'No report date yet.';
   out.push({ k: 'next', q: "What's next?", a: nextA,
-    because: nr.date ? html`${capFirst(timing[nr.timing] || '')}${timing[nr.timing] ? ', ' : ''}in ${nr.days_away} days${nr.confirmed ? ', confirmed' : ''}.${im ? html` Options price ±${num(im.pct)}% through the ${shortDate(im.expiry)} expiry; report days have averaged ±${num(pr.event_day_avg_pct)}%.` : ''}` : '' });
+    because: D.earnError ? gone(D.earnError).because : nr.date ? html`${capFirst(timing[nr.timing] || '')}${timing[nr.timing] ? ', ' : ''}in ${nr.days_away} days${nr.confirmed ? ', confirmed' : ''}.${im ? html` Options price ±${num(im.pct)}% through the ${shortDate(im.expiry)} expiry; report days have averaged ±${num(pr.event_day_avg_pct)}%.` : ''}` : '' });
   return answerGrid(out);
 }
 function answerGrid(out) {
@@ -137,8 +141,9 @@ export function historyRatio(pr, im, quartersIn) {
     : k === 'event-day' ? `the average move on the session after past reports (${quarters} quarters)`
       : `a matched ${n}-session move over the past two years`;
   return html`<div class="ratio"><p class="t-label">Priced against history</p>
-    <p class="ratio-eq"><b>${num(pr.ratio, 2)}×</b> <span>= ±${num(pr.implied_move_pct)}% priced${im ? ` through ${shortDate(im.expiry)}` : ''} ÷ ±${num(pr.baseline_move_pct)}% ${basis}.</span></p>
-    <p class="t-note">Options are ${stanceWord[pr.stance] || pr.stance}.</p></div>`;
+    <p class="ratio-eq"><b>${num(pr.ratio, 2)}×</b> <span>Options price ±${num(pr.implied_move_pct)}%${im ? ` through ${shortDate(im.expiry)}` : ''}, against a typical ±${num(pr.baseline_move_pct)}% for the same period.</span></p>
+    <p class="t-note">Options are ${stanceWord[pr.stance] || pr.stance}.</p>
+    ${how(html`<p>The ratio is the priced move (±${num(pr.implied_move_pct)}%) divided by ${basis} (±${num(pr.baseline_move_pct)}%).</p>`)}</div>`;
 }
 
 function fundEvidence(k, sym) {
@@ -236,18 +241,18 @@ function longViews(sym) {
   const q = (lt.quality || {}).grade, v = (lt.valuation || {}).label;
   if (s100 === null && !conv.label) return '';
   return html`<section class="section" aria-labelledby="lv-h">
-    <div class="section-head"><div><h2 class="t-h2" id="lv-h">Two long-term views</h2><p class="section-sub">They answer different questions, so they can disagree.</p></div></div>
+    <div class="section-head"><div><h2 class="t-h2" id="lv-h">Two long-term views</h2><p class="section-sub">One reads how the price has behaved, the other what the business is worth at this price. They can disagree.</p></div></div>
     <div class="views">
       <div class="view"><p class="t-label">Long-term trend score, from price history</p>
         <p class="n">${s100 === null ? 'n/a' : num(s100, 0)}<small> of 100</small></p>
         <p>${h ? clean(h.plan || '') : 'Not available.'}</p>
-        <p class="asof">The 200-week and 40-week trends, five years against the S&amp;P 500, return per unit of risk, forward P/E, distance from the high, dividend and catalysts.</p></div>
+        ${how(html`<p>From the 200-week and 40-week trends, five years against the S&amp;P 500, return per unit of risk, forward P/E, distance from the high, the dividend and catalysts.</p>`)}</div>
       <div class="view"><p class="t-label">Long-term case, from the business and its price</p>
         <p class="n">${conv.label || 'n/a'}</p>
         <p>${clean(conv.why || '')}</p>
         <p class="asof">Business quality${q ? ` (grade ${q})` : ''} weighed against valuation${v ? ` (${v.toLowerCase()})` : ''} and the weekly chart.</p></div>
     </div>
-    ${h && conv.label ? html`<p class="reconcile"><b>Why they differ.</b> The trend score reads how the stock has behaved: ${num(priceBehaviour, 0)} of its ${num(h.conviction_score, 0)} points come from trend, relative strength and risk-adjusted return, and valuation added ${num(valuation ? valuation.points : 0, 0)}.${valuation ? html` On valuation the trend model says: “${clean(valuation.detail)}”` : ''} The long-term case asks whether today's price pays for the business${v ? `, and grades the valuation ${v.toLowerCase()}` : ''}. Optic's combined read below uses the long-term case.</p>` : ''}
+    ${h && conv.label ? html`<p class="reconcile"><b>Why they differ.</b> The trend score reads how the stock has behaved: ${num(priceBehaviour, 0)} of its ${num(h.conviction_score, 0)} points come from trend, relative strength and risk-adjusted return${valuation && isNum(valuation.points) ? `, and valuation added ${num(valuation.points, 0)}` : ''}.${valuation ? html` On valuation the trend model says: “${clean(valuation.detail)}”` : ''} The long-term case asks whether today's price pays for the business${v ? `, and grades the valuation ${v.toLowerCase()}` : ''}. Optic's combined read below uses the long-term case.</p>` : ''}
   </section>`;
 }
 
@@ -291,7 +296,7 @@ function more(sym) {
     ...(prof.summary ? [[isFundHere(sym) ? `What is ${name}?` : `What does ${name} do?`, html`<p>${clean(prof.summary)}</p>`, '']] : []),
     ...((news.articles || []).length ? [['Latest headlines', html`<ul class="plain">${news.articles.slice(0, 6).map((a) => html`<li><a href="${a.url}" target="_blank" rel="noopener">${clean(a.title)}</a> <span class="t-muted">${a.publisher}, ${a.age_words || ''}, ${a.tone || ''}</span></li>`)}</ul><a class="textlink" href="${hrefFor('news', sym)}">All headlines on News ${icon('out')}</a>`, news.overall_tone || '']] : []),
     ...(fil.length ? [['Recent SEC filings', html`<ul class="plain">${fil.slice(0, 5).map((f) => html`<li><a href="${f.url}" target="_blank" rel="noopener">${f.form}</a> ${clean(f.what)}, filed ${fullDate(f.filed)}</li>`)}</ul>`, `${Math.min(5, fil.length)} newest`]] : []),
-    ['Thesis check', html`<p>Save the conditions your idea depends on, and Optic marks each one as holding or broken. Theses are in the current app for now.</p><a class="textlink" href="${CLASSIC}#/${sym}">Open the thesis check ${icon('out')}</a>`, ''],
+    ['Thesis check', html`<p>Save the conditions your idea depends on, and Optic marks each one as holding or broken. The thesis check is in the classic app.</p><a class="textlink" href="${CLASSIC}#/${sym}">Open the thesis check ${icon('out')}</a>`, ''],
   ];
   return html`<section class="section" aria-labelledby="mr-h"><h2 class="t-h2" id="mr-h">More on ${name}</h2>
     <div class="more">${items.map(([t1, b, hint]) => html`<details><summary>${t1}<span>${hint ? html`<small>${hint}</small>` : ''}${icon('chev')}</span></summary><div class="inner">${b}</div></details>`)}</div></section>`;
@@ -331,10 +336,10 @@ export async function render(main, route) {
   wire(main, sym);
   const enc = encodeURIComponent(sym);
   const step = (p, ok, bad) => { p.then((d) => { if (D.sym === sym) ok(d); }, (e) => { if (D.sym === sym) bad(e); }).finally(() => { if (D.sym === sym) paint(main, sym); }); };
-  step(api.get(`/api/quote/${enc}`, { ttl: 20000, timeout: 15000 }), (d) => { if (d && d.available !== false) D.quote = Object.assign({}, d.quote || d, D.quote || {}); else D.quoteError = new api.ApiError('notfound', 404, `No quote for ${sym}`); }, (e) => { D.quoteError = e; });
+  step(api.get(`/api/quote/${enc}`, { ttl: 20000, timeout: 15000 }), (d) => { if (d && d.available !== false) D.quote = fresher(D.quote, d.quote || d); else D.quoteError = new api.ApiError('notfound', 404, `No quote for ${sym}`); }, (e) => { D.quoteError = e; });
   step(api.get(`/api/session/${enc}`, { ttl: 60000 }), (d) => { D.session = d; learn(sym, { session: d, quote: D.quote }); }, () => {});
   step(api.get(`/api/ticker/${enc}?max_expiries=4&macro=true`, { ttl: 120000, timeout: 60000 }), (d) => {
-    D.ticker = d; if (d.quote) D.quote = Object.assign({}, D.quote || {}, d.quote);
+    D.ticker = d; if (d.quote) D.quote = fresher(D.quote, d.quote);
     if (d.data_caveat) D.freshText = clean(d.data_caveat);
   }, (e) => { D.tickerError = e; });
   step(api.get(`/api/framework/${enc}?mode=combined`, { ttl: 300000, timeout: 60000 }), (d) => { D.framework = d.available === false ? null : d; if (d.available === false) D.fwError = new api.ApiError('notfound', 404, d.reason || 'No framework read'); }, (e) => { D.fwError = e; D.framework = {}; });
@@ -367,4 +372,4 @@ function wire(main, sym) {
   });
 }
 
-export const retry = { dossier: (main, route) => { api.invalidate(`/api/quote/${route.symbol}`); draw(main, route); } };
+export const retry = { dossier: (main, route) => { api.invalidate(`/api/quote/${route.symbol}`); api.invalidate(`/api/ticker/${route.symbol}`); render(main, route); } };

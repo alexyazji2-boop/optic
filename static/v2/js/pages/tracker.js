@@ -101,7 +101,7 @@ function ledger(d) {
     : cfg.universe === 'nasdaq' ? html`Universe: <b>every NASDAQ-listed common stock</b>, about 3,000 names. A scan screens all of them on price and volume, then puts the top ${cfg.shortlist_size} through the full analysis, so it takes a few minutes.`
       : `Watchlist: ${(cfg.watchlist || []).join(', ')}. A scan puts all of them through the full analysis.`;
   return html`<section class="section" aria-labelledby="op-h"><h2 class="t-h2" id="op-h">Optic Portfolio${name ? html` <span class="pill">${name}</span>` : ''}</h2>
-    <p class="section-sub">Three simulated ledgers, shared by everyone who opens this page, running the terminal's own signals under three different rule sets.${name ? ` You are looking at the ${name.toLowerCase()} book; the cards above switch between them.` : ''} Each trades both instruments the Options tab produces: the shares, and the exact contract it recommended.</p>
+    <p class="section-sub">Three simulated ledgers, one per rule set, trading Optic's own signals. Every reader sees the same books.${name ? ` You are looking at the ${name.toLowerCase()} book; the cards above switch between them.` : ''} Each trades both instruments the Options tab produces: the shares, and the exact contract it recommended.</p>
     <div class="cluster tk-bar"><button type="button" class="btn btn-primary" data-v2-tk="scan" ${run ? 'disabled' : ''}>${run ? 'Scan running…' : 'Run a scan now'}</button><button type="button" class="btn" data-v2-tk="mark" ${run ? 'disabled' : ''}>Refresh marks</button></div>
     <p class="asof">${hint}</p>
     ${notice ? html`<div class="state" role="status"><p>${notice}</p></div>` : ''}
@@ -241,7 +241,7 @@ function paint() {
       <p class="section-sub">The terminal's own paper-traded record. Hypothetical performance: these positions were never placed with real money.</p></header>
     ${D.err ? failed("Optic's position ledger", D.err, { retry: 'load' }) : !d ? skeleton('rows', 6, "Loading Optic's own position ledger") : html`
       ${books(d)}${ledger(d)}${openPositions(d.open || [])}${months(d)}${funnel(d)}
-      ${empty ? html`<section class="section"><h2 class="t-h2">No trades yet</h2><p>The ledger is empty. It only opens a position when a setup clears a composite score of ${num((d.config || {}).min_composite, 0)}, and most scans find nothing. Which is the intended behaviour, not a fault. Run a scan above, or wait for the background one.</p></section>` : ''}
+      ${empty ? html`<section class="section"><h2 class="t-h2">No trades yet</h2><p>The ledger is empty. It only opens a position when a setup clears a composite score of ${num((d.config || {}).min_composite, 0)}, and most scans find nothing. Run a scan above, or wait for the scheduled one.</p></section>` : ''}
       ${record(d.summary || {})}${risk(d)}${rest(d)}`}`);
   if (Math.abs(window.scrollY - y) > 2) window.scrollTo(0, y);
   if (fid) { const el = fid.startsWith('data-') ? mainEl.querySelector(`[${fid}]`) : mainEl.querySelector(`#${fid}`); if (el) { if (!el.hasAttribute('tabindex') && /^H\d$/.test(el.tagName)) el.setAttribute('tabindex', '-1'); el.focus({ preventScroll: true }); } }

@@ -7,6 +7,7 @@ import { html, render as draw } from '../core/dom.js';
 import * as api from '../core/api.js';
 import { num, signed, dir, clean, capFirst, isNum } from '../core/format.js';
 import { watchButton } from '../ui/company.js';
+import { icon } from '../ui/icons.js';
 import { button as miloButton } from '../ui/milo.js';
 import { GROUPS, pageOf } from '../nav.js';
 import { tabSelect, tabLinks } from './tabs.js';
@@ -29,6 +30,31 @@ export function stateLine(D) {
   else if (!phase) base = `Delayed about 15 minutes${last}.`;
   else base = `${sessionWord(s.phase_label || sess.label || phase)}. Price is the close of ${etDay((sess.last_close || {}).date) || 'the last session'}.`;
   return { base, ext };
+}
+/**
+ * The same, short, for the one-line header: what the price is and when (editorial pass, 2026-10-19). During the
+ * session it is a delayed trade with its time, never "the close"; outside it, the close of the named day; and an
+ * extended-hours print is said apart, with the moment it was struck.
+ */
+export function priceWhen(D) {
+  const q = D.quote || {}, sess = (D.session || {}).session || {}, s = (D.session || {}).prices || {};
+  const phase = s.phase || sess.phase || QUOTE_PHASE[String(q.market_state || '').toUpperCase()] || null;
+  const last = q.market_time ? `, last trade ${etStamp(q.market_time)}` : '';
+  if (phase === 'regular' || sess.is_regular) return `Delayed about 15 minutes${last}`;
+  if (!phase) return `Delayed about 15 minutes${last}`;
+  const day = etDay((sess.last_close || {}).date);
+  return day ? `Close of ${day}` : 'Last close';
+}
+
+/**
+ * Two quotes for one ticker (the 20-second /api/quote and the ticker snapshot's, cached two minutes) merged so the
+ * later trade wins and the other only fills gaps. Whichever answered last used to win, so the header price could
+ * step back to an older snapshot (editorial pass, 2026-10-19).
+ */
+export function fresher(a, b) {
+  if (!a) return b || null; if (!b) return a;
+  const ta = Date.parse(a.market_time || '') || 0, tb = Date.parse(b.market_time || '') || 0;
+  return tb >= ta ? Object.assign({}, a, b) : Object.assign({}, b, a);
 }
 
 /** Quote and session for the header. Resolves to {quote, session, quoteError}. */
@@ -53,7 +79,7 @@ function actions(sym, label, sm) {
   return html`<div class="acts" role="group" aria-label="${sym} actions">
     <span class="acts-2"><a class="btn btn-quiet ${s}" href="#/alerts?symbol=${sym}">Alert</a><a class="btn btn-quiet ${s}" href="#/compare?t=${sym}">Compare</a></span>
     ${watchButton(sym, { compact: sm })}${miloButton(`Ask about ${sym}`, { ask: `What is the case for ${sym} right now?`, context: `${sym} Dossier, ${label}`, symbol: sym, cls: `${s} acts-milo` })}
-    <details class="menu acts-more"><summary class="btn btn-quiet ${s}" aria-label="More actions for ${sym}">⋯</summary><div class="menu-body menu-end"><a href="#/alerts?symbol=${sym}">Alert</a><a href="#/compare?t=${sym}">Compare</a></div></details>
+    <details class="menu acts-more"><summary class="btn btn-quiet ${s}" aria-label="More actions for ${sym}">${icon('more')}</summary><div class="menu-body menu-end"><a href="#/alerts?symbol=${sym}">Alert</a><a href="#/compare?t=${sym}">Compare</a></div></details>
   </div>`;
 }
 
@@ -70,7 +96,7 @@ export function header(sym, D, view = 'overview', { compact = false, bar = true 
       <h1 class="name"><b class="tick">${sym}</b>${name && name !== sym ? html`<span>${name}</span>` : ''}<span class="sr">, ${label}</span></h1>
       <p class="dh-price">${isNum(q.price) ? html`<span class="dh-px">${num(q.price)}</span>` : D.quoteError ? '' : html`<span class="sk dh-sk dh-sk-sm" role="status" aria-label="Loading the price"></span>`}
         <span class="dh-chg ${dir(q.change_pct)}">${isNum(q.change_pct) ? html`${signed(q.change, 2, '')} (${signed(q.change_pct)})` : ''}</span>
-        ${ext ? html`<span class="dh-ext">${capFirst(ext.kind)} ${num(ext.price)} <span class="${dir(ext.change_pct)}">${signed(ext.change_pct)}</span>${ext.as_of ? `, ${etStamp(ext.as_of)}` : ''}</span>` : s.phase_label ? html`<span class="dh-ext">Close of ${etDay(((D.session || {}).session || {}).last_close && D.session.session.last_close.date) || 'the last session'}</span>` : ''}</p>
+        ${isNum(q.price) ? html`<span class="dh-ext">${priceWhen(D)}</span>` : ''}${ext ? html`<span class="dh-ext">${capFirst(ext.kind)} ${num(ext.price)} <span class="${dir(ext.change_pct)}">${signed(ext.change_pct)}</span>${ext.as_of ? ` at ${etStamp(ext.as_of)}` : ''}</span>` : ''}</p>
       ${actions(sym, label, true)}
     </header>`;
   }

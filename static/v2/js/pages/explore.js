@@ -4,7 +4,7 @@
 // /api/scanners, /api/scanners/groups, /api/sectors/board and /api/home.
 import { html, render as draw } from '../core/dom.js';
 import * as api from '../core/api.js';
-import { num, signed, clean, isNum } from '../core/format.js';
+import { num, signed, clean, isNum, dir } from '../core/format.js';
 import { skeleton, empty } from '../ui/states.js';
 import { icon } from '../ui/icons.js';
 import { button as miloButton, provideContext } from '../ui/milo.js';
@@ -35,7 +35,7 @@ function readings() {
   const sec = (sb.rows || []).filter((r) => r.available && isNum(r.rel_week_pct));
   if (sec.length) { const a = sec.filter((r) => r.rel_week_pct > 0).length, sh = a / sec.length; rows.push(['Sector breadth', `${a} of ${sec.length} ahead of ${sb.benchmark || 'SPY'}`, sh >= 0.6 ? 'Broad: most sectors beat the index this week.' : sh <= 0.4 ? 'Carried by the heaviest sectors.' : 'Split.']); }
   if (!rows.length) return '';
-  return html`<section class="section" aria-labelledby="ex-r"><h2 class="t-h2" id="ex-r">What is worth a look</h2><p class="section-sub">How much is screenable today, the biggest move and how many sectors lead the index.</p>
+  return html`<section class="section" aria-labelledby="ex-r"><h2 class="t-h2" id="ex-r">What is worth a look today</h2>
     <dl class="reads-dl">${rows.map(([k, v, n]) => html`<div><dt>${k}</dt><dd><b>${v}</b> <span class="t-muted">${n}</span></dd></div>`)}</dl></section>`;
 }
 
@@ -43,7 +43,7 @@ function screens() {
   const sc = D.scans, gr = D.groups;
   if (sc === undefined) return html`<section class="section">${skeleton('rows', 3, 'Loading the screens')}</section>`;
   const groups = (gr && gr.groups) || (sc && sc.scans ? [{ id: 'all', name: 'Screens', scans: sc.scans }] : []);
-  return html`<section class="section" aria-labelledby="ex-s"><div class="section-head"><div><h2 class="t-h2" id="ex-s">Screens</h2><p class="section-sub">${sc && sc.ready ? `Each screen asks one question of those ${sc.considered} names and opens its ranked results on Scan.` : sc && (sc.scans || []).length ? 'The universe ranking is still building in the background. The screens open, and fill once it lands.' : 'The scanner catalogue is unavailable right now.'}</p></div></div>
+  return html`<section class="section" aria-labelledby="ex-s"><div class="section-head"><div><h2 class="t-h2" id="ex-s">Screens</h2><p class="section-sub">${sc && sc.ready ? `${sc.considered} names pass the price and volume filters. Each screen asks one question of them and opens its results on Scan.` : sc && (sc.scans || []).length ? 'The ranking is still loading. The screens open now and fill when it finishes.' : 'The scanner catalogue is unavailable right now.'}</p></div></div>
     <div class="scan-groups">${groups.map((g) => html`<div class="sg"><h3>${g.name}</h3>${g.blurb ? html`<p class="t-muted">${clean(g.blurb)}</p>` : ''}<ul class="plain">${(g.scans || []).map((s) => html`<li><a href="#/scan?id=${encodeURIComponent(s.id)}"><b>${s.name}</b></a><br><small class="t-muted">${clean(s.looks_for || '')}</small></li>`)}</ul></div>`)}</div>
     ${gr && gr.note ? html`<p class="asof">${clean(gr.note)}</p>` : ''}</section>`;
 }
@@ -53,17 +53,17 @@ function sectors() {
   if (b === undefined) return '';
   const rows = ((b || {}).rows || []).filter((r) => r.available);
   if (!rows.length) return '';
-  return html`<section class="section" aria-labelledby="ex-c"><h2 class="t-h2" id="ex-c">Sectors</h2><p class="section-sub">Every sector against ${b.benchmark || 'SPY'}, by its own week. Rotation is where money moved, not where it is.</p>
-    <div class="tscroll"><table class="t"><thead><tr><th>Sector</th><th>Week</th><th>Month</th><th>Read</th></tr></thead><tbody>${rows.map((r) => html`<tr><td><a href="#/${r.symbol}">${r.symbol}</a> ${r.name}</td><td class="${r.rel_week_pct >= 0 ? 'up' : 'down'}">${signed(r.rel_week_pct)}</td><td class="${r.rel_month_pct >= 0 ? 'up' : 'down'}">${signed(r.rel_month_pct)}</td><td title="${(r.rotation || {}).note || ''}">${(r.rotation || {}).label || ''}</td></tr>`)}</tbody></table></div>
+  return html`<section class="section" aria-labelledby="ex-c"><h2 class="t-h2" id="ex-c">Sectors</h2><p class="section-sub">Each sector's return against ${b.benchmark || 'SPY'} over the past week. Rotation shows where money moved, not where it sits.</p>
+    <div class="tscroll"><table class="t"><thead><tr><th>Sector</th><th>Week</th><th>Month</th><th>Read</th></tr></thead><tbody>${rows.map((r) => html`<tr><td><a href="#/${r.symbol}">${r.symbol}</a> ${r.name}</td><td class="${dir(r.rel_week_pct)}">${signed(r.rel_week_pct)}</td><td class="${dir(r.rel_month_pct)}">${signed(r.rel_month_pct)}</td><td title="${(r.rotation || {}).note || ''}">${(r.rotation || {}).label || ''}</td></tr>`)}</tbody></table></div>
     <p><a class="textlink" href="#/macro">The sector board and rotation are on Macro ${icon('arrow')}</a></p></section>`;
 }
 
 function crossAsset() {
   const mv = rankedMoves(D.home);
   if (!mv.length) return '';
-  return html`<section class="section" aria-labelledby="ex-x"><div class="section-head"><div><h2 class="t-h2" id="ex-x">Cross-asset</h2><p class="section-sub">Every instrument's move against its own typical day, biggest first. A 1.0× move is an ordinary day for that instrument.</p></div>
+  return html`<section class="section" aria-labelledby="ex-x"><div class="section-head"><div><h2 class="t-h2" id="ex-x">Cross-asset</h2><p class="section-sub">Today's move against each instrument's typical day, largest first; 1.0× is an ordinary day.</p></div>
       ${miloButton('Ask Milo about the biggest move', { ask: `Why is ${mv[0].label} moving ${signed(mv[0].chg)} today, and does it matter for stocks?`, context: 'Discover, Explore' })}</div>
-    <ul class="xa">${mv.map((r) => html`<li><a href="#/instrument/${encodeURIComponent(r.symbol)}"><span>${r.label}</span><b class="${r.chg >= 0 ? 'up' : 'down'}">${signed(r.chg)}</b><small class="t-muted">${isNum(r.rel) ? `${num(r.rel, 1)}×` : ''}</small></a></li>`)}</ul></section>`;
+    <ul class="xa">${mv.map((r) => html`<li><a href="#/instrument/${encodeURIComponent(r.symbol)}"><span>${r.label}</span><b class="${dir(r.chg)}">${signed(r.chg)}</b><small class="t-muted">${isNum(r.rel) ? `${num(r.rel, 1)}×` : ''}</small></a></li>`)}</ul></section>`;
 }
 
 function paint() {

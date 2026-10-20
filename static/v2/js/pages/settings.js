@@ -48,7 +48,7 @@ function account() {
       <form class="set-row" data-v2-set-profile><div class="set-row-main"><p class="set-row-title">Name</p><p class="set-row-note">Used to address you, nothing else.</p></div>
         <div class="set-row-act set-name"><label class="field field-sm"><span class="sr">First name</span><input name="first_name" value="${u.first_name || ''}" placeholder="First" autocomplete="given-name"></label>
           <label class="field field-sm"><span class="sr">Last name</span><input name="last_name" value="${u.last_name || ''}" placeholder="Last" autocomplete="family-name"></label><button type="submit" class="btn btn-sm">Save</button></div></form>
-      ${row('Email address', `${u.email}${u.email_verified ? '' : (m.mail || {}).available === false ? '. Email is not configured on this deployment, so the confirmation link goes to the server log rather than an inbox.' : '. Check your inbox for the confirmation link.'}`,
+      ${row('Email address', `${u.email}${u.email_verified ? '' : (m.mail || {}).available === false ? '. Email is not switched on yet, so the confirmation link goes to the server log rather than an inbox.' : '. Check your inbox for the confirmation link.'}`,
         u.email_verified ? '' : html`<button type="button" class="btn btn-sm" data-v2-set-resend>Resend link</button>`, tag(u.email_verified, u.email_verified ? 'Confirmed' : 'Not confirmed'))}
     </section>
     <section class="section" aria-labelledby="ss-h"><h2 class="t-h2" id="ss-h">Security</h2>

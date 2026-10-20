@@ -129,7 +129,7 @@ function paint(main) {
   const keep = f && main.contains(f) ? [...Object.entries(f.dataset || {})][0] : null;
   draw($('#wl-body', main), html`
     ${store.state.listsError ? failed('Your watchlists', store.state.listsError, { retry: 'lists' }) : ''}
-    ${!lists.length ? empty('You are not following anything yet', 'Add a ticker to start a list. Home and alerts fill in around what you follow.') : listsBar()}
+    ${!lists.length ? empty('You are not following anything yet', 'Add a ticker above to start your watchlist.') : listsBar()}
     <form class="add-form" data-v2-add>
       <label class="field">${icon('plus')}<span class="sr">Add a ticker${a ? ` to ${a.name}` : ''}</span><input name="sym" placeholder="Add a ticker, such as MSFT" autocomplete="off" spellcheck="false" maxlength="12" required></label>
       <button type="submit" class="btn btn-primary">Add</button></form>

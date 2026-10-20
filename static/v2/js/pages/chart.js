@@ -129,7 +129,9 @@ async function loadBars() {
   paintChart();
 }
 async function tickerData() {
-  if (!D.tPromise) D.tPromise = api.get(`/api/ticker/${encodeURIComponent(D.sym)}?max_expiries=4&macro=true`, { ttl: 120000, timeout: 60000 }).then((t) => { D.t = t; return t; });
+  // the state it was asked for: a late answer for the previous ticker must not land on the next one's page
+  const box = D;
+  if (!D.tPromise) D.tPromise = api.get(`/api/ticker/${encodeURIComponent(D.sym)}?max_expiries=4&macro=true`, { ttl: 120000, timeout: 60000 }).then((t) => { box.t = t; return t; });
   return D.tPromise;
 }
 
@@ -341,7 +343,7 @@ function paint() {
     <section class="section chart-page" aria-label="${D.sym} chart">
       <div id="ch-tools">${toolbar()}</div>
       <div class="ch-stage"><div id="ch-draw">${drawbar()}</div><div id="ch-body"></div>
-        <div class="ch-wrail" id="ch-wrail">${W.rail(shown(), isPhone())}${miloButton('Ask Milo', { context: `${D.sym} Dossier, Chart`, symbol: D.sym, cls: 'chw-milo' })}</div>
+        <div class="ch-wrail" id="ch-wrail">${W.rail(shown(), isPhone())}${miloButton(html`<span class="sr">Ask Milo about the ${D.sym} chart</span>`, { context: `${D.sym} Dossier, Chart`, symbol: D.sym, cls: 'chw-milo' })}</div>
         <div class="ch-side" id="ch-side" ${V.read || shown().length ? '' : 'hidden'}><aside class="ch-read" id="ch-read" aria-labelledby="cr-h" ${V.read ? '' : 'hidden'}></aside></div></div>
       <div class="ch-foot"><p class="asof" id="ch-note"></p><p class="asof ch-snote" id="ch-snote" aria-live="polite"></p>
         <p class="asof">Wheel or pinch to zoom, drag the chart or the strip under it to move along, arrows to read each bar, plus and minus to zoom. Click a drawing to select it; drag it to move it, or drag a handle to move one point.</p></div>

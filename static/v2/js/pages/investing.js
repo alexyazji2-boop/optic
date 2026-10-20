@@ -11,7 +11,7 @@ import { $, html, render as draw, raw } from '../core/dom.js';
 import { CLASSIC } from '../core/classic.js';
 import * as api from '../core/api.js';
 import * as store from '../core/store.js';
-import { num, signed, money, compact, clean, capFirst, shortDate, fullDate, isNum, score100 } from '../core/format.js';
+import { num, signed, money, compact, clean, capFirst, shortDate, fullDate, isNum, score100, ordinal, dir } from '../core/format.js';
 import { lineChart, meter, mountCharts } from '../ui/chart.js';
 import { createPriceChart } from '../ui/pricechart.js';
 import { nyDate, weekMonday } from '../ui/studies.js';
@@ -62,10 +62,10 @@ function trend(sym) {
   const conv = (((D.fw || {}).long_term) || {}).conviction || {};
   const clash = s !== null && s >= 60 && ((st.available && st.stars <= 2) || (vh.available && vh.percentile >= 80));
   return html`<section class="section" aria-labelledby="lt-h">
-    <div class="section-head"><div><h2 class="t-h2" id="lt-h">Long-term trend score, from price history</h2><p class="section-sub">How the ${kindOf(sym, D) === 'fund' ? 'fund' : 'stock'} has behaved over years. It does not say whether the price is low.</p></div>${ask(sym, 'Ask Milo about this score', `What is ${sym}'s long-term trend score built from, and what does it leave out?`)}</div>
+    <div class="section-head"><div><h2 class="t-h2" id="lt-h">Long-term trend score, from price history</h2><p class="section-sub">How the ${kindOf(sym, D) === 'fund' ? 'fund' : 'stock'} has traded over the years: trend, strength against the S&amp;P 500 and risk. It does not measure valuation.</p></div>${ask(sym, 'Ask Milo about this score', `What is ${sym}'s long-term trend score built from, and what does it leave out?`)}</div>
     <div class="figure"><p class="t-display-m">${s === null ? 'n/a' : num(s, 0)} <small class="t-muted">of 100</small></p><p class="delta"><span>${capFirst(h.conviction || '')} conviction</span><span class="t-muted">${capFirst((h.long_trend || {}).phase || '')}</span></p></div>
     <p><b>The model's rule:</b> ${clean(h.plan || '')}</p>
-    ${clash ? html`<p class="reconcile"><b>Read it beside the price.</b> The score is built from trend and the five-year record${st.available ? `, while the price earns ${st.stars} of 5 stars against its own usual valuation` : ''}${vh.available ? ` and the P/E sits at the ${num(vh.percentile, 0)}th percentile of its own history` : ''}.${conv.label ? ` The business-and-price case on the Overview reads ${conv.label}.` : ''}</p>` : ''}
+    ${clash ? html`<p class="reconcile"><b>Read it beside the price.</b> The score is built from trend and the five-year record${st.available ? `, while the price earns ${st.stars} of 5 stars against its own usual valuation` : ''}${vh.available ? ` and the P/E sits at the ${ordinal(vh.percentile)} percentile of its own history` : ''}.${conv.label ? ` The business-and-price case on the Overview reads ${conv.label}.` : ''}</p>` : ''}
     ${(h.data_quality || {}).warnings && h.data_quality.warnings.length ? h.data_quality.warnings.map((w) => html`<p class="stale">${clean(w)}</p>`) : ''}
     <div class="tscroll"><table class="t"><thead><tr><th>Factor</th><th>Type</th><th>Points</th><th>Why</th></tr></thead>
       <tbody>${(h.conviction_factors || []).map((f) => html`<tr><td>${f.label}</td><td>${f.kind}</td><td>${signed(f.points, 0, '')}</td><td style="text-align:left">${clean(f.detail)}</td></tr>`)}
@@ -77,7 +77,7 @@ function returnsRisk() {
   const h = (D.lt || {}).holding; if (!h) return '';
   const hz = h.horizons || {}, r = h.risk || {};
   return html`<section class="section" aria-labelledby="rr-h"><h2 class="t-h2" id="rr-h">Return and risk</h2>
-    ${kv([['1 year', html`<span class="${hz.return_1y_pct >= 0 ? 'up' : 'down'}">${signed(hz.return_1y_pct)}</span>`], ['3 years, a year', signed(hz.cagr_3y_pct)], ['5 years, a year', signed(hz.cagr_5y_pct)], ['Against the S&P 500, 5 years', html`${signed(h.excess_cagr_5y_pct)} a year <span class="t-muted">(index ${signed(h.benchmark_cagr_5y_pct)})</span>`]], 4)}
+    ${kv([['1 year', html`<span class="${dir(hz.return_1y_pct)}">${signed(hz.return_1y_pct, 1)}</span>`], ['3 years, a year', signed(hz.cagr_3y_pct, 1)], ['5 years, a year', signed(hz.cagr_5y_pct, 1)], ['Against the S&P 500, 5 years', html`${signed(h.excess_cagr_5y_pct, 1)} a year <span class="t-muted">(index ${signed(h.benchmark_cagr_5y_pct, 1)})</span>`]], 4)}
     ${kv([['Volatility, a year', pct(r.annualised_vol_pct)], ['Downside volatility', pct(r.downside_vol_pct)], ['Return per unit of risk', num(r.sharpe_proxy, 2)], ['Downside-adjusted', num(r.sortino_proxy, 2)], ['Beta to the S&P 500', num(r.beta_vs_spy, 2)], ['Correlation', num(r.correlation_vs_spy, 2)], ['Best day', signed(r.best_day_pct)], ['Worst day', signed(r.worst_day_pct)], ['Up days', pct(r.pct_positive_days)]], 3)}
   </section>`;
 }
@@ -93,13 +93,13 @@ function weekly(sym) {
       <div class="seg seg-ic" role="group" aria-label="Style">${[['candles', 'Candles', 'candles'], ['line', 'Line', 'lineChart'], ['area', 'Area', 'area']].map(([k, l, ic]) => html`<button type="button" data-v2-lt-style="${k}" aria-pressed="${style === k}" aria-label="${l}" title="${l}">${icon(ic)}</button>`)}</div>
       <details class="menu lt-lvl"><summary class="btn btn-sm">Technical levels${n ? html` <span class="ch-count">${n}</span>` : ''}</summary><div class="menu-body">
         ${lv.map(([k, l]) => html`<label class="check"><input type="checkbox" data-v2-lt-lvl="${k}" ${lvlOn(k) ? 'checked' : ''}> <span>${l}</span></label>`)}
-        <p class="menu-help">Retracements of the three-year range, and support and resistance found on these weekly bars, as bands. The same switches as the current app's charts.</p>
+        <p class="menu-help">Retracements of the three-year range, and support and resistance found on these weekly bars, as bands.</p>
       </div></details>
     </div>
     <div id="lt-chart" class="lt-chart">${skeleton('chart')}</div>
     <p class="legend-line" id="lt-legend">${ltLegend()}</p>
     <p class="asof" id="lt-note"></p>
-    <p class="asof">Drag to move along the years, wheel or pinch to zoom, arrows to read each ${unit}.</p>
+    <p class="asof">Drag to pan, scroll or pinch to zoom, arrow keys to step through each ${unit}.</p>
     ${kv([['Against the 40-week average', signed(lt.vs_40w_sma)], ['Against the 200-week average', signed(lt.vs_200w_sma)], ['Weekly RSI', num(lt.weekly_rsi, 1)], ['40-week slope over 3 months', signed(lt.slope_40w_pct_3m)]], 4)}
   </section>`;
 }
@@ -185,7 +185,7 @@ function drawdown() {
   const h = (D.lt || {}).holding; if (!h || !h.drawdown) return '';
   const dd = h.drawdown;
   return html`<section class="section" aria-labelledby="dd-h"><h2 class="t-h2" id="dd-h">Drawdown, daily</h2>
-    ${kv([['From the high now', signed(dd.current_drawdown_pct)], ['Largest drawdown', html`${signed(dd.max_drawdown_pct)} <span class="t-muted">${fullDate(dd.max_drawdown_date)}</span>`], ['All-time high', html`${num(dd.all_time_high)} <span class="t-muted">${fullDate(dd.ath_date)}</span>`]], 3)}
+    ${kv([['From the high now', signed(dd.current_drawdown_pct, 1)], ['Largest drawdown', html`${signed(dd.max_drawdown_pct, 1)} <span class="t-muted">${fullDate(dd.max_drawdown_date)}</span>`], ['All-time high', html`${num(dd.all_time_high)} <span class="t-muted">${fullDate(dd.ath_date)}</span>`]], 3)}
     <div class="chart-slot" data-chart="dd"></div></section>`;
 }
 function ddMaker() {
@@ -198,7 +198,7 @@ function multiple(sym) {
   const pe = D.pe, h = (D.lt || {}).holding || {}, vh = h.valuation_history || {}, rm = h.revenue_multiple || {};
   if (pe === undefined) return html`<section class="section">${skeleton('lines', 3, 'Loading the multiple history')}</section>`;
   return html`<section class="section" aria-labelledby="pe-h"><div class="section-head"><div><h2 class="t-h2" id="pe-h">The multiple against its own history</h2><p class="section-sub">${pe && pe.available ? `${num(pe.weeks / 52, 0)} years of weekly trailing P/E from the company's filings.` : 'No P/E history for this company.'}</p></div>${ask(sym, 'Ask Milo about the multiple', `Is ${sym}'s P/E high against its own history, and why might that be?`)}</div>
-    ${pe && pe.available ? html`${kv([['Trailing P/E now', html`${num(pe.pe_current, 1)} <span class="t-muted">${num(pe.pe_percentile, 0)}th percentile</span>`], ['Its own median, 5 years', html`${num(pe.pe_median, 1)} <span class="t-muted">quartiles ${num((pe.pe_bands || {})[25], 1)} to ${num((pe.pe_bands || {})[75], 1)}</span>`], ['Cross-check with the quote feed', (pe.anchor || {}).available ? `${num(pe.anchor.provider, 1)} (${pe.anchor.agrees ? 'agrees' : 'differs'})` : 'n/a']], 3)}
+    ${pe && pe.available ? html`${kv([['Trailing P/E now', html`${num(pe.pe_current, 1)} <span class="t-muted">${ordinal(pe.pe_percentile)} percentile</span>`], ['Its own median, 5 years', html`${num(pe.pe_median, 1)} <span class="t-muted">quartiles ${num((pe.pe_bands || {})[25], 1)} to ${num((pe.pe_bands || {})[75], 1)}</span>`], ['Cross-check with the quote feed', (pe.anchor || {}).available ? `${num(pe.anchor.provider, 1)} (${pe.anchor.agrees ? 'agrees' : 'differs'})` : 'n/a']], 3)}
       <div class="chart-slot" data-chart="pe"></div><p class="legend-line"><span><i></i>Trailing P/E</span><span><i class="o1"></i>Median</span><span><i class="o3"></i>25th and 75th percentile</span></p>
       ${(pe.revenue_growth || []).length ? html`<details class="more-inline"><summary>Revenue growth, last 8 quarters</summary><div class="tscroll"><table class="t"><thead><tr><th>Quarter</th><th>Revenue</th><th>Growth, year on year</th></tr></thead><tbody>${pe.revenue_growth.slice(-8).map((r) => html`<tr><td>${r.label}</td><td>${compact(r.revenue)}</td><td>${signed(r.growth_pct)}</td></tr>`)}</tbody></table></div></details>` : ''}
       <p class="asof">${clean(pe.method || '')}</p>` : ''}
@@ -238,7 +238,7 @@ function fundValuation(sym) {
   const h = (D.lt || {}).holding; if (!h) return '';
   const v = h.valuation || {}, q = D.quote || {};
   const y = isNum(q.dividend_yield) ? q.dividend_yield * 100 : isNum(v.dividend_yield) ? v.dividend_yield * 100 : null;
-  return html`<section class="section" aria-labelledby="fvl-h"><div class="section-head"><div><h2 class="t-h2" id="fvl-h">What its holdings cost</h2><p class="section-sub">The fund's holdings, weighted. A fund has no business of its own, so there is no fair value range, cash-flow model or P/E history here.</p></div></div>
+  return html`<section class="section" aria-labelledby="fvl-h"><div class="section-head"><div><h2 class="t-h2" id="fvl-h">What its holdings cost</h2><p class="section-sub">The fund's holdings, weighted by size. A fund has no fair value range, cash-flow model or P/E history of its own.</p></div></div>
     ${kv([['P/E of the holdings, trailing', num(v.trailing_pe, 1)], ['Price to book', num(v.price_to_book, 2)], ['Distribution yield', isNum(y) ? `${num(y, 2)}%` : 'n/a']])}
     <p class="asof">${clean(v.caveat || '')} Source: Yahoo Finance's fund figures.</p></section>`;
 }
@@ -250,14 +250,14 @@ function dcf(sym) {
   const d = v.dcf || {}, sc = v.scenarios || {}, rv = v.reverse || {}, tor = (v.tornado || []).slice(0, 4);
   const price = (v.market || {}).price;
   return html`<section class="section" aria-labelledby="dcf-h"><div class="section-head"><div><h2 class="t-h2" id="dcf-h">Fair-value model, discounted cash flow</h2><p class="section-sub">${clean((((v.classification || {}).models || {}).dcf || {}).name || '')}. ${clean((((v.classification || {}).models || {}).dcf || {}).why || '')}</p></div>
-      <a class="btn" href="${CLASSIC}#/${sym}/investing">Edit the model in the current app</a></div>
-    ${kv([['Base case, a share', html`${money(d.per_share)} <span class="t-muted">${signed((d.upside || 0) * 100, 0)} against ${num(price)}</span>`], ['Discount rate', pct((d.discount_rate || 0) * 100, 2)], ['Share of value after the forecast', pct((d.terminal_share || 0) * 100, 0)]], 3)}
+      <a class="btn" href="${CLASSIC}#/${sym}/investing">Edit the model in the classic app</a></div>
+    ${kv([['Base case, a share', html`${money(d.per_share)} <span class="t-muted">${isNum(d.upside) ? signed(d.upside * 100, 0) : 'n/a'} against ${num(price)}</span>`], ['Discount rate', isNum(d.discount_rate) ? pct(d.discount_rate * 100, 2) : 'n/a'], ['Share of value after the forecast', isNum(d.terminal_share) ? pct(d.terminal_share * 100, 0) : 'n/a']], 3)}
     <div class="tscroll"><table class="t"><thead><tr><th>Case</th><th>A share</th><th>Against the price</th><th>What it assumes</th></tr></thead>
-      <tbody>${['bear', 'base', 'bull'].filter((k) => sc[k]).map((k) => html`<tr><td>${capFirst(k)}</td><td>${money(sc[k].per_share)}</td><td>${signed((sc[k].upside || 0) * 100, 0)}</td><td style="text-align:left">${clean((v.scenario_text || {})[k] || '')}</td></tr>`)}</tbody></table></div>
+      <tbody>${['bear', 'base', 'bull'].filter((k) => sc[k]).map((k) => html`<tr><td>${capFirst(k)}</td><td>${money(sc[k].per_share)}</td><td>${isNum(sc[k].upside) ? signed(sc[k].upside * 100, 0) : 'n/a'}</td><td class="l">${clean((v.scenario_text || {})[k] || '')}</td></tr>`)}</tbody></table></div>
     ${(rv.solves || []).length ? html`<h3>What today's price implies</h3><ul class="plain">${rv.solves.map((s) => html`<li>${clean(s.text)} <span class="t-muted">Holding ${clean(s.held)}.</span></li>`)}</ul>` : ''}
     ${tor.length ? html`<h3>What moves the value most</h3><div class="tscroll"><table class="t"><thead><tr><th>Input</th><th>Lower</th><th>Higher</th><th>Swing</th></tr></thead><tbody>${tor.map((t) => html`<tr><td>${t.label}</td><td>${money(t.value_low)}</td><td>${money(t.value_high)}</td><td>${money(t.swing)}</td></tr>`)}</tbody></table></div>` : ''}
     ${(v.warnings || []).map((w) => html`<p class="stale">${clean(w.text || w)}</p>`)}
-    <p class="asof">Model output from the company's filings, with stated defaults. The full workspace (assumptions, sensitivity tables, statements, other methods, peers, saved models) opens in the current app.</p>
+    <p class="asof">Model output from the company's filings, with stated defaults. The full workspace (assumptions, sensitivity tables, statements, other methods, peers, saved models) is in the classic app.</p>
   </section>`;
 }
 

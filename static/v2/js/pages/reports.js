@@ -64,7 +64,7 @@ function usage() {
   if (d.available === false) return html`<p>${clean(d.reason || 'The usage ledger could not be read.')}</p>`;
   const f = d.features || [], t = d.totals || {}, noKey = D.health && D.health.assistant && D.health.assistant.enabled === false;
   const lead = f.length ? `What the model has cost this deployment, by feature. Recorded since ${stamp(d.since)}.`
-    : noKey ? 'No calls recorded. The assistant has no key on this deployment, so nothing calls Claude and nothing is recorded until it has one.'
+    : noKey ? 'No calls recorded. The assistant has no key, so nothing calls Claude and nothing is recorded until it has one.'
       : 'No calls recorded yet. Every call to Claude is recorded here from this deploy on.';
   const row = (label, x) => html`<td>${usd(x.today)}</td><td>${usd(x.week)}</td><td>${usd(x.month)}</td><td class="n">${count((x.month || {}).calls)}</td><td class="n">${count((x.month || {}).unused)}</td><td class="n">${count((x.month || {}).failed)}</td>`;
   return html`<p class="section-sub">${lead}</p>

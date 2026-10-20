@@ -11,6 +11,7 @@
 import { $, $$, html, raw, render as draw } from '../core/dom.js';
 import * as api from '../core/api.js';
 import * as store from '../core/store.js';
+import * as prefs from '../core/prefs.js';
 import { num, signed, money, compact, dir, isNum, ago, clean, shortDate, longDate, capFirst } from '../core/format.js';
 import { etDay } from '../core/marketTime.js';
 import { marketSession } from '../core/status.js';
@@ -149,7 +150,7 @@ const CONTRACT_COLS = [
   // sec: hidden in a phone's row, shown when the row opens (or with All columns)
   { key: 'strike', label: 'Strike', num: true, v: (r) => r.strike, cell: (r) => num(r.strike) },
   { key: 'mid', label: 'Mid', num: true, sec: true, v: (r) => r.mid, cell: (r) => num(r.mid) },
-  { key: 'cost', label: 'Cost', num: true, v: (r) => r.mid * 100, cell: (r) => money(r.mid * 100, 0) },
+  { key: 'cost', label: 'Cost', num: true, v: (r) => (isNum(r.mid) ? r.mid * 100 : null), cell: (r) => (isNum(r.mid) ? money(r.mid * 100, 0) : 'n/a') },
   { key: 'spread', label: 'Spread', num: true, sec: true, v: (r) => r.spread_pct, cell: (r) => `${num(r.spread_pct, 1)}%` },
   { key: 'delta', label: 'Delta', num: true, v: (r) => r.delta, cell: (r) => num(r.delta, 2) },
   { key: 'iv', label: 'IV', num: true, sec: true, v: (r) => r.iv_pct, cell: (r) => `${num(r.iv_pct, 1)}%` },
@@ -173,8 +174,11 @@ const asof = (iso) => {
   if (!iso) return '';
   // a bare date (a daily close) has no time to show, and read as a moment it lands on the evening before
   if (/^\d{4}-\d{2}-\d{2}$/.test(String(iso))) return `Through ${shortDate(iso)}`;
-  const t = new Date(iso), today = new Date().toDateString() === t.toDateString();
-  return `Updated ${today ? '' : `${t.toLocaleDateString([], { month: 'short', day: 'numeric' })}, `}${t.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`;
+  // the data's refresh time, in the reader's chosen zone and named (it had no zone, so 3:45 could be anyone's)
+  const t = new Date(iso); if (!Number.isFinite(t.getTime())) return '';
+  const z = prefs.zone(), day = (d) => d.toLocaleDateString('en-US', { timeZone: z, year: 'numeric', month: 'short', day: 'numeric' });
+  const today = day(new Date()) === day(t);
+  return `Updated ${today ? '' : `${t.toLocaleDateString('en-US', { timeZone: z, month: 'short', day: 'numeric' })}, `}${t.toLocaleTimeString('en-US', { timeZone: z, hour: 'numeric', minute: '2-digit' })} ${prefs.zoneAbbrev(z, t)}`;
 };
 
 /* ---------------- the panels ---------------- */
@@ -218,7 +222,7 @@ export const PANELS = {
     body: (d) => {
       const md = (d || {}).morning_desk;
       if (!md || !md.available) return html`<p class="ws-note">${clean((md && md.reason) || 'No Desk edition is available right now.')}</p>`;
-      return html`<p class="ws-sub">${md.voice === 'mechanical' ? 'Written from the numbers by fixed rules today.' : 'The day\'s edition.'} ${md.date ? `For ${shortDate(md.date)}.` : ''}</p>
+      return html`<p class="ws-sub">${md.date ? `For ${shortDate(md.date)}. ` : ''}${md.voice === 'mechanical' ? 'Compiled by fixed rules from the day\'s figures; no model wrote it.' : 'Written by an AI model from the day\'s figures.'}</p>
         <ul class="desk-lead">${(md.lead || []).map((l) => html`<li>${clean(l)}</li>`)}</ul>
         ${md.overall ? html`<details class="more"><summary>The full read ${icon('chev')}</summary><div class="inner"><p>${clean(md.overall)}</p>${md.note ? html`<p class="t-muted">${clean(md.note)}</p>` : ''}</div></details>` : ''}`;
     },
@@ -276,7 +280,7 @@ export const PANELS = {
     load: () => get('/api/home'),
     body: (d) => {
       const em = ((d || {}).macro || {}).expected_move || {};
-      if (!isNum(em.implied_pct)) return html`<p class="ws-note">The expected move needs the VIX and the S&P 500 level; one of them did not come back.</p>`;
+      if (!isNum(em.implied_pct)) return html`<p class="ws-note">Expected move unavailable: the VIX or the S&P 500 quote did not load.</p>`;
       return html`<dl class="ws-kv"><div><dt>Priced for one day</dt><dd>±${num(em.implied_pct)}%<small>±${num(em.implied_points, 0)} points on ${num(em.spot, 0)}</small></dd></div>
         <div><dt>Recently delivered</dt><dd>${num(em.atr_pct)}%<small>14-day average true range</small></dd></div>
         <div><dt>Priced against delivered</dt><dd>${num(em.ratio, 2)}×<small>VIX ${num(em.vix)}</small></dd></div></dl>
@@ -305,7 +309,7 @@ export const PANELS = {
     how: 'Scheduled U.S. releases and market events for the coming days, with the time in New York and how much each usually matters. Released shows once a figure is out.',
     load: () => get('/api/brief?cached=true', { ttl: 120000 }),
     body: (d, P) => {
-      if (!d || d.missing) return html`<p class="ws-note">${(d && d.reason) || 'The day\'s Read, which carries the calendar, has not been built yet.'}</p>`;
+      if (!d || d.missing) return html`<p class="ws-note">${(d && d.reason) || 'The calendar comes with the day\'s Read, which is not ready yet.'}</p>`;
       let ev = ((d.calendar || {}).events || []);
       if (P.imp === 'high') ev = ev.filter((e) => e.impact === 'high' || e.impact === 'medium');
       if (!ev.length) return html`${impSeg(P)}<p class="ws-note">Nothing scheduled${P.imp === 'high' ? ' at medium or high impact' : ''} in the window.</p>`;
@@ -343,7 +347,7 @@ export const PANELS = {
     how: 'The liquid U.S. stocks with the largest one-month moves, from Optic\'s nightly universe scan. Volume against normal shows whether the move came with participation.',
     load: () => get('/api/scanners/movers', { ttl: 300000 }),
     body: (d) => {
-      if (!d || d.available === false) return html`<p class="ws-note">${(d && (d.reason || (d.building && `Building the universe ranking: ${d.building.done} of ${d.building.total}.`))) || 'The movers scan is not available right now.'}</p>`;
+      if (!d || d.available === false) return html`<p class="ws-note">${(d && (d.reason || (d.building && `Ranking loading: ${d.building.done} of ${d.building.total} symbols.`))) || 'The movers scan is not available right now.'}</p>`;
       return html`<table class="ws-t"><caption class="sr">Moved most this month</caption><thead><tr><th scope="col">Ticker</th><th scope="col" class="n">1 month</th><th scope="col" class="n ws-sec">Volume</th></tr></thead><tbody>
         ${(d.rows || []).slice(0, 12).map((r) => html`<tr><td>${tickBtn(r.symbol)}</td><td class="n ${dir(r.roc20)}">${pct(r.roc20, 1)}</td><td class="n ws-sec">${isNum(r.volume_expansion) ? `${num(r.volume_expansion, 2)}×` : ''}</td></tr>`)}</tbody></table>`;
     },
@@ -514,7 +518,7 @@ export const PANELS = {
       const nr = e.next_report || {}, pr = e.pricing || {}, su = e.surprise || {};
       return html`<dl class="ws-kv">
         <div><dt>Next report</dt><dd>${nr.date ? longDate(nr.date) : 'No date yet'}</dd><small>${nr.date ? `${nr.days_away} days${nr.confirmed ? ', confirmed' : ', not confirmed'}` : ''}</small></div>
-        <div><dt>Options price for it</dt><dd>${pr.available && isNum(pr.implied_move_pct) ? `±${num(pr.implied_move_pct, 1)}%` : 'n/a'}</dd><small>${pr.available && isNum(pr.ratio) ? `${num(pr.ratio, 2)}× its usual move` : ''}</small></div>
+        <div><dt>Options price for it</dt><dd>${pr.available && isNum(pr.implied_move_pct) ? `±${num(pr.implied_move_pct, 2)}%` : 'n/a'}</dd><small>${pr.available && isNum(pr.ratio) ? `${num(pr.ratio, 2)}× its usual move` : ''}</small></div>
         <div><dt>Average report-day move</dt><dd>${isNum(pr.event_day_avg_pct) ? `±${num(pr.event_day_avg_pct, 1)}%` : 'n/a'}</dd><small>${su.quarters ? `Last ${su.quarters} reports` : ''}</small></div>
         <div><dt>Beat rate</dt><dd>${isNum(su.beat_rate_pct) ? `${num(su.beat_rate_pct, 0)}%` : 'n/a'}</dd><small>${isNum(su.beat_count) ? `${su.beat_count} of ${su.quarters}` : ''}</small></div></dl>
         <p><a class="textlink" href="#/${enc(link)}/earnings">${link} earnings in full ${icon('arrow')}</a></p>`;
@@ -659,7 +663,7 @@ function onboard() {
   const following = store.allSymbols();
   return html`<section class="ws-onboard" id="ws-new" aria-labelledby="ob-h">
     <div class="ob-text"><h2 class="ws-title" id="ob-h">New to Optic? Start with a few names.</h2>
-      <p class="ws-sub">Search any company, fund or index at the top, or follow one of these and Home fills in around them. ${store.signedIn() ? 'They go into your watchlist.' : 'Kept in this browser; sign in to keep them on your account.'}</p></div>
+      <p class="ws-sub">Search a company, fund or index at the top, or follow one of these to start. ${store.signedIn() ? 'They go into your watchlist.' : 'Kept in this browser; sign in to keep them on your account.'}</p></div>
     <div class="ob-row"><div class="ob-picks" role="group" aria-label="Follow a starter name">${STARTERS.map((sym) => html`<button type="button" class="ws-tick ob-follow" data-v2-watch="${sym}" aria-pressed="${store.isFollowed(sym)}">${store.isFollowed(sym) ? 'Following' : 'Follow'} ${sym}</button>`)}</div>
     ${NEW.modes && NEW.modes.length ? html`<label class="ws-sel ob-mode">How Optic explains things <select data-ws-mode><option value="">Choose a level</option>${NEW.modes.map((m) => html`<option value="${m.id}" ${cur === m.id ? 'selected' : ''}>${m.label}</option>`)}</select></label>` : ''}</div>
     <button type="button" class="btn btn-sm" data-ws-onboard-done>${following.length ? 'Done' : 'Not now'}</button>
@@ -684,7 +688,7 @@ function paintAll() {
   const ses = ((DATA.indices || {}).session) || {};
   draw(root, html`<div class="ws-page">
     <header class="ws-pagehead"><div><h1 class="t-h2" tabindex="-1">${hello()}</h1><p class="ws-sub" id="ws-date">${etDate(ses.now_et)}${ses.label ? `. ${clean(ses.label)}.` : ''}</p></div>
-      <p class="ws-sub ws-about">Connected to Optic's existing data sources; each panel names its source and how fresh it is.</p></header>
+      </header>
     ${showOnboard() ? onboard() : ''}
     ${bar()}
     <div class="ws-grid ${EDIT ? 'is-editing' : 'is-locked'}">${shown.length ? shown.map((x, i) => panelShell(x, i, shown.length)) : html`<p class="ws-note">Every panel is hidden. Use Add panel, or Reset.</p>`}</div></div>`);

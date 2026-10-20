@@ -10,11 +10,11 @@ import { icon } from '../ui/icons.js';
 // app.js navigates on its change.
 export function tabSelect(label, pages, current, symbol) {
   const cur = pages.find((p) => p.view === current);
-  return html`<label class="tabsel"><span class="tabsel-k">${label}</span><select data-v2-tabsel aria-label="${label} view">${pages.map((p) => html`<option value="${hrefFor(p.view, symbol)}" ${p.view === current ? 'selected' : ''}>${p.label}${p.v2 ? '' : ' (current app)'}</option>`)}${cur ? '' : html`<option value="" selected disabled>Choose a view</option>`}</select></label>`;
+  return html`<label class="tabsel"><span class="tabsel-k">${label}</span><select data-v2-tabsel aria-label="${label} view">${pages.map((p) => html`<option value="${hrefFor(p.view, symbol)}" ${p.view === current ? 'selected' : ''}>${p.label}${p.v2 ? '' : ' (classic app)'}</option>`)}${cur ? '' : html`<option value="" selected disabled>Choose a view</option>`}</select></label>`;
 }
 
 export function tabLinks(pages, current, symbol) {
-  return pages.map((p) => html`<a href="${hrefFor(p.view, symbol)}" ${p.view === current ? html`aria-current="page"` : ''}>${p.label}${p.v2 ? '' : html`<span class="legacy-mark" aria-hidden="true">${icon('out')}</span><span class="sr">, opens in the current app</span>`}</a>`);
+  return pages.map((p) => html`<a href="${hrefFor(p.view, symbol)}" ${p.view === current ? html`aria-current="page"` : ''}>${p.label}${p.v2 ? '' : html`<span class="legacy-mark" aria-hidden="true">${icon('out')}</span><span class="sr">, opens in the classic app</span>`}</a>`);
 }
 
 export function groupTabs(groupId, current, symbol) {

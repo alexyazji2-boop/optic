@@ -23,18 +23,20 @@ export function chartReadModel(payload) {
   const ma = t.moving_averages || {};
   const s20 = ma.sma20 || {}, s50 = ma.sma50 || {}, s200 = ma.sma200 || {};
   if (!fin(s200.value) || !fin(s50.value)) return null;
-  const above = (m) => m.position === 'above';
+  // the side of an average: the payload's word, else the sign of the distance; never assumed below (editorial pass)
+  const pos = (m) => m.position || (fin(m.distance_pct) ? (m.distance_pct > 0 ? 'above' : m.distance_pct < 0 ? 'below' : null) : null);
+  const above = (m) => pos(m) === 'above';
   const st = t.structure || {};
 
   let trend = 'Mixed trend';
   if (above(s200) && s50.value > s200.value) trend = 'Uptrend';
-  else if (!above(s200) && s50.value < s200.value) trend = 'Downtrend';
+  else if (pos(s200) === 'below' && s50.value < s200.value) trend = 'Downtrend';
 
-  const side = (m, n) => (fin(m.distance_pct) ? `Price is ${num(Math.abs(m.distance_pct), 1)}% ${above(m) ? 'above' : 'below'} the ${n}-day average.` : null);
+  const side = (m, n) => (fin(m.distance_pct) && pos(m) ? `Price is ${num(Math.abs(m.distance_pct), 1)}% ${pos(m)} the ${n}-day average.` : null);
   const facts = [side(s200, 200), side(s50, 50), side(s20, 20)].filter(Boolean);
   if (st.stacked_bullish) facts.push('The 20, 50 and 200-day averages are stacked in rising order.');
   else if (st.stacked_bearish) facts.push('The 20, 50 and 200-day averages are stacked in falling order.');
-  else facts.push('The averages are not stacked in order, so the trend is not settled.');
+  else if ('stacked_bullish' in st || 'stacked_bearish' in st) facts.push('The averages are not stacked in order, so the trend is not settled.');
   if (fin(s50.slope_10d_pct)) facts.push(`The 50-day average is ${s50.slope_10d_pct >= 0 ? 'rising' : 'falling'}, ${num(Math.abs(s50.slope_10d_pct), 2)}% over ten sessions.`);
   if (st.cross_event) {
     facts.push(/golden/.test(st.cross_event) ? 'The 50-day crossed above the 200-day in the last five sessions.'
@@ -52,7 +54,7 @@ export function chartReadModel(payload) {
     facts,
     support: nearest('support', true),
     resistance: nearest('resistance', false),
-    rsi: fin(r.value) ? `${RSI_WORDS[r.state] || 'Neutral'}, ${num(r.value, 0)}` : null,
+    rsi: fin(r.value) ? `${RSI_WORDS[r.state] ? `${RSI_WORDS[r.state]}, ` : ''}${num(r.value, 0)}` : null,
     macd: MACD_EVENTS[m.event] || (m.state === 'bullish' ? 'Above its signal' : m.state === 'bearish' ? 'Below its signal' : null),
   };
 }

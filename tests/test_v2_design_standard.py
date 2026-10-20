@@ -115,9 +115,9 @@ def test_unavailable_short_interest_is_not_a_conclusion():
 
 def test_two_clocks_and_the_copy():
     read = (JS / "pages/read.js").read_text()
-    assert "Prices and headlines updated ${ago(b.built_at)}" in read and "This text was written ${ago(s.written_at)}, from the figures at that time" in read
+    assert "Prices and headlines updated ${ago(b.built_at)}" in read and "${generated(s, { at: s.written_at })}" in read and "the prices above are newer" in read
     ex = (JS / "pages/explore.js").read_text()
-    assert "not a fourth thing to read" not in ex and "How much is screenable today, the biggest move and how many sectors lead the index." in ex
+    assert "not a fourth thing to read" not in ex and "<h2 class=\"t-h2\" id=\"ex-r\">What is worth a look today</h2>" in ex, "the heading says it; no line restating it (editorial pass)"
 
 
 def test_methods_fold_behind_how_this_works():

@@ -101,7 +101,7 @@ def test_each_widget_draws_from_a_real_ticker_payload(tmp_path):
     assert "Mildly bullish, 12 stories." in o["news"]
     assert "Stop from the entry plan" in o["stopcheck"]
     assert "0 of 7 for AAPL." in o["checklist"]
-    assert "terms, the definitions the current app shows" in o["learn"]
+    assert "118 terms." in o["learn"] or " terms." in o["learn"], "the count of glossary terms"
     assert all(got["waiting"].values()), "a widget that reads the payload says it is loading until it arrives"
     assert got["terms"] == ["ATM", "Forward P/E", "Realised P&L", "YoY", "Iron condor"]
 

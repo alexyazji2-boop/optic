@@ -63,11 +63,11 @@ export function openCompany(r, opener, { context = 'Home' } = {}) {
     body: html`<div class="figure"><p class="t-label">Last price</p><p class="t-display-m">${money(r.price)}</p>
         <p class="delta"><span class="${dir(r.change_pct)}">${signed(r.change_pct)} today</span><span class="${dir(r.change_5d_pct)}">${signed(r.change_5d_pct)} over 5 days</span><span class="${dir(r.change_20d_pct)}">${signed(r.change_20d_pct)} over 20</span></p></div>
       <dl class="kv">
-        <div><dt>What changed</dt><dd class="note">${r.changed ? html`${clean(r.changed.text)}. ${capFirst(clean(r.changed.why || ''))}.` : 'Nothing has cleared a threshold. That is the usual state.'}</dd></div>
+        <div><dt>What changed</dt><dd class="note">${r.changed ? html`${clean(r.changed.text)}. ${capFirst(clean(r.changed.why || ''))}.` : 'No change worth noting since the last close.'}</dd></div>
         <div><dt>Signal</dt><dd class="note">${signalWord[r.signal] || 'No signal'}${r.signal_why ? html`: ${clean(r.signal_why)}` : ''}</dd></div>
       </dl>
       <div class="cluster"><a class="btn btn-primary" href="#/${sym}">Open the Dossier</a>${watchButton(sym)}</div>
       ${miloButton(`Ask Milo about ${sym}`, { ask: `What should I know about ${sym} right now?`, context: `${sym}, from your watchlist`, symbol: sym })}
-      <p class="asof">From daily closes. Each change names the number that triggered it; nothing here is written by a model.</p>`,
+      <p class="asof">Computed from daily closes by fixed thresholds, not written by a model. Each change names the number that triggered it.</p>`,
   });
 }

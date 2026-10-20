@@ -8,8 +8,8 @@
 import { $, html, raw, render as draw } from '../core/dom.js';
 import { CLASSIC } from '../core/classic.js';
 import * as api from '../core/api.js';
-import { num, signed, clean, bolded, capFirst, ago, shortDate, fullDate, isNum } from '../core/format.js';
-import { skeleton, empty, failed } from '../ui/states.js';
+import { num, signed, clean, bolded, capFirst, ago, shortDate, fullDate, isNum, dir } from '../core/format.js';
+import { skeleton, empty, failed, how, generated } from '../ui/states.js';
 import { icon } from '../ui/icons.js';
 import { groupedTabs } from '../ui/grouptabs.js';
 import { toast } from '../ui/toast.js';
@@ -29,7 +29,7 @@ function desk() {
   const ev = new Map((e.evidence || []).map((x) => [x.id, x]));
   const cites = (ids) => (ids || []).map((id) => ev.get(id)).filter(Boolean).map((x) => html` <a class="cite" href="${x.url}" target="_blank" rel="noopener" title="${x.label || ''}">${x.source || 'source'}</a>`);
   return html`<section class="section desk" aria-labelledby="dk-h"><p class="t-label">Optic Desk, ${e.slot_label || ''}${e.test_edition ? ', a test edition' : ''}</p>
-    <h2 class="t-display-m" id="dk-h">${clean(e.headline || '')}</h2>
+    <h2 class="t-display-m" id="dk-h">${clean(e.headline || '')}</h2>${generated(e, { at: e.written_at || e.gathered_at })}
     ${e.summary ? html`<p class="lede-line">${clean(e.summary)}</p>` : ''}
     ${(e.sections || []).map((s) => html`<div class="desk-sec"><h3>${clean(s.title || capFirst(s.id || ''))}</h3>
       ${(s.items || s.claims || []).map((c) => html`<p>${clean(c.text || c)}${cites(c.cites)}</p>`)}</div>`)}
@@ -42,18 +42,18 @@ function readHero() {
   const b = D.brief;
   if (D.briefErr) return failed("Today's Read", D.briefErr, { retry: 'brief' });
   if (!b) return skeleton('lines', 6, "Loading today's Read");
-  if (b.missing) return empty("Today's Read has not been built yet", `${clean(b.reason || '')} The current app builds it on request.`, html`<a class="btn" href="${CLASSIC}#/read">Open Read in the current app ${icon('out')}</a>`);
+  if (b.missing) return empty("Today's Read is not ready yet", `${clean(b.reason || '')} The classic app can build it on request.`, html`<a class="btn" href="${CLASSIC}#/read">Open the Read in the classic app ${icon('out')}</a>`);
   const s = b.summary || {}, w = b.wires || {};
   const idx = ((b.overview || {}).groups || {}).indices || [];
-  return html`${idx.length ? html`<div class="mstrip" style="--n:${idx.length}" role="group" aria-label="Indices">${idx.map((r) => html`<a class="mcell" href="#/${r.symbol}"><span class="k">${r.symbol} ${r.name}</span><span class="v">${num(r.last)}</span><span class="d ${r.day >= 0 ? 'up' : 'down'}">${signed(r.day)}</span></a>`)}</div>
+  return html`${idx.length ? html`<div class="mstrip" style="--n:${idx.length}" role="group" aria-label="Indices">${idx.map((r) => html`<a class="mcell" href="#/${r.symbol}"><span class="k">${r.symbol} ${r.name}</span><span class="v">${num(r.last)}</span><span class="d ${dir(r.day)}">${signed(r.day)}</span></a>`)}</div>
       <p class="asof">Fund prices, not index levels.</p>` : ''}
     <section class="section read-hero" aria-labelledby="rd-h">
       <div class="section-head"><div><p class="t-label">Optic's Read, ${fullDate(b.day)}</p><h2 class="t-display-m" id="rd-h">${clean(s.headline || 'The Read')}</h2>
-        <p class="section-sub">Prices and headlines updated ${ago(b.built_at)}${b.previous_day ? '. This is the previous day\'s Read while today\'s is built' : b.stale ? '. A newer one is due on the server\'s next pass' : ''}.${w.window_hours ? ` Covering the ${w.window_hours} hours since the previous session closed${w.window_hours >= 48 ? ', the whole weekend' : ''}.` : ''}</p></div>
+        <p class="section-sub">Prices and headlines updated ${ago(b.built_at)}${b.previous_day ? '. Showing the previous day\'s Read until today\'s is ready' : b.stale ? '. A newer edition is due shortly' : ''}.${w.window_hours ? ` Covering the ${w.window_hours} hours since the previous session closed${w.window_hours >= 48 ? ', the whole weekend' : ''}.` : ''}</p></div>
         ${ask('Ask Milo about the Read', 'What matters most in today\'s Read, and what period does it cover?')}</div>
       <div class="read-prose">${(s.paragraphs || []).map((p) => (String(p).startsWith('## ') ? html`<h3>${raw(bolded(p.slice(3)))}</h3>` : html`<p>${raw(bolded(p))}</p>`))}</div>
       <!-- two clocks, said apart (design review, 2026-10-19): the data refresh above and when this text was written -->
-      <p class="asof">${s.written_at ? `This text was written ${ago(s.written_at)}, from the figures at that time${Date.parse(b.built_at) - Date.parse(s.written_at) > 1800000 ? '; the prices above are newer' : ''}.` : ''}</p>
+      ${generated(s, { at: s.written_at })}${s.written_at && Date.parse(b.built_at) - Date.parse(s.written_at) > 1800000 ? html`<p class="asof">The text was written from the figures at that time; the prices above are newer.</p>` : ''}
       ${s.method || (b.overview || {}).note ? html`<details class="more-inline"><summary>How the Read is made</summary><p class="asof">${clean(s.method || '')} ${clean((b.overview || {}).note || '')}</p></details>` : ''}
       <form class="read-search" role="search" data-v2-read-search><label class="field">${icon('search')}<span class="sr">Search the headlines</span><input name="q" placeholder="Search the headlines" autocomplete="off" value="${D.q || ''}"></label></form>
       <div id="read-results" aria-live="polite">${searchResults()}</div>
@@ -76,7 +76,7 @@ function overnight() {
   const g = (D.brief || {}).global_overnight;
   if (!g || !g.available) return empty('No overnight reading', clean((g || {}).reason || ''));
   return html`${(g.sessions || []).map((s) => html`<h3>${clean(s.label)}</h3><p class="t-muted">${s.advancing} up, ${s.declining} down, average move ${num(s.avg_move_pct, 2)}%.</p>
-      <div class="tscroll"><table class="t"><thead><tr><th>Market</th><th>Day</th><th>5 days</th><th>20 days</th><th>With the S&amp;P</th></tr></thead><tbody>${(s.rows || []).map((r) => html`<tr><td><a href="#/instrument/${encodeURIComponent(r.symbol)}">${r.label}</a> <small class="t-muted">${r.region || ''}</small></td><td class="${r.chg_1d >= 0 ? 'up' : 'down'}">${signed(r.chg_1d)}</td><td>${signed(r.chg_5d)}</td><td>${signed(r.chg_20d)}</td><td>${num(r.corr_spx, 2)} <small class="t-muted">${r.corr_spx >= g.corr_threshold ? 'linked' : 'loose'}</small></td></tr>`)}</tbody></table></div>`)}
+      <div class="tscroll"><table class="t"><thead><tr><th>Market</th><th>Day</th><th>5 days</th><th>20 days</th><th>With the S&amp;P</th></tr></thead><tbody>${(s.rows || []).map((r) => html`<tr><td><a href="#/instrument/${encodeURIComponent(r.symbol)}">${r.label}</a> <small class="t-muted">${r.region || ''}</small></td><td class="${dir(r.chg_1d)}">${signed(r.chg_1d)}</td><td>${signed(r.chg_5d)}</td><td>${signed(r.chg_20d)}</td><td>${num(r.corr_spx, 2)} <small class="t-muted">${r.corr_spx >= g.corr_threshold ? 'linked' : 'loose'}</small></td></tr>`)}</tbody></table></div>`)}
     ${(g.crosses || []).length ? html`<h3>What carries it into US hours</h3><ul class="plain">${g.crosses.map((c) => html`<li><b>${c.label}</b> ${signed(c.chg_1d)}: ${clean(c.note)}. ${clean(c.corr_read)}.</li>`)}</ul>` : ''}
     <p class="asof">${g.linked_count} of ${g.market_count} markets move with the S&amp;P (correlation at or above ${num(g.corr_threshold, 2)} over ${g.corr_window} sessions). Moving together is not one causing the other. ${clean(g.method || '')}</p>`;
 }
@@ -98,10 +98,10 @@ function catalystMode() {
   return html`<h3>${clean(r.title)}</h3><p class="t-muted">${r.source}${r.source_detail ? `, ${r.source_detail}` : ''}. Released ${(r.age || {}).at_et || ''}, ${(r.age || {}).label || ''}.</p>
     ${r.summary ? html`<p>${clean(r.summary)}</p>` : ''}${r.why_it_matters ? html`<p>${clean(r.why_it_matters)}</p>` : ''}
     <p><b>Consensus against actual:</b> not shown. ${clean((c.consensus || {}).reason || '')}</p>
-    ${(c.reaction || {}).available ? html`<h3>How markets took it</h3><div class="chips">${c.reaction.assets.map((a) => html`<span class="pill">${a.name} <b class="${a.change_pct >= 0 ? 'up' : 'down'}">${signed(a.change_pct)}</b></span>`)}</div><p class="asof">${clean(c.reaction.basis || '')}</p>` : ''}
+    ${(c.reaction || {}).available ? html`<h3>How markets took it</h3><div class="chips">${c.reaction.assets.map((a) => html`<span class="pill">${a.name} <b class="${dir(a.change_pct)}">${signed(a.change_pct)}</b></span>`)}</div><p class="asof">${clean(c.reaction.basis || '')}</p>` : ''}
     <h3>Optic's read of it</h3>
-    ${rd.available ? html`<p><b>${clean(rd.headline || '')}</b></p>${(rd.paragraphs || []).map((p) => html`<p>${raw(bolded(p))}</p>`)}<p class="asof">${clean(rd.disclaimer || '')}</p>`
-    : D.catWriting ? skeleton('lines', 3, 'Writing the read') : html`<p class="t-muted">Not written yet.</p><button type="button" class="btn btn-sm" data-v2-catread>Write the read</button><p class="asof">Writing it uses a paid model; once written it is kept for an hour and shared with every reader.</p>`}
+    ${rd.available ? html`<p><b>${clean(rd.headline || '')}</b></p>${(rd.paragraphs || []).map((p) => html`<p>${raw(bolded(p))}</p>`)}${generated(rd, { at: rd.written_at || rd.generated_at })}<p class="asof">${clean(rd.disclaimer || '')}</p>`
+    : D.catWriting ? skeleton('lines', 3, 'Writing the read') : html`<p class="t-muted">Not written yet.</p><button type="button" class="btn btn-sm" data-v2-catread>Write the read</button><p class="asof">Written by an AI model when someone asks, then kept for an hour and shared with every reader.</p>`}
     <p class="asof">${clean(c.method || '')}</p>`;
 }
 
@@ -118,9 +118,9 @@ function library() {
         ${(k.companies || []).length ? html`<div class="tscroll"><table class="t"><thead><tr><th>Company</th><th>How directly</th><th>Strength</th><th>Why</th></tr></thead><tbody>${k.companies.map((co) => html`<tr><td><a href="#/${co.ticker}">${co.ticker}</a> ${co.name || ''}</td><td>${co.directness || ''}</td><td>${co.strength || ''}</td><td>${clean(co.why || '')}</td></tr>`)}</tbody></table></div>` : ''}
         ${/^https?:/.test(k.source_url || '') ? html`<p><a class="textlink" href="${k.source_url}" target="_blank" rel="noopener">${k.source_name || 'Source'} ${icon('out')}</a></p>` : ''}</details>`)
       : html`<p class="quiet">${c.stored_total ? 'Nothing matches these filters.' : 'No catalysts stored yet.'}</p>`}
-    <p class="asof">${c.stored_total} stored. ${(c.scan || {}).last_ok_at ? `Last scanned ${ago(c.scan.last_ok_at)}.` : 'Not scanned yet.'} ${clean(c.method || '')}</p>
+    <p class="asof">${c.stored_total} catalysts on record. ${(c.scan || {}).last_ok_at ? `Last scanned ${ago(c.scan.last_ok_at)}.` : 'Not scanned yet.'} ${clean(c.method || '')}</p>
     <button type="button" class="btn btn-sm" data-v2-cat-refresh ${D.catRefreshing ? 'disabled' : ''}>${D.catRefreshing ? 'Scanning…' : 'Scan for new catalysts'}</button>
-    <p class="asof">A scan reads the news for new catalysts. Anyone may run one every 15 minutes; when the server reads with a model, a scan uses a paid call.</p>`;
+    <p class="asof">A scan checks the news for new catalysts. One can run every 15 minutes.</p>`;
 }
 
 function weekly() {
@@ -128,11 +128,11 @@ function weekly() {
   if (w === undefined) return skeleton('lines', 4, "Loading this week's update");
   if (!w) return empty('The weekly update did not load', '');
   if (!w.available) {
-    return html`<p>${clean(w.reason || 'Not written yet.')}</p>${w.not_written ? (D.weeklyWriting ? skeleton('lines', 3, 'Writing this week\'s update, about a minute') : html`<button type="button" class="btn btn-sm" data-v2-weekly-write>Write this week's update</button><p class="asof">Writing it uses a paid model (a long piece, about a minute). It is written once a week and shared with every reader.</p>`) : ''}`;
+    return html`<p>${clean(w.reason || 'Not written yet.')}</p>${w.not_written ? (D.weeklyWriting ? skeleton('lines', 3, 'Writing this week\'s update, about a minute') : html`<button type="button" class="btn btn-sm" data-v2-weekly-write>Write this week's update</button><p class="asof">Written by an AI model when someone asks, in about a minute, then kept for the week and shared with every reader.</p>`) : ''}`;
   }
   const e = (w.facts || {}).earnings;
   return html`<p class="t-label">Weekly market analysis</p><h3 class="t-h2">${clean(w.headline)}</h3>${w.subhead ? html`<p class="lede-line">${clean(w.subhead)}</p>` : ''}
-    ${(w.paragraphs || []).map((p) => html`<p>${raw(bolded(p))}</p>`)}
+    ${(w.paragraphs || []).map((p) => html`<p>${raw(bolded(p))}</p>`)}${generated(w, { at: w.written_at || w.generated_at })}
     ${e && (e.days || []).length ? html`<h3>Reporting this week, from the watchlist</h3><ul class="plain">${e.days.map((d) => html`<li><b>${d.day}</b>: ${(d.symbols || []).join(', ')}</li>`)}</ul>` : ''}
     <p class="asof">${clean(w.method || '')} ${clean(w.disclaimer || '')}</p>`;
 }
@@ -156,7 +156,7 @@ function regime() {
     <p>${clean(r.effect || '')}</p>
     <div class="tscroll"><table class="t"><thead><tr><th>Input</th><th>Weight</th><th>Reading</th><th>How it is scaled</th></tr></thead><tbody>${comps.map(([k, v]) => html`<tr><td>${capFirst(k)}</td><td>${num((r.weights || {})[k], 0)}%</td><td>${signed(v, 1, '')}</td><td style="text-align:left"><small>${clean((r.scales || {})[k] || '')}</small></td></tr>`)}</tbody></table></div>
     <p>${isNum(r.agreement_pct) ? `${num(r.agreement_pct, 0)}% of the inputs point the same way.` : ''} ${(r.conflicts || []).map(clean).join(' ')}</p>
-    <p class="asof">Positive at +12, negative at −12. ${clean(r.scale_note || '')} ${clean(r.method || '')}</p>`;
+    ${how(html`<p>Positive at +12, negative at −12. ${clean(r.scale_note || '')} ${clean(r.method || '')}</p>`)}`;
 }
 
 function calendar() {

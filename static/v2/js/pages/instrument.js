@@ -4,7 +4,7 @@
 // deal at.
 import { html, render as draw } from '../core/dom.js';
 import * as api from '../core/api.js';
-import { num, signed, clean, isNum } from '../core/format.js';
+import { num, signed, clean, isNum, dir } from '../core/format.js';
 import { skeleton, failed } from '../ui/states.js';
 import { button as miloButton, provideContext } from '../ui/milo.js';
 import { createPriceChart } from '../ui/pricechart.js';
@@ -21,7 +21,7 @@ function paint() {
   draw(mainEl, html`<header class="page-head"><p class="t-label">${d ? (d.group === 'fx' ? 'FX' : (d.group || 'Instrument')) : 'Instrument'}</p><div class="split"><h1 class="t-display-m">${d ? `${d.name || d.label} (${d.label || sym})` : sym}</h1>
       ${miloButton('Ask Milo what this is', { ask: `What is ${d ? d.label || sym : sym}, and why does it matter for markets right now?`, context: `Instrument, ${sym}` })}</div>${d && (d.about || d.note) ? html`<p class="section-sub">${clean(d.about || d.note)}</p>` : ''}</header>
     ${D.err ? failed('This instrument', D.err, { retry: 'instrument' }) : !d ? skeleton('chart', 1, 'Loading the history') : html`
-      <dl class="kv" style="--kv:5"><div><dt>Last</dt><dd>${num(sn.last, dp)} <small class="${sn.chg_1d >= 0 ? 'up' : 'down'}">${signed(sn.chg_1d)}</small></dd></div>
+      <dl class="kv" style="--kv:5"><div><dt>Last</dt><dd>${num(sn.last, dp)} <small class="${dir(sn.chg_1d)}">${signed(sn.chg_1d)}</small></dd></div>
         <div><dt>20 days</dt><dd>${signed(sn.chg_20d)}</dd></div><div><dt>Against the 200-day</dt><dd>${signed(sn.vs_sma200)} <small class="t-muted">${num(sn.sma200, dp)}</small></dd></div>
         <div><dt>RSI</dt><dd>${num(sn.rsi, 0)} <small class="t-muted">${rsiWord}</small></dd></div><div><dt>From the 52-week high</dt><dd>${signed(sn.pct_from_52w_high)}</dd></div></dl>
       <div class="ctools" style="margin-top:18px"><div class="seg" role="group" aria-label="Range">${RANGES.map(([k, l]) => html`<button type="button" data-v2-inst-range="${k}" aria-pressed="${range === k}">${l}</button>`)}</div>
@@ -43,7 +43,7 @@ async function load() {
 export async function render(main, route) {
   live = true; mainEl = main; D = { sym: route.symbol };
   document.title = `${route.symbol}, Optic`;
-  provideContext(() => ({ view: 'instrument', instrument: D.d ? { symbol: D.sym, label: D.d.label, snapshot: D.d.snapshot } : null }));
+  provideContext(() => ({ view: 'instrument', focus_label: D.d && D.d.label ? `${D.d.label} (${D.sym})` : '', instrument: D.d ? { symbol: D.sym, label: D.d.label, snapshot: D.d.snapshot } : null }));
   main.addEventListener('click', (e) => {
     const r = e.target.closest('[data-v2-inst-range]'); if (r) { range = r.dataset.v2InstRange; load(); return; }
     const s = e.target.closest('[data-v2-inst-style]'); if (s) { style = s.dataset.v2InstStyle; if (chart) chart.set({ style }); mainEl.querySelectorAll('[data-v2-inst-style]').forEach((b) => b.setAttribute('aria-pressed', String(b === s))); }

@@ -7,9 +7,9 @@
 // it. The only paid piece is a Sector Read, written on request.
 import { $, html, raw, render as draw } from '../core/dom.js';
 import * as api from '../core/api.js';
-import { num, signed, compact, clean, capFirst, shortDate, isNum, esc } from '../core/format.js';
+import { num, signed, compact, clean, capFirst, shortDate, isNum, esc, dir } from '../core/format.js';
 import { lineChart, spark, mountCharts } from '../ui/chart.js';
-import { skeleton, empty, failed } from '../ui/states.js';
+import { skeleton, empty, failed, how } from '../ui/states.js';
 import { groupedTabs } from '../ui/grouptabs.js';
 import { button as miloButton, provideContext } from '../ui/milo.js';
 import { sectionHead } from './tabs.js';
@@ -43,7 +43,8 @@ function regimeBlock(m) {
 function expected(em) {
   if (!em || !isNum(em.implied_pct)) return '';
   return html`<h3>Expected S&amp;P move, from the VIX</h3><p>${clean(em.reading || '')}</p>
-    ${kv([['Options price', html`±${num(em.implied_pct, 2)}% a day <small class="t-muted">VIX ${num(em.vix, 1)} ÷ 16, ±${num(em.implied_points, 0)} points</small>`], ['The S&P moves', html`${num(em.atr_pct, 2)}% a day <small class="t-muted">ATR 14, ${num(em.atr14, 0)} points high to low</small>`], ['On one footing', isNum(em.ratio) ? html`${num(em.ratio, 1)}× <small class="t-muted">±${num(em.implied_pct, 2)}% against ±${num(em.realized_pct, 2)}%, the range ÷ 1.6</small>` : 'n/a']], 3)}`;
+    ${kv([['Options price', html`±${num(em.implied_pct, 2)}% a day <small class="t-muted">±${num(em.implied_points, 0)} points, from the VIX</small>`], ['The S&P moves', html`${num(em.atr_pct, 2)}% a day <small class="t-muted">${num(em.atr14, 0)} points, average over 14 sessions</small>`], ['On one footing', isNum(em.ratio) ? html`${num(em.ratio, 1)}× <small class="t-muted">priced against delivered</small>` : 'n/a']], 3)}
+    ${how(html`<p>Options price: the VIX (${num(em.vix, 1)}) divided by 16, as a share of the index. The S&amp;P moves: the 14-session average true range. On one footing: ±${num(em.implied_pct, 2)}% priced against ±${num(em.realized_pct, 2)}%, the average range divided by 1.6 so a range compares with a one-standard-deviation move.</p>`)}`;
 }
 
 /* ---------------- tabs ---------------- */
@@ -69,7 +70,7 @@ function rotation() {
     <div class="chart-slot" data-chart="rrg"></div>
     ${(r.crossed || []).length ? html`<p><b>Crossed a boundary this week:</b> ${r.crossed.map((c) => `${c.name} (${c.from} to ${c.to})`).join(', ')}.</p>` : ''}
     <div class="tscroll"><table class="t"><thead><tr><th>Sector</th><th>Quadrant</th><th>Strength</th><th>Momentum</th><th>Change in strength</th></tr></thead><tbody>${r.sectors.map((s) => html`<tr><td><a href="#/${s.symbol}">${s.symbol}</a> ${s.name}</td><td>${capFirst(s.quadrant)}${s.previous_quadrant !== s.quadrant ? html` <small class="t-muted">from ${s.previous_quadrant}</small>` : ''}</td><td>${num(s.strength, 1)}</td><td>${num(s.momentum, 1)}</td><td>${signed(s.d_strength, 2, '')}</td></tr>`)}</tbody></table></div>
-    <p class="asof">Strength is the sector against ${r.benchmark}, normalised so 100 is in line; momentum is the change in that strength. Leading: both above 100. Improving: momentum above, strength below. Weakening: the reverse. Lagging: both below.</p>`;
+    ${how(html`<p>Strength is the sector against ${r.benchmark}, normalised so 100 is in line; momentum is the change in that strength. Leading: both above 100. Improving: momentum above, strength below. Weakening: the reverse. Lagging: both below.</p>`)}`;
 }
 function rrgChart(r) {
   return (w) => {
@@ -113,7 +114,7 @@ function stockmap() {
 function mapChart(s) {
   return (w) => {
     const W = Math.max(300, w), lay = s.layout || [];
-    if (!lay.length) return '<p class="quiet">This map draws as bubbles in the current app.</p>';
+    if (!lay.length) return '<p class="quiet">This map is drawn as bubbles in the classic app.</p>';
     // the server lays tiles out in percent of the canvas
     const k = Math.max(...lay.map((c) => c.x + c.w)) > 1.5 ? 100 : 1;
     const H = Math.round(W * (W < 600 ? 1.1 : 0.55)), col = s.template.color, dom = s.colour_domain || { min: -5, max: 5 };
@@ -134,7 +135,7 @@ function forex() {
 function crossAsset() {
   const g = ((D.m || {}).macro || {}).groups || {};
   return html`${['volatility', 'rates', 'fx', 'commodities', 'credit', 'crypto'].filter((k) => (g[k] || []).length).map((k) => html`<h3>${capFirst(k === 'fx' ? 'currencies' : k)}</h3><div class="tscroll"><table class="t"><thead><tr><th>Instrument</th><th>Last</th><th>Day</th><th>5 days</th><th>20 days</th><th>Against the 200-day</th><th>RSI</th><th>90 sessions</th></tr></thead>
-    <tbody>${g[k].filter((r) => !r.error).map((r) => html`<tr><td>${instLink(r.symbol, r.label)}${r.note ? html`<br><small class="t-muted">${clean(r.note)}</small>` : ''}</td><td>${num(r.last, r.last < 10 ? 3 : 2)}</td><td class="${r.chg_1d >= 0 ? 'up' : 'down'}">${signed(r.chg_1d)}</td><td>${signed(r.chg_5d)}</td><td>${signed(r.chg_20d)}</td><td>${signed(r.vs_sma200)}</td><td>${num(r.rsi, 0)}</td><td>${raw(spark(r.series || []))}</td></tr>`)}</tbody></table></div>`)}`;
+    <tbody>${g[k].filter((r) => !r.error).map((r) => html`<tr><td>${instLink(r.symbol, r.label)}${r.note ? html`<br><small class="t-muted">${clean(r.note)}</small>` : ''}</td><td>${num(r.last, r.last < 10 ? 3 : 2)}</td><td class="${dir(r.chg_1d)}">${signed(r.chg_1d)}</td><td>${signed(r.chg_5d)}</td><td>${signed(r.chg_20d)}</td><td>${signed(r.vs_sma200)}</td><td>${num(r.rsi, 0)}</td><td>${raw(spark(r.series || []))}</td></tr>`)}</tbody></table></div>`)}`;
 }
 function ratios() {
   const r = ((D.m || {}).macro || {}).ratios || [];
@@ -154,14 +155,14 @@ function corrDisp() {
 function strength() {
   const s = (D.m || {}).sectors || {};
   return html`<div class="tscroll"><table class="t"><thead><tr><th>Sector</th><th>Day</th><th>1 month</th><th>3 months</th><th>6 months</th><th>RSI</th><th>Against the 50-day</th><th>Against the 200-day</th></tr></thead>
-    <tbody>${(s.sectors || []).map((r) => html`<tr><td><a href="#/${r.symbol}">${r.symbol}</a> ${r.name}</td><td class="${r.chg_1d >= 0 ? 'up' : 'down'}">${signed(r.chg_1d)}</td><td>${signed(r.chg_20d)}</td><td>${signed(r.chg_60d)}</td><td>${signed(r.chg_120d)}</td><td>${num(r.rsi, 0)}</td><td>${signed(r.vs_sma50)}</td><td>${signed(r.vs_sma200)}</td></tr>`)}</tbody></table></div>
+    <tbody>${(s.sectors || []).map((r) => html`<tr><td><a href="#/${r.symbol}">${r.symbol}</a> ${r.name}</td><td class="${dir(r.chg_1d)}">${signed(r.chg_1d)}</td><td>${signed(r.chg_20d)}</td><td>${signed(r.chg_60d)}</td><td>${signed(r.chg_120d)}</td><td>${num(r.rsi, 0)}</td><td>${signed(r.vs_sma50)}</td><td>${signed(r.vs_sma200)}</td></tr>`)}</tbody></table></div>
     <p class="asof">Leaders: ${(s.leaders || []).map((x) => x.name).join(', ')}. Laggards: ${(s.laggards || []).map((x) => x.name).join(', ')}.</p>`;
 }
 function themes() {
   const s = (D.m || {}).sectors || {};
   const tbl = (rows) => html`<div class="tscroll"><table class="t"><thead><tr><th>Name</th><th>Day</th><th>1 month</th><th>3 months</th><th>Against the 200-day</th></tr></thead><tbody>${rows.map((r) => html`<tr><td><a href="#/${r.symbol}">${r.symbol}</a> ${r.name}${r.breakout_reasons ? html`<br><small class="t-muted">${r.breakout_reasons.map(clean).join('; ')}</small>` : ''}</td><td>${signed(r.chg_1d)}</td><td>${signed(r.chg_20d)}</td><td>${signed(r.chg_60d)}</td><td>${signed(r.vs_sma200)}</td></tr>`)}</tbody></table></div>`;
   return html`<h3>Themes and sub-industries</h3>${tbl(s.themes || [])}
-    <h3>Breakout candidates</h3>${(s.breakout_candidates || []).length ? tbl(s.breakout_candidates) : html`<p class="quiet">Nothing is set up cleanly right now. That is itself information.</p>`}
+    <h3>Breakout candidates</h3>${(s.breakout_candidates || []).length ? tbl(s.breakout_candidates) : html`<p class="quiet">No sector is set up for a breakout right now.</p>`}
     <h3>Niche industries</h3>${tbl(s.niche || [])}
     <h3>Ratio pair trades</h3><div class="tscroll"><table class="t"><thead><tr><th>Pair</th><th>Ratio</th><th>z-score, 60 days</th><th>5 days</th><th>20 days</th><th>Setup</th></tr></thead><tbody>${(s.pairs || []).map((p) => html`<tr><td><b>${p.pair}</b><br><small class="t-muted">${clean(p.thesis || '')}</small></td><td>${num(p.ratio, 3)}</td><td class="${Math.abs(p.zscore_60d) >= 2 ? 'z-stretched' : ''}">${signed(p.zscore_60d, 1, '')}</td><td>${signed(p.chg_5d)}</td><td>${signed(p.chg_20d)}</td><td style="text-align:left">${clean(p.setup || '')}</td></tr>`)}</tbody></table></div>
     <p class="asof">A z-score beyond ±2 is stretched against the last 60 sessions; it is not a call.</p>`;
@@ -193,7 +194,7 @@ function paint() {
   if (!live) return;
   const y = window.scrollY;
   draw(mainEl, html`<header class="page-head">${sectionHead('market', 'market')}</header>
-    ${D.err ? failed('The macro picture', D.err, { retry: 'market' }) : !D.m ? html`${skeleton('lines', 5, 'Loading about 40 instruments')}<p class="asof" role="status">This reads about 40 instruments and can take half a minute after a restart.</p>`
+    ${D.err ? failed('The macro picture', D.err, { retry: 'market' }) : !D.m ? html`${skeleton('lines', 5, 'Loading about 40 instruments')}<p class="asof" role="status">Loading about 40 instruments. This can take up to 30 seconds.</p>`
     : html`<section class="section" aria-label="The market today"><h2 class="t-h2">The market today, in brief</h2>${plain(D.m)}</section>${regimeBlock(D.m)}`}
     <section class="section" aria-labelledby="mc-more-h"><h2 class="t-h2" id="mc-more-h">In depth</h2><div id="mc-more"></div></section>`);
   paintMore();

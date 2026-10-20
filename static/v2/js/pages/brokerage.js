@@ -137,7 +137,7 @@ function connections() {
       ${ent.can_link && canAdd ? consent(st.consent || {}) : ''}
       <p class="section-sub">${ent.can_link ? `Your plan links up to ${ent.max_connections} connection${ent.max_connections === 1 ? '' : 's'} and ${ent.max_accounts} accounts. Accounts sync on their own once a day; Sync now is limited to ${ent.manual_syncs_per_day} a day.` : 'Linking and syncing are part of the paid plan. Your stored data stays until you delete it or the retention period ends.'}</p>
       ${conns.length ? conns.map(connCard) : html`<p class="quiet">Nothing linked yet. Connect a brokerage to see your holdings here.</p>`}
-      ${conns.length ? '' : html`<p class="asof">After you finish at the provider, it returns you to the current app's Brokerage page.</p>`}</section>
+      ${conns.length ? '' : html`<p class="asof">After you finish at the provider, it returns you to Brokerage in the classic app.</p>`}</section>
     ${permissions(st, !conns.length)}
     ${conns.length ? html`<section class="section set-danger" aria-labelledby="bd-h"><h2 class="t-h2" id="bd-h">Delete all brokerage data</h2><p>Disconnects every brokerage at the provider and deletes everything Optic stored about them, including the encryption key, so backups cannot be read either. Your Optic account stays.</p>
       ${S.armed === 'all' ? html`<div class="cluster"><button type="button" class="btn btn-danger" data-v2-bk-delete="confirm">Yes, delete all brokerage data</button><button type="button" class="btn" data-v2-bk-disarm>Keep it</button></div>` : html`<button type="button" class="btn btn-danger" data-v2-bk-delete>Delete all brokerage data</button>`}</section>` : ''}`;
@@ -424,7 +424,7 @@ function body() {
   const st = S.status;
   if (S.err) return html`<div class="state err" role="alert"><p class="t-h3">Brokerage did not load</p><p>${S.err}</p><button type="button" class="btn btn-sm" data-v2-bk-reload>Try again</button></div>`;
   if (!st) return skeleton('rows', 4, 'Loading your brokerage');
-  if (!st.available) return html`<section class="section first"><p>${clean(st.reason || 'Brokerage linking is not available on this deployment.')}</p></section>`;
+  if (!st.available) return html`<section class="section first"><p>${clean(st.reason || 'Brokerage linking is not available right now.')}</p></section>`;
   if (!st.signed_in) return html`<section class="section first"><h2 class="t-h2">Link your brokerage</h2><p>See your real holdings in Optic and ask Milo about them. Read-only: Optic cannot trade or move money. Sign in first; linking is part of the paid plan.</p><a class="btn btn-primary" href="#/signin">Sign in</a></section>${permissions(st, true)}`;
   const ent = st.entitlement || {};
   if (!ent.can_link && !linked()) return html`${upgrade(ent)}${permissions(st, true)}`;
