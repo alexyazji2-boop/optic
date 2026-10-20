@@ -92,7 +92,9 @@ def analyse_short_interest(raw: Dict[str, Any], avg_volume: Optional[float]) -> 
         change_pct = _f((shares / prior - 1.0) * 100.0, 2)
 
     notes: List[str] = []
-    squeeze = "low"
+    # Without the share of float there is no reading of crowding: "low" from nothing was a conclusion drawn
+    # from missing data (design review, 2026-10-19). Both apps print this word.
+    squeeze = "low" if pct_float is not None else "not known"
 
     if pct_float is not None:
         pct = pct_float * 100.0

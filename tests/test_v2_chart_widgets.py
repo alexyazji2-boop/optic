@@ -169,8 +169,10 @@ def test_the_rail_follows_the_house_rules():
     pressed = CSS[CSS.index('.chw-btn[aria-pressed="true"]'):]
     assert "gold" not in pressed[:pressed.index("}")], "the gold outline is the sidebar's alone"
     chw = "\n".join(line for line in CSS.splitlines() if ".chw" in line)
+    # sizes are the type scale's tokens since the design standard (2026-10-19), the smallest 12px
     sizes = [float(x) for x in re.findall(r"font(?:-size)?:[^;]*?(\d+(?:\.\d+)?)px", chw)]
-    assert sizes and min(sizes) >= 12, "nothing under 12px"
+    toks = set(re.findall(r"font(?:-size)?:[^;]*?var\(--t-(\w+)\)", chw))
+    assert (sizes or toks) and (not sizes or min(sizes) >= 12) and toks <= {"xs", "sm", "md", "base", "lg", "xl", "lead", "2xl", "chart", "note", "label", "micro", "body"}, "nothing under 12px"
     assert "@container chartpage (max-width: 1020px)" in CSS and "container: chartpage / inline-size" in CSS
 
 

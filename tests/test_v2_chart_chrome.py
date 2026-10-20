@@ -164,8 +164,10 @@ def test_the_chrome_follows_the_house_rules():
     for pressed in ('.cc-swatch[aria-pressed="true"]', '.ch-tool[data-v2-ch-max][aria-pressed="true"]'):
         rule = CSS[CSS.index(pressed):CSS.index("}", CSS.index(pressed))]
         assert "gold" not in rule, "the gold outline is the sidebar's alone"
+    # sizes are the type scale's tokens since the design standard (2026-10-19), the smallest 12px
     sizes = [float(x) for x in re.findall(r"font(?:-size)?:[^;]*?(\d+(?:\.\d+)?)px", CHROME_CSS)]
-    assert sizes and min(sizes) >= 12, "nothing under 12px"
+    toks = set(re.findall(r"font(?:-size)?:[^;]*?var\(--t-(\w+)\)", CHROME_CSS))
+    assert (sizes or toks) and (not sizes or min(sizes) >= 12) and toks <= {"xs", "sm", "md", "base", "lg", "xl", "lead", "2xl", "chart", "note", "label", "micro", "body"}, "nothing under 12px"
     phone = CHROME_CSS[CHROME_CSS.index("@media (max-width: 860px)"):]
     assert ".pc-lt, .pc-lx { min-height: 44px; } .pc-lx { width: 44px; height: 44px; }" in phone
     assert ".cc-swatch, .cc-wheel { width: 44px; height: 44px; }" in phone

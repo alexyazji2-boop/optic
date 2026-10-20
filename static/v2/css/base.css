@@ -12,7 +12,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 button, input[type="search"] { -webkit-appearance: none; appearance: none; }
 img, svg { max-width: 100%; }
 h1, h2, h3, h4, p { margin: 0; }
-:focus-visible { outline: 2px solid var(--c-focus); outline-offset: 3px; border-radius: 6px; }
+:focus-visible { outline: 2px solid var(--c-focus); outline-offset: 3px; border-radius: var(--r-sm); }
 [hidden] { display: none !important; }
 .sr { position: absolute !important; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; }
 .skip { position: absolute; left: -999px; top: 8px; z-index: 200; padding: 10px 14px; border-radius: var(--r-1); background: var(--c-scene); color: var(--c-on-scene); }
@@ -21,12 +21,14 @@ h1, h2, h3, h4, p { margin: 0; }
 /* type roles */
 .t-display { font: var(--w-display) var(--t-display)/0.98 var(--f-sans); letter-spacing: var(--track-display); font-variant-numeric: tabular-nums lining-nums; }
 .t-display-m { font: var(--w-display) var(--t-display-m)/1.05 var(--f-sans); letter-spacing: -0.025em; text-wrap: balance; }
+/* figures line up (design standard): tabular numerals in every place numbers are compared */
+.kv dd, table td, table th, .dh-price, .t-display, .ws-body, .pc-read, .num, .readings, .chips, .seg button, .legend-line, .tile, .milo-bubble .milo-src { font-variant-numeric: tabular-nums; }
 .t-h2 { font: 600 var(--t-h2)/1.25 var(--f-sans); letter-spacing: -0.018em; }
 .t-h3 { font: 600 var(--t-h3)/1.3 var(--f-sans); letter-spacing: -0.01em; }
 .t-label { font: 500 var(--t-label)/1.25 var(--f-label); color: var(--c-ink-3); }
 .t-note { font-size: var(--t-note); color: var(--c-ink-2); }
 .t-muted { color: var(--c-ink-3); }
-.tick { font: 600 14px/1 var(--f-label); letter-spacing: .01em; }
+.tick { font: 600 var(--t-md)/1 var(--f-label); letter-spacing: .01em; }
 .up { color: var(--c-pos); } .down { color: var(--c-neg); } .flat { color: var(--c-ink-2); }
 
 /* layout primitives */

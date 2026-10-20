@@ -1,9 +1,9 @@
 // Pieces shared by Macro and Indices: the trend board for sector or index
 // funds, and the written Sector Read, which is a paid model call and so only
 // ever runs on the reader's press.
-import { html } from '../core/dom.js';
+import { html, raw } from '../core/dom.js';
 import * as api from '../core/api.js';
-import { num, signed, clean, capFirst } from '../core/format.js';
+import { num, signed, clean, bolded, capFirst } from '../core/format.js';
 import { skeleton, empty } from '../ui/states.js';
 
 export function sectorBoard(board, readLabel) {
@@ -24,7 +24,7 @@ export function sectorReadBlock(sread) {
   if (sread.loading) return html`<div class="sread" role="status">${sread.loading}. Reading the board…${skeleton('lines', 3)}</div>`;
   if (sread.error) return html`<div class="state err" role="alert"><p class="t-h3">The read did not load</p><p>${api.explain(sread.error, 'The read')}</p></div>`;
   if (!sread.available) return html`<div class="state"><p class="t-h3">${clean(sread.summary || 'No read')}</p><p>${clean(sread.reason || '')}</p><button type="button" class="btn btn-sm" data-v2-sread-close>Close</button></div>`;
-  return html`<div class="sread"><p class="t-label">${sread.symbol || ''}, ${capFirst(sread.stance || '')}</p><h3 class="t-h3">${clean(sread.headline || '')}</h3>${(sread.paragraphs || []).map((p) => html`<p>${clean(p)}</p>`)}
+  return html`<div class="sread"><p class="t-label">${sread.symbol || ''}, ${capFirst(sread.stance || '')}</p><h3 class="t-h3">${clean(sread.headline || '')}</h3>${(sread.paragraphs || []).map((p) => html`<p>${raw(bolded(p))}</p>`)}
     <p class="asof">${clean(sread.method || '')} ${clean(sread.disclaimer || '')}</p><button type="button" class="btn btn-sm" data-v2-sread-close>Close</button></div>`;
 }
 

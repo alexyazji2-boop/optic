@@ -5,10 +5,10 @@
 // the catalyst read are asked for with `cached=true`, which serves only what is
 // already written; the server's own loop keeps the Read current. Writing a
 // missing piece is a labelled button, because it spends a model call.
-import { $, html, render as draw } from '../core/dom.js';
+import { $, html, raw, render as draw } from '../core/dom.js';
 import { CLASSIC } from '../core/classic.js';
 import * as api from '../core/api.js';
-import { num, signed, clean, capFirst, ago, shortDate, fullDate, isNum } from '../core/format.js';
+import { num, signed, clean, bolded, capFirst, ago, shortDate, fullDate, isNum } from '../core/format.js';
 import { skeleton, empty, failed } from '../ui/states.js';
 import { icon } from '../ui/icons.js';
 import { groupedTabs } from '../ui/grouptabs.js';
@@ -49,10 +49,11 @@ function readHero() {
       <p class="asof">Fund prices, not index levels.</p>` : ''}
     <section class="section read-hero" aria-labelledby="rd-h">
       <div class="section-head"><div><p class="t-label">Optic's Read, ${fullDate(b.day)}</p><h2 class="t-display-m" id="rd-h">${clean(s.headline || 'The Read')}</h2>
-        <p class="section-sub">Updated ${ago(b.built_at)}${b.previous_day ? '. This is the previous day\'s Read while today\'s is built' : b.stale ? '. A newer one is due on the server\'s next pass' : ''}.${w.window_hours ? ` Covering the ${w.window_hours} hours since the previous session closed${w.window_hours >= 48 ? ', the whole weekend' : ''}.` : ''}</p></div>
+        <p class="section-sub">Prices and headlines updated ${ago(b.built_at)}${b.previous_day ? '. This is the previous day\'s Read while today\'s is built' : b.stale ? '. A newer one is due on the server\'s next pass' : ''}.${w.window_hours ? ` Covering the ${w.window_hours} hours since the previous session closed${w.window_hours >= 48 ? ', the whole weekend' : ''}.` : ''}</p></div>
         ${ask('Ask Milo about the Read', 'What matters most in today\'s Read, and what period does it cover?')}</div>
-      <div class="read-prose">${(s.paragraphs || []).map((p) => (String(p).startsWith('## ') ? html`<h3>${clean(p.slice(3))}</h3>` : html`<p>${clean(p)}</p>`))}</div>
-      <p class="asof">${s.written_at ? `Written ${ago(s.written_at)}.` : ''}</p>
+      <div class="read-prose">${(s.paragraphs || []).map((p) => (String(p).startsWith('## ') ? html`<h3>${raw(bolded(p.slice(3)))}</h3>` : html`<p>${raw(bolded(p))}</p>`))}</div>
+      <!-- two clocks, said apart (design review, 2026-10-19): the data refresh above and when this text was written -->
+      <p class="asof">${s.written_at ? `This text was written ${ago(s.written_at)}, from the figures at that time${Date.parse(b.built_at) - Date.parse(s.written_at) > 1800000 ? '; the prices above are newer' : ''}.` : ''}</p>
       ${s.method || (b.overview || {}).note ? html`<details class="more-inline"><summary>How the Read is made</summary><p class="asof">${clean(s.method || '')} ${clean((b.overview || {}).note || '')}</p></details>` : ''}
       <form class="read-search" role="search" data-v2-read-search><label class="field">${icon('search')}<span class="sr">Search the headlines</span><input name="q" placeholder="Search the headlines" autocomplete="off" value="${D.q || ''}"></label></form>
       <div id="read-results" aria-live="polite">${searchResults()}</div>
@@ -99,7 +100,7 @@ function catalystMode() {
     <p><b>Consensus against actual:</b> not shown. ${clean((c.consensus || {}).reason || '')}</p>
     ${(c.reaction || {}).available ? html`<h3>How markets took it</h3><div class="chips">${c.reaction.assets.map((a) => html`<span class="pill">${a.name} <b class="${a.change_pct >= 0 ? 'up' : 'down'}">${signed(a.change_pct)}</b></span>`)}</div><p class="asof">${clean(c.reaction.basis || '')}</p>` : ''}
     <h3>Optic's read of it</h3>
-    ${rd.available ? html`<p><b>${clean(rd.headline || '')}</b></p>${(rd.paragraphs || []).map((p) => html`<p>${clean(p)}</p>`)}<p class="asof">${clean(rd.disclaimer || '')}</p>`
+    ${rd.available ? html`<p><b>${clean(rd.headline || '')}</b></p>${(rd.paragraphs || []).map((p) => html`<p>${raw(bolded(p))}</p>`)}<p class="asof">${clean(rd.disclaimer || '')}</p>`
     : D.catWriting ? skeleton('lines', 3, 'Writing the read') : html`<p class="t-muted">Not written yet.</p><button type="button" class="btn btn-sm" data-v2-catread>Write the read</button><p class="asof">Writing it uses a paid model; once written it is kept for an hour and shared with every reader.</p>`}
     <p class="asof">${clean(c.method || '')}</p>`;
 }
@@ -131,7 +132,7 @@ function weekly() {
   }
   const e = (w.facts || {}).earnings;
   return html`<p class="t-label">Weekly market analysis</p><h3 class="t-h2">${clean(w.headline)}</h3>${w.subhead ? html`<p class="lede-line">${clean(w.subhead)}</p>` : ''}
-    ${(w.paragraphs || []).map((p) => html`<p>${clean(p)}</p>`)}
+    ${(w.paragraphs || []).map((p) => html`<p>${raw(bolded(p))}</p>`)}
     ${e && (e.days || []).length ? html`<h3>Reporting this week, from the watchlist</h3><ul class="plain">${e.days.map((d) => html`<li><b>${d.day}</b>: ${(d.symbols || []).join(', ')}</li>`)}</ul>` : ''}
     <p class="asof">${clean(w.method || '')} ${clean(w.disclaimer || '')}</p>`;
 }

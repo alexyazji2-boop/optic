@@ -57,13 +57,14 @@ function actions(sym, label, sm) {
   </div>`;
 }
 
-export function header(sym, D, view = 'overview', { compact = false, bar = false } = {}) {
+export function header(sym, D, view = 'overview', { compact = false, bar = true } = {}) {
   const q = D.quote || {};
   const s = (D.session && D.session.prices) || {};
   const name = q.name || (D.session && D.session.name) || '';
   const ext = s.extended && isNum(s.extended.price) ? s.extended : null;
   const label = (pageOf(view) || {}).label || 'Overview';
-  // The Chart page's header is one line, so the plot gets the screen (owner, 2026-10-18 second review).
+  // One line, so the research gets the screen: the Chart page's header (owner, 2026-10-18 second review), on every
+  // dossier tab since the design standard of 2026-10-19. The tall header below is kept for a caller that asks.
   if (bar) {
     return html`<header class="dhead bar">
       <h1 class="name"><b class="tick">${sym}</b>${name && name !== sym ? html`<span>${name}</span>` : ''}<span class="sr">, ${label}</span></h1>

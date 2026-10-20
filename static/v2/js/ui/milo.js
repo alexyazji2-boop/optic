@@ -24,6 +24,7 @@ import { renderAnswer, streamingTail, sourcesAsText, STUDIES, SECTIONS as ACT_SE
 import { lineChart, mountCharts } from './chart.js';
 import { CLASSIC } from '../core/classic.js';
 import { miloNotice } from '../core/legal.js';
+import { icon } from './icons.js';
 
 const HISTORY_KEY = 'optic.pulse.history.v1', PERSONA_KEY = 'optic.pulse.persona.v1', HORIZON_KEY = 'optic.milo.horizon.v1', RESEARCH_KEY = 'optic.research.v1';
 const MAX_CONVERSATIONS = 30, MAX_MESSAGES = 60, MAX_CHARS = 12000;
@@ -199,7 +200,7 @@ function openingHTML() {
 }
 
 export function button(label, { ask, context, symbol, cls = '' } = {}) {
-  return html`<button type="button" class="btn btn-milo ${cls}" data-v2-milo="${ask || ''}" data-v2-milo-ctx="${context || ''}" data-v2-milo-sym="${symbol || ''}" ${AVAIL === 'off' ? html`aria-describedby="milo-off-desc"` : ''}>${label}</button>`;
+  return html`<button type="button" class="btn btn-milo ${cls}" data-v2-milo="${ask || ''}" data-v2-milo-ctx="${context || ''}" data-v2-milo-sym="${symbol || ''}" ${AVAIL === 'off' ? html`aria-describedby="milo-off-desc"` : ''}>${icon('milo')}${label}</button>`;
 }
 
 /* ---------------- whether Milo can answer here ---------------- */

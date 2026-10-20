@@ -10,7 +10,7 @@ import { num, signed, dir, money, compact, clean, capFirst, shortDate, fullDate,
 import { signedBars } from '../ui/bars.js';
 import { xyChart } from '../ui/xychart.js';
 import { button as miloButton } from '../ui/milo.js';
-import { empty } from '../ui/states.js';
+import { empty, how } from '../ui/states.js';
 import { icon } from '../ui/icons.js';
 
 const pct = (v, dp = 1) => (isNum(v) ? `${num(v, dp)}%` : 'n/a');
@@ -63,13 +63,13 @@ export function gex(t, sym) {
     <p>${clean(reg.note || '')} <b>Walls:</b> ${clean(reg.swing_implication || '')}</p>${note(reg.sign_note)}
     <h3>Key levels</h3>${kv([wall('Call wall', lv.call_wall), wall('Put wall', lv.put_wall), wall('Gamma pin', lv.gamma_pin), lv.max_oi_strike ? ['Most open interest', html`${num(lv.max_oi_strike.strike, 0)} <span class="t-muted">(${compact(lv.max_oi_strike.total_oi)} contracts)</span>`] : null], 4)}
     <h3>Net dealer gamma by strike</h3><div class="chart-slot" data-chart="gexStrikes"></div>
-    <p class="asof">Strikes with the most gamma only, so the strikes are not evenly spaced in price. The gold line is the current price.</p>
     ${(g.profile || {}).spots ? html`<h3>Gamma profile across price</h3><div class="chart-slot" data-chart="gexProfile"></div><p class="asof">Net dealer gamma if the price moved to each level, everything else held. ${isNum(reg.flip_point) ? `It crosses zero near ${num(reg.flip_point)}.` : 'It does not cross zero within 12% of the price.'}</p>` : ''}
     ${nearTerm(g.near_term)}
     <h3>Dealer vanna and charm</h3>${kv([['Net vanna', html`${signedMoneyCompact(tot.net_vanna)} delta per vol point`], ['Net charm', html`${signedMoneyCompact(tot.net_charm)} delta per day`]], 2)}
-    <p class="asof">There is deliberately no vanna flip point. ${clean((g.convention || {}).represents || '')}</p>
-    ${note(`Sign convention: ${g.assumption || ''} It is the common retail convention and it is sometimes wrong.`)}
-    ${note(`Expiries used: ${(g.expiries_used || []).map(shortDate).join(', ')}. Rate ${num((g.inputs || {}).rate_pct, 2)}%.`)}
+    ${how(html`<p>The strike chart shows the strikes with the most gamma only, so they are not evenly spaced in price; the gold line is the current price.</p>`,
+      html`<p>There is deliberately no vanna flip point. ${clean((g.convention || {}).represents || '')}</p>`,
+      html`<p>Sign convention: ${g.assumption || ''} It is the common retail convention and it is sometimes wrong.</p>`,
+      html`<p>Expiries used: ${(g.expiries_used || []).map(shortDate).join(', ')}. Rate ${num((g.inputs || {}).rate_pct, 2)}%.</p>`)}
     ${ask(sym, 'Ask Milo about dealer gamma', `What does dealer gamma positioning mean for ${sym} this week?`)}`;
 }
 function nearTerm(n) {

@@ -35,7 +35,7 @@ function readings() {
   const sec = (sb.rows || []).filter((r) => r.available && isNum(r.rel_week_pct));
   if (sec.length) { const a = sec.filter((r) => r.rel_week_pct > 0).length, sh = a / sec.length; rows.push(['Sector breadth', `${a} of ${sec.length} ahead of ${sb.benchmark || 'SPY'}`, sh >= 0.6 ? 'Broad: most sectors beat the index this week.' : sh <= 0.4 ? 'Carried by the heaviest sectors.' : 'Split.']); }
   if (!rows.length) return '';
-  return html`<section class="section" aria-labelledby="ex-r"><h2 class="t-h2" id="ex-r">What is worth a look</h2><p class="section-sub">A reading of the three sections below, not a fourth thing to read.</p>
+  return html`<section class="section" aria-labelledby="ex-r"><h2 class="t-h2" id="ex-r">What is worth a look</h2><p class="section-sub">How much is screenable today, the biggest move and how many sectors lead the index.</p>
     <dl class="reads-dl">${rows.map(([k, v, n]) => html`<div><dt>${k}</dt><dd><b>${v}</b> <span class="t-muted">${n}</span></dd></div>`)}</dl></section>`;
 }
 

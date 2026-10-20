@@ -17,7 +17,7 @@
   /* ink */
   --c-ink: #1b1a18;
   --c-ink-2: #48443d;
-  --c-ink-3: #686256;
+  --c-ink-3: #5c564b;
   --c-line: #d9d1c1;
   --c-line-2: #e6dfd1;
   /* brand and meaning */
@@ -30,6 +30,9 @@
   --c-warn: #8a5a00;
   --c-proposed: #6c43c9;
   --c-focus: #1b1a18;
+  --c-on-gold: #1b1a18;   /* text on a gold fill: the primary action */
+  /* chart categories, in a fixed order (they were literals in eleven places) */
+  --c-cat-1: #5b7fbf; --c-cat-2: #3d8f8a; --c-cat-3: #c27a2c; --c-cat-4: #8a5fb8;
   /* charts */
   --c-chart-ink: var(--c-ink);
   --c-chart-grid: #e3dccd;
@@ -48,23 +51,42 @@
   --f-label: "Space Grotesk", "Inter", system-ui, sans-serif;
   --t-display: clamp(40px, 6vw, 84px);
   --t-display-m: clamp(28px, 3.4vw, 46px);
-  --t-h2: 24px;
-  --t-h3: 18px;
-  --t-body: 16px;
-  --t-note: 15px;
-  --t-label: 14px;
-  --t-micro: 13px;   /* labels on dense rows only */
-  --t-chart: 12px;   /* chart ticks and data tags only */
+  /* the type scale (design standard, 2026-10-19, docs/frontend-v2/DESIGN-STANDARD.md): seven text sizes and
+     one lead size. Half-pixel sizes were rounded up into these, so supporting text reads more easily. Figures
+     larger than 24px are a component's headline number and say so where they are set. */
+  --t-xs: 12px;     /* chart ticks, data tags, counts */
+  --t-sm: 13px;     /* meta lines, dense labels, as-of lines in tight rows */
+  --t-md: 14px;     /* labels, controls in toolbars, table cells */
+  --t-base: 15px;   /* supporting text, notes, as-of lines */
+  --t-lg: 16px;     /* body */
+  --t-xl: 18px;     /* h3, a row's lead figure */
+  --t-lead: 20px;   /* a section's one-line finding */
+  --t-2xl: 24px;    /* h2, the header's price */
+  --t-h2: var(--t-2xl);
+  --t-h3: var(--t-xl);
+  --t-body: var(--t-lg);
+  --t-note: var(--t-base);
+  --t-label: var(--t-md);
+  --t-micro: var(--t-sm);
+  --t-chart: var(--t-xs);
   --track-display: -0.035em;
   --w-display: 600;
 
   /* space and shape */
   --s-1: 4px; --s-2: 8px; --s-3: 12px; --s-4: 16px; --s-5: 20px; --s-6: 24px; --s-7: 32px; --s-8: 40px; --s-9: 56px; --s-10: 72px;
-  --r-1: 8px; --r-2: 12px; --r-3: 16px; --r-4: 22px; --r-pill: 999px;
+  /* corner radii, by what the shape holds (design standard): marks and tags 4, an item inside a control 6,
+     controls 8, panels, cards and menus 12, sheets 16. --r-pill is the sidebar's gold hover pill (owner's rule)
+     and counts; 50% is for avatars, dots and the round icon buttons. The old names point at the new steps. */
+  --r-xs: 4px; --r-sm: 6px; --r-md: 8px; --r-lg: 12px; --r-xl: 16px; --r-pill: 999px;
+  --r-1: var(--r-md); --r-2: var(--r-lg); --r-3: var(--r-lg); --r-4: var(--r-xl);
   /* controls (buttons, segmented controls, chips, inputs, selects): squared-off, not pill-shaped (owner's
-     checklist, 2026-10-19). --r-pill stays for tags, badges, bars and the sidebar's gold hover pill. */
-  --r-ctl: 10px; --r-ctl-in: 8px;
-  --tap: 44px;
+     checklist, 2026-10-19) */
+  --r-ctl: var(--r-md); --r-ctl-in: var(--r-sm);
+  --tap: 44px;        /* every control a finger can reach */
+  /* elevation is for what floats over the page and nothing else: menus, popovers and tips; drawers and sheets */
+  --sh-pop: 0 12px 32px rgba(0, 0, 0, .28);
+  --sh-sheet: -24px 0 60px rgba(0, 0, 0, .30);
+  --ctl-sm: 36px;     /* a dense toolbar's controls (the Chart page), with a 44px row around them */
   --rail: 236px;
   --page: 1560px;   /* one canvas for every page, Home's workspace included (2026-10-18) */
 
@@ -75,27 +97,28 @@
 }
 :root[data-theme="charcoal"] {
   /* four steps of emphasis (owner, 2026-10-18 second review): headings and figures (ink), supporting
-     text (ink-2), labels and times (ink-3, 6.7:1 on a panel), and lines strong enough to separate panels */
+     text (ink-2), labels and times (ink-3), and lines strong enough to separate panels. ink-2 and ink-3 were
+     lifted on 2026-10-19 (design standard: "readable secondary text"): ink-3 is 8.4:1 on a panel, was 6.7 */
   --c-plane: #0b0b0a; --c-plane-2: #0f0f0e; --c-raised: #161614; --c-sunk: #201f1c; --c-active: #2d2c28;
   --c-scene: #080807; --c-scene-2: #121210;
-  --c-ink: #f3f1eb; --c-ink-2: #c9c5bc; --c-ink-3: #a29e95;
+  --c-ink: #f3f1eb; --c-ink-2: #d3cfc6; --c-ink-3: #b4afa5;
   --c-line: #363430; --c-line-2: #272623;
   --c-gold: #d4b144; --c-gold-ink: #e3c76f;
   --c-pos: #4cc38a; --c-neg: #f07a66; --c-warn: #e7b25a; --c-proposed: #b9a0ff; --c-focus: #f0d77c;
   --c-chart-grid: #2a2925; --c-area-top: rgba(212, 177, 68, .20); --c-cone-a: rgba(212, 177, 68, .30); --c-cone-edge: #e3c76f;
-  --c-tip-bg: #eceae4; --c-tip-ink: #0b0b0a; --c-scrim: rgba(0, 0, 0, .6);
+  --c-tip-bg: #eceae4; --c-tip-ink: #0b0b0a; --c-scrim: rgba(0, 0, 0, .6); --c-on-gold: #0b0b0a;
   color-scheme: dark;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme]) {
     --c-plane: #0b0b0a; --c-plane-2: #0f0f0e; --c-raised: #161614; --c-sunk: #201f1c; --c-active: #2d2c28;
     --c-scene: #080807; --c-scene-2: #121210;
-    --c-ink: #f3f1eb; --c-ink-2: #c9c5bc; --c-ink-3: #a29e95;
+    --c-ink: #f3f1eb; --c-ink-2: #d3cfc6; --c-ink-3: #b4afa5;
     --c-line: #363430; --c-line-2: #272623;
     --c-gold: #d4b144; --c-gold-ink: #e3c76f;
     --c-pos: #4cc38a; --c-neg: #f07a66; --c-warn: #e7b25a; --c-proposed: #b9a0ff; --c-focus: #f0d77c;
     --c-chart-grid: #2a2925; --c-area-top: rgba(212, 177, 68, .20); --c-cone-a: rgba(212, 177, 68, .30); --c-cone-edge: #e3c76f;
-    --c-tip-bg: #eceae4; --c-tip-ink: #0b0b0a; --c-scrim: rgba(0, 0, 0, .6);
+    --c-tip-bg: #eceae4; --c-tip-ink: #0b0b0a; --c-scrim: rgba(0, 0, 0, .6); --c-on-gold: #0b0b0a;
     color-scheme: dark;
   }
 }

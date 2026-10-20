@@ -14,7 +14,7 @@ import { holds } from '../core/device.js';
 import { num, signed, money, clean, shortDate, isNum } from '../core/format.js';
 import { mountCharts } from '../ui/chart.js';
 import { xyChart } from '../ui/xychart.js';
-import { skeleton, empty, failed, staleLine } from '../ui/states.js';
+import { skeleton, empty, failed, staleLine, how } from '../ui/states.js';
 import { icon } from '../ui/icons.js';
 import { button as miloButton, provideContext } from '../ui/milo.js';
 import { toast } from '../ui/toast.js';
@@ -252,7 +252,7 @@ function research() {
   }
   return html`${head}
     <p class="asof">${shortDate(s.expiry)}, ${s.dte} days.${ivLine} Price ${num(d.spot)}. Showing ${tbl.shown} of ${tbl.total}.</p>
-    ${(d.events || []).length ? html`<ul class="plain events-note">${d.events.map((e) => html`<li>${clean(e.text)}</li>`)}</ul>` : ''}
+    ${(d.events || []).filter((e) => /report/i.test(e.text || '')).length ? html`<ul class="plain events-note">${d.events.filter((e) => /report/i.test(e.text || '')).map((e) => html`<li>${clean(e.text)}</li>`)}</ul>` : ''}
     <div class="tscroll"><table class="t contracts"><caption class="sr">${R.side === 'call' ? 'Calls' : 'Puts'} expiring ${shortDate(s.expiry)}</caption>
       <thead><tr><th>Strike</th><th>Delta</th><th>Bid / ask</th><th>Spread</th><th>IV</th><th>Breakeven</th><th>Cost</th>${R.more ? html`<th>Decay a day</th><th>Per vol pt</th><th>ITM, model</th><th>OI / volume</th><th>Early exercise</th>` : ''}<th><span class="sr">Add</span></th></tr></thead>
       <tbody>${rs.map((r) => html`<tr class="${Math.abs(r.moneyness_pct) < 1.5 ? 'atm' : ''}">
@@ -264,8 +264,9 @@ function research() {
         ${R.more ? html`<td>${money(r.theta_per_contract, 2)}</td><td>${money(r.vega_per_contract, 2)}</td><td>${num((r.p_itm_model || 0) * 100, 0)}%</td><td>${num(r.open_interest, 0)} / ${num(r.volume, 0)}</td><td>${r.exercise === 'european' ? 'European' : isNum(r.early_exercise_premium_contract) ? (r.early_exercise_premium_contract < 0.5 ? 'Under $1' : money(r.early_exercise_premium_contract, 0)) : 'n/a'}</td>` : ''}
         <td>${r.mid ? html`<button type="button" class="btn btn-sm" data-v2-add-leg="${r.strike}" aria-label="Add the ${num(r.strike, 0)} ${r.type} to the position">Add</button>` : ''}</td></tr>`)}</tbody></table></div>
     ${all.length > 15 ? html`<button type="button" class="textlink" data-v2-op-all aria-expanded="${!!R.allStrikes}">${R.allStrikes ? 'Show the 15 nearest the money' : `Show all ${all.length} strikes`}</button>` : ''}
-    ${D.t && D.t.data_caveat ? html`<p class="asof">${clean(D.t.data_caveat)}</p>` : ''}
-    <p class="asof">Cost is one contract (100 shares) at the ask, before fees. Breakeven at expiry is the strike plus or minus the ask. ITM (model) is N(d2) under risk-neutral pricing: not a forecast, and not a chance of profit. ${clean(((d.liquidity_method || {}).text) || '')}</p>`;
+    ${how((d.events || []).filter((e) => !/report/i.test(e.text || '')).map((e) => html`<p>${clean(e.text)}</p>`),
+      D.t && D.t.data_caveat ? html`<p>${clean(D.t.data_caveat)}</p>` : '',
+      html`<p>Cost is one contract (100 shares) at the ask, before fees. Breakeven at expiry is the strike plus or minus the ask. ITM (model) is N(d2) under risk-neutral pricing: not a forecast, and not a chance of profit. ${clean(((d.liquidity_method || {}).text) || '')}</p>`)}`;
 }
 
 async function loadResearch() {

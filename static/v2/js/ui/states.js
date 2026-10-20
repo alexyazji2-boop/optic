@@ -11,6 +11,11 @@ export const skeleton = (kind = 'lines', n = 3, label = 'Loading') => html`<div 
   ${kind === 'lines' ? Array.from({ length: n }, (_, i) => html`<div class="sk sk-line" style="width:${[92, 78, 64, 85, 70][i % 5]}%"></div>`) : ''}
 </div>`;
 
+/**
+ * A section's method, folded (design standard, 2026-10-19): the finding stays on screen and the formulas,
+ * conventions and caveats are one press away, under the same words everywhere.
+ */
+export const how = (...parts) => html`<details class="more-inline how"><summary>How this works</summary><div class="how-body">${parts}</div></details>`;
 export const empty = (title, body, action) => html`<div class="state" role="note"><p class="t-h3">${title}</p>${body ? html`<p>${body}</p>` : ''}${action || ''}</div>`;
 
 export const failed = (what, err, { retry } = {}) => html`<div class="state err" role="alert">

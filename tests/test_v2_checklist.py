@@ -23,8 +23,9 @@ def _rule(css, selector):
 
 def test_no_purple_and_no_decorative_gradients():
     assert not re.search(r"purple|violet|indigo|#(8b5cf6|7c3aed|a855f7|9333ea|6d28d9|c084fc|a78bfa)", ALL_CSS, re.I)
-    # the only gradients: the rail's divider line, the loading shimmer and the first-visit illustration
-    assert len(re.findall(r"(linear|radial)-gradient\(", ALL_CSS)) <= 4
+    # the only gradients: the rail's divider line and the loading shimmer; the two gold glows went with the
+    # design standard (2026-10-19: "no decorative gradients, glow effects")
+    assert len(re.findall(r"(linear|radial)-gradient\(", ALL_CSS)) <= 2
 
 
 def test_buttons_and_controls_are_not_pill_shaped():
@@ -35,7 +36,7 @@ def test_buttons_and_controls_are_not_pill_shaped():
     for sel in (".select select", ".ws-presets", ".ws-presets button", ".toast-act"):
         rule = _rule(pages, sel)
         assert "var(--r-pill)" not in rule and "var(--r-ctl" in rule, sel
-    assert "--r-ctl: 10px" in CSS["tokens.css"]
+    assert "--r-ctl: var(--r-md);" in CSS["tokens.css"] and "--r-md: 8px;" in CSS["tokens.css"], "controls are 8px (design standard)"
 
 
 def test_no_emoji_or_sparkle_icons():

@@ -86,6 +86,14 @@ export function clean(s) {
   return plain(String(s == null ? '' : s)).replace(/\s*—\s*/g, ': ').replace(/–/g, ' to ');
 }
 
+/**
+ * Written prose as HTML: escaped, then the model's **bold** kept as bold (the Read's figures arrive so marked) and
+ * nothing else interpreted. The markers printed as they were on the Read (design review, 2026-10-19).
+ */
+export function bolded(s) {
+  return esc(clean(s)).replace(/\*\*([^*\n]+?)\*\*/g, '<b>$1</b>').replace(/\*\*/g, '');
+}
+
 export function capFirst(s) {
   const t = String(s == null ? '' : s);
   return t.charAt(0).toUpperCase() + t.slice(1);

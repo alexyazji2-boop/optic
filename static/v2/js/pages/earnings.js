@@ -5,10 +5,10 @@
 // The pre-earnings brief is written by a model (/api/earnings/{T}/brief) and
 // costs Optic money on a cache miss. The classic app requested it on every
 // visit; here it loads only when the reader asks, and says so.
-import { html, render as draw } from '../core/dom.js';
+import { html, raw, render as draw } from '../core/dom.js';
 import * as api from '../core/api.js';
 import * as store from '../core/store.js';
-import { num, signed, compact, clean, capFirst, longDate, fullDate, shortDate, isNum, ago } from '../core/format.js';
+import { num, signed, compact, clean, bolded, capFirst, longDate, fullDate, shortDate, isNum, ago } from '../core/format.js';
 import { mountCharts } from '../ui/chart.js';
 import { signedBars } from '../ui/bars.js';
 import { skeleton, empty, failed } from '../ui/states.js';
@@ -49,7 +49,7 @@ function brief(sym) {
     : b === 'loading' ? skeleton('lines', 4, 'Writing the brief')
       : b.error ? failed('The brief', b.error, { retry: 'brief' })
         : !b.available ? html`<p class="t-muted">${clean(b.reason || 'No brief right now.')}</p>`
-          : html`<p class="t-label">${capFirst(b.stance || '')}</p><p class="t-h3">${clean(b.headline || '')}</p>${(b.paragraphs || []).map((p) => html`<p>${clean(p)}</p>`)}<p class="asof">${clean(b.method || '')} ${b.generated_at ? `Written ${ago(b.generated_at)}.` : ''} ${clean(b.disclaimer || '')}</p>`}
+          : html`<p class="t-label">${capFirst(b.stance || '')}</p><p class="t-h3">${clean(b.headline || '')}</p>${(b.paragraphs || []).map((p) => html`<p>${raw(bolded(p))}</p>`)}<p class="asof">${clean(b.method || '')} ${b.generated_at ? `Written ${ago(b.generated_at)}.` : ''} ${clean(b.disclaimer || '')}</p>`}
   </section>`;
 }
 
