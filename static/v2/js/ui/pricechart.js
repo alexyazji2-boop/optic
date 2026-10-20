@@ -13,6 +13,7 @@
 // app's format, so they line up whatever the bar size.
 import { num, esc, compact } from '../core/format.js';
 import { makeAxis } from './timeaxis.js';
+import { drawOn } from './drawon.js';
 import { tsoSeries, maTrendSeries, volumeByPrice, sessionStarts, nyDate, TSO_LEVEL } from './studies.js';
 import { TOOL_POINTS, channel, fibExt, pitchfork, riskReward, positionSize, measure, snap, moved, segDist } from './drawings.js';
 import { icon } from './icons.js';
@@ -183,8 +184,12 @@ export function createPriceChart(host, opts) {
   }
   const path = (vals, X, Y) => { let d = '', pen = false; for (let i = from; i <= to; i++) { const v = vals[i]; if (v === null || v === undefined || !Number.isFinite(v)) { pen = false; continue; } d += `${pen ? 'L' : 'M'}${X(i).toFixed(1)} ${Y(v).toFixed(1)}`; pen = true; } return d; };
 
+  // the classic draw-on, once, on a line or area chart's first draw; not on a rebuild that keeps the view
+  // (a pane added, a refresh), and other redraws wait until the line has drawn rather than cut it off
+  let anim = null, first = true, holdT = 0;
   function draw() {
     raf = 0;
+    if (anim && anim.busy()) { if (!holdT) holdT = setTimeout(() => { holdT = 0; redraw(); }, 140); return; }
     layout = computeLayout();
     const { X, bw, panes } = layout;
     const pp = panes[0], ps = priceScale(pp); layout.ps = ps;
@@ -369,6 +374,7 @@ export function createPriceChart(host, opts) {
     }
     svg.setAttribute('viewBox', `0 0 ${W} ${H}`); svg.setAttribute('width', W); svg.setAttribute('height', H);
     svg.innerHTML = o;
+    if (first) { first = false; if (S.animate !== false && !S.view && (S.style === 'line' || S.style === 'area')) anim = drawOn(svg, { lines: '.pline', fades: '.area' }); }
     svg.setAttribute('aria-label', summary());
     readout();
     const zoomed = from !== home0.from || to !== home0.to;
@@ -728,7 +734,7 @@ export function createPriceChart(host, opts) {
     keep: () => ({ view: { from, to }, history: { undo, redo } }),
     deleteSelected() { if (sel >= 0) { commit(S.drawings.filter((_, j) => j !== sel)); sel = -1; } },
     clearDrawings() { commit([]); },
-    destroy() { ro.disconnect(); },
+    destroy() { ro.disconnect(); clearTimeout(holdT); anim = null; },
     focus() { svg.focus(); },
   };
 }

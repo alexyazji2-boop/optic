@@ -4,6 +4,7 @@
 // specified size. Every chart has a text summary for screen readers and a
 // keyboard-readable crosshair.
 import { num, shortDate, fullDate, esc, monthName } from '../core/format.js';
+import { drawOn } from './drawon.js';
 
 let seq = 0;
 
@@ -216,9 +217,25 @@ export function mountCharts(root, makers) {
       el._drawn = true;
       if (out.wire) out.wire(el);
     };
+    const fresh = !el._drawn;
     el._draw = draw; slots.add(el); draw();
+    // the classic draw-on, the first time this chart appears on this visit to the page: a repaint, a refresh
+    // or a resize draws it in place
+    if (fresh && el._drawn) {
+      const view = el.closest('.page-view') || document.body;
+      let seen = drawnOn.get(view); if (!seen) drawnOn.set(view, (seen = new Map()));
+      // a repaint within the draw's own time (the Options builder paints twice as a position lands) draws the
+      // replacement on too, rather than cutting the first draw off
+      const at = seen.get(el.dataset.chart);
+      if (at === undefined || performance.now() - at < 900) {
+        if (at === undefined) seen.set(el.dataset.chart, performance.now());
+        const svg = el.querySelector('svg.chart, svg.xy');
+        if (svg) drawOn(svg, { lines: 'path.line, path.ov, path.ln', fades: 'path.area, path.fill-up, path.fill-dn' });
+      }
+    }
   });
 }
+const drawnOn = new WeakMap();   // page view -> chart key -> when it was first drawn on there
 let rt;
 window.addEventListener('resize', () => {
   clearTimeout(rt);
