@@ -120,7 +120,8 @@
 /* Scan: each result's next steps, and the symbol kept in view while the table scrolls sideways */
 .sc-t th[scope="row"] { position: sticky; left: 0; z-index: 1; background: var(--c-raised); text-align: left; }
 .sc-acts { white-space: nowrap; text-align: right; } .sc-acts .icon-btn { display: inline-grid; vertical-align: middle; } .sc-acts .icon-btn svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.7; }
-.sc-next { margin-top: 8px; } .flt-count { margin: 0 0 8px; display: flex; align-items: center; gap: 12px; }
+/* .scan-next, not .sc-next: that name is the top bar session chip's, and an 8px margin here pushed its "After hours at 4 pm" off the line */
+.scan-next { margin-top: 8px; } .flt-count { margin: 0 0 8px; display: flex; align-items: center; gap: 12px; }
 /* Options: a leg's quote under it, a quantity stepper, the position's summary at the foot of the chain */
 .legs-list li { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 12px; }
 .leg-main { display: grid; gap: 2px; min-width: 0; } .leg-acts { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }

@@ -59,7 +59,7 @@ const buildBar = (b) => (b && b.total ? html`<div class="build-bar" role="progre
 /** A result row's next steps: its chart, and following it. */
 const rowActs = (sym) => html`<td class="sc-acts"><a class="icon-btn" href="${hrefFor('chart', sym)}" aria-label="${sym} chart" title="Chart">${icon('markets')}</a>${watchButton(sym, { compact: true })}</td>`;
 /** Comparing the names a result leads with, in one step. */
-const compareTop = (rows) => (rows || []).length >= 2 ? html`<p class="cluster sc-next"><a class="btn btn-sm" href="#/compare?t=${encodeURIComponent(rows.slice(0, 4).map((r) => r.symbol).join(','))}">Compare the first ${Math.min(4, rows.length)}</a></p>` : '';
+const compareTop = (rows) => (rows || []).length >= 2 ? html`<p class="cluster scan-next"><a class="btn btn-sm" href="#/compare?t=${encodeURIComponent(rows.slice(0, 4).map((r) => r.symbol).join(','))}">Compare the first ${Math.min(4, rows.length)}</a></p>` : '';
 function screenTable(res, emptyText) {
   const cols = res.columns || [];
   if (!(res.rows || []).length) return html`<p class="quiet">${emptyText}</p>`;
