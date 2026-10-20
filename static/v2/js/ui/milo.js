@@ -229,6 +229,7 @@ export function contextShort(scope = S.scope, r = route) {
 }
 const PAGE_WORDS = { chart: 'this {T} chart', swing: "{T}'s options", long: "{T}'s valuation", earnings: "{T}'s earnings", financials: "{T}'s financials", news: "{T}'s news" };
 function welcomeLine() {
+  const bk = blocked(); if (bk && bk.kind !== 'spent') return bk.kind === 'signin' ? 'Sign in above to ask. The pages themselves need no account.' : bk.text;
   if (S.scope === 'none') return 'Milo will see your question only, not this page.';
   if (S.scope === 'market') return "Milo will see the market's state, not this page.";
   const sym = onSymbol();
@@ -291,7 +292,7 @@ function blocked() {
   if (!r) return null;
   const ai = r.ai || {}, a = r.allowance || {};
   if (ai.enabled === false) return { kind: 'off', text: 'Milo is switched off right now, so it cannot answer questions. Everything else in Optic works without it.' };
-  if (a.requires_account && !store.signedIn()) return { kind: 'signin', text: 'Milo needs a free account. Sign in or create one to ask.' };
+  if (a.requires_account && !store.signedIn()) return { kind: 'signin', text: 'Asking Milo needs a free account.', perDay: a.signed_in_allowance };
   if (Number.isFinite(a.allowed) && a.allowed > 0 && a.left === 0) return { kind: 'spent', text: `You have used today's ${a.allowed} questions.${a.next_at ? ` The next one is available ${new Date(a.next_at).toLocaleString('en-US', { weekday: 'short', hour: 'numeric', minute: '2-digit' })}.` : ''}` };
   return null;
 }
@@ -410,10 +411,19 @@ function movedHTML() {
   if (!S.items.length || S.scope !== 'auto' || !S.conv.lastTicker || !now || now === S.conv.lastTicker) return '';
   return html`<p class="milo-moved" role="note">This conversation is about ${S.conv.lastTicker}. Your next question will be about ${now}, and Milo is told the change. <button type="button" class="textlink" data-v2-milo-new>Start a new conversation</button></p>`;
 }
+// What the reader can do here, said first when they cannot ask (beginner brief item 10): Milo being on is the
+// service; whether this reader may ask is their access. A guest sees that an account is needed, the way to one,
+// what it unlocks and what works without it, before any setting.
+function accessHTML(b) {
+  if (!b) return '';
+  if (b.kind === 'signin') return html`<div class="milo-guest" role="status"><p><b>${b.text}</b> Milo is available. A free account lets you ask it${isFinite(b.perDay) && b.perDay > 0 ? ` ${b.perDay} questions a day` : ''} about any company or page, and keeps your watchlists on every device.</p>
+    <div class="cluster"><a class="btn btn-primary btn-sm" href="#/signin">Sign in or create an account</a></div>
+    <p class="milo-guest-sub">Without an account you can search companies, read every page, follow companies in this browser, and tap an underlined term for its meaning.</p></div>`;
+  return html`<div class="state milo-block" role="status"><p>${b.text}</p></div>`;
+}
 function chromeHTML() {
   const b = blocked();
-  return html`${ctxHTML()}${movedHTML()}${personaHTML()}
-    ${b ? html`<div class="state milo-block" role="status"><p>${b.text}</p>${b.kind === 'signin' ? html`<a class="btn btn-primary btn-sm" href="#/signin">Sign in</a>` : ''}</div>` : ''}`;
+  return html`${accessHTML(b)}${ctxHTML()}${movedHTML()}${personaHTML()}`;
 }
 function logHTML() {
   if (S.showHistory) return historyHTML();
@@ -461,6 +471,8 @@ function paintForm() {
   if (S.busy && hadFocus === send && stop) stop.focus({ preventScroll: true });
   if (!S.busy && hadFocus === stop && ta) ta.focus({ preventScroll: true });
   if (ta) { ta.disabled = !!b && b.kind !== 'spent'; ta.placeholder = placeholder(); }
+  // no conversation form that cannot be used: hidden while asking needs an account or Milo is off
+  const fm = $('.milo-form', h); if (fm) fm.hidden = !!b && b.kind !== 'spent';
   const at = $('#milo-attached span', h); if (at) at.textContent = attachedLine();
   const f = $('.milo-form', h); if (f) f.dataset.state = !S.busy ? 'idle' : S.live && S.live.text ? 'streaming' : 'sending';
   const al = $('#milo-allow', h); if (al) al.textContent = !S.busy ? allowanceLine() : S.live && S.live.text ? 'Milo is answering' : 'Sending';

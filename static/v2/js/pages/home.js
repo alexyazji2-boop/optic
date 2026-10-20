@@ -30,7 +30,9 @@ const STRIP = [
   { group: 'crypto', label: 'Bitcoin' },
 ];
 export const STARTERS = ['AAPL', 'NVDA', 'MSFT', 'SPY'];
-const STARTER_NAMES = { AAPL: 'Apple', NVDA: 'NVIDIA', MSFT: 'Microsoft', SPY: 'S&P 500 ETF' };
+// each starter with the name a newcomer knows it by; SPY is a fund, said so (beginner brief item 2)
+export const STARTER_NAMES = { AAPL: 'Apple', NVDA: 'NVIDIA', MSFT: 'Microsoft', SPY: 'S&P 500 fund' };
+export const STARTER_ABOUT = { SPY: 'SPY is a fund that holds the 500 companies of the S&P 500, so it moves with the US market as a whole.' };
 
 let timer = null;
 let live = true;

@@ -3,6 +3,7 @@
 // footer chip), and a notice while the browser is offline.
 import { html, render, $ } from './dom.js';
 import * as api from './api.js';
+import * as store from './store.js';
 import * as prefs from './prefs.js';
 
 // The market session the top bar shows, for a page that needs it without a fetch of its own (Home's
@@ -27,7 +28,10 @@ async function health() {
   try {
     const h = await api.get('/api/health', { ttl: 300000, timeout: 10000 });
     const feed = h.realtime_chain ? 'Option chains real-time; other quotes may be delayed.' : 'Quotes from Yahoo Finance, delayed about 15 minutes.';
-    const milo = (h.assistant || {}).enabled ? 'Milo is answering.' : 'Milo is switched off in this build.';
+    // the service and this reader's access to it, kept apart (beginner brief item 10)
+    let access = null; try { access = await api.get('/api/ai-allowance', { ttl: 60000, timeout: 10000 }); } catch (e) { /* the service line still shows */ }
+    const guestNeedsAccount = !!(access && access.allowance && access.allowance.requires_account && !store.signedIn());
+    const milo = !(h.assistant || {}).enabled ? 'Milo is switched off in this build.' : guestNeedsAccount ? 'Milo is available with a free account.' : 'Milo is available.';
     render(el, `${feed} ${milo}`);
   } catch (e) { render(el, ''); }
 }

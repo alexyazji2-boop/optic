@@ -1406,3 +1406,44 @@ ul.cal-react { display: flex; flex-wrap: wrap; gap: 4px 18px; padding-left: 0; l
 .ern-lead { display: grid; gap: var(--s-3); } .ern-lead p { margin: 0; max-width: 72ch; }
 .ern-when { font-size: var(--t-lg); line-height: 1.45; color: var(--c-ink); } .ern-what { font-size: var(--t-md); }
 .legend-line i.ref-sw { width: 18px; height: 0; border-top: 2px dashed var(--c-ink-3); }
+
+/* Home for a newcomer (beginner brief, 2026-10-20, items 2 to 4) */
+.ws-onboard { grid-template-areas: "text done" "ways ways"; }
+.ob-ways { grid-area: ways; margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--s-3) var(--s-5); }
+.ob-ways li { display: grid; gap: var(--s-2); align-content: start; min-width: 0; } .ob-ways p { margin: 0; font-size: var(--t-md); line-height: 1.45; color: var(--c-ink-2); } .ob-ways b { color: var(--c-ink); }
+.ob-acts { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; }
+.ob-sym { margin-left: 4px; font: 500 var(--t-xs)/1 var(--f-label); color: var(--c-ink-3); }
+.ws-onboard .ob-spy { font-size: var(--t-sm); }
+@media (max-width: 1100px) { .ob-ways { grid-template-columns: minmax(0, 1fr); } }
+/* the company the linked panels show, right above the first of them */
+.ws-linkrow { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; padding: 6px 0; }
+.ws-linkrow .ws-linkform { flex-wrap: wrap; } .ws-linkrow .ws-linkhint { flex-basis: 100%; margin: 0; font-size: var(--t-sm); }
+.ws-linkhint .ws-linkchip { vertical-align: 1px; }
+.ws-cell .u { font: 500 var(--t-xs)/1.2 var(--f-label); color: var(--c-ink-3); }
+.ws-lead { margin: 0 0 var(--s-3); font-size: var(--t-base); line-height: 1.5; color: var(--c-ink-2); } .ws-lead b { color: var(--c-ink); }
+.ws-cond { margin-bottom: var(--s-2); }
+.ob-ways .textlink { font-size: inherit; font-weight: 600; }
+@media (max-width: 860px) {
+  .ob-wide { display: none; }
+  .ws-onboard .ob-picks { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .ws-onboard .ob-picks .ob-follow { justify-content: flex-start; text-align: left; }
+  .ob-ways { gap: var(--s-3); }
+}
+
+/* Overview for a newcomer (beginner brief, 2026-10-20, items 5 and 6): what the company does first, in a few lines */
+.about { display: grid; gap: var(--s-3); } .about-lead { margin: 0; max-width: 72ch; font-size: var(--t-lg); line-height: 1.55; color: var(--c-ink); }
+.about-kv { margin: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: var(--s-3) var(--s-6); }
+.about-kv dt { font: 500 var(--t-sm)/1.3 var(--f-label); color: var(--c-ink-3); } .about-kv dd { margin: 2px 0 0; font-size: var(--t-base); color: var(--c-ink); font-variant-numeric: tabular-nums; }
+.about-kv dd small { display: block; margin-top: 2px; font-size: var(--t-sm); color: var(--c-ink-3); }
+.synth { margin: 0 0 var(--s-4); max-width: 72ch; font-size: var(--t-lg); line-height: 1.5; color: var(--c-ink); }
+
+/* Discover: three questions first (beginner brief item 8) */
+.guided { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--s-5); }
+.gq { display: grid; gap: var(--s-2); align-content: start; padding: var(--s-4); border: 1px solid var(--c-line-2); border-radius: var(--r-lg); background: var(--c-raised); }
+.gq h3 { margin: 0; font: 600 var(--t-lg)/1.3 var(--f-sans); } .gq p { margin: 0; } .gq .btn { justify-self: start; }
+.gq-prev { margin: 0; padding: 0; list-style: none; display: grid; gap: 4px; font-variant-numeric: tabular-nums; }
+@media (max-width: 860px) { .guided { grid-template-columns: minmax(0, 1fr); } }
+
+/* whose portfolio this is, said before any figure (beginner brief item 9) */
+.whose { margin-top: var(--s-3); padding: var(--s-3) var(--s-4); border: 1px solid var(--c-line); border-radius: var(--r-lg); background: var(--c-raised); display: grid; gap: 4px; max-width: 80ch; }
+.whose p { margin: 0; color: var(--c-ink-2); } .whose b { color: var(--c-ink); }

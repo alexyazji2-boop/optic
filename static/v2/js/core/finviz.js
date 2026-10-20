@@ -140,3 +140,7 @@ export function reactionVsImplied(moves, implied) {
   const avg = ms.reduce((a, m) => a + Math.abs(m), 0) / ms.length;
   return { n: ms.length, avg, over: isFig(implied) ? ms.filter((m) => Math.abs(m) > implied).length : null, largest: ms.reduce((a, m) => (Math.abs(m) > Math.abs(a) ? m : a), 0) };
 }
+
+/** The three ways a figure can be absent, said the same way everywhere (beginner brief item 13): not out yet, not
+ * a figure this item has, or one Optic does not have. Never a blank, never a zero. */
+export const MISSING = { pending: 'Not released yet', na: 'Not applicable', unavailable: 'Not available' };

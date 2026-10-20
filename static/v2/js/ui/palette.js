@@ -137,8 +137,10 @@ async function build(q, early) {
     const rec = store.recent().slice(0, 5);
     rec.forEach((s) => rows.push({ group: 'Recent', lead: icon(isInstrument(s) ? 'chart' : 'dossier'), label: s, detail: 'Open again', run: go(openHref(s)) }));
     if (rec.length) rows.push({ group: 'Recent', lead: icon('close'), label: 'Clear recent symbols', detail: 'Forgets them in this browser', keep: true, run: () => store.clearRecent() });
-    QUICK.forEach((x) => rows.push({ group: 'Actions', lead: icon('arrow'), label: x.label, detail: x.detail, run: x.run }));
-    places.slice(0, 6).forEach((p) => rows.push({ group: 'Go to', lead: icon('arrow'), label: p.label, run: go(placeHref(p)) }));
+    // companies first, by the names a newcomer knows, then a few actions; the full list of pages answers to typing
+    POPULAR.filter(([s2]) => !rec.includes(s2)).slice(0, rec.length ? 2 : 4).forEach(([s2, name, d]) => rows.push({ group: 'Companies', lead: icon(s2 === 'SPY' ? 'markets' : 'dossier'), label: `${name} · ${s2}`, detail: d, run: go(openHref(s2)) }));
+    QUICK.slice(0, 3).forEach((x) => rows.push({ group: 'Actions', lead: icon('arrow'), label: x.label, detail: x.detail, run: x.run }));
+    places.slice(0, 4).forEach((p) => rows.push({ group: 'Go to', lead: icon('arrow'), label: p.label, run: go(placeHref(p)) }));
     return rows;
   }
   const upper = q.toUpperCase(), lower = q.toLowerCase(), isTicker = looksLikeTicker(q), isQuestion = looksLikeQuestion(q);
@@ -207,18 +209,22 @@ async function build(q, early) {
   return rows;
 }
 
+const POPULAR = [['AAPL', 'Apple', 'iPhone, Mac and services'], ['NVDA', 'NVIDIA', 'Chips for AI and graphics'], ['MSFT', 'Microsoft', 'Software and cloud'], ['SPY', 'S&P 500 fund', 'A fund that tracks the S&P 500']];
 function ensure() {
   if (root) return;
   root = document.createElement('div');
   root.className = 'palette'; root.hidden = true;
   root.innerHTML = `<div class="palette-scrim"></div><div class="palette-panel" role="dialog" aria-modal="true" aria-label="Search or ask Optic">
-    <input type="search" role="combobox" aria-expanded="true" aria-controls="pal-list" aria-autocomplete="list" placeholder="Search stocks, funds, indices, pages, or ask Milo" autocomplete="off" autocapitalize="none" autocorrect="off" enterkeyhint="go" spellcheck="false">
+    <div class="palette-top"><input type="search" role="combobox" aria-expanded="true" aria-controls="pal-list" aria-autocomplete="list" aria-label="Search a company, fund, index or page, or ask Milo a question" placeholder="Search a company" autocomplete="off" autocapitalize="none" autocorrect="off" enterkeyhint="go" spellcheck="false">
+      <button type="button" class="palette-x" data-pal-close>Cancel</button></div>
     <div class="palette-list" id="pal-list" role="listbox" aria-label="Results"></div>
     <p class="palette-note" role="status" aria-live="polite" hidden></p>
     <p class="palette-foot" aria-hidden="true"><span><kbd>↑</kbd><kbd>↓</kbd> move</span><span><kbd>↵</kbd> open</span><span><kbd>esc</kbd> close</span></p></div>`;
   document.body.appendChild(root);
   input = $('input', root); list = $('.palette-list', root); note = $('.palette-note', root);
-  root.addEventListener('click', (e) => { if (e.target.classList.contains('palette-scrim')) close(); const it = e.target.closest('.palette-item'); if (it) choose(Number(it.dataset.v2Idx)); });
+  // the scrim, Cancel or Escape close it and put the reader back where they were (beginner brief item 12: a phone
+  // has no Escape key, and the menu showed no way out)
+  root.addEventListener('click', (e) => { if (e.target.classList.contains('palette-scrim') || e.target.closest('[data-pal-close]')) { close(); return; } const it = e.target.closest('.palette-item'); if (it) choose(Number(it.dataset.v2Idx)); });
   input.addEventListener('input', () => { moved = null; clearTimeout(timer); timer = setTimeout(() => paint(input.value.trim()), 120); });
   input.addEventListener('keydown', (e) => {
     if (e.isComposing) return;

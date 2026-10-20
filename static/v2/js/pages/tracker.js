@@ -5,6 +5,7 @@
 // own cooldown-guarded actions. No model call anywhere on the page.
 import { html, raw, render as draw } from '../core/dom.js';
 import * as api from '../core/api.js';
+import * as store from '../core/store.js';
 import { num, signed, money, compact, clean, capFirst, shortDate, isNum } from '../core/format.js';
 import { stamp, advancedOn } from '../core/prefs.js';
 import { skeleton, failed } from '../ui/states.js';
@@ -76,16 +77,18 @@ function gauge(p) {
 const pnlCell = (p) => html`<b class="${tone(p.pnl)}">${$0(p.pnl)}</b><br><small class="t-muted">${signed(p.pnl_pct, 1)}</small>`;
 
 /* ---------------- sections ---------------- */
+// "High risk, high reward" read as a promise: higher risk means wider swings both ways, never a better return
+const RISK_WORDS = { conservative: 'Smaller risk per trade', balanced: 'Middle risk per trade', aggressive: 'Higher risk: bigger gains and bigger losses' };
 function books(d) {
   const bs = d.books || [];
   if (bs.length < 2) return '';
   const dated = bs.filter((b) => b.since).map((b) => b.since).sort();
-  return html`<section class="section first" aria-labelledby="bk-h"><div class="section-head"><div><h2 class="t-h2" id="bk-h">Three books</h2>
-      <p class="section-sub">The same scan run under three sets of rules. Identical candidates, so comparing them says what a risk tolerance costs and earns rather than comparing three different signals. Each book has its own $100,000 and its own record.</p></div>
+  return html`<section class="section first" aria-labelledby="bk-h"><div class="section-head"><div><h2 class="t-h2" id="bk-h">Three simulated accounts</h2>
+      <p class="section-sub">Each account, which traders call a book, runs the same scan under its own rules. Identical candidates, so comparing them says what a risk tolerance costs and earns rather than comparing three different signals. Each book has its own $100,000 and its own record.</p></div>
       ${miloButton('Ask Milo what differs', { ask: 'Explain the three books. What actually differs between conservative, balanced and aggressive, and what does comparing them tell me that one book alone would not?', context: 'Optic Portfolio' })}</div>
     <div class="book-cards" role="group" aria-label="Choose a book">${bs.map((b) => { const su = b.summary || {}, traded = (su.open_count || 0) + (su.closed_count || 0) > 0, val = isNum(su.start_equity) ? su.start_equity + (su.total_pnl || 0) : b.equity;
       return html`<button type="button" class="book-card" data-v2-book="${b.id}" aria-pressed="${b.id === (d.book || book)}">
-        <span class="bk-top"><b>${b.label}</b><span class="pill">${b.tagline}</span></span>
+        <span class="bk-top"><b>${b.label}</b><span class="pill">${RISK_WORDS[b.id] || b.tagline}</span></span>
         <span class="bk-figs"><span><i>Value</i>$${compact(val)}</span>${traded ? html`<span><i>Return</i><b class="${tone(su.return_pct)}">${signed(su.return_pct, 2)}</b></span><span><i>Open</i>${num(su.open_count, 0)}</span><span><i>Closed</i>${num(su.closed_count, 0)}</span>` : html`<span><i>Record</i>No trades yet</span>`}</span>
         ${b.since ? html`<span class="bk-since">Record from ${b.since}</span>` : ''}
         <span class="bk-rules">${num(b.risk_per_trade * 100, 1)}% per trade, score bar ${num(b.min_composite, 0)}, ${b.allow_options ? (b.prefer_options ? 'options preferred' : 'shares and options') : 'shares only'}, max daily range ${num(b.max_atr_pct, 0)}%</span>
@@ -102,8 +105,10 @@ function ledger(d) {
       : `Watchlist: ${(cfg.watchlist || []).join(', ')}. A scan puts all of them through the full analysis.`;
   return html`<section class="section" aria-labelledby="op-h"><h2 class="t-h2" id="op-h">Optic Portfolio${name ? html` <span class="pill">${name}</span>` : ''}</h2>
     <p class="section-sub">Three simulated ledgers, one per rule set, trading Optic's own signals. Every reader sees the same books.${name ? ` You are looking at the ${name.toLowerCase()} book; the cards above switch between them.` : ''} Each trades both instruments the Options tab produces: the shares, and the exact contract it recommended.</p>
-    <div class="cluster tk-bar"><button type="button" class="btn btn-primary" data-v2-tk="scan" ${run ? 'disabled' : ''}>${run ? 'Scan running…' : 'Run a scan now'}</button><button type="button" class="btn" data-v2-tk="mark" ${run ? 'disabled' : ''}>Refresh marks</button></div>
-    <p class="asof">${hint}</p>
+    ${run ? '' : html`<details class="more-inline tk-ops"><summary>Run the shared scan or refresh prices</summary>
+      <p class="asof">These act on the demonstration portfolio every reader sees. Anyone may run a scan once every half hour; it also runs on its own every few hours. Refreshing prices only re-marks the open positions.</p>
+      <div class="cluster tk-bar"><button type="button" class="btn" data-v2-tk="scan">Run a scan now</button><button type="button" class="btn" data-v2-tk="mark">Refresh marks</button></div>
+      <p class="asof">${hint}</p></details>`}
     ${notice ? html`<div class="state" role="status"><p>${notice}</p></div>` : ''}
     ${d.market_open ? '' : html`<p class="stale"><b>The market is closed.</b> Open positions are still re-marked at the closing price, but no new entries are taken while the tape is shut. A fill at a stale price isn't a trade anyone could have got. Scanning resumes at the next open (9:30am ET, weekdays).</p>`}
     ${run ? html`<div class="tk-progress" role="status"><p><b>${prog.stage || 'Working'}</b>${prog.note ? ` ${prog.note}` : ''}${prog.total ? ` ${prog.done} of ${prog.total}` : ''}${prog.trigger === 'scheduled' ? ' (scheduled)' : ''}</p>${prog.total ? html`<div class="build-bar"><span style="width:${Math.min(100, Math.round((prog.done / prog.total) * 100))}%"></span></div>` : ''}</div>` : ''}
@@ -237,11 +242,14 @@ function paint() {
   // a background repaint (risk, a scan poll) must not take focus away from the reader
   const a = document.activeElement, fid = a && mainEl.contains(a) ? a.id || (a.dataset && Object.keys(a.dataset).length ? a.outerHTML.match(/data-v2-[a-z-]+="[^"]*"/)?.[0] : '') : '';
   const empty = d && !(d.open || []).length && !(d.closed || []).length;
+  // whose portfolio this is, before any figure (beginner brief item 9): Optic's own simulated record, the same for
+  // every reader, with pretend money; the reader's own practice portfolio and real accounts are elsewhere
   draw(mainEl, html`<header class="page-head">${sectionHead('portfolio', 'tracker')}
-      <p class="section-sub">The terminal's own paper-traded record. Hypothetical performance: these positions were never placed with real money.</p></header>
+      <div class="whose" role="note"><p><b>This is Optic's demonstration portfolio, not yours.</b> Three simulated accounts trade Optic's own signals with pretend money, the same for every reader. No money is real and no order reaches a broker.</p>
+        <p>Your own practice portfolio is the <a class="textlink" href="#/paper">Paper Desk</a>.${store.signedIn() ? ' Accounts you link are under <a class="textlink" href="#/brokerage">Brokerage</a>, read only.' : ''}</p></div></header>
     ${D.err ? failed("Optic's position ledger", D.err, { retry: 'load' }) : !d ? skeleton('rows', 6, "Loading Optic's own position ledger") : html`
       ${books(d)}${ledger(d)}${openPositions(d.open || [])}${months(d)}${funnel(d)}
-      ${empty ? html`<section class="section"><h2 class="t-h2">No trades yet</h2><p>The ledger is empty. It only opens a position when a setup clears a composite score of ${num((d.config || {}).min_composite, 0)}, and most scans find nothing. Run a scan above, or wait for the scheduled one.</p></section>` : ''}
+      ${empty ? html`<section class="section"><h2 class="t-h2">No trades yet</h2><p>The ledger is empty. It only opens a position when a setup clears a composite score of ${num((d.config || {}).min_composite, 0)}, and most scans find nothing. Open "Run the shared scan" above to run one, or wait for the scheduled one.</p></section>` : ''}
       ${record(d.summary || {})}${risk(d)}${rest(d)}`}`);
   if (Math.abs(window.scrollY - y) > 2) window.scrollTo(0, y);
   if (fid) { const el = fid.startsWith('data-') ? mainEl.querySelector(`[${fid}]`) : mainEl.querySelector(`#${fid}`); if (el) { if (!el.hasAttribute('tabindex') && /^H\d$/.test(el.tagName)) el.setAttribute('tabindex', '-1'); el.focus({ preventScroll: true }); } }

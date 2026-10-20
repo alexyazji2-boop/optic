@@ -23,7 +23,9 @@ import { provideContext } from '../ui/milo.js';
 import { toast } from '../ui/toast.js';
 import { icon } from '../ui/icons.js';
 import { go } from '../core/router.js';
-import { hello, etDate, portfolio, eventsBlock, STARTERS, portfolioSeries } from './home.js';
+import { hello, etDate, portfolio, eventsBlock, STARTERS, STARTER_NAMES, STARTER_ABOUT, portfolioSeries } from './home.js';
+import { term } from '../ui/term.js';
+import * as FV from '../core/finviz.js';
 
 const KEY = 'optic.v2.workspace.v1';
 const VERSION = 5;   // 5: each layout knows whether the reader changed it, panel settings are kept, and any older version carries over (2026-10-20)
@@ -223,6 +225,11 @@ const asof = (iso) => {
 };
 
 /* ---------------- the panels ---------------- */
+const UNIT = { 'S&P 500': 'Index points', 'Nasdaq 100': 'Index points', 'Russell 2000': 'Index points', VIX: 'Volatility index', 'US 10Y': 'Yield, change in basis points', 'WTI Crude': 'Dollars a barrel', Gold: 'Dollars an ounce', Bitcoin: 'Dollars' };
+const NEUTRAL_MOVE = new Set(['volatility', 'rates']);
+// the regime in plain words, with what it means for prices, in place of "risk-on" and "tape" (beginner brief item 4)
+const PLAIN_REGIME = { 'risk-on': 'Investors are leaning toward risk', 'mildly risk-on': 'A mild lean toward risk', 'neutral / mixed': 'Mixed: no clear lean', 'mildly risk-off': 'A mild lean toward caution', 'risk-off': 'Investors are leaning toward caution' };
+const STANCE = { 'risk-on': 'Buyers have had the market behind them: rising prices have tended to hold.', 'mildly risk-on': 'Conditions are supportive, but not strongly enough to lift a weak company on their own.', 'neutral / mixed': 'The market is not pushing prices one way, so each company\'s own news matters more than the market.', 'mildly risk-off': 'Conditions are less forgiving than usual: rises have tended to fade faster.', 'risk-off': 'Investors have been seeking protection, and rises have often failed to hold.' };
 const STRIP = [['equity', 'S&P 500'], ['equity', 'Nasdaq 100'], ['equity', 'Russell 2000'], ['volatility', 'VIX'], ['rates', 'US 10Y'], ['commodities', 'WTI Crude'], ['commodities', 'Gold'], ['crypto', 'Bitcoin']];
 const inst = (d, g, l) => ((((d || {}).macro || {}).groups || {})[g] || []).find((r) => r.label === l) || null;
 function moveText(i) {
@@ -283,34 +290,39 @@ export const PANELS = {
     milo: 'Explain the latest scan alerts.',
   },
   indices: {
-    title: 'Indices', span: 12,
-    how: 'The day\'s move for the main U.S. indices, volatility, the 10-year yield, oil, gold and bitcoin. Yields move in basis points (0.01 percentage points). Outside the regular session most of these are at the last close; futures and crypto keep trading.',
+    // not only indices: volatility, a yield, oil, gold and bitcoin too, so the heading says markets (beginner brief item 4)
+    title: 'Markets at a glance', span: 12,
+    how: 'The day\'s move for the main U.S. indices, volatility, the 10-year yield, oil, gold and bitcoin. Yields move in basis points (0.01 percentage points). The VIX is what S&P 500 options price for the next month\'s swings: lower means calmer trading is priced, not that prices will rise. A higher yield means lenders demand more; it is not good or bad on its own, so neither is coloured. Outside the regular session most of these are at the last close; futures and crypto keep trading.',
     load: () => get('/api/home'),
     body: (d) => {
       const cells = STRIP.map(([g, l]) => inst(d, g, l)).filter((i) => i && isNum(i.last));
       if (!cells.length) return html`<p class="ws-note">No index readings came back from the feed.</p>`;
-      return html`<div class="ws-strip">${cells.map((i) => html`<a class="ws-cell" href="#/instrument/${enc(i.symbol)}"><span class="k">${i.label}</span><span class="v">${num(i.last, i.last < 20 ? 2 : i.last > 1000 ? 0 : 2)}</span><span class="d ${dir(i.chg_1d)}">${moveText(i)}</span></a>`)}</div>`;
+      // each figure with its unit; volatility and yields are not coloured as good or bad: a falling VIX is calmer
+      // trading priced, a rising yield a higher return demanded, neither a win or a loss in itself
+      return html`<div class="ws-strip">${cells.map((i) => html`<a class="ws-cell" href="#/instrument/${enc(i.symbol)}"><span class="k">${i.label}</span><span class="v">${num(i.last, i.last < 20 ? 2 : i.last > 1000 ? 0 : 2)}${i.group === 'rates' ? '%' : ''}</span><span class="d ${NEUTRAL_MOVE.has(i.group) ? 'flat' : dir(i.chg_1d)}">${moveText(i)}</span><span class="u">${UNIT[i.label] || ''}</span></a>`)}</div>`;
     },
     foot: (d) => ({ source: 'Yahoo Finance via Optic', at: d.generated_at, note: ((d.session || {}).is_regular ? '' : 'Outside the regular session, equities are at the last close; futures and crypto keep trading.'), stale: (d.degraded || []).length ? 'Some missing' : '', staleWhy: (d.degraded || []).length ? `Not available: ${d.degraded.join(', ')}.` : '' }),
     milo: 'What do today\'s index, volatility, yield and commodity moves say together?',
   },
   regime: {
-    title: 'Sentiment and regime', span: 6,
+    title: 'Market conditions', span: 6,
     how: 'Two separate reads. The regime score adds up named rules (VIX level and change, trend, credit, the curve): each factor shows how much it moved the score. The sentiment gauge averages several market inputs into 0 to 100, where low is fear. When they disagree, the factors say why.',
     load: async () => { const [h, s] = await Promise.all([get('/api/home'), get('/api/sentiment', { ttl: 120000 }).catch((e) => ({ available: false, reason: api.explain(e, 'Sentiment') }))]); return { h, s }; },
     body: ({ h, s }) => {
       const m = (h || {}).macro || {};
-      // The conclusion and its three largest reasons first; every factor and the sentiment inputs one step away,
-      // so the panel fits a third of the row (owner, 2026-10-19).
+      // In plain words first (beginner brief item 4): what conditions are, then the two readings' figures with their
+      // scales, then every factor and input one step away. The labels, scores and rules are unchanged.
       const all = (m.factors || []).slice().sort((a, b) => Math.abs(b.contribution) - Math.abs(a.contribution)), top = all.slice(0, 3);
-      const frow = (f) => html`<tr><td>${f.factor}<span class="ws-rule ws-clip" title="${f.rule || ''}">${f.rule || ''}</span></td><td class="n">${num(f.value, 2)}</td><td class="n ${dir(f.contribution)}">${f.contribution > 0 ? '+' : ''}${num(f.contribution, 1)}</td></tr>`;
-      return html`<div class="ws-two">
-        <div><p class="ws-k">Regime</p><p class="ws-big">${capitalize(m.regime || 'n/a')}</p><p class="ws-sub">Score ${num(m.risk_score, 1)} on −100 to +100</p>
-          <table class="ws-t"><caption class="sr">The three largest regime factors</caption><thead><tr><th scope="col">Largest factors</th><th scope="col" class="n">Reading</th><th scope="col" class="n">Effect</th></tr></thead><tbody>${top.map(frow)}</tbody></table>
-          ${all.length > 3 ? html`<details class="ws-more"><summary>All ${all.length} factors</summary><table class="ws-t"><caption class="sr">Every regime factor</caption><tbody>${all.slice(3).map(frow)}</tbody></table></details>` : ''}</div>
-        <div><p class="ws-k">Sentiment</p>${s && s.available !== false ? html`<p class="ws-big">${num(s.score, 0)} <span class="ws-word">${s.label}</span></p><p class="ws-sub">0 is extreme fear, 100 extreme greed</p>
-          <details class="ws-more"><summary>Its ${(s.components || []).length} inputs</summary><ul class="ws-bars">${(s.components || []).map((c) => html`<li><span>${c.label}</span><span class="ws-gauge" aria-hidden="true"><i style="width:${Math.max(2, Math.min(100, c.score || 0))}%"></i></span><b>${num(c.score, 0)}</b></li>`)}</ul></details>`
-          : html`<p class="ws-note">${(s && s.reason) || 'The sentiment gauge is not available right now.'}</p>`}</div></div>`;
+      const frow = (f) => html`<tr><td>${f.factor}<span class="ws-rule ws-clip" title="${f.rule || ''}">${f.rule || ''}</span></td><td class="n">${num(f.value, 2)}</td><td class="n">${f.contribution > 0 ? '+' : ''}${num(f.contribution, 1)}</td></tr>`;
+      const plain = PLAIN_REGIME[m.regime] || capitalize(m.regime || 'Not available');
+      const sent = s && s.available !== false;
+      return html`<p class="ws-lead"><b>${plain}.</b> ${clean(STANCE[m.regime] || m.stance || '')}</p>
+        <dl class="ws-kv ws-cond"><div><dt>Optic's market score</dt><dd>${num(m.risk_score, 0)}<small>From −100, cautious, to +100, leaning toward ${term('risk-on', 'risk')}</small></dd></div>
+          <div><dt>Sentiment gauge</dt><dd>${sent ? html`${num(s.score, 0)} <span class="ws-word">${s.label}</span><small>0 is extreme fear, 100 extreme greed</small>` : html`<small>${(s && s.reason) || 'Not available right now.'}</small>`}</dd></div></dl>
+        <details class="ws-more"><summary>How these readings are built</summary>
+          <p class="ws-rule">The market score adds up named rules (volatility, trend, credit, the yield curve); each factor shows how much it moved the score. The sentiment gauge averages several market inputs. When they disagree, the factors say why.</p>
+          <table class="ws-t"><caption class="sr">The regime factors, largest first</caption><thead><tr><th scope="col">Factor</th><th scope="col" class="n">Reading</th><th scope="col" class="n">Effect on the score</th></tr></thead><tbody>${all.map(frow)}</tbody></table>
+          ${sent ? html`<p class="ws-k">The sentiment gauge's ${(s.components || []).length} inputs</p><ul class="ws-bars">${(s.components || []).map((c) => html`<li><span>${c.label}</span><span class="ws-gauge" aria-hidden="true"><i style="width:${Math.max(2, Math.min(100, c.score || 0))}%"></i></span><b>${num(c.score, 0)}</b></li>`)}</ul>` : ''}</details>`;
     },
     foot: ({ h, s }) => ({ source: 'Optic regime rules; Optic sentiment gauge', at: (s && s.generated_at) || (h || {}).generated_at }),
     milo: 'Where do the regime factors and the sentiment components agree or conflict right now?',
@@ -356,10 +368,18 @@ export const PANELS = {
       if (!ev.length) return html`${impSeg(P)}<p class="ws-note">Nothing scheduled${P.imp === 'high' ? ' at medium or high impact' : ''} in the window.</p>`;
       const withFig = ev.some((e) => (e.readings || {}).available);
       const fig = (r, k) => (r.available && isNum(r[k]) ? `${num(r[k], 2)}${r.unit || ''}` : '');
+      // an empty cell says why: a release with no figure (a speech, an auction), one still to come, or one Optic
+      // has no data series for (beginner brief item 13)
+      const cellFig = (e, r, k) => {
+        if (r.available && isNum(r[k]) && !(k === 'actual' && r.is_upcoming)) return fig(r, k);
+        const word = !r.available ? (/speech|testif|minutes|meeting|auction|holiday|remarks|conference/i.test(e.title || '') ? FV.MISSING.na : FV.MISSING.unavailable)
+          : k === 'actual' && (r.is_upcoming || !e.released) ? FV.MISSING.pending : FV.MISSING.unavailable;
+        return html`<span class="ws-rule" title="${word === FV.MISSING.unavailable ? 'Optic has no data series for this release, or the figure has not reached it yet' : ''}">${word}</span>`;
+      };
       let day = '';
       return html`${impSeg(P)}<table class="ws-t"><caption class="sr">Economic calendar</caption><thead><tr><th scope="col">Time (ET)</th><th scope="col">Release</th><th scope="col">Impact</th>${withFig ? html`<th scope="col" class="n">Actual</th><th scope="col" class="n">Prior</th>` : ''}</tr></thead><tbody>
         ${ev.map((e) => { const head = e.when_label !== day ? (day = e.when_label, html`<tr class="ws-day"><th scope="rowgroup" colspan="${withFig ? 5 : 3}">${e.when_label}</th></tr>`) : ''; const r = e.readings || {};
-          return html`${head}<tr><td class="ws-time">${e.all_day ? 'All day' : e.time_label || ''}</td><td>${e.title}${e.released ? html` <span class="ws-flag">Released</span>` : ''}<span class="ws-rule">${e.agency_short || e.agency || ''}</span></td><td><span class="ws-imp" data-imp="${e.impact}">${capitalize(e.impact || 'low')}</span></td>${withFig ? html`<td class="n">${r.available ? (r.is_upcoming || !isNum(r.actual) ? html`<span class="ws-rule">pending</span>` : fig(r, 'actual')) : ''}</td><td class="n">${fig(r, 'previous')}</td>` : ''}</tr>`; })}</tbody></table>`;
+          return html`${head}<tr><td class="ws-time">${e.all_day ? 'All day' : e.time_label || ''}</td><td>${e.title}${e.released ? html` <span class="ws-flag">Released</span>` : ''}<span class="ws-rule">${e.agency_short || e.agency || ''}</span></td><td><span class="ws-imp" data-imp="${e.impact}">${capitalize(e.impact || 'low')}</span></td>${withFig ? html`<td class="n">${cellFig(e, r, 'actual')}</td><td class="n">${cellFig(e, r, 'previous')}</td>` : ''}</tr>`; })}</tbody></table>`;
     },
     foot: (d) => ({ source: 'Agency schedules (BLS, BEA, Fed, Census), via Optic\'s Read', at: (d || {}).built_at, note: (d || {}).stale ? 'From the last built Read.' : '', gap: 'Actual and prior come from FRED where Optic maps the release to a series. Consensus forecasts are licensed and not in Optic.' }),
     milo: 'Which scheduled releases this week matter most for stocks, and why?',
@@ -401,7 +421,7 @@ export const PANELS = {
     load: async () => { const syms = (store.activeList() || {}).symbols || []; if (!syms.length) return { empty: true }; const d = await get(`/api/watchlist?symbols=${enc(syms.slice(0, 30).join(','))}`, { ttl: 30000 }); return Object.assign({}, d, { total: syms.length }); },
     body: (d) => {
       if (d.empty) return html`<p class="ws-note">Your open watchlist is empty. Follow a few names to start, or press Watch on any company.</p>
-        <div class="ws-starters" role="group" aria-label="Follow a starter name">${STARTERS.map((sym) => html`<button type="button" class="ws-tick" data-v2-watch="${sym}" aria-pressed="${store.isFollowed(sym)}">${store.isFollowed(sym) ? 'Following' : 'Follow'} ${sym}</button>`)}</div>`;
+        <div class="ws-starters" role="group" aria-label="Follow a company to start">${STARTERS.map((sym) => followBtn(sym))}</div>`;
       return html`<table class="ws-t"><caption class="sr">Watchlist</caption><thead><tr><th scope="col">Ticker</th><th scope="col" class="n">Price</th><th scope="col" class="n">Day</th><th scope="col" class="ws-sec">Changed</th></tr></thead><tbody>
         ${(d.rows || []).map((r) => html`<tr><td>${tickBtn(r.symbol)}</td><td class="n">${r.available === false ? '' : num(r.price)}</td><td class="n ${dir(r.change_pct)}">${r.available === false ? 'n/a' : pct(r.change_pct)}</td><td class="ws-rule ws-sec">${((r.changed || {}).text) || ''}</td></tr>`)}</tbody></table>
         ${d.total > 30 ? html`<p class="ws-note">The first 30 of ${d.total}. <a href="#/watchlist">The whole list is on Watchlist</a>.</p>` : ''}`;
@@ -656,11 +676,19 @@ function bar() {
       ${S.preset === 'mine' ? '' : html`<button type="button" class="btn btn-sm" data-ws-save>Save as My Desk</button>`}
       <details class="ws-menu menu"><summary class="ws-hbtn" aria-label="More layout actions">${icon('more')}</summary><div class="ws-menu-body"><button type="button" data-ws-reset>Reset ${PRESETS[S.preset].label} to its standard panels</button></div></details>
     </div>`
-  : html`<div class="ws-toolbar">
-      <form class="ws-linkform" data-ws-linkform><label for="ws-link">Linked ticker</label><input id="ws-link" name="link" value="${S.link}" autocomplete="off" spellcheck="false" maxlength="12" aria-describedby="ws-link-help"><button type="submit" class="btn btn-sm">Link</button><span id="ws-link-help" class="sr">Panels showing the ticker chip follow it</span></form>
-      ${recent.length ? html`<div class="ws-recent" role="group" aria-label="Link a recent ticker">${recent.map((sym) => tickBtn(sym))}</div>` : ''}
-    </div>`}
+  : ''}
 `;
+}
+// "Company or fund shown in linked panels", placed right above the first panel that follows it, so what it changes
+// is in view and the market-wide panels above it plainly do not (beginner brief item 3: "Linked ticker" and
+// "Link" asked a newcomer to understand dashboard linking before using Home)
+function linkRow() {
+  const recent = [...new Set([...(store.recent() || []), ...((store.activeList() || {}).symbols || [])])].filter((x) => x !== S.link).slice(0, 5);
+  return html`<div class="ws-linkrow">
+      <form class="ws-linkform" data-ws-linkform><label for="ws-link">Company or fund shown in linked panels</label><input id="ws-link" name="link" value="${S.link}" autocomplete="off" spellcheck="false" maxlength="12" aria-describedby="ws-link-help"><button type="submit" class="btn btn-sm">Update panels</button><span id="ws-link-help" class="sr">Panels showing the ticker chip follow it</span></form>
+      ${recent.length ? html`<div class="ws-recent" role="group" aria-label="Show a recent company in the linked panels">${recent.map((sym) => tickBtn(sym))}</div>` : ''}
+      <p class="ws-sub ws-linkhint">Panels marked with <span class="ws-linkchip">${S.link}</span> show this company or fund; the others show the whole market.</p>
+    </div>`;
 }
 
 function panelShell(x, i, n) {
@@ -673,7 +701,7 @@ function panelShell(x, i, n) {
     <header class="ws-head">
       ${locked ? '' : html`<button type="button" class="ws-grip" data-ws-grip="${x.id}" aria-label="Move ${p.title}: arrow keys move it earlier or later">${icon('grip')}</button>`}
       <h2 class="ws-title" id="wsh-${x.id}"><span class="ws-tt">${p.title}</span><button type="button" class="ws-tbtn" data-ws-fold="${x.id}" aria-expanded="${!fold}" aria-controls="wsb-${x.id}"><span>${p.title}</span>${icon('chev')}</button></h2>
-      ${p.linked ? html`<span class="ws-linkchip" title="Follows the linked ticker">${link}</span>` : SCOPE[x.id] ? html`<span class="ws-scope">${SCOPE[x.id]}</span>` : ''}
+      ${p.linked ? html`<span class="ws-linkchip" title="Shows ${link}, the company or fund chosen above these panels">${link}</span>` : SCOPE[x.id] ? html`<span class="ws-scope">${SCOPE[x.id]}</span>` : ''}
       <span class="spacer"></span>
       <button type="button" class="ws-ibtn ws-howbtn" data-ws-how="${x.id}" aria-expanded="false" aria-controls="wsw-${x.id}" aria-label="About ${p.title}: how to read it, its source and how fresh it is" title="About this panel">${icon('help')}</button>
       <button type="button" class="ws-ibtn ws-ask" data-v2-milo="${ask}" data-v2-milo-ctx="Home: ${p.title}" data-v2-milo-sym="${p.linked ? link : ''}" aria-label="Ask Milo about ${p.title}" title="Ask Milo about ${p.title}">${icon('milo')}</button>
@@ -704,14 +732,23 @@ function panelShell(x, i, n) {
 const ONBOARD_KEY = 'optic.v2.onboard.v1';
 const onboarded = () => { try { return localStorage.getItem(ONBOARD_KEY) === 'done'; } catch (e) { return false; } };
 const showOnboard = () => isNew() && !onboarded();
+// a starter as the name a newcomer knows, the symbol beside it; following saves it, it never buys
+function followBtn(sym, cls = 'ws-tick') {
+  const on = store.isFollowed(sym);
+  return html`<button type="button" class="${cls} ob-follow" data-v2-watch="${sym}" aria-pressed="${on}" title="${STARTER_ABOUT[sym] || ''}">${on ? 'Following' : 'Follow'} ${STARTER_NAMES[sym] || sym} <span class="ob-sym">${sym}</span></button>`;
+}
 function onboard() {
-  let cur = null; try { cur = localStorage.getItem('optic.knowledge.v1'); } catch (e) { /* private */ }
   const following = store.allSymbols();
   return html`<section class="ws-onboard" id="ws-new" aria-labelledby="ob-h">
-    <div class="ob-text"><h2 class="ws-title" id="ob-h">New to Optic? Start with a few names.</h2>
-      <p class="ws-sub">Search a company, fund or index at the top, or follow one of these to start. ${store.signedIn() ? 'They go into your watchlist.' : 'Kept in this browser; sign in to keep them on your account.'}</p></div>
-    <div class="ob-row"><div class="ob-picks" role="group" aria-label="Follow a starter name">${STARTERS.map((sym) => html`<button type="button" class="ws-tick ob-follow" data-v2-watch="${sym}" aria-pressed="${store.isFollowed(sym)}">${store.isFollowed(sym) ? 'Following' : 'Follow'} ${sym}</button>`)}</div>
-    ${NEW.modes && NEW.modes.length ? html`<label class="ws-sel ob-mode">How Optic explains things <select data-ws-mode><option value="">Choose a level</option>${NEW.modes.map((m) => html`<option value="${m.id}" ${cur === m.id ? 'selected' : ''}>${m.label}</option>`)}</select></label>` : ''}</div>
+    <div class="ob-text"><h2 class="ws-title" id="ob-h">New to Optic? Three ways to start</h2></div>
+    <ul class="ob-ways">
+      <li><p><b>Research a company.</b> Search by its name, such as Apple, or by its ${term('ticker', 'ticker')}, the short code it trades under, such as AAPL.</p>
+        <div class="ob-acts"><button type="button" class="btn btn-sm" data-v2-open-palette>Search for a company</button><a class="textlink ob-wide" href="#/AAPL">Apple · AAPL</a><a class="textlink ob-wide" href="#/NVDA">NVIDIA · NVDA</a></div></li>
+      <li><p><b>Understand today's market.</b> What moved, what is scheduled and what it means, in a few lines; Market conditions below sums it up too.</p>
+        <div class="ob-acts"><a class="btn btn-sm" href="#/read">Read today's market</a></div></li>
+      <li><p><b>Save a company to follow.</b> Following adds it to your ${term('watchlist', 'watchlist')}; it does not buy shares or spend money. SPY is a fund that tracks the S&P 500. ${store.signedIn() ? '' : 'Kept in this browser until you sign in.'}</p>
+        <div class="ob-picks" role="group" aria-label="Follow a company">${STARTERS.map((sym) => followBtn(sym))}</div></li>
+    </ul>
     <button type="button" class="btn btn-sm" data-ws-onboard-done>${following.length ? 'Done' : 'Not now'}</button>
   </section>`;
 }
@@ -720,12 +757,15 @@ function onboard() {
 // grid has no hole (for example when Your portfolio is absent). The saved spans are unchanged.
 function fillRows() {
   const grid = $('.ws-grid', root); if (!grid) return;
-  const ps2 = $$('.ws-grid > .ws-panel', root).filter((x) => !x.hidden);
+  const ps2 = $$('.ws-grid > .ws-panel, .ws-grid > .ws-linkrow', root).filter((x) => !x.hidden);
   ps2.forEach((x) => x.style.removeProperty('grid-column'));
   const wide = window.innerWidth > 1100; if (window.innerWidth <= 860) return;
   const eff = (x) => { const sp = Number(x.dataset.span) || 6; return wide ? sp : (sp >= 8 ? 12 : 6); };
   let used = 0, prev = null;
-  ps2.forEach((x) => { const w = eff(x); if (used + w > 12) { if (prev && used < 12) prev.style.gridColumn = `span ${12 - used + eff(prev)}`; used = 0; } used += w; prev = x; });
+  ps2.forEach((x) => {
+    if (x.classList.contains('ws-linkrow')) { if (prev && used > 0 && used < 12) prev.style.gridColumn = `span ${12 - used + eff(prev)}`; used = 0; prev = null; return; }
+    const w = eff(x); if (used + w > 12) { if (prev && used < 12) prev.style.gridColumn = `span ${12 - used + eff(prev)}`; used = 0; } used += w; prev = x;
+  });
   if (prev && used < 12) prev.style.gridColumn = `span ${12 - used + eff(prev)}`;
 }
 
@@ -737,8 +777,7 @@ function paintAll() {
       </header>
     ${showOnboard() ? onboard() : ''}
     ${bar()}
-    <div class="ws-grid ${EDIT ? 'is-editing' : 'is-locked'}">${shown.length ? shown.map((x, i) => panelShell(x, i, shown.length)) : html`<p class="ws-note">Every panel is hidden. Use Add panel, or Reset.</p>`}</div></div>`);
-  if (showOnboard()) loadNew();
+    <div class="ws-grid ${EDIT ? 'is-editing' : 'is-locked'}">${shown.length ? shown.map((x, i) => html`${!EDIT && i === shown.findIndex((y) => PANELS[y.id].linked) ? linkRow() : ''}${panelShell(x, i, shown.length)}`) : html`<p class="ws-note">Every panel is hidden. Use Add panel, or Reset.</p>`}</div></div>`);
   shown.forEach((x) => { if (DATA[x.id] !== undefined || ERR[x.id]) paintBody(x.id); if (!folded(x.id)) loadPanel(x.id, { quiet: DATA[x.id] !== undefined }); });
   fillRows();
   provideContext(miloContext);

@@ -821,3 +821,12 @@ table.st td a { text-decoration: none; font-weight: 600; } table.st td a:hover {
 .term-pop-ex span { color: var(--c-ink-3); font-weight: 600; }
 .term-pop-x { justify-self: end; min-height: var(--tap); padding: 0 12px; margin: -4px -6px -6px 0; border: 0; border-radius: var(--r-ctl); background: none; color: var(--c-ink); font: 600 var(--t-md)/1 var(--f-sans); cursor: pointer; }
 .term-pop-x:hover { background: var(--c-sunk); }
+
+/* the search's own way out, for a phone with no Escape key (beginner brief item 12) */
+.palette-top { display: flex; align-items: center; gap: 8px; padding-right: 10px; border-bottom: 1px solid var(--c-line-2); } .palette-panel .palette-top input { flex: 1; min-width: 0; border-bottom: 0; }
+.palette-x { flex: none; min-height: var(--tap); padding: 0 12px; border: 0; border-radius: var(--r-ctl); background: none; color: var(--c-ink); font: 600 var(--t-md)/1 var(--f-sans); cursor: pointer; }
+.palette-x:hover { background: var(--c-sunk); } .palette-x:focus-visible { outline: 2px solid var(--c-focus); outline-offset: 1px; }
+.milo-guest { display: grid; gap: var(--s-2); margin: 0; padding: 12px 20px 14px; border-bottom: 1px solid var(--c-line-2); background: var(--c-sunk); }
+.milo .milo-guest p { margin: 0; color: var(--c-ink-2); font-size: var(--t-md); line-height: 1.45; } .milo .milo-guest b { color: var(--c-ink); }
+.milo .milo-guest-sub { font-size: var(--t-sm); color: var(--c-ink-3); }
+.milo-form[hidden] { display: none; }

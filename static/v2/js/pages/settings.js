@@ -134,10 +134,11 @@ function preferences() {
     <section class="section" aria-labelledby="ts-h"><h2 class="t-h2" id="ts-h">Text size</h2>
       <p class="section-sub">Scales the whole interface, type and spacing together, so the proportions stay as they are and only the size changes.</p>
       ${row('Size', 'Default is 15% larger than the terminal shipped with. Compact is that original density, for a small screen or a reader who wants more on it at once.', seg('Text size', [['compact', 'Compact'], ['default', 'Default'], ['large', 'Large']], prefs.scale(), 'scale'))}</section>
-    <section class="section" aria-labelledby="hm-h"><h2 class="t-h2" id="hm-h">How much to show</h2>
-      <p class="section-sub">Off, every page leads with plain-language summaries and the specialist panels start folded, one press from open. On, those panels start open with their full terminology and methodology. Every panel is on the page either way.</p>
-      ${row('Advanced analysis', 'The same setting as Optic Mode in the Milo panel: on is Advanced or Professional, off is Simple, Financially Literate or Adaptive. Turning it off returns you to the level you had chosen.',
-        html`<label class="switch"><input type="checkbox" role="switch" data-v2-adv ${prefs.advancedOn() ? 'checked' : ''}> <span>Show advanced analysis</span></label>`)}</section>
+    <!-- the level changes Milo's answers and nothing on the pages; it was described as changing every page (beginner audit, 2026-10-20) -->
+    <section class="section" aria-labelledby="hm-h"><h2 class="t-h2" id="hm-h">How Milo explains things</h2>
+      <p class="section-sub">This sets the level Milo pitches its answers at, the Level in Milo's Response settings. The pages are the same at every level: each leads with a plain finding, then its figures, with methods one step away.</p>
+      ${row('Advanced answers', 'On is Advanced or Professional, off is Simple, Financially Literate or Adaptive. Turning it off returns Milo to the level you had chosen. On also opens the paper portfolio\'s risk rules by default.',
+        html`<label class="switch"><input type="checkbox" role="switch" data-v2-adv ${prefs.advancedOn() ? 'checked' : ''}> <span>Advanced answers from Milo</span></label>`)}</section>
     <section class="section" aria-labelledby="tz-h"><h2 class="t-h2" id="tz-h">Time zone</h2>
       <p class="section-sub"><b>US market hours are defined in Eastern Time and don't move.</b> This setting only changes the clock they're displayed against, so you can see when the open and close land where you are.</p>
       ${row('Show times in', `Currently ${z} (${prefs.zoneAbbrev(z)})${onMarket ? '. The same as market time, so nothing is converted.' : '.'}`,
@@ -279,7 +280,7 @@ function wire(main) {
   main.addEventListener('change', (e) => {
     const t = e.target;
     if (t.matches('[data-v2-tz]')) { prefs.setTimezone(t.value); paint(); const s = mainEl.querySelector('[data-v2-tz]'); if (s) s.focus(); return; }
-    if (t.matches('[data-v2-adv]')) { prefs.setAdvanced(t.checked); toast(t.checked ? 'Advanced analysis on.' : 'Advanced analysis off.'); }
+    if (t.matches('[data-v2-adv]')) { prefs.setAdvanced(t.checked); toast(t.checked ? 'Milo will give advanced answers.' : 'Milo will explain at your chosen level.'); }
   });
   main.addEventListener('submit', async (e) => {
     const f = e.target; e.preventDefault();

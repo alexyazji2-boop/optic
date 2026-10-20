@@ -34,9 +34,10 @@ def test_what_the_company_does_and_its_headlines_come_first():
     paint = DOSSIER[DOSSIER.index("function paint(main, sym)"):]
     assert paint.index("${about(sym)}") < paint.index('section class="section dchart"'), "above the chart"
     about = DOSSIER[DOSSIER.index("function about(sym)"):DOSSIER.index("function more(sym)")]
-    assert "What does ${name} do?" in about and "'Latest headlines'" in about
+    # since the beginner pass the section is titled "What Apple does" and opens with its lead (test_v2_beginner)
+    assert "What ${name} does" in about and "'Latest headlines'" in about
     more = DOSSIER[DOSSIER.index("function more(sym)"):DOSSIER.index("function paint(")]
-    assert "Latest headlines" not in more and "What does ${name} do?" not in more, "not twice"
+    assert "Latest headlines" not in more and "What ${name} does" not in more, "not twice"
 
 
 def test_bull_and_bear_case_titles_in_the_markets_colours():

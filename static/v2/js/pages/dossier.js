@@ -7,11 +7,13 @@
 // Every answer is worded by a stated rule from the server's own fields; the
 // drawer behind each answer shows the evidence and the method. No number here
 // is computed differently from the classic app.
+import * as FV from '../core/finviz.js';
+import { term } from '../ui/term.js';
 import { $, $$, html, render as draw, raw } from '../core/dom.js';
 import { CLASSIC } from '../core/classic.js';
 import * as api from '../core/api.js';
 import * as store from '../core/store.js';
-import { num, signed, dir, compact, clean, capFirst, longDate, fullDate, shortDate, isNum, score100 } from '../core/format.js';
+import { num, signed, dir, money, compact, clean, capFirst, longDate, fullDate, shortDate, isNum, score100 } from '../core/format.js';
 import { lineChart, meter, mountCharts } from '../ui/chart.js';
 import { skeleton, empty, failed, staleLine, how } from '../ui/states.js';
 import { icon } from '../ui/icons.js';
@@ -95,6 +97,24 @@ function fundAnswers(sym, tradeItem) {
 }
 const clip = (t, n) => (t.length > n ? `${t.slice(0, t.lastIndexOf(' ', n))}…` : t);
 
+// How the share price has moved over a year, against its 200-day average: a finding about the price, never
+// about the business (the reader is told which is which)
+export function trendFinding(pts, sma200) {
+  const closes = (pts || []).filter((p) => isNum(p.c));
+  if (closes.length < 60) return null;
+  const last = closes[closes.length - 1], back = closes[Math.max(0, closes.length - 253)];
+  const ch = FV.pctChange(last.c, back.c), vsAvg = isNum(sma200) && sma200 > 0 ? ((last.c - sma200) / sma200) * 100 : null;
+  return { ch, from: back, to: last, vsAvg, span: closes.length >= 253 ? 'a year' : `${Math.round((closes.length - 1) / 21)} months` };
+}
+function trendItem(sym) {
+  const ps = ((D.ticker || {}).technicals || {}).price_series || {}, sma = (ps.sma200 || []).filter(isNum);
+  const t = D.ticker ? trendFinding(series(), sma[sma.length - 1]) : undefined;
+  if (t === undefined) return { k: 'trend', q: 'How has the share price moved?', a: null };
+  if (!t || !isNum(t.ch)) return { k: 'trend', q: 'How has the share price moved?', a: 'Not enough price history.', because: 'Optic needs a few months of daily closes for this.' };
+  return { k: 'trend', q: 'How has the share price moved?', a: `${t.ch >= 0 ? 'Up' : 'Down'} ${num(Math.abs(t.ch), 1)}% over ${t.span}.`,
+    because: html`From ${num(t.from.c)} on ${fullDate(t.from.d)} to ${num(t.to.c)}.${isNum(t.vsAvg) ? ` ${num(Math.abs(t.vsAvg), 1)}% ${t.vsAvg >= 0 ? 'above' : 'below'} its 200-day average, ${t.vsAvg >= 0 ? 'so the longer trend is up' : 'so the longer trend is down'}.` : ''} This is the share price, not the business's results.` };
+}
+
 function answers(sym) {
   const fw = D.framework || {}, lt = fw.long_term || {}, sw = fw.swing || {};
   const qy = lt.quality || {}, fv = (D.fairValue || {}).fair_value || {}, st = (D.fairValue || {}).stars || {};
@@ -106,19 +126,21 @@ function answers(sym) {
   const gone = (e) => ({ a: 'Not available right now.', because: `${clean((e && e.message) || 'Its source did not answer.')} The other answers do not depend on it.` });
   if (D.fwError) {
     const g = gone(D.fwError);
-    out.push({ k: 'quality', q: 'Is it a good business?', ...g });
-  } else out.push({ k: 'quality', q: 'Is it a good business?', a: D.framework ? (qy.grade ? qualityWord[qy.grade] || `Grade ${qy.grade}.` : 'Not graded.') : null,
+    out.push({ k: 'quality', q: 'How is the business doing?', ...g });
+  } else out.push({ k: 'quality', q: 'How is the business doing?', a: D.framework ? (qy.grade ? qualityWord[qy.grade] || `Grade ${qy.grade}.` : 'Not graded.') : null,
     because: qy.grade ? html`<span class="chip-tag">Grade ${qy.grade}</span>${clean(((qy.components || [])[0] || {}).headline || qy.summary || '')}` : clean(qy.summary || '') });
   const priceA = D.fvError ? 'Not available right now.' : !D.fairValue ? null : st.available ? starsWord[st.stars] || clean(st.word) : fv.available ? 'No verdict.' : 'No estimate for this company.';
-  out.push({ k: 'price', q: 'Is the price attractive?', a: priceA,
+  out.push({ k: 'price', q: 'Is the share price expensive?', a: priceA,
     because: st.available && fv.available ? html`${raw(meter({ lo: fv.low, mid: fv.mid, hi: fv.high, price: q.price || fv.price, w: 214 }))}<span class="chip-tag">${st.stars} of 5 stars</span>Fair value ${num(fv.low, 0)} to ${num(fv.high, 0)}, from its own 5-year P/E.`
       : D.fvError ? gone(D.fvError).because : clean([st.reason, fv.wide ? fv.wide_note : fv.reason].filter(Boolean).join(' ')) });
   const setup = sw.setup || {};
   const tradeA = D.fwError ? 'Not available right now.' : !D.framework ? null : sw.grade === 'S' || sw.grade === 'A' ? `Yes. A grade ${sw.grade} ${setup.kind || 'setup'}.` : sw.grade === 'B' ? `Not yet. ${capFirst(setup.kind || 'a setup')} is forming.` : sw.grade ? 'No clear trade.' : 'Not graded.';
   const tradeItem = { k: 'trade', q: 'Is there a trade?', a: tradeA,
     because: D.fwError ? gone(D.fwError).because : sw.grade ? html`<span class="chip-tag">Grade ${sw.grade}</span>${clean(setup.why || sw.why || '')}` : '' };
-  if (isFundHere(sym)) { out.length = 0; out.push(...fundAnswers(sym, tradeItem)); return answerGrid(out); }
-  out.push(tradeItem);
+  // the four basic questions in the beginner brief's order (item 5): the business, its price, the share price's
+  // trend, what is next. The short-term trade setup is deeper research, under More.
+  if (isFundHere(sym)) { out.length = 0; out.push(...fundAnswers(sym, trendItem(sym))); return answerGrid(out); }
+  out.push(trendItem(sym));
   const nextA = D.earnError ? 'Not available right now.' : !D.earnings ? null : nr.date ? `Earnings on ${longDate(nr.date)}.` : 'No report date yet.';
   out.push({ k: 'next', q: "What's next?", a: nextA,
     because: D.earnError ? gone(D.earnError).because : nr.date ? html`${capFirst(timing[nr.timing] || '')}${timing[nr.timing] ? ', ' : ''}in ${nr.days_away} days${nr.confirmed ? ', confirmed' : ''}.${im ? html` Options price ±${num(im.pct)}% through the ${shortDate(im.expiry)} expiry; report days have averaged ±${num(pr.event_day_avg_pct)}%.` : ''}` : '' });
@@ -188,6 +210,12 @@ function evidence(k, sym) {
       ${val.label ? html`<h3>The framework's valuation</h3><p>${clean(val.summary || `Valuation ${val.label}.`)} It looks at more than the P/E (intrinsic value, multiples against peers and history), so it can differ from the stars.</p>${comp(val.components)}` : ''}
       <ul class="plain">${(fv.limits || []).map((l) => html`<li>${clean(l)}</li>`)}</ul><p class="asof">Source: ${fv.source || 'company filings'}.</p>`;
   }
+  if (k === 'trend') {
+    const ps = ((D.ticker || {}).technicals || {}).price_series || {}, sma = (ps.sma200 || []).filter(isNum), t = trendFinding(series(), sma[sma.length - 1]);
+    return html`<p>${t && isNum(t.ch) ? `The share price ${t.ch >= 0 ? 'rose' : 'fell'} ${num(Math.abs(t.ch), 1)}% from ${num(t.from.c)} on ${fullDate(t.from.d)} to ${num(t.to.c)} on ${fullDate(t.to.d)}.` : 'Not enough history.'}</p>
+      ${t && isNum(t.vsAvg) ? html`<p>It is ${num(Math.abs(t.vsAvg), 1)}% ${t.vsAvg >= 0 ? 'above' : 'below'} its 200-day average, the average close of about the last ten months, which smooths out day-to-day swings.</p>` : ''}
+      <p>A rising share price and a growing business are different things: the price moves with what investors expect, and can rise while results weaken, or fall while they improve. How is the business doing answers the second; Financials and Earnings have the figures.</p>`;
+  }
   if (k === 'trade') {
     const plan = sw.plan || {};
     return html`<p><b>Grade ${sw.grade}.</b> ${clean(sw.why || '')}</p>
@@ -240,20 +268,39 @@ function longViews(sym) {
   const conv = lt.conviction || {};
   const q = (lt.quality || {}).grade, v = (lt.valuation || {}).label;
   if (s100 === null && !conv.label) return '';
+  const syn = synthesis(s100, q, (D.fairValue || {}).stars || {}, v, conv.label);
   return html`<section class="section" aria-labelledby="lv-h">
-    <div class="section-head"><div><h2 class="t-h2" id="lv-h">Two long-term views</h2><p class="section-sub">One reads how the price has behaved, the other what the business is worth at this price. They can disagree.</p></div></div>
+    <div class="section-head"><div><h2 class="t-h2" id="lv-h">How the long-term views fit together</h2><p class="section-sub">Each model answers a different question, over a different span. A strong company or a strong price trend can still be an expensive stock.</p></div></div>
+    ${syn ? html`<p class="synth">${syn}</p>` : ''}
     <div class="views">
-      <div class="view"><p class="t-label">Long-term trend score, from price history</p>
+      <div class="view"><p class="t-label">Price trend score: how the share price has behaved over about five years</p>
         <p class="n">${s100 === null ? 'n/a' : num(s100, 0)}<small> of 100</small></p>
-        <p>${h ? clean(h.plan || '') : 'Not available.'}</p>
-        ${how(html`<p>From the 200-week and 40-week trends, five years against the S&amp;P 500, return per unit of risk, forward P/E, distance from the high, the dividend and catalysts.</p>`)}</div>
-      <div class="view"><p class="t-label">Long-term case, from the business and its price</p>
+        <p>${s100 === null ? 'Not available.' : `${trendBand(s100)}. A finding about the share price's path, not about the business, its price today or whether it suits you.`}</p>
+        ${how(html`<p>From the 200-week and 40-week trends, five years against the S&amp;P 500, return per unit of risk, forward P/E, distance from the high, the dividend and catalysts.</p>`, h && h.plan ? html`<p>The trend model's own wording: "${clean(h.plan)}" It reads the price trend only.</p>` : '')}</div>
+      <div class="view"><p class="t-label">Long-term case: the business and what it costs, over years</p>
         <p class="n">${conv.label || 'n/a'}</p>
         <p>${clean(conv.why || '')}</p>
         <p class="asof">Business quality${q ? ` (grade ${q})` : ''} weighed against valuation${v ? ` (${v.toLowerCase()})` : ''} and the weekly chart.</p></div>
     </div>
     ${h && conv.label ? html`<p class="reconcile"><b>Why they differ.</b> The trend score reads how the stock has behaved: ${num(priceBehaviour, 0)} of its ${num(h.conviction_score, 0)} points come from trend, relative strength and risk-adjusted return${valuation && isNum(valuation.points) ? `, and valuation added ${num(valuation.points, 0)}` : ''}.${valuation ? html` On valuation the trend model says: “${clean(valuation.detail)}”` : ''} The long-term case asks whether today's price pays for the business${v ? `, and grades the valuation ${v.toLowerCase()}` : ''}. Optic's combined read below uses the long-term case.</p>` : ''}
   </section>`;
+}
+
+const trendBand = (x) => (x >= 70 ? 'A strong long-term price trend' : x >= 45 ? 'A middling long-term price trend' : 'A weak long-term price trend');
+/** One sentence on where the views agree and where they do not, from their own labels (beginner brief item 6):
+ * nothing is reweighted or left out to make them agree. */
+export function synthesis(s100, grade, stars, valLabel, convLabel) {
+  const good = [], bad = [];
+  if (grade) (['A', 'B'].includes(grade) ? good : ['D', 'F'].includes(grade) ? bad : []).push(['A', 'B'].includes(grade) ? `the business grades ${grade}` : `the business grades ${grade}`);
+  if (isNum(s100)) (s100 >= 70 ? good : s100 < 45 ? bad : []).push(s100 >= 70 ? `the long-term price trend is strong (${num(s100, 0)} of 100)` : `the long-term price trend is weak (${num(s100, 0)} of 100)`);
+  const st = stars && stars.available ? stars.stars : null, val = valLabel ? valLabel.toLowerCase() : '';
+  if (isNum(st)) (st >= 4 ? good : st <= 2 ? bad : []).push(st >= 4 ? 'the price is below its fair value range' : `the price is ${st === 1 ? 'above' : 'in the upper part of'} its fair value range${val ? ` (valuation ${val})` : ''}`);
+  else if (/stretch|expensive|rich/.test(val)) bad.push(`the valuation reads ${val}`);
+  const join = (xs) => (xs.length > 1 ? `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}` : xs[0] || '');
+  const cap = (t) => t.charAt(0).toUpperCase() + t.slice(1);
+  if (!good.length && !bad.length) return convLabel ? `Optic's combined long-term case is ${convLabel.toLowerCase()}.` : '';
+  const lead = good.length && bad.length ? `${cap(join(good))}, but ${join(bad)}.` : `${cap(join(good.length ? good : bad))}.`;
+  return `${lead}${convLabel ? ` Weighing them, Optic's combined long-term case is ${convLabel.toLowerCase()}.` : ''}`;
 }
 
 function combined() {
@@ -281,19 +328,57 @@ function digest(sym) {
 }
 
 /* ---------------- what the company is, and its latest news: first on the page (owner, 2026-10-20) ---------------- */
+function firstSentences(t, n = 2, max = 320) {
+  const parts = String(t || '').match(/[^.!?]+[.!?]+(\s|$)/g) || [String(t || '')];
+  let out = ''; for (const x of parts.slice(0, n)) { if ((out + x).length > max && out) break; out += x; }
+  return out.trim();
+}
+function revenueLine() {
+  const s = D.segments, f = (((D.ticker || {}).company || {}).financials) || {};
+  if (!s || !s.available) return '';
+  const t = (s.tables || []).filter((x) => x.metric === 'revenue' && ((x.annual || {}).ends || []).length).sort((a, b) => (a.axis === 'product' ? -1 : 1) - (b.axis === 'product' ? -1 : 1))[0];
+  if (!t) return '';
+  const ends = t.annual.ends, rows = t.annual.rows, k = ends.map((_, i) => rows.some((r) => isNum(r.values[i]))).lastIndexOf(true); if (k < 0) return '';
+  const day = (x) => Date.parse(String(x).slice(0, 10)), ai = (f.annual_periods || []).findIndex((p) => Math.abs(day(p) - day(ends[k])) <= 15 * 864e5);
+  const total = ai >= 0 ? ((f.annual || {}).revenue || [])[ai] : null;
+  const c = FV.composition(rows.map((r) => clean(r.member)), rows.map((r) => r.values[k]), total);
+  if (!c.rows.length || !c.canShare) return '';
+  const base = c.reconciles ? c.total : c.sum, top = c.rows.slice(0, 2).map((r) => `${r.label}, ${num((r.v / base) * 100, 0)}%`);
+  const label = ai >= 0 ? (f.annual_fiscal || [])[ai] : String(ends[k]).slice(0, 4);
+  return `${top.join('; ')} of ${label} revenue, ${t.axis_label.toLowerCase().replace(/^by /, 'by ')}.`;
+}
 function about(sym) {
   const t = D.ticker || {}, q = D.quote || {}, prof = (D.session || {}).profile || {};
-  const news = t.news || {};
-  const name = q.name || sym;
+  const news = t.news || {}, name = q.name || prof.name || sym, fund = isFundHere(sym);
+  const summary = clean(prof.summary || '').replace(/^The Company\b/, name);
+  const lead = firstSentences(summary);
+  const rev = fund ? '' : revenueLine();
+  const ses = ((D.session || {}).session) || {};
+  const price = isNum(q.price) ? html`${money(q.price)}${isNum(q.change_pct) ? html`, <span class="${dir(q.change_pct)}">${signed(q.change_pct)}</span> ${ses.is_regular ? 'today' : 'at the last close'}` : ''}<small>US dollars; quotes delayed about 15 minutes</small>` : '';
   const items = [
-    ...(prof.summary ? [[isFundHere(sym) ? `What is ${name}?` : `What does ${name} do?`, html`<p>${clean(prof.summary)}</p>`, '']] : []),
+    ...(summary && summary.length > lead.length + 20 ? [[`${fund ? 'What it is' : 'What it does'}, in full`, html`<p>${summary}</p>${prof.summary_source && prof.summary_source.form_name ? html`<p class="asof">From its ${prof.summary_source.form_name}${prof.summary_source.filed ? `, filed ${fullDate(prof.summary_source.filed)}` : ''}.</p>` : ''}`, '']] : []),
     ...((news.articles || []).length ? [['Latest headlines', html`<ul class="plain">${news.articles.slice(0, 6).map((a) => html`<li><a href="${a.url}" target="_blank" rel="noopener">${clean(a.title)}</a> <span class="t-muted">${a.publisher}, ${a.age_words || ''}, ${a.tone || ''}</span></li>`)}</ul><a class="textlink" href="${hrefFor('news', sym)}">All headlines on News ${icon('out')}</a>`, news.overall_tone || '']] : []),
   ];
-  if (!items.length) return '';
-  return html`<section class="section about" aria-label="About ${name}"><div class="more">${items.map(([t1, b, hint]) => html`<details><summary>${t1}<span>${hint ? html`<small>${hint}</small>` : ''}${icon('chev')}</span></summary><div class="inner">${b}</div></details>`)}</div></section>`;
+  if (!lead && !items.length && !price) return '';
+  return html`<section class="section about" aria-labelledby="ab-h"><h2 class="t-h2" id="ab-h">${fund ? `What ${name} is` : `What ${name} does`}</h2>
+    ${lead ? html`<p class="about-lead">${lead}</p>` : ''}
+    <dl class="about-kv">
+      ${prof.industry || prof.sector || prof.category ? html`<div><dt>${fund ? 'Kind of fund' : 'Industry'}</dt><dd>${fund ? prof.category || 'Fund' : [prof.industry, prof.sector].filter(Boolean).join(', ')}</dd></div>` : ''}
+      ${rev ? html`<div><dt>Where its revenue comes from</dt><dd>${rev}</dd></div>` : ''}
+      ${price ? html`<div><dt>Share price</dt><dd>${price}</dd></div>` : ''}
+      ${isNum(q.market_cap) && !fund ? html`<div><dt>${term('market cap', 'Market value')}</dt><dd>$${compact(q.market_cap)}<small>all its shares at today's price</small></dd></div>` : ''}
+    </dl>
+    ${items.length ? html`<div class="more">${items.map(([t1, b, hint]) => html`<details><summary>${t1}<span>${hint ? html`<small>${hint}</small>` : ''}${icon('chev')}</span></summary><div class="inner">${b}</div></details>`)}</div>` : ''}</section>`;
 }
 
 /* ---------------- the rest, one step away ---------------- */
+// Optic's short-term setup (a swing grade), for readers who trade: deeper research, not a basic question
+function tradeNow(sym) {
+  const sw = (D.framework || {}).swing || {}, setup = sw.setup || {};
+  if (!D.framework || !sw.grade || isFundHere(sym)) return '';
+  const a = sw.grade === 'S' || sw.grade === 'A' ? `A grade ${sw.grade} ${setup.kind || 'setup'}.` : sw.grade === 'B' ? `${capFirst(setup.kind || 'A setup')} is forming.` : 'No clear trade.';
+  return html`<p><b>${a}</b> <span class="chip-tag">Grade ${sw.grade}</span> ${clean(setup.why || sw.why || '')}</p><p class="asof">A model's reading of the next few weeks' price action, not a recommendation. The full reading is on <a class="textlink" href="${hrefFor('swing', sym)}">Options</a>.</p>`;
+}
 function more(sym) {
   const t = D.ticker || {}, q = D.quote || {}, prof = (D.session || {}).profile || {};
   const cases = t.cases || {}, news = t.news || {}, fil = (t.filings || {}).filings || [];
@@ -305,6 +390,7 @@ function more(sym) {
       ['Volume', compact(q.volume)], ['Average volume', compact(q.avg_volume)], ['Dividend yield', isNum(q.dividend_yield) ? `${num(q.dividend_yield * 100, 2)}%` : 'n/a'], ['Beta', num(q.beta, 2)]];
   const items = [
     ['Key figures', html`<dl class="kv">${kv.map(([k, v]) => html`<div><dt>${k}</dt><dd>${v}</dd></div>`)}</dl>`, ''],
+    ...(tradeNow(sym) ? [['Short-term trade setup', tradeNow(sym), 'Swing grade']] : []),
     ...(cases.available ? [['Bull case and bear case', html`<div class="cases"><div><h3 class="case-h up">Bull case</h3><ul class="plain">${(cases.bull || []).map((c) => html`<li><b>${clean(c.claim)}.</b> ${clean(c.detail)}</li>`)}</ul></div><div><h3 class="case-h down">Bear case</h3><ul class="plain">${(cases.bear || []).map((c) => html`<li><b>${clean(c.claim)}.</b> ${clean(c.detail)}</li>`)}</ul></div></div>`, `${(cases.bull || []).length} for, ${(cases.bear || []).length} against`]] : []),
     ...(fil.length ? [['Recent SEC filings', html`<ul class="plain">${fil.slice(0, 5).map((f) => html`<li><a href="${f.url}" target="_blank" rel="noopener">${f.form}</a> ${clean(f.what)}, filed ${fullDate(f.filed)}</li>`)}</ul>`, `${Math.min(5, fil.length)} newest`]] : []),
     ['Thesis check', html`<p>Save the conditions your idea depends on, and Optic marks each one as holding or broken. The thesis check is in the classic app.</p><a class="textlink" href="${CLASSIC}#/${sym}">Open the thesis check ${icon('out')}</a>`, ''],
@@ -352,13 +438,14 @@ export async function render(main, route) {
   step(api.get(`/api/session/${enc}`, { ttl: 60000 }), (d) => { D.session = d; learn(sym, { session: d, quote: D.quote }); }, () => {});
   step(api.get(`/api/ticker/${enc}?max_expiries=4&macro=true`, { ttl: 120000, timeout: 60000 }), (d) => {
     D.ticker = d; if (d.quote) D.quote = fresher(D.quote, d.quote);
-    if (d.data_caveat) D.freshText = clean(d.data_caveat);
+    if (d.data_caveat) D.freshText = clean(String(d.data_caveat).split(/(?<=\.)\s/)[0]);   // the delay; Greeks and Black-Scholes belong to Options
   }, (e) => { D.tickerError = e; });
   step(api.get(`/api/framework/${enc}?mode=combined`, { ttl: 300000, timeout: 60000 }), (d) => { D.framework = d.available === false ? null : d; if (d.available === false) D.fwError = new api.ApiError('notfound', 404, d.reason || 'No framework read'); }, (e) => { D.fwError = e; D.framework = {}; });
   step(api.get(`/api/fair-value/${enc}`, { ttl: 600000, timeout: 30000 }), (d) => { D.fairValue = d; }, (e) => { D.fvError = e; D.fairValue = {}; });
   step(api.get(`/api/longterm/${enc}?indices=false`, { ttl: 600000, timeout: 45000 }), (d) => { D.longterm = d; }, () => { D.longterm = {}; });
   step(api.get(`/api/earnings/${enc}`, { ttl: 600000, timeout: 45000 }), (d) => { D.earnings = d; }, (e) => { D.earnError = e; D.earnings = {}; });
   step(api.get(`/api/digest/${enc}`, { ttl: 300000, timeout: 30000 }), (d) => { D.digest = d; }, () => { D.digest = null; });
+  step(api.get(`/api/segments/${enc}`, { ttl: 600000, timeout: 60000 }), (d) => { D.segments = d; }, () => { D.segments = null; });
 }
 
 export function dispose() { live = false; drawer.close({ silent: true }); }
@@ -370,7 +457,7 @@ function wire(main, sym) {
     const a = e.target.closest('[data-v2-answer]');
     if (a) {
       const k = a.dataset.v2Answer;
-      const titles = { quality: 'Is it a good business?', price: 'Is the price attractive?', trade: 'Is there a trade?', next: "What's next?" };
+      const titles = { quality: 'How is the business doing?', price: 'Is the share price expensive?', trend: 'How has the share price moved?', trade: 'Is there a trade?', next: "What's next?" };
       drawer.open({ kicker: `${sym}, evidence and method`, title: titles[k], opener: a,
         body: html`${evidence(k, sym)}${miloButton('Ask Milo about this', { ask: `${titles[k].replace('?', '')} for ${sym}?`, context: `${sym}, ${titles[k]}`, symbol: sym })}` });
       return;
