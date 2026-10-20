@@ -9,6 +9,7 @@ import { CLASSIC } from '../core/classic.js';
 import { num, signed, dir, money, compact, clean, capFirst, shortDate, fullDate, isNum, score100 } from '../core/format.js';
 import { signedBars } from '../ui/bars.js';
 import { xyChart } from '../ui/xychart.js';
+import { lineChart } from '../ui/chart.js';
 import { button as miloButton } from '../ui/milo.js';
 import { empty, how } from '../ui/states.js';
 import { icon } from '../ui/icons.js';
@@ -233,7 +234,95 @@ export function levels(t, sym) {
     <h3>Fibonacci, ${fib.direction || ''} from ${num(fib.anchor_low)} to ${num(fib.anchor_high)}</h3><div class="tscroll"><table class="t"><thead><tr><th>Level</th><th>Price</th><th>Distance</th><th>Role</th></tr></thead>
       <tbody>${(fib.levels || []).map((l) => html`<tr><td>${l.label}${l.is_golden ? ' (golden zone)' : ''}</td><td>${num(l.price)}</td><td>${signed(l.distance_pct)}</td><td>${capFirst(l.role || '')}</td></tr>`)}</tbody></table></div>
     <h3>Moving averages</h3><div class="tscroll"><table class="t"><thead><tr><th>Average</th><th>Value</th><th>Distance</th><th>Slope, 10 days</th></tr></thead>
-      <tbody>${Object.entries(ma).map(([k, m]) => html`<tr><td>${k.toUpperCase()}</td><td>${num(m.value)}</td><td>${signed(m.distance_pct)}</td><td>${signed(m.slope_10d_pct)}</td></tr>`)}</tbody></table></div>`;
+      <tbody>${Object.entries(ma).map(([k, m]) => html`<tr><td>${k.toUpperCase()}</td><td>${num(m.value)}</td><td>${signed(m.distance_pct)}</td><td>${signed(m.slope_10d_pct)}</td></tr>`)}</tbody></table></div>
+    ${momentum(t)}`;
+}
+
+/* ---------- RSI and MACD over the last 70 sessions: the classic swing page's momentum row (owner, 2026-10-20:
+   "include the RSI and MACD charts from the classic version") ---------- */
+const MOMENTUM_BARS = 70;   // the classic MACD_WINDOW
+const RSI_SIGNAL = 9;       // the same length as the MACD's signal, so the two panels compare
+const tail = (a, n) => (Array.isArray(a) ? a.slice(-n) : []);
+const smaOf = (v, n) => v.map((_, i) => { if (i < n - 1) return null; let sum = 0; for (let j = i - n + 1; j <= i; j++) { if (!Number.isFinite(v[j])) return null; sum += v[j]; } return sum / n; });
+
+/** The latest crossing of a fast line over its signal in a window, and how many bars back it was. */
+export function lastCross(a, b) {
+  for (let i = a.length - 1; i > 0; i--) {
+    if (![a[i - 1], b[i - 1], a[i], b[i]].every(Number.isFinite)) continue;
+    const was = a[i - 1] - b[i - 1], now = a[i] - b[i];
+    if ((was <= 0 && now > 0) || (was >= 0 && now < 0)) return { index: i, bullish: now > 0, barsAgo: a.length - 1 - i };
+  }
+  return null;
+}
+
+/** The last 70 daily RSI and MACD readings with their dates, from the server's series; null when the series and
+ * the dates do not line up (a reading is never placed on the wrong day). */
+export function momentumData(t) {
+  const te = t.technicals || {}, dates = (te.price_series || {}).dates || [];
+  const rs = (te.rsi || {}).series, ms = (te.macd || {}).series || {};
+  const n = Math.min(MOMENTUM_BARS, dates.length);
+  const out = { n, dates: tail(dates, n), rsi: null, macd: null };
+  if (Array.isArray(rs) && rs.length === dates.length && n > 20) {
+    const v = tail(rs, n), sig = tail(smaOf(rs, RSI_SIGNAL), n);
+    out.rsi = { v, sig, cross: lastCross(v, sig) };
+  }
+  if (['macd', 'signal', 'hist'].every((k) => Array.isArray(ms[k]) && ms[k].length === dates.length) && n > 20) {
+    const v = tail(ms.macd, n), sig = tail(ms.signal, n);
+    out.macd = { v, sig, hist: tail(ms.hist, n), cross: lastCross(v, sig) };
+  }
+  return out.rsi || out.macd ? out : null;
+}
+
+// the classic panels' read of a crossing, word for word: has momentum turned, and how recently
+export function crossLine(cross, line, sig, dates, what) {
+  const gap = line[line.length - 1] - sig[sig.length - 1];
+  const prev = line.length > 1 ? line[line.length - 2] - sig[sig.length - 2] : gap;
+  const widening = Math.abs(gap) > Math.abs(prev);
+  if (!cross) return `No crossover in the last ${line.length} days: ${what} has stayed ${gap >= 0 ? 'above' : 'below'} its signal line throughout, so momentum has not changed direction in this window. The gap is currently ${widening ? 'widening' : 'narrowing'}${widening ? '' : ', which is what precedes a cross'}.`;
+  const when = cross.barsAgo === 0 ? 'on the latest day' : `${cross.barsAgo} ${cross.barsAgo === 1 ? 'day' : 'days'} ago`;
+  const date = dates[cross.index] ? ` (${shortDate(dates[cross.index])})` : '';
+  return `Last crossover: ${what} crossed ${cross.bullish ? 'above' : 'below'} its signal line ${when}${date}. A ${cross.bullish ? 'bullish' : 'bearish'} momentum shift, marked on the chart. The gap has ${widening ? 'widened since' : 'narrowed since'}, meaning the shift is ${widening ? 'still building' : 'losing conviction and could cross back'}.`;
+}
+
+function momentum(t) {
+  const m = momentumData(t);
+  if (!m) return '';
+  const te = t.technicals || {}, r = te.rsi || {}, mc = te.macd || {};
+  return html`<h3>Momentum, last ${m.n} days</h3><div class="momentum">
+    ${m.rsi ? html`<div class="mo"><p class="mo-h"><b>RSI (14)</b> <span class="t-muted">${num(r.value, 1)} out of 100: ${r.state || 'n/a'}</span></p>
+      <p class="legend-line"><span><i></i>RSI (14)</span><span><i class="o2"></i>Signal, ${RSI_SIGNAL}-day average</span></p>
+      <div class="chart-slot" data-chart="rsi"></div><p class="asof">${crossLine(m.rsi.cross, m.rsi.v, m.rsi.sig, m.dates, 'RSI')}</p></div>` : ''}
+    ${m.macd ? html`<div class="mo"><p class="mo-h"><b>MACD (12, 26, 9)</b> <span class="t-muted">${num(mc.macd, 2)} against ${num(mc.signal, 2)}: ${mc.state || 'n/a'}</span></p>
+      <p class="legend-line"><span><i></i>MACD</span><span><i class="o2"></i>Signal</span><span><i class="kbs"></i><i class="kbr"></i>Histogram, MACD less signal</span></p>
+      <div class="chart-slot" data-chart="macd"></div><p class="asof">${crossLine(m.macd.cross, m.macd.v, m.macd.sig, m.dates, 'MACD')}</p></div>` : ''}
+  </div>
+  ${how(html`<p>RSI (14) is Wilder's relative strength index on daily closes, from 0 to 100. Above 70 is overbought, below 30 oversold; 50 divides bullish from bearish momentum. Its signal line is a ${RSI_SIGNAL}-day average of RSI itself, the same length the MACD uses for its signal. RSI crossing its own average is the earlier, noisier read on a momentum turn; it usually leads the MACD cross.</p>`,
+    html`<p>MACD (12, 26, 9) is the 12-day exponential average of the close less the 26-day one; the signal is a 9-day exponential average of MACD, and the histogram is the gap between them.</p>`)}`;
+}
+
+export function levelCharts(t) {
+  const m = momentumData(t);
+  if (!m) return {};
+  const ser = (vals) => m.dates.map((d, i) => ({ d, c: vals[i] }));
+  const pin = (x, vals, unit) => (x ? [{ i: x.index, v: vals[x.index], dir: x.bullish ? 'up' : 'down', text: `${x.bullish ? 'Bullish' : 'Bearish'} cross${x.barsAgo ? `, ${x.barsAgo} ${unit}${x.barsAgo === 1 ? '' : 's'} ago` : ', latest'}` }] : []);
+  const last = (a) => a[a.length - 1];
+  // round axis values through zero (MACD's own scale is the stock's price units)
+  const roundTicks = (vals) => {
+    const v = vals.filter(Number.isFinite), lo = Math.min(0, ...v), hi = Math.max(0, ...v), raw = Math.max(Math.abs(lo), Math.abs(hi)) / 3 || 1;
+    const p = 10 ** Math.floor(Math.log10(raw)), f = raw / p, step = (f < 1.5 ? 1 : f < 3.5 ? 2 : f < 7.5 ? 5 : 10) * p;
+    const out = []; for (let k = Math.ceil(lo / step); k * step <= hi; k++) out.push(k * step);
+    return out;
+  };
+  const out = {};
+  if (m.rsi) out.rsi = (w) => lineChart(ser(m.rsi.v), { w, h: 200, label: 'RSI (14)', dp: 1, domain: [10, 90], ticksAt: [30, 50, 70],
+    refs: [{ v: 70, cls: 'band' }, { v: 50, cls: 'mid' }, { v: 30, cls: 'band' }], overlays: [{ values: m.rsi.sig, cls: 'o2' }], pins: pin(m.rsi.cross, m.rsi.v, 'day'),
+    tipMore: (i) => (Number.isFinite(m.rsi.sig[i]) ? `Signal ${num(m.rsi.sig[i], 1)}` : ''),
+    summary: `RSI (14) over the last ${m.n} days, from ${num(m.rsi.v[0], 1)} on ${fullDate(m.dates[0])} to ${num(last(m.rsi.v), 1)} on ${fullDate(last(m.dates))}, against its signal at ${num(last(m.rsi.sig), 1)}. ${crossLine(m.rsi.cross, m.rsi.v, m.rsi.sig, m.dates, 'RSI')}` });
+  if (m.macd) out.macd = (w) => lineChart(ser(m.macd.v), { w, h: 200, label: 'MACD (12, 26, 9)', dp: 2, ticksAt: roundTicks([...m.macd.v, ...m.macd.sig, ...m.macd.hist]), refs: [{ v: 0, cls: 'mid' }], bars: m.macd.hist,
+    overlays: [{ values: m.macd.sig, cls: 'o2' }], pins: pin(m.macd.cross, m.macd.v, 'day'),
+    tipMore: (i) => `Signal ${num(m.macd.sig[i], 2)}, histogram ${signed(m.macd.hist[i], 2, '')}`,
+    summary: `MACD over the last ${m.n} days, ${num(last(m.macd.v), 2)} against a signal of ${num(last(m.macd.sig), 2)} on ${fullDate(last(m.dates))}. ${crossLine(m.macd.cross, m.macd.v, m.macd.sig, m.dates, 'MACD')}` });
+  return out;
 }
 
 /* ---------- how an option's value moves (the classic Greeks lab) ---------- */

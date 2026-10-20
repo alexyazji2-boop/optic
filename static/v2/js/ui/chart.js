@@ -12,7 +12,10 @@ let seq = 0;
  * series: [{d: 'YYYY-MM-DD', c: number}]
  * opts: { w, h, label, summary, dp, area, events:[{d, kind, label, detail}],
  *         onEvent(d), future (empty sessions after the last close), cone:{lo, hi, label},
- *         tags:[{i?, text, dir}], focusEnd, noTicks, pad }
+ *         tags:[{i?, text, dir}], focusEnd, noTicks, pad,
+ *         oscillators (RSI, MACD): domain:[lo, hi] a fixed range, ticksAt:[v] the axis values, refs:[{v, cls}]
+ *         level lines, bars:[v] a histogram from zero aligned by index, pins:[{i, v, text, dir}] a marked point,
+ *         tipMore(i) a second line in the reading }
  * Returns { html, wire(root) }.
  */
 export function lineChart(series, opts = {}) {
@@ -27,7 +30,10 @@ export function lineChart(series, opts = {}) {
   // overlays: extra lines aligned with the series by index (averages, bands)
   const overlays = (opts.overlays || []).map((o) => Object.assign({}, o, { values: (o.values || []).slice(-pts.length) }));
   overlays.forEach((o) => o.values.forEach((v) => { if (Number.isFinite(v)) { lo = Math.min(lo, v); hi = Math.max(hi, v); } }));
+  const bars = opts.bars ? opts.bars.slice(-pts.length) : null;
+  if (bars) bars.forEach((v) => { if (Number.isFinite(v)) { lo = Math.min(lo, v, 0); hi = Math.max(hi, v, 0); } });
   const span = hi - lo || 1; lo -= span * 0.06; hi += span * 0.06;
+  if (opts.domain) [lo, hi] = opts.domain;
   const slots = pts.length - 1 + (opts.future || 0);
   const X = (i) => pad.l + (i / slots) * (W - pad.l - pad.r);
   const Y = (v) => pad.t + (1 - (v - lo) / (hi - lo)) * (H - pad.t - pad.b);
@@ -48,12 +54,14 @@ export function lineChart(series, opts = {}) {
     lineSvg += cuts.map((i) => `<path class="line-gap" d="M${X(i - 1).toFixed(1)} ${Y(pts[i - 1].c).toFixed(1)}L${X(i).toFixed(1)} ${Y(pts[i].c).toFixed(1)}"/>`).join('');
   }
   const last = pts[pts.length - 1];
-  const ticks = [0.1, 0.5, 0.9].map((f) => lo + (hi - lo) * f);
+  const ticks = opts.ticksAt || [0.1, 0.5, 0.9].map((f) => lo + (hi - lo) * f);
   // Axis labels get the decimals the range needs, so three ticks never print the same number: a ratio near
   // 0.26 drew "0 / 0 / 0" when every label was rounded to a whole number (owner, 2026-10-19). A unit from
   // the caller (opts.unit: '%', ' pts') follows the figure.
-  const tickGap = (hi - lo) * 0.4;
-  const tickDp = tickGap >= 20 ? 0 : tickGap >= 2 ? 1 : tickGap >= 0.2 ? 2 : tickGap >= 0.02 ? 3 : 4;
+  const tickGap = opts.ticksAt && opts.ticksAt.length > 1 ? Math.abs(opts.ticksAt[1] - opts.ticksAt[0]) : (hi - lo) * 0.4;
+  // fixed ticks are round numbers: the decimals their step needs (10, 20, 30, not 10.0)
+  const tickDp = opts.ticksAt ? (tickGap >= 1 ? 0 : tickGap >= 0.1 ? 1 : tickGap >= 0.01 ? 2 : 3)
+    : tickGap >= 20 ? 0 : tickGap >= 2 ? 1 : tickGap >= 0.2 ? 2 : tickGap >= 0.02 ? 3 : 4;
   const tickText = (t) => `${num(t, Math.max(tickDp, 0))}${opts.unit || ''}`;
   const index = new Map(pts.map((p, i) => [p.d, i]));
   const at = (iso) => { if (index.has(iso)) return index.get(iso); let b = -1; pts.forEach((p, i) => { if (p.d <= iso) b = i; }); return b; };
@@ -102,11 +110,18 @@ export function lineChart(series, opts = {}) {
   const change = last.c - first.c;
   const summary = opts.summary || `${opts.label || 'Chart'}: from ${num(first.c, dp)} on ${fullDate(first.d)} to ${num(last.c, dp)} on ${fullDate(last.d)}, ${change >= 0 ? 'up' : 'down'} ${num(Math.abs(change / first.c * 100), 1)} percent. Low ${num(Math.min(...pts.map((p) => p.c)), dp)}, high ${num(Math.max(...pts.map((p) => p.c)), dp)}.`;
 
+  const refSvg = (opts.refs || []).map((r) => `<line class="ref ${r.cls || ''}" x1="${pad.l}" x2="${W - pad.r}" y1="${Y(r.v).toFixed(1)}" y2="${Y(r.v).toFixed(1)}"/>`).join('');
+  const bw = Math.max(1, ((W - pad.l - pad.r) / Math.max(1, slots)) * 0.62);
+  const barSvg = bars ? bars.map((v, i) => (Number.isFinite(v) && v !== 0 ? `<rect class="hbar ${v > 0 ? 'up' : 'down'}" x="${(X(i) - bw / 2).toFixed(1)}" y="${Math.min(Y(v), Y(0)).toFixed(1)}" width="${bw.toFixed(1)}" height="${Math.max(0.5, Math.abs(Y(v) - Y(0))).toFixed(1)}"/>` : '')).join('') : '';
+  const pinSvg = (opts.pins || []).filter((q) => q.i >= 0 && q.i < pts.length && Number.isFinite(q.v)).map((q) => {
+    const x = X(q.i), y = Y(q.v), right = q.i > pts.length * 0.6, low = y < pad.t + 22;
+    return `<g class="pin ${q.dir || ''}"><circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="5"/><text class="tag ${q.dir || ''}" x="${(x + (right ? -9 : 9)).toFixed(1)}" y="${(low ? y + 20 : y - 10).toFixed(1)}" text-anchor="${right ? 'end' : 'start'}">${esc(q.text)}</text></g>`;
+  }).join('');
   const markSvg = marks.map((m) => { const x = X(m.i).toFixed(1); return `<g class="mark"><line class="mark-rule" x1="${x}" x2="${x}" y1="${pad.t}" y2="${H - pad.b}"/><text class="mark-t" x="${(X(m.i) - 6).toFixed(1)}" y="${pad.t + 12}" text-anchor="end">${esc(m.label)}</text></g>`; }).join('');
   const markWords = marks.map((m) => ` ${m.label} on ${fullDate(pts[m.i].d)}${m.detail ? `: ${m.detail}` : ''}.`).join('');
   const svg = `<svg class="chart" id="${id}" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="${esc(summary + markWords)}" tabindex="0">
     ${ticks.map((t) => `<line class="grid" x1="${pad.l}" x2="${W - pad.r}" y1="${Y(t).toFixed(1)}" y2="${Y(t).toFixed(1)}"/>${opts.noTicks ? '' : `<text class="ax" x="${W - pad.r + 6}" y="${(Y(t) + 4).toFixed(1)}">${tickText(t)}</text>`}`).join('')}
-    ${months.join('')}${area}${overlays.map((o) => { let d = '', pen = false; o.values.forEach((v, i) => { if (Number.isFinite(v)) { d += `${pen ? 'L' : 'M'}${X(i).toFixed(1)} ${Y(v).toFixed(1)}`; pen = true; } else pen = false; }); return d ? `<path class="ov ${o.cls || ''}" d="${d}"/>` : ''; }).join('')}${lineSvg}${markSvg}${coneSvg}${events}${tags}
+    ${refSvg}${months.join('')}${area}${barSvg}${overlays.map((o) => { let d = '', pen = false; o.values.forEach((v, i) => { if (Number.isFinite(v)) { d += `${pen ? 'L' : 'M'}${X(i).toFixed(1)} ${Y(v).toFixed(1)}`; pen = true; } else pen = false; }); return d ? `<path class="ov ${o.cls || ''}" d="${d}"/>` : ''; }).join('')}${lineSvg}${markSvg}${coneSvg}${events}${tags}${pinSvg}
     ${opts.focusEnd ? `<circle class="focus-ring" cx="${X(pts.length - 1)}" cy="${Y(last.c)}" r="10"/>` : ''}
     <circle class="end" cx="${X(pts.length - 1)}" cy="${Y(last.c)}" r="3.5"/>
     <g class="xh" style="display:none"><line class="xh-v" y1="${pad.t}" y2="${H - pad.b}"/><circle class="xh-dot" r="4"/></g>
@@ -124,7 +139,7 @@ export function lineChart(series, opts = {}) {
       xh.querySelector('.xh-dot').setAttribute('cx', x); xh.querySelector('.xh-dot').setAttribute('cy', y);
       const ev = (opts.events || []).find((e) => at(e.d) === i) || (() => { const m = marks.find((x) => x.i === i); return m ? { label: m.label, detail: m.detail } : null; })();
       tip.style.display = '';
-      tip.innerHTML = `<b>${num(p.c, dp)}</b> <span>${fullDate(p.d)}</span>${ev ? `<em>${esc(ev.label)}${ev.detail ? ', ' + esc(ev.detail) : ''}</em>` : ''}`;
+      tip.innerHTML = `<b>${num(p.c, dp)}</b> <span>${fullDate(p.d)}</span>${ev ? `<em>${esc(ev.label)}${ev.detail ? ', ' + esc(ev.detail) : ''}</em>` : ''}${opts.tipMore ? `<em>${esc(opts.tipMore(i) || '')}</em>` : ''}`;
       const box = el.getBoundingClientRect();
       tip.style.left = Math.min(box.width - 170, Math.max(0, (x / W) * box.width - 70)) + 'px';
     };

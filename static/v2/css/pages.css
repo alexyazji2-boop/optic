@@ -1377,3 +1377,12 @@ ul.cal-react { display: flex; flex-wrap: wrap; gap: 4px 18px; padding-left: 0; l
   .page-view > section.answers { padding: 0; }
   .answers .answer-in, .answers .answer:first-child .answer-in, .answers .answer:nth-child(3) .answer-in { padding: 16px 12px; }
 }
+
+/* Levels and momentum: RSI and MACD side by side, one above the other on a phone */
+.momentum { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 var(--s-6); }
+/* each column's heading, key, chart and read share rows, so the two charts start level */
+.momentum .mo { min-width: 0; display: grid; grid-row: span 4; grid-template-rows: subgrid; align-content: start; } .momentum .mo-h { margin: 0 0 2px; } .momentum .legend-line { margin: 0 0 6px; font-size: var(--t-sm); }
+@media (max-width: 860px) { .momentum { grid-template-columns: minmax(0, 1fr); row-gap: 0; } .momentum .mo + .mo { margin-top: var(--s-5); } }
+/* A Milo question button wraps its question rather than run off a phone's page: the Swing verdict's follow-ups
+   are whole sentences, and one pushed Options 251 px wider than a 390 px screen (2026-10-20) */
+.btn.btn-milo { white-space: normal; text-align: left; max-width: 100%; padding-block: 6px; }

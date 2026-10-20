@@ -380,7 +380,7 @@ const OPT_GROUPS = [
     ['Swing verdict', (t, s) => P.verdict(t, s)],
     ['Strike and entry', (t, s) => P.entry(t, s)],
     ['Ideas', (t, s) => P.ideas(t, s, D.budget), (t) => P.ideaCharts(t, (t.quote || {}).price)],
-    ['Levels and momentum', (t, s) => P.levels(t, s)],
+    ['Levels and momentum', (t, s) => P.levels(t, s), (t) => P.levelCharts(t)],
     ['Setups and patterns', (t, s) => P.setups(t, s, D.extra), null, () => loadExtra()],
   ] },
 ];

@@ -661,3 +661,7 @@ table.st td a { text-decoration: none; font-weight: 600; } table.st td a:hover {
 .milo-grip:hover::after, .milo-grip:focus-visible::after, .milo-grip.is-dragging::after { opacity: 1; }
 .milo-grip:focus-visible { outline: 2px solid var(--c-focus); outline-offset: -2px; }
 @media (max-width: 860px) { .milo-grip { display: none; } }
+/* oscillator charts (RSI, MACD): level lines, a histogram from zero and a marked crossing */
+.chart .ref { stroke: var(--c-ink-3); stroke-width: 1; stroke-dasharray: 4 4; opacity: .75; } .chart .ref.mid { opacity: .45; }
+.chart .hbar.up { fill: color-mix(in srgb, var(--c-pos) 45%, transparent); } .chart .hbar.down { fill: color-mix(in srgb, var(--c-neg) 45%, transparent); }
+.chart .pin circle { fill: var(--c-plane); stroke-width: 2; } .chart .pin.up circle { stroke: var(--c-pos); } .chart .pin.down circle { stroke: var(--c-neg); }
