@@ -63,7 +63,7 @@ function form() {
       <p class="form-error" role="alert" id="si-err"></p>
       <button type="submit" class="btn btn-primary">${up ? 'Create account' : 'Sign in'}</button>
     </form>
-    ${up ? '' : html`<p><button type="button" class="textlink" data-v2-auth-mode="forgot">Forgot your password?</button></p>`}
+    ${up ? html`<p class="t-muted si-agree">By creating an account, with email or with Google or Apple, you agree to the <a class="textlink" href="#/terms">Terms of use</a> and the <a class="textlink" href="#/privacy">Privacy policy</a>.</p>` : html`<p><button type="button" class="textlink" data-v2-auth-mode="forgot">Forgot your password?</button></p>`}
     <p>${up ? html`Have an account? <button type="button" class="textlink" data-v2-auth-mode="in">Sign in</button>` : html`New to Optic? <button type="button" class="textlink" data-v2-auth-mode="up">Create an account</button>`}</p>
   </section>`;
 }

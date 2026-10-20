@@ -124,8 +124,20 @@ def touch_login(user_id: str) -> None:
 
 def delete_user(user_id: str) -> None:
     """Everything the person owns goes with them, via ON DELETE CASCADE. That
-    only works because `app/db.py` turns foreign keys on per connection."""
-    db.execute("DELETE FROM users WHERE id = ?", (user_id,))
+    only works because `app/db.py` turns foreign keys on per connection.
+
+    Problem reports have no foreign key (a report once needed no account), so
+    they kept the reporter's email after the account was gone. They stay, for
+    the problem they describe, without the email or the account: what the
+    privacy policy says (2026-10-19)."""
+    u = db.row("SELECT email FROM users WHERE id = ?", (user_id,))
+    email = normalise_email(u["email"]) if u and u.get("email") else ""
+    db.execute_many([
+        ("UPDATE feedback SET reporter_email = NULL, reporter_id = NULL, reply_to = '' "
+         "WHERE reporter_id = ? OR (? <> '' AND (lower(coalesce(reporter_email, '')) = ? OR lower(reply_to) = ?))",
+         (user_id, email, email, email)),
+        ("DELETE FROM users WHERE id = ?", (user_id,)),
+    ])
 
 
 # ---------------------------------------------------------------- identities

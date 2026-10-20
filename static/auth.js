@@ -574,6 +574,10 @@
         + '<div class="auth-error" data-error hidden></div>'
         + '<button type="submit" class="btn primary auth-submit">Create account</button>'
         + '</form>'
+        // In force from 2026-10-19 (v2's pages/legalpages.js); a new tab, so nothing typed is lost.
+        + '<p class="auth-alt auth-agree">By creating an account, with email or with Google or Apple, you agree to the '
+        + '<a href="/v2/#/terms" target="_blank" rel="noopener">Terms of use</a> and the '
+        + '<a href="/v2/#/privacy" target="_blank" rel="noopener">Privacy policy</a>.</p>'
         + '<p class="auth-alt">Already have an account? '
         + '<button type="button" data-mode="signin">Sign in</button></p>';
     }

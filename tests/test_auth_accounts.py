@@ -323,3 +323,22 @@ def test_delete_account_wants_the_email_typed_and_takes_everything_with_it():
     for table in ("sessions", "watchlists", "auth_identities", "user_passwords",
                   "user_preferences", "subscriptions"):
         assert main.accounts_db.rows("SELECT 1 FROM {}".format(table)) == [], table
+
+
+def test_delete_account_keeps_problem_reports_without_the_reporters_email():
+    """The privacy policy: reports stay, for the problem they describe, without the email or the account."""
+    from app import feedback
+    signup()
+    csrf = client.cookies.get(config.CSRF_COOKIE)
+    user = store.get_user_by_email("reader@example.com")
+    feedback.store("The chart froze", "#/AAPL/chart", "", "test-agent", {"email": "reader@example.com", "id": user["id"]})
+    feedback.store("Older report", "#/", "Reader@Example.com", "test-agent", None)
+    feedback.store("Someone else's", "#/", "other@example.com", "test-agent", None)
+    gone = client.post("/api/auth/delete-account", headers={"X-Optic-CSRF": csrf},
+                       json={"confirm_email": "reader@example.com", "password": GOOD})
+    assert gone.status_code == 200
+    rows = {r["message"]: r for r in main.accounts_db.rows("SELECT message, reply_to, reporter_email, reporter_id FROM feedback")}
+    assert set(rows) == {"The chart froze", "Older report", "Someone else's"}, "the reports themselves are kept"
+    for m in ("The chart froze", "Older report"):
+        assert (rows[m]["reply_to"], rows[m]["reporter_email"], rows[m]["reporter_id"]) == ("", None, None), m
+    assert rows["Someone else's"]["reply_to"] == "other@example.com"

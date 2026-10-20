@@ -290,20 +290,36 @@ function historyHTML() {
     ${list.length ? html`<ul class="plain">${list.map((c) => html`<li class="${c.id === S.conv.id ? 'is-now' : ''}"><button type="button" class="milo-hist-open" data-v2-milo-open="${c.id}"><span>${c.title}</span><small class="t-muted">${prefs.dayTime(c.at)}, ${(c.messages || []).length} messages${c.ticker ? `, ${c.ticker}` : ''}</small></button><button type="button" class="icon-btn" data-v2-milo-del="${c.id}" aria-label="Delete ${c.title}">×</button></li>`)}</ul>` : html`<p class="t-muted">Nothing saved yet.</p>`}
     <p class="asof">Stored in this browser only and never uploaded, shared with the classic app. Each account's are kept apart here, and signing out puts yours away until you sign in again. The last ${MAX_CONVERSATIONS} conversations are kept.</p></div>`;
 }
-function settingsHTML() {
-  const p = S.personas || {}, ps = p.personas || [], hz = ((p.horizons || {}).horizons) || [], ms = (S.modes || {}).modes || [];
-  return html`<details class="more-inline milo-settings"><summary>Answer settings</summary><div class="milo-set-grid">
-      <label class="select"><span class="t-label">Level</span><select data-v2-milo-mode>${ms.map((m) => html`<option value="${m.id}" ${prefs.knowledge() === m.id ? 'selected' : ''}>${m.label}</option>`)}</select></label>
-      <label class="select"><span class="t-label">Analyst</span><select data-v2-milo-persona>${ps.map((x) => html`<option value="${x.id}" ${persona() === x.id ? 'selected' : ''}>${x.label}</option>`)}</select></label>
-      <label class="select"><span class="t-label">Timeframe</span><select data-v2-milo-horizon>${hz.map((x) => html`<option value="${x.id}" ${horizon() === x.id ? 'selected' : ''}>${x.label}</option>`)}</select></label></div>
-    <p class="asof">The same settings as the classic panel. They change how Milo explains and what it weighs, never the figures.</p></details>`;
+// The classic panel's three answer settings, on show rather than folded away (owner, 2026-10-19: "include the
+// personalities here that used to be in the classic version"): the level; the Optic Persona, a menu of each
+// personality with what it is, and what choosing one changes and never changes, from /api/personas as the
+// classic menu reads them (its glyphs left out: v2 draws no emoji); and the timeframe as one row of four.
+const HZ_SHORT = { auto: 'Auto', day: 'Day', swing: 'Swing', long: 'Long term' };
+function lensHTML() {
+  const pp = S.personas || {}, ps = pp.personas || [], hz = ((pp.horizons || {}).horizons) || [], ms = (S.modes || {}).modes || [];
+  const cur = ps.find((x) => x.id === persona()) || ps[0] || { label: 'Neutral analyst', blurb: '' };
+  const h = hz.find((x) => x.id === horizon()) || hz[0] || null;
+  const list = (rows, head) => (rows && rows.length ? html`<p class="t-label">${head}</p><ul class="plain">${rows.map((r) => html`<li>${r}</li>`)}</ul>` : '');
+  // the classic order: the level first, then the persona, then the timeframe, each control's own line under it
+  return html`<div class="milo-lens">
+    ${ms.length ? html`<label class="select milo-level"><span class="t-label">Level</span><select data-v2-milo-mode>${ms.map((m) => html`<option value="${m.id}" ${prefs.knowledge() === m.id ? 'selected' : ''}>${m.label}</option>`)}</select></label>` : ''}
+    <details class="menu milo-pp"><summary class="btn btn-sm milo-pp-btn" aria-label="Optic Persona"><span class="t-label">Optic Persona</span><span class="milo-pp-now">${cur.label}</span></summary>
+      <div class="menu-body milo-pp-menu" role="group" aria-label="Optic Persona">
+        ${ps.map((x) => html`<button type="button" class="milo-pp-opt" aria-pressed="${x.id === cur.id ? 'true' : 'false'}" data-v2-milo-pp="${x.id}"><span class="milo-pp-l">${x.label}</span><span class="milo-pp-b">${x.blurb || ''}</span></button>`)}
+        ${(pp.changes || []).length || (pp.never_changes || []).length ? html`<div class="milo-pp-foot">${list(pp.changes, 'Changes')}${list(pp.never_changes, 'Never changes')}</div>` : ''}
+      </div></details>
+    ${cur.blurb ? html`<p class="milo-lens-blurb">${cur.blurb}</p>` : ''}
+    ${hz.length ? html`<div class="milo-hz" role="group" aria-labelledby="milo-hz-lab"><span class="t-label" id="milo-hz-lab">Timeframe</span>
+      <div class="seg">${hz.map((x) => html`<button type="button" aria-pressed="${h && x.id === h.id ? 'true' : 'false'}" data-v2-milo-hz="${x.id}" title="${x.blurb || ''}">${HZ_SHORT[x.id] || x.label}</button>`)}</div></div>
+    ${h && h.blurb ? html`<p class="milo-lens-blurb">${h.blurb}</p>` : ''}` : ''}
+  </div>`;
 }
 function chromeHTML() {
   const b = blocked();
   return html`<div class="milo-top"><label class="select milo-scope"><span class="t-label">Milo sees</span><select data-v2-milo-scope>${Object.entries(SCOPES).map(([k, v]) => html`<option value="${k}" ${S.scope === k ? 'selected' : ''}>${k === 'auto' ? contextLabel('auto') : v}</option>`)}</select></label>
       <div class="cluster"><button type="button" class="btn btn-sm" data-v2-milo-history aria-expanded="${S.showHistory}">History</button><button type="button" class="btn btn-sm" data-v2-milo-new>New</button></div></div>
     <p class="asof milo-delay">${(S.health && S.health.realtime_chain) ? 'Option chains are real-time; other prices may be delayed.' : 'Prices are delayed up to 15 minutes.'}</p>${miloNotice()}
-    ${S.showHistory ? historyHTML() : ''}${settingsHTML()}
+    ${S.showHistory ? historyHTML() : ''}${lensHTML()}
     ${b ? html`<div class="state milo-block" role="status"><p>${b.text}</p>${b.kind === 'signin' ? html`<a class="btn btn-primary btn-sm" href="#/signin">Sign in</a>` : ''}</div>` : ''}`;
 }
 function logHTML() {
@@ -553,8 +569,6 @@ function wire(root) {
   root.addEventListener('change', (e) => {
     const t = e.target;
     if (t.matches('[data-v2-milo-scope]')) { S.scope = t.value; return; }
-    if (t.matches('[data-v2-milo-persona]')) { setPref(PERSONA_KEY, t.value); return; }
-    if (t.matches('[data-v2-milo-horizon]')) { setPref(HORIZON_KEY, t.value); return; }
     if (t.matches('[data-v2-milo-mode]')) prefs.setKnowledge(t.value);
   });
   root.addEventListener('click', async (e) => {
@@ -567,6 +581,8 @@ function wire(root) {
       setMenu(false, true); return;
     }
     if (SC.menu && !t('#milo-scout-menu')) setMenu(false);
+    if ((b = t('[data-v2-milo-pp]'))) { setPref(PERSONA_KEY, b.dataset.v2MiloPp); const d = b.closest('details'); if (d) d.open = false; paintChrome(); const sm = $('.milo-pp-btn', root); if (sm) sm.focus(); return; }
+    if ((b = t('[data-v2-milo-hz]'))) { setPref(HORIZON_KEY, b.dataset.v2MiloHz); paintChrome(); const hb = $(`[data-v2-milo-hz="${b.dataset.v2MiloHz}"]`, root); if (hb) hb.focus(); return; }
     if (t('[data-v2-milo-stop]')) { stop(); return; }
     if (t('[data-v2-milo-history]')) { S.showHistory = !S.showHistory; paintChrome(); const hb = $('[data-v2-milo-history]', root); if (hb) hb.focus(); return; }
     if (t('[data-v2-milo-new]')) { if (S.busy) return; S.conv = blankConv(); S.items = []; meta.clear(); SC.i = null; S.showHistory = false; paintChrome(); paintLog(); const ta = $('#milo-q', root); if (ta) ta.focus(); return; }
