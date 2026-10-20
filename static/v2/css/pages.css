@@ -1351,3 +1351,12 @@ ul.cal-list { padding-left: 0; list-style: none; }
 .cal-meta, .cal-read { font-size: var(--t-md); }
 .cal-i.is-out .cal-top b { color: var(--c-ink-2); }
 ul.cal-react { display: flex; flex-wrap: wrap; gap: 4px 18px; padding-left: 0; list-style: none; }
+
+/* Insiders: an amended filing set apart; on a phone the figures and the filing link open under the row (task 11) */
+.ins-t tr.is-amend td { background: var(--c-plane-2); }
+.ins-rowbtn { display: none; } .ins-detail td { background: var(--c-plane-2); white-space: normal; text-align: left; }
+@media (max-width: 640px) {
+  .ins-t .ins-wide { display: none; }
+  .ins-rowbtn { display: inline-grid; width: var(--tap); height: var(--tap); vertical-align: middle; }
+  .ins-rowbtn[aria-expanded="true"] svg { transform: rotate(90deg); }
+}

@@ -423,7 +423,35 @@ def analyse_earnings_history(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
 # ------------------------------------------------ insider & institutional flow
 
 
-def analyse_ownership(insiders: Dict[str, Any], institutions: Dict[str, Any]) -> Dict[str, Any]:
+def _six_month_trades(trades: List[Dict[str, Any]], now: Optional[dt.date] = None) -> Dict[str, Any]:
+    """Open-market purchases and sales over the last six months, from the classified Form 4 rows.
+
+    Yahoo's own six-month tally ("Purchases", "Sales") counts every acquisition, stock awards and option
+    exercises included: Microsoft's said 16 purchases against 10 sales and "net buying" when its rows held
+    2 purchases, 28 sales and 60 awards and grants (audit 2026-10-20). An award is not a decision to buy.
+    The signal is read from purchases and sales only; the rest are counted and named."""
+    today = now or dt.date.today()
+    cutoff = (today - dt.timedelta(days=182)).isoformat()
+    rows = [r for r in trades if str(r.get("date") or "") >= cutoff]
+    buys = [r for r in rows if r.get("action") == "purchase"]
+    sells = [r for r in rows if r.get("action") == "sale"]
+    total = lambda xs, k: sum(float(r.get(k) or 0) for r in xs)          # noqa: E731
+    # the provider keeps two years and up to 200 rows: when the oldest row kept is inside the window, rows
+    # before it may be missing, and the counts are a floor
+    oldest = min((str(r.get("date") or "") for r in trades), default="")
+    return {
+        "basis": "open_market",
+        "since": cutoff,
+        "purchase_count": len(buys), "purchase_shares": total(buys, "shares"), "purchase_value": total(buys, "value"),
+        "sale_count": len(sells), "sale_shares": total(sells, "shares"), "sale_value": total(sells, "value"),
+        "other_count": len(rows) - len(buys) - len(sells),
+        "net_shares": total(buys, "shares") - total(sells, "shares"),
+        "complete": not (len(trades) >= 200 and oldest > cutoff),
+    }
+
+
+def analyse_ownership(insiders: Dict[str, Any], institutions: Dict[str, Any],
+                      now: Optional[dt.date] = None) -> Dict[str, Any]:
     summary = (insiders or {}).get("summary_6m") or {}
     trades = (insiders or {}).get("transactions") or []
     breakdown = (institutions or {}).get("breakdown") or {}
@@ -445,23 +473,29 @@ def analyse_ownership(insiders: Dict[str, Any], institutions: Dict[str, Any]) ->
 
     notes: List[str] = []
     insider_signal = "neutral"
-
-    net_shares = (net or {}).get("shares")
-    if net_shares is not None:
+    six = _six_month_trades(trades, now)
+    net_shares = six["net_shares"] if trades else (net or {}).get("shares")
+    other = " {} awards, grants, gifts and option exercises are not counted: they are not decisions to buy or sell.".format(
+        six["other_count"]) if six["other_count"] else ""
+    if trades and not six["purchase_count"] and not six["sale_count"]:
+        # "neutral", the word the classic page already prints ("Insiders are net neutral"); the counts say none
+        insider_signal = "neutral"
+        notes.append("No open-market purchases or sales by insiders in six months." + other)
+    elif net_shares is not None and trades:
         if net_shares > 0:
             insider_signal = "buying"
             notes.append(
-                "Insiders were net buyers of {} shares over six months. Insider buying is the more "
-                "informative direction. There is only one reason to buy.".format(_human(net_shares))
-            )
+                "Insiders bought {} more shares on the open market than they sold over six months ({} purchases, "
+                "{} sales). Insider buying is the more informative direction. There is only one reason to buy.{}".format(
+                    _human(net_shares), six["purchase_count"], six["sale_count"], other))
         elif net_shares < 0:
             insider_signal = "selling"
             notes.append(
-                "Insiders were net sellers of {} shares over six months. Much insider selling is "
-                "scheduled diversification or option exercise, so treat it as weak evidence.".format(_human(abs(net_shares)))
-            )
+                "Insiders sold {} more shares on the open market than they bought over six months ({} sales, "
+                "{} purchases). Much insider selling is scheduled diversification, so treat it as weak "
+                "evidence.{}".format(_human(abs(net_shares)), six["sale_count"], six["purchase_count"], other))
         else:
-            notes.append("Insider buying and selling roughly offset over six months.")
+            notes.append("Insider purchases and sales offset over six months." + other)
 
     inst_pct = None
     for key, value in breakdown.items():
@@ -495,13 +529,26 @@ def analyse_ownership(insiders: Dict[str, Any], institutions: Dict[str, Any]) ->
     return {
         "available": bool(summary or holders),
         "insider_signal": insider_signal,
-        "insider_6m": {
+        # Open-market purchases and sales over six months, from the Form 4 rows below (since 2026-10-20).
+        "insider_6m": six if trades else {
+            "basis": "yahoo_tally",
             "purchase_shares": (purchases or {}).get("shares"),
             "purchase_count": (purchases or {}).get("transactions"),
             "sale_shares": (sales or {}).get("shares"),
             "sale_count": (sales or {}).get("transactions"),
             "net_shares": net_shares,
         },
+        # Yahoo's own six-month tally, kept and named for what it counts: every acquisition and disposal
+        "yahoo_tally_6m": {
+            "acquired_shares": (purchases or {}).get("shares"), "acquired_count": (purchases or {}).get("transactions"),
+            "disposed_shares": (sales or {}).get("shares"), "disposed_count": (sales or {}).get("transactions"),
+            "net_shares": (net or {}).get("shares"),
+            "note": "Yahoo Finance's count of every acquisition and disposal, awards and option exercises included.",
+        },
+        "insider_method": ("Open-market purchases and sales (Form 4 codes P and S) by officers, directors and 10% owners "
+                           "in the last six months, from the filings Yahoo Finance lists for the last two years. "
+                           "A transaction date is when the trade happened; it became public when the Form 4 was filed, "
+                           "usually within two business days. Reported history, not current trading."),
         "recent_transactions": trades,
         "institutional_pct_held": inst_pct,
         "insider_pct_held": insiders_pct,

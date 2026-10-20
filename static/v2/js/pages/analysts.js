@@ -31,8 +31,10 @@ function body() {
   const lead = Q.ticker ? (rows.length ? `${d.count ?? rows.length} actions on ${Q.ticker}.` : `Nothing on ${Q.ticker} matching. A longer window, or All under Show, may find more.`)
     : d.covered === 0 ? 'Analyst actions are loading for the first time. They appear here when they finish.'
       : rows.length ? `${d.count} actions in the last ${Q.days} days across ${d.covered} names, newest first.${d.count > rows.length ? ` Showing the newest ${rows.length}.` : ''}` : `Nothing matching in the last ${Q.days} days, across ${d.covered} names.`;
+  // how old the list is, and what its dates are: when the firm's action was recorded, not when it was read
+  const age = d.read_at || d.generated_at;
   return html`<p class="section-sub">${lead}</p>
-    ${table(rows, COLS, { id: 'an', sort, caption: 'Analyst actions' })}<p class="asof">${clean(d.method || '')}</p>`;
+    ${table(rows, COLS, { id: 'an', sort, caption: 'Analyst actions' })}<p class="asof">${age ? `Read ${ago(age)}. ` : ''}Each date is when Yahoo Finance recorded the firm's action, usually the day it was announced. ${clean(d.method || '')}</p>`;
 }
 
 function paint() {

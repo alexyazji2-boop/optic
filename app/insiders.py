@@ -431,6 +431,24 @@ def latest(limit: int = 40, only_purchases: bool = True, force: bool = False,
     if keep is not None:
         rows = [r for r in rows if r.get("code") in keep]
 
+    # A Form 4/A amends an earlier Form 4, but EDGAR's index does not say which one. Nothing is removed: a
+    # transaction is matched to an original only on the same insider, issuer, date, code and shares, and the
+    # pair is said ("may amend the filing of ..."), never merged, since two real trades can look alike.
+    key = lambda r: (r.get("insider"), r.get("issuer"), r.get("date"), r.get("code"), r.get("shares"))   # noqa: E731
+    originals: Dict[Any, Dict[str, Any]] = {}
+    for r in rows:
+        if r.get("form") == "4":
+            originals.setdefault(key(r), r)
+    amended = 0
+    for r in rows:
+        r["amendment"] = r.get("form") == "4/A"
+        if r["amendment"]:
+            amended += 1
+            o = originals.get(key(r))
+            if o is not None and o.get("accession") != r.get("accession"):
+                r["may_amend"] = {"accession": o.get("accession"), "filed_at": o.get("filed_at")}
+                o["may_be_amended_by"] = {"accession": r.get("accession"), "filed_at": r.get("filed_at")}
+
     # Filing time first, transaction date second. Both are shown because they
     # are different facts: a purchase made on Monday and filed on Wednesday is
     # news on Wednesday.
@@ -440,6 +458,7 @@ def latest(limit: int = 40, only_purchases: bool = True, force: bool = False,
         "available": True,
         "rows": rows[:max(1, min(int(limit), 200))],
         "matched": len(rows),
+        "amendments": amended,
         "filings_listed": len(listed),
         "filings_read": len(listed) - unread - failed - elsewhere,
         "filings_unread": unread,
