@@ -70,7 +70,7 @@ function readings(sym) {
   const main = im ? { pct: im.implied_move_pct, expiry: im.expiry, dte: im.dte, event: !!(e.next_report && e.next_report.date && e.next_report.date <= im.expiry) }
     : r30 ? { pct: r30.straddle_move_pct, expiry: r30.expiry, dte: r30.dte, event: r30.contains_event } : null;
   const cells = [];
-  if (main && isNum(main.pct)) cells.push(html`<div class="rd main"><span class="k">Implied move through ${shortDate(main.expiry)}</span><span class="v">±${num(main.pct)}%</span><span class="d">${isNum(spot) ? `${num(spot * (1 - main.pct / 100), 0)} to ${num(spot * (1 + main.pct / 100), 0)}. ` : ''}All ${main.dte} days${main.event && e.next_report ? `, the ${shortDate(e.next_report.date)} report included` : ''}.</span></div>`);
+  if (main && isNum(main.pct)) cells.push(html`<div class="rd main"><span class="k">Implied move through ${shortDate(main.expiry)}</span><span class="v">±${num(main.pct)}%</span><span class="d">${isNum(spot) ? `${num(spot * (1 - main.pct / 100), 0)} to ${num(spot * (1 + main.pct / 100), 0)}. ` : ''}All ${P.dayCount(main.dte)}${main.event && e.next_report ? `, the ${shortDate(e.next_report.date)} report included` : ''}.</span></div>`);
   if (pr.available && isNum(pr.event_day_avg_pct)) cells.push(html`<div class="rd"><span class="k">Average report-day move</span><span class="v">±${num(pr.event_day_avg_pct)}%</span><span class="d">Last ${(e.surprise || {}).quarters || 8} quarters. History, not a price.</span></div>`);
   if (pr.available && isNum(pr.ratio)) cells.push(html`<div class="rd"><span class="k">Priced against history</span><span class="v">${num(pr.ratio, 2)}×</span><span class="d">the typical ±${num(pr.baseline_move_pct)}% for ${pr.baseline_sessions} sessions</span></div>`);
   const iv = vs.iv30 || {};
@@ -144,7 +144,7 @@ function result(sym) {
     ${within ? html`<p class="asof">${clean(a.bounds_note)}</p>` : ''}
     <p class="asof">${quotedAt(a.fetched_at)}${a.fetched_at ? '. ' : ''}Priced ${B.pricedAt ? etStamp(new Date(B.pricedAt).toISOString()) : 'now'}: a model value is an estimate, the mid is half way between a quoted bid and ask, and neither is a fill.</p>
     <div class="chart-slot" data-chart="payoff"></div>
-    <p class="asof">Solid: at expiry. Gold: today. Dashed: in ${num((a.first_expiry_days || 0) / 2, 0)} days. The line marked Now is the price now.</p>
+    <p class="asof">Solid: at expiry. Gold: today. Dashed: in ${P.dayCount(num((a.first_expiry_days || 0) / 2, 0))}. The line marked Now is the price now.</p>
     ${isNum(spotY) && Math.abs(spotY) > Math.max(1, 0.01 * Math.abs(en.mid || 0)) ? html`<p class="asof">At today's price the model values the position at ${signedMoney(spotY, 2)} against its mid entry: the model holds one implied volatility per strike, the out-of-the-money side's, which is not exactly where each leg is quoted.</p>` : ''}
     ${how(html`<p>The expiry line is exact from the mid entry. Today's and the dashed lines are model values that hold each leg's current implied volatility; the dashed line is halfway to the first expiry.</p>`)}
     <p><b>Greeks:</b> delta ${num(gk.delta_shares, 0)} shares, gamma ${num(gk.gamma_per_dollar, 2)} per dollar, decay ${money(gk.theta_per_day, 2)} a day, ${money(gk.vega_per_vol_pt, 2)} per volatility point.</p>
@@ -224,17 +224,22 @@ async function template(id) {
   } catch (e) { if (!stillHere(g) || mine !== B) return; B.analyzing = false; B.error = e.message; paintBuilder(); }
 }
 
-async function analyze() {
+// quiet: the two-minute re-price in session. The figures stay on screen until the new ones land: a skeleton in
+// their place collapsed the result every two minutes and threw the reader about 1,000 px down the page (live
+// check, 2026-10-20). A failed re-read keeps the last figures, whose quotes line says when they were read. Only
+// the latest request lands, so a re-read that answers after the reader's own change cannot undo it.
+async function analyze({ quiet } = {}) {
+  const my = ++B.seq;
   if (!B.legs.length) { B.analysis = null; paintBuilder(); return; }
-  B.analyzing = true; B.error = null; paintResult();
+  if (!quiet) { B.analyzing = true; B.error = null; paintResult(); }
   const g = GEN, mine = B;
   try {
     const out = await api.post(`/api/options/${encodeURIComponent(D.sym)}/analyze`, { legs: B.legs, slippage: B.slippage, fee_per_contract: B.fee, days_forward: B.days || undefined }, { timeout: 45000 });
-    if (!stillHere(g) || mine !== B) return;
+    if (!stillHere(g) || mine !== B || my !== B.seq) return;
     B.analysis = out; B.pricedAt = Date.now(); saveState();
     const whens = [...new Set(((B.analysis.scenarios || {}).rows || []).map((r) => r.when))];
     if (!whens.includes(B.when)) B.when = whens[0] || 'now';
-  } catch (e) { if (!stillHere(g) || mine !== B) return; B.analysis = null; B.error = e.message || 'The server could not price it.'; }
+  } catch (e) { if (!stillHere(g) || mine !== B || my !== B.seq || quiet) return; B.analysis = null; B.error = e.message || 'The server could not price it.'; }
   B.analyzing = false;
   paintBuilder();
 }
@@ -244,7 +249,7 @@ async function analyze() {
 // that, instead of an empty list.
 function expirySelect() {
   const exps = ((R.data || {}).listed_expiries) || [];
-  const opts = exps.length ? exps.map((x) => html`<option value="${x.expiry}" ${x.expiry === R.expiry ? 'selected' : ''}>${shortDate(x.expiry)}, ${x.dte} days${x.monthly ? ', monthly' : ''}</option>`)
+  const opts = exps.length ? exps.map((x) => html`<option value="${x.expiry}" ${x.expiry === R.expiry ? 'selected' : ''}>${shortDate(x.expiry)}, ${P.dayCount(x.dte)}${x.monthly ? ', monthly' : ''}</option>`)
     : html`<option>${R.error ? 'Expiries unavailable' : 'Loading expiries'}</option>`;
   return html`<label class="select"><span class="t-label">Expiry</span><select data-v2-op-expiry aria-label="Expiry for the table and the position builder" ${exps.length ? '' : 'disabled'}>${opts}</select></label>`;
 }
@@ -286,7 +291,7 @@ function research() {
     rs = all.slice(lo, lo + 15);
   }
   return html`${head}
-    <p class="asof">${shortDate(s.expiry)}, ${s.dte} days.${ivLine} Price ${num(d.spot)}. Showing ${tbl.shown} of ${tbl.total}.${d.fetched_at ? ` ${quotedAt(d.fetched_at)}.` : ''}</p>
+    <p class="asof">${shortDate(s.expiry)}, ${P.dayCount(s.dte)}.${ivLine} Price ${num(d.spot)}. Showing ${tbl.shown} of ${tbl.total}.${d.fetched_at ? ` ${quotedAt(d.fetched_at)}.` : ''}</p>
     ${(d.events || []).filter((e) => /report/i.test(e.text || '')).length ? html`<ul class="plain events-note">${d.events.filter((e) => /report/i.test(e.text || '')).map((e) => html`<li>${clean(e.text)}</li>`)}</ul>` : ''}
     <div class="tscroll"><table class="t contracts"><caption class="sr">${R.side === 'call' ? 'Calls' : 'Puts'} expiring ${shortDate(s.expiry)}</caption>
       <thead><tr><th>Strike</th><th>Delta</th><th>Bid / ask</th><th>Spread</th><th>IV</th><th>Breakeven</th><th>Cost</th>${R.more ? html`<th>Decay a day</th><th>Per vol pt</th><th>ITM, model</th><th>OI / volume</th><th>Early exercise</th>` : ''}<th><span class="sr">Add</span></th></tr></thead>
@@ -429,7 +434,7 @@ export async function render(main, route) {
   const f = readFilters();
   D = { sym, extra: {}, budget: readBudget() };
   R = { side: f.side, delta: f.delta, maxSpread: f.maxSpread, minOi: f.minOi, unquoted: f.unquoted, more: false, expiry: null, data: null, seq: 0 };
-  B = { legs: [], analysis: null, analyzing: false, error: null, slippage: f.slippage, fee: f.fee, days: null, when: 'now', cache: {}, template: null };
+  B = { legs: [], analysis: null, analyzing: false, seq: 0, error: null, slippage: f.slippage, fee: f.fee, days: null, when: 'now', cache: {}, template: null };
   const kept = readState(sym);
   if (kept && kept.expiry) { R.expiry = kept.expiry; B.legs = Array.isArray(kept.legs) ? kept.legs.map((l) => Object.assign({}, l)) : []; B.template = kept.template || null; }
   store.pushRecent(sym);
@@ -462,7 +467,7 @@ export async function render(main, route) {
     if (!live || document.visibilityState !== 'visible' || !['pre', 'regular', 'after'].includes(ph)) return;
     loadTicker({ quiet: true });
     beat += 1;
-    if (beat % 2 === 0) { loadResearch({ quiet: true }); if (B.legs.length && !B.analyzing) analyze(); }
+    if (beat % 2 === 0) { loadResearch({ quiet: true }); if (B.legs.length && !B.analyzing) analyze({ quiet: true }); }
   }, 60000);
 }
 

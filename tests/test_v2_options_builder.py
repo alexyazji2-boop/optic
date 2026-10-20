@@ -16,7 +16,7 @@ from fastapi.testclient import TestClient
 import app.main as m
 from app import rates
 from app.analytics import liquidity, position, vol_surface as vs
-from tests.test_frontend_v2_stage0 import V2
+from tests.test_frontend_v2_stage0 import V2, _run
 from tests.test_options_research_api import FakeProvider, _chain, R, SPOT
 
 PAGE = (V2 / "js/pages/options.js").read_text()
@@ -190,7 +190,21 @@ def test_the_position_is_kept_for_the_visit_in_memory_only():
 
 def test_in_session_the_contracts_and_the_position_are_priced_again():
     tick = PAGE.split("refresh = setInterval(")[1].split("}, 60000);")[0]
-    assert "loadResearch({ quiet: true })" in tick and "analyze()" in tick
+    assert "loadResearch({ quiet: true })" in tick and "analyze({ quiet: true })" in tick
+
+
+def test_the_two_minute_re_price_keeps_the_figures_on_screen():
+    """In session the position is priced again every two minutes. That re-price put a skeleton in place of the
+    figures, collapsing the result, and the reader reading the Greeks under the payoff was thrown about 1,000 px
+    down the page each time (live AAPL, 2026-10-20). Quiet: no skeleton, a failed re-read keeps the last
+    figures, and only the latest request lands, so a late re-read cannot undo the reader's own change."""
+    fn = PAGE.split("async function analyze(")[1].split("\n}\n")[0]
+    assert fn.startswith("{ quiet } = {}) {")
+    assert "if (!quiet) { B.analyzing = true; B.error = null; paintResult(); }" in fn, "the skeleton is for the reader's own changes only"
+    assert fn.index("const my = ++B.seq;") < fn.index("if (!B.legs.length)"), "removing every leg also drops a re-read in flight"
+    assert fn.count("my !== B.seq") == 2, "a superseded answer or failure lands nowhere"
+    assert "|| quiet) return; B.analysis = null;" in fn, "a failed re-read keeps the last figures"
+    assert "seq: 0," in PAGE.split("export async function render(")[1].split("const kept")[0]
 
 
 def test_a_phone_folds_the_wide_columns_into_a_row_detail():
@@ -198,3 +212,17 @@ def test_a_phone_folds_the_wide_columns_into_a_row_detail():
     assert "table.contracts .op-wide" in css and ".op-rowbtn { display: inline-grid; width: var(--tap); height: var(--tap)" in css
     assert 'aria-controls="op-rd-${n}"' in PAGE and 'class="op-detail" id="op-rd-${n}" hidden' in PAGE
     assert "data-v2-leg-step" in PAGE and 'inputmode="numeric"' in PAGE
+
+
+def test_a_one_day_expiry_is_one_day(tmp_path):
+    """The live chain lists tomorrow's expiry: it read "Oct 21, 1 days" in the select and the table's line, and
+    "Dashed: in 1 days" under the payoff (SPY, 2026-10-20)."""
+    got = _run(tmp_path, f"""
+      const p = await import('{(V2 / "js/pages/options-panels.js").as_posix()}');
+      print(JSON.stringify([p.dayCount(1), p.dayCount('1'), p.dayCount(0), p.dayCount(31)]));
+    """)
+    assert got == ["1 day", "1 day", "0 days", "31 days"]
+    panels = (V2 / "js/pages/options-panels.js").read_text()
+    for src in (PAGE, panels):   # the volatility lab's own 7 to 60 days are never one
+        assert not any(f"{v}.dte}} days" in src for v in ("i", "r", "x", "s", "main"))
+    assert PAGE.count("P.dayCount(") == 4

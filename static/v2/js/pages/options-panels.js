@@ -27,6 +27,8 @@ export function row30(vs) {
   return ex.length ? ex.reduce((a, r) => (Math.abs(r.dte - 30) < Math.abs(a.dte - 30) ? r : a), ex[0]) : null;
 }
 export const skewWords = (rr) => (!isNum(rr) ? 'n/a' : rr > 0.5 ? 'Puts dearer' : rr < -0.5 ? 'Calls dearer' : 'About equal');
+// "1 day", "31 days": a one-day expiry read "Oct 21, 1 days" on the live chain (2026-10-20)
+export const dayCount = (n) => `${n} ${Number(n) === 1 ? 'day' : 'days'}`;
 
 /* ---------- what options are pricing ---------- */
 export function pricing(t, sym) {
@@ -146,7 +148,7 @@ function idea(i, n) {
   const be = Array.isArray(i.breakeven) ? i.breakeven.map((b) => num(b)).join(' and ') : num(i.breakeven);
   const mp = i.max_profit === 'unlimited' ? 'No cap' : usd(i.profit_for_one ?? (isNum(i.max_profit) ? i.max_profit * 100 : null));
   const ml = usd(i.risk_for_one ?? (isNum(i.max_loss) ? Math.abs(i.max_loss) * 100 : null));
-  return html`<article class="idea"><p class="t-label">${i.group}, ${i.structure || ''}${i.expiry ? `, ${shortDate(i.expiry)}, ${i.dte} days` : ''}</p><h3>${i.name}</h3>
+  return html`<article class="idea"><p class="t-label">${i.group}, ${i.structure || ''}${i.expiry ? `, ${shortDate(i.expiry)}, ${dayCount(i.dte)}` : ''}</p><h3>${i.name}</h3>
     <p>${clean(i.rationale || '')}</p>
     <p class="legs">${(i.legs || []).map((l) => `${l.action === 'SELL' ? 'Sell' : 'Buy'} ${num(l.strike, 0)} ${(l.type || '').toLowerCase()} at ${num(l.mid)}`).join(', ')}.</p>
     ${kv([[debit ? 'Cost for one' : 'Credit for one', usd(i.cost_for_one ?? i.credit_for_one ?? (isNum(i.net_debit) ? i.net_debit * 100 : isNum(i.net_credit) ? i.net_credit * 100 : null))], ['Most it can make', mp], ['Most it can lose', ml], ['Breakeven', be || 'n/a']], 4)}
@@ -182,7 +184,7 @@ export function entry(t, sym) {
   }
   const r = ep.recommended || {}, og = ep.order_guidance || {}, tg = ep.target || {}, rk = ep.risk || {};
   return html`<p><b>${clean(ep.headline || '')}</b></p>
-    ${kv([['Contract', `${num(r.strike, 0)} ${ep.direction === 'short' ? 'put' : 'call'}, ${shortDate(r.expiry)} (${r.dte} days)`], ['Limit price', html`${num(og.limit_price ?? r.entry_mid)}${og.never_pay_more_than ? html` <span class="t-muted">never above ${num(og.never_pay_more_than)}</span>` : ''}`], ['Cost per contract', usd(r.capital_per_contract)], ['Breakeven', num(r.breakeven)], ['If the target is hit', signed(r.return_at_target_pct, 0)], ['If IV drops 20%', signed(r.return_if_iv_drops_20pct, 0)]], 3)}
+    ${kv([['Contract', `${num(r.strike, 0)} ${ep.direction === 'short' ? 'put' : 'call'}, ${shortDate(r.expiry)} (${dayCount(r.dte)})`], ['Limit price', html`${num(og.limit_price ?? r.entry_mid)}${og.never_pay_more_than ? html` <span class="t-muted">never above ${num(og.never_pay_more_than)}</span>` : ''}`], ['Cost per contract', usd(r.capital_per_contract)], ['Breakeven', num(r.breakeven)], ['If the target is hit', signed(r.return_at_target_pct, 0)], ['If IV drops 20%', signed(r.return_if_iv_drops_20pct, 0)]], 3)}
     ${(ep.entry_options || []).length ? html`<h3>Where to enter</h3><ul class="plain">${ep.entry_options.map((o) => html`<li><b>${capFirst(o.style || '')}.</b> ${clean(o.detail || '')} ${clean(o.confirmation || '')}</li>`)}</ul>` : ''}
     <h3>Target and risk</h3>${kv([['Target', html`${num(tg.target_price)} <span class="t-muted">(${signed(tg.move_required_pct)}, ${clean(tg.target_source || '')})</span>`], ['Stock stop', html`${num(rk.underlying_stop)} <span class="t-muted">${clean(rk.stop_basis || '')}</span>`], ['Typical time', isNum(tg.estimated_trading_days) ? `${tg.estimated_trading_days} sessions` : 'n/a']], 3)}
     <p>${clean(rk.invalidation || '')}</p>
