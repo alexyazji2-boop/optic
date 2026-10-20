@@ -956,6 +956,9 @@ table.narrow { max-width: 640px; }
 .book-card { display: grid; gap: 8px; text-align: left; padding: 16px 18px; border: 1px solid var(--c-line); border-radius: var(--r-3); background: var(--c-raised); color: var(--c-ink); font: inherit; cursor: pointer; }
 .book-card:hover { border-color: var(--c-ink-3); }
 .book-card[aria-pressed="true"] { border-color: var(--c-ink); box-shadow: inset 0 0 0 1px var(--c-ink); }
+/* A short screen (a phone on its side): a book card taller than the room between the top bar and the phone
+   bar was focused with its top under the bar. The rules and the blurb go; the cards keep name, value, return. */
+@media (max-height: 500px) { .book-card { padding: 10px 14px; gap: 4px; } .book-card .bk-rules, .book-card .bk-blurb { display: none; } }
 .bk-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; } .bk-top b { font-size: var(--t-xl); }
 .bk-figs { display: grid; grid-template-columns: repeat(4, auto); justify-content: start; gap: 4px 18px; font: 600 var(--t-base)/1.3 var(--f-label); }
 .bk-figs i { display: block; font: 500 var(--t-sm)/1.3 var(--f-label); font-style: normal; color: var(--c-ink-3); }

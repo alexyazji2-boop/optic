@@ -71,7 +71,7 @@ function projChart(pr) {
     { name: 'Lower band', xs, ys: (pr.series_low || []).map((v) => (typeof v === 'object' && v ? v.balance : v)), cls: 'alt' },
     { name: 'Upper band', xs, ys: (pr.series_high || []).map((v) => (typeof v === 'object' && v ? v.balance : v)), cls: 'alt' },
     { name: 'Contributions only', xs, ys: ys('contributed', pr.series), cls: 'faint' },
-  ], { w, h: 300, label: 'Contribution projection', xfmt: (x) => `yr ${Math.round(x)}`, yfmt: (v) => `$${compact(v)}`, summary: `After ${pr.years} years: central ${$(pr.balance_base)}, lower ${$(pr.balance_low)}, upper ${$(pr.balance_high)}, from ${$(pr.total_contributed)} put in.` });
+  ], { w, h: Math.max(180, Math.min(300, innerHeight - 190)), label: 'Contribution projection', xfmt: (x) => `yr ${Math.round(x)}`, yfmt: (v) => `$${compact(v)}`, summary: `After ${pr.years} years: central ${$(pr.balance_base)}, lower ${$(pr.balance_low)}, upper ${$(pr.balance_high)}, from ${$(pr.total_contributed)} put in.` });
 }
 
 function sections(d) {

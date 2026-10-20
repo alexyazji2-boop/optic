@@ -13,6 +13,7 @@ import { signedBars } from '../ui/bars.js';
 import { mountCharts } from '../ui/chart.js';
 import { provideContext } from '../ui/milo.js';
 import { sectionHead } from './tabs.js';
+import { etStamp } from '../core/marketTime.js';
 
 const KEY = 'optic.paper.v1', MAX = 50, KEEP_CLOSED = 200, R_SHOWN = 30, EXPIRY_DAYS = 7, CONCENTRATED = 0.4;
 
@@ -53,7 +54,7 @@ export function health(open, marks, today = etToday()) {
 
 /* ---------------- state ---------------- */
 let book = { open: [], closed: [] }, ticket = blankTicket(), chain = null, chainFor = '', chainState = 'idle', chainErr = '';
-let marks = {}, marking = false, markFailed = false, armed = false, note = '', reads = {}, live = true, mainEl = null, health0 = null;
+let markedAt = null, marks = {}, marking = false, markFailed = false, armed = false, note = '', reads = {}, live = true, mainEl = null, health0 = null;
 function blankTicket() { return { ticker: '', instrument: 'shares', direction: 'long', qty: '', entry: '', stop: '', target: '', thesis: '', expiry: '', strike: '', optionType: 'call' }; }
 function loadBook() {
   book = { open: [], closed: [] };
@@ -83,7 +84,7 @@ function healthBlock() {
   const parts = h.ranked.slice(0, 6).map(([s, v], i) => ({ name: `${s}${isShort(s) ? ' short' : ''}`, share: v / (h.total || 1), cls: `s${i + 1}` }));
   const rest = h.ranked.slice(6); if (rest.length) parts.push({ name: `${rest.length} other${rest.length === 1 ? '' : 's'}`, share: rest.reduce((a, [, v]) => a + v, 0) / (h.total || 1), cls: 's0' });
   return html`<section class="section first" aria-labelledby="ph-h"><div class="section-head"><h2 class="t-h2" id="ph-h">Portfolio health</h2>
-      <span class="pill">${h.marked < book.open.length ? `${book.open.length - h.marked} of ${book.open.length} not marked` : `${realtime ? 'Marked from live quotes' : 'Marked from delayed quotes'}${modelledN ? `; ${modelledN} option${modelledN === 1 ? '' : 's'} estimated by a model` : ''}`}</span></div>
+      <span class="pill">${h.marked < book.open.length ? `${book.open.length - h.marked} of ${book.open.length} not marked` : `${realtime ? 'Marked from live quotes' : 'Marked from delayed quotes'}${markedAt ? ` at ${etStamp(markedAt)}` : ''}${modelledN ? `; ${modelledN} option${modelledN === 1 ? '' : 's'} estimated by a model` : ''}`}</span></div>
     <p class="lead-line">${names === 1 ? `One name, ${h.top[0]}, is the whole book.` : conc ? `${h.top[0]} is ${Math.round(h.topShare * 100)}% of the book, which is concentrated.` : `Spread across ${names} names; the largest, ${h.top[0]}, is ${Math.round(h.topShare * 100)}%.`} It is ${lean}. ${h.review.length ? `${h.review.length} position${h.review.length === 1 ? ' needs' : 's need'} a look.` : 'Nothing is near its stop or its expiry.'}</p>
     <dl class="kv" style="--kv:3"><div><dt>Exposure</dt><dd>$${compact(h.total)}</dd><p class="kv-note">at cost, ${book.open.length} position${book.open.length === 1 ? '' : 's'}</p></div>
       <div><dt>Open P&L</dt><dd class="${h.marked ? (h.pnl >= 0 ? 'up' : 'down') : ''}">${h.marked ? money2(h.pnl) : 'n/a'}</dd><p class="kv-note">${!h.marked ? 'waiting on marks' : modelledN ? `a quote, not a result; ${modelledN} of it a model's estimate` : 'a quote, not a result'}</p></div>
@@ -139,7 +140,7 @@ function openTable() {
           <td class="pt-src">${m.mark_source ? m.mark_source : html`<span class="t-muted">${m.reason || (marking ? 'pricing…' : 'not marked')}</span>`}</td><td class="${cls}">${isNum(pnl) ? money2(pnl) : 'n/a'}</td><td class="${cls}">${rText(r)}</td>
           <td>${p.read ? html`<span class="${ag === null ? 't-muted' : ag ? 'up' : 'down'}" title="${p.read.summary || ''}">${p.read.stance}${ag === null ? '' : ag ? ', with' : ', against'}</span>` : html`<span class="t-muted">n/a</span>`}</td>
           <td><button type="button" class="btn btn-sm" data-v2-pt-close="${p.id}" ${isNum(m.mark_price) ? '' : 'disabled'} title="Close at the current mark" aria-label="Close ${posLabel(p)} at the current mark">Close</button></td></tr>`; })}</tbody></table></div>
-      <p class="asof">Closing takes the current mark: the last trade for shares, the chain's mid for an option, or a model's estimate when the contract has no quote. A real fill would be at the bid or the ask.</p>`
+      <p class="asof">${markedAt ? `Marks taken ${etStamp(markedAt)}; a mark is a quote, delayed about 15 minutes in session and the last close outside it. ` : ''}Closing takes the current mark: the last trade for shares, the chain's mid for an option, or a model's estimate when the contract has no quote. A real fill would be at the bid or the ask.</p>`
       : html`<p class="quiet">No open positions. The ticket above opens one.</p>`}</section>`;
 }
 
@@ -151,7 +152,7 @@ function recordBlock() {
   const w = sided(true), a = sided(false);
   return html`<section class="section" aria-labelledby="pr-h"><h2 class="t-h2" id="pr-h">Record</h2>
     <p class="section-sub">${done.length} closed, ${wins.length} up, ${Math.round((wins.length / done.length) * 100)}% win rate</p>
-    <dl class="kv" style="--kv:2"><div><dt>Realised</dt><dd class="${dir(total)}">${money2(total)}</dd></div><div><dt>Average</dt><dd class="${dir(avgR)}">${rText(avgR)}</dd><p class="kv-note">per trade, in multiples of what it risked</p></div></dl>
+    <dl class="kv" style="--kv:2"><div><dt>Realised</dt><dd class="${dir(total)}">${money2(total)}</dd><p class="kv-note">all ${done.length} closed${done.length > 50 ? ', the table shows the newest 50' : ''}</p></div><div><dt>Average</dt><dd class="${dir(avgR)}">${rText(avgR)}</dd><p class="kv-note">per trade, in multiples of what it risked</p></div></dl>
     ${withR.length >= 2 ? html`<h3>${withR.filter((t) => t.r > 0).length} of ${withR.length} trades with a stop made more than they risked to lose${withR.length > R_SHOWN ? `; the latest ${R_SHOWN} drawn` : ''}</h3><div class="chart-slot" data-chart="r"></div><p class="asof">Each closed trade in multiples of what its stop said it could lose, oldest first. Kept in this browser only.</p>` : ''}
     ${w || a ? html`<h3>With the terminal, and against it</h3><dl class="kv" style="--kv:2">${w ? html`<div><dt>Traded with Optic's read</dt><dd class="${dir(w.avg)}">${rText(w.avg)}</dd><p class="kv-note">${w.n} trade${w.n === 1 ? '' : 's'}</p></div>` : ''}${a ? html`<div><dt>Traded against it</dt><dd class="${dir(a.avg)}">${rText(a.avg)}</dd><p class="kv-note">${a.n} trade${a.n === 1 ? '' : 's'}</p></div>` : ''}</dl>
       <p class="asof">The read is the one Optic held when the trade was opened, not today's. Trades where it was neutral are in neither column: a neutral read was not an opinion to disagree with. Two or three trades is not a finding about anything.</p>` : ''}</section>
@@ -179,7 +180,7 @@ function paint() {
 async function mark() {
   if (marking || !book.open.length) return;
   marking = true; markFailed = false; paint();
-  try { const out = await api.post('/api/paper/mark', { positions: book.open }, { timeout: 60000 }); marks = {}; (out.marks || []).forEach((m) => { marks[m.id] = m; }); }
+  try { const out = await api.post('/api/paper/mark', { positions: book.open }, { timeout: 60000 }); marks = {}; markedAt = out.marked_at || new Date().toISOString(); (out.marks || []).forEach((m) => { marks[m.id] = m; }); }
   catch (e) { markFailed = true; note = `Could not price the book just now (${api.explain(e, 'The pricing')}).`; }
   marking = false; paint();
 }

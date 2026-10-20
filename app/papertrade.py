@@ -124,6 +124,11 @@ def _spot_map(provider, tickers: List[str]) -> Dict[str, Optional[float]]:
     return out
 
 
+def _now_iso() -> str:
+    from datetime import datetime, timezone
+    return datetime.now(timezone.utc).isoformat()
+
+
 def mark_book(provider, positions: List[Dict[str, Any]],
               rate: float = 0.0) -> Dict[str, Any]:
     """Mark every position in a hand-entered book.
@@ -173,6 +178,8 @@ def mark_book(provider, positions: List[Dict[str, Any]],
     return {
         "available": True,
         "marks": marks,
+        # when these marks were taken: the page says how old a mark is (a quote, delayed in session)
+        "marked_at": _now_iso(),
         "counted": len(cleaned),
         "dropped": max(0, len(positions or []) - len(cleaned)),
         # Said rather than silently truncated: a book at the cap would
