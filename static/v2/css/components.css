@@ -306,7 +306,7 @@ ul.plain { margin: 0; padding-left: 18px; } ul.plain li { margin-bottom: 7px; }
 
 /* ---------- Milo ---------- */
 .milo { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; gap: 10px; height: 100%; min-height: 0; }
-.drawer-panel.milo-panel { width: min(560px, 100vw); } .milo-panel .drawer-body { display: flex; flex-direction: column; min-height: 0; overflow: hidden; padding-bottom: 16px; } .milo-panel .milo { flex: 1; }
+.drawer-panel.milo-panel { width: min(var(--milo-w, 560px), 100vw); } .milo-panel .drawer-body { display: flex; flex-direction: column; min-height: 0; overflow: hidden; padding-bottom: 16px; } .milo-panel .milo { flex: 1; }
 .milo-top { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 8px 12px; }
 .milo-scope { display: grid; gap: 4px; min-width: 0; flex: 1; } .milo-scope select { max-width: 100%; }
 /* pages.css's .select (inline-flex) comes later and won: the picker could not shrink and ran under History on a phone */
@@ -655,3 +655,9 @@ table.st td a { text-decoration: none; font-weight: 600; } table.st td a:hover {
 /* Milo: what an answer was about, and a plain flag when the page now open is another symbol's (task 12) */
 .milo-about { margin: 0 0 6px; font-size: var(--t-sm); color: var(--c-ink-3); }
 .milo-about.is-other b { color: var(--c-ink); font-weight: 600; }
+/* Milo's width grip, on the panel's left edge (desktop; on a phone the panel is a bottom sheet) */
+.milo-grip { position: absolute; left: -5px; top: 0; bottom: 0; width: 10px; cursor: col-resize; z-index: 2; touch-action: none; }
+.milo-grip::after { content: ''; position: absolute; left: 4px; top: 50%; width: 2px; height: 44px; margin-top: -22px; border-radius: 2px; background: var(--c-ink-3); opacity: 0; transition: opacity var(--d); }
+.milo-grip:hover::after, .milo-grip:focus-visible::after, .milo-grip.is-dragging::after { opacity: 1; }
+.milo-grip:focus-visible { outline: 2px solid var(--c-focus); outline-offset: -2px; }
+@media (max-width: 860px) { .milo-grip { display: none; } }

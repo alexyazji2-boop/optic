@@ -540,7 +540,7 @@ export async function openMilo({ question = '', opener, send: sendNow = false, a
   if (question) S.draft = question;
   // every opening says where it came from; one with no block is the whole page
   asked = about || symbol ? { about: about || null, symbol: symbol ? String(symbol).toUpperCase() : null } : null;
-  let vvOff = null;
+  let vvOff = null, gripOff = null;
   drawer.open({
     kicker: 'Ask Milo', title: 'Milo', opener,
     body: html`<div class="milo"><div class="milo-chrome">${chromeHTML()}</div>
@@ -550,7 +550,7 @@ export async function openMilo({ question = '', opener, send: sendNow = false, a
         <div class="cluster"><button type="submit" class="btn btn-primary" data-v2-milo-send>Send</button><button type="button" class="btn" data-v2-milo-stop hidden>Stop</button><p class="asof" id="milo-allow"></p></div></form></div>`,
     mount: (b) => {
       S.mounted = $('.milo', b) || b;
-      const panel = S.mounted.closest('.drawer-panel'); if (panel) panel.classList.add('milo-panel');
+      const panel = S.mounted.closest('.drawer-panel'); if (panel) { panel.classList.add('milo-panel'); gripOff = resizable(panel); }
       // the phone keyboard: keep the composer above it
       const vv = window.visualViewport;
       if (vv && panel) { const fit = () => { panel.style.setProperty('--vvh', `${Math.round(vv.height)}px`); }; fit(); vv.addEventListener('resize', fit); vvOff = () => vv.removeEventListener('resize', fit); }
@@ -564,9 +564,65 @@ export async function openMilo({ question = '', opener, send: sendNow = false, a
       api.get('/api/health', { ttl: 60000 }).then((hh) => { S.health = hh; paintChrome(); }, () => {});
       if (sendNow && S.draft) send(S.draft);
     },
-    closed: () => { if (vvOff) vvOff(); const ta = S.mounted && $('#milo-q', S.mounted); if (ta) S.draft = ta.value; SC.menu = false; S.mounted = null; },
+    closed: () => { if (vvOff) vvOff(); if (gripOff) { gripOff(); gripOff = null; } const ta = S.mounted && $('#milo-q', S.mounted); if (ta) S.draft = ta.value; SC.menu = false; S.mounted = null; },
   });
 }
+// Milo's panel is as wide as the reader drags it, as in the classic app: a grip on its left edge, the arrow
+// keys on the grip, a double click for the default. The classic key and its rules: a width is saved only once
+// chosen, never on opening; the page keeps at least 240 px (owner, 2026-10-20).
+const W_KEY = 'optic.chat.width.v2', W_OLD = 'optic.chat.width.v1', W_OLD_DEFAULT = 382, W_MIN = 320, W_DEFAULT = 560, PAGE_MIN = 240;
+const wMax = () => Math.max(W_MIN, window.innerWidth - PAGE_MIN);
+function storedWidth() {
+  try {
+    const n = parseInt(localStorage.getItem(W_KEY) || '', 10); if (Number.isFinite(n) && n >= W_MIN) return n;
+    const o = parseInt(localStorage.getItem(W_OLD) || '', 10); if (Number.isFinite(o) && o >= W_MIN && o !== W_OLD_DEFAULT) return o;
+  } catch (e) { /* private mode */ }
+  return null;
+}
+function resizable(panel) {
+  const grip = document.createElement('div');
+  grip.className = 'milo-grip'; grip.tabIndex = 0;
+  grip.setAttribute('role', 'separator'); grip.setAttribute('aria-orientation', 'vertical');
+  grip.setAttribute('aria-label', "Milo's width. Drag, or use the arrow keys; double-click for the default.");
+  panel.appendChild(grip);
+  let w = W_DEFAULT;
+  const apply = (px, save) => {
+    w = Math.round(Math.min(Math.max(px, W_MIN), wMax()));
+    panel.style.setProperty('--milo-w', `${w}px`);
+    grip.setAttribute('aria-valuenow', String(w)); grip.setAttribute('aria-valuemin', String(W_MIN)); grip.setAttribute('aria-valuemax', String(wMax()));
+    if (save) { try { localStorage.setItem(W_KEY, String(w)); } catch (e) { /* private mode */ } }
+  };
+  apply(storedWidth() || W_DEFAULT, false);
+  let dragging = false;
+  grip.addEventListener('pointerdown', (e) => {
+    if (e.button !== 0) return;
+    dragging = true; grip.classList.add('is-dragging');
+    try { grip.setPointerCapture(e.pointerId); } catch (err) { /* a pointer the browser no longer tracks */ }
+    e.preventDefault();
+  });
+  grip.addEventListener('pointermove', (e) => {
+    if (!dragging) return;
+    if (e.pointerType === 'mouse' && e.buttons === 0) { end(); return; }
+    apply(window.innerWidth - e.clientX, false);
+  });
+  const end = () => { if (!dragging) return; dragging = false; grip.classList.remove('is-dragging'); apply(w, true); };
+  grip.addEventListener('pointerup', end); grip.addEventListener('pointercancel', end); grip.addEventListener('lostpointercapture', end);
+  grip.addEventListener('keydown', (e) => {
+    const step = e.shiftKey ? 96 : 24;
+    if (e.key === 'ArrowLeft') apply(w + step, true);
+    else if (e.key === 'ArrowRight') apply(w - step, true);
+    else if (e.key === 'Home') apply(W_MIN, true);
+    else if (e.key === 'End') apply(wMax(), true);
+    else return;
+    e.preventDefault();
+  });
+  grip.addEventListener('dblclick', () => { try { localStorage.removeItem(W_KEY); } catch (e) { /* private mode */ } apply(W_DEFAULT, false); });
+  // a narrower window re-clamps the panel, without overwriting the width the reader chose
+  const onResize = () => apply(storedWidth() || W_DEFAULT, false);
+  window.addEventListener('resize', onResize);
+  return () => { window.removeEventListener('resize', onResize); grip.remove(); panel.style.removeProperty('--milo-w'); panel.classList.remove('milo-panel'); };
+}
+
 function wire(root) {
   root.addEventListener('submit', (e) => { if (e.target.closest('[data-v2-milo-form]')) { e.preventDefault(); send($('#milo-q', root).value); } });
   root.addEventListener('keydown', (e) => { if (e.target.id === 'milo-q' && e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); send(e.target.value); } });
