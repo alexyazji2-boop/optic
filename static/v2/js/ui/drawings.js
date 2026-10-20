@@ -56,8 +56,10 @@ export function snap(bar, price, yOf, px = SNAP_PX) {
   return best && bestPx <= px ? best : { price, field: null };
 }
 /** A drawing moved by `di` bars and `dp` in price; points stay on bars, held at the ends of the series. */
-export function moved(points, di, dp, bars, indexOf) {
-  return points.map((q) => { const i = Math.max(0, Math.min(bars.length - 1, indexOf(q.t) + di)); return { t: bars[i].t, p: +(q.p + dp).toFixed(4) }; });
+/** A drawing moved by `di` bars and `dp` in price. Positions go through the chart's time axis (ui/timeaxis.js), so
+ * a point keeps its place between bars and past the ends instead of snapping to the nearest bar. */
+export function moved(points, di, dp, axis) {
+  return points.map((q) => ({ t: Math.round(axis.t(axis.f(q.t) + di)), p: +(q.p + dp).toFixed(4) }));
 }
 /** The distance from a point to a segment, for picking a drawing under the pointer. */
 export function segDist(px, py, x1, y1, x2, y2) {

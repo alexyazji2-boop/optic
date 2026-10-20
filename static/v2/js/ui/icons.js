@@ -37,6 +37,7 @@ const P = {
   candles: '<path d="M7 3.5v3.5M7 17v3.5M17 6v4M17 18v2.5"/><rect x="5" y="7" width="4" height="10" rx="1"/><rect x="15" y="10" width="4" height="8" rx="1"/>',
   lineChart: '<path d="M3 17l5-6 4 3 8-9"/>',
   area: '<path d="M3 17l5-6 4 3 8-9v15H3z"/>',
+  lineChart: '<path d="M3 17l5-6 4 3 8-9"/>',   // the Line style (it had no icon of its own and drew an empty button)
   cursor: '<path d="M6 3.5l12 8.8-5.4 1.3 2.9 6.4-2.3 1-2.9-6.4L6 18.4z"/>',
   hline: '<path d="M3 12h18"/><circle cx="7" cy="12" r="1.8"/>',
   vline: '<path d="M12 3v18"/><circle cx="12" cy="8" r="1.8"/>',

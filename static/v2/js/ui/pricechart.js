@@ -12,6 +12,7 @@
 // Drawings are stored as {kind, points:[{t: epoch ms, p: price}]}, the classic
 // app's format, so they line up whatever the bar size.
 import { num, esc, compact } from '../core/format.js';
+import { makeAxis } from './timeaxis.js';
 import { tsoSeries, maTrendSeries, volumeByPrice, sessionStarts, nyDate, TSO_LEVEL } from './studies.js';
 import { TOOL_POINTS, channel, fibExt, pitchfork, riskReward, positionSize, measure, snap, moved, segDist } from './drawings.js';
 import { icon } from './icons.js';
@@ -124,9 +125,19 @@ export function createPriceChart(host, opts) {
   };
   let from = Math.max(0, N - (S.window || 126)), to = N - 1;
   const home0 = { from, to };   // the view the chart opened on, which Reset zoom goes back to
+  // a chart rebuilt on the same bars (a pane added, the chart read opened) keeps where the reader had zoomed
+  if (S.view && S.view.to <= N - 1 && S.view.from >= 0 && S.view.to > S.view.from) { from = S.view.from; to = S.view.to; }
+  // where a moment sits on these bars (ui/timeaxis.js): drawings and events keep their day at any bar size
+  const AX = makeAxis(bars, !!S.intraday);
   let zoomedWas = null;
   let cross = -1, crossY = null, sel = -1, pending = null, W = 0, H = 0, layout = null, drag = null, raf = 0;
-  const undo = [], redo = [];
+  // the undo history survives a rebuild on the same bars, as the view does
+  const undo = (S.history && S.history.undo) || [], redo = (S.history && S.history.redo) || [];
+  let touchy = false;   // the last pointer was a finger: wider targets, a larger move before a drag
+  const changed = () => { if (S.onChange) S.onChange({ canUndo: undo.length > 0, canRedo: redo.length > 0, selected: sel >= 0 }); };
+  // A finger scrolls the page up and down over the chart and pans it sideways (pan-y); while a tool is placing
+  // points or a drawing is selected, the chart takes the whole gesture.
+  const syncTouch = () => { svg.style.touchAction = S.tool !== 'select' || sel >= 0 ? 'none' : 'pan-y'; };
   const CLIP = `pc-clip-${++clipSeq}`;
 
   host.classList.add('pc');
@@ -229,6 +240,8 @@ export function createPriceChart(host, opts) {
     if (OV.trends && !S.intraday) (SD.trends || []).forEach((t) => { const a = Math.max(t.i1, from), b = Math.min(t.i2, to); if (a >= b) return; const at = (i) => t.p1 + (t.p2 - t.p1) * (i - t.i1) / Math.max(1, t.i2 - t.i1); o += `<line class="tl ${t.up ? 'up' : 'dn'}${t.broken ? ' brk' : ''}" x1="${X(a).toFixed(1)}" y1="${ps.Y(at(a)).toFixed(1)}" x2="${X(b).toFixed(1)}" y2="${ps.Y(at(b)).toFixed(1)}"><title>${esc(t.label)}</title></line>`; });
     // volume by price, for the bars in view: bars from the right edge, the point of control the strongest
     if (OV.vbp) { const vb = volumeByPrice(bars.slice(from, to + 1).map((b) => b.c), bars.slice(from, to + 1).map((b) => b.v || 0)); if (vb) { const mx = Math.max(...vb.map((q) => q.volume)), wmax = (right - layout.l) * 0.22; vb.forEach((q) => { const y1 = ps.Y(q.hi), y2 = ps.Y(q.lo), w = (q.volume / mx) * wmax; o += `<rect class="vbp${q.poc ? ' poc' : ''}" x="${(right - w).toFixed(1)}" y="${(y1 + 0.5).toFixed(1)}" width="${w.toFixed(1)}" height="${Math.max(0.5, y2 - y1 - 1).toFixed(1)}"/>`; }); } }
+    // pre- and post-market bars shaded apart from the regular session (the bars' own `extended` flags)
+    if (S.extended && S.intraday) { let i = from; while (i <= to) { if (!S.extended[i]) { i += 1; continue; } let j = i; while (j + 1 <= to && S.extended[j + 1]) j += 1; o += `<rect class="ext-band" x="${(X(i) - bw / 2).toFixed(1)}" y="${pp.y0}" width="${((j - i + 1) * bw).toFixed(1)}" height="${pp.y1 - pp.y0}"><title>Pre- or post-market: thin books</title></rect>`; i = j + 1; } }
     // session dividers on intraday bars: a dashed line where each trading day starts
     if (OV.sessions && S.intraday) ind.sess.forEach((i) => { if (i < from || i > to) return; const x = (X(i) - bw / 2).toFixed(1); o += `<line class="sdiv" x1="${x}" x2="${x}" y1="${pp.y0}" y2="${H - 22}"/>`; });
     // a page's own bands and series (the Investing tab's weekly structure: support and resistance as shaded bands
@@ -278,13 +291,13 @@ export function createPriceChart(host, opts) {
         + `<title>${word} market structure break. Swing ${bull ? 'high' : 'low'} of ${num(m.price)} formed ${fmtT(bars[m.from].t)}; known as a swing from ${fmtT(bars[m.known].t)}, once the bars after it had closed (dotted before then); broken ${fmtT(at.t)} by a close of ${num(at.c)}.</title></g>`;
     });
     // earnings and other events
-    (S.overlays.events === false ? [] : S.events).forEach((e) => { const i = idxOfT(e.t); if (i < from || i > to) return; const x = X(i).toFixed(1); o += `<g class="evm"><line x1="${x}" x2="${x}" y1="${pp.y0}" y2="${pp.y1}"/><text x="${x}" y="${pp.y1 - 4}" text-anchor="middle">${esc(e.kind)}</text><title>${esc(e.label)}</title></g>`; });
+    (S.overlays.events === false ? [] : S.events).forEach((e) => { const i = AX.bar(e.t); if (i < 0 || i < from || i > to) return; const x = X(i).toFixed(1); o += `<g class="evm"><line x1="${x}" x2="${x}" y1="${pp.y0}" y2="${pp.y1}"/><text x="${x}" y="${pp.y1 - 4}" text-anchor="middle">${esc(e.kind)}</text><title>${esc(e.label)}</title></g>`; });
     // insider trades (S.insiders, from the ticker payload): a green arrow under the bar's low for a purchase, a red
     // one over its high for a sale, one arrow for all of a side's trades in a bar; the box comes from insiderTip()
     flags = [];
     if (S.overlays.ins !== false && (S.insiders || []).length) {
       const by = new Map();
-      S.insiders.forEach((it) => { const i = idxOfT(it.t); if (i < from || i > to || !bars[i]) return; const k = `${i}${it.side}`; if (!by.has(k)) by.set(k, { i, side: it.side, items: [] }); by.get(k).items.push(it); });
+      S.insiders.forEach((it) => { const i = AX.bar(it.t); if (i < 0 || i < from || i > to || !bars[i]) return; const k = `${i}${it.side}`; if (!by.has(k)) by.set(k, { i, side: it.side, items: [] }); by.get(k).items.push(it); });
       by.forEach((f) => {
         const b = bars[f.i], x = X(f.i), buy = f.side === 'buy';
         const tip = buy ? Math.min(pp.y1 - 21, ps.Y(b.l) + 6) : Math.max(pp.y0 + 21, ps.Y(b.h) - 6), d = buy ? 1 : -1;
@@ -295,7 +308,7 @@ export function createPriceChart(host, opts) {
     }
     // fills a side widget asks for (the backtest's entries and exits): B under the bar's low, S over its high
     (S.marks || []).forEach((m) => {
-      const i = idxOfT(m.t); if (i < from || i > to || !bars[i]) return;
+      const i = AX.bar(m.t); if (i < 0 || i < from || i > to || !bars[i]) return;
       const b = bars[i], x = X(i), r = 8, buy = m.kind === 'B';
       const y = Math.max(pp.y0 + r, Math.min(pp.y1 - r, buy ? ps.Y(b.l) + r + 4 : ps.Y(b.h) - r - 4));
       o += `<g class="tm ${m.tone === 'neg' ? 'neg' : 'pos'}"><circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${r}"/><text x="${x.toFixed(1)}" y="${(y + 4).toFixed(1)}" text-anchor="middle">${esc(m.kind)}</text><title>${esc(m.label)}</title></g>`;
@@ -303,6 +316,7 @@ export function createPriceChart(host, opts) {
     // drawings
     S.drawings.forEach((dr, k) => { o += drawing(dr, k === sel); });
     // the tool being placed, to the pointer (snapped as a click there would be)
+    if (pending && pending.points.length) pending.points.forEach((q) => { o += `<circle class="dr-h dr-placed" cx="${X(AX.f(q.t)).toFixed(1)}" cy="${ps.Y(q.p).toFixed(1)}" r="5"/>`; });
     if (pending && pending.points.length && cross >= 0 && crossY !== null) o += drawing({ kind: pending.kind, points: [...pending.points, { t: bars[cross].t, p: S.snap ? snap(bars[cross], crossY, ps.Y).price : crossY }] }, false, true);
     o += '</g>';
     // panes
@@ -366,7 +380,7 @@ export function createPriceChart(host, opts) {
   // that point, drag the shape to move it all). A tool still being placed draws what its points so far make.
   function drawing(dr, selected, ghost) {
     const ps = layout.ps, X = layout.X, right = W - layout.r, last = N - 1;
-    const q = dr.points.map((x) => ({ i: idxOfT(x.t), p: x.p, t: x.t }));
+    const q = dr.points.map((x) => ({ i: AX.f(x.t), p: x.p, t: x.t }));
     const pts = q.map((x) => ({ x: X(x.i), y: ps.Y(x.p), p: x.p }));
     const cls = `dr ${selected ? 'sel' : ''} ${ghost ? 'ghost' : ''}`;
     const seg = (g, c = cls) => `<line class="${c}" x1="${X(g.i1).toFixed(1)}" y1="${ps.Y(g.p1).toFixed(1)}" x2="${X(g.i2).toFixed(1)}" y2="${ps.Y(g.p2).toFixed(1)}"/>`;
@@ -583,6 +597,9 @@ export function createPriceChart(host, opts) {
     try { svg.setPointerCapture(e.pointerId); } catch (err) { /* a pointer the browser no longer tracks */ }
     pointers.set(e.pointerId, pt(e));
     hoverP = pt(e);   // a tap on an arrow opens its box on a touch screen
+    touchy = e.pointerType === 'touch' || e.pointerType === 'pen';
+    // a tap reads that bar: the crosshair goes there and stays when the finger lifts
+    if (touchy && layout) { const q = pt(e); cross = Math.max(from, Math.min(to, layout.I(q.x))); crossY = q.y <= layout.panes[0].y1 ? layout.ps.P(q.y) : null; }
     if (pointers.size === 2) { const [p1, p2] = [...pointers.values()]; drag = { pinch: Math.abs(p1.x - p2.x), span: to - from + 1 }; return; }
     const p = pt(e);
     if (S.tool !== 'select') {
@@ -596,7 +613,7 @@ export function createPriceChart(host, opts) {
     const h = handleAt(p);
     if (h >= 0) { drag = { mode: 'handle', k: sel, h, before: S.drawings, moved: false }; return; }
     const hit = hitTest(p);
-    sel = hit; if (S.onSelect) S.onSelect(hit >= 0 ? S.drawings[hit] : null);
+    sel = hit; if (S.onSelect) S.onSelect(hit >= 0 ? S.drawings[hit] : null); syncTouch(); changed();
     drag = hit >= 0 ? { mode: 'body', k: hit, x: p.x, y: p.y, pts: S.drawings[hit].points, before: S.drawings, moved: false } : { x: p.x, from, moved: false };
     redraw();
   });
@@ -605,8 +622,8 @@ export function createPriceChart(host, opts) {
     if (pointers.has(e.pointerId)) pointers.set(e.pointerId, p);
     if (drag && drag.pinch && pointers.size === 2) { const [p1, p2] = [...pointers.values()]; const d = Math.abs(p1.x - p2.x) || 1; const ns = Math.max(10, Math.min(N, Math.round(drag.span * drag.pinch / d))); const c = to; from = Math.max(0, c - ns + 1); to = c; redraw(); return; }
     if (drag && drag.mode === 'handle') { const at = pointAt(p), dr = S.drawings[drag.k]; S.drawings = S.drawings.map((x, j) => (j === drag.k ? Object.assign({}, dr, { points: dr.points.map((q, n) => (n === drag.h ? { t: at.t, p: at.p } : q)) }) : x)); drag.moved = true; }
-    else if (drag && drag.mode === 'body') { const di = Math.round((p.x - drag.x) / layout.bw), dp = layout.ps.P(p.y) - layout.ps.P(drag.y); if (Math.abs(p.x - drag.x) > 3 || Math.abs(p.y - drag.y) > 3) { drag.moved = true; S.drawings = S.drawings.map((x, j) => (j === drag.k ? Object.assign({}, x, { points: moved(drag.pts, di, dp, bars, idxOfT) }) : x)); } }
-    else if (drag && !drag.pinch) { const dx = p.x - drag.x; if (Math.abs(dx) > 3) drag.moved = true; const span = to - from; from = Math.max(0, Math.min(N - 1 - span, drag.from - Math.round(dx / layout.bw))); to = from + span; }
+    else if (drag && drag.mode === 'body') { const di = Math.round((p.x - drag.x) / layout.bw), dp = layout.ps.P(p.y) - layout.ps.P(drag.y); if (Math.abs(p.x - drag.x) > (touchy ? 8 : 3) || Math.abs(p.y - drag.y) > (touchy ? 8 : 3)) { drag.moved = true; S.drawings = S.drawings.map((x, j) => (j === drag.k ? Object.assign({}, x, { points: moved(drag.pts, di, dp, AX) }) : x)); } }
+    else if (drag && !drag.pinch) { const dx = p.x - drag.x; if (Math.abs(dx) > (touchy ? 8 : 3)) drag.moved = true; const span = to - from; from = Math.max(0, Math.min(N - 1 - span, drag.from - Math.round(dx / layout.bw))); to = from + span; }
     cross = Math.max(from, Math.min(to, layout.I(p.x))); crossY = p.y <= layout.panes[0].y1 ? layout.ps.P(p.y) : null;
     hoverP = p;
     redraw();
@@ -619,17 +636,17 @@ export function createPriceChart(host, opts) {
   };
   svg.addEventListener('pointerup', up); svg.addEventListener('pointercancel', up);
   // a finger lifting also leaves: the box it opened stays until the next touch
-  svg.addEventListener('pointerleave', (e) => { if (e.pointerType !== 'touch') hoverP = null; if (!drag) { cross = -1; crossY = null; redraw(); } });
+  svg.addEventListener('pointerleave', (e) => { if (e.pointerType === 'touch') return; hoverP = null; if (!drag) { cross = -1; crossY = null; redraw(); } });
   svg.addEventListener('wheel', (e) => { e.preventDefault(); const p = pt(e); zoom(e.deltaY > 0 ? 1.15 : 1 / 1.15, Math.max(from, Math.min(to, layout.I(p.x)))); }, { passive: false });
 
   // The drawing under the pointer, or -1: within 9 px of a line, or inside a box or a measured range.
   function hitTest(p) {
     const ps = layout.ps, X = layout.X, right = W - layout.r, last = N - 1;
-    let best = -1, bd = 9;
+    let best = -1, bd = touchy ? 20 : 9;   // a finger's tap is wider than a pointer's
     const segD = (g) => segDist(p.x, p.y, X(g.i1), ps.Y(g.p1), X(g.i2), ps.Y(g.p2));
     const inBox = (x1, x2, y1, y2) => (p.x >= Math.min(x1, x2) - 4 && p.x <= Math.max(x1, x2) + 4 && p.y >= Math.min(y1, y2) - 4 && p.y <= Math.max(y1, y2) + 4 ? 0 : Infinity);
     S.drawings.forEach((dr, k) => {
-      const q = dr.points.map((x) => ({ i: idxOfT(x.t), p: x.p })), pts = q.map((x) => ({ x: X(x.i), y: ps.Y(x.p) }));
+      const q = dr.points.map((x) => ({ i: AX.f(x.t), p: x.p })), pts = q.map((x) => ({ x: X(x.i), y: ps.Y(x.p) }));
       let d = Infinity;
       if (dr.kind === 'hline' || dr.kind === 'fibdraw') d = Math.min(...pts.map((x) => Math.abs(x.y - p.y)));
       else if (dr.kind === 'vline') d = Math.abs(pts[0].x - p.x);
@@ -652,7 +669,7 @@ export function createPriceChart(host, opts) {
   function handleAt(p) {
     if (sel < 0 || !S.drawings[sel]) return -1;
     const ps = layout.ps, X = layout.X;
-    return S.drawings[sel].points.findIndex((x) => Math.hypot(X(idxOfT(x.t)) - p.x, ps.Y(x.p) - p.y) <= 9);
+    return S.drawings[sel].points.findIndex((x) => Math.hypot(X(AX.f(x.t)) - p.x, ps.Y(x.p) - p.y) <= (touchy ? 20 : 9));
   }
   // A point placed or dragged: on its bar, and with snapping on at the bar's open, high, low or close when one is close.
   function pointAt(p) {
@@ -668,9 +685,9 @@ export function createPriceChart(host, opts) {
     if (dr.kind === 'text') { if (S.askText) S.askText(dr, (text) => { if (text) { dr.text = text.slice(0, 120); commit([...S.drawings, dr]); } }); return; }
     commit([...S.drawings, dr]);
   }
-  function commit(next) { undo.push(S.drawings); if (undo.length > 40) undo.shift(); redo.length = 0; S.drawings = next; if (S.onDrawings) S.onDrawings(next); redraw(); }
-  function undoOne() { const prev = undo.pop(); if (prev) { redo.push(S.drawings); S.drawings = prev; sel = -1; if (S.onDrawings) S.onDrawings(prev); redraw(); } }
-  function redoOne() { const next = redo.pop(); if (next) { undo.push(S.drawings); S.drawings = next; sel = -1; if (S.onDrawings) S.onDrawings(next); redraw(); } }
+  function commit(next) { undo.push(S.drawings); if (undo.length > 40) undo.shift(); redo.length = 0; S.drawings = next; if (S.onDrawings) S.onDrawings(next); syncTouch(); changed(); redraw(); }
+  function undoOne() { const prev = undo.pop(); if (prev) { redo.push(S.drawings); S.drawings = prev; sel = -1; if (S.onDrawings) S.onDrawings(prev); syncTouch(); changed(); redraw(); } }
+  function redoOne() { const next = redo.pop(); if (next) { undo.push(S.drawings); S.drawings = next; sel = -1; if (S.onDrawings) S.onDrawings(next); syncTouch(); changed(); redraw(); } }
 
   /* ---------- keyboard ---------- */
   svg.addEventListener('keydown', (e) => {
@@ -680,7 +697,7 @@ export function createPriceChart(host, opts) {
     else if (k === '+' || k === '=') { zoom(1 / 1.25, cross); e.preventDefault(); } else if (k === '-' || k === '_') { zoom(1.25, cross); e.preventDefault(); }
     else if (k === 'Home') { cross = from; crossY = bars[cross].c; announce(); e.preventDefault(); } else if (k === 'End') { cross = to; crossY = bars[cross].c; announce(); e.preventDefault(); }
     else if ((k === 'Delete' || k === 'Backspace') && sel >= 0) { commit(S.drawings.filter((_, j) => j !== sel)); sel = -1; e.preventDefault(); }
-    else if (k === 'Escape') { pending = null; sel = -1; if (S.onEscape) S.onEscape(); }
+    else if (k === 'Escape') { pending = null; sel = -1; syncTouch(); changed(); if (S.onEscape) S.onEscape(); }
     else if ((e.metaKey || e.ctrlKey) && k.toLowerCase() === 'z') { if (e.shiftKey) redoOne(); else undoOne(); e.preventDefault(); }
     else if ((e.metaKey || e.ctrlKey) && k.toLowerCase() === 'y') { redoOne(); e.preventDefault(); }
     redraw();
@@ -688,16 +705,19 @@ export function createPriceChart(host, opts) {
   function announce() { const b = bars[cross], ins = flags.filter((g) => g.i === cross).map((g) => `${g.items.length} insider ${g.side === 'buy' ? 'purchase' : 'sale'}${g.items.length === 1 ? '' : 's'}: ${g.items.map((it) => `${it.who}, ${it.amount}`).join('; ')}`).join('. '); live.textContent = `${fmtT(b.t)}: open ${num(b.o)}, high ${num(b.h)}, low ${num(b.l)}, close ${num(b.c)}.${ins ? ` ${ins}.` : ''}`; }
 
   const ro = new ResizeObserver(() => redraw()); ro.observe(host);
+  syncTouch();
   draw();
 
   return {
-    set(next) { Object.assign(S, next); if (next.tool) pending = null; redraw(); },
+    set(next) { Object.assign(S, next); if (next.tool) pending = null; if ('drawings' in next && sel >= S.drawings.length) sel = -1; syncTouch(); redraw(); },
     zoom: (f) => zoom(f, cross >= 0 ? cross : to), fit, pan, home() { from = home0.from; to = home0.to; redraw(); },
     view: () => ({ from, to }),
     height: () => S.height, navH: () => S.navH || 40,
     /** The market structure breaks in view, newest last, for Milo and the page. */
     structure: () => ind.msb.filter((m) => m.at >= from && m.at <= to).map((m) => ({ direction: m.dir === 'bull' ? 'bullish' : 'bearish', swing_formed_on: fmtT(bars[m.from].t), swing_known_on: fmtT(bars[m.known].t), broke_on: fmtT(bars[m.at].t), close: bars[m.at].c, level: m.price })),
-    undo: undoOne, redo: redoOne, canUndo: () => undo.length > 0, canRedo: () => redo.length > 0,
+    undo: undoOne, redo: redoOne, canUndo: () => undo.length > 0, canRedo: () => redo.length > 0, selected: () => sel >= 0,
+    /** What a rebuild on the same bars carries over: the zoom and the undo history. */
+    keep: () => ({ view: { from, to }, history: { undo, redo } }),
     deleteSelected() { if (sel >= 0) { commit(S.drawings.filter((_, j) => j !== sel)); sel = -1; } },
     clearDrawings() { commit([]); },
     destroy() { ro.disconnect(); },

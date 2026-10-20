@@ -51,7 +51,7 @@ def test_the_geometry(tmp_path):
         rr: D.riskReward({{ p: 100 }}, {{ p: 95 }}, {{ p: 112 }}), pos: D.positionSize({{ p: 100 }}, {{ p: 96 }}, {{ p: 105 }}),
         m: D.measure({{ i: 3, p: 50 }}, {{ i: 9, p: 55 }}),
         snapNear: D.snap(bars[2], 11.4, Y), snapFar: D.snap(bars[2], 9.0, Y),
-        moved: D.moved([{{ t: 1000, p: 10 }}, {{ t: 3000, p: 12 }}], 2, 0.5, bars, (t) => t / 1000),
+        moved: D.moved([{{ t: 1000, p: 10 }}, {{ t: 3000, p: 12 }}], 2, 0.5, (await import('{(JS / "ui/timeaxis.js").as_posix()}')).makeAxis(bars, true)),
         seg: D.segDist(5, 5, 0, 0, 10, 0),
       }}));
     """)
@@ -64,7 +64,8 @@ def test_the_geometry(tmp_path):
     assert got["pos"] == {"perShare": 4, "budget": 500, "shares": 125}, "$100 a dollar from the entry, as the classic tool reads it"
     assert got["m"]["bars"] == 6 and abs(got["m"]["pct"] - 10) < 1e-9
     assert got["snapNear"] == {"price": 11, "field": "C"} and got["snapFar"] == {"price": 9.0, "field": None}, "within 7 px of a field, else where the pointer is"
-    assert got["moved"] == [{"t": 3000, "p": 10.5}, {"t": 4000, "p": 12.5}], "two bars on, held at the series' end"
+    # two bars on; past the series' end a point keeps its place by the bars' spacing (2026-10-20: it was held at the end)
+    assert got["moved"] == [{"t": 3000, "p": 10.5}, {"t": 5000, "p": 12.5}]
     assert got["seg"] == 5
 
 
@@ -73,7 +74,7 @@ def test_snap_move_and_redo_in_the_chart():
     assert 'data-v2-ch-snap aria-pressed="${!!V.snap}" aria-label="Snap to candles"' in CH
     assert "const at = S.snap ? snap(bars[i], price, layout.ps.Y) : { price, field: null };" in PC
     assert "drag = { mode: 'handle', k: sel, h, before: S.drawings, moved: false };" in PC, "a handle moves one point"
-    assert "moved(drag.pts, di, dp, bars, idxOfT)" in PC, "the body moves it all"
+    assert "moved(drag.pts, di, dp, AX)" in PC, "the body moves it all, through the time axis"
     assert "if (drag && drag.mode && drag.moved) { undo.push(drag.before);" in PC, "a move is one change to undo"
     assert "function redoOne()" in PC and "data-v2-ch-redo" in CH and "k.toLowerCase() === 'y'" in PC
     for k in ("channel", "fibext", "pitchfork", "arrow", "ruler", "rr", "position"):
@@ -84,7 +85,8 @@ def test_snap_move_and_redo_in_the_chart():
 
 def test_the_classic_layout():
     tb = CH[CH.index("function toolbar() {"):CH.index("// The drawing tools: the classic rail")]
-    order = [tb.index(x) for x in ("menu('ind', 'Indicators'", "data-v2-ch-layers", "data-v2-ch-read", "data-v2-ch-reset", 'class="spacer"', "data-v2-ch-iv", "data-v2-ch-sessionsel", "data-v2-ch-fit", "data-v2-ch-home", 'aria-label="Style"')]
+    # the wide toolbar's order (a phone puts Chart read, Reset and Fit in one menu, 2026-10-20)
+    order = [tb.index(x) for x in ("menu('ind', 'Indicators'", "data-v2-ch-layers", 'data-v2-ch-read aria-pressed="${!!V.read}" aria-controls="ch-read" title=', "data-v2-ch-reset ${isClean() ? 'disabled' : ''} title=", 'class="spacer"', "data-v2-ch-iv", "data-v2-ch-sessionsel", 'data-v2-ch-fit title=', "data-v2-ch-home", "${isPhone() ? '' : html`<div class=\"seg seg-ic\" role=\"group\" aria-label=\"Style\">")]
     assert order == sorted(order), "Indicators, Layers, Chart read, Reset; then bar size, session, Fit, Reset zoom, style"
     assert "['ruler', 'Measure']" in CH and "Regular hours" in tb and "Extended hours" in tb
     assert "title=\"Back to price and volume. Your drawings are kept.\">Reset</button>" in tb

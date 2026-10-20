@@ -114,7 +114,9 @@ export function data(on) {
   if (on.trends && S.tl && S.tl.available && !iv.intraday) st.trends = once('trends', [S.tl, bars], () => trendSegments(S.tl, dayKeys(bars), { weekly: P.weekly() }));
   if (on.accum && S.lt && S.lt.holding) st.accum = ((S.lt.holding.accumulation_zones) || []).filter((z) => z && Number.isFinite(z.price)).map((z) => ({ price: z.price, label: `${z.label} ${num(z.price)}` }));
   const t = P.t();
-  if (on.zones && t) st.zones = (((t.patterns || {}).zones) || []).filter((z) => !z.out_of_horizon && Number.isFinite(z.top) && Number.isFinite(z.bottom)).map((z) => ({ t: Date.parse(`${z.formed}T00:00:00Z`), top: z.top, bottom: z.bottom, side: z.side, broken: !!z.broken }));
+  // on intraday bars, the intraday answer's own zones (P.patterns); else the daily pattern read's
+  const pat = (P.patterns && P.patterns()) || (t && t.patterns) || null;
+  if (on.zones && pat) st.zones = ((pat.zones) || []).filter((z) => !z.out_of_horizon && Number.isFinite(z.top) && Number.isFinite(z.bottom)).map((z) => ({ t: Date.parse(String(z.formed).length > 10 ? z.formed : `${z.formed}T00:00:00Z`), top: z.top, bottom: z.bottom, side: z.side, broken: !!z.broken }));
   return out;
 }
 

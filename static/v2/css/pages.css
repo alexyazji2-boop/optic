@@ -368,6 +368,12 @@ table.scen td { font-weight: 600; }
 .ctools .select select { min-height: 34px; }
 .ctools .seg button { min-height: 32px; padding: 0 11px; font-size: var(--t-md); }
 .ctools .btn-sm { min-height: 34px; padding: 0 12px; font-size: var(--t-md); gap: 6px; }
+@media (pointer: coarse), (max-width: 860px) { .ctools .btn-sm, .ctools .select select { min-height: var(--tap); } }
+@media (max-width: 860px) { .chart-page .ctools .select select { padding: 0 26px 0 10px; font-size: var(--t-md); } }   /* Draw, the bar size and the session fit one row at 360 */
+.ch-more .menu-body { display: grid; gap: 6px; min-width: 190px; } .ch-more .menu-body .btn { justify-content: flex-start; }
+.check.is-off { color: var(--c-ink-3); } .ch-cannot { color: var(--c-ink-3); }
+.ext-band { fill: var(--c-ink); opacity: .05; }
+.dr-placed { fill: var(--c-gold); stroke: var(--c-plane); }
 .ctools .btn-sm svg, .seg-ic svg, .ch-tool svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
 .seg-ic button { min-width: 36px; padding: 0 8px; display: inline-grid; place-items: center; }
 .ch-zoom { display: inline-flex; gap: 4px; }
@@ -478,8 +484,13 @@ table.chw-table { font-size: var(--t-sm); } table.chw-table th { padding: 6px 4p
   .ch-stage { flex-direction: column; gap: 6px; }
   .ch-stage > #ch-draw { width: 100%; }
   .ch-draw { display: flex; flex-direction: row; position: static; overflow-x: auto; scrollbar-width: none; }
-  #ch-body > .ch-pacts { position: static; justify-content: flex-end; margin-bottom: 4px; }   /* over the readout on a phone, so above it */
-  .ch-pacts + .pc-host .pc-read { padding-right: 0; }
+  /* a phone: Explain and full screen at the readout's corner, and the readout in two short lines, so the plot
+     starts in the first screen (it began at 684px of 844 on a 390px phone, 2026-10-20) */
+  #ch-body > .ch-pacts { display: none; }   /* Explain and full screen are in the toolbar's menu on a phone */
+  #ch-body > .ch-pacts + .pc-host .pc-read { padding-right: 0; }   /* beats the wide screen's room for the corner buttons, below */
+  .chart-page .pc-read { gap: 2px 8px; font-size: var(--t-sm); } .chart-page .pc-read .pc-sym, .chart-page .pc-read .pc-what { display: none; }
+  .chart-page .ctools { gap: 6px; } .chart-page .ctools .btn-sm { padding: 0 10px; }
+  .ch-more .seg { justify-self: start; }
   .ch-draw .ch-sep { width: 1px; height: 24px; margin: auto 4px; }
   .ch-stage > #ch-body, .ch-wrail, .ch-side { flex: none; width: 100%; }
   .chw-rail { display: flex; flex-direction: row; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
@@ -681,6 +692,9 @@ html.ch-max .shell { grid-template-columns: minmax(0, 1fr); }
 html.ch-max #main.page { max-width: none; padding: 6px 10px 8px; }
 html.ch-max .page-view > nav.tabs, html.ch-max .page-view .legal-area, html.ch-max .dhead .acts, html.ch-max .chart-page .ch-foot, html.ch-max .chart-page > p.asof { display: none !important; }
 html.ch-max .chart-page { margin-top: 4px; }
+/* full screen on a phone, and a phone on its side: the chart takes the screen; the company's line and its tabs go */
+@media (max-width: 860px) { html.ch-max .page-view > .dhead, html.ch-max .page-view > header { display: none !important; } }
+@media (max-height: 500px) and (orientation: landscape) { html.ch-max .page-view > .dhead, html.ch-max .page-view > header, html.ch-max .ch-layers { display: none !important; } html.ch-max .ctools { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; } }
 html.ch-max .ch-side, html.ch-max .ch-wrail, html.ch-max .ch-draw { top: 8px; }
 html.ch-max .ch-side, html.ch-max .ch-wrail { max-height: min(calc(100vh - 16px), var(--ch-h, 100vh)); }
 .stars .on { color: var(--c-gold-ink); } .stars .off { color: var(--c-line); }

@@ -25,6 +25,7 @@ import { button as miloButton, provideContext, openMilo } from '../ui/milo.js';
 import { toast } from '../ui/toast.js';
 import { createPriceChart } from '../ui/pricechart.js';
 import { core, header, tabs, isFund } from './dossier-frame.js';
+import { kindOf } from '../core/instrument.js';
 import * as W from './chart-widgets.js';
 import * as ST from './chart-studies.js';
 import * as C from './chart-chrome.js';
@@ -72,12 +73,12 @@ let D = {}, V = {}, live = true, mainEl = null, chart = null, unsub = null, phon
 function readView() {
   const d = { interval: '60', range: '6M', style: 'candles', session: 'regular', read: false, layers: false, dock: [], overlays: { ma: true, ema: false, bb: false, fib: false, sr: false, gex: false, msb: false, events: true, ins: true, cloud921: false, cloud2150: false, keltner: false, donchian: false, sec: false, vwap: false, zones: false, accum: false, trends: false, vbp: false, sessions: false, stages: false, matrend: false }, panes: { volume: true, rsi: false, macd: false, tso: false, adx: false, stochastic: false, obv: false, mfi: false, rs: false }, msbK: 5 };
   try { const s = JSON.parse(localStorage.getItem(VIEW_KEY) || 'null'); if (s && typeof s === 'object') { Object.assign(d, s, { overlays: Object.assign(d.overlays, s.overlays || {}), panes: Object.assign(d.panes, s.panes || {}) }); } } catch (e) { /* private */ }
-  d.interval = '60'; // the Chart page opens on hourly bars, as in the classic app
+  if (!INTERVALS.some((x) => x.key === d.interval)) d.interval = '60';   // a first visit opens on hourly bars, as in the classic app
   try { d.snap = localStorage.getItem(SNAP_KEY) !== 'off'; } catch (e) { d.snap = true; }   // on, as it always was in the classic app
   d.dock = Array.isArray(d.dock) ? d.dock.filter((id, i, a) => W.IDS.includes(id) && a.indexOf(id) === i) : [];
   return d;
 }
-function saveView() { try { localStorage.setItem(VIEW_KEY, JSON.stringify({ range: V.range, style: V.style, session: V.session, read: V.read, layers: V.layers, dock: V.dock, overlays: V.overlays, panes: V.panes, msbK: V.msbK })); } catch (e) { /* private */ } }
+function saveView() { try { localStorage.setItem(VIEW_KEY, JSON.stringify({ interval: V.wantInterval || V.interval, range: V.range, style: V.style, session: V.session, read: V.read, layers: V.layers, dock: V.dock, overlays: V.overlays, panes: V.panes, msbK: V.msbK })); } catch (e) { /* private */ } }
 
 function readDrawings(sym) {
   if (!holds(store.state.user)) return [];
@@ -103,10 +104,22 @@ async function loadBars() {
   try {
     let bars;
     if (iv.intraday) {
-      const d = await api.get(`/api/intraday/${enc}?range=${iv.key}&window=${iv.history}&session=${V.session}`, { ttl: 60000, timeout: 45000 });
-      if (!d.available) throw new api.ApiError('notfound', 404, clean(d.reason || 'No intraday bars right now.'));
-      bars = d.times.map((t, i) => ({ t: Date.parse(t), o: d.opens[i], h: d.highs[i], l: d.lows[i], c: d.closes[i], v: d.volumes[i] }));
-      note = d.session_note;
+      let d = null;
+      try { d = await api.get(`/api/intraday/${enc}?range=${iv.key}&window=${iv.history}&session=${V.session}`, { ttl: 60000, timeout: 45000 }); } catch (e) { if (e.kind !== 'notfound') throw e; }
+      if (d && d.available) {
+        bars = d.times.map((t, i) => ({ t: Date.parse(t), o: d.opens[i], h: d.highs[i], l: d.lows[i], c: d.closes[i], v: d.volumes[i] }));
+        // the intraday answer's own Fibonacci, levels and patterns, read from these bars, and which bars are pre- or post-market
+        D.intra = { fib: d.fibonacci, sr: d.support_resistance, patterns: d.patterns, extended: Array.isArray(d.extended) && d.extended.some(Boolean) ? d.extended : null };
+        note = d.session_note;
+      } else {
+        // a symbol with no intraday feed (a mutual fund, a thin listing): its daily bars, said plainly, without changing the saved bar size
+        if (!current()) return;
+        V.wantInterval = V.interval; V.interval = 'daily'; D.intra = null;
+        const why = clean((d && d.reason) || `${iv.label} bars are not available for ${sym}.`);
+        paintTools(); await loadBars();
+        D.note = `${why} Showing daily bars instead.`; const n = $('#ch-note', mainEl); if (n) n.textContent = D.note;
+        return;
+      }
     } else if (V.interval === 'weekly') {
       const d = await api.get(`/api/weekly-bars/${enc}?span=${V.range === 'All' ? 'max' : '10y'}`, { ttl: 3600000, timeout: 45000 });
       bars = d.dates.map((t, i) => ({ t: Date.parse(t), o: d.open[i], h: d.high[i], l: d.low[i], c: d.close[i], v: d.volume[i] }));
@@ -124,7 +137,8 @@ async function loadBars() {
     bars = bars.filter((b) => isNum(b.c) && isNum(b.t) && b.c > 0).map((b) => ({ t: b.t, o: isNum(b.o) ? b.o : b.c, h: isNum(b.h) ? b.h : b.c, l: isNum(b.l) ? b.l : b.c, c: b.c, v: b.v || 0 }));
     if (bars.length < 5) throw new api.ApiError('notfound', 404, 'Not enough bars to draw.');
     if (!current()) return;
-    D.bars = bars; D.note = note;
+    if (!iv.intraday) D.intra = null;
+    D.bars = bars; D.note = note; D.noVolume = !bars.some((b) => b.v > 0);
   } catch (e) { if (!current()) return; D.barsErr = e; }
   paintChart();
 }
@@ -141,9 +155,11 @@ function windowBars() {
   const r = RANGES[V.interval === 'weekly' ? 'weekly' : 'daily'][V.range];
   return Number.isFinite(r) ? r : D.bars.length;
 }
+// On intraday bars the Fibonacci and the support and resistance are the intraday answer's own, read from
+// those bars (as the classic chart draws them); on daily and weekly bars, the daily technicals'.
 function levels() {
-  const t = D.t || {}, te = t.technicals || {}, g = t.gex || {};
-  return { fib: te.fibonacci, sr: te.support_resistance, gex: g.error ? null : { call_wall: ((g.levels || {}).call_wall || {}).strike, put_wall: ((g.levels || {}).put_wall || {}).strike, flip: (g.regime || {}).flip_point } };
+  const t = D.t || {}, te = t.technicals || {}, g = t.gex || {}, I = D.intra;
+  return { fib: I && I.fib ? I.fib : te.fibonacci, sr: I && I.sr ? I.sr : te.support_resistance, gex: g.error ? null : { call_wall: ((g.levels || {}).call_wall || {}).strike, put_wall: ((g.levels || {}).put_wall || {}).strike, flip: (g.regime || {}).flip_point } };
 }
 function events() {
   const eh = ((D.t || {}).company || {}).earnings_history || {};
@@ -152,8 +168,19 @@ function events() {
 }
 
 /* ---------------- page ---------------- */
+// A box that would draw nothing on these bars is shown off, with the reason under it (the chart audit,
+// 2026-10-20: candle colours on a line, trend lines on hourly bars, volume studies on an index).
+const VOLUME_KEYS = new Set(['vbp', 'vwap', 'volume', 'obv', 'mfi']);
+function cannot(k) {
+  const iv = INTERVALS.find((x) => x.key === V.interval) || {};
+  if ((k === 'stages' || k === 'matrend') && V.style !== 'candles') return 'Colours candles: choose Candles to see it.';
+  if (k === 'trends' && iv.intraday) return 'Drawn on daily and weekly bars only.';
+  if (k === 'sessions' && !iv.intraday) return 'Marks where each trading day starts, on intraday bars only.';
+  if (VOLUME_KEYS.has(k) && D.noVolume) return `${D.sym} reports no volume, so there is nothing to draw.`;
+  return '';
+}
 // One overlay's row in a menu: its box, its name, what it is, and for MSB the swing strength.
-const ovRow = (k) => { const l = (OVERLAYS.find((x) => x[0] === k) || [])[1]; return html`<label class="check"><input type="checkbox" data-v2-ch-ov="${k}" ${V.overlays[k] ? 'checked' : ''} ${k === 'msb' ? html`aria-describedby="ch-msb-help"` : ST.HELP[k] ? html`aria-describedby="ch-help-${k}"` : ''}> <span>${l}</span></label>${ST.HELP[k] ? html`<p class="menu-help" id="ch-help-${k}">${ST.HELP[k]}</p>` : ''}${k === 'msb' ? html`<p class="menu-help" id="ch-msb-help">Marks where a close moved beyond the latest swing high (bullish) or swing low (bearish). A swing is a bar above or below the bars on each side. Its level is drawn back to where it formed, but it only became known once those later bars had closed: the line is dotted before then, with a tick where it became known, and only a close after that counts as a break.</p>
+const ovRow = (k) => { const l = (OVERLAYS.find((x) => x[0] === k) || [])[1], no = cannot(k); return html`<label class="check ${no ? 'is-off' : ''}"><input type="checkbox" data-v2-ch-ov="${k}" ${V.overlays[k] && !no ? 'checked' : ''} ${no ? 'disabled' : ''} ${k === 'msb' ? html`aria-describedby="ch-msb-help"` : ST.HELP[k] ? html`aria-describedby="ch-help-${k}"` : ''}> <span>${l}</span></label>${no ? html`<p class="menu-help ch-cannot">${no}</p>` : ''}${ST.HELP[k] ? html`<p class="menu-help" id="ch-help-${k}">${ST.HELP[k]}</p>` : ''}${k === 'msb' ? html`<p class="menu-help" id="ch-msb-help">Marks where a close moved beyond the latest swing high (bullish) or swing low (bearish). A swing is a bar above or below the bars on each side. Its level is drawn back to where it formed, but it only became known once those later bars had closed: the line is dotted before then, with a tick where it became known, and only a close after that counts as a break.</p>
   <label class="ws-sel menu-help">Swing strength <select data-v2-ch-msbk aria-label="Market structure swing strength">${[3, 5, 10].map((n) => html`<option value="${n}" ${V.msbK === n ? 'selected' : ''}>${n} bars each side${n === 3 ? ', more breaks' : n === 10 ? ', fewer' : ''}</option>`)}</select></label>` : ''}`; };
 const countOf = (keys) => keys.filter((k) => V.overlays[k]).length;
 // what is drawing inside Layers, for the count on its button: a closed drawer must not hide what is on
@@ -183,20 +210,28 @@ function toolbar() {
   return html`<div class="ctools" role="toolbar" aria-label="Chart settings">
     ${menu('ind', 'Indicators', countOf(IND_KEYS), IND_KEYS.map(ovRow))}
     <button type="button" class="btn btn-sm ch-layers-btn" data-v2-ch-layers aria-expanded="${!!V.layers}" aria-controls="ch-layers" title="Levels, events, candle colours, panes and colours">Layers${n ? html` <span class="ch-count">${n}</span>` : ''}${icon('down')}</button>
-    <button type="button" class="btn btn-sm" data-v2-ch-read aria-pressed="${!!V.read}" aria-controls="ch-read" title="The trend, the nearest levels, RSI and MACD, from daily sessions">Chart read</button>
-    <button type="button" class="btn btn-sm" data-v2-ch-reset ${isClean() ? 'disabled' : ''} title="Back to price and volume. Your drawings are kept.">Reset</button>
+    ${isPhone() ? html`<details class="menu ch-more" data-ch-menu="more"><summary class="btn btn-sm" aria-label="More chart settings">${icon('more')}</summary><div class="menu-body">
+        <div class="seg seg-ic" role="group" aria-label="Style">${[['candles', 'Candles', 'candles'], ['line', 'Line', 'lineChart'], ['area', 'Area', 'area']].map(([k, l, ic]) => html`<button type="button" data-v2-ch-style="${k}" aria-pressed="${V.style === k}" aria-label="${l}" title="${l}">${icon(ic)}</button>`)}</div>
+        <button type="button" class="btn btn-sm" data-v2-ch-read aria-pressed="${!!V.read}" aria-controls="ch-read">Chart read</button>
+        <button type="button" class="btn btn-sm" data-v2-ch-reset ${isClean() ? 'disabled' : ''}>Reset indicators</button>
+        <button type="button" class="btn btn-sm" data-v2-ch-fit>Fit every bar</button>
+        <button type="button" class="btn btn-sm" data-v2-ch-max aria-pressed="${C.isMax()}">${C.isMax() ? 'Leave full screen' : 'Full screen'}</button>
+        ${miloButton('Explain this chart', { ask: `Explain the ${D.sym} chart: the trend, support, resistance, momentum, volume and risk, and what would invalidate the read.`, context: `${D.sym} Dossier, Chart`, symbol: D.sym, cls: 'btn-sm' })}</div></details>`
+    : html`<button type="button" class="btn btn-sm" data-v2-ch-read aria-pressed="${!!V.read}" aria-controls="ch-read" title="The trend, the nearest levels, RSI and MACD, from daily sessions">Chart read</button>
+    <button type="button" class="btn btn-sm" data-v2-ch-reset ${isClean() ? 'disabled' : ''} title="Back to price and volume. Your drawings are kept.">Reset</button>`}
     <button type="button" class="btn btn-sm ch-drawtoggle" data-v2-ch-drawtoggle aria-expanded="${drawOpen()}" aria-controls="ch-draw">${icon('pencil')}<span>Draw</span></button>
     <span class="spacer"></span>
     <label class="select ch-iv"><span class="sr">Bar size</span><select data-v2-ch-iv title="Bar size">${INTERVALS.map((x) => html`<option value="${x.key}" ${x.key === V.interval ? 'selected' : ''}>${x.label}</option>`)}</select></label>
-    ${iv.intraday ? html`<label class="select ch-ses"><span class="sr">Session</span><select data-v2-ch-sessionsel title="Which hours the bars cover">${[['regular', 'Regular hours'], ['extended', 'Extended hours']].map(([k, l]) => html`<option value="${k}" ${V.session === k ? 'selected' : ''}>${l}</option>`)}</select></label>`
+    ${iv.intraday ? html`<label class="select ch-ses"><span class="sr">Session</span><select data-v2-ch-sessionsel title="${noExtended() ? `${D.sym} trades no extended session` : 'Which hours the bars cover'}">${[['regular', isPhone() ? 'Regular' : 'Regular hours'], ['extended', noExtended() ? 'Extended (none here)' : isPhone() ? 'Extended' : 'Extended hours']].map(([k, l]) => html`<option value="${k}" ${V.session === k ? 'selected' : ''} ${k === 'extended' && noExtended() ? 'disabled' : ''}>${l}</option>`)}</select></label>`
+    : isPhone() ? html`<label class="select ch-rng"><span class="sr">Range</span><select data-v2-ch-rangesel>${Object.keys(RANGES.daily).map((r) => html`<option value="${r}" ${V.range === r ? 'selected' : ''}>${r}</option>`)}</select></label>`
     : html`<div class="seg" role="group" aria-label="Range">${Object.keys(RANGES.daily).map((r) => html`<button type="button" data-v2-ch-range="${r}" aria-pressed="${V.range === r}">${r}</button>`)}</div>`}
-    <button type="button" class="btn btn-sm" data-v2-ch-fit title="Every loaded bar on screen">Fit</button>
+    ${isPhone() ? '' : html`<button type="button" class="btn btn-sm" data-v2-ch-fit title="Every loaded bar on screen">Fit</button>`}
     <button type="button" class="btn btn-sm ch-home" data-v2-ch-home ${D.zoomed ? '' : 'hidden'} title="Back to the ${iv.intraday ? iv.label : V.range} view">Reset zoom</button>
-    <div class="seg seg-ic" role="group" aria-label="Style">${[['candles', 'Candles', 'candles'], ['line', 'Line', 'lineChart'], ['area', 'Area', 'area']].map(([k, l, ic]) => html`<button type="button" data-v2-ch-style="${k}" aria-pressed="${V.style === k}" aria-label="${l}" title="${l}">${icon(ic)}</button>`)}</div>
+    ${isPhone() ? '' : html`<div class="seg seg-ic" role="group" aria-label="Style">${[['candles', 'Candles', 'candles'], ['line', 'Line', 'lineChart'], ['area', 'Area', 'area']].map(([k, l, ic]) => html`<button type="button" data-v2-ch-style="${k}" aria-pressed="${V.style === k}" aria-label="${l}" title="${l}">${icon(ic)}</button>`)}</div>`}
   </div>
   <div class="ctools ch-layers" id="ch-layers" role="group" aria-label="Layers" ${V.layers ? '' : 'hidden'}>
     ${LAYER_MENUS.map(([id, label, ks]) => menu(id, label, countOf(ks), ks.map(ovRow)))}
-    ${menu('panes', 'Panes', PANES.filter(([k]) => k !== 'volume' && V.panes[k]).length, html`${PANES.map(([k, l]) => html`<label class="check"><input type="checkbox" data-v2-ch-pane="${k}" ${V.panes[k] ? 'checked' : ''} ${ST.HELP[k] ? html`aria-describedby="ch-help-${k}"` : ''}> <span>${l}</span></label>${ST.HELP[k] ? html`<p class="menu-help" id="ch-help-${k}">${ST.HELP[k]}</p>` : ''}`)}<p class="menu-help">Drawn under the price on the same bars.</p>`)}
+    ${menu('panes', 'Panes', PANES.filter(([k]) => k !== 'volume' && V.panes[k]).length, html`${PANES.map(([k, l]) => html`<label class="check ${cannot(k) ? 'is-off' : ''}"><input type="checkbox" data-v2-ch-pane="${k}" ${V.panes[k] && !cannot(k) ? 'checked' : ''} ${cannot(k) ? 'disabled' : ''} ${ST.HELP[k] ? html`aria-describedby="ch-help-${k}"` : ''}> <span>${l}</span></label>${cannot(k) ? html`<p class="menu-help ch-cannot">${cannot(k)}</p>` : ''}${ST.HELP[k] ? html`<p class="menu-help" id="ch-help-${k}">${ST.HELP[k]}</p>` : ''}`)}<p class="menu-help">Drawn under the price on the same bars.</p>`)}
     <details class="menu ch-colours"><summary class="btn btn-sm" aria-label="Chart colours" title="Colour of the candles and the line">${icon('palette')}<span>Colours</span></summary><div class="menu-body ch-cmenu" id="ch-cmenu"></div></details>
   </div>
   ${D.confirmClear ? html`<p class="confirm ch-confirm" role="alert">Remove all ${D.drawings.length} drawings on ${D.sym}? <button type="button" class="btn btn-sm" data-v2-ch-clear="yes">Remove</button><button type="button" class="btn btn-sm" data-v2-ch-clear="no">Keep them</button></p>` : ''}
@@ -209,12 +244,13 @@ function toolbar() {
 const drawOpen = () => !isPhone() || !!D.drawOpen || V.tool !== 'select';
 function drawbar() {
   return html`<div class="ch-draw" role="toolbar" aria-label="Drawing tools" aria-orientation="${isPhone() ? 'horizontal' : 'vertical'}" ${drawOpen() ? '' : 'hidden'}>
+    ${isPhone() ? html`<button type="button" class="ch-tool" data-v2-ch-undo aria-label="Undo the last drawing change" ${D.can && D.can.canUndo ? '' : 'disabled'}>${icon('undo')}</button><button type="button" class="ch-tool" data-v2-ch-del aria-label="Delete the selected drawing" ${D.can && D.can.selected ? '' : 'disabled'}>${icon('trash')}</button><span class="ch-sep" aria-hidden="true"></span>` : ''}
     ${TOOLS.map(([k, l]) => html`${TOOL_GROUP_STARTS.has(k) ? html`<span class="ch-sep" aria-hidden="true"></span>` : ''}<button type="button" class="ch-tool" data-v2-tool="${k}" aria-pressed="${V.tool === k}" aria-label="${l}" title="${l}">${icon(TOOL_ICON[k])}</button>`)}
     <span class="ch-sep" aria-hidden="true"></span>
     <button type="button" class="ch-tool ch-snap" data-v2-ch-snap aria-pressed="${!!V.snap}" aria-label="Snap to candles" title="${V.snap ? 'Snapping on: points land on a candle and its open, high, low or close. Click to place freely.' : 'Snapping off: points land exactly where you click. Click to snap to candles.'}">${icon('magnet')}</button>
-    <button type="button" class="ch-tool" data-v2-ch-undo aria-label="Undo the last drawing change" title="Undo">${icon('undo')}</button>
-    <button type="button" class="ch-tool" data-v2-ch-redo aria-label="Redo" title="Redo">${icon('redo')}</button>
-    <button type="button" class="ch-tool" data-v2-ch-del aria-label="Delete the selected drawing" title="Delete selected">${icon('trash')}</button>
+    <button type="button" class="ch-tool" data-v2-ch-undo aria-label="Undo the last drawing change" title="Undo" ${D.can && D.can.canUndo ? '' : 'disabled'}>${icon('undo')}</button>
+    <button type="button" class="ch-tool" data-v2-ch-redo aria-label="Redo" title="Redo" ${D.can && D.can.canRedo ? '' : 'disabled'}>${icon('redo')}</button>
+    <button type="button" class="ch-tool" data-v2-ch-del aria-label="Delete the selected drawing" title="Delete selected" ${D.can && D.can.selected ? '' : 'disabled'}>${icon('trash')}</button>
     <button type="button" class="ch-tool" data-v2-ch-clear="ask" aria-label="Remove all drawings on ${D.sym}" title="Remove all" ${D.drawings.length ? '' : 'disabled'}>${icon('clear')}</button>
   </div>`;
 }
@@ -228,9 +264,12 @@ function paintChart() {
   const iv = INTERVALS.find((x) => x.key === V.interval);
   // the plot's own header controls, at its top right as in the classic chart: Explain (Milo) and full screen
   host.innerHTML = '<div class="ch-pacts"></div><div class="pc-host"></div>';
-  draw(host.firstChild, html`${miloButton('Explain', { ask: `Explain the ${D.sym} chart: the trend, support, resistance, momentum, volume and risk, and what would invalidate the read.`, context: `${D.sym} Dossier, Chart`, symbol: D.sym, cls: 'btn-sm' })}${C.maxButton()}`);
+  draw(host.firstChild, isPhone() ? '' : html`${miloButton('Explain', { ask: `Explain the ${D.sym} chart: the trend, support, resistance, momentum, volume and risk, and what would invalidate the read.`, context: `${D.sym} Dossier, Chart`, symbol: D.sym, cls: 'btn-sm' })}${C.maxButton()}`);
+  const kept = chart && D.chartBars === D.bars ? chart.keep() : {};
   if (chart) chart.destroy();
+  D.chartBars = D.bars;
   chart = createPriceChart(host.lastChild, {
+    ...kept, extended: D.intra && D.intra.extended, onChange: (c) => { D.can = c; syncDrawButtons(); },
     bars: D.bars, intraday: !!iv.intraday, msbK: V.msbK || 5, style: V.style, snap: V.snap, title: titleOf(),
     onView: (v) => { D.zoomed = v.zoomed; const z = $('[data-v2-ch-home]', mainEl); if (z) z.hidden = !v.zoomed; }, overlays: V.overlays, panes: V.panes, levels: levels(), events: events(),
     drawings: D.drawings, tool: V.tool, window: windowBars(), label: `${D.sym}, ${iv.label} bars`, ...extras(), ...studies(),
@@ -307,9 +346,9 @@ function placeMenu(d) {
   if (m.getBoundingClientRect().right > document.documentElement.clientWidth - 8) { m.style.left = 'auto'; m.style.right = '0'; }
 }
 function paintMax() {
-  const b = $('[data-v2-ch-max]', mainEl); if (!b) return;
   const on = C.isMax();
-  b.setAttribute('aria-pressed', String(on)); b.title = C.maxTitle(on); draw(b, icon(on ? 'shrink' : 'expand'));
+  // the plot's corner button (a wide screen), or the phone menu's, which says it in words
+  $$('[data-v2-ch-max]', mainEl).forEach((b) => { b.setAttribute('aria-pressed', String(on)); b.title = C.maxTitle(on); if (b.closest('.ch-more')) b.textContent = on ? 'Leave full screen' : 'Full screen'; else draw(b, icon(on ? 'shrink' : 'expand')); });
 }
 function toggleMax(on) {
   C.setMax(on);
@@ -335,8 +374,26 @@ function onStorage(e) {
   if (!live) return;
   if (e.key === C.COLOURS_KEY || e.key === null) { V.colours = C.readColours(); applyColours(); paintColours(); }
   if (e.key === C.LEGEND_KEY || e.key === null) { V.legend = C.legendOpen(); if (chart) chart.set({ legendOpen: V.legend }); }
+  // drawings made in another tab or the classic app on this symbol show here, so this tab's next save cannot drop them
+  if (e.key === DRAW_KEY || e.key === null) { D.drawings = readDrawings(D.sym); if (chart) chart.set({ drawings: D.drawings }); paintTools(); }
 }
-function paintTools() { const h = $('#ch-tools', mainEl); if (h) draw(h, toolbar()); const d = $('#ch-draw', mainEl); if (d) draw(d, drawbar()); }
+// The toolbars drawn again (a tool chosen, a box ticked): the drawing strip keeps where it was scrolled to and
+// the control that had the focus keeps it, so picking a tool on a phone does not jump the strip back to its start.
+function paintTools() {
+  const a = document.activeElement, attr = a && mainEl.contains(a) ? [...a.attributes].find((x) => /^data-v2-(tool|ch-)/.test(x.name)) : null;
+  const strip = $('#ch-draw .ch-draw', mainEl), left = strip ? strip.scrollLeft : 0;
+  const h = $('#ch-tools', mainEl); if (h) draw(h, toolbar());
+  const d = $('#ch-draw', mainEl); if (d) draw(d, drawbar());
+  const s2 = $('#ch-draw .ch-draw', mainEl); if (s2 && left) s2.scrollLeft = left;
+  if (attr) { const el = $(`[${attr.name}="${CSS.escape(attr.value)}"]`, mainEl); if (el && !el.disabled) el.focus({ preventScroll: true }); }
+}
+function syncDrawButtons() {
+  const c = D.can || {};
+  $$('[data-v2-ch-undo]', mainEl).forEach((b) => { b.disabled = !c.canUndo; });
+  $$('[data-v2-ch-redo]', mainEl).forEach((b) => { b.disabled = !c.canRedo; });
+  $$('[data-v2-ch-del]', mainEl).forEach((b) => { b.disabled = !c.selected; });
+}
+const noExtended = () => ['index', 'crypto'].includes(kindOf(D.sym));   // an index or a coin has no pre- or post-market session
 
 function paint() {
   draw(mainEl, html`${header(D.sym, D, 'chart', { bar: true })}${tabs(D.sym, 'chart', { fund: isFund(D) })}
@@ -346,7 +403,7 @@ function paint() {
         <div class="ch-wrail" id="ch-wrail">${W.rail(shown(), isPhone())}${miloButton(html`<span class="sr">Ask Milo about the ${D.sym} chart</span>`, { context: `${D.sym} Dossier, Chart`, symbol: D.sym, cls: 'chw-milo' })}</div>
         <div class="ch-side" id="ch-side" ${V.read || shown().length ? '' : 'hidden'}><aside class="ch-read" id="ch-read" aria-labelledby="cr-h" ${V.read ? '' : 'hidden'}></aside></div></div>
       <div class="ch-foot"><p class="asof" id="ch-note"></p><p class="asof ch-snote" id="ch-snote" aria-live="polite"></p>
-        <p class="asof">Wheel or pinch to zoom, drag the chart or the strip under it to move along, arrows to read each bar, plus and minus to zoom. Click a drawing to select it; drag it to move it, or drag a handle to move one point.</p></div>
+        <p class="asof">${matchMedia('(pointer: coarse)').matches ? 'Pinch to zoom, drag sideways or the strip under the chart to move along, tap a bar to read it. Tap a drawing to select it, then drag it or a handle.' : 'Wheel or pinch to zoom, drag the chart or the strip under it to move along, arrows to read each bar, plus and minus to zoom. Click a drawing to select it; drag it to move it, or drag a handle to move one point.'}</p></div>
     </section>`);
   applyColours(); paintChart(); paintRead(); syncSide();
 }
@@ -442,7 +499,7 @@ export async function render(main, route) {
     overlayOn: (k) => !!V.overlays[k], overlay: (k, on) => { V.overlays[k] = on; saveView(); paintTools(); if (chart) chart.set({ overlays: V.overlays }); } });
   W.reset();
   ST.bind({ sym: () => D.sym, bars: () => D.bars, iv: () => INTERVALS.find((x) => x.key === V.interval), range: () => V.range, session: () => V.session, weekly: () => V.interval === 'weekly',
-    firstShown: () => (D.bars ? D.bars[Math.max(0, D.bars.length - windowBars())].t : null), t: () => D.t, repaint: () => { if (live) paintStudies(); } });
+    firstShown: () => (D.bars ? D.bars[Math.max(0, D.bars.length - windowBars())].t : null), t: () => D.t, patterns: () => (D.intra ? D.intra.patterns : null), repaint: () => { if (live) paintStudies(); } });
   ST.reset();
   if (unsub) unsub();
   unsub = store.subscribe((what) => { if (what === 'lists') repaintWidget('watchlist'); });
@@ -467,7 +524,7 @@ function afterTicker() { shown().forEach((id) => { if (W.FROM_TICKER.includes(id
 function onPhoneChange() {
   if (!live) return;
   const r = $('#ch-wrail', mainEl); if (r) draw(r, W.rail(shown(), isPhone()));
-  syncSide(); paintExtras(); refit();
+  paintTools(); syncSide(); paintExtras(); refit();
 }
 export function dispose() {
   live = false; W.flush(mainEl || document);
@@ -488,7 +545,8 @@ function wire(main) {
     if (el.closest('.chw') && W.onChange(e)) return;
     if (el.matches('[data-v2-cc-pick]')) { pickColour(el.dataset.v2CcPick, el.value, `[data-v2-cc-pick="${el.dataset.v2CcPick}"]`); return; }
     if (el.matches('[data-v2-ch-sessionsel]')) { V.session = el.value; saveView(); loadBars(); return; }
-    if (el.matches('[data-v2-ch-iv]')) { V.interval = el.value; if (V.interval === 'weekly' && !RANGES.weekly[V.range]) V.range = '1Y'; paintTools(); loadBars(); return; }
+    if (el.matches('[data-v2-ch-iv]')) { V.interval = el.value; V.wantInterval = null; if (V.interval === 'weekly' && !RANGES.weekly[V.range]) V.range = '1Y'; saveView(); paintTools(); loadBars(); return; }
+    if (el.matches('[data-v2-ch-rangesel]')) { const was = V.range; V.range = el.value; saveView(); paintTools(); if (V.range === 'All' || was === 'All') loadBars(); else paintChart(); return; }
     if (el.matches('[data-v2-ch-msbk]')) { V.msbK = Number(el.value) || 5; saveView(); paintChart(); return; }
     if (el.matches('[data-v2-ch-ov]')) { V.overlays[el.dataset.v2ChOv] = el.checked; saveView(); ST.need(ticked()); paintStudies(); syncToolbar(); if (el.dataset.v2ChOv === 'sr') repaintWidget('levels'); if (el.dataset.v2ChOv === 'ins') repaintWidget('insiders'); return; }
     if (el.matches('[data-v2-ch-pane]')) { V.panes[el.dataset.v2ChPane] = el.checked; saveView(); paintChart(); syncToolbar(); }
@@ -501,7 +559,13 @@ function wire(main) {
     if (t('.chw') && W.onClick(e)) return;
     if ((b = t('[data-v2-ch-range]'))) { const was = V.range; V.range = b.dataset.v2ChRange; saveView(); paintTools(); if (V.range === 'All' || was === 'All') loadBars(); else paintChart(); return; }
     if (t('[data-v2-ch-layers]')) { V.layers = !V.layers; saveView(); paintTools(); const again = $('[data-v2-ch-layers]', mainEl); if (again) again.focus(); return; }
-    if (t('[data-v2-ch-reset]')) { Object.keys(V.overlays).forEach((k) => { V.overlays[k] = false; }); Object.keys(V.panes).forEach((k) => { V.panes[k] = k === 'volume'; }); saveView(); paintTools(); paintChart(); repaintWidget('levels'); repaintWidget('insiders'); announce('Back to price and volume. Your drawings are kept.'); const f = $('[data-v2-ch-layers]', mainEl); if (f) f.focus(); return; }
+    if (t('[data-v2-ch-reset]')) {
+      const was = { overlays: Object.assign({}, V.overlays), panes: Object.assign({}, V.panes) };
+      Object.keys(V.overlays).forEach((k) => { V.overlays[k] = false; }); Object.keys(V.panes).forEach((k) => { V.panes[k] = k === 'volume'; });
+      saveView(); paintTools(); paintChart(); repaintWidget('levels'); repaintWidget('insiders');
+      toast('Back to price and volume. Your drawings are kept.', { action: 'Undo', run: () => { V.overlays = was.overlays; V.panes = was.panes; saveView(); paintTools(); paintChart(); repaintWidget('levels'); repaintWidget('insiders'); } });
+      const f = $('[data-v2-ch-layers]', mainEl); if (f) f.focus(); return;
+    }
     if (t('[data-v2-ch-home]')) { if (chart) chart.home(); const f = $('[data-v2-ch-fit]', mainEl); if (f) f.focus(); return; }
     if (t('[data-v2-ch-snap]')) { V.snap = !V.snap; try { localStorage.setItem(SNAP_KEY, V.snap ? 'on' : 'off'); } catch (e) { /* private */ } paintTools(); if (chart) chart.set({ snap: V.snap }); const again = $('[data-v2-ch-snap]', mainEl); if (again) again.focus(); return; }
     if (t('[data-v2-ch-redo]')) { if (chart) chart.redo(); return; }
