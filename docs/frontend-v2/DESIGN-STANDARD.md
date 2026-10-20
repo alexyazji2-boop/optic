@@ -145,3 +145,4 @@ The account button never wraps (`white-space: nowrap; flex: none`).
 7. **The light theme** was not re-screenshotted in this pass. Its ink-3 was deepened, but nothing else was checked.
 8. **Classic is untouched.** It still has its own sizes, gold buttons and pills.
 9. **Gold declarations in the CSS** still number about 120, most of them chart encodings and focus rings. The on-screen count above is the measure that matters.
+10. **Home's starter cards** label "Follow" in gold, which is outside the list of gold uses. This was found by the optic-frontend skill's test run, and the label should be ink.
