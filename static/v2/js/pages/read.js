@@ -191,8 +191,12 @@ function calItem(e) {
   const r = e.readings || {};
   const when = e.all_day ? 'All day' : e.time_label || '';
   const status = e.released ? `Released${when ? ` ${when}` : ''}` : when ? `Due ${when}` : 'Due';
-  const prev = r.available && isNum(r.previous) ? `Previous reading${r.as_of ? `, for ${periodOf(r.as_of, r.series_label)}` : ''}: ${r.previous}${r.unit || ''}${r.series_label ? ` (${r.series_label.toLowerCase()})` : ''}.` : '';
-  const actual = r.available ? (e.released || !r.is_upcoming ? (isNum(r.actual) ? ` Released: ${r.actual}${r.unit || ''}.` : ' The released figure has not reached the data feed yet.') : '') : '';
+  // the period is the previous figure's own (previous_as_of): once a release is out, `as_of` is the new print's, and a
+  // Read built before the server said so names no period rather than the wrong one. A release still due by the clock
+  // shows no released figure: a Read built at 7 AM on jobs day called September's payrolls November's (2026-10-20).
+  const pAsOf = r.previous_as_of || (r.is_upcoming ? r.as_of : '');
+  const prev = r.available && isNum(r.previous) ? `Previous reading${pAsOf ? `, for ${periodOf(pAsOf, r.series_label)}` : ''}: ${r.previous}${r.unit || ''}${r.series_label ? ` (${r.series_label.toLowerCase()})` : ''}.` : '';
+  const actual = r.available && e.released ? (isNum(r.actual) ? ` Released: ${r.actual}${r.unit || ''}.` : ' The released figure has not reached the data feed yet.') : '';
   return html`<li class="cal-i ${e.released ? 'is-out' : ''}"><p class="cal-top"><b>${status}</b> ${/^https?:/.test(e.source_url || '') ? html`<a class="textlink" href="${e.source_url}" target="_blank" rel="noopener">${clean(e.title)}</a>` : clean(e.title)} <span class="cal-imp">${IMPACT_WORD[e.impact] || ''}</span></p>
     <p class="t-muted cal-meta">${(DATE_WORD[e.confidence] || (() => ''))(e)}${e.category ? `. ${capFirst(e.category)}` : ''}.</p>
     ${e.why ? html`<p class="cal-why">${clean(e.why)}</p>` : ''}

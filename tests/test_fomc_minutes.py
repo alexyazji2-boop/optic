@@ -97,7 +97,7 @@ def _calendar(monkeypatch, now):
     monkeypatch.setattr(events, "_bls_events", lambda force=False: {"events": [], "error": None})
     monkeypatch.setattr(events, "_cot_events", lambda now: {"events": [], "error": None})
     monkeypatch.setattr(events, "_expiry_events", lambda now: {"events": [], "error": None})
-    monkeypatch.setattr(events, "_readings", lambda title, days: {"available": False})
+    monkeypatch.setattr(events, "_readings", lambda title, at, now: {"available": False})
     monkeypatch.setattr(events, "_last_release", lambda title, force=False: None)
 
 

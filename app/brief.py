@@ -754,7 +754,9 @@ def _morning_read(overview: Dict[str, Any], macro: Dict[str, Any],
         "leaders": overview.get("leaders"),
         "laggards": overview.get("laggards"),
         "official_releases": (macro or {}).get("entries"),
-        "upcoming_calendar": (calendar or {}).get("events"),
+        # Still to come only: a release already out is in `official_releases`,
+        # and in a list called upcoming the note could write about it as ahead.
+        "upcoming_calendar": [e for e in (calendar or {}).get("events") or [] if not e.get("released")],
         "lead_story": (wires or {}).get("lead"),
         # The geopolitical leg. Previously only the single lead story reached the
         # written read, so world and politics coverage was invisible to it unless
@@ -862,7 +864,12 @@ def build(yf_provider, day: Optional[str] = None) -> Dict[str, Any]:
     overview = _overview(yf_provider)
     macro = _macro_section()
     wires = _desks()
-    calendar = events.upcoming()
+    # Today's releases stay on the day once they are out, marked `released`: the
+    # Read is rebuilt every 20 minutes, and asked for only what was still to come
+    # it dropped a release from its own Today within one build of printing (the
+    # 10:00 BLS release was on the 8:10 build and gone from the 11:04 one, live
+    # check 2026-10-20). Home's Today band asks the same way.
+    calendar = events.upcoming(earlier_today=True)
     # Scored once here and passed down, rather than computed inside the morning
     # note. It was only ever an input to that prompt, which is why the Read tab
     # had nothing to render even though the score existed and was correct.

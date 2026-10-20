@@ -599,7 +599,7 @@ def _category(title: str) -> str:
     return "other"
 
 
-def _readings(title: str, days_away: Optional[int]) -> Dict[str, Any]:
+def _readings(title: str, at: datetime, now: datetime) -> Dict[str, Any]:
     """The last published figure for this release, from FRED.
 
     For a release that has ALREADY happened this is its actual. For one still
@@ -607,6 +607,16 @@ def _readings(title: str, days_away: Optional[int]) -> Dict[str, Any]:
     compared against. Those are different claims, so the field is named for which
     one it is rather than always calling it "actual" and letting the reader
     assume a future event has already reported.
+
+    Still to come is by the clock (`at` not before `now`), not the day.
+    Decided by the day, a release later today counted as out: at 7 AM on jobs
+    day the Read printed September's payrolls as the November release's
+    figure, with August's labelled September (live check against the FRED
+    series, 2026-10-20). Nor is out the same as in FRED: until FRED has the
+    period the release reports on, its last value is the period before's, so
+    that figure stays the previous reading and `feed_pending` says the new one
+    is still on its way. `previous_as_of` is the observation `previous` is for,
+    so the period the page names is that figure's own.
     """
     try:
         from . import fred
@@ -617,7 +627,9 @@ def _readings(title: str, days_away: Optional[int]) -> Dict[str, Any]:
     if not block.get("available"):
         return {"available": False}
 
-    upcoming = days_away is not None and days_away > 0
+    upcoming = not at < now                      # the same test as the row's `released`
+    period = None if upcoming else fred.reference_period(title, at.astimezone(ET).date())
+    posted = not upcoming and (period is None or block["as_of"] >= period)
     return {
         "available": True,
         "series": block["series"],
@@ -625,9 +637,11 @@ def _readings(title: str, days_away: Optional[int]) -> Dict[str, Any]:
         "unit": block["unit"],
         "as_of": block["as_of"],
         # An upcoming release has not printed; its "actual" is next week's news.
-        "actual": None if upcoming else block["actual"],
-        "previous": block["actual"] if upcoming else block["previous"],
+        "actual": block["actual"] if posted else None,
+        "previous": block["previous"] if posted else block["actual"],
+        "previous_as_of": block.get("previous_as_of") if posted else block["as_of"],
         "is_upcoming": upcoming,
+        "feed_pending": not upcoming and not posted,
         "forecast": None,
         "forecast_note": block["forecast_note"],
     }
@@ -685,7 +699,7 @@ def upcoming(force: bool = False, now: Optional[datetime] = None,
         row["category"] = _category(row.get("title") or "")
         # Only for the releases a reader would actually compare numbers on, so a
         # twenty-row calendar does not fire twenty FRED fetches.
-        row["readings"] = (_readings(row.get("title") or "", row.get("days_away"))
+        row["readings"] = (_readings(row.get("title") or "", when, now)
                            if row["impact"] in ("high", "medium") else {"available": False})
         # Only for the releases a reader would actually compare against, so a
         # calendar of twenty rows does not fire twenty feed fetches.

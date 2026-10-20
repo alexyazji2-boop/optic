@@ -25,6 +25,7 @@ no value, which is the correct answer.
 from __future__ import annotations
 
 import logging
+from datetime import date
 from typing import Any, Dict, List, Optional, Tuple
 
 from . import feeds
@@ -48,43 +49,51 @@ TTL_SECONDS = 6 * 3600
 # CPI and PPI are *indexes* in FRED; nobody quotes them that way, so those are
 # converted to the month-over-month change the release headline actually leads
 # with. Getting this wrong would print "332.813%" for inflation.
+#
+# `reports` is the period a release covers, counted back from the month it comes
+# out in: most monthly releases report the month before, JOLTS the one before
+# that, the quarterly ones the quarter before. It is how a release that is out
+# is checked against FRED, which posts the new print some time after the agency
+# does: until FRED has that period, its last value is the period before's, and
+# calling it the new print would be wrong. A series without it (the weekly
+# mortgage rate) is taken as FRED has it.
 SERIES_MAP: Dict[str, Dict[str, Any]] = {
     "consumer price index": {
-        "series": "CPIAUCSL", "transform": "pct_mom", "unit": "%",
+        "series": "CPIAUCSL", "transform": "pct_mom", "unit": "%", "reports": ("month", 1),
         "label": "CPI, all items, month over month"},
     "producer price index": {
-        "series": "PPIFIS", "transform": "pct_mom", "unit": "%",
+        "series": "PPIFIS", "transform": "pct_mom", "unit": "%", "reports": ("month", 1),
         "label": "PPI, final demand, month over month"},
     "employment situation": {
-        "series": "PAYEMS", "transform": "diff_thousands", "unit": "k",
+        "series": "PAYEMS", "transform": "diff_thousands", "unit": "k", "reports": ("month", 1),
         "label": "Nonfarm payrolls, change on the month"},
     "unemployment": {
-        "series": "UNRATE", "transform": "level", "unit": "%",
+        "series": "UNRATE", "transform": "level", "unit": "%", "reports": ("month", 1),
         "label": "Unemployment rate"},
     "personal income": {
-        "series": "PI", "transform": "pct_mom", "unit": "%",
+        "series": "PI", "transform": "pct_mom", "unit": "%", "reports": ("month", 1),
         "label": "Personal income, month over month"},
     "retail sales": {
-        "series": "RSAFS", "transform": "pct_mom", "unit": "%",
+        "series": "RSAFS", "transform": "pct_mom", "unit": "%", "reports": ("month", 1),
         "label": "Retail sales, month over month"},
     "industrial production": {
-        "series": "INDPRO", "transform": "pct_mom", "unit": "%",
+        "series": "INDPRO", "transform": "pct_mom", "unit": "%", "reports": ("month", 1),
         "label": "Industrial production, month over month"},
     "gross domestic product": {
-        "series": "GDPC1", "transform": "pct_qoq_annual", "unit": "%",
+        "series": "GDPC1", "transform": "pct_qoq_annual", "unit": "%", "reports": ("quarter", 1),
         "label": "Real GDP, annualised quarterly rate"},
     "job openings": {
-        "series": "JTSJOL", "transform": "level_millions", "unit": "m",
+        "series": "JTSJOL", "transform": "level_millions", "unit": "m", "reports": ("month", 2),
         "label": "Job openings"},
     "employment cost index": {
-        "series": "ECIALLCIV", "transform": "pct_qoq", "unit": "%",
+        "series": "ECIALLCIV", "transform": "pct_qoq", "unit": "%", "reports": ("quarter", 1),
         "label": "Employment cost index, quarter over quarter"},
     "import and export price": {
-        "series": "IR", "transform": "pct_mom", "unit": "%",
+        "series": "IR", "transform": "pct_mom", "unit": "%", "reports": ("month", 1),
         "label": "Import price index, month over month"},
     "productivity": {
-        "series": "OPHNFB", "transform": "pct_qoq_annual", "unit": "%",
-        "label": "Nonfarm productivity, annualised"},
+        "series": "OPHNFB", "transform": "pct_qoq_annual", "unit": "%", "reports": ("quarter", 1),
+        "label": "Nonfarm productivity, annualised quarterly rate"},
     "mortgage rate": {
         "series": "MORTGAGE30US", "transform": "level", "unit": "%",
         "label": "30-year fixed mortgage rate"},
@@ -171,6 +180,7 @@ def _present(spec: Dict[str, Any], rows: List[Tuple[str, float]]) -> Dict[str, A
         "label": spec["label"],
         "unit": spec["unit"],
         "as_of": rows[-1][0],
+        "previous_as_of": rows[-2][0],           # the observation `previous` is for
         "actual": round(actual, digits),
         "previous": round(previous, digits) if previous is not None else None,
         # No forecast, and the reason travels with the row rather than living in
@@ -181,10 +191,30 @@ def _present(spec: Dict[str, Any], rows: List[Tuple[str, float]]) -> Dict[str, A
     }
 
 
+def _spec(title: str) -> Optional[Dict[str, Any]]:
+    low = (title or "").lower()
+    return next((v for k, v in SERIES_MAP.items() if k in low), None)
+
+
+def reference_period(title: str, released_on: date) -> Optional[str]:
+    """The first day of the period a release out on `released_on` reports on, as
+    FRED dates it ("2026-10-01" for October, "2026-07-01" for Q3), or None when
+    the series has no rule."""
+    spec = _spec(title)
+    rule = (spec or {}).get("reports")
+    if not rule:
+        return None
+    unit, back = rule
+    if unit == "quarter":
+        q = (released_on.year * 4 + (released_on.month - 1) // 3) - back
+        return "{:04d}-{:02d}-01".format(q // 4, (q % 4) * 3 + 1)
+    m = (released_on.year * 12 + released_on.month - 1) - back
+    return "{:04d}-{:02d}-01".format(m // 12, m % 12 + 1)
+
+
 def for_release(title: str) -> Dict[str, Any]:
     """Actual and previous for a release title, or unavailable."""
-    low = (title or "").lower()
-    spec = next((v for k, v in SERIES_MAP.items() if k in low), None)
+    spec = _spec(title)
     if not spec:
         return {"available": False,
                 "reason": "No FRED series is mapped to this release."}

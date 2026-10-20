@@ -37071,7 +37071,7 @@ function calReadings(r) {
     ${cell('prev', calNum(r.previous, r.unit), 'prev')}
     ${cell('est', null, 'est')}
     ${cell('actual', calNum(r.actual, r.unit), 'act',
-    r.is_upcoming ? 'pending' : null)}
+    r.is_upcoming || r.feed_pending ? 'pending' : null)}
   </span>`;
 }
 
@@ -37082,7 +37082,7 @@ function calRow(e) {
   const impact = e.impact || 'low';
   const readings = e.readings || {};
   const head = `
-    <span class="read-cal-time">${esc(e.time_label || 'all day')}</span>
+    <span class="read-cal-time">${e.released ? 'Out at ' : ''}${esc(e.time_label || 'all day')}</span>
     <span class="read-cal-what">
       ${e.short ? `<span class="chip strong"><i class="dot"></i>${esc(e.short)}</span>` : ''}
       ${briefLink({ url: e.source_url, title: e.title })}
@@ -37106,6 +37106,9 @@ function calRow(e) {
     ? `<span class="cal-prev-age">${fmt(e.previous.age_days, 0)} days ago</span>` : ''}
     </div>` : '';
 
+  // A release out today stays on the Read's calendar, marked out; until FRED has
+  // its period, the figure shown is the one before it (feed_pending).
+  const before = readings.is_upcoming || readings.feed_pending;
   const detail = readings.available ? `
     <div class="cal-detail">
       <div class="cal-detail-grid">
@@ -37113,9 +37116,9 @@ function calRow(e) {
           <span class="cal-detail-val">${esc(readings.series_label || '')}
             <span class="cal-detail-id">${esc(readings.series || '')}</span></span></div>
         <div><span class="cal-detail-lbl">${
-  readings.is_upcoming ? 'Previous reading' : 'This print'}</span>
+  before ? 'Previous reading' : 'This print'}</span>
           <span class="cal-detail-val">${
-  esc(calNum(readings.is_upcoming ? readings.previous : readings.actual, readings.unit) || '—')}
+  esc(calNum(before ? readings.previous : readings.actual, readings.unit) || '—')}
             ${readings.as_of ? `<span class="cal-detail-id">as of ${
     esc(readings.as_of)}</span>` : ''}</span></div>
         <div><span class="cal-detail-lbl">Consensus</span>
@@ -37124,7 +37127,10 @@ function calRow(e) {
       <p class="cal-detail-note">${esc(readings.forecast_note || '')}</p>
       ${readings.is_upcoming
     ? `<p class="cal-detail-note">This release has not printed. The figure above is what
-        the next one will be compared against, not a result.</p>` : ''}
+        the next one will be compared against, not a result.</p>`
+    : readings.feed_pending
+      ? `<p class="cal-detail-note">This release is out, but its figure has not reached FRED
+        yet. The figure above is the one before it.</p>` : ''}
     </div>` : '';
 
   return `<details class="${cls} cal-open">

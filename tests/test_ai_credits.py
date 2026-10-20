@@ -193,7 +193,7 @@ def test_a_forced_rebuild_does_not_pay_for_the_read_again(claude, monkeypatch):
     _edition(monkeypatch, "2026-09-30:morning")
     for name in ("_overview", "_macro_section", "_desks"):
         monkeypatch.setattr(brief, name, lambda *a, **k: {"sources": [], "groups": {}})
-    monkeypatch.setattr(brief.events, "upcoming", lambda: {"events": []})
+    monkeypatch.setattr(brief.events, "upcoming", lambda **kw: {"events": []})
     monkeypatch.setattr(brief.global_markets, "build", lambda p: {"available": False})
     monkeypatch.setattr(brief, "_save", lambda key, payload: None)
     monkeypatch.setattr(brief, "_MEM", {})
