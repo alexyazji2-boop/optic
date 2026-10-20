@@ -10,7 +10,10 @@ import * as api from '../core/api.js';
 import * as store from '../core/store.js';
 import { num, signed, dir, compact, clean, bolded, capFirst, longDate, fullDate, shortDate, isNum, ago } from '../core/format.js';
 import { mountCharts } from '../ui/chart.js';
-import { signedBars } from '../ui/bars.js';
+import { signedBars, groupedBars } from '../ui/bars.js';
+import * as FV from '../core/finviz.js';
+import { term } from '../ui/term.js';
+import { how } from '../ui/states.js';
 import { skeleton, empty, failed, generated } from '../ui/states.js';
 import { button as miloButton, provideContext } from '../ui/milo.js';
 import { core, header, tabs, isFund } from './dossier-frame.js';
@@ -26,27 +29,85 @@ const pct = (v, dp = 1) => (isNum(v) ? `${num(v, dp)}%` : 'n/a');   // num(null)
 const REACTION = 'Reaction';
 const reactionWhen = (t) => (t === 'before_open' ? 'that session' : t === 'after_close' ? 'the next session' : 'the session that traded on it');
 
+// The page opens on four questions a newcomer has (owner's beginner brief, 2026-10-20, item 7): when the company
+// reports, what a report is, what analysts expect (EPS consensus in words, with the term and the figure kept), and
+// what happened after earlier reports. The beat rate is never shown without what the price did after: Apple beat in
+// 8 of 8 quarters and still fell after most of them.
+function rows8() { return (((D.e || {}).surprise || {}).rows || []).map((r) => Object.assign({}, r, FV.surprise(r.eps_estimate, r.eps_reported, r.surprise_pct))); }
+export function afterBeats(rows) {
+  const beats = rows.filter((r) => r.cls === 'beat' && isNum(r.next_day_move_pct));
+  return { n: beats.length, fell: beats.filter((r) => r.next_day_move_pct < 0).length, avg: beats.length ? beats.reduce((a, r) => a + r.next_day_move_pct, 0) / beats.length : null };
+}
 function hero(sym) {
-  const e = D.e, nr = e.next_report || {}, lr = e.latest_result || {}, s = e.surprise || {}, im = e.implied || {}, pr = e.pricing || {}, v = e.verdict || {};
+  const e = D.e, nr = e.next_report || {}, lr = e.latest_result || {}, s = e.surprise || {}, name = (D.quote || {}).name || sym;
   const upcoming = nr.date && !lr.just_reported;
-  return html`<section class="section" aria-labelledby="nr-h">
-    <p class="t-label" id="nr-h">${upcoming ? 'Next report' : 'Latest result'}</p>
-    ${upcoming ? html`<p class="t-display-m">${longDate(nr.date)}</p><p class="delta"><span>${capFirst(timing[nr.timing] || '')}${timing[nr.timing] ? ', ' : ''}in ${nr.days_away} days</span><span class="t-muted">${nr.confirmed ? 'Confirmed' : 'Not yet confirmed'}</span>${pr.available && ({ fair: 'about in line', expensive: 'rich', cheap: 'cheap' })[pr.stance] ? html`<span>Options priced ${({ fair: 'about in line', expensive: 'rich', cheap: 'cheap' })[pr.stance]} against history</span>` : ''}</p>`
-    : !lr.date && !isNum(lr.eps_reported) ? html`<p class="t-display-m">No report on record</p><p class="delta"><span class="t-muted">There is no next report date and no latest result in the feed for this company.</span></p>`
-    : html`<p class="t-display-m">EPS ${num(lr.eps_reported)} <small class="t-muted">against ${num(lr.eps_estimate)}</small></p><p class="delta">${isNum(lr.surprise_pct) ? html`<span class="${dir(lr.surprise_pct)}">${lr.surprise_pct >= 0 ? 'Beat' : 'Missed'} by ${num(Math.abs(lr.surprise_pct), 1)}%</span>` : html`<span class="t-muted">No estimate to compare with</span>`}<span>${REACTION} ${signed(lr.next_day_move_pct)}</span><span class="t-muted">${fullDate(lr.date)}</span></p>`}
-    ${kv([
-      upcoming ? ['EPS consensus', html`${num(nr.eps_consensus)} <span class="t-muted">${num(nr.eps_low)} to ${num(nr.eps_high)}</span>`] : ['Surprise', signed(lr.surprise_pct, 1)],
-      upcoming ? ['Revenue consensus', nr.revenue_consensus_label || 'n/a'] : ['Reaction session', signed(lr.next_day_move_pct)],
-      im.available ? [`Implied move through ${shortDate(im.expiry)}`, `±${num(im.implied_move_pct)}%`] : null,
-      s.available && isNum(s.beat_rate_pct) ? ['Beat rate', `${num(s.beat_rate_pct, 0)}% of ${s.rate_quarters || s.quarters} quarters`] : null,
-    ], 4)}
-    ${nr.dispersion_note ? html`<p>${clean(nr.dispersion_note)}</p>` : ''}
-    ${lr.reaction_fights_result ? html`<p class="stale">The stock moved against the result: a beat that fell or a miss that rose.</p>` : ''}
-    ${v.headline ? html`<p><b>${clean(v.headline)}</b></p><ul class="plain">${(v.reasons || []).map((r) => html`<li>${clean(r)}</li>`)}</ul>` : ''}
+  const R = rows8(), beats = R.filter((r) => r.cls === 'beat').length, misses = R.filter((r) => r.cls === 'miss').length, inl = R.filter((r) => r.cls === 'in line').length;
+  const ab = afterBeats(R);
+  const when = upcoming ? html`<p class="ern-when"><b>${name} reports on ${longDate(nr.date)}${timing[nr.timing] ? `, ${timing[nr.timing]}` : ''}</b>, in ${nr.days_away} ${nr.days_away === 1 ? 'day' : 'days'}. ${nr.confirmed ? 'The company has confirmed the date.' : 'The date is an estimate; the company has not confirmed it yet.'}</p>`
+    : lr.date ? html`<p class="ern-when"><b>${name} last reported on ${fullDate(lr.date)}.</b> ${nr.date ? '' : 'No next date is in the data yet.'}</p>`
+      : html`<p class="ern-when"><b>No report date on record for ${sym}.</b> There is no next report date and no latest result in the feed for this company.</p>`;
+  const expect = upcoming && isNum(nr.eps_consensus) ? html`<p>Analysts expect ${term('earnings per share', 'earnings per share')} (${term('eps', 'EPS')}) of <b>$${num(nr.eps_consensus)}</b> for the quarter, the average of their estimates (the ${term('consensus', 'consensus')}), within a range of $${num(nr.eps_low)} to $${num(nr.eps_high)}${nr.revenue_consensus_label ? html`, on revenue of about <b>${nr.revenue_consensus_label}</b>` : ''}.</p>` : '';
+  const before = R.length ? html`<p>In the last ${R.length} reports, ${name} ${beats === R.length ? `beat the estimate every time` : `beat the estimate ${beats} ${beats === 1 ? 'time' : 'times'}${misses ? `, missed ${misses}` : ''}${inl ? `, and was in line ${inl}` : ''}`}.${ab.n ? html` <b>But the share price fell after ${ab.fell} of those ${ab.n} beats</b>${isNum(ab.avg) ? `, ${ab.avg < 0 ? 'down' : 'up'} ${num(Math.abs(ab.avg), 1)}% on average in the session that traded on the report` : ''}. Beating estimates does not mean the price rises: the price already reflects what investors expected, and the reaction depends on the whole report.` : ''}</p>` : '';
+  const latest = !upcoming && (lr.date || isNum(lr.eps_reported)) ? (() => { const sv = FV.surprise(lr.eps_estimate, lr.eps_reported, lr.surprise_pct); return html`<p>Latest result: EPS $${num(lr.eps_reported)} against $${num(lr.eps_estimate)} expected, ${sv.cls === 'missing' ? 'no estimate to compare with' : sv.pct === null ? `${sv.cls}, by $${num(Math.abs(sv.diff))}` : `${sv.cls}${sv.cls === 'in line' ? '' : ` by ${num(Math.abs(sv.pct), 1)}%`}`}; the price moved ${signed(lr.next_day_move_pct)} in the session that traded on it.</p>`; })() : '';
+  return html`<section class="section ern-lead" aria-labelledby="nr-h"><h2 class="t-h2" id="nr-h">${upcoming ? 'The next report' : 'The latest report'}</h2>
+    ${when}<p class="t-muted ern-what">An ${term('earnings report', 'earnings report')} is a company's results for the quarter: what it sold, the profit it kept, and often what it expects next.</p>
+    ${expect}${latest}${before}
+    <p class="asof">${e.generated_at ? `Read ${ago(e.generated_at)}. ` : ''}Estimates, reported EPS and prices from Yahoo Finance${s.quarters ? `, ${s.quarters} quarters of history` : ''}. ${clean(s.eps_basis || '')}</p>
     ${(e.extended_hours || {}).available ? html`<p class="asof">${sessionWord(e.extended_hours.kind)} ${num(e.extended_hours.price)}, ${signed(e.extended_hours.move_pct)} from the close${e.extended_hours.as_of ? `, struck ${etStamp(e.extended_hours.as_of)}` : ''}. The header shows the latest print, which can be from a later session. ${clean(e.extended_hours.caveat || '')}</p>` : ''}
   </section>`;
 }
 
+// What Optic's earnings verdict reads from these figures: a model's reading, kept with the deeper research
+function verdictBlock() {
+  const v = (D.e || {}).verdict || {}, nr = (D.e || {}).next_report || {}, lr = (D.e || {}).latest_result || {};
+  if (!v.headline && !nr.dispersion_note && !lr.reaction_fights_result) return '';
+  return html`<section class="section" aria-labelledby="vd-h"><h2 class="t-h2" id="vd-h">Optic's reading of the setup</h2><p class="section-sub">A model's reading of the figures on this page, not a recommendation.</p>
+    ${v.headline ? html`<p><b>${clean(v.headline)}</b></p><ul class="plain">${(v.reasons || []).map((r) => html`<li>${clean(r)}</li>`)}</ul>` : ''}
+    ${nr.dispersion_note ? html`<p>${clean(nr.dispersion_note)}</p>` : ''}
+    ${lr.reaction_fights_result ? html`<p class="stale">The stock moved against the result: a beat that fell or a miss that rose.</p>` : ''}</section>`;
+}
+
+// Reported against expected, and what the price did after: two figures on the same quarters, each with its
+// own scale, the window and the sample said (data-viz brief items 2 and 7)
+function history(sym) {
+  const R = rows8(); if (!R.length) return '';
+  const s = (D.e || {}).surprise || {}, last = R[0], ab = afterBeats(R);
+  const small = R.some((r) => r.small);
+  const lastWords = last.cls === 'missing' ? '' : last.pct === null ? ` The latest, ${last.fiscal || fullDate(last.date)}, ${last.cls === 'in line' ? 'was in line' : `${last.cls === 'beat' ? 'beat' : 'missed'} by $${num(Math.abs(last.diff))} a share`}.` : ` The latest, ${last.fiscal || fullDate(last.date)}, ${last.cls === 'in line' ? 'was in line' : `${last.cls === 'beat' ? 'beat' : 'missed'} by $${num(Math.abs(last.diff))} a share (${num(Math.abs(last.pct), 1)}%)`}.`;
+  const moves = R.filter((r) => isNum(r.next_day_move_pct)), up = moves.filter((r) => r.next_day_move_pct > 0).length;
+  return html`<section class="section" id="ern-history" aria-labelledby="eh-h"><h2 class="t-h2" id="eh-h">Earlier reports</h2>
+    <div class="fv-grid">
+      <figure class="fv"><figcaption><h3>Reported against expected</h3><p class="fv-take">${R.filter((r) => r.cls === 'beat').length} beats, ${R.filter((r) => r.cls === 'miss').length} misses and ${R.filter((r) => r.cls === 'in line').length} in line in the last ${R.length} quarters.${lastWords}</p>
+        <p class="legend-line fv-key"><span><i class="sw s0 hollow"></i>Analysts' estimate</span><span><i class="sw s1"></i>Reported EPS</span></p><p class="fv-unit">EPS in dollars a share, by quarter, on analysts' basis. Under each quarter: beat, miss or in line.</p></figcaption>
+        <div class="chart-slot" data-chart="eps"></div></figure>
+      <figure class="fv"><figcaption><h3>What the price did after</h3><p class="fv-take">The price rose after ${up} of ${moves.length} reports and fell after ${moves.length - up}${ab.n ? `; after the ${ab.n} beats it fell ${ab.fell} ${ab.fell === 1 ? 'time' : 'times'}` : ''}. Largest move ${signed(s.largest_move_pct)}.</p>
+        <p class="fv-unit">The move in the session that traded on each report: that session for a report before the open, the next one for a report after the close. After-hours and longer moves are not in this data. ${moves.length} reports.</p></figcaption>
+        <div class="chart-slot" data-chart="react"></div></figure>
+    </div>
+    <details class="more-inline fv-data"><summary>View data</summary><div class="tscroll"><table class="t"><thead><tr><th scope="col">Quarter</th><th scope="col">Reported on</th><th scope="col">Estimate</th><th scope="col">Reported</th><th scope="col">Difference</th><th scope="col">Surprise</th><th scope="col">Result</th><th scope="col">${REACTION}</th></tr></thead>
+      <tbody>${R.map((x) => html`<tr><th scope="row">${x.fiscal || shortDate(x.date)}</th><td>${fullDate(x.date)}${x.timing && timing[x.timing] ? html`<small class="t-muted"> ${timing[x.timing]}</small>` : ''}</td><td>${num(x.eps_estimate)}</td><td>${num(x.eps_reported)}</td><td>${isNum(x.diff) ? signed(x.diff, 2, '') : 'n/a'}</td><td>${x.pct === null ? (x.small ? 'n/a, estimate under $0.10' : 'n/a') : signed(x.pct, 1)}</td><td>${FV.CLASS_WORD[x.cls]}</td><td>${isNum(x.next_day_move_pct) ? signed(x.next_day_move_pct) : 'Not reported'}</td></tr>`)}</tbody></table></div>
+      <p class="asof">A result is in line when the difference rounds to nothing, a beat above the estimate and a miss below it. ${small ? 'Where the estimate is under ten cents a share, a percentage of almost nothing misleads, so only the dollar difference is given. ' : ''}${clean(s.eps_basis || '')}</p>
+      <ul class="plain">${(s.notes || []).map((n) => html`<li>${clean(n)}</li>`)}</ul></details></section>`;
+}
+
+// What options price for the report day, against what past report days did: both one session (the options
+// market's report-day move from the term structure, never the straddle to a later expiry), labelled as market
+// pricing. Kept with the options detail, which a newcomer can leave closed (beginner brief item 7).
+function eventDay() { const ev = (((D.t || {}).vol_surface || {}).event) || {}; return ev.available && isNum(ev.move_pct) && ev.move_pct > 0 ? ev : null; }
+function pricing(sym) {
+  const e = D.e, pr = e.pricing || {}, im = e.implied || {}, nr = e.next_report || {}, ev = eventDay();
+  if (!pr.available && !im.available && !ev) return '';
+  const imx = im.available ? { pct: im.implied_move_pct, expiry: im.expiry } : null;
+  const R = rows8(), cmp = FV.reactionVsImplied(R.map((r) => r.next_day_move_pct), ev ? ev.move_pct : null);
+  return html`<section class="section" id="ern-options" aria-labelledby="ep-h"><div class="section-head"><div><h2 class="t-h2" id="ep-h">What options price for the report</h2><p class="section-sub">For readers who use options. The ${term('implied move', 'implied move')} is what options cost, not a forecast or a guaranteed range.</p></div>${ask(sym, 'Ask Milo about the event pricing', `Are ${sym}'s options priced rich or cheap for the coming report?`)}</div>
+    ${ev && cmp ? html`<figure class="fv"><figcaption><p class="fv-take">Options price a move of about <b>±${num(ev.move_pct, 1)}% for the report day itself</b>${nr.date ? ` (${shortDate(nr.date)})` : ''}. The last ${cmp.n} reports moved ${num(cmp.avg, 1)}% on average in the session that traded on them; ${cmp.over} of ${cmp.n} moved more than ±${num(ev.move_pct, 1)}%.</p>
+        <p class="legend-line fv-key"><span><i class="sw s1"></i>Size of each past report-day move</span><span><i class="ref-sw"></i>Today's report-day price, ±${num(ev.move_pct, 1)}%</span></p><p class="fv-unit">One session each: the past moves and the priced move cover the same window. Read from the ${shortDate(ev.after)} expiry against the ${shortDate(ev.before)} one.</p></figcaption>
+      <div class="chart-slot" data-chart="evday"></div></figure>` : ''}
+    ${im.available ? html`<p><b>±${num(im.implied_move_pct)}% through the ${shortDate(im.expiry)} expiry.</b> The ${num(im.strike, 0)} ${term('straddle', 'straddle')} costs $${num(im.straddle_cost)}, ${im.dte} days out, at ${num(im.atm_iv_pct, 1)}% ${term('implied volatility', 'implied volatility')}. It covers ${im.dte} days of ordinary trading as well as the report, so it is not the report day's move and is not compared with one.</p>
+      <p class="asof">${im.priced_from === 'last_trades' ? `Priced from the contracts' last trades${im.last_trade ? `, the oldest ${etStamp(im.last_trade)}` : ''}: no two-sided quotes right now, so this is where they last traded, not where they are quoted.` : 'Priced from two-sided quotes, at the mid.'}</p>` : ''}
+    ${historyRatio(pr, imx, (e.surprise || {}).quarters)}
+    ${pr.stale ? html`<p class="stale">${clean(pr.stale_note || '')}</p>` : ''}${how(html`<p>${clean(pr.caveat || '')}</p>`, ev ? html`<p>The report day's move is the variance the ${shortDate(ev.after)} expiry carries beyond what the ${shortDate(ev.before)} expiry's rate implies for the ordinary days in between.</p>` : '')}</section>`;
+}
 function brief(sym) {
   const b = D.brief;
   return html`<section class="section" aria-labelledby="br-h"><div class="section-head"><div><h2 class="t-h2" id="br-h">Pre-earnings brief</h2><p class="section-sub">A short summary of this page's figures, written by an AI model when you ask. Kept for six hours per report date.</p></div></div>
@@ -56,18 +117,6 @@ function brief(sym) {
         : !b.available ? html`<p class="t-muted">${clean(b.reason || 'No brief right now.')}</p>`
           : html`<p class="t-label">${capFirst(b.stance || '')}</p><p class="t-h3">${clean(b.headline || '')}</p>${(b.paragraphs || []).map((p) => html`<p>${raw(bolded(p))}</p>`)}${generated(b.written_by ? b : Object.assign({ written_by: 'model' }, b), { at: b.generated_at })}<p class="asof">${clean(b.method || '')} ${clean(b.disclaimer || '')}</p>`}
   </section>`;
-}
-
-function pricing(sym) {
-  const e = D.e, pr = e.pricing || {}, im = e.implied || {};
-  if (!pr.available && !im.available) return '';
-  const imx = im.available ? { pct: im.implied_move_pct, expiry: im.expiry } : null;
-  return html`<section class="section" aria-labelledby="ep-h"><div class="section-head"><h2 class="t-h2" id="ep-h">Event pricing</h2>${ask(sym, 'Ask Milo about the event pricing', `Are ${sym}'s options priced rich or cheap for the coming report?`)}</div>
-    ${im.available ? html`<p><b>±${num(im.implied_move_pct)}% through the ${shortDate(im.expiry)} expiry.</b> The ${num(im.strike, 0)} straddle costs $${num(im.straddle_cost)}, ${im.dte} days out, at ${num(im.atm_iv_pct, 1)}% IV. It covers ordinary trading as well as the report.</p>
-      <p class="asof">${im.priced_from === 'last_trades' ? `Priced from the contracts' last trades${im.last_trade ? `, the oldest ${etStamp(im.last_trade)}` : ''}: no two-sided quotes right now, so this is where they last traded, not where they are quoted.` : 'Priced from two-sided quotes, at the mids.'}</p>` : html`<p>${clean(im.reason || '')}</p>`}
-    ${isNum(pr.event_day_avg_pct) ? html`<p><b>±${num(pr.event_day_avg_pct)}% on report days.</b> The average move on the session after the last ${(e.surprise || {}).quarters || 8} reports. History, not a price.</p>` : ''}
-    ${historyRatio(pr, imx, (e.surprise || {}).quarters)}
-    ${pr.stale ? html`<p class="stale">${clean(pr.stale_note || '')}</p>` : ''}<p class="asof">${clean(pr.caveat || '')}</p></section>`;
 }
 
 function revisions(sym) {
@@ -81,33 +130,31 @@ function revisions(sym) {
     <p class="asof">${clean(r.caveat || '')}</p></section>`;
 }
 
-function surprises() {
-  const s = D.e.surprise || {};
-  if (!s.available) return '';
-  return html`<section class="section" aria-labelledby="sh-h"><h2 class="t-h2" id="sh-h">Surprise history</h2>
-    ${kv([['Beat rate', isNum(s.beat_rate_pct) ? `${num(s.beat_rate_pct, 0)}% (${s.beat_count} of ${s.rate_quarters || s.quarters}${s.in_line_count ? `, ${s.in_line_count} in line` : ''})` : 'n/a'], ['Average surprise', signed(s.avg_surprise_pct, 1)], ['Average reaction', isNum(s.avg_abs_move_pct) ? `±${num(s.avg_abs_move_pct)}%` : 'n/a'], ['Average reaction to a beat', signed(s.avg_move_on_beat_pct)]], 4)}
-    <div class="chart-slot" data-chart="surp"></div>
-    <div class="tscroll"><table class="t"><thead><tr><th scope="col">Quarter</th><th scope="col">Reported on</th><th scope="col">Estimate</th><th scope="col">Reported</th><th scope="col">Surprise</th><th scope="col">${REACTION}</th></tr></thead>
-      <tbody>${s.rows.map((x) => html`<tr><th scope="row">${x.fiscal || shortDate(x.date)}</th><td>${fullDate(x.date)}${x.timing && timing[x.timing] ? html`<small class="t-muted"> ${timing[x.timing]}</small>` : ''}</td><td>${num(x.eps_estimate)}</td><td>${num(x.eps_reported)}</td><td class="${dir(x.surprise_pct)}">${signed(x.surprise_pct, 1)}</td><td>${signed(x.next_day_move_pct)}</td></tr>`)}</tbody></table></div>
-    <p class="asof">${REACTION} is the move in the session that traded on the report: that session for a report before the open, the next one for a report after the close. ${clean(s.eps_basis || '')} A surprise that rounds to 0.0% is in line, neither a beat nor a miss.</p>
-    <ul class="plain">${(s.notes || []).map((n) => html`<li>${clean(n)}</li>`)}</ul></section>`;
-}
-
 // A growth table: a column with no figure in any row is left out rather than shown as a column of n/a.
 const GROWTH_COLS = [['revenue', 'Revenue', (v) => compact(v)], ['revenue_yoy_pct', 'Growth', (v) => signed(v)], ['net_income', 'Net income', (v) => compact(v)], ['net_income_yoy_pct', 'Growth', (v) => signed(v)], ['gross_margin_pct', 'Gross margin', (v) => pct(v)], ['operating_margin_pct', 'Operating margin', (v) => pct(v)]];
 export function growthTable(rows) {
   const cols = GROWTH_COLS.filter(([k]) => rows.some((x) => isNum(x[k])));
   return html`<thead><tr><th scope="col">Period</th>${cols.map(([, l]) => html`<th scope="col">${l}</th>`)}</tr></thead><tbody>${rows.map((x) => html`<tr><th scope="row">${x.fiscal || `${shortDate(x.period)} ${String(x.period).slice(0, 4)}`}<small class="t-muted fin-end">to ${shortDate(x.period)} ${String(x.period).slice(2, 4)}</small></th>${cols.map(([k, , f]) => html`<td>${f(x[k])}</td>`)}</tr>`)}</tbody>`;
 }
+// The business the reports describe: reported quarters, then what analysts expect, drawn hollow and labelled as
+// estimates so a forecast is never read as a result
 function growth() {
   const g = D.e.growth || {};
   if (!(g.quarterly || []).length && !(g.annual || []).length) return '';
-  return html`<section class="section" aria-labelledby="gr-h"><h2 class="t-h2" id="gr-h">Financial growth</h2>
-    <div class="chart-slot" data-chart="growth"></div>
-    ${(g.quarterly || []).length ? html`<h3>Quarters</h3><div class="tscroll"><table class="t">${growthTable(g.quarterly)}</table></div>` : ''}
-    ${(g.annual || []).length ? html`<h3>Fiscal years</h3><div class="tscroll"><table class="t">${growthTable(g.annual)}</table></div>` : ''}
-    ${(g.forward || []).length ? html`<h3>What analysts expect</h3><div class="tscroll"><table class="t"><thead><tr><th>Period</th><th>EPS</th><th>EPS growth</th><th>Revenue</th><th>Revenue growth</th><th>Analysts</th></tr></thead><tbody>${g.forward.map((f) => html`<tr><td>${f.label}</td><td>${num(f.eps_avg)}</td><td>${signed(f.eps_growth_pct, 1)}</td><td>${f.revenue_label || compact(f.revenue_avg)}</td><td>${signed(f.revenue_growth_pct, 1)}</td><td>${f.eps_analysts || ''}</td></tr>`)}</tbody></table></div>` : ''}
-    <ul class="plain">${(g.notes || []).map((n) => html`<li>${clean(n)}</li>`)}</ul></section>`;
+  const q = g.quarterly || [], fw = (g.forward || []).filter((f) => /q$/.test(f.period || '') && isNum(f.revenue_avg));
+  const lab = q.map((r) => r.fiscal || shortDate(r.period));
+  const yoy = q[0] && isNum(q[0].revenue_yoy_pct) ? `Revenue ${q[0].revenue_yoy_pct >= 0 ? 'grew' : 'fell'} ${num(Math.abs(q[0].revenue_yoy_pct), 1)}% from the same quarter a year before, to ${FV.usd(q[0].revenue)} in ${lab[0]}.` : q[0] ? `Revenue was ${FV.usd(q[0].revenue)} in ${lab[0]}.` : '';
+  const ni = q[0] && isNum(q[0].net_income) ? ` Net income was ${FV.usd(q[0].net_income)}${isNum(q[0].net_income_yoy_pct) ? `, ${q[0].net_income_yoy_pct >= 0 ? 'up' : 'down'} ${num(Math.abs(q[0].net_income_yoy_pct), 1)}%` : ''}.` : '';
+  const ahead = fw[0] ? ` Analysts expect about ${fw[0].revenue_label || FV.usd(fw[0].revenue_avg)} of revenue for the ${fw[0].label.toLowerCase()}${isNum(fw[0].revenue_growth_pct) ? `, ${signed(fw[0].revenue_growth_pct)} on a year before` : ''}: an estimate, not a result.` : '';
+  return html`<section class="section" aria-labelledby="gr-h"><h2 class="t-h2" id="gr-h">The business behind the reports</h2>
+    ${q.length ? html`<figure class="fv"><figcaption><p class="fv-take">${yoy}${ni}${ahead}</p>
+      <p class="legend-line fv-key"><span><i class="sw s1"></i>Revenue</span><span><i class="sw s3"></i>Net income</span>${fw.length ? html`<span><i class="sw s1 hollow"></i>Revenue, analysts' estimate</span>` : ''}</p><p class="fv-unit">By quarter, US dollars. Reported quarters first, then estimates.</p></figcaption>
+      <div class="chart-slot" data-chart="growth"></div></figure>` : ''}
+    <details class="more-inline fv-data"><summary>View data</summary>
+      ${q.length ? html`<h3>Quarters</h3><div class="tscroll"><table class="t">${growthTable(q)}</table></div>` : ''}
+      ${(g.annual || []).length ? html`<h3>Fiscal years</h3><div class="tscroll"><table class="t">${growthTable(g.annual)}</table></div>` : ''}
+      ${(g.forward || []).length ? html`<h3>What analysts expect</h3><div class="tscroll"><table class="t"><thead><tr><th>Period</th><th>EPS</th><th>EPS growth</th><th>Revenue</th><th>Revenue growth</th><th>Analysts</th></tr></thead><tbody>${g.forward.map((f) => html`<tr><td>${f.label}</td><td>${num(f.eps_avg)}</td><td>${signed(f.eps_growth_pct)}</td><td>${f.revenue_label || 'n/a'}</td><td>${signed(f.revenue_growth_pct)}</td><td>${f.eps_analysts || 'n/a'}</td></tr>`)}</tbody></table></div>` : ''}
+      <ul class="plain">${(g.notes || []).map((n) => html`<li>${clean(n)}</li>`)}</ul></details></section>`;
 }
 
 function analysts(sym) {
@@ -122,12 +169,20 @@ function analysts(sym) {
 
 function makers() {
   const e = D.e || {};
-  const rv = (e.revisions || {}).rows || [], sr = ((e.surprise || {}).rows || []).slice().reverse(), q = ((e.growth || {}).quarterly || []).slice().reverse();
-  return {
+  const rv = (e.revisions || {}).rows || [], R = rows8().slice().reverse(), q = ((e.growth || {}).quarterly || []).slice().reverse();
+  const fw = ((e.growth || {}).forward || []).filter((f) => /q$/.test(f.period || '') && isNum(f.revenue_avg));
+  const G = R.map((r) => ({ x: r.fiscal || shortDate(r.date), sub: FV.CLASS_WORD[r.cls], subCls: r.cls.replace(' ', '-') }));
+  const ev = eventDay();
+  const out = {
     rev: (w) => signedBars(rv.map((r) => ({ x: r.label, v: r.chg_90d_pct, label: `${r.label}: ${signed(r.chg_90d_pct)} over 90 days` })), { w, h: 150, label: 'Estimate change over 90 days by period', fmt: (v) => signed(v), xfmt: (x) => x.replace('Current ', '').replace('Next ', 'next ') }),
-    surp: (w) => signedBars(sr.map((r) => ({ x: r.fiscal || shortDate(r.date), v: r.surprise_pct, label: `${r.fiscal ? `${r.fiscal}, reported ` : ''}${fullDate(r.date)}: ${signed(r.surprise_pct, 1)} surprise, reaction ${signed(r.next_day_move_pct)}` })), { w, h: 150, label: 'Earnings surprise by quarter', fmt: (v) => signed(v, 1) }),
-    growth: (w) => signedBars(q.map((r) => ({ x: r.fiscal || shortDate(r.period), v: r.revenue_yoy_pct, label: `${fullDate(r.period)}: revenue ${signed(r.revenue_yoy_pct)} year on year` })), { w, h: 150, label: 'Quarterly revenue growth, year on year', fmt: (v) => signed(v, 1) }),
+    eps: (w) => groupedBars(G, [{ name: "Analysts' estimate", cls: 's0', hollow: true, values: R.map((r) => r.eps_estimate), missingText: 'No estimate' }, { name: 'Reported EPS', cls: 's1', values: R.map((r) => r.eps_reported) }], { w, h: 230, fmt: (v) => `$${num(v, 2)}`, axisFmt: (v) => `$${num(v, 2)}`, valueLabels: 'none', label: 'EPS estimate against reported, by quarter', note: (i) => { const r = R[i]; return r.cls === 'missing' ? 'No estimate to compare' : `${FV.CLASS_WORD[r.cls]}${isNum(r.diff) ? `, ${signed(r.diff, 2, '')} a share` : ''}${r.pct !== null && r.cls !== 'in line' ? ` (${signed(r.pct, 1)})` : ''}`; } }),
+    react: (w) => groupedBars(R.map((r) => ({ x: r.fiscal || shortDate(r.date), sub: FV.CLASS_WORD[r.cls], subCls: r.cls.replace(' ', '-') })), [{ name: 'Price move in the reaction session', cls: 's2', values: R.map((r) => r.next_day_move_pct), missingText: 'Not reported' }], { w, h: 230, fmt: (v) => signed(v), axisFmt: (v) => `${num(v, 0)}%`, valueLabels: 'all', label: 'Share price move in the session that traded on each report', note: (i) => `${fullDate(R[i].date)}, ${timing[R[i].timing] || ''}` }),
+    growth: (w) => groupedBars([...q.map((r) => ({ x: r.fiscal || shortDate(r.period) })), ...fw.map((f) => ({ x: f.label.replace('Current quarter', 'This quarter'), sub: 'Estimate' }))],
+      [{ name: 'Revenue', cls: 's1', values: [...q.map((r) => r.revenue), ...fw.map(() => null)] }, { name: 'Net income', cls: 's3', values: [...q.map((r) => r.net_income), ...fw.map(() => null)], missingText: 'No estimate' }, { name: "Revenue, analysts' estimate", cls: 's1', hollow: true, values: [...q.map(() => null), ...fw.map((f) => f.revenue_avg)], missingText: 'Reported, see Revenue' }],
+      { w, h: 230, fmt: FV.usd, valueLabels: 'none', label: 'Quarterly revenue and net income, then analysts\' revenue estimates' }),
   };
+  if (ev) out.evday = (w) => groupedBars(R.map((r) => ({ x: r.fiscal || shortDate(r.date) })), [{ name: 'Size of the report-day move', cls: 's1', values: R.map((r) => (isNum(r.next_day_move_pct) ? Math.abs(r.next_day_move_pct) : null)) }], { w, h: 200, fmt: (v) => `${num(v, 1)}%`, axisFmt: (v) => `${num(v, 0)}%`, valueLabels: 'all', refs: [{ v: ev.move_pct, text: `Priced today: ±${num(ev.move_pct, 1)}%` }], label: 'Size of past report-day moves against the move options price for the next report day' });
+  return out;
 }
 
 function paint() {
@@ -138,7 +193,8 @@ function paint() {
   if (D.err) body = failed('The earnings data', D.err, { retry: 'earnings' });
   else if (!D.e) body = skeleton('lines', 6, 'Loading the earnings data');
   else if (D.e.not_applicable) body = empty(`No earnings for ${sym}`, clean(D.e.reason || 'Funds and indices do not report earnings.'));
-  else body = html`${hero(sym)}${brief(sym)}${pricing(sym)}${revisions(sym)}${surprises()}${growth()}${analysts(sym)}<p class="asof disclaimer">${clean(D.e.data_caveat || '')} ${clean(D.e.disclaimer || '')}</p>`;
+  // the newcomer's questions first; Optic's reading, revisions, analysts and options after (beginner brief item 7)
+  else body = html`${hero(sym)}${history(sym)}${growth()}${brief(sym)}${revisions(sym)}${analysts(sym)}${verdictBlock()}${pricing(sym)}<p class="asof disclaimer">${clean(D.e.data_caveat || '')} ${clean(D.e.disclaimer || '')}</p>`;
   draw(mainEl, html`${header(sym, D, 'earnings')}${tabs(sym, 'earnings', { fund: isFund(D) })}<div class="earn">${body}</div>`);
   if (D.e && !D.e.not_applicable) mountCharts(mainEl, makers());
   if (Math.abs(window.scrollY - y) > 2) window.scrollTo(0, y);
@@ -164,6 +220,9 @@ export async function render(main, route) {
   paint();
   main.addEventListener('click', (e) => { if (e.target.closest('[data-v2-brief]')) loadBrief(); });
   core(sym).then((c) => { if (D.sym !== sym) return; D.quote = c.quote; D.session = c.session; D.quoteError = c.quoteError; paint(); });
+  // the options term structure, for the move priced for the report day itself (one session, as the reactions are);
+  // the same snapshot the other Dossier pages read, so it is usually cached already
+  api.get(`/api/ticker/${encodeURIComponent(sym)}?max_expiries=4&macro=true`, { ttl: 120000, timeout: 60000 }).then((t) => { if (D.sym === sym) { D.t = t; if (D.e) paint(); } }, () => {});
   try { D.e = await api.get(`/api/earnings/${encodeURIComponent(sym)}`, { ttl: 600000, timeout: 60000 }); }
   catch (e) { if (D.sym === sym) D.err = e; }
   if (D.sym === sym) paint();

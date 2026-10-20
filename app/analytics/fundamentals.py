@@ -35,6 +35,11 @@ ROW_ALIASES = {
     "total_equity": ("Stockholders Equity", "Total Equity Gross Minority Interest"),
     "free_cash_flow": ("Free Cash Flow",),
     "operating_cash_flow": ("Operating Cash Flow",),
+    # spending on property and equipment, negative on the statement (cash out); free cash flow is operating cash
+    # flow plus it
+    "capital_expenditure": ("Capital Expenditure",),
+    # the weighted diluted share count the statement's diluted EPS divides by
+    "diluted_shares": ("Diluted Average Shares",),
 }
 
 
@@ -292,6 +297,14 @@ def analyse_financials(raw: Dict[str, Any]) -> Dict[str, Any]:
     equity = _pick_row(balance, "total_equity")
     # on the income statement's fiscal years, by date: the cash-flow statement's columns are not the same list
     fcf = _pick_row(cash, "free_cash_flow", a_periods) if a_periods else _pick_row(cash, "free_cash_flow")
+    # the lines behind free cash flow, and cash and debt at each fiscal year end, on the same years (the charts on
+    # Financials, 2026-10-20); the diluted share count behind EPS, yearly and quarterly
+    ocf = _pick_row(cash, "operating_cash_flow", a_periods) if a_periods else None
+    capex = _pick_row(cash, "capital_expenditure", a_periods) if a_periods else None
+    cash_hist = _pick_row(balance, "cash", a_periods) if a_periods else None
+    debt_hist = _pick_row(balance, "total_debt", a_periods) if a_periods else None
+    shares_a = _pick_row(annual, "diluted_shares")
+    shares_q = _pick_row(quarterly, "diluted_shares")
 
     net_cash = None
     if cash_bal and total_debt and cash_bal[0] is not None and total_debt[0] is not None:
@@ -341,9 +354,12 @@ def analyse_financials(raw: Dict[str, Any]) -> Dict[str, Any]:
         "annual": {
             "revenue": rev_a, "gross_profit": gp_a, "operating_income": oi_a, "ebitda": ebitda_a,
             "net_income": ni_a, "diluted_eps": eps_a, "free_cash_flow": fcf,
+            "operating_cash_flow": ocf, "capital_expenditure": capex, "diluted_shares": shares_a,
         },
         "quarterly": {"revenue": rev_q, "gross_profit": gp_q, "operating_income": oi_q, "ebitda": ebitda_q,
-                      "net_income": ni_q, "diluted_eps": eps_q},
+                      "net_income": ni_q, "diluted_eps": eps_q, "diluted_shares": shares_q},
+        # cash and equivalents and total debt at each fiscal year end, under annual_periods
+        "balance_history": {"cash": cash_hist, "total_debt": debt_hist},
         # Yahoo carries the filings' statements; the diluted EPS here is the statement's (GAAP), which is not
         # the basis analysts' estimates and surprises use (usually adjusted)
         "source": "The company's annual and quarterly statements as Yahoo Finance carries them.",

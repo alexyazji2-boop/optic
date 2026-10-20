@@ -1390,3 +1390,19 @@ ul.cal-react { display: flex; flex-wrap: wrap; gap: 4px 18px; padding-left: 0; l
 /* A Milo question button wraps its question rather than run off a phone's page: the Swing verdict's follow-ups
    are whole sentences, and one pushed Options 251 px wider than a 390 px screen (2026-10-20) */
 .btn.btn-milo { white-space: normal; text-align: left; max-width: 100%; padding-block: 6px; }
+
+/* Financials and Earnings figures: each a question, a one-line answer from its own figures, a key, the chart;
+   the full table one step away under View data (owner's brief, 2026-10-20) */
+.fv-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s-7) var(--s-6); margin-top: var(--s-4); }
+.fv { margin: 0; min-width: 0; display: grid; align-content: start; gap: var(--s-2); } .fv-wide { grid-column: 1 / -1; }
+.fv figcaption { display: grid; gap: 4px; } .fv h3 { margin: 0; font: 600 var(--t-lg)/1.3 var(--f-sans); }
+.fv-take { margin: 0; font-size: var(--t-base); line-height: 1.5; color: var(--c-ink); text-wrap: pretty; } .fv-take.fv-sub { color: var(--c-ink-2); font-size: var(--t-md); }
+.fv-key { margin: 2px 0 0; gap: 4px 14px; font-size: var(--t-sm); } .fv-unit { margin: 0; font-size: var(--t-sm); color: var(--c-ink-3); }
+.fv-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s-5); } .fv-pair .t-label { margin: 0 0 4px; }
+.fv-bridge-h { margin: var(--s-3) 0 0; }
+.fv-data { margin-top: var(--s-6); } .fv-data > summary { min-height: var(--tap); }
+@media (max-width: 860px) { .fv-grid { grid-template-columns: minmax(0, 1fr); gap: var(--s-6); } .fv-pair { grid-template-columns: minmax(0, 1fr); gap: var(--s-4); } }
+/* Earnings: the newcomer's four questions first (beginner brief, 2026-10-20, item 7) */
+.ern-lead { display: grid; gap: var(--s-3); } .ern-lead p { margin: 0; max-width: 72ch; }
+.ern-when { font-size: var(--t-lg); line-height: 1.45; color: var(--c-ink); } .ern-what { font-size: var(--t-md); }
+.legend-line i.ref-sw { width: 18px; height: 0; border-top: 2px dashed var(--c-ink-3); }

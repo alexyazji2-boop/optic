@@ -33,6 +33,11 @@
   --c-on-gold: #1b1a18;   /* text on a gold fill: the primary action */
   /* chart categories, in a fixed order (they were literals in eleven places) */
   --c-cat-1: #5b7fbf; --c-cat-2: #3d8f8a; --c-cat-3: #c27a2c; --c-cat-4: #8a5fb8;
+  /* the three series of a financial chart, one per metric wherever it appears: s1 the top line (revenue, gross
+     margin, operating cash flow, cash, EPS), s2 the middle (operating income and margin, capital spending, debt,
+     shares), s3 the bottom line (net income and margin, free cash flow). Checked with the dataviz validator in both
+     themes (2026-10-20): lightness, chroma, colour-blind and normal-vision separation, contrast against a panel */
+  --c-s1: #5b7fbf; --c-s2: #c27a2c; --c-s3: #c75b88;
   /* charts */
   --c-chart-ink: var(--c-ink);
   --c-chart-grid: #e3dccd;

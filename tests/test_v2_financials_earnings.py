@@ -132,7 +132,8 @@ def test_the_pages_say_what_their_figures_are():
     assert "year less three quarters" in FIN and ".slice().reverse()" in FIN.split("function segments")[1]
     assert "Next day" not in EARN and "REACTION" in EARN and "reactionWhen" in EARN
     assert "num(x.gross_margin_pct, 1)}%" not in EARN and "const pct = " in EARN
-    assert "s.rate_quarters || s.quarters" in EARN and "im.priced_from === 'last_trades'" in EARN
+    # every quarter is classified by one rule since 2026-10-20 (core/finviz.js surprise): beat, miss, in line, no estimate
+    assert "FV.surprise(r.eps_estimate, r.eps_reported, r.surprise_pct)" in EARN and "im.priced_from === 'last_trades'" in EARN
 
 
 def test_a_growth_column_with_no_figure_is_left_out(tmp_path):

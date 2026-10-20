@@ -114,7 +114,8 @@ def test_missing_data_is_never_a_zero_or_a_conclusion():
     assert "((r.call || {}).iv || 0) + ((r.put || {}).iv || 0)" not in pan and "const atmIv = (r) =>" in pan, "one missing side no longer halves the IV"
     assert "(r.p_itm_model || 0)" not in op and "(u.iv || 0)" not in pan
     assert "v: (r) => r.mid * 100" not in ws
-    assert "${isNum(lr.surprise_pct) ? html`<span class=\"${dir(lr.surprise_pct)}\">" in earn and "No estimate to compare with" in earn, "no 'Missed by 0.0%' without a surprise"
+    # one rule for every result since 2026-10-20 (core/finviz.js surprise): no estimate is said, never "Missed by 0.0%"
+    assert "sv.cls === 'missing' ? 'no estimate to compare with'" in earn and "No estimate" in (V2 / "js/core/finviz.js").read_text(), "no 'Missed by 0.0%' without a surprise"
     assert "pr.stance === 'expensive' ? 'rich' : 'cheap'" not in earn, "no 'cheap' for an unknown stance"
     assert "g.revenue_yoy_pct - g.net_income_yoy_pct > 2 ? ': sales grew" not in fin and "revenue outpaced net income" in fin
     assert "${c.uptrend || 0} in uptrends" not in SRC["pages/market-shared.js"]

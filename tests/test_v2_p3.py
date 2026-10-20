@@ -110,4 +110,5 @@ def test_financials_leads_with_a_summary_and_a_jump_list():
     # the Earnings tables share the rule since 2026-10-20 (backlog task 8)
     rule = CSS[CSS.index(".fin .tscroll .t th:first-child, .fin .tscroll .t td:first-child"):]
     assert rule.split("{")[1].strip().startswith("position: sticky; left: 0;") and ".earn .tscroll .t td:first-child" in rule.split("{")[0]
-    assert "fin-card-v" in fin, "each chart card states its latest value and change"
+    # since 2026-10-20 each figure's takeaway states its latest value and its change (core/finviz.js)
+    assert 'class="fv-take"' in fin and "FV.profitLine(" in fin and "FV.marginLine(" in fin, "each chart states its latest value and change"

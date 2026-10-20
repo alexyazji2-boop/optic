@@ -708,7 +708,7 @@ ul.plain { margin: 0; padding-left: 18px; } ul.plain li { margin-bottom: 7px; }
 .bars .mk { stroke: var(--c-gold); stroke-width: 1.5; stroke-dasharray: 3 3; }
 .bars .mk-t { fill: var(--c-gold-ink); font: 600 var(--t-chart)/1 var(--f-label); }
 .hbars { margin: 0; padding: 0; list-style: none; display: grid; gap: 10px; }
-.hbars li { display: grid; grid-template-columns: minmax(90px, 180px) minmax(0, 1fr) 70px; gap: 12px; align-items: center; font-size: var(--t-base); }
+.hbars li { display: grid; grid-template-columns: minmax(90px, 180px) minmax(0, 1fr) minmax(70px, auto); gap: 12px; align-items: center; font-size: var(--t-base); }
 .hb-track { height: 8px; border-radius: var(--r-xs); background: var(--c-sunk); overflow: hidden; }
 .hb-fill { display: block; height: 100%; background: var(--c-gold); border-radius: var(--r-xs); }
 .hb-v { text-align: right; font-weight: 600; }
@@ -792,3 +792,32 @@ table.st td a { text-decoration: none; font-weight: 600; } table.st td a:hover {
 .chart .ref { stroke: var(--c-ink-3); stroke-width: 1; stroke-dasharray: 4 4; opacity: .75; } .chart .ref.mid { opacity: .45; }
 .chart .hbar.up { fill: color-mix(in srgb, var(--c-pos) 45%, transparent); } .chart .hbar.down { fill: color-mix(in srgb, var(--c-neg) 45%, transparent); }
 .chart .pin circle { fill: var(--c-plane); stroke-width: 2; } .chart .pin.up circle { stroke: var(--c-pos); } .chart .pin.down circle { stroke: var(--c-neg); }
+
+/* ---------- figures across periods (ui/bars.js groupedBars, periodLines, bridgeBars, stackedBars; 2026-10-20) */
+.bars .grid { stroke: var(--c-chart-grid); stroke-width: 1; }
+.gbar.s1, .pdot.s1 { fill: var(--c-s1); } .gbar.s2, .pdot.s2 { fill: var(--c-s2); } .gbar.s3, .pdot.s3 { fill: var(--c-s3); }
+.gbar.s0 { fill: var(--c-ink-3); }
+.gbar.hollow { fill: none; stroke-width: 1.5; stroke-dasharray: 3 2; } .gbar.hollow.s1 { stroke: var(--c-s1); } .gbar.hollow.s2 { stroke: var(--c-s2); } .gbar.hollow.s3 { stroke: var(--c-s3); } .gbar.hollow.s0 { stroke: var(--c-ink-3); }
+.gbar.step-out { fill: var(--c-s2); } .gbar.step-in { fill: var(--c-s1); }
+.gbars .gbar.on, .sbars .gbar.on, .bbars .gbar.on { stroke: var(--c-ink); stroke-width: 1.5; }
+.pline { fill: none; stroke-width: 2; stroke-linejoin: round; } .pline.s1 { stroke: var(--c-s1); } .pline.s2 { stroke: var(--c-s2); } .pline.s3 { stroke: var(--c-s3); }
+.pdot { stroke: var(--c-raised); stroke-width: 2; } .pdot.on { r: 5.5; }
+.bars .vlab { fill: var(--c-ink-2); font: 600 var(--t-chart)/1 var(--f-sans); font-variant-numeric: tabular-nums; paint-order: stroke; stroke: var(--c-raised); stroke-width: 3px; }
+.bars .ax-sub { font-weight: 600; } .bars .ax-sub.beat { fill: var(--c-ink-2); } .bars .ax-sub.miss { fill: var(--c-ink-2); }
+.bars .ref { stroke: var(--c-ink-3); stroke-dasharray: 4 4; } .bars .ref-t { fill: var(--c-ink-2); font: 600 var(--t-chart)/1 var(--f-label); paint-order: stroke; stroke: var(--c-raised); stroke-width: 3px; }
+.bars .gap-mark { stroke: var(--c-ink-3); stroke-dasharray: 2 2; }
+.bars .join { stroke: var(--c-ink-3); stroke-dasharray: 2 2; }
+.chart-tip .tip-row { display: flex; align-items: center; gap: 6px; margin-top: 3px; } .chart-tip .tip-row b { margin-left: auto; padding-left: 10px; }
+.chart-tip .sw, .legend-line i.sw { display: inline-block; width: 10px; height: 10px; border: 0; border-radius: 2px; margin-right: 6px; vertical-align: -1px; flex: none; }
+.sw.s1 { background: var(--c-s1); } .sw.s2 { background: var(--c-s2); } .sw.s3 { background: var(--c-s3); } .sw.s0 { background: var(--c-ink-3); }
+.sw.hollow, .legend-line i.sw.hollow { background: none; border: 1.5px dashed currentColor; } .sw.hollow.s1 { border-color: var(--c-s1); } .sw.hollow.s2 { border-color: var(--c-s2); } .sw.hollow.s3 { border-color: var(--c-s3); } .sw.hollow.s0 { border-color: var(--c-ink-3); }
+@media (prefers-reduced-motion: no-preference) { .gbar, .pdot { transition: stroke var(--d); } }
+/* a term explained where it is used (ui/term.js): the word, underlined with dots, opens a short definition */
+.term { display: inline; padding: 0; margin: 0; border: 0; background: none; color: inherit; font: inherit; text-align: inherit; cursor: help; text-decoration: underline dotted var(--c-ink-3); text-decoration-thickness: 1.5px; text-underline-offset: 3px; }
+.term:hover, .term[aria-expanded="true"] { text-decoration-color: var(--c-ink); }
+.term:focus-visible { outline: 2px solid var(--c-focus); outline-offset: 2px; border-radius: 2px; }
+.term-pop { position: absolute; z-index: 90; display: grid; gap: 6px; padding: 12px 14px; background: var(--c-raised); color: var(--c-ink-2); border: 1px solid var(--c-line); border-radius: var(--r-lg); box-shadow: var(--sh-pop); font-size: var(--t-md); line-height: 1.45; text-align: left; }
+.term-pop p { margin: 0; } .term-pop-h { color: var(--c-ink); font-weight: 600; }
+.term-pop-ex span { color: var(--c-ink-3); font-weight: 600; }
+.term-pop-x { justify-self: end; min-height: var(--tap); padding: 0 12px; margin: -4px -6px -6px 0; border: 0; border-radius: var(--r-ctl); background: none; color: var(--c-ink); font: 600 var(--t-md)/1 var(--f-sans); cursor: pointer; }
+.term-pop-x:hover { background: var(--c-sunk); }
