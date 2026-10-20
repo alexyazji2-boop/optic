@@ -75,8 +75,14 @@ export function recent() {
   const r = readJSON(RECENT_KEY, []);
   return Array.isArray(r) ? r.map((x) => String(typeof x === 'string' ? x : x && x.symbol || '').toUpperCase()).filter(Boolean).slice(0, 8) : [];
 }
+// The company opened on this visit, kept in memory only. The sidebar's Dossier link and an empty Compare start from
+// it, never from the Recent list: that list outlives the visit (the classic app shares it and signing in brings
+// back the person's own), so following it opened a company the reader had not asked for today.
+let opened = null;
+export const openedNow = () => opened;
 export function pushRecent(sym) {
   if (!sym) return;
+  if (!/^\^|=|-USD$/.test(sym)) opened = sym;
   const raw = readJSON(RECENT_KEY, []);
   const list = Array.isArray(raw) ? raw : [];
   // keep whatever shape the classic app stored; it stores plain symbols

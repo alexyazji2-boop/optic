@@ -214,7 +214,7 @@ export async function render(main, route) {
   const pre = String((route.params || {}).t || '').split(',').map((x) => x.trim().toUpperCase()).filter(Boolean).slice(0, MAX);
   // a result is for the tickers it was asked for: another set in the address clears it
   if (pre.length) { if (result && result.tickers && result.tickers.join(',') !== pre.join(',')) { result = null; seq++; running = false; } inputs = pre.length >= 2 ? pre : [pre[0], '']; }
-  else if (inputs.every((x) => !x)) { const r = store.recent()[0]; if (r) inputs[0] = r; }
+  else if (inputs.every((x) => !x)) { const r = store.openedNow(); if (r) inputs[0] = r; }
   provideContext(() => ({ view: 'compare', compare: result && result.available ? { tickers: result.tickers, take: (result.take || {}).headline, ranks: result.ranks } : null }));
   main.addEventListener('submit', (e) => { if (e.target.closest('[data-v2-cmp-form]')) { e.preventDefault(); run(); } });
   main.addEventListener('input', (e) => {

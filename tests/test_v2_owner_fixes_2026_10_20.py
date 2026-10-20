@@ -177,3 +177,22 @@ def test_the_compare_form_has_room():
     assert '<div class="cmp-recent" role="group" aria-labelledby="cmp-recent-h">' in cmp
     assert ">×</button>" not in cmp and "${icon('close')}" in cmp, "the line icon, not a text glyph"
     assert not re.search(r"\.cmp-inputs \{[^}]*margin-bottom", css)
+
+
+def test_the_dossier_link_follows_this_visit_never_the_saved_recent_list(tmp_path):
+    # "i did not load NVDA and it showed up first thing": the sidebar's Dossier link opened the head of the Recent
+    # list, which outlives the visit (the classic app shares it; signing in brings the person's own back)
+    got = _run(tmp_path, f"""
+      localStorage.setItem('optic.recent.v1', JSON.stringify(['NVDA', 'AMD']));
+      const S = await import('{(JS / "core/store.js").as_posix()}');
+      const before = S.openedNow();
+      S.pushRecent('^TNX'); const instrument = S.openedNow();
+      S.pushRecent('AAPL');
+      print(JSON.stringify({{ before, instrument, after: S.openedNow(), recent: S.recent() }}));
+    """)
+    assert got == {"before": None, "instrument": None, "after": "AAPL", "recent": ["AAPL", "^TNX", "NVDA", "AMD"]}, "the Recent list is kept as it was, and offered in the search"
+    shell = (JS / "ui/shell.js").read_text()
+    assert "const sym = (route.view !== 'instrument' && route.symbol) || openedNow() || null;" in shell
+    assert "const sym = openedNow() || null;" in shell and "recent()" not in shell
+    assert "data-v2-open-palette aria-label=\"${name}, search for a company\"" in shell, "with no company yet, Dossier opens the search"
+    assert "const r = store.openedNow(); if (r) inputs[0] = r;" in (JS / "pages/compare.js").read_text()

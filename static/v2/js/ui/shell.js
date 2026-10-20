@@ -5,7 +5,7 @@ import { html, render, $, $$ } from '../core/dom.js';
 import { icon, brandMark } from './icons.js';
 import { footer as legalFooter } from '../core/legal.js';
 import { GROUPS, SECTIONS, SETTINGS, MOBILE_TABS, visibleGroups, hrefFor, groupOf } from '../nav.js';
-import { state as store, recent } from '../core/store.js';
+import { state as store, openedNow } from '../core/store.js';
 
 let flags = { admin: false, brokerage: false };
 export function setFlags(f) { flags = Object.assign(flags, f); }
@@ -44,8 +44,9 @@ export function mount(app) {
 /** Paint the rail and phone bar for the current route. */
 export function paint(route) {
   const g = route.view === 'settings' ? null : groupOf(route.view);
-  // an instrument page (^TNX) has no Dossier: the Dossier link stays on the last company opened
-  const sym = (route.view !== 'instrument' && route.symbol) || recent().find((s) => !/^\^|=|-USD$/.test(s)) || null;
+  // an instrument page (^TNX) has no Dossier: the Dossier link stays on the company opened on this visit; with none,
+  // it opens the search, where the Recent list is offered rather than followed
+  const sym = (route.view !== 'instrument' && route.symbol) || openedNow() || null;
   const groups = visibleGroups(flags);
   let lastSec = '';
   const rows = [];
@@ -81,7 +82,7 @@ export function paint(route) {
 
 export function moreBody() {
   const shown = new Set(MOBILE_TABS.filter((t) => t.group).map((t) => t.group));
-  const sym = recent()[0] || null;
+  const sym = openedNow() || null;
   return html`<nav class="more-list" aria-label="More sections">${visibleGroups(flags).filter((g) => !shown.has(g.id)).map((g) => {
     const href = groupHref(g, sym);
     return html`<a class="rail-row" href="${href}">${icon(g.icon)}<span>${g.label}</span>${groupIsV2(g) ? '' : html`<span class="legacy">${icon('out')}<span class="sr">, opens in the classic app</span></span>`}</a>`;
