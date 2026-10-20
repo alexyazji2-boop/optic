@@ -745,7 +745,9 @@ def test_the_compare_bars_use_the_same_threshold_as_the_take():
     assert "const decisive = gap >= CMP_TIE_POINTS;" in block
     tie = float(re.search(r"const CMP_TIE_POINTS = ([0-9.]+);", APP_JS).group(1))
     take = open("app/analytics/compare.py").read()
-    assert tie == float(re.search(r'"decisive": gap >= ([0-9.]+),', take).group(1)), \
+    # one constant on the server since 2026-10-20 (compare.TIE_POINTS), read by the take and the ranks
+    assert '"decisive": gap >= TIE_POINTS,' in take
+    assert tie == float(re.search(r'^TIE_POINTS = ([0-9.]+)$', take, re.M).group(1)), \
         "the bars said they used the take's threshold and used 8 against its 5"
 
 

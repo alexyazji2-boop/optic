@@ -40,7 +40,7 @@ def _longterm():
             "excess_cagr_5y_pct": 50.05,
             "drawdown": {"current_drawdown_pct": -7.71, "max_drawdown_pct": -66.36},
             "risk": {"beta_vs_spy": 2.1, "annualised_vol_pct": 48.0,
-                     "sharpe_proxy": 1.4},
+                     "annualised_vol_5y_pct": 52.0, "sharpe_proxy": 1.4},
             "long_trend": {"phase": "secular uptrend", "vs_40w_sma": 11.64},
             "valuation": {"forward_pe": 33.3},
             "valuation_history": {"percentile": 25.0, "read": "cheap"},
@@ -220,11 +220,16 @@ def test_ratio_uses_a_matched_window():
     which divides a one-year return by a multi-year volatility."""
     lt = _longterm()
     lt["holding"]["horizons"]["cagr_5y_pct"] = 24.0
-    lt["holding"]["risk"]["annualised_vol_pct"] = 48.0
+    lt["holding"]["risk"]["annualised_vol_5y_pct"] = 48.0
+    # the full history's volatility (up to 12 years) is a different window: not the denominator
+    lt["holding"]["risk"]["annualised_vol_pct"] = 30.0
     lt["holding"]["risk"]["sharpe_proxy"] = 6.84  # the mixed-window figure
     m = compare._metrics(_snapshot(), lt)
     assert m["cagr_per_vol_5y"] == 0.5
     assert "sharpe_proxy" not in m
+    # under five years of history there is no five-year volatility, and no ratio rather than a mixed one
+    del lt["holding"]["risk"]["annualised_vol_5y_pct"]
+    assert compare._metrics(_snapshot(), lt)["cagr_per_vol_5y"] is None
 
 
 def test_ratio_guards_a_zero_denominator():

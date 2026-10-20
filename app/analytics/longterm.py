@@ -92,6 +92,10 @@ def _risk_stats(close: pd.Series, bench_close: Optional[pd.Series]) -> Dict[str,
         return {}
 
     vol = float(returns.std(ddof=0) * np.sqrt(TRADING_DAYS) * 100.0)
+    # The same measure over the last five years only, so a five-year return can be divided by the volatility of
+    # the same five years (Compare's return per unit of volatility divided by the full, up to 12-year, figure).
+    tail5 = returns.tail(5 * TRADING_DAYS)
+    vol_5y = float(tail5.std(ddof=0) * np.sqrt(TRADING_DAYS) * 100.0) if len(returns) >= 5 * TRADING_DAYS else None
     downside = returns[returns < 0]
     downside_vol = (
         float(downside.std(ddof=0) * np.sqrt(TRADING_DAYS) * 100.0) if not downside.empty else None
@@ -122,6 +126,7 @@ def _risk_stats(close: pd.Series, bench_close: Optional[pd.Series]) -> Dict[str,
 
     return {
         "annualised_vol_pct": _f(vol, 2),
+        "annualised_vol_5y_pct": _f(vol_5y, 2) if vol_5y is not None else None,
         "downside_vol_pct": _f(downside_vol, 2) if downside_vol else None,
         "trailing_1y_return_pct": _f(annual_return, 2),
         "sharpe_proxy": sharpe,

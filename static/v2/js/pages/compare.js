@@ -27,24 +27,24 @@ export const GROUPS = [
     { key: 'atr_pct', label: 'Typical daily range', kind: 'pct_plain', means: 'How far it travels on an average day, as a share of price. Sets how wide a stop has to be.' },
     { key: 'iv_pct', label: 'Implied volatility', kind: 'pct_plain', means: 'What the option market is charging for future movement.' },
     { key: 'hv_pct', label: 'Realised volatility, 20 sessions', kind: 'pct_plain', means: 'What it actually did. Implied above realised means options are priced for more movement than has been happening.' },
-    { key: 'annual_vol_pct', label: 'Annualised volatility', kind: 'pct_plain', means: 'The same measure over the full history, used in the return-per-unit-of-vol figure below.' },
+    { key: 'annual_vol_pct', label: 'Annualised volatility, up to 12 years', kind: 'pct_plain', lead: 'low', means: 'The same measure over up to 12 years of daily closes, or since listing if shorter.' },
     { key: 'beta_vs_spy', label: 'Beta versus SPY', kind: 'num2', means: 'Roughly how much it moves for a 1% index move. Above 1 amplifies the market, below 1 dampens it.' }] },
   { title: 'What it costs', rows: [
-    { key: 'forward_pe', label: 'Forward P/E', kind: 'num1', means: 'Price against next year’s expected earnings. Lower is cheaper, which is not the same as better. A low multiple often means low expected growth.' },
+    { key: 'forward_pe', label: 'Forward P/E', kind: 'num1', lead: 'low', means: 'Price against next year’s expected earnings. Lower is cheaper, which is not the same as better. A low multiple often means low expected growth.' },
     { key: 'pe_percentile', label: 'That multiple against its own past', kind: 'pctile', lead: 'low', sub: 'pe_read', means: 'Where today’s multiple sits in this company’s own range. 25th means cheaper than it has been three quarters of the time.' }] },
   { title: 'The multi-year record', rows: [
-    { key: 'cagr_5y_pct', label: 'Five-year return', kind: 'pct', lead: 'high', note: 'per year', means: 'Annualised, so a name listed for five years and one listed for twenty are comparable.' },
-    { key: 'excess_cagr_5y_pct', label: 'Five-year return versus SPY', kind: 'pct', lead: 'high', note: 'per year', means: 'The part of that return the index did not give you. Negative means the index would have done better.' },
-    { key: 'cagr_per_vol_5y', label: 'Return per unit of volatility', kind: 'num2', lead: 'high', note: 'SPY ≈ 0.65', means: 'How much of that return you were paid per unit of turbulence. Two names can compound at the same rate through very different rides.' },
-    { key: 'drawdown_pct', label: 'Below the all-time high', kind: 'pct', means: 'Where it sits now versus its own peak. Near the high is a stronger trend; far below it leaves more room to recover.' },
-    { key: 'max_drawdown_pct', label: 'Worst fall on record', kind: 'pct_neutral', lead: 'high', means: 'The deepest peak-to-trough this name has actually put a holder through. What a bad stretch looks like here.' },
+    { key: 'cagr_5y_pct', label: 'Five-year price return', kind: 'pct', lead: 'high', note: 'per year', means: 'Annualised, so a name listed for five years and one listed for twenty are comparable. Price only: dividends are not included.' },
+    { key: 'excess_cagr_5y_pct', label: 'Five-year price return versus SPY', kind: 'pct', lead: 'high', note: 'per year', means: 'The part of that return the index did not give you, both on price alone. Negative means the index would have done better.' },
+    { key: 'cagr_per_vol_5y', label: 'Return per unit of volatility, five years', kind: 'num2', lead: 'high', means: 'The five-year price return divided by the volatility of the same five years. Two names can compound at the same rate through very different rides.' },
+    { key: 'drawdown_pct', label: 'Below its 12-year high', kind: 'pct', lead: 'high', means: 'Where it sits now against its highest close in up to 12 years of daily history (since listing if shorter). Near the high is a stronger trend; far below it leaves more room to recover.' },
+    { key: 'max_drawdown_pct', label: 'Worst fall in 12 years', kind: 'pct_neutral', lead: 'high', means: 'The deepest peak-to-trough in the same up to 12 years. What a bad stretch looks like here.' },
     { key: 'trend_phase', label: 'Multi-year phase', kind: 'text', means: 'Where the weekly chart sits against its long averages.' }] },
   { title: "Optic's own score", rows: [
     { key: 'composite', label: 'Composite', kind: 'signed', lead: 'high', means: 'The swing-tab score for this name. Included so you can see whether it agrees with the horizon ranks above.' }] },
 ];
 
-export function cell(kind, v) {
-  if (v === null || v === undefined || v === '') return html`<span class="t-muted" aria-label="not available">n/a</span>`;
+export function cell(kind, v, why) {
+  if (v === null || v === undefined || v === '') return why ? html`<span class="t-muted">n/a, ${why}</span>` : html`<span class="t-muted" aria-label="not available">n/a</span>`;
   if (kind === 'text') return clean(String(v));
   if (kind === 'usd') return `$${num(v, 2)}`;
   if (kind === 'pct') return html`<span class="${v > 0 ? 'up' : v < 0 ? 'down' : ''}">${signed(v, 2)}</span>`;
@@ -57,39 +57,48 @@ export function cell(kind, v) {
   if (kind === 'signed') return html`<span class="${v > 0 ? 'up' : v < 0 ? 'down' : ''}">${v > 0 ? '+' : ''}${num(v, 0)}</span>`;
   return num(v, 2);
 }
-/** The classic leader: none when fewer than two have the figure, or when the
- * best and the runner-up are within 2% of the row's spread. */
-export function leader(row, cols) {
+/** The row's leader. The server's (`leaders`, analytics/compare.py LEAD_ROWS) is the one rule the table and
+ * Optic's take share; this local reading is for a payload from before it, and leaves an exact tie
+ * without a leader rather than giving it to the first column. */
+export function leader(row, cols, served) {
   if (!row.lead) return null;
+  if (served && Object.prototype.hasOwnProperty.call(served, row.key)) return served[row.key] || null;
   const vals = cols.map((r) => r[row.key]).filter((v) => typeof v === 'number' && Number.isFinite(v));
   if (vals.length < 2) return null;
   const best = row.lead === 'high' ? Math.max(...vals) : Math.min(...vals);
   const rest = vals.filter((v) => v !== best);
   if (!rest.length) return null;
+  if (vals.filter((v) => v === best).length > 1) return null;
   const runner = row.lead === 'high' ? Math.max(...rest) : Math.min(...rest);
-  const spread = Math.max(...vals) - Math.min(...vals);
-  if (spread === 0 || Math.abs(best - runner) < spread * 0.02) return null;
+  const scale = Math.max(Math.abs(best), Math.abs(runner));
+  if (Math.abs(best - runner) < Math.max(scale * 0.05, 0.25)) return null;
   const hit = cols.find((r) => r[row.key] === best);
   return hit ? hit.ticker : null;
 }
+// the gap between two scores as the page shows them, one decimal: 70.3 and 65.3 are five points apart
+export const gapOf = (a, b) => Math.round((Math.round(a * 10) - Math.round(b * 10))) / 10;
 // One tie rule for the prose, the winner cards, the bars and the table (owner, 2026-10-19: "too close to
 // separate" sat beside "best" and "#2"). Names within TIE points of the top share first place, so nobody
 // is "best" alone then; the server's winner cards use the same 5 points (analytics/compare.py, decisive).
 export function standing(ranks) {
   const r = (ranks || []).slice().sort((a, b) => b.score - a.score), out = {};
   if (!r.length) return out;
-  const level = r.filter((x) => r[0].score - x.score < TIE);
+  if (r.every((x) => x.standing)) { r.forEach((x) => { out[x.ticker] = x.standing; }); return out; }
+  const level = r.filter((x) => gapOf(r[0].score, x.score) < TIE);
   r.forEach((x, i) => { out[x.ticker] = level.includes(x) ? (level.length > 1 ? 'level' : 'best') : `#${i + 1}`; });
   return out;
 }
 export function rankRead(ranks) {
   if (!ranks || ranks.length < 2) return '';
-  const [a, b] = ranks, gap = a.score - b.score;
+  const [a, b] = ranks, gap = gapOf(a.score, b.score);
   return gap < TIE ? `${a.ticker} and ${b.ticker} are level here (${num(a.score, 0)} against ${num(b.score, 0)}). Too close to separate.` : `${a.ticker} leads, ${num(gap, 0)} points clear of ${b.ticker}.`;
 }
 
 // kept for the session, as the classic page keeps STATE.compare
-let inputs = ['', ''], result = null, running = false, seq = 0, live = true, mainEl = null, sugg = [], suggT = null;
+let inputs = ['', ''], result = null, running = false, seq = 0, live = true, mainEl = null, sugg = [], suggT = null, showMeans = false;
+const wanted = () => [...new Set(inputs.map((x) => x.trim().toUpperCase()).filter(Boolean))];
+// the result on screen is for other names than the boxes now hold (one removed, added or changed)
+const stale = () => !!(result && result.available && result.tickers && result.tickers.join(',') !== wanted().join(','));
 
 function controls() {
   const recent = store.recent().filter((s) => !inputs.map((x) => x.toUpperCase()).includes(s)).slice(0, 6);
@@ -106,7 +115,7 @@ function take(c) {
   const t = c.take || {};
   if (!t.available) return '';
   const hz = Object.fromEntries((c.horizons || []).map((h) => [h.id, h]));
-  return html`<section class="section" aria-labelledby="ct-h"><div class="section-head"><div><h2 class="t-h2" id="ct-h">Optic's take <span class="pill">${t.unanimous ? 'all horizons agree' : 'horizons disagree'}</span></h2></div>
+  return html`<section class="section" aria-labelledby="ct-h"><div class="section-head"><div><h2 class="t-h2" id="ct-h">Optic's take</h2>${t.agreement ? html`<p class="section-sub">${clean(t.agreement)}</p>` : ''}</div>
       ${miloButton('Ask Milo about this comparison', { ask: `Compare ${c.tickers.join(', ')}. ${t.headline || ''} Which would you look at first for my timeframe, and what is each one's biggest risk?`, context: 'Compare' })}</div>
     <p class="lead-line">${clean(t.headline || '')}</p>
     <div class="cmp-winners">${Object.entries(t.winners || {}).map(([hid, w]) => html`<div class="cmp-win ${w.decisive ? '' : 'is-close'}"><p class="t-label">${(hz[hid] || {}).name || w.name || hid}</p><p class="cmp-win-t">${w.decisive ? w.ticker : 'Level'}</p><p class="t-muted">${w.decisive ? `ahead by ${num(w.gap, 1)} points` : `${num(w.gap, 1)} points apart, under ${TIE}: not a ranking`}</p></div>`)}</div>
@@ -139,7 +148,7 @@ function bars(c) {
   if (rows.length < 2) return '';
   return html`<section class="section" aria-labelledby="cb-h"><h2 class="t-h2" id="cb-h">Where each name leads</h2>
     <p class="section-sub">Every bar is the same 0-100 composite for its horizon, so the bars compare across names within a horizon. Two scores within ${TIE} points are treated as level.</p>
-    <div class="cmp-bars">${(c.horizons || []).map((h) => { const r = ((c.ranks || {})[h.id] || []).slice().sort((a, b) => b.score - a.score); const gap = r.length > 1 ? r[0].score - r[1].score : 0;
+    <div class="cmp-bars">${(c.horizons || []).map((h) => { const r = ((c.ranks || {})[h.id] || []).slice().sort((a, b) => b.score - a.score); const gap = r.length > 1 ? gapOf(r[0].score, r[1].score) : 0;
       return html`<div class="cmp-hz ${gap >= TIE ? 'is-clear' : ''}"><h3>${h.name} <span class="t-muted">${h.horizon}</span></h3><p class="t-muted">${gap < TIE ? `level: ${num(gap, 1)} point${num(gap, 1) === '1.0' ? '' : 's'} apart, under ${TIE}` : `${r[0].ticker} ${num(gap, 1)} points clear`}</p>
         ${raw(hbars(r.map((x) => ({ label: x.ticker, v: Math.max(1, Math.min(100, x.score)) })), { fmt: (v) => num(v, 0), max: 100 }))}</div>`; })}</div></section>`;
 }
@@ -147,18 +156,20 @@ function bars(c) {
 function grid(c) {
   const rows = c.rows || [];
   if (!rows.length) return '';
-  const anyLead = GROUPS.some((g) => g.rows.some((r) => leader(r, rows)));
-  return html`<section class="section" aria-labelledby="cg-h"><h2 class="t-h2" id="cg-h">Side by side</h2>
-    <div class="tscroll"><table class="t cmp-t"><caption class="sr">Every metric for ${c.tickers.join(', ')}</caption>
-      <thead><tr><th scope="col">Metric</th>${rows.map((r) => html`<th scope="col"><a href="#/${r.ticker}">${r.ticker}</a>${r.name && r.name !== r.ticker ? html`<br><small class="t-muted">${r.name}</small>` : ''}${r.sector ? html`<br><small class="t-muted">${r.sector}</small>` : ''}</th>`)}</tr></thead>
+  const anyLead = GROUPS.some((g) => g.rows.some((r) => leader(r, rows, c.leaders)));
+  const what = (r) => (r.is_benchmark ? 'The benchmark' : r.kind === 'fund' ? 'Fund' : r.sector || '');
+  return html`<section class="section" aria-labelledby="cg-h"><div class="section-head"><h2 class="t-h2" id="cg-h">Side by side</h2>
+      <button type="button" class="btn btn-sm cmp-means-btn" data-v2-cmp-means aria-pressed="${showMeans}">${showMeans ? 'Hide what each row measures' : 'What each row measures'}</button></div>
+    <div class="tscroll cmp-wrap"><table class="t cmp-t ${showMeans ? 'show-means' : ''}"><caption class="sr">Every metric for ${c.tickers.join(', ')}</caption>
+      <thead><tr><th scope="col">Metric</th>${rows.map((r) => html`<th scope="col"><a href="#/${r.ticker}">${r.ticker}</a>${r.name && r.name !== r.ticker ? html`<small class="t-muted cmp-name">${r.name}</small>` : ''}${what(r) ? html`<small class="t-muted cmp-sector">${what(r)}</small>` : ''}</th>`)}</tr></thead>
       <tbody>${(c.horizons || []).map((h) => { const rk = (c.ranks || {})[h.id] || [];
         const st = standing(rk);
-        return html`<tr class="cmp-rank"><th scope="row">${h.name}<br><small class="t-muted">${rankRead(rk.slice().sort((x, y) => y.score - x.score))}</small></th>${rows.map((r) => { const x = rk.find((y) => y.ticker === r.ticker), w = x ? st[x.ticker] : ''; return html`<td>${x ? html`<span class="${w === 'best' ? 'cmp-best' : w === 'level' ? 'cmp-level' : 't-muted'}">${w}</span> ${num(x.score, 0)}` : 'n/a'}</td>`; })}</tr>`; })}
+        return html`<tr class="cmp-rank"><th scope="row">${h.name}<small class="t-muted cmp-means">${rankRead(rk.slice().sort((x, y) => y.score - x.score))}</small></th>${rows.map((r) => { const x = rk.find((y) => y.ticker === r.ticker), w = x ? st[x.ticker] : ''; const part = x && x.inputs && x.inputs[0] < x.inputs[1]; return html`<td>${x ? html`<span class="${w === 'best' ? 'cmp-best' : w === 'level' ? 'cmp-level' : 't-muted'}">${w}</span> ${num(x.score, 0)}${part ? html`<small class="t-muted cmp-part">from ${x.inputs[0]} of ${x.inputs[1]} inputs</small>` : ''}` : 'n/a'}</td>`; })}</tr>`; })}
       ${GROUPS.map((g) => html`<tr class="cmp-group"><th scope="rowgroup" colspan="${rows.length + 1}">${g.title}</th></tr>
-        ${g.rows.map((m) => { const lead = leader(m, rows);
-          return html`<tr><th scope="row">${m.label}${m.note ? html` <small class="t-muted">${m.note}</small>` : ''}<br><small class="t-muted">${m.means}</small></th>${rows.map((r) => html`<td>${cell(m.kind, r[m.key])}${lead === r.ticker ? html` <span class="cmp-dot" title="${m.lead === 'high' ? 'Higher' : 'Lower'} on this measure">·<span class="sr">, leads this row</span></span>` : ''}${m.sub && r[m.sub] ? html`<br><small class="t-muted">${clean(r[m.sub])}</small>` : ''}</td>`)}</tr>`; })}`)}</tbody></table></div>
+        ${g.rows.map((m) => { const lead = leader(m, rows, c.leaders);
+          return html`<tr><th scope="row">${m.label}${m.note ? html` <small class="t-muted">${m.note}</small>` : ''}<small class="t-muted cmp-means">${m.means}</small></th>${rows.map((r) => html`<td>${cell(m.kind, r[m.key], (r.why_na || {})[m.key])}${lead === r.ticker ? html` <span class="cmp-dot" title="${m.lead === 'high' ? 'Higher' : 'Lower'} on this measure">·<span class="sr">, leads this row</span></span>` : ''}${m.sub && r[m.sub] ? html`<br><small class="t-muted">${clean(r[m.sub])}</small>` : ''}</td>`)}</tr>`; })}`)}</tbody></table></div>
     ${(c.failed || []).length ? html`<p class="stale">Could not load: ${c.failed.map((f) => `${f.ticker} (${f.reason})`).join(', ')}.</p>` : ''}
-    ${anyLead ? html`<p class="asof">A dot marks the higher or lower reading on the rows where one direction is better. No dot when fewer than two names have the figure, or when the top two are within 2% of the row's spread.</p>` : ''}
+    ${anyLead ? html`<p class="asof">A dot marks the higher or lower reading on the rows where one direction is better. No dot when fewer than two names have the figure, when the top two read the same, or when they are within 5% of each other.</p>` : ''}
     ${c.method ? html`<p class="asof">${clean(c.method)}</p>` : ''}</section>`;
 }
 
@@ -171,20 +182,27 @@ function paint() {
       ${c && c.available && (c.horizons || []).length ? html`<div class="cmp-hzs">${c.horizons.map((h) => html`<div><p class="t-label">${h.name}</p><p><b>Horizon: ${h.horizon}</b></p><p class="t-muted">${clean(h.basis || '')}</p></div>`)}</div>` : ''}</section>
     <div aria-live="polite">${running ? html`<div class="sk-wrap" role="status" aria-label="Comparing"><p>Pulling ${inputs.filter(Boolean).map((x) => x.toUpperCase()).join(' and ')} in full. The same analysis the Options and Investing tabs run, for each name.</p><div class="sk sk-row"></div><div class="sk sk-row"></div><div class="sk sk-row"></div></div>`
       : !c ? '' : !c.available ? html`<div class="state err" role="alert"><p class="t-h3">Not compared</p><p>${clean(c.reason || 'Not enough names loaded to compare.')}</p>${(c.failed || []).map((f) => html`<p class="t-muted">${f.ticker}: ${clean(f.reason)}</p>`)}${inputs.filter((x) => x.trim()).length >= 2 ? html`<button type="button" class="btn btn-sm" data-v2-cmp-again>Try again</button>` : ''}</div>`
-        : html`${take(c)}${perf(c)}${bars(c)}${grid(c)}`}</div>`);
+        : html`${stale() ? html`<div class="stale cmp-stale" role="status"><p>These results are for ${c.tickers.join(', ')}. ${wanted().length >= 2 ? html`Press Compare for ${wanted().join(', ')}.` : 'Add a second name to compare again.'}</p>${wanted().length >= 2 ? html`<button type="button" class="btn btn-sm" data-v2-cmp-again>Compare ${wanted().join(', ')}</button>` : ''}</div>` : ''}<div class="${stale() ? 'cmp-old' : ''}">${take(c)}${perf(c)}${bars(c)}${grid(c)}</div>`}</div>`);
+  // a phone's table header sticks under the top bar, whatever its height
+  const bar = document.querySelector('.topbar'); if (bar && mainEl) mainEl.style.setProperty('--cmp-top', `${Math.round(bar.getBoundingClientRect().height)}px`);
   if (c && c.available && ((c.performance || {}).series || []).length >= 2) mountCharts(mainEl, { cmp: perfChart(c) });
 }
 
-async function run() {
-  const t = [...new Set(inputs.map((x) => x.trim().toUpperCase()).filter(Boolean))];
+async function run({ force } = {}) {
+  const t = wanted();
   if (t.length < 2) { result = { available: false, reason: 'Give at least two tickers.' }; paint(); return; }
   running = true; paint();
   const mine = ++seq;
   let got;
-  try { got = await api.get(`/api/compare?tickers=${encodeURIComponent(t.join(','))}`, { ttl: 300000, timeout: 90000 }); }
+  const path = `/api/compare?tickers=${encodeURIComponent(t.join(','))}`;
+  // "Try again" asks again: a refusal kept for five minutes used to come straight back from the cache
+  try { got = await api.get(path, { ttl: 300000, timeout: 90000, force: !!force }); }
   catch (e) { got = { available: false, reason: api.explain(e, 'The comparison') }; }
   if (mine !== seq) return;
+  if (!got || !got.available) api.invalidate(path);
   result = got; running = false; paint();
+  // the address says what is compared, so a reload or a shared link comes back to it (replaceState fires no route)
+  if (got && got.available) { const want = `#/compare?t=${got.tickers.join(',')}`; if (location.hash !== want) { try { history.replaceState(history.state, '', `${location.pathname}${location.search}${want}`); } catch (e) { /* a sandboxed frame */ } } }
   const h = mainEl && mainEl.querySelector('#ct-h, #cp-h'); if (h) { h.setAttribute('tabindex', '-1'); h.focus({ preventScroll: false }); }
 }
 
@@ -200,7 +218,9 @@ export async function render(main, route) {
   main.addEventListener('submit', (e) => { if (e.target.closest('[data-v2-cmp-form]')) { e.preventDefault(); run(); } });
   main.addEventListener('input', (e) => {
     const i = e.target.dataset.v2CmpInput; if (i === undefined) return;
+    const was = stale();
     inputs[i] = e.target.value;
+    if (stale() !== was) { const at = e.target.selectionStart; paint(); const el = mainEl.querySelector(`#cmp-${i}`); if (el) { el.focus(); try { el.setSelectionRange(at, at); } catch (err) { /* number input */ } } }
     clearTimeout(suggT); const q = e.target.value.trim();
     if (q.length < 1) return;
     suggT = setTimeout(async () => {
@@ -209,7 +229,8 @@ export async function render(main, route) {
   });
   main.addEventListener('click', (e) => {
     const t = (s) => e.target.closest(s); let b;
-    if (t('[data-v2-cmp-again]')) { run(); return; }
+    if (t('[data-v2-cmp-again]')) { run({ force: !(result && result.available) }); return; }
+    if (t('[data-v2-cmp-means]')) { showMeans = !showMeans; paint(); const b2 = mainEl.querySelector('[data-v2-cmp-means]'); if (b2) b2.focus(); return; }
     if (t('[data-v2-cmp-add]')) { if (inputs.length < MAX) { inputs.push(''); paint(); const i = mainEl.querySelector(`#cmp-${inputs.length - 1}`); if (i) i.focus(); } return; }
     if ((b = t('[data-v2-cmp-drop]'))) { const k = Number(b.dataset.v2CmpDrop); inputs.splice(k, 1); paint(); const i = mainEl.querySelector(`#cmp-${Math.min(k, inputs.length - 1)}`); if (i) i.focus(); return; }
     if ((b = t('[data-v2-cmp-pick]'))) {

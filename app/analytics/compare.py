@@ -56,11 +56,12 @@ HORIZONS = [
         "id": "longterm",
         "name": "Long-term trend",
         "horizon": "multi-year",
-        "basis": ("Five-year annualised return and that rate per unit of "
-                  "volatility, current drawdown from the all-time high, the "
-                  "worst historical drawdown, position against the 200-day "
-                  "average, and valuation against the company's own multi-year "
-                  "range. Not driven by today's move."),
+        "basis": ("Five-year annualised price return and that rate per unit of "
+                  "the same five years' volatility, how far it sits below its "
+                  "high and its worst fall (both over up to 12 years of daily "
+                  "closes), position against the 200-day average, and valuation "
+                  "against the company's own multi-year range. Not driven by "
+                  "today's move."),
     },
 ]
 
@@ -99,6 +100,24 @@ def _mean(parts: List[Optional[float]]) -> Optional[float]:
     return round(sum(usable) / len(usable), 1) if usable else None
 
 
+# Two scores this close are level. One rule for the headline, the cards, the bars, the ranks and the table:
+# the gap is taken between the scores as shown (one decimal), so 70.3 against 65.3 is five points and
+# decisive, where the unrounded difference (4.9999...) once printed "5.0 apart, under 5" (audit 2026-10-20).
+TIE_POINTS = 5.0
+
+
+def _gap(a: Optional[float], b: Optional[float]) -> Optional[float]:
+    if a is None or b is None:
+        return None
+    return round(round(a, 1) - round(b, 1), 1)
+
+
+# What a fund has no figure for, and what the benchmark cannot be measured against.
+FUND_TYPES = {"ETF", "MUTUALFUND", "INDEX"}
+BENCHMARK = "SPY"
+AGAINST_BENCHMARK = ("rs_vs_spy", "excess_cagr_5y_pct", "beta_vs_spy")
+
+
 def _metrics(payload: Dict[str, Any], longterm: Dict[str, Any]) -> Dict[str, Any]:
     """Pull the comparable figures out of the per-ticker payloads.
 
@@ -109,6 +128,8 @@ def _metrics(payload: Dict[str, Any], longterm: Dict[str, Any]) -> Dict[str, Any
     "wrong key". Anything read here is read from a shape that was printed first.
     """
     tech = payload.get("technicals") or {}
+    fund_meta = ((longterm or {}).get("holding") or {}).get("fundamentals") or {}
+    qtype = str(fund_meta.get("quote_type") or (payload.get("quote") or {}).get("quote_type") or "").upper()
     mas = tech.get("moving_averages") or {}
     vol = tech.get("volatility") or {}
     quote = payload.get("quote") or {}
@@ -150,12 +171,18 @@ def _metrics(payload: Dict[str, Any], longterm: Dict[str, Any]) -> Dict[str, Any
         "beta_vs_spy": _num(risk.get("beta_vs_spy")),
         "annual_vol_pct": _num(risk.get("annualised_vol_pct")),
         "max_drawdown_pct": _num(draw.get("max_drawdown_pct")),
+        "vol_5y_pct": _num(risk.get("annualised_vol_5y_pct")),
         # Derived here rather than taken from holding.sharpe_proxy, which divides
         # a trailing one-year return by a multi-year volatility. Mixing windows
         # inside one ratio is the exact error this tab exists to avoid, so the
-        # five-year rate is divided by the volatility over the same kind of span.
+        # five-year rate is divided by the volatility of the same five years.
+        # (Until 2026-10-20 it was divided by the full, up to 12-year, figure.)
         "cagr_per_vol_5y": _ratio(_num(hz.get("cagr_5y_pct")),
-                                  _num(risk.get("annualised_vol_pct"))),
+                                  _num(risk.get("annualised_vol_5y_pct"))),
+        # How much daily history the multi-year figures stand on: up to 12 years.
+        "history_years": _num(((longterm or {}).get("holding") or {}).get("data_quality", {}).get("history_years")),
+        # A fund has no earnings, so no P/E, and its "sector" is a fund family.
+        "kind": "fund" if qtype in FUND_TYPES else "stock",
         "vs_sma40w": _num(trend.get("vs_40w_sma")),
         "trend_phase": trend.get("phase"),
         "sector": sc.get("sector") or (holding.get("fundamentals") or {}).get("sector"),
@@ -163,7 +190,7 @@ def _metrics(payload: Dict[str, Any], longterm: Dict[str, Any]) -> Dict[str, Any
     }
 
 
-def _score_swing(m: Dict[str, Any]) -> Optional[float]:
+def _swing_parts(m: Dict[str, Any]) -> List[Optional[float]]:
     """Momentum without being extended, and options not overpriced."""
     # RSI is best in the upper-middle: 50-70 is trending, above 75 is stretched.
     rsi = m.get("rsi")
@@ -173,29 +200,29 @@ def _score_swing(m: Dict[str, Any]) -> Optional[float]:
     iv, hv = m.get("iv_pct"), m.get("hv_pct")
     # Cheap implied vol relative to what the stock actually does is a better entry.
     vol_score = _scaled(iv / hv, 0.7, 1.6, invert=True) if iv and hv else None
-    return _mean([
+    return [
         rsi_score,
         _scaled(m.get("rs_vs_spy"), -10, 15),
         _scaled(m.get("vs_sma20"), -8, 8),
         _scaled(m.get("vs_sma50"), -12, 12),
         vol_score,
-    ])
+    ]
 
 
-def _score_position(m: Dict[str, Any]) -> Optional[float]:
+def _position_parts(m: Dict[str, Any]) -> List[Optional[float]]:
     """Trend intact over months, and not paying a record multiple for it."""
-    return _mean([
+    return [
         _scaled(m.get("vs_sma50"), -12, 12),
         _scaled(m.get("vs_sma200"), -20, 25),
         _scaled(m.get("rs_vs_spy"), -10, 15),
         # A low percentile means cheap against its own history.
         _scaled(m.get("pe_percentile"), 0, 100, invert=True),
-    ])
+    ]
 
 
-def _score_longterm(m: Dict[str, Any]) -> Optional[float]:
+def _longterm_parts(m: Dict[str, Any]) -> List[Optional[float]]:
     """Multi-year trend, how far off the high, and valuation against its range."""
-    return _mean([
+    return [
         # A five-year CAGR, so the band is annual-return sized. Scoring a total
         # return on this band would put every large-cap winner at 100.
         _scaled(m.get("cagr_5y_pct"), -5, 35),
@@ -209,10 +236,23 @@ def _score_longterm(m: Dict[str, Any]) -> Optional[float]:
         _scaled(m.get("cagr_per_vol_5y"), -0.2, 1.2),
         # The worst peak-to-trough this name has actually put a holder through.
         _scaled(m.get("max_drawdown_pct"), -75, -20),
-    ])
+    ]
+
+
+def _score_swing(m: Dict[str, Any]) -> Optional[float]:
+    return _mean(_swing_parts(m))
+
+
+def _score_position(m: Dict[str, Any]) -> Optional[float]:
+    return _mean(_position_parts(m))
+
+
+def _score_longterm(m: Dict[str, Any]) -> Optional[float]:
+    return _mean(_longterm_parts(m))
 
 
 SCORERS = {"swing": _score_swing, "position": _score_position, "longterm": _score_longterm}
+PARTS = {"swing": _swing_parts, "position": _position_parts, "longterm": _longterm_parts}
 
 
 def _closes(payload: Dict[str, Any]) -> List[Tuple[str, float]]:
@@ -289,7 +329,20 @@ def build(snapshot_fn, longterm_fn, tickers: List[str]) -> Dict[str, Any]:
             lt = {}
         m = _metrics(payload, lt or {})
         m["ticker"] = sym
+        # The benchmark against itself is not a measurement: its relative strength, excess return and beta
+        # are said to be the benchmark's, not shown as n/a, 0 and 1 (audit 2026-10-20).
+        m["is_benchmark"] = sym == BENCHMARK
+        m["why_na"] = {}
+        if m["is_benchmark"]:
+            for key in AGAINST_BENCHMARK:
+                m[key] = None
+                m["why_na"][key] = "the benchmark"
+        if m["kind"] == "fund":
+            for key in ("forward_pe", "pe_percentile"):
+                if m.get(key) is None:
+                    m["why_na"][key] = "a fund"
         m["scores"] = {k: fn(m) for k, fn in SCORERS.items()}
+        m["score_inputs"] = {k: [sum(p is not None for p in fn(m)), len(fn(m))] for k, fn in PARTS.items()}
         rows.append(m)
         closes[sym] = _closes(payload)
 
@@ -298,19 +351,25 @@ def build(snapshot_fn, longterm_fn, tickers: List[str]) -> Dict[str, Any]:
                 "reason": "Only {} of {} tickers returned data.".format(len(rows), len(clean)),
                 "failed": failed}
 
-    # Rank within each horizon. Ties share a rank rather than being ordered by
-    # something arbitrary like alphabetical position.
+    # Rank within each horizon. Names within TIE_POINTS of the top are level and share first place; below
+    # them, a score equal to the one before shares its rank. Each entry says where it stands in words the
+    # page shows as they are: "best", "level" or "#3".
     ranks: Dict[str, List[Dict[str, Any]]] = {}
     for hid in SCORERS:
         scored = [r for r in rows if r["scores"].get(hid) is not None]
         scored.sort(key=lambda r: -r["scores"][hid])
+        top = scored[0]["scores"][hid] if scored else None
+        level = [r for r in scored if _gap(top, r["scores"][hid]) < TIE_POINTS]
         out = []
         for i, r in enumerate(scored):
-            prev = scored[i - 1] if i else None
-            rank = i + 1
-            if prev is not None and prev["scores"][hid] == r["scores"][hid]:
-                rank = out[-1]["rank"]
-            out.append({"ticker": r["ticker"], "score": r["scores"][hid], "rank": rank})
+            if r in level:
+                rank, standing = 1, "level" if len(level) > 1 else "best"
+            elif out and _gap(out[-1]["score"], r["scores"][hid]) == 0:
+                rank, standing = out[-1]["rank"], out[-1]["standing"]
+            else:
+                rank, standing = i + 1, "#{}".format(i + 1)
+            out.append({"ticker": r["ticker"], "score": r["scores"][hid], "rank": rank, "standing": standing,
+                        "inputs": r["score_inputs"][hid]})
         ranks[hid] = out
 
     return {
@@ -320,6 +379,8 @@ def build(snapshot_fn, longterm_fn, tickers: List[str]) -> Dict[str, Any]:
         "ranks": ranks,
         "horizons": HORIZONS,
         "performance": _performance(closes),
+        "leaders": leaders(rows),
+        "tie_points": TIE_POINTS,
         "failed": failed,
         "method": (
             "Every figure is computed the same way at the same moment for each "
@@ -349,6 +410,28 @@ TAKE_METRICS = [
 ]
 
 
+# Every row of the table where one direction is better, with the decimals the table shows it to and the
+# smallest gap that counts at that scale. The table's dots and the take's standouts are read off this one
+# list (the page used to compute its own dots on a 2%-of-spread rule that never fired for two names, and
+# gave an exact tie's dot to the first column).
+LEAD_ROWS = {
+    # key: (higher is better, decimals shown, floor)
+    "rs_vs_spy": (True, 2, 0.25), "cagr_5y_pct": (True, 2, 0.25), "excess_cagr_5y_pct": (True, 2, 0.25),
+    "cagr_per_vol_5y": (True, 2, 0.05), "drawdown_pct": (True, 2, 0.25), "max_drawdown_pct": (True, 2, 0.25),
+    "annual_vol_pct": (False, 1, 0.25), "forward_pe": (False, 1, 0.25), "pe_percentile": (False, 0, 1.0),
+    "composite": (True, 0, 1.0),
+}
+
+
+def leaders(rows: List[Dict[str, Any]]) -> Dict[str, Optional[str]]:
+    """The leading ticker on each row that has a direction, or None for no clear leader."""
+    out = {}
+    for key, (high_good, _dp, _floor) in LEAD_ROWS.items():
+        got = _leader(rows, key, high_good)
+        out[key] = got["ticker"] if got else None
+    return out
+
+
 def _leader(rows: List[Dict[str, Any]], key: str, high_is_good: bool):
     """The name leading on one metric, or None when too few have the number."""
     have = [(r["ticker"], _num(r.get(key))) for r in rows]
@@ -357,6 +440,10 @@ def _leader(rows: List[Dict[str, Any]], key: str, high_is_good: bool):
         return None
     have.sort(key=lambda pair: pair[1], reverse=high_is_good)
     best, second = have[0], have[1]
+    _hg, dp, floor = LEAD_ROWS.get(key, (high_is_good, 2, 0.25))
+    # level as the table prints them is level: no leader between two equal figures
+    if round(best[1], dp) == round(second[1], dp):
+        return None
 
     # A leader by a hair is not a finding.
     #
@@ -371,7 +458,7 @@ def _leader(rows: List[Dict[str, Any]], key: str, high_is_good: bool):
     # -0.05 is not a leader either.
     gap = abs(best[1] - second[1])
     scale = max(abs(best[1]), abs(second[1]))
-    if gap < max(scale * 0.05, 0.25):
+    if gap < max(scale * 0.05, floor):
         return None
     return {"ticker": best[0], "value": best[1]}
 
@@ -401,14 +488,14 @@ def take(payload: Dict[str, Any]) -> Dict[str, Any]:
         if len(ordered) < 2:
             continue
         top, second = ordered[0], ordered[1]
-        gap = _num(top["score"]) - _num(second["score"])
+        gap = _gap(_num(top["score"]), _num(second["score"]))
         winners[hid] = {
             "ticker": top["ticker"],
             "score": _num(top["score"]),
-            "gap": round(gap, 1),
+            "gap": gap,
             # Under five points on a 0-100 scale, across scores built from a
             # handful of inputs, is not a ranking anyone should act on.
-            "decisive": gap >= 5.0,
+            "decisive": gap >= TIE_POINTS,
             "name": (horizons.get(hid) or {}).get("name", hid),
         }
 
@@ -480,9 +567,22 @@ def take(payload: Dict[str, Any]) -> Dict[str, Any]:
         headline = "The one horizon with enough data is level." if level else "Neither name has enough data to rank."
 
     weak = [w for w in winners.values() if not w["decisive"]]
+    # How the horizons relate, said once beside the heading: "disagree" only when two decisive horizons name
+    # different leaders (it used to say so whenever the verdict was not unanimous, a level horizon included).
+    if unanimous:
+        agreement = "All three horizons name {}.".format(tickers[0]) if len(winners) == 3 else "Every horizon names {}.".format(tickers[0])
+    elif len(set(tickers)) > 1:
+        agreement = "The horizons name different leaders."
+    elif tickers:
+        n = len(level)
+        agreement = "{} leads where the scores separate; {} horizon{} level.".format(
+            tickers[0], {1: "one", 2: "two"}.get(n, str(n)), " is" if n == 1 else "s are")
+    else:
+        agreement = "Level on every horizon."
     return {
         "available": True,
         "headline": headline,
+        "agreement": agreement,
         "overall": overall,
         "unanimous": unanimous,
         "winners": winners,
