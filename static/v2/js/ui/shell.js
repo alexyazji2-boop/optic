@@ -17,7 +17,7 @@ export function setRailTight(on) { try { localStorage.setItem(RAIL_KEY, on ? '1'
 
 function groupHref(g, symbol) {
   const first = g.pages[0];
-  if (g.symbol) return symbol ? `#/${symbol}` : null;
+  if (g.symbol) return symbol ? `#/${encodeURIComponent(symbol)}` : null;
   return hrefFor(first.view, symbol);
 }
 const groupIsV2 = (g) => g.pages.some((p) => p.v2);
@@ -44,7 +44,8 @@ export function mount(app) {
 /** Paint the rail and phone bar for the current route. */
 export function paint(route) {
   const g = route.view === 'settings' ? null : groupOf(route.view);
-  const sym = route.symbol || recent()[0] || null;
+  // an instrument page (^TNX) has no Dossier: the Dossier link stays on the last company opened
+  const sym = (route.view !== 'instrument' && route.symbol) || recent().find((s) => !/^\^|=|-USD$/.test(s)) || null;
   const groups = visibleGroups(flags);
   let lastSec = '';
   const rows = [];

@@ -6,12 +6,14 @@ import { $, html, render, announce } from './core/dom.js';
 import * as api from './core/api.js';
 import * as store from './core/store.js';
 import * as router from './core/router.js';
+import * as scrollmem from './core/scrollmem.js';
 import * as prefs from './core/prefs.js';
 import * as shell from './ui/shell.js';
 import * as palette from './ui/palette.js';
 import * as drawer from './ui/drawer.js';
 import { openMilo, resetContext, checkAvailability, markButtons } from './ui/milo.js';
 import { toggleWatch } from './ui/company.js';
+import { linkHome } from './core/homelink.js';
 import { toast } from './ui/toast.js';
 import { hrefFor } from './nav.js';
 import * as dossier from './pages/dossier.js';
@@ -123,7 +125,7 @@ function show(route) {
   shell.paint(route);
   // Milo forgets the last page before this one renders (it registers its own context as it renders)
   resetContext(route);
-  window.scrollTo(0, 0);
+  scrollmem.arrive();
   Promise.resolve(page.render(view, route, app)).catch((e) => {
     console.error(e);
     render(view, html`<div class="state err" role="alert"><p class="t-h3">This page did not load</p><p>${e.message || 'An error stopped it.'}</p><a class="btn" href="${hrefFor(route.view, route.symbol)}">Try again</a></div>`);
@@ -164,6 +166,12 @@ function wireGlobal() {
       return;
     }
     if ((b = t('[data-v2-watch]'))) { e.preventDefault(); await toggleWatch(b.dataset.v2Watch); return; }
+    if ((b = t('[data-v2-homelink]'))) {
+      const sym = b.dataset.v2Homelink, onHome = current && current.route.view === 'home';
+      drawer.close({ silent: true });
+      if (linkHome(sym)) { toast(`Home's linked panels now follow ${sym}.`); if (!onHome) router.go('#/'); }
+      return;
+    }
     if ((b = t('[data-v2-account]'))) { drawer.open({ kicker: 'Account', title: store.state.user ? (store.state.user.first_name || 'Your account') : 'Not signed in', body: accountBody(), opener: b }); return; }
     if ((b = t('[data-v2-more]'))) { drawer.open({ kicker: 'Sections', title: 'More', body: shell.moreBody(), opener: b }); return; }
     if (t('[data-v2-signout]')) { drawer.close({ silent: true }); await store.signOut(); await app.settleAuth({ said: 'out', next: '#/' }); return; }
@@ -171,10 +179,17 @@ function wireGlobal() {
       drawer.close({ silent: true, force: true });
       if (b.dataset.v2Guest === 'keep') { keepGuestThingsOut(); return; }
       bringGuestThings();
-      // the guest's symbols join the account's lists, as the classic app does on load
-      let syms = [];
-      try { const raw = JSON.parse(localStorage.getItem('optic.watchlists.v1') || 'null'); syms = raw && Array.isArray(raw.lists) ? raw.lists.flatMap((l) => l.symbols || []) : JSON.parse(localStorage.getItem('optic.chart.watch.v1') || '[]'); } catch (err) { syms = []; }
-      if (syms.length) { try { await api.post('/api/watchlists/adopt', { symbols: [...new Set(syms)] }); toast(`Brought ${new Set(syms).size} names into your account.`); } catch (err) { toast(api.explain(err, 'Bringing them across'), { kind: 'bad' }); } }
+      // the guest's lists join the account as lists: a name the account has merges into it, a new
+      // name becomes a list while the plan has room, the rest go into the first list (account.py)
+      let lists = [];
+      try { const raw = JSON.parse(localStorage.getItem('optic.watchlists.v1') || 'null'); lists = raw && Array.isArray(raw.lists) ? raw.lists.filter((l) => (l.symbols || []).length).map((l) => ({ name: l.name, symbols: l.symbols })) : [{ name: 'Watchlist', symbols: JSON.parse(localStorage.getItem('optic.chart.watch.v1') || '[]') }].filter((l) => l.symbols.length); } catch (err) { lists = []; }
+      if (lists.length) {
+        try {
+          const r = await api.post('/api/watchlists/adopt', { lists });
+          const made = (r && r.created) || [], merged = (r && r.merged) || [];
+          toast(`Brought ${r && r.added || 0} name${(r && r.added) === 1 ? '' : 's'} into your account${made.length ? `, as ${made.length} new list${made.length === 1 ? '' : 's'}` : ''}.${merged.length ? ` The plan's list limit put ${merged.map((m) => m.name).join(', ')} into ${merged[0].into}.` : ''}`);
+        } catch (err) { toast(`${api.explain(err, 'Bringing your lists across')} They are still in this browser; sign out and in again to retry.`, { kind: 'bad' }); }
+      }
       // theses and valuation scenarios too, as the classic app's adoptLocalTheses
       // and valuationAccountLoad do; the server never overwrites one the account has
       await adoptKeyed('optic.thesis.v1', '/api/theses/adopt', 'theses', (n) => `Brought ${n} thesis${n === 1 ? '' : 'es'} into your account.`);
@@ -239,6 +254,7 @@ async function boot() {
   if (store.state.auth === 'unknown') toast('Optic could not check your sign-in. Showing this browser\'s lists for now.');
   await afterAuth();
   checkAvailability();
+  scrollmem.start();
   router.onRoute(show);
   if (link && link.reset) { startReset(link.reset); history.replaceState(history.state, '', `${location.pathname}${location.search}#/signin?mode=reset`); }
   else if (link && link.signin && !store.signedIn()) history.replaceState(history.state, '', `${location.pathname}${location.search}#/signin`);

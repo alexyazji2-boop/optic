@@ -26,10 +26,14 @@ from __future__ import annotations
 
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
+from datetime import date, datetime, timezone
 from typing import Any, Dict, List, Optional
 
 import numpy as np
 import pandas as pd
+
+from .. import session as session_mod
 
 BENCH = "SPY"
 
@@ -172,8 +176,35 @@ def _signal(closes: pd.Series) -> Dict[str, Any]:
     return {"state": "neutral", "why": "the averages are not stacked in either direction"}
 
 
-def build(provider, symbols: List[str]) -> Dict[str, Any]:
-    """One row per symbol: price, change, what changed, and a signal."""
+def _volume(volumes: Optional[pd.Series], closes: pd.Series, now_et: datetime) -> Dict[str, Any]:
+    """The last session's volume against its 20-session average, and the date of that bar.
+
+    During the regular session the last daily bar is the session in progress, so its volume
+    is a part-day figure set against full days: `volume_partial` says so, and the reader is
+    told rather than shown a ratio that always looks low before the close."""
+    out: Dict[str, Any] = {"as_of": None, "volume": None, "avg_volume_20d": None,
+                           "volume_ratio": None, "volume_partial": False}
+    try:
+        last_day = pd.Timestamp(closes.index[-1]).date()
+        out["as_of"] = last_day.isoformat()
+    except Exception:
+        last_day = None
+    if volumes is None or len(volumes) < 6:
+        return out
+    last = _num(volumes.iloc[-1])
+    prior = [v for v in (_num(x) for x in volumes.iloc[-21:-1]) if v is not None and v > 0]
+    avg = sum(prior) / len(prior) if len(prior) >= 5 else None
+    out["volume"] = int(last) if last is not None else None
+    out["avg_volume_20d"] = int(avg) if avg else None
+    out["volume_ratio"] = round(last / avg, 2) if last is not None and avg else None
+    out["volume_partial"] = bool(last_day and last_day == now_et.date()
+                                 and session_mod.state(now_et.astimezone(timezone.utc)).get("phase") in ("pre", "regular"))
+    return out
+
+
+def build(provider, symbols: List[str], now: Optional[datetime] = None) -> Dict[str, Any]:
+    """One row per symbol: price, change, volume against its average, what changed, and a signal."""
+    now_et = (now or datetime.now(timezone.utc)).astimezone(session_mod.ET)
     wanted = [s.upper().strip() for s in symbols if s and s.strip()]
     if not wanted:
         return {"available": True, "rows": [], "reason_none":
@@ -204,6 +235,7 @@ def build(provider, symbols: List[str]) -> Dict[str, Any]:
         changed = _what_changed(closes, volumes, bench_closes)
         sig = _signal(closes)
         rows.append({
+            **_volume(volumes, closes, now_et),
             "symbol": sym,
             "available": True,
             "price": _num(closes.iloc[-1]),
@@ -235,3 +267,34 @@ _METHOD = (
     "anything that clears a threshold, which is the usual state and is worth "
     "saying rather than filling."
 )
+
+
+def earnings_dates(provider, symbols: List[str], today: Optional[date] = None) -> Dict[str, Any]:
+    """The next earnings date for each symbol, from the provider's per-company calendar.
+
+    Asked separately from the rows, after they paint: it is one call per company (cached for
+    an hour by the provider), where the rows are one batched pull. A fund has no report; a
+    company without a published date says so. A date already past is not a "next" date.
+    """
+    today = today or datetime.now(timezone.utc).astimezone(session_mod.ET).date()
+    wanted = [s.upper().strip() for s in symbols if s and s.strip()]
+
+    def one(sym: str) -> Optional[str]:
+        try:
+            return provider.earnings_date(sym)
+        except Exception:
+            return None
+
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        found = dict(zip(wanted, pool.map(one, wanted)))
+    out: Dict[str, Any] = {}
+    for sym, day in found.items():
+        try:
+            d = date.fromisoformat(str(day)[:10]) if day else None
+        except ValueError:
+            d = None
+        out[sym] = {"date": d.isoformat() if d and d >= today else None,
+                    "days": (d - today).days if d and d >= today else None}
+    return {"available": True, "dates": out, "source": "Yahoo Finance company calendars",
+            "method": "The next date each company has published or the provider expects. "
+                      "No date means none is published yet, or the symbol is a fund."}

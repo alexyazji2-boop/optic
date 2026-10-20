@@ -518,6 +518,10 @@ SETTINGS = {
     # The rebuilt frontend's chart view: bar range, style, indicators, panes.
     "optic.v2.chart.v1",
     "optic.v2.workspace.v1",       # Home's workspace: layouts, lock, panels folded on a phone, the linked ticker
+    # Where each page was scrolled to, for Back, Forward and refresh (sessionStorage, this tab only).
+    "optic.v2.scroll.v1",
+    # How the Watchlist page is sorted: a display choice, like the chart style.
+    "optic.v2.watchlist.sort.v1",
     # Whether this browser has dismissed Home's first-visit welcome: like the dismissed notices above.
     "optic.v2.onboard.v1",
     # Which of the Options page's three tool groups was open last: where things are on the screen.

@@ -135,6 +135,8 @@ function load() {
   Object.keys(PRESETS).forEach((p) => { if (!Array.isArray(S.layouts[p])) S.layouts[p] = defaults(p); });
   // a panel a later version adds appears hidden in older saved layouts, never lost
   Object.keys(PRESETS).forEach((p) => { const have = new Set(S.layouts[p].map((x) => x.id)); Object.keys(PANELS).forEach((id) => { if (!have.has(id)) S.layouts[p].push({ id, span: PANELS[id].span || 6, h: 'm', hidden: true }); }); S.layouts[p] = S.layouts[p].filter((x) => PANELS[x.id]); });
+  // a ticker linked from elsewhere ("Show on Home") survives even when the saved layout did not
+  if (!S.link && v && typeof v.link === 'string') S.link = v.link;
   if (!S.link) S.link = (((store.activeList() || {}).symbols || [])[0] || store.recent()[0] || 'SPY');
 }
 function save() { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { /* private mode: the layout lasts this visit */ } }
@@ -357,13 +359,14 @@ export const PANELS = {
   watch: {
     title: 'Watchlist', span: 4,
     how: 'Your open watchlist, with the day\'s move and what changed. Choose a ticker to link it to the chart, news and options panels.',
-    load: async () => { const syms = (store.activeList() || {}).symbols || []; if (!syms.length) return { empty: true }; return get(`/api/watchlist?symbols=${enc(syms.slice(0, 30).join(','))}`, { ttl: 30000 }); },
+    load: async () => { const syms = (store.activeList() || {}).symbols || []; if (!syms.length) return { empty: true }; const d = await get(`/api/watchlist?symbols=${enc(syms.slice(0, 30).join(','))}`, { ttl: 30000 }); return Object.assign({}, d, { total: syms.length }); },
     body: (d) => {
       if (d.empty) return html`<p class="ws-note">Your open watchlist is empty. Follow a company from its Dossier, or <a href="#/watchlist">open Watchlist</a>.</p>`;
       return html`<table class="ws-t"><caption class="sr">Watchlist</caption><thead><tr><th scope="col">Ticker</th><th scope="col" class="n">Price</th><th scope="col" class="n">Day</th><th scope="col" class="ws-sec">Changed</th></tr></thead><tbody>
-        ${(d.rows || []).map((r) => html`<tr><td>${tickBtn(r.symbol)}</td><td class="n">${r.available === false ? '' : num(r.price)}</td><td class="n ${dir(r.change_pct)}">${r.available === false ? 'n/a' : pct(r.change_pct)}</td><td class="ws-rule ws-sec">${((r.changed || {}).text) || ''}</td></tr>`)}</tbody></table>`;
+        ${(d.rows || []).map((r) => html`<tr><td>${tickBtn(r.symbol)}</td><td class="n">${r.available === false ? '' : num(r.price)}</td><td class="n ${dir(r.change_pct)}">${r.available === false ? 'n/a' : pct(r.change_pct)}</td><td class="ws-rule ws-sec">${((r.changed || {}).text) || ''}</td></tr>`)}</tbody></table>
+        ${d.total > 30 ? html`<p class="ws-note">The first 30 of ${d.total}. <a href="#/watchlist">The whole list is on Watchlist</a>.</p>` : ''}`;
     },
-    foot: () => ({ source: 'Your open list; prices from Yahoo Finance' }),
+    foot: () => ({ source: `${(store.activeList() || {}).name || 'Your open list'}; prices from Yahoo Finance` }),
     milo: 'Summarise what changed across my watchlist today.',
   },
   quote: {
@@ -912,6 +915,8 @@ export async function render(main) {
   if (!sessionHooked) {
     sessionHooked = true;
     window.addEventListener('optic:session', () => { if (live && !(DATA.indices || {}).session) QUOTED.forEach((id) => { if (DATA[id] !== undefined) paintBody(id); }); });
+    // "Show on Home" while Home is open (core/homelink.js): the linked panels follow at once
+    window.addEventListener('v2:homelink', (e) => { if (!live || !S) return; e.preventDefault(); setLink(e.detail); });
   }
   root = main; live = true; load();
   document.title = 'Home, Optic';

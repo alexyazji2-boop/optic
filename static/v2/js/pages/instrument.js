@@ -18,7 +18,7 @@ function paint() {
   if (chart) { chart.destroy(); chart = null; }
   const sn = (d || {}).snapshot || {}, dp = Math.abs(sn.last) < 10 ? 4 : 2;
   const rsiWord = !isNum(sn.rsi) ? 'Not enough history' : sn.rsi >= 70 ? 'Overbought territory' : sn.rsi <= 30 ? 'Oversold territory' : 'Mid-range';
-  draw(mainEl, html`<header class="page-head"><p class="t-label">${d ? (d.group === 'fx' ? 'FX' : (d.group || 'Instrument')) : 'Instrument'}</p><div class="split"><h1 class="t-display-m">${d ? `${d.name || d.label} (${d.label || sym})` : sym}</h1>
+  draw(mainEl, html`<header class="page-head"><p class="t-label">${d ? (d.group === 'fx' ? 'FX' : (d.group || 'Instrument')) : 'Instrument'}</p><div class="split"><h1 class="t-display-m">${d ? `${d.name || d.label} (${d.label && d.label !== (d.name || d.label) ? d.label : sym})` : sym}</h1>
       ${miloButton('Ask Milo what this is', { ask: `What is ${d ? d.label || sym : sym}, and why does it matter for markets right now?`, context: `Instrument, ${sym}` })}</div>${d && (d.about || d.note) ? html`<p class="section-sub">${clean(d.about || d.note)}</p>` : ''}</header>
     ${D.err ? failed('This instrument', D.err, { retry: 'instrument' }) : !d ? skeleton('chart', 1, 'Loading the history') : html`
       <dl class="kv" style="--kv:5"><div><dt>Last</dt><dd>${num(sn.last, dp)} <small class="${dir(sn.chg_1d)}">${signed(sn.chg_1d)}</small></dd></div>
@@ -30,14 +30,20 @@ function paint() {
       <p class="asof">A reference series, not a price you could deal at. Source: Yahoo Finance. Tiles use a year of bars whatever the range.</p>`}`);
   if (d && (d.dates || []).length > 4) {
     const bars = d.dates.map((t, i) => ({ t: Date.parse(t), o: (d.open || [])[i] ?? d.close[i], h: (d.high || [])[i] ?? d.close[i], l: (d.low || [])[i] ?? d.close[i], c: d.close[i], v: (d.volume || [])[i] || 0 })).filter((b) => isNum(b.c));
-    chart = createPriceChart(mainEl.querySelector('#inst-chart'), { bars, style, overlays: { events: false }, panes: { volume: !!d.volume, rsi: false, macd: false }, window: bars.length, label: d.label || sym, height: 400 });
+    chart = createPriceChart(mainEl.querySelector('#inst-chart'), { bars, style, overlays: { events: false }, panes: { volume: !!d.volume, rsi: false, macd: false }, window: bars.length, label: d.label || sym, height: Math.max(240, Math.min(400, Math.round(window.innerHeight * 0.62))) });   // a landscape phone keeps the whole chart in view
   }
 }
 
+let gen = 0;
 async function load() {
+  // the newest request wins: ^TNX then ^VIX, or two quick range changes, never paint the older answer
+  const my = ++gen, sym = D.sym;
   D.d = null; D.err = null; paint();
-  try { D.d = await api.get(`/api/instrument?symbol=${encodeURIComponent(D.sym)}&range=${range}`, { ttl: 300000, timeout: 45000 }); if (D.d && D.d.available === false) { D.err = new api.ApiError('notfound', 404, clean(D.d.reason || 'No history.')); D.d = null; } }
-  catch (e) { D.err = e; }
+  let got = null, err = null;
+  try { got = await api.get(`/api/instrument?symbol=${encodeURIComponent(sym)}&range=${range}`, { ttl: 300000, timeout: 45000 }); if (got && got.available === false) { err = new api.ApiError('notfound', 404, clean(got.reason || 'No history.')); got = null; } }
+  catch (e) { err = e; }
+  if (my !== gen || !live || D.sym !== sym) return;
+  D.d = got; D.err = err;
   paint();
 }
 export async function render(main, route) {

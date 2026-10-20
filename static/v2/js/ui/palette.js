@@ -11,6 +11,7 @@ import * as api from '../core/api.js';
 import * as store from '../core/store.js';
 import { holds } from '../core/device.js';
 import { hrefFor } from '../nav.js';
+import * as router from '../core/router.js';
 import { getFlags } from './shell.js';
 import { openMilo } from './milo.js';
 // Row markers are the app's own line icons: the sparkle and arrow characters read as emoji (owner's checklist, 2026-10-19).
@@ -34,8 +35,8 @@ export const PLACES = [
   { view: 'alerts', label: 'Alerts', terms: 'alerts alarms notifications fired' },
   { view: 'compare', label: 'Compare', terms: 'compare versus vs side by side' },
   { view: 'overview', label: 'Dossier: Overview', symbol: true, terms: 'overview dossier ticker security summary company snapshot' },
-  { view: 'chart', label: 'Chart', symbol: true, terms: 'chart charting drawings indicators advanced' },
-  { view: 'swing', label: 'Options', symbol: true, terms: 'options option chain greeks gamma flow swing setup calls puts strategies levels' },
+  { view: 'chart', label: 'Chart', symbol: true, terms: 'chart charting drawings indicators advanced studies backtest back-test pairs stop' },
+  { view: 'swing', label: 'Options', symbol: true, terms: 'options option chain greeks gamma gex flow swing setup calls puts strategies levels payoff builder spread' },
   { view: 'long', label: 'Investing', symbol: true, terms: 'investing long term valuation fair value dcf conviction drawdown hold' },
   { view: 'earnings', label: 'Earnings', symbol: true, terms: 'earnings report eps estimates surprise implied move guidance results' },
   { view: 'financials', label: 'Financials', symbol: true, terms: 'financials revenue margin cash ownership short interest statements' },
@@ -47,6 +48,15 @@ export const PLACES = [
 ];
 const QUESTION_WORDS = /^(what|why|how|when|where|which|who|is|are|does|do|should|can|will|find|show|explain|compare)\b/i;
 export const looksLikeTicker = (t) => /^[A-Za-z][A-Za-z.-]{0,5}$/.test(String(t).trim());
+// What a result is decides where it opens: an index, rate, currency, future or crypto has an
+// instrument page, not a company dossier (the search audit, 2026-10-20: ^TNX opened as a dossier).
+const INSTRUMENT_KINDS = new Set(['index', 'rate', 'fx', 'commodity', 'future', 'crypto']);
+export const isInstrument = (sym, kind) => (kind ? INSTRUMENT_KINDS.has(kind) : /^\^|=|-USD$|\.NYB$/.test(String(sym || '')));
+export const openHref = (sym, kind) => (isInstrument(sym, kind) ? `#/instrument/${encodeURIComponent(sym)}` : hrefFor('overview', sym));
+// An index's options trade on its fund, so the chart-then-options path still works from ^GSPC.
+const PROXY = { '^GSPC': 'SPY', '^NDX': 'QQQ', '^RUT': 'IWM', '^DJI': 'DIA', 'ES=F': 'SPY', 'NQ=F': 'QQQ', 'RTY=F': 'IWM' };
+const KIND_WORD = { etf: 'fund', index: 'index', rate: 'rate', fx: 'currency', commodity: 'commodity', future: 'future', crypto: 'crypto' };
+const startsWord = (name, q) => String(name || '').toLowerCase().split(/[\s,.]+/).some((w) => w.startsWith(q.toLowerCase()));
 export function looksLikeQuestion(text) { const t = String(text).trim(); if (!t) return false; if (t.endsWith('?')) return true; if (QUESTION_WORDS.test(t) && t.split(/\s+/).length > 1) return true; return t.split(/\s+/).length >= 3; }
 const SCREEN_INTENT = /\b(find|show|screen|scan|list|which|what)\b/i, SCREEN_NOUNS = /\b(stocks?|names?|tickers?|companies|equities|etfs?|setups?)\b/i;
 export const looksLikeScreen = (t) => { t = String(t || '').trim(); return t.length >= 8 && SCREEN_INTENT.test(t) && SCREEN_NOUNS.test(t); };
@@ -65,11 +75,24 @@ export function screenMatches(text, scans) {
 /** The place a typed word names exactly (its label, or one of its search words). */
 export function exactPlace(q, places) { const l = String(q).trim().toLowerCase(); return places.find((p) => p.label.toLowerCase() === l || p.terms.split(/\s+/).indexOf(l) !== -1) || null; }
 
-let root, input, list, untrap, opener, timer, seq = 0, items = [], sel = 0, catalogue = null, research = null, ctxSym = null;
+let root, input, list, note, untrap, opener, timer, seq = 0, items = [], sel = 0, catalogue = null, research = null, ctxSym = null, vvOff = null, scrollY0 = 0;
+let moved = null, pending = null, pendingFor = null, settledFor = null, notice = '';
 const allowed = (p) => (!p.owner || !!(store.state.me && store.state.me.admin)) && (!p.feature || !!getFlags()[p.feature]);
-const symFor = () => ctxSym || store.recent()[0] || null;
+const symFor = () => ctxSym || store.recent().find((s) => !isInstrument(s)) || null;
 const placeHref = (p) => (p.href ? p.href : p.symbol ? (symFor() ? hrefFor(p.view, symFor()) : '#/') : hrefFor(p.view));
-const go = (href) => () => { if (href.startsWith('/')) location.href = href; else location.hash = href; };
+// While the palette is open it has a history entry of its own, so Back on a phone closes it.
+// Opening a result replaces that entry: Back from the result returns to the screen the search began
+// on, with no empty step between. The current address re-renders instead of doing nothing.
+const onEntry = () => !!(history.state && history.state.v2palette);
+const go = (href) => () => {
+  if (href.startsWith('/')) { location.href = href; return; }
+  if (onEntry()) {
+    if (href === location.hash) { history.back(); return; }
+    location.replace(`${location.pathname}${location.search}${href}`);
+    return;
+  }
+  router.go(href);
+};
 const QUICK = [
   { label: 'Market overview', detail: 'Macro, sectors and rotation', run: go('#/macro') },
   { label: "Today's read", detail: 'The written daily brief', run: go('#/read') },
@@ -85,10 +108,22 @@ function savedFor(sym) {
   const list0 = store.signedIn() ? (research || []) : (() => { if (!holds(store.state.user)) return []; try { const v = JSON.parse(localStorage.getItem('optic.research.v1') || '[]'); return Array.isArray(v) ? v : []; } catch (e) { return []; } })();
   return list0.filter((r) => String(r.ticker || r.symbol || '').toUpperCase() === sym).slice(0, 3).map((r) => String(r.question || r.title || ''));
 }
-function symbolRows(sym, detail, exact) {
-  const out = [{ group: 'Open', lead: icon('dossier'), label: sym, detail, tag: exact ? '' : 'enter', run: go(`#/${sym}`) }];
-  [['Chart', 'Charting workspace', `#/${sym}/chart`], ['News', 'Headlines for this symbol', `#/${sym}/news`], ['Earnings', 'History, estimates and the read', `#/${sym}/earnings`], ['Investing', 'Valuation and the decade view', `#/${sym}/investing`], ['Compare', 'Put it beside other names', `#/compare?t=${sym}`]]
-    .forEach(([label, d, href]) => out.push({ group: sym, lead: icon('arrow'), label, detail: d, run: go(href) }));
+/** The Open row and the symbol's own places. `kind` is the search's (stock, etf, index, ...), or ''
+ * for a symbol taken as typed; `enter` marks the row Enter opens. */
+function symbolRows(sym, detail, { kind = '', enter = true } = {}) {
+  const word = KIND_WORD[kind];
+  const what = [detail, word && kind !== 'etf' ? word : ''].filter(Boolean).join(', ');
+  const out = [{ group: 'Open', lead: isInstrument(sym, kind || undefined) ? icon('chart') : icon('dossier'), label: sym, detail: what, tag: enter ? 'enter' : '', run: go(openHref(sym, kind || undefined)) }];
+  if (isInstrument(sym, kind || undefined)) {
+    const proxy = PROXY[sym];
+    if (proxy) out.push({ group: sym, lead: icon('arrow'), label: `Options on ${proxy}`, detail: `The fund that tracks it; ${sym} has no option chain here`, run: go(hrefFor('swing', proxy)) });
+    return out;
+  }
+  const fund = kind === 'etf';
+  [['Chart', 'Charting workspace', 'chart'], ['Options', 'The chain, positioning and the position builder', 'swing'], fund ? null : ['Earnings', 'History, estimates and the read', 'earnings'],
+    ['News', 'Headlines for this symbol', 'news'], ['Investing', fund ? 'The decade view' : 'Valuation and the decade view', 'long']].filter(Boolean)
+    .forEach(([label, d, view]) => out.push({ group: sym, lead: icon('arrow'), label, detail: d, run: go(hrefFor(view, sym)) }));
+  out.push({ group: sym, lead: icon('arrow'), label: 'Compare', detail: 'Put it beside other names', run: go(`#/compare?t=${encodeURIComponent(sym)}`) });
   savedFor(sym).forEach((q) => out.push({ group: sym, lead: icon('milo'), label: q.slice(0, 60), detail: 'Saved research', run: () => openMilo({ question: q, opener }) }));
   return out;
 }
@@ -96,9 +131,12 @@ function symbolRows(sym, detail, exact) {
 async function build(q, early) {
   const rows = [];
   const places = PLACES.filter(allowed);
+  notice = '';
   if (!q) {
-    store.recent().slice(0, 5).forEach((s) => rows.push({ group: 'Recent', lead: icon('dossier'), label: s, detail: 'Open again', run: go(`#/${s}`) }));
-    QUICK.forEach((a) => rows.push({ group: 'Actions', lead: icon('arrow'), label: a.label, detail: a.detail, run: a.run }));
+    const rec = store.recent().slice(0, 5);
+    rec.forEach((s) => rows.push({ group: 'Recent', lead: icon(isInstrument(s) ? 'chart' : 'dossier'), label: s, detail: 'Open again', run: go(openHref(s)) }));
+    if (rec.length) rows.push({ group: 'Recent', lead: icon('close'), label: 'Clear recent symbols', detail: 'Forgets them in this browser', keep: true, run: () => store.clearRecent() });
+    QUICK.forEach((x) => rows.push({ group: 'Actions', lead: icon('arrow'), label: x.label, detail: x.detail, run: x.run }));
     places.slice(0, 6).forEach((p) => rows.push({ group: 'Go to', lead: icon('arrow'), label: p.label, run: go(placeHref(p)) }));
     return rows;
   }
@@ -106,31 +144,64 @@ async function build(q, early) {
   const matched = places.filter((p) => p.label.toLowerCase().includes(lower) || p.terms.includes(lower));
   const exact = exactPlace(q, matched);
   const placeRow = (p) => ({ group: 'Go to', lead: icon('arrow'), label: p.label, detail: p.symbol && symFor() ? symFor() : '', tag: p === exact ? 'enter' : '', run: go(placeHref(p)) });
+  // the quick actions answer to what they do ("movers", "unusual volume"), not only on an empty box
+  const actions = lower.length >= 3 ? QUICK.filter((x) => `${x.label} ${x.detail}`.toLowerCase().split(/[\s,]+/).some((w) => w.startsWith(lower)) || x.label.toLowerCase().includes(lower)) : [];
   if (exact) rows.push(placeRow(exact));
   const from = rows.length;
-  if (isTicker) rows.push(...symbolRows(upper, 'Analyse this symbol', !!exact));
+  // until the search answers, a ticker-shaped word is offered as typed, without the Enter mark
+  if (isTicker) rows.push(...symbolRows(upper, 'Looking it up', { enter: false }));
   const to = rows.length;
   matched.forEach((p) => { if (p !== exact) rows.push(placeRow(p)); });
+  actions.forEach((x) => rows.push({ group: 'Actions', lead: icon('arrow'), label: x.label, detail: x.detail, run: x.run }));
   const ask = (isQuestion || (!isTicker && q.length > 2)) ? { group: 'Ask Milo', lead: icon('milo'), label: q, detail: ctxSym ? `With ${ctxSym} and this page in context` : 'Milo answers with this page in context', tag: isQuestion && !exact ? 'enter' : '', run: () => openMilo({ question: q, opener }) } : null;
   if (ask) { if (isQuestion && !exact) rows.unshift(ask); else rows.push(ask); }
   if (early) early(rows.slice());
   const my = seq;
-  let results = [];
-  try { const r = await api.get(`/api/search?q=${encodeURIComponent(q)}&limit=7`, { ttl: 300000, timeout: 8000 }); results = (r && r.results) || []; } catch (e) { results = []; }
-  if (my !== seq) return null;
-  if (isTicker && results.length && !results.some((r) => String(r.symbol || '').toUpperCase() === upper)) {
-    const top = results[0]; rows.splice(from + (ask && isQuestion && !exact ? 1 : 0), to - from, ...symbolRows(String(top.symbol).toUpperCase(), top.name || 'Analyse this symbol', !!exact)); results = results.slice(1);
+  // A sentence is a question for Milo, not a name: the directory is not asked (over 40 characters it refuses).
+  const lookUp = q.length <= 40 && !(isQuestion && q.split(/\s+/).length > 3);
+  let results = [], failed = false;
+  if (lookUp) {
+    try { const r = await api.get(`/api/search?q=${encodeURIComponent(q)}&limit=8`, { ttl: 300000, timeout: 8000 }); results = (r && r.results) || []; failed = !!(r && r.available === false); } catch (e) { failed = true; }
   }
+  if (my !== seq) return null;
+  const at = from + (ask && isQuestion && !exact ? 1 : 0);
+  const hit = results.find((r) => r.match === 'symbol');
+  // A name is promoted to the Open row only when it is what was typed: a symbol, a name people use
+  // ("google", "spx", "10 year"), or a company whose name starts with the word. "VIX" no longer opens VIXM.
+  const first = results[0];
+  const named = !hit && first && (first.match === 'alias' || (['name', 'word'].includes(first.match) && (first.kind || 'stock') === 'stock' && startsWord(first.name, q))) ? first : null;
+  const top = hit || named;
+  const others = top ? results.filter((r) => r !== top) : results;
+  const placeTakes = !!exact || matched.length > 0 || actions.length > 0;
+  // A page named exactly ("scan", "Compare") beats a ticker; a page that only lists the word among its
+  // search terms does not beat the listed symbol itself ("SPY" opens SPY, not Indices).
+  const byLabel = !!exact && exact.label.toLowerCase() === lower;
+  if (hit && exact && !byLabel) rows.forEach((r) => { if (r.group === 'Go to' && r.label === exact.label) r.tag = ''; });
+  if (top) {
+    const enter = (!exact || (hit && !byLabel)) && !(isQuestion && ask);
+    const swap = symbolRows(String(top.symbol).toUpperCase(), top.name || '', { kind: top.kind || (top.etf ? 'etf' : 'stock'), enter });
+    if (isTicker) rows.splice(at, to - from, ...swap); else rows.splice(at, 0, ...swap);
+  } else if (isTicker) {
+    // nothing listed under that word: it can still be opened as typed (a foreign listing, a new issue),
+    // said plainly, and a place or action that matched takes Enter instead
+    const why = failed ? 'Search is unavailable; opens as typed' : results.length ? 'Not a listed symbol; opens as typed' : 'No listing found; opens as typed';
+    rows.splice(at, to - from, ...symbolRows(upper, why, { enter: !placeTakes && !(isQuestion && ask) }));
+    if (placeTakes && !exact) { const row = rows.find((r) => r.group === 'Go to' || r.group === 'Actions'); if (row) row.tag = 'enter'; }
+  }
+  if (failed) notice = 'Company search is not answering right now. Typed symbols still open, and pages and Milo work as usual.';
+  else if (lookUp && !results.length && !isTicker && !matched.length && !actions.length) notice = `No company, fund or index matches "${q}".`;
   const insertAt = rows.findIndex((r) => r.group === 'Ask Milo' && !isQuestion);
-  const symRows = results.filter((r) => !(isTicker && r.symbol === upper)).map((r) => ({ group: 'Symbols', lead: r.etf ? 'ETF' : icon('dossier'), label: r.symbol, detail: r.name, run: go(`#/${r.symbol}`) }));
+  const symRows = others.map((r) => ({ group: 'Symbols', lead: isInstrument(r.symbol, r.kind) ? icon('chart') : r.etf ? 'ETF' : icon('dossier'), label: r.symbol, detail: [r.name, KIND_WORD[r.kind] && r.kind !== 'etf' ? KIND_WORD[r.kind] : ''].filter(Boolean).join(', '), run: go(openHref(r.symbol, r.kind)) }));
   if (insertAt >= 0) rows.splice(insertAt, 0, ...symRows); else rows.push(...symRows);
   if (looksLikeScreen(q)) {
     if (!catalogue) { try { catalogue = await api.get('/api/scanners', { ttl: 600000 }); } catch (e) { catalogue = { scans: [] }; } }
     if (my !== seq) return null;
     const found = screenMatches(q, catalogue.scans), sector = sectorMentioned(q), caveat = sector ? `Does not filter by ${sector}: these run over the whole ranked universe. ` : '';
-    if (found.length) rows.forEach((r) => { if (r.group === 'Ask Milo') r.tag = ''; });
-    [...found].reverse().forEach((s, i) => rows.unshift({ group: 'Screen', lead: icon('discover'), label: s.name, detail: caveat + String(s.looks_for || '').slice(0, 120), tag: i === found.length - 1 && !exact ? 'enter' : '', run: go(`#/scan?id=${encodeURIComponent(s.id)}`) }));
-    if (sector && found.length) rows.push({ group: 'Screen', lead: icon('arrow'), label: 'Sector board', detail: `For ${sector} specifically. Macro groups the whole market by sector and drills into one.`, run: go('#/macro') });
+    if (found.length) rows.forEach((r) => { r.tag = ''; });
+    const screens = found.map((s, i) => ({ group: 'Screen', lead: icon('discover'), label: s.name, detail: caveat + String(s.looks_for || '').slice(0, 120), tag: i === 0 && !exact ? 'enter' : '', run: go(`#/scan?id=${encodeURIComponent(s.id)}`) }));
+    if (sector && found.length) screens.push({ group: 'Screen', lead: icon('arrow'), label: 'Sector board', detail: `For ${sector} specifically. Macro groups the whole market by sector and drills into one.`, run: go('#/macro') });
+    rows.unshift(...screens);
+    if (exact) { const ex = rows.find((r) => r.group === 'Go to' && r.label === exact.label); if (ex) ex.tag = 'enter'; }
   }
   return rows;
 }
@@ -140,50 +211,74 @@ function ensure() {
   root = document.createElement('div');
   root.className = 'palette'; root.hidden = true;
   root.innerHTML = `<div class="palette-scrim"></div><div class="palette-panel" role="dialog" aria-modal="true" aria-label="Search or ask Optic">
-    <input type="search" role="combobox" aria-expanded="true" aria-controls="pal-list" aria-autocomplete="list" placeholder="Search stocks, ETFs, pages, or ask Milo" autocomplete="off" spellcheck="false">
+    <input type="search" role="combobox" aria-expanded="true" aria-controls="pal-list" aria-autocomplete="list" placeholder="Search stocks, funds, indices, pages, or ask Milo" autocomplete="off" autocapitalize="none" autocorrect="off" enterkeyhint="go" spellcheck="false">
     <div class="palette-list" id="pal-list" role="listbox" aria-label="Results"></div>
+    <p class="palette-note" role="status" aria-live="polite" hidden></p>
     <p class="palette-foot" aria-hidden="true"><span><kbd>↑</kbd><kbd>↓</kbd> move</span><span><kbd>↵</kbd> open</span><span><kbd>esc</kbd> close</span></p></div>`;
   document.body.appendChild(root);
-  input = $('input', root); list = $('.palette-list', root);
+  input = $('input', root); list = $('.palette-list', root); note = $('.palette-note', root);
   root.addEventListener('click', (e) => { if (e.target.classList.contains('palette-scrim')) close(); const it = e.target.closest('.palette-item'); if (it) choose(Number(it.dataset.v2Idx)); });
-  input.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(() => paint(input.value.trim()), 120); });
+  input.addEventListener('input', () => { moved = null; clearTimeout(timer); timer = setTimeout(() => paint(input.value.trim()), 120); });
   input.addEventListener('keydown', (e) => {
+    if (e.isComposing) return;
     if (e.key === 'ArrowDown') { e.preventDefault(); move(1); } else if (e.key === 'ArrowUp') { e.preventDefault(); move(-1); }
-    else if (e.key === 'Enter') { e.preventDefault(); clearTimeout(timer); const q = input.value.trim(); if (q && q !== lastPainted) paint(q).then(() => choose(sel)); else choose(sel); }
+    else if (e.key === 'Home' && items.length) { e.preventDefault(); move(-sel); } else if (e.key === 'End' && items.length) { e.preventDefault(); move(items.length - 1 - sel); }
+    else if (e.key === 'Enter') {
+      e.preventDefault(); clearTimeout(timer);
+      // Enter waits until the search has answered for exactly what is typed, so a fast Enter never opens a guess
+      const q = input.value.trim();
+      if (q === settledFor) choose(sel); else (q === pendingFor && pending ? pending : paint(q)).then(() => { if (input.value.trim() === q) choose(sel); });
+    }
   });
+  window.addEventListener('popstate', () => { if (isOpen() && !onEntry()) close({ fromHistory: true }); });
 }
-let lastPainted = '';
-async function paint(q) {
-  const my = ++seq; lastPainted = q;
-  const out = await build(q, (early) => { if (my === seq) draw(early); });
-  if (out && my === seq) draw(out);
+function paint(q) {
+  const my = ++seq; settledFor = null; pendingFor = q;
+  pending = build(q, (early) => { if (my === seq) draw(early); }).then((out) => { if (out && my === seq) { draw(out); settledFor = q; } });
+  return pending;
 }
 function draw(out) {
-  items = out; sel = Math.max(0, out.findIndex((r) => r.tag === 'enter'));
+  items = out;
+  // once the reader has moved the selection, results arriving keep it on the same row
+  const keep = moved ? out.findIndex((r) => `${r.group}|${r.label}` === moved) : -1;
+  sel = keep >= 0 ? keep : Math.max(0, out.findIndex((r) => r.tag === 'enter'));
+  if (note) { note.textContent = notice; note.hidden = !notice; }
   let last = null;
   render(list, out.length ? out.map((it, i) => { const head = it.group !== last ? html`<p class="palette-group" role="presentation">${it.group}</p>` : ''; last = it.group;
     return html`${head}<button type="button" class="palette-item" role="option" id="pal-${i}" data-v2-idx="${i}" aria-selected="${i === sel}"><span class="pal-lead" aria-hidden="true">${it.lead}</span><span class="pal-main">${it.group === 'Open' || it.group === 'Symbols' || it.group === 'Recent' ? html`<b class="tick">${it.label}</b>` : it.label}</span>${it.detail ? html`<small>${it.detail}</small>` : ''}${it.tag ? html`<kbd class="pal-tag">${it.tag}</kbd>` : ''}</button>`; })
-    : html`<p class="quiet">Nothing matches. Try a ticker such as AAPL, or ask a question.</p>`);
+    : html`<p class="quiet">${notice ? '' : 'Nothing matches. Try a ticker such as AAPL, or ask a question.'}</p>`);
   input.setAttribute('aria-activedescendant', out.length ? `pal-${sel}` : '');
   const b = $(`#pal-${sel}`, list); if (b) b.scrollIntoView({ block: 'nearest' });
 }
 function move(d) {
   if (!items.length) return;
   sel = (sel + d + items.length) % items.length;
+  moved = `${items[sel].group}|${items[sel].label}`;
   $$('.palette-item', list).forEach((b, i) => b.setAttribute('aria-selected', String(i === sel)));
   input.setAttribute('aria-activedescendant', `pal-${sel}`);
   const b = $(`#pal-${sel}`, list); if (b) b.scrollIntoView({ block: 'nearest' });
 }
-function choose(i) { const it = items[i]; if (!it) return; close({ silent: true }); it.run(); }
+function choose(i) {
+  const it = items[i]; if (!it) return;
+  if (it.keep) { it.run(); paint(input.value.trim()); input.focus({ preventScroll: true }); return; }   // an action on the list itself keeps it open
+  close({ silent: true, leaving: true }); it.run();
+  // an action that does not navigate (Ask Milo) leaves the palette's history step behind: drop it
+  setTimeout(() => { if (onEntry() && !isOpen()) history.back(); }, 0);
+}
 
 /** Open the palette; seed it with text when a field handed it over. */
 export function open(from, { seed = '', symbol = null } = {}) {
   ensure();
   opener = from || document.activeElement; ctxSym = symbol;
+  scrollY0 = window.scrollY; moved = null; settledFor = null;
+  if (!onEntry()) { try { history.pushState(Object.assign({}, history.state || {}, { v2palette: 1 }), ''); } catch (e) { /* a sandboxed frame */ } }
   root.hidden = false; input.value = seed;
   paint(seed.trim());
   untrap = trapFocus($('.palette-panel', root), () => close());
-  input.focus();
+  // a phone's keyboard covers the bottom of the screen: the list fits the visible part (visualViewport) instead
+  const vv = window.visualViewport;
+  if (vv && !vvOff) { const fit = () => root.style.setProperty('--vvh', `${Math.round(vv.height)}px`); fit(); vv.addEventListener('resize', fit); vvOff = () => { vv.removeEventListener('resize', fit); vvOff = null; }; }
+  input.focus({ preventScroll: true });
   // the account's saved research arrives after the first paint: paint again
   // when it does, so a symbol's saved questions show without another keystroke
   if (store.signedIn() && research === null) {
@@ -191,10 +286,14 @@ export function open(from, { seed = '', symbol = null } = {}) {
       .then(() => { if (isOpen() && research.length) paint(input.value.trim()); });
   }
 }
-export function close({ silent } = {}) {
+export function close({ silent, leaving, fromHistory } = {}) {
   if (!root || root.hidden) return;
   root.hidden = true; if (untrap) untrap();
-  if (!silent && opener && document.contains(opener)) opener.focus();
+  if (vvOff) vvOff();
+  // Escape, the scrim or a route change take the palette's history step away; Back already has
+  if (!leaving && !fromHistory && onEntry()) history.back();
+  // dismissing returns the reader to the screen and the place they left (iOS scrolls the page to the focused field)
+  if (!silent) { if (opener && document.contains(opener)) opener.focus({ preventScroll: true }); if (Math.abs(window.scrollY - scrollY0) > 1) window.scrollTo(0, scrollY0); }
 }
 export const isOpen = () => !!root && !root.hidden;
 export function forgetResearch() { research = null; }

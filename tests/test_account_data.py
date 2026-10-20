@@ -70,7 +70,8 @@ def test_the_symbol_validator_accepts_every_instrument_the_terminal_loads(symbol
     reply = post("/api/watchlists/{}/items".format(list_id), signed_in["csrf"],
                  symbol=symbol)
     assert reply.status_code == 200, symbol
-    assert symbol in reply.json()["watchlist"]["symbols"]
+    # a US share class is kept in the dashed form every price source uses (2026-10-20): BRK.B is BRK-B
+    assert symbol.replace("BRK.B", "BRK-B") in reply.json()["watchlist"]["symbols"]
 
 
 def test_the_same_symbol_twice_is_one_row(signed_in):

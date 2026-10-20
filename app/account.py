@@ -50,8 +50,20 @@ DEFAULT_LIST = "Main Watchlist"
 RESEARCH_TYPES = ("note", "pulse", "deep_research", "compare", "thesis", "scan")
 
 
-def _symbol(raw: Any) -> str:
+# A US share class is dotted in the exchange directory (BRK.B) and dashed by every price
+# source (BRK-B). Kept in the dashed form so one company is one entry on a list. Only the
+# A and B classes: a dot before another letter is usually an exchange (VOD.L is London).
+SHARE_CLASS = re.compile(r"^([A-Z]{1,5})[./ ]([AB])$")
+
+
+def canonical(raw: Any) -> str:
     symbol = str(raw or "").strip().upper()
+    m = SHARE_CLASS.match(symbol)
+    return "{}-{}".format(m.group(1), m.group(2)) if m else symbol
+
+
+def _symbol(raw: Any) -> str:
+    symbol = canonical(raw)
     if not SYMBOL.match(symbol):
         raise HTTPException(status_code=400,
                             detail="That does not look like a symbol.")
@@ -309,8 +321,9 @@ async def remove_item(watchlist_id: str, symbol: str, request: Request) -> Dict[
     user = deps.require_user(request)
     deps.csrf_guard(request)
     _owned_list(user["id"], watchlist_id)
-    db.execute("DELETE FROM watchlist_items WHERE watchlist_id = ? AND symbol = ?",
-               (watchlist_id, _symbol(symbol)))
+    # the stored form may predate the dashed share class (BRK.B): both go
+    db.execute("DELETE FROM watchlist_items WHERE watchlist_id = ? AND symbol IN (?, ?)",
+               (watchlist_id, _symbol(symbol), str(symbol or "").strip().upper()))
     db.execute("UPDATE watchlists SET updated_at = ? WHERE id = ?",
                (db.utcnow(), watchlist_id))
     return {"ok": True, "watchlist": _list_payload(_owned_list(user["id"], watchlist_id))}
@@ -327,6 +340,9 @@ async def adopt_local(request: Request,
     second time and cannot delete anything."""
     user = deps.require_user(request)
     deps.csrf_guard(request)
+    lists = payload.get("lists")
+    if isinstance(lists, list) and lists:
+        return _adopt_lists(user["id"], lists)
     symbols = payload.get("symbols")
     if not isinstance(symbols, list) or not symbols:
         raise HTTPException(status_code=400, detail="Nothing to import.")
@@ -335,6 +351,39 @@ async def adopt_local(request: Request,
     _put_symbols(target["id"], symbols)
     after = _list_payload(target)
     return {"ok": True, "added": len(after["symbols"]) - before, "watchlist": after}
+
+
+def _adopt_lists(user_id: str, lists: List[Any]) -> Dict[str, Any]:
+    """A guest's named lists, kept as lists (v2 sends `lists`; the classic app sends one
+    flat `symbols`). A list whose name the account already has is merged into that one;
+    a new name becomes a new list while the plan has room; the rest go into the first
+    list, and the answer says which went where. Idempotent like the flat form."""
+    limit = store.subscription(user_id)["limits"]["watchlists"]
+    added, created, merged = 0, [], []
+    for entry in lists[:50]:
+        if not isinstance(entry, dict):
+            continue
+        name = str(entry.get("name") or "").strip()[:60] or DEFAULT_LIST
+        symbols = entry.get("symbols") if isinstance(entry.get("symbols"), list) else []
+        if not symbols:
+            continue
+        existing = _lists_for(user_id)
+        target = next((w for w in existing if w["name"].lower() == name.lower()), None)
+        if target is None and existing and len(existing) >= limit:
+            target = existing[0]
+            merged.append({"name": name, "into": target["name"]})
+        if target is None:
+            now = db.utcnow()
+            wid = db.new_id()
+            db.execute("INSERT INTO watchlists (id,user_id,name,position,created_at,updated_at) "
+                       "VALUES (?,?,?,?,?,?)", (wid, user_id, name, len(existing), now, now))
+            target = db.row("SELECT * FROM watchlists WHERE id = ?", (wid,))
+            created.append(name)
+        before = len(_list_payload(target)["symbols"])
+        _put_symbols(target["id"], symbols)
+        added += len(_list_payload(target)["symbols"]) - before
+    return {"ok": True, "added": added, "created": created, "merged": merged,
+            "watchlists": [_list_payload(w) for w in _lists_for(user_id)]}
 
 
 # -------------------------------------------------------------- saved research

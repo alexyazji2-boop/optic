@@ -1,7 +1,9 @@
 /* Optic v2 base: reset, type, focus, layout primitives. Components live in
    components.css; nothing here sets a component's look. */
 *, *::before, *::after { box-sizing: border-box; }
-html { -webkit-text-size-adjust: 100%; }
+html { -webkit-text-size-adjust: 100%; scroll-padding-top: 88px; scroll-padding-bottom: 16px; }
+/* the phone bar is fixed at the foot: what the keyboard focuses, or a link jumps to, stays above it */
+@media (max-width: 860px) { html { scroll-padding-top: 76px; scroll-padding-bottom: 84px; } }
 body {
   margin: 0; background: var(--c-plane); color: var(--c-ink);
   font: 400 var(--t-body)/1.55 var(--f-sans); font-variant-numeric: tabular-nums;

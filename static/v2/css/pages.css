@@ -34,8 +34,10 @@
 .row .sig, .wl-row .sig { font: 500 var(--t-md)/1 var(--f-label); color: var(--c-ink-3); }
 .sig-bullish { color: var(--c-pos) !important; } .sig-bearish { color: var(--c-neg) !important; }
 .row-off { padding: 14px 8px; border-bottom: 1px solid var(--c-line-2); }
-.toast-act { margin-left: 10px; min-height: 32px; padding: 0 12px; border-radius: var(--r-ctl-in); border: 1px solid rgba(244, 239, 229, .4); background: transparent; color: inherit; font-weight: 600; cursor: pointer; }
-.toast { pointer-events: none; display: flex; align-items: center; } .toast.show { pointer-events: auto; }
+.toast-act { margin-left: 10px; min-height: var(--tap); min-width: var(--tap); padding: 0 12px; border-radius: var(--r-ctl-in); border: 1px solid rgba(244, 239, 229, .4); background: transparent; color: inherit; font-weight: 600; cursor: pointer; }
+.toast { pointer-events: none; display: flex; align-items: center; visibility: hidden; transition: opacity var(--d), transform var(--d) var(--ease), visibility 0s linear var(--d); } .toast.show { pointer-events: auto; visibility: visible; transition: opacity var(--d), transform var(--d) var(--ease); }
+/* a phone: above the fixed phone bar, never on it */
+@media (max-width: 860px) { .toast { bottom: calc(76px + env(safe-area-inset-bottom, 0px)); } }
 .toast[data-kind="bad"] { background: var(--c-neg); }
 .more-list { display: grid; gap: 2px; }
 
@@ -80,14 +82,21 @@
 .list-form .field { flex: 1 1 260px; max-width: 420px; }
 .confirm { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: var(--t-base); }
 .add-form { display: flex; gap: 10px; margin-top: 18px; max-width: 520px; }
-.add-form .field { flex: 1; }
+.add-form .field { flex: 1; min-width: 0; }
 .add-form .field svg { stroke: var(--c-ink-3); }
 .wl-pulse { --kv: 4; margin-top: 22px; }
 .wl-controls { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin: 22px 0 10px; }
 .field-sm { min-height: 44px; flex: 0 1 240px; }
 .select { display: inline-flex; align-items: center; gap: 8px; }
 .select select { min-height: var(--tap); padding: 0 34px 0 14px; border-radius: var(--r-ctl); border: 1px solid var(--c-line); background: var(--c-raised); color: var(--c-ink); font-size: var(--t-base); }
-.wl-rows { border-top: 1px solid var(--c-line); --wl: minmax(110px, 1fr) 96px 92px 120px minmax(140px, 1.8fr) 92px; }
+.wl-rows { border-top: 1px solid var(--c-line); --wl: minmax(110px, 1fr) 96px 92px 120px 76px 96px minmax(140px, 1.8fr) 92px; }
+@media (max-width: 1240px) { .wl-rows { --wl: minmax(100px, 1fr) 92px 88px 76px 96px minmax(130px, 1.6fr) 88px; } .wl-rows .spark-cell { display: none; } }
+.wl-alert { display: inline-flex; align-items: center; gap: 4px; margin-left: 8px; font: 500 var(--t-sm)/1 var(--f-label); color: var(--c-ink-3); white-space: nowrap; }
+.wl-alert svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.7; }
+.wl-alert.is-fired { color: var(--c-ink); font-weight: 600; }
+.wl-earn small, .wl-vol small { font-size: var(--t-sm); }
+.wl-undo { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 8px 0; color: var(--c-ink-2); }
+.co-go { margin-top: 10px; }
 .wl-head { display: grid; grid-template-columns: var(--wl); gap: 16px; padding: 10px 8px; margin-right: 44px; font: 500 var(--t-md)/1.2 var(--f-label); color: var(--c-ink-3); border-bottom: 1px solid var(--c-line); }
 .wl-rows.is-custom .wl-head { margin-right: 136px; }
 .wl-head .num, .row-main .num { text-align: right; }
@@ -143,10 +152,11 @@
   .wl-head { display: none; }
   .row-main { grid-template-columns: minmax(0, 1fr) auto; gap: 4px 12px; padding: 14px 4px; }
   .row-main .who { grid-column: 1; grid-row: 1; }
-  .row-main .num:nth-of-type(1) { grid-column: 2; grid-row: 1; }
-  .row-main > .num + .num { grid-column: 2; grid-row: 2; }
+  /* a phone keeps the symbol, the price and the day's change; the rest is in the row's detail */
+  .row-main .wl-price { grid-column: 2; grid-row: 1; }
+  .row-main .wl-chg { grid-column: 2; grid-row: 2; }
   .row-main .note { grid-column: 1; grid-row: 2; font-size: var(--t-base); }
-  .row-main .spark-cell, .row-main .sig { display: none; }
+  .row-main .spark-cell, .row-main .sig, .row-main .wl-vol, .row-main .wl-earn { display: none; }
   .watch-list li { grid-template-columns: 1fr auto; }
   .watch-list .w-state { grid-column: 1 / -1; }
   .verdict-line { font-size: var(--t-lead); }
@@ -451,7 +461,7 @@ table.chw-table { font-size: var(--t-sm); } table.chw-table th { padding: 6px 4p
 @media (max-width: 860px) {
   .dhead.bar { gap: 6px 12px; }
   .dhead.bar .acts { margin-left: 0; width: 100%; }
-  .dhead.bar .acts .btn { min-height: 40px; }
+  .dhead.bar .acts .btn { min-height: var(--tap); }
   .ch-drawtoggle { display: inline-flex !important; }
   .ch-zoom [data-v2-ch-zoom] { display: none; }
   .ch-stage { flex-direction: column; gap: 6px; }
@@ -471,7 +481,7 @@ table.chw-table { font-size: var(--t-sm); } table.chw-table th { padding: 6px 4p
   /* one row of controls under the bar size: style, indicators, draw and fit as named icons */
   .ctools .ch-lbl { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
   .ctools .btn-sm:has(.ch-lbl) { min-width: 44px; min-height: 44px; padding: 0 10px; }
-  .ctools .seg-ic button { min-height: 40px; }
+  .ctools .seg-ic button { min-height: var(--tap); }
   .ch-zoom .ch-tool { width: 44px; height: 44px; }
 }
 .ctools { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
@@ -675,14 +685,14 @@ html.ch-max .ch-side, html.ch-max .ch-wrail { max-height: min(calc(100vh - 16px)
 .drawd > summary { display: none; }
 @media (max-width: 860px) {
   .drawd { margin: 10px 0; } .drawd > summary { display: inline-flex; list-style: none; } .drawd > summary::-webkit-details-marker { display: none; }
-  .ctools { gap: 8px; } .ctools .seg button { min-height: 38px; padding: 0 10px; }
+  .ctools { gap: 8px; } .ctools .seg button { min-height: var(--tap); padding: 0 10px; }
 }
 @media (max-width: 860px) {
   .dhead.compact { padding-top: 6px; gap: 8px; }
   .dhead.compact .t-display { font-size: 30px; }
   .dhead.compact .dh-chg { font-size: var(--t-base); }
   .dhead.compact .dh-state { display: none; }
-  .dhead.compact .acts .btn { min-height: 40px; font-size: var(--t-md); }
+  .dhead.compact .acts .btn { min-height: var(--tap); font-size: var(--t-md); }
   .chart-page .ctools [data-v2-ch-zoom] { display: none; }
   .chart-page { margin-top: 10px; }
 }

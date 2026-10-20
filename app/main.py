@@ -1641,8 +1641,10 @@ async def symbol_search(
     limit: int = Query(10, ge=1, le=25),
 ) -> Dict[str, Any]:
     """Typeahead for the ticker box. Matches symbol or company name across every
-    US-listed symbol, ranked so the company someone meant comes first."""
-    return await _run(lambda: {"query": q, "results": universe_mod.search(q, limit)})
+    US-listed symbol, and the indices, rates, currencies and futures Optic quotes,
+    ranked so the thing someone meant comes first. `available` is False when the
+    symbol directory could not be read, so the box can say so instead of "no match"."""
+    return await _run(lambda: {"query": q, **universe_mod.search_with_status(q, limit)})
 
 
 # A daily candle's close keeps moving for a few minutes after the bell, while
@@ -2517,6 +2519,16 @@ async def watchlist_feed(
     """
     wanted = [s.strip().upper() for s in symbols.split(",") if s.strip()][:40]
     return await _run(watchlist_mod.build, YF_PROVIDER, wanted)
+
+
+@app.get("/api/watchlist/earnings")
+async def watchlist_earnings(
+    symbols: str = Query("", description="Comma-separated symbols"),
+) -> Dict[str, Any]:
+    """The next earnings date for each name on a list, asked after the rows have painted.
+    One provider call per company, cached for an hour, so it is capped at 40 like the feed."""
+    wanted = [s.strip().upper() for s in symbols.split(",") if s.strip()][:40]
+    return await _run(watchlist_mod.earnings_dates, YF_PROVIDER, wanted)
 
 
 @app.get("/api/home")

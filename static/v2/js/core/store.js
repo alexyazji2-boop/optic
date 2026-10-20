@@ -84,7 +84,25 @@ export function pushRecent(sym) {
   writeJSON(RECENT_KEY, next);
 }
 
+/** Take one symbol off the Recent list: one that turned out not to exist (the classic forgetSymbol). */
+export function forgetRecent(sym) {
+  const raw = readJSON(RECENT_KEY, []);
+  if (!Array.isArray(raw)) return;
+  writeJSON(RECENT_KEY, raw.filter((x) => String(typeof x === 'string' ? x : x && x.symbol).toUpperCase() !== String(sym).toUpperCase()));
+}
+/** Forget the symbols opened in this browser (the search's Recent list; the classic app reads the same key). */
+export function clearRecent() { writeJSON(RECENT_KEY, []); }
+
 /* ---------------- watchlists ---------------- */
+// One company is one entry: a US share class is kept dashed (BRK-B), the form every price
+// source uses, however it was typed (BRK.B, brk b). Only A and B: VOD.L is London.
+export function canon(sym) {
+  const s = String(sym || '').trim().toUpperCase();
+  const m = /^([A-Z]{1,5})[./ ]([AB])$/.exec(s);
+  return m ? `${m[1]}-${m[2]}` : s;
+}
+const uniq = (syms) => [...new Set(syms.map(canon).filter(Boolean))];
+const SAVE_REFUSED = 'This browser would not save the change (private browsing, or its storage is full), so nothing was changed.';
 const newId = () => 'wl' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 
 function guestLists() {
@@ -92,7 +110,7 @@ function guestLists() {
   if (raw && Array.isArray(raw.lists) && raw.lists.length) {
     const lists = raw.lists.map((l) => ({
       id: String(l.id || newId()), name: String(l.name || 'Watchlist').slice(0, 60),
-      symbols: (Array.isArray(l.symbols) ? l.symbols : []).map((x) => String(x).toUpperCase()).filter(Boolean),
+      symbols: uniq(Array.isArray(l.symbols) ? l.symbols : []),
     }));
     const activeId = lists.some((l) => l.id === raw.activeId) ? raw.activeId : lists[0].id;
     return { lists, activeId, stored: true };
@@ -103,16 +121,18 @@ function guestLists() {
   const flat = readJSON(WATCH_KEY, null);
   if (Array.isArray(flat)) {
     const id = newId();
-    return { lists: [{ id, name: 'Watchlist', symbols: flat.map((s) => String(s).toUpperCase()).filter(Boolean) }], activeId: id, stored: true };
+    return { lists: [{ id, name: 'Watchlist', symbols: uniq(flat) }], activeId: id, stored: true };
   }
   return { lists: [], activeId: null, stored: false };
 }
 
+/** False when the browser refused the write: the caller puts the list back and says so. */
 function saveGuest(lists, activeId) {
-  writeJSON(WATCHLISTS_KEY, { lists, activeId });
+  const ok = writeJSON(WATCHLISTS_KEY, { lists, activeId });
   const active = lists.find((l) => l.id === activeId);
   // the active list is mirrored into the flat key every classic reader uses
   writeJSON(WATCH_KEY, active ? active.symbols : []);
+  return ok;
 }
 
 // Signed in, the classic app still keeps the open list in the flat key: its
@@ -125,7 +145,7 @@ function mirrorActive() {
 }
 
 function adoptServer(lists, preferId) {
-  state.lists = (lists || []).map((w) => ({ id: w.id, name: w.name, symbols: (w.symbols || []).slice() }));
+  state.lists = (lists || []).map((w) => ({ id: w.id, name: w.name, symbols: uniq(w.symbols || []) }));
   // the classic app stores the id as a bare string, not JSON (watchListSwitch)
   let remembered = null; try { remembered = holds(state.user) ? localStorage.getItem(ACCOUNT_LIST_KEY) : null; } catch (e) { /* private */ }
   const want = [preferId, state.activeId, remembered].find((id) => id && state.lists.some((l) => l.id === id));
@@ -155,7 +175,8 @@ export async function loadLists({ force = false } = {}) {
 
 export const activeList = () => (state.lists || []).find((l) => l.id === state.activeId) || null;
 export const allSymbols = () => [...new Set((state.lists || []).flatMap((l) => l.symbols))];
-export const isFollowed = (sym) => (state.lists || []).some((l) => l.symbols.includes(sym));
+export const isFollowed = (sym) => (state.lists || []).some((l) => l.symbols.includes(canon(sym)));
+export const listsWith = (sym) => (state.lists || []).filter((l) => l.symbols.includes(canon(sym)));
 export function listCap() {
   if (signedIn()) {
     const n = Number(plan().limits.watchlists || state.listLimit);
@@ -168,17 +189,24 @@ export function setActive(id) {
   if (!(state.lists || []).some((l) => l.id === id)) return;
   state.activeId = id;
   if (signedIn()) { if (holds(state.user)) { try { localStorage.setItem(ACCOUNT_LIST_KEY, id); } catch (e) { /* private */ } } mirrorActive(); }
-  else saveGuest(state.lists, id);
+  else saveGuest(state.lists, id);   // which list is open is a convenience: a refused write is not worth an error
   emit('lists');
 }
 
 // Every write is optimistic: the page changes at once, and a refusal puts it
-// back and throws so the caller can say why.
+// back and throws so the caller can say why. A browser that will not store a
+// guest's change is a refusal too. When the answer never came (a timeout, a
+// dropped connection) the server may have applied it, so the lists are read
+// again from the account instead of being guessed back.
 async function mutate(apply, remote) {
   const before = JSON.stringify({ lists: state.lists, activeId: state.activeId });
+  const restore = () => { const b = JSON.parse(before); state.lists = b.lists; state.activeId = b.activeId; emit('lists'); };
   apply();
   emit('lists');
-  if (!signedIn()) { saveGuest(state.lists, state.activeId); return; }
+  if (!signedIn()) {
+    if (!saveGuest(state.lists, state.activeId)) { restore(); throw new api.ApiError('bad', 0, SAVE_REFUSED); }
+    return;
+  }
   try {
     const r = await remote();
     if (r && Array.isArray(r.watchlists)) adoptServer(r.watchlists);
@@ -191,14 +219,18 @@ async function mutate(apply, remote) {
     api.invalidate('/api/watchlists');
     emit('lists');
   } catch (e) {
-    const b = JSON.parse(before); state.lists = b.lists; state.activeId = b.activeId;
-    emit('lists');
+    if (e && e.status === 0 && (e.kind === 'timeout' || e.kind === 'server' || e.kind === 'offline')) {
+      await loadLists({ force: true }).catch(() => {});
+      if (!state.listsError) throw new api.ApiError(e.kind, 0, 'Optic could not confirm that change. The list now shows what your account holds.');
+    }
+    restore();
     throw e;
   }
 }
 
-export async function follow(sym, listId) {
-  sym = String(sym || '').toUpperCase().trim();
+/** Add a symbol to a list (the open one by default). `at` puts it back where it was, for Undo. */
+export async function follow(sym, listId, { at } = {}) {
+  sym = canon(sym);
   if (!sym) return;
   if (!state.lists || !state.lists.length) {
     // the first follow makes the first list
@@ -210,17 +242,24 @@ export async function follow(sym, listId) {
     }
     const id = newId();
     state.lists = [{ id, name: 'Watchlist', symbols: [sym] }]; state.activeId = id;
-    saveGuest(state.lists, id); emit('lists');
+    if (!saveGuest(state.lists, id)) { state.lists = []; state.activeId = null; emit('lists'); throw new api.ApiError('bad', 0, SAVE_REFUSED); }
+    emit('lists');
     return;
   }
   const id = listId || state.activeId;
   const list = state.lists.find((l) => l.id === id);
   if (!list || list.symbols.includes(sym)) return;
-  return mutate(() => { list.symbols = [...list.symbols, sym]; },
-    () => api.post(`/api/watchlists/${encodeURIComponent(id)}/items`, { symbol: sym }));
+  const next = list.symbols.slice();
+  next.splice(Number.isInteger(at) && at >= 0 ? Math.min(at, next.length) : next.length, 0, sym);
+  const atEnd = next[next.length - 1] === sym;
+  return mutate(() => { list.symbols = next; }, async () => {
+    const r = await api.post(`/api/watchlists/${encodeURIComponent(id)}/items`, { symbol: sym });
+    return atEnd ? r : api.put(`/api/watchlists/${encodeURIComponent(id)}/order`, { symbols: next });
+  });
 }
 
 export async function unfollow(sym, listId) {
+  sym = canon(sym);
   const id = listId || state.activeId;
   const list = (state.lists || []).find((l) => l.id === id);
   if (!list) return;
@@ -230,8 +269,10 @@ export async function unfollow(sym, listId) {
 
 /** Remove a symbol from every list (the Watch/Watching toggle on a company). */
 export async function unfollowEverywhere(sym) {
-  const ids = (state.lists || []).filter((l) => l.symbols.includes(sym)).map((l) => l.id);
-  for (const id of ids) await unfollow(sym, id); // eslint-disable-line no-await-in-loop
+  sym = canon(sym);
+  const where = (state.lists || []).filter((l) => l.symbols.includes(sym)).map((l) => ({ id: l.id, name: l.name, at: l.symbols.indexOf(sym) }));
+  for (const w of where) await unfollow(sym, w.id); // eslint-disable-line no-await-in-loop
+  return where;   // the lists it left and its place on each, so Undo can put it back exactly
 }
 
 export async function moveSymbol(sym, delta, listId) {
@@ -259,16 +300,20 @@ export async function createList(name) {
     if (r && r.watchlist) setActive(r.watchlist.id);
     return;
   }
+  if ((state.lists || []).some((l) => l.name.toLowerCase() === name.toLowerCase())) throw new api.ApiError('bad', 409, 'You already have a list with that name.');
   const id = newId();
+  const was = { lists: state.lists, activeId: state.activeId };
   state.lists = [...(state.lists || []), { id, name, symbols: [] }];
   state.activeId = id;
-  saveGuest(state.lists, id); emit('lists');
+  if (!saveGuest(state.lists, id)) { state.lists = was.lists; state.activeId = was.activeId; emit('lists'); throw new api.ApiError('bad', 0, SAVE_REFUSED); }
+  emit('lists');
 }
 
 export async function renameList(id, name) {
   name = String(name || '').trim().slice(0, 60);
   const list = (state.lists || []).find((l) => l.id === id);
   if (!list || !name || name === list.name) return;
+  if (!signedIn() && state.lists.some((l) => l !== list && l.name.toLowerCase() === name.toLowerCase())) throw new api.ApiError('bad', 409, 'You already have a list with that name.');
   return mutate(() => { list.name = name; }, () => api.patch(`/api/watchlists/${encodeURIComponent(id)}`, { name }));
 }
 

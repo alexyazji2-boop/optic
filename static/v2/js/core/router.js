@@ -18,7 +18,8 @@ const BROKERAGE_SECTIONS = ['overview', 'holdings', 'performance', 'events', 'sc
 export function parse(hash = location.hash) {
   const raw = String(hash || '').replace(/^#\/?/, '');
   const [path, query = ''] = raw.split('?');
-  const parts = path.split('/').filter(Boolean).map((s) => decodeURIComponent(s));
+  // a hand-typed or truncated address ("#/%") must not stop the app from rendering
+  const parts = path.split('/').filter(Boolean).map((s) => { try { return decodeURIComponent(s); } catch (e) { return s; } });
   const params = {};
   query.split('&').filter(Boolean).forEach((kv) => {
     const [k, v = ''] = kv.split('=');
