@@ -105,6 +105,99 @@ const persona = () => { try { return localStorage.getItem(PERSONA_KEY) || 'neutr
 const horizon = () => { try { return localStorage.getItem(HORIZON_KEY) || 'auto'; } catch (e) { return 'auto'; } };
 const setPref = (k, v) => { try { localStorage.setItem(k, v); } catch (e) { /* private mode */ } };
 
+/* ---------------- the mascot ---------------- */
+// Scout, the classic panel's mascot (components/scout.js, loaded before the app as on the classic page:
+// window.OpticScout). He moves on Milo's own events, as he does there, never on a loop of his own: the panel
+// opening (one wave, not again within 20 s), typing (a curious tilt, let go 2.5 s after the last key), a question
+// sent (an acknowledging wave, then thinking), a search the server reports (a look around), the first words of
+// the answer (stillness), the end (a small nod), a failure or a cut-off answer (a concerned face), a stop (a look).
+// The welcome figure is a button with the classic guide menu; the bust beside each answer is decorative, and
+// only the newest one moves. Without the script the panel reads the same, without him.
+const OS = () => window.OpticScout || null;
+const SEARCHING = new Set(['searching the web', 'searching', 'reading and weighing sources']);
+const CAN_ASK = 'Ask me anything: about the company or the page you have open, about the market as a whole, or about how Optic works something out. I read Optic\'s own figures for what is on your screen, and look up more of Optic\'s data when a question needs it.';
+// the classic panel's starters, word for word; the ones about a symbol only when one is on screen
+const EXAMPLES = [
+  ['ticker', 'Walk me through the composite score on {T}. Which inputs are carrying it, and where do they disagree?'],
+  ['ticker', 'What is the strongest argument AGAINST the current setup on {T}?'],
+  ['ticker', 'Give me the bull and bear case for {T} over the next quarter, from the numbers on screen.'],
+  ['ticker', 'Is {T}’s seasonality real, or is the sample too small to say?'],
+  ['ticker', 'What does the dealer gamma profile imply if {T} breaks its nearest level?'],
+  ['ticker', 'How has {T} actually traded after its last eight earnings reports?'],
+  [null, 'What is the macro regime saying right now, and which sectors is it favouring?'],
+  [null, 'Which currency pairs are worth watching this week, and why?'],
+  [null, 'Explain how this terminal computes dealer gamma, and what assumption it is making.'],
+  [null, 'Summarise what happened in the market since the last close.'],
+  [null, 'How is the paper-trading ledger actually doing, and is the sample big enough to mean anything?'],
+  [null, 'Which chart patterns has this terminal measured as actually working, and at what hit rate?'],
+];
+export const examples = (sym) => EXAMPLES.filter(([need]) => !need || sym).map(([, q]) => q.replace(/\{T\}/g, sym || ''));
+// i: the answer whose bust moves, and the state it is in; via: a gesture still to play into that state
+const SC = { i: null, state: 'idle', via: null, menu: false, canAsk: false, examples: false, presses: 0, lastWave: 0, quiet: null };
+const figure = (size, label = '') => (OS() ? raw(OS().html({ size, label: label ? esc(label) : '' })) : '');
+const welcomeEl = (h) => $('.milo-hello .scout', h);
+const replyEl = (h, i) => (i === null || i === undefined ? null : $(`[data-v2-milo-i="${i}"] .milo-who .scout`, h));
+/** After the log is drawn: start the welcome figure, and put the moving bust back in its state. */
+function scoutAfterPaint() {
+  const O = OS(), h = host(); if (!O || !h) return;
+  const btn = $('.milo-hello .scout-btn', h); if (btn) { btn.setAttribute('aria-expanded', String(SC.menu)); O.attach(welcomeEl(h), { slot: 'welcome' }); }
+  const el = replyEl(h, SC.i); if (!el) return;
+  const c = O.attach(el, { slot: 'reply' }), via = SC.via; SC.via = null;
+  if (c) c.set(SC.state, via || undefined);
+}
+function scoutTo(i, state, via) { SC.i = i; SC.state = state; SC.via = via || null; scoutAfterPaint(); }
+// typing: the welcome figure, or once a conversation has started the newest bust, unless it is busy with an answer
+function scoutListen(v) {
+  const O = OS(), h = host(); if (!O || !h) return;
+  let el = welcomeEl(h);
+  if (!el && !S.busy) { const all = h.querySelectorAll('.milo-bot .milo-who .scout'); el = all.length ? all[all.length - 1] : null; }
+  const c = el && O.attach(el, el.closest('.milo-hello') ? { slot: 'welcome' } : { slot: 'reply' }); if (!c) return;
+  clearTimeout(SC.quiet);
+  if (!String(v || '').trim()) { if (c.state === 'listening') c.set('idle'); return; }
+  if (c.state === 'idle') c.set('listening');
+  SC.quiet = setTimeout(() => { if (c.state === 'listening') c.set('idle'); }, 2500);
+}
+function setMenu(open, refocus) {
+  const h = host(); SC.menu = open;
+  const menu = h && $('#milo-scout-menu', h), btn = h && $('.milo-hello .scout-btn', h);
+  if (menu) menu.hidden = !open;
+  if (btn) { btn.setAttribute('aria-expanded', String(open)); if (!open && refocus) btn.focus(); }
+  if (open && menu) { const f = $('.scout-mi', menu); if (f) f.focus({ preventScroll: true }); menu.scrollIntoView({ block: 'nearest' }); }
+}
+// a press: a short wave or, every other time, a curious tilt, and the menu
+function scoutPress(btn) {
+  if (SC.menu) { setMenu(false, true); return; }
+  const c = OS() && OS().attach($('.scout', btn), { slot: 'welcome' }); if (c) c.gesture(SC.presses++ % 2 ? 'curious' : 'wave');
+  setMenu(true);
+}
+// the menu's two actions show the sentence or the examples in the opening; neither sends anything
+function scoutAct(act) {
+  SC.menu = false;
+  if (act === 'ask') SC.canAsk = !SC.canAsk; else SC.examples = !SC.examples;
+  paintLog(false);
+  const h = host(); if (!h) return;
+  const btn = $('.milo-hello .scout-btn', h); if (btn) btn.focus({ preventScroll: true });
+  const c = OS() && OS().attach(welcomeEl(h), { slot: 'welcome' });
+  if (act === 'examples' && SC.examples) { const ex = $('.milo-examples', h); if (ex) ex.scrollIntoView({ block: 'nearest' }); if (c) c.gesture('point'); } else if (act === 'ask' && SC.canAsk && c) c.gesture('curious');
+}
+function menuHTML() {
+  const m = OS() ? OS().motion() : 'full';
+  const radio = (v, l) => html`<button type="button" role="menuitemradio" class="scout-mi" aria-checked="${m === v ? 'true' : 'false'}" data-v2-scout-motion="${v}">${l}</button>`;
+  return html`<div class="scout-menu" id="milo-scout-menu" role="menu" aria-label="Milo guide" ${SC.menu ? '' : 'hidden'}>
+    <button type="button" role="menuitem" class="scout-mi" data-v2-scout-act="ask">${SC.canAsk ? 'Hide what I can ask' : 'What can I ask?'}</button>
+    <button type="button" role="menuitem" class="scout-mi" data-v2-scout-act="examples">${SC.examples ? 'Hide example questions' : 'Show example questions'}</button>
+    <div class="scout-menu-sep" role="separator"></div><p class="scout-menu-lab" aria-hidden="true">Animation</p>
+    ${radio('full', 'Full')}${radio('subtle', 'Subtle')}${radio('still', 'Still')}</div>`;
+}
+function openingHTML() {
+  const fig = figure('full', 'Milo guide: what to ask, examples and animation');
+  const sym = (DOSSIER.has(route.view) || route.view === 'instrument') && route.symbol ? route.symbol : null;
+  return html`<div class="milo-opening"><div class="milo-hello">${fig}${fig ? menuHTML() : ''}<p class="milo-hello-say" role="note">Hi, I'm Milo. What would you like to explore?</p></div>
+    ${SC.canAsk ? html`<p class="milo-can-ask" role="note">${CAN_ASK}</p>` : ''}
+    <p class="t-muted milo-empty">Ask about ${contextLabel()}, or anything else in the market. Follow-up questions keep the conversation going.</p>
+    ${SC.examples ? html`<div class="milo-examples" role="group" aria-label="Example questions">${examples(sym).map((q) => html`<button type="button" class="milo-ex" data-v2-milo-follow="${q}">${q}</button>`)}</div>` : ''}</div>`;
+}
+
 export function button(label, { ask, context, symbol, cls = '' } = {}) {
   return html`<button type="button" class="btn btn-milo ${cls}" data-v2-milo="${ask || ''}" data-v2-milo-ctx="${context || ''}" data-v2-milo-sym="${symbol || ''}" ${AVAIL === 'off' ? html`aria-describedby="milo-off-desc"` : ''}>${label}</button>`;
 }
@@ -177,7 +270,7 @@ function msgHTML(it) {
   if (m.role === 'user') return html`<div class="milo-msg milo-you"><p class="milo-who">You</p><div class="milo-bubble">${m.content}</div></div>`;
   const shown = String(m.content || '').replace(/\n\n\[(Stopped by the reader|Cut off): incomplete\]$/, '');
   const { html: body, ups } = renderAnswer(shown, info.symbol || null);
-  return html`<div class="milo-msg milo-bot" data-v2-milo-i="${it.i}"><p class="milo-who">Milo</p>
+  return html`<div class="milo-msg milo-bot" data-v2-milo-i="${it.i}"><p class="milo-who">${figure('compact')}<span>Milo</span></p>
     ${info.assumed ? html`<p class="milo-assumed">${info.assumed}</p>` : ''}
     <div class="milo-bubble">${raw(body)}</div>
     ${info.ended || /\[(Stopped by the reader|Cut off): incomplete\]$/.test(m.content || '') ? html`<p class="milo-ended" role="note">${(info.ended || (/Stopped by the reader/.test(m.content) ? 'stopped' : 'cut')) === 'stopped' ? 'Stopped by you. This answer is incomplete.' : 'The connection ended before Milo finished. This answer is incomplete.'}</p>` : ''}
@@ -214,7 +307,7 @@ function chromeHTML() {
     ${b ? html`<div class="state milo-block" role="status"><p>${b.text}</p>${b.kind === 'signin' ? html`<a class="btn btn-primary btn-sm" href="#/signin">Sign in</a>` : ''}</div>` : ''}`;
 }
 function logHTML() {
-  if (!S.items.length) return html`<p class="t-muted milo-empty">Ask about ${contextLabel()}, or anything else in the market. Follow-up questions keep the conversation going.</p>`;
+  if (!S.items.length) return openingHTML();
   return html`${S.items.map(msgHTML)}`;
 }
 function paintChrome() { const h = host(); if (!h) return; draw($('.milo-chrome', h), chromeHTML()); paintForm(); }
@@ -224,6 +317,7 @@ function paintLog(stick = true) {
   draw(log, logHTML());
   mountAnswerCharts(log);
   if (stick && pinned) log.scrollTop = log.scrollHeight;
+  scoutAfterPaint();
 }
 function paintForm() {
   const h = host(); if (!h) return;
@@ -290,6 +384,7 @@ export async function send(text) {
   S.busy = true; S.live = { i: ai, text: '', status: 'Reading what is on your screen', symbol: focusTicker || route.symbol || null };
   if (ta) ta.value = ''; S.draft = '';
   paintLog(); paintForm(); paintLive();
+  scoutTo(ai, 'thinking', 'ack');
   const ctl = new AbortController(); S.abort = ctl;
   let finished = false, ended = '', failed = null;
   try {
@@ -317,8 +412,8 @@ export async function send(text) {
           c.split('\n').forEach((line) => { if (line.startsWith('event: ')) ev = line.slice(7).trim(); else if (line.startsWith('data: ')) data += line.slice(6); });
           if (!data) continue;
           let p; try { p = JSON.parse(data); } catch (e) { continue; }
-          if (ev === 'delta') { S.live.text += p.text || ''; S.live.status = ''; S.conv.messages[ai].content = S.live.text; paintLive(); }
-          else if (ev === 'status') { const w = STEP_WORDS[String(p.state || '')] || String(p.state || '').replace(/^./, (x) => x.toUpperCase()); S.live.status = w; paintLive(); }
+          if (ev === 'delta') { S.live.text += p.text || ''; S.live.status = ''; S.conv.messages[ai].content = S.live.text; paintLive(); if (SC.i === ai && SC.state !== 'streaming') scoutTo(ai, 'streaming'); }
+          else if (ev === 'status') { const w = STEP_WORDS[String(p.state || '')] || String(p.state || '').replace(/^./, (x) => x.toUpperCase()); S.live.status = w; paintLive(); if (SC.i === ai && SC.state !== 'streaming') scoutTo(ai, SEARCHING.has(String(p.state || '')) ? 'searching' : 'thinking'); }
           else if (ev === 'assumed') { const hz = (((S.personas || {}).horizons || {}).horizons || []).find((x) => x.id === p.horizon); if (hz && p.horizon_source === 'question' && p.horizon !== horizon()) meta.get(ai).assumed = `Answered for a ${hz.label.toLowerCase()} timeframe, from your question. Your setting is unchanged.`; }
           else if (ev === 'error') { finished = true; failed = { text: p.message || 'Milo could not answer.' }; }
           else if (ev === 'done') { finished = true; Object.assign(meta.get(ai), { citations: p.sources || p.citations || [], read: Array.isArray(p.read) ? p.read : [], retrieved: Array.isArray(p.retrieved) ? p.retrieved : [] }); }
@@ -338,10 +433,15 @@ export async function send(text) {
     S.items.push({ kind: 'note', text: failed.text });
     S.draft = text; const box = host() && $('#milo-q', host()); if (box && !box.value.trim()) box.value = text;
     if (failed.signin) loadAllowance();
+    SC.i = null;
   } else if (!reply && ended === 'stopped') {
     S.conv.messages.splice(ai - 1, 2); S.items = S.items.filter((it) => !(it.kind === 'msg' && it.i >= ai - 1)); meta.delete(ai);
     S.items.push({ kind: 'note', text: 'Stopped before Milo answered.' });
+    SC.i = null;
   } else {
+    if (failed || ended === 'cut') Object.assign(SC, { i: ai, state: 'error', via: null });
+    else if (ended === 'stopped') Object.assign(SC, { i: ai, state: 'idle', via: 'look' });
+    else Object.assign(SC, { i: ai, state: 'idle', via: reply.trim() ? 'nod' : null });
     if (failed) S.items.push({ kind: 'note', text: failed.text });
     if (ended) { meta.get(ai).ended = ended; S.conv.messages[ai].content = `${reply}\n\n[${ended === 'stopped' ? 'Stopped by the reader' : 'Cut off'}: incomplete]`; }
     persist();
@@ -424,19 +524,32 @@ export async function openMilo({ question = '', opener, send: sendNow = false, a
       if (vv && panel) { const fit = () => { panel.style.setProperty('--vvh', `${Math.round(vv.height)}px`); }; fit(); vv.addEventListener('resize', fit); vvOff = () => vv.removeEventListener('resize', fit); }
       wire(S.mounted);
       paintLog(); paintForm();
+      const w = OS() && welcomeEl(S.mounted);
+      if (w && Date.now() - SC.lastWave > 20000) { const c = OS().attach(w, { slot: 'welcome' }); if (c) { SC.lastWave = Date.now(); c.gesture('wave'); } }
       const ta = $('#milo-q', S.mounted);
       if (ta && !matchMedia('(pointer: coarse)').matches) { ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); }
       loadAllowance(); loadChoices();
       api.get('/api/health', { ttl: 60000 }).then((hh) => { S.health = hh; paintChrome(); }, () => {});
       if (sendNow && S.draft) send(S.draft);
     },
-    closed: () => { if (vvOff) vvOff(); const ta = S.mounted && $('#milo-q', S.mounted); if (ta) S.draft = ta.value; S.mounted = null; },
+    closed: () => { if (vvOff) vvOff(); const ta = S.mounted && $('#milo-q', S.mounted); if (ta) S.draft = ta.value; SC.menu = false; S.mounted = null; },
   });
 }
 function wire(root) {
   root.addEventListener('submit', (e) => { if (e.target.closest('[data-v2-milo-form]')) { e.preventDefault(); send($('#milo-q', root).value); } });
   root.addEventListener('keydown', (e) => { if (e.target.id === 'milo-q' && e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); send(e.target.value); } });
-  root.addEventListener('input', (e) => { if (e.target.id === 'milo-q') S.draft = e.target.value; });
+  // inside the guide menu, Escape closes the menu and not the panel; the arrows, Home and End move through it
+  root.addEventListener('keydown', (e) => {
+    const menu = e.target.closest && e.target.closest('#milo-scout-menu'); if (!menu) return;
+    const items = [...menu.querySelectorAll('.scout-mi')], i = items.indexOf(document.activeElement);
+    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); setMenu(false, true); }
+    else if (e.key === 'ArrowDown') { e.preventDefault(); items[(i + 1) % items.length].focus(); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); items[(i - 1 + items.length) % items.length].focus(); }
+    else if (e.key === 'Home') { e.preventDefault(); items[0].focus(); }
+    else if (e.key === 'End') { e.preventDefault(); items[items.length - 1].focus(); }
+    else if (e.key === 'Tab') setMenu(false);
+  });
+  root.addEventListener('input', (e) => { if (e.target.id === 'milo-q') { S.draft = e.target.value; scoutListen(e.target.value); } });
   root.addEventListener('change', (e) => {
     const t = e.target;
     if (t.matches('[data-v2-milo-scope]')) { S.scope = t.value; return; }
@@ -446,19 +559,27 @@ function wire(root) {
   });
   root.addEventListener('click', async (e) => {
     const t = (s) => e.target.closest(s); let b;
+    if ((b = t('.scout-btn'))) { scoutPress(b); return; }
+    if ((b = t('[data-v2-scout-act]'))) { scoutAct(b.dataset.v2ScoutAct); return; }
+    if ((b = t('[data-v2-scout-motion]'))) {
+      const v = b.dataset.v2ScoutMotion; if (OS()) OS().setMotion(v);
+      root.querySelectorAll('[data-v2-scout-motion]').forEach((x) => x.setAttribute('aria-checked', String(x.dataset.v2ScoutMotion === v)));
+      setMenu(false, true); return;
+    }
+    if (SC.menu && !t('#milo-scout-menu')) setMenu(false);
     if (t('[data-v2-milo-stop]')) { stop(); return; }
     if (t('[data-v2-milo-history]')) { S.showHistory = !S.showHistory; paintChrome(); const hb = $('[data-v2-milo-history]', root); if (hb) hb.focus(); return; }
-    if (t('[data-v2-milo-new]')) { if (S.busy) return; S.conv = blankConv(); S.items = []; meta.clear(); S.showHistory = false; paintChrome(); paintLog(); const ta = $('#milo-q', root); if (ta) ta.focus(); return; }
+    if (t('[data-v2-milo-new]')) { if (S.busy) return; S.conv = blankConv(); S.items = []; meta.clear(); SC.i = null; S.showHistory = false; paintChrome(); paintLog(); const ta = $('#milo-q', root); if (ta) ta.focus(); return; }
     if ((b = t('[data-v2-milo-open]'))) {
       if (S.busy) return;
       const c = loadHistory().find((x) => x.id === b.dataset.v2MiloOpen); if (!c) return;
       S.conv = { id: c.id, messages: (c.messages || []).map((m) => ({ role: m.role, content: m.content })), lastTicker: c.ticker || null };
-      meta.clear(); S.items = S.conv.messages.map((m, i) => ({ kind: 'msg', i }));
+      meta.clear(); SC.i = null; S.items = S.conv.messages.map((m, i) => ({ kind: 'msg', i }));
       S.conv.messages.forEach((m, i) => { if (m.role === 'assistant') meta.set(i, { question: (S.conv.messages[i - 1] || {}).content || '', symbol: c.ticker || null }); });
       S.showHistory = false; paintChrome(); paintLog(); const ta = $('#milo-q', root); if (ta) ta.focus(); return;
     }
     if ((b = t('[data-v2-milo-del]'))) { const id = b.dataset.v2MiloDel; saveHistory(loadHistory().filter((c) => c.id !== id)); if (S.conv.id === id && !S.busy) { S.conv = blankConv(); S.items = []; meta.clear(); paintLog(); } paintChrome(); return; }
-    if ((b = t('[data-v2-milo-follow]'))) { const ta = $('#milo-q', root); if (ta) { ta.value = b.dataset.v2MiloFollow; S.draft = ta.value; ta.focus(); } return; }
+    if ((b = t('[data-v2-milo-follow]'))) { const ta = $('#milo-q', root); if (ta) { ta.value = b.dataset.v2MiloFollow; S.draft = ta.value; ta.focus(); scoutListen(ta.value); } return; }
     if ((b = t('[data-v2-milo-again]'))) { const q = (meta.get(Number(b.dataset.v2MiloAgain)) || {}).question; const ta = $('#milo-q', root); if (q && ta) { ta.value = q; S.draft = q; ta.focus(); } return; }
     if ((b = t('[data-v2-milo-copy]'))) {
       const m = S.conv.messages[Number(b.dataset.v2MiloCopy)] || {}; const txt = sourcesAsText(String(m.content || '').split(/\n(?:→|->) /)[0]);

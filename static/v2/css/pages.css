@@ -157,12 +157,12 @@
 details.method { margin-top: 6px; font-size: 14.5px; color: var(--c-ink-3); }
 details.method summary { cursor: pointer; min-height: var(--tap); display: inline-flex; align-items: center; color: var(--c-gold-ink); font-weight: 600; }
 details.method p { max-width: 80ch; }
-.topbar-milo .ic { display: none; }
+.topbar-milo { gap: 8px; }
 .search-btn span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 @media (max-width: 860px) {
   .topbar-milo { width: var(--tap); min-width: var(--tap); padding: 0; }
   .topbar-milo .tm-label { display: none; }
-  .topbar-milo .ic { display: block; width: 20px; height: 20px; }
+  .topbar-milo .scout-badge { width: 26px; height: 26px; }
   .topbar-milo { position: relative; }
   html[data-milo="off"] .topbar-milo::after { position: absolute; right: -6px; top: -6px; margin: 0; padding: 2px 4px; border: 1px solid var(--c-line); }
   .welcome .wel-form { flex-wrap: nowrap; }
