@@ -10,6 +10,7 @@ import { num, signed, clean, fullDate, ordinal, isNum } from '../core/format.js'
 import { lineChart, mountCharts } from '../ui/chart.js';
 import { hbars } from '../ui/bars.js';
 import { button as miloButton, provideContext } from '../ui/milo.js';
+import { icon } from '../ui/icons.js';
 
 const MAX = 4, TIE = 5;
 export const GROUPS = [
@@ -104,11 +105,11 @@ function controls() {
   const recent = store.recent().filter((s) => !inputs.map((x) => x.toUpperCase()).includes(s)).slice(0, 6);
   return html`<form class="cmp-form" data-v2-cmp-form aria-label="Tickers to compare">
       <div class="cmp-inputs">${inputs.map((v, i) => html`<div class="cmp-in"><label class="field field-sm"><span class="sr">Ticker ${i + 1}</span><input id="cmp-${i}" data-v2-cmp-input="${i}" value="${v}" placeholder="Ticker ${i + 1}" title="A ticker, or a company name" maxlength="24" autocomplete="off" list="cmp-sugg" autocapitalize="characters" spellcheck="false"></label>
-        ${inputs.length > 2 ? html`<button type="button" class="icon-btn" data-v2-cmp-drop="${i}" aria-label="Remove ticker ${i + 1}${v ? ` (${v.toUpperCase()})` : ''}">×</button>` : ''}</div>`)}</div>
+        ${inputs.length > 2 ? html`<button type="button" class="icon-btn" data-v2-cmp-drop="${i}" aria-label="Remove ticker ${i + 1}${v ? ` (${v.toUpperCase()})` : ''}">${icon('close')}</button>` : ''}</div>`)}</div>
       <datalist id="cmp-sugg">${sugg.map((s) => html`<option value="${s.symbol}">${s.name || ''}</option>`)}</datalist>
       <div class="cluster"><button type="submit" class="btn btn-primary" ${running ? 'disabled' : ''}>${running ? 'Comparing…' : 'Compare'}</button>${inputs.length < MAX ? html`<button type="button" class="btn" data-v2-cmp-add>Add ticker</button>` : ''}</div>
     </form>
-    ${recent.length ? html`<div class="chips chips-scroll" role="group" aria-label="Recently viewed"><span class="t-label">Recently viewed</span>${recent.map((s) => html`<button type="button" class="chip" data-v2-cmp-pick="${s}">${s}</button>`)}</div>` : result ? '' : html`<p class="asof">Nothing is fetched until you press Compare.</p>`}`;
+    ${recent.length ? html`<div class="cmp-recent" role="group" aria-labelledby="cmp-recent-h"><p class="t-label" id="cmp-recent-h">Recently viewed</p><div class="chips">${recent.map((s) => html`<button type="button" class="chip" data-v2-cmp-pick="${s}">${s}</button>`)}</div></div>` : result ? '' : html`<p class="asof">Nothing is fetched until you press Compare.</p>`}`;
 }
 
 function take(c) {

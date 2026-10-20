@@ -905,7 +905,11 @@ table.narrow { max-width: 640px; }
   .ac-t th[scope="row"] { position: sticky; left: 0; background: var(--c-plane); z-index: 1; }
 }
 /* Compare */
-.cmp-inputs { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 12px; }
+/* the boxes, the buttons and the recent names each get their own row and room: they ran together (owner, 2026-10-20) */
+.cmp-form { display: grid; gap: var(--s-5); justify-items: start; }
+.cmp-inputs { display: flex; flex-wrap: wrap; gap: var(--s-3); }
+.cmp-recent { display: grid; gap: var(--s-3); margin-top: var(--s-6); padding-top: var(--s-5); border-top: 1px solid var(--c-line-2); }
+.cmp-recent .t-label { margin: 0; } .cmp-recent .chips { gap: var(--s-3); }
 .cmp-in { display: flex; align-items: center; gap: 4px; } .cmp-in .field { width: 150px; }
 .cmp-in input { text-transform: uppercase; }
 .cmp-hzs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; margin-top: 20px; border-top: 1px solid var(--c-line); padding-top: 14px; }
