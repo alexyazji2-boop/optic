@@ -16,33 +16,8 @@ import { toggleWatch } from './ui/company.js';
 import { linkHome } from './core/homelink.js';
 import { toast } from './ui/toast.js';
 import { hrefFor } from './nav.js';
-import * as dossier from './pages/dossier.js';
-import * as options from './pages/options.js';
-import * as investing from './pages/investing.js';
-import * as earnings from './pages/earnings.js';
-import * as financials from './pages/financials.js';
-import * as news from './pages/news.js';
-import * as chartPage from './pages/chart.js';
-import * as readPage from './pages/read.js';
-import * as macroPage from './pages/macro.js';
-import * as indicesPage from './pages/indices.js';
-import * as instrumentPage from './pages/instrument.js';
-import * as explorePage from './pages/explore.js';
-import * as scanPage from './pages/scan.js';
-import * as insidersPage from './pages/insiders.js';
-import * as analystsPage from './pages/analysts.js';
 import * as settingsPage from './pages/settings.js';
-import * as comparePage from './pages/compare.js';
-import * as trackerPage from './pages/tracker.js';
-import * as paperPage from './pages/paper.js';
-import * as retirementPage from './pages/retirement.js';
-import * as brokeragePage from './pages/brokerage.js';
-import * as reportsPage from './pages/reports.js';
-import * as watchlist from './pages/watchlist.js';
-import * as alerts from './pages/alerts.js';
 import * as signin from './pages/signin.js';
-import * as legalPages from './pages/legalpages.js';
-import * as workspacePage from './pages/workspace.js';
 import { startReset } from './pages/signin.js';
 import { handleAuthLinks } from './core/authlinks.js';
 import { areaNotice } from './core/legal.js';
@@ -53,7 +28,45 @@ import * as bridge from './pages/bridge.js';
 import { watchTables } from './ui/align.js';
 
 // Home is the research workspace (Market Overview by default); pages/home.js supplies its blocks
-const PAGES = { home: workspacePage, overview: dossier, swing: options, long: investing, earnings, financials, news, chart: chartPage, brief: readPage, market: macroPage, indices: indicesPage, instrument: instrumentPage, explore: explorePage, scan: scanPage, insiders: insidersPage, analysts: analystsPage, settings: settingsPage, compare: comparePage, tracker: trackerPage, paper: paperPage, roth: retirementPage, brokerage: brokeragePage, reports: reportsPage, usage: reportsPage, accounts: reportsPage, watchlist, alerts, signin, terms: legalPages, privacy: legalPages };
+// Each page's module is fetched the first time it is opened, not with the shell: a first visit on a phone
+// downloaded all 78 modules (444 KB compressed) whatever the page (backlog task 14, 2026-10-20). The import map
+// in index.html gives import() the same versioned URLs as a static import, so a module is never loaded twice.
+// A page's modules beyond the shell (index.html's v2-graph), asked for side by side before its import() runs.
+const GRAPH = (() => { try { return JSON.parse((document.getElementById('v2-graph') || {}).textContent || '{}'); } catch (e) { return {}; } })();
+function preloadGraph(name) {
+  (GRAPH[name] || []).forEach((url) => {
+    if (document.querySelector(`link[rel="modulepreload"][href="${url}"]`)) return;
+    const l = document.createElement('link'); l.rel = 'modulepreload'; l.href = url; document.head.appendChild(l);
+  });
+}
+const lazy = (load, name) => { let p = null; return () => (p || (p = (preloadGraph(name), load()).catch((e) => { p = null; throw e; }))); };
+const P = {
+  workspace: lazy(() => import('./pages/workspace.js'), 'workspace'), dossier: lazy(() => import('./pages/dossier.js'), 'dossier'), options: lazy(() => import('./pages/options.js'), 'options'),
+  investing: lazy(() => import('./pages/investing.js'), 'investing'), earnings: lazy(() => import('./pages/earnings.js'), 'earnings'), financials: lazy(() => import('./pages/financials.js'), 'financials'),
+  news: lazy(() => import('./pages/news.js'), 'news'), chart: lazy(() => import('./pages/chart.js'), 'chart'), read: lazy(() => import('./pages/read.js'), 'read'),
+  macro: lazy(() => import('./pages/macro.js'), 'macro'), indices: lazy(() => import('./pages/indices.js'), 'indices'), instrument: lazy(() => import('./pages/instrument.js'), 'instrument'),
+  explore: lazy(() => import('./pages/explore.js'), 'explore'), scan: lazy(() => import('./pages/scan.js'), 'scan'), insiders: lazy(() => import('./pages/insiders.js'), 'insiders'),
+  analysts: lazy(() => import('./pages/analysts.js'), 'analysts'), compare: lazy(() => import('./pages/compare.js'), 'compare'), tracker: lazy(() => import('./pages/tracker.js'), 'tracker'),
+  paper: lazy(() => import('./pages/paper.js'), 'paper'), retirement: lazy(() => import('./pages/retirement.js'), 'retirement'), brokerage: lazy(() => import('./pages/brokerage.js'), 'brokerage'),
+  reports: lazy(() => import('./pages/reports.js'), 'reports'), watchlist: lazy(() => import('./pages/watchlist.js'), 'watchlist'), alerts: lazy(() => import('./pages/alerts.js'), 'alerts'),
+  legal: lazy(() => import('./pages/legalpages.js'), 'legalpages'),
+};
+const PAGES = { home: P.workspace, overview: P.dossier, swing: P.options, long: P.investing, earnings: P.earnings, financials: P.financials, news: P.news, chart: P.chart, brief: P.read, market: P.macro, indices: P.indices, instrument: P.instrument, explore: P.explore, scan: P.scan, insiders: P.insiders, analysts: P.analysts, settings: () => settingsPage, compare: P.compare, tracker: P.tracker, paper: P.paper, roth: P.retirement, brokerage: P.brokerage, reports: P.reports, usage: P.reports, accounts: P.reports, watchlist: P.watchlist, alerts: P.alerts, signin: () => signin, terms: P.legal, privacy: P.legal };
+// The pages a reader most often opens next, fetched (not run) once the first page has settled and the
+// connection is not marked as costly: a later move to them does not wait on the network.
+function warmNext() {
+  const c = navigator.connection || {};
+  if (c.saveData || /2g/.test(c.effectiveType || '')) return;
+  ['dossier', 'chart', 'options', 'watchlist', 'workspace', 'compare'].forEach((n) => {
+    preloadGraph(n);
+    const url = ((JSON.parse((document.querySelector('script[type="importmap"]') || {}).textContent || '{}').imports) || {})[`/v2/js/pages/${n}.js`];
+    if (url && !document.querySelector(`link[rel="modulepreload"][href="${url}"]`)) { const l = document.createElement('link'); l.rel = 'modulepreload'; l.href = url; document.head.appendChild(l); }
+  });
+}
+let warmed = false;
+// four seconds after the first page has drawn, in idle time
+const warmLater = () => { if (warmed) return; warmed = true; setTimeout(() => { const run = () => warmNext(); if (window.requestIdleCallback) requestIdleCallback(run, { timeout: 4000 }); else run(); }, 4000); };
+let SHOW = 0;
 let current = null;   // { page, view, route }
 let noticeWatch = null;
 
@@ -94,14 +107,25 @@ async function afterAuth() {
   if (current && current.page.onAuth) current.page.onAuth(current.view);
 }
 
-function show(route) {
+async function show(route) {
   // v2 closed to this reader since the page loaded: the move lands on the classic app instead
   if (isClosed()) { location.href = `${CLASSIC}${location.hash}`; return; }
+  if (route.view === 'signin' && store.signedIn() && (route.params || {}).mode !== 'reset') { router.go('#/'); return; }
+  // the page's module: at once once fetched; on a first visit, fetched now (a later route wins a race)
+  const my = ++SHOW, load = PAGES[route.view];
+  let page = bridge;
+  if (load) {
+    try { page = await load(); }
+    catch (e) {
+      if (my !== SHOW) return;
+      const v = $('#main'); render(v, html`<div class="page-view"><div class="state err" role="alert"><p class="t-h3">This page did not load</p><p>Its code could not be fetched. Check the connection and try again.</p><a class="btn" href="${hrefFor(route.view, route.symbol)}">Try again</a></div></div>`);
+      return;
+    }
+    if (my !== SHOW) return;
+  }
   if (current && current.page.dispose) current.page.dispose();
   drawer.close({ silent: true, route: true });
   palette.close({ silent: true });
-  if (route.view === 'signin' && store.signedIn() && (route.params || {}).mode !== 'reset') { router.go('#/'); return; }
-  const page = PAGES[route.view] || bridge;
   const main = $('#main');
   const view = document.createElement('div');
   view.className = 'page-view';
@@ -126,7 +150,10 @@ function show(route) {
   // Milo forgets the last page before this one renders (it registers its own context as it renders)
   resetContext(route);
   scrollmem.arrive();
-  Promise.resolve(page.render(view, route, app)).catch((e) => {
+  const rendered = Promise.resolve(page.render(view, route, app));
+  // once the first page has drawn, the likeliest next pages are fetched in quiet time
+  rendered.then(warmLater, () => {});
+  rendered.catch((e) => {
     console.error(e);
     render(view, html`<div class="state err" role="alert"><p class="t-h3">This page did not load</p><p>${e.message || 'An error stopped it.'}</p><a class="btn" href="${hrefFor(route.view, route.symbol)}">Try again</a></div>`);
   });

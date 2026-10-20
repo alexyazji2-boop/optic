@@ -183,6 +183,9 @@ export function meter({ lo, mid, hi, price, w = 260, showMid = false }) {
 /** Mount charts into .chart-slot[data-chart] elements at their real width; redraw on resize. */
 const slots = new Set();
 export function mountCharts(root, makers) {
+  // slots of pages already left go now, not at the next resize: a detached slot held its whole page in memory
+  // (40 route changes grew the document from 14,000 to 75,000 nodes, backlog task 14, 2026-10-20)
+  slots.forEach((el) => { if (!el.isConnected) slots.delete(el); });
   root.querySelectorAll('.chart-slot[data-chart]').forEach((el) => {
     const make = makers[el.dataset.chart]; if (!make) return;
     const draw = () => {

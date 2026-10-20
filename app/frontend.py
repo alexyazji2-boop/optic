@@ -115,6 +115,29 @@ def _content_versions(v2_dir: Path) -> Dict[str, str]:
     return out
 
 
+_IMPORT = re.compile(r"""(?:import|export)\s[^'"]*?from\s*['"](\.{1,2}/[^'"]+)['"]|import\s*['"](\.{1,2}/[^'"]+)['"]""")
+
+
+def static_graph(v2_dir: Path, entry: str = "js/app.js") -> set:
+    """Site paths of the modules reachable from `entry` through static imports (dynamic import() is not
+    followed): what a first load needs before the shell can run."""
+    seen: set = set()
+    stack = [(v2_dir / entry).resolve()]
+    root = v2_dir.resolve()
+    while stack:
+        path = stack.pop()
+        if path in seen or not path.is_file():
+            continue
+        seen.add(path)
+        try:
+            src = path.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        for m in _IMPORT.finditer(src):
+            stack.append((path.parent / (m.group(1) or m.group(2))).resolve())
+    return {V2_PREFIX + p.relative_to(root).as_posix() for p in seen}
+
+
 def v2_build(v2_dir: Path) -> str:
     """One stamp for the whole of v2, for an open tab to compare with."""
     versions = _content_versions(v2_dir)
@@ -134,8 +157,19 @@ def v2_page(v2_dir: Path, classic_url: str = "/classic") -> str:
     html = re.sub(r'src="js/([^"]+)"', lambda m: f'src="{ver(V2_PREFIX + "js/" + m.group(1))}"', html)
     js = {k: f"{k}?v={v}" for k, v in versions.items() if k.endswith(".js")}
     importmap = json.dumps({"imports": js}, separators=(",", ":"))
-    preload = "".join(f'<link rel="modulepreload" href="{u}">' for u in js.values())
-    head_add = f'<script type="importmap">{importmap}</script>{preload}<meta name="optic-build" content="{v2_build(v2_dir)}">'
+    # The map names every module, so a page fetched later resolves to its versioned address; only the modules
+    # the shell imports statically are preloaded (pages load when first opened, app.js).
+    shell = static_graph(v2_dir)
+    preload = "".join(f'<link rel="modulepreload" href="{u}">' for k, u in js.items() if k in shell)
+    # each page's own modules beyond the shell, so opening a page fetches them side by side rather than one
+    # import at a time (a waterfall of round trips on a slow phone)
+    graphs = {}
+    for page in sorted((v2_dir / "js" / "pages").glob("*.js")):
+        own = static_graph(v2_dir, "js/pages/" + page.name) - shell
+        if own:
+            graphs[page.stem] = sorted(js[k] for k in own if k in js)
+    graph = json.dumps(graphs, separators=(",", ":")).replace("</", "<\\/")
+    head_add = f'<script type="importmap">{importmap}</script>{preload}<script type="application/json" id="v2-graph">{graph}</script><meta name="optic-build" content="{v2_build(v2_dir)}">'
     # the import map must come before the first module script
     html = html.replace('<script type="module"', head_add + '<script type="module"', 1)
     html = html.replace("<html", f'<html data-classic="{classic_url}"', 1)

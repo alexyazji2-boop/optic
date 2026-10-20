@@ -87,7 +87,8 @@ def test_terms_and_privacy_are_published_and_complete():
     router = (V2 / "js/core/router.js").read_text()
     assert "SLUG_VIEW.terms = 'terms';" in router and "SLUG_VIEW.privacy = 'privacy';" in router
     app = (V2 / "js/app.js").read_text()
-    assert "terms: legalPages, privacy: legalPages" in app
+    # pages load when first opened since 2026-10-20 (backlog task 14): both routes share the legal pages' loader
+    assert "terms: P.legal, privacy: P.legal" in app and "legal: lazy(() => import('./pages/legalpages.js'), 'legalpages')" in app
     legal = (V2 / "js/core/legal.js").read_text()
     assert 'href="#/terms"' in legal and 'href="#/privacy"' in legal, "every page's footer links both"
     for claim in ("Argon2id", "optic_session", "optic_csrf", "optic_ui", "read-only", "Anthropic", "never sees your card number",

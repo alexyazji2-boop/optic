@@ -89,8 +89,12 @@ def test_versioned_v2_assets_are_immutable_and_the_rest_revalidate():
     assert r.status_code == 200 and "immutable" in r.headers["cache-control"]
     assert client.get("/v2/js/core/dom.js").headers["cache-control"] == "no-cache"
     assert client.get("/app.js").headers["cache-control"] == "no-cache"
-    # every module the page preloads is one the import map names
-    assert set(re.findall(r'<link rel="modulepreload" href="([^"]+)">', page)) == set(imports.values())
+    # every module the page preloads is one the import map names, and only the shell's static graph is preloaded:
+    # pages load when first opened (backlog task 14, 2026-10-20)
+    pre = set(re.findall(r'<link rel="modulepreload" href="([^"]+)">', page))
+    assert pre <= set(imports.values())
+    assert pre == {imports[k] for k in frontend.static_graph(V2)}
+    assert imports["/v2/js/app.js"] in pre and imports["/v2/js/pages/chart.js"] not in pre
 
 
 def test_build_stamps_are_separate_for_the_two_apps():
