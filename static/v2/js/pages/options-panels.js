@@ -35,21 +35,30 @@ export function pricing(t, sym) {
   const vs = t.vol_surface || {};
   if (!vs.available) return empty('No options pricing right now', 'The chain did not have enough two-sided quotes to read.');
   const r = row30(vs), iv = vs.iv30 || {}, rank = t.iv_rank || {}, term = vs.term || {}, ev = vs.event || {};
+  // each read is its finding and, at most, one fact that bears on it; how a figure is computed and what its sign
+  // means go in the fold below, so the list reads as what options are pricing (owner, 2026-10-20: "the point of
+  // optic is simplicity", on the report day's formula shown under its finding)
+  const evMove = ev.available && isNum(ev.move_pct) && ev.move_pct > 0;
   const items = [
     iv.available ? [`Options are priced for about ${num(iv.iv_pct, 1)}% a year of movement over the next ${iv.days || 30} days.`, rank.available ? `${clean(rank.label || 'IV rank')} ${num(rank.rank, 0)}${isNum(rank.percentile) ? `, percentile ${num(rank.percentile, 0)}` : ''}. ${clean(rank.note || '')}` : clean(rank.reason || '')] : null,
     t.iv_hv && t.iv_hv.available ? [`Implied ${num(t.iv_hv.iv30, 1)}% against realised ${num(t.iv_hv.hv30, 1)}%.`, clean(t.iv_hv.note || '')] : null,
     t.iv_cheapness && t.iv_cheapness.available ? [`Cheap or dear? ${clean(t.iv_cheapness.text || '')}`, clean(t.iv_cheapness.finding || '')] : null,
-    r && isNum(r.straddle_move_pct) ? [`The ${shortDate(r.expiry)} at-the-money straddle is priced for a move of about ±${num(r.straddle_move_pct, 2)}%.`, `${isNum(r.one_sd_move_pct) ? `One standard deviation is ±${num(r.one_sd_move_pct, 2)}%. ` : ''}These are what options cost, not limits on the price: a move that size or larger happens about a third of the time.${t.straddle_calibration && t.straddle_calibration.available ? ' ' + clean(t.straddle_calibration.text) : ''}`] : null,
-    term.available ? [clean(term.text), 'Front against back expiry implied volatility.'] : null,
-    r && isNum(r.rr25_pts) ? [`25-delta risk reversal: ${skewWords(r.rr25_pts)} (${signed(r.rr25_pts, 1, ' vol pts')}).`, 'Positive means downside puts cost more than upside calls.'] : null,
-    ev.available ? [clean(ev.text), clean(ev.method || '')] : null,
+    r && isNum(r.straddle_move_pct) ? [`The ${shortDate(r.expiry)} at-the-money straddle is priced for a move of about ±${num(r.straddle_move_pct, 2)}%.`, `${isNum(r.one_sd_move_pct) ? `One standard deviation is ±${num(r.one_sd_move_pct, 2)}%.` : ''}${t.straddle_calibration && t.straddle_calibration.available ? ' ' + clean(t.straddle_calibration.text) : ''}`.trim()] : null,
+    term.available ? [clean(term.text), ''] : null,
+    r && isNum(r.rr25_pts) ? [`25-delta risk reversal: ${skewWords(r.rr25_pts)} (${signed(r.rr25_pts, 1, ' vol pts')}).`, ''] : null,
+    ev.available ? [evMove ? `About ${num(ev.move_pct, 1)}% is priced for the report day itself.` : clean(ev.text), ''] : null,
   ].filter(Boolean);
   return html`<ul class="reads">${items.map(([a, b]) => html`<li><p>${a}</p>${b ? html`<p class="t-muted">${b}</p>` : ''}</li>`)}</ul>
     <details class="more-inline"><summary>Compare expiries</summary><div class="tscroll"><table class="t">
       <thead><tr><th>Expiry</th><th>Days</th><th>ATM IV</th><th>Straddle move</th><th>1-SD move</th><th>Put skew</th><th>Quoted</th><th>Report inside</th></tr></thead>
       <tbody>${(vs.expiries || []).map((e) => html`<tr><td>${shortDate(e.expiry)}</td><td>${e.dte}</td><td>${pct(e.atm_iv_pct)}</td><td>±${num(e.straddle_move_pct, 2)}%</td><td>±${num(e.one_sd_move_pct, 2)}%</td><td>${signed(e.rr25_pts, 1, '')}</td><td>${e.two_sided} of ${e.contracts}</td><td>${e.contains_event ? 'Yes' : 'No'}</td></tr>`)}</tbody></table></div>
       ${(vs.notes || []).map((n) => note(n))}</details>
-    ${note(`${vs.clock || ''} ${(t.rate || {}).label ? 'Rate ' + t.rate.label + '.' : ''}`)}${note(vs.iv_method)}
+    ${note(`${vs.clock || ''} ${(t.rate || {}).label ? 'Rate ' + t.rate.label + '.' : ''}`)}
+    ${how(r && isNum(r.straddle_move_pct) ? html`<p>A straddle's price and one standard deviation are what options cost, not limits on the price: a move that size or larger happens about a third of the time.</p>` : '',
+      term.available ? html`<p>The term structure compares the front expiry's implied volatility with a later one's.</p>` : '',
+      r && isNum(r.rr25_pts) ? html`<p>The risk reversal is the 25-delta put's implied volatility less the 25-delta call's: positive means downside puts cost more than upside calls.</p>` : '',
+      evMove ? html`<p>The report day's move is read from the ${shortDate(ev.after)} expiry's IV against the ${shortDate(ev.before)} expiry's. ${clean(ev.method || '')}</p>` : '',
+      vs.iv_method ? html`<p>${clean(vs.iv_method)}</p>` : '')}
     ${ask(sym, 'Ask Milo about implied volatility', `What is implied volatility telling me about ${sym} right now?`)}`;
 }
 

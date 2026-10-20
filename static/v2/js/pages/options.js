@@ -254,9 +254,17 @@ function expirySelect() {
   return html`<label class="select"><span class="t-label">Expiry</span><select data-v2-op-expiry aria-label="Expiry for the table and the position builder" ${exps.length ? '' : 'disabled'}>${opts}</select></label>`;
 }
 
+// a contract the feed has no live bid and ask for (or whose ask sits below its intrinsic value: a stale print)
+const unquotedRow = (r) => !!r.quote_state && r.quote_state !== 'two_sided';
+
 function research() {
   const d = R.data;
   const f = DELTAS[R.delta] || DELTAS.any;
+  // How many contracts the box adds. The box shows only when it would change the list, with that count, so
+  // ticking it is never a no-op: in a session nearly every contract near the money is quoted, and the few that
+  // are not sit far from it (owner, 2026-10-20: "there is no difference when i check or uncheck this").
+  if (d && !R.loading && !d.unusable) R.nUnq = R.unquoted ? ((d.table || {}).rows || []).filter(unquotedRow).length : ((d.table || {}).filtered_out || {}).unquoted || 0;
+  const nUnq = R.nUnq;
   const head = html`<div class="section-head"><div><h2 class="t-h2" id="rc-h">Research contracts</h2><p class="section-sub">Calls or puts at one expiry, by strike. Nothing here is ranked best; the position builder below uses the same expiry.</p></div></div>
     <form class="op-filters" data-v2-op-form>
       ${expirySelect()}
@@ -264,7 +272,7 @@ function research() {
       <label class="select"><span class="t-label">Delta</span><select data-v2-op-set="delta">${Object.entries(DELTAS).map(([k, v]) => html`<option value="${k}" ${R.delta === k ? 'selected' : ''}>${v[2]}</option>`)}</select></label>
       <label class="select"><span class="t-label">Widest spread</span><select data-v2-op-set="maxSpread">${[[0, 'Any'], [5, '5%'], [10, '10%'], [25, '25%']].map(([v, l]) => html`<option value="${v}" ${Number(R.maxSpread) === v ? 'selected' : ''}>${l}</option>`)}</select></label>
       <label class="select"><span class="t-label">Least open interest</span><select data-v2-op-set="minOi">${[0, 100, 500, 1000].map((v) => html`<option value="${v}" ${Number(R.minOi) === v ? 'selected' : ''}>${v ? num(v, 0) : 'Any'}</option>`)}</select></label>
-      <label class="check"><input type="checkbox" data-v2-op-set="unquoted" ${R.unquoted ? 'checked' : ''}> <span>Show contracts without a two-sided quote</span></label>
+      ${R.unquoted || nUnq ? html`<label class="check"><input type="checkbox" data-v2-op-set="unquoted" ${R.unquoted ? 'checked' : ''}> <span>${isNum(nUnq) && nUnq ? `Include ${nUnq} ${nUnq === 1 ? 'contract' : 'contracts'} without a two-sided quote` : 'Include contracts without a two-sided quote'}</span></label>` : ''}
       <button type="button" class="textlink" data-v2-op-more aria-pressed="${R.more}">${R.more ? 'Fewer columns' : 'More columns'}</button></form>`;
   if (R.error) return html`${head}${failed('The contracts', R.error, { retry: 'research' })}`;
   if (!d || R.loading) return html`${head}${skeleton('rows', 6, 'Loading contracts')}`;
@@ -280,7 +288,7 @@ function research() {
     if (fo.delta) why.push(`${fo.delta} outside the delta range`);
     if (fo.spread) why.push(`${fo.spread} with a wider spread than you allow`);
     if (fo.open_interest) why.push(`${fo.open_interest} under the least open interest`);
-    return html`${head}${empty(`No ${R.side === 'call' ? 'calls' : 'puts'} to show at this expiry`, `${tbl.total ? `Of ${tbl.total} contracts, ${why.length ? why.join(', ') : 'none passed the filters'}.` : 'The chain has no contracts at this expiry.'}${fo.unquoted ? ' Quotes fill in as the session goes on; "Show contracts without a two-sided quote" lists them anyway.' : ' A wider filter may find some.'}`)}`;
+    return html`${head}${empty(`No ${R.side === 'call' ? 'calls' : 'puts'} to show at this expiry`, `${tbl.total ? `Of ${tbl.total} contracts, ${why.length ? why.join(', ') : 'none passed the filters'}.` : 'The chain has no contracts at this expiry.'}${fo.unquoted ? ' Quotes fill in as the session goes on; the box above lists them anyway.' : ' A wider filter may find some.'}`)}`;
   }
   const ivLine = isNum(s.atm_iv_pct) && isNum(s.straddle_move_pct) ? ` At-the-money IV ${num(s.atm_iv_pct, 1)}%, straddle priced for ±${num(s.straddle_move_pct, 2)}%.` : ' Too few quotes near the money for an at-the-money IV yet.';
   // the strikes nearest the money first; the whole chain one press away
@@ -297,7 +305,7 @@ function research() {
       <thead><tr><th>Strike</th><th>Delta</th><th>Bid / ask</th><th>Spread</th><th>IV</th><th>Breakeven</th><th>Cost</th>${R.more ? html`<th>Decay a day</th><th>Per vol pt</th><th>ITM, model</th><th>OI / volume</th><th>Early exercise</th>` : ''}<th><span class="sr">Add</span></th></tr></thead>
       <tbody>${rs.map((r, n) => html`<tr class="${Math.abs(r.moneyness_pct) < 1.5 ? 'atm' : ''}">
         <td><b>${num(r.strike, r.strike % 1 ? 1 : 0)}</b> <small class="t-muted">${signed(r.moneyness_pct, 1)}</small><button type="button" class="icon-btn op-rowbtn" data-v2-op-row="${n}" aria-expanded="false" aria-controls="op-rd-${n}" aria-label="The ${num(r.strike, 0)} ${r.type}'s details">${icon('chev')}</button></td><td class="op-wide">${num(r.delta, 2)}</td>
-        <td>${num(r.bid)} / ${num(r.ask)} <small class="t-muted">mid ${num(r.mid)}</small></td>
+        <td>${num(r.bid)} / ${num(r.ask)} <small class="t-muted">${unquotedRow(r) ? 'no two-sided quote' : `mid ${num(r.mid)}`}</small></td>
         <td><span class="liq liq-${(r.liquidity || {}).grade}" title="${((r.liquidity || {}).reasons || []).join(' ')}">${(r.liquidity || {}).label || ''}</span> <small class="t-muted">${num(r.spread_pct, 1)}%</small></td>
         <td class="op-wide">${num(r.iv_pct, 1)}%${r.iv_source === 'filled' ? html` <small class="t-muted">assumed</small>` : r.iv_source === 'feed' ? html` <small class="t-muted">feed</small>` : ''}</td>
         <td class="op-wide">${num(r.breakeven_ask)} <small class="t-muted">${signed(r.breakeven_move_pct, 1)}</small></td><td class="op-wide">${money(r.cost_ask_contract, 0)}</td>
@@ -334,6 +342,8 @@ async function loadResearch({ quiet } = {}) {
     const d = await api.get(`/api/options/${encodeURIComponent(D.sym)}/research?${q}`, { ttl: quiet ? 0 : 60000, force: !!quiet, timeout: 60000 });
     if (my !== R.seq || !stillHere(g)) return;
     R.data = d; R.expiry = d.expiry; saveState();
+    // ticking the box shows what it added: those contracts are usually past the 15 strikes nearest the money
+    if (R.revealUnq) { R.revealUnq = false; const rows = (d.table || {}).rows || []; if (!R.allStrikes && rows.length > 15 && rows.some(unquotedRow)) R.allStrikes = R.allByUnq = true; }
   } catch (e) { if (my !== R.seq || !stillHere(g)) return; if (!quiet) R.error = e; }
   R.loading = false;
   paintResearch(); paintBuilder();
@@ -487,7 +497,7 @@ function wire(main) {
     if (t('[data-v2-op-sum]')) { toBuilder(); return; }
     if ((b = t('[data-v2-when]'))) { B.when = b.dataset.v2When; paintResult(); const again = $(`[data-v2-when="${B.when}"]`, main); if (again) again.focus(); return; }
     if ((b = t('[data-v2-op-side]'))) { R.side = b.dataset.v2OpSide; saveFilters(); loadResearch(); return; }
-    if (t('[data-v2-op-all]')) { R.allStrikes = !R.allStrikes; paintResearch(); const again = $('[data-v2-op-all]', main); if (again) again.focus(); return; }
+    if (t('[data-v2-op-all]')) { R.allStrikes = !R.allStrikes; R.allByUnq = false; paintResearch(); const again = $('[data-v2-op-all]', main); if (again) again.focus(); return; }
     if ((b = t('[data-v2-op-more]'))) { R.more = !R.more; paintResearch(); const again = $('[data-v2-op-more]', main); if (again) again.focus(); return; }
     if ((b = t('[data-v2-add-leg]'))) {
       if (B.legs.filter((l) => l.type !== 'stock').length >= 4 && !B.legs.some((l) => String(l.strike) === b.dataset.v2AddLeg && l.type === R.side)) { toast('Up to four option legs.'); return; }
@@ -526,7 +536,7 @@ function wire(main) {
       if (had) { B.legs = B.legs.filter((l) => l.type === 'stock'); B.analysis = null; B.template = null; toast(`The ${had} option leg${had === 1 ? ' was' : 's were'} on another expiry, so the position was cleared. Pick a template or Add a contract on ${shortDate(el.value)}.`); paintBuilder(); }
       saveState(); loadResearch(); return;
     }
-    if (el.matches('[data-v2-op-set]')) { const k = el.dataset.v2OpSet; R[k] = el.type === 'checkbox' ? el.checked : el.value; saveFilters(); loadResearch(); return; }
+    if (el.matches('[data-v2-op-set]')) { const k = el.dataset.v2OpSet; R[k] = el.type === 'checkbox' ? el.checked : el.value; if (k === 'unquoted') { R.revealUnq = el.checked; if (!el.checked && R.allByUnq) R.allStrikes = false; R.allByUnq = false; } saveFilters(); loadResearch(); return; }
     if (el.matches('[data-v2-leg-qty]')) { const l = B.legs[Number(el.dataset.v2LegQty)]; const q = Math.round(Number(el.value)); const max = l.type === 'stock' ? 100000 : 100; if (q >= 1 && q <= max) { l.qty = q; await analyze(); } else { toast(`Quantity is 1 to ${num(max, 0)}.`); el.value = l.qty; } return; }
     if (el.matches('[data-v2-lab-iv]')) { const v = Number(el.value); if (v >= 5 && v <= 200) { D.lab.iv = v; paintMore(); } }
   });
