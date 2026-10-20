@@ -305,53 +305,127 @@ ul.plain { margin: 0; padding-left: 18px; } ul.plain li { margin-bottom: 7px; }
 .palette-item small { color: var(--c-ink-3); font-size: var(--t-md); }
 
 /* ---------- Milo ---------- */
-.milo { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; gap: 10px; height: 100%; min-height: 0; }
-.drawer-panel.milo-panel { width: min(var(--milo-w, 560px), 100vw); } .milo-panel .drawer-body { display: flex; flex-direction: column; min-height: 0; overflow: hidden; padding-bottom: 16px; } .milo-panel .milo { flex: 1; }
-.milo-top { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 8px 12px; }
-.milo-scope { display: grid; gap: 4px; min-width: 0; flex: 1; } .milo-scope select { max-width: 100%; }
-/* pages.css's .select (inline-flex) comes later and won: the picker could not shrink and ran under History on a phone */
-.milo-top .milo-scope { display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1 1 220px; } .milo-top .milo-scope select { flex: 1; width: 100%; min-width: 0; }
-.milo-delay { margin: 0; }
-/* the answer settings, on show: Optic Persona and the level in a row, each one's line under it, the timeframe */
-.milo-lens { display: grid; justify-items: start; gap: 6px; }
-.milo-pp { position: relative; }
-.milo-pp-btn { gap: 8px; } .milo-pp-btn .t-label { margin: 0; } .milo-pp-now { font-weight: 600; color: var(--c-ink); }
-.milo-pp-btn::after { content: ""; width: 7px; height: 7px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: translateY(-2px) rotate(45deg); margin-left: 2px; }
-.menu-body.milo-pp-menu { min-width: 300px; max-width: min(420px, calc(100vw - 32px)); max-height: min(70vh, 560px); overflow-y: auto; overscroll-behavior: contain; gap: 4px; padding: 8px; }
-.milo-pp-opt { display: grid; gap: 2px; width: 100%; min-height: var(--tap); padding: 8px 10px; border: 0; border-radius: var(--r-1); background: none; color: var(--c-ink); text-align: left; cursor: pointer; font: inherit; }
-.milo-pp-opt:hover, .milo-pp-opt:focus-visible { background: var(--c-sunk); outline: none; }
-.milo-pp-opt[aria-pressed="true"] { background: var(--c-gold-wash); }
-.milo-pp-l { font-weight: 600; font-size: var(--t-base); } .milo-pp-b { font-size: var(--t-md); line-height: 1.4; color: var(--c-ink-2); }
-.milo-pp-foot { border-top: 1px solid var(--c-line); margin-top: 4px; padding: 6px 10px 2px; font-size: var(--t-md); color: var(--c-ink-2); } .milo-pp-foot ul { margin: 2px 0 6px; } .milo-pp-foot li { margin: 2px 0; }
-.milo-level { gap: 8px; } .milo-level select { min-height: 40px; } .milo-level .t-label { margin: 0; }
-.milo-hz { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; } .milo-hz .t-label { margin: 0; }
-.milo-lens-blurb { margin: 0; font-size: var(--t-md); line-height: 1.4; color: var(--c-ink-3); }
-.milo-history { border: 1px solid var(--c-line); border-radius: var(--r-2); padding: 10px 12px; background: var(--c-raised); max-height: 260px; overflow-y: auto; }
-.milo-history ul { margin: 6px 0; } .milo-history li { display: flex; align-items: center; gap: 6px; border-bottom: 1px solid var(--c-line-2); }
-.milo-history li.is-now { background: var(--c-gold-wash); }
+/* The 2026-10-20 redesign (owner's brief, from an approved sketch): a compact header with Milo beside his name;
+   under it what Milo receives and Response settings, the five personas always on show, the conversation with most
+   of the height and its own scroll, and the composer pinned at the foot. Optic's own type, surfaces and controls;
+   gold only for the send control (the view's main action) and for focus. */
+.drawer-panel.milo-panel { width: min(var(--milo-w, 560px), 100vw); }
+.milo-panel .drawer-head { align-items: center; gap: 8px; padding: 10px 10px 10px 20px; }
+.milo-panel .drawer-acts { display: flex; align-items: center; gap: 2px; }
+.milo-panel .drawer-acts .icon-btn.is-on { background: var(--c-active); color: var(--c-ink); }
+.milo-panel .drawer-acts .icon-btn:disabled { opacity: .45; cursor: default; }
+.milo-id { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.milo-id .scout-compact { width: 32px; }
+.milo-panel .milo-id h2 { font: 600 var(--t-xl)/1.15 var(--f-sans); letter-spacing: -0.01em; margin: 0; }
+.milo-sub { margin: 2px 0 0; font-size: var(--t-sm); line-height: 1.2; color: var(--c-ink-3); }
+/* clip, not hidden: nothing (a scrollIntoView, a focused control) can scroll the header and controls out of place */
+.milo-panel .drawer-body { display: flex; flex-direction: column; min-height: 0; overflow: hidden; overflow: clip; padding: 0; gap: 0; }
+.milo { flex: 1; display: flex; flex-direction: column; min-height: 0; position: relative; }
+.milo-chrome { flex: none; display: grid; }
+/* what Milo receives, the data's freshness and the disclosure; Response settings at the right */
+.milo-ctx { position: relative; display: flex; align-items: flex-start; justify-content: space-between; gap: 8px 12px; padding: 8px 16px 8px 20px; border-bottom: 1px solid var(--c-line-2); }
+.milo-ctx-l { min-width: 0; display: grid; gap: 0; }
+.milo-ctx-btn { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; max-width: 100%; padding: 0 8px; margin-left: -8px; border-radius: var(--r-ctl); cursor: pointer; list-style: none; font: 600 var(--t-md)/1.2 var(--f-label); color: var(--c-ink); }
+.milo-ctx-btn::-webkit-details-marker { display: none; }
+.milo-ctx-btn:hover, .milo-ctx-pick[open] > .milo-ctx-btn { background: var(--c-sunk); }
+.milo-ctx-btn .ic { width: 14px; height: 14px; transform: rotate(90deg); color: var(--c-ink-3); }
+.milo-ctx-now { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.menu-body.milo-ctx-menu { min-width: 280px; max-width: min(360px, calc(100vw - 32px)); padding: 6px; display: grid; gap: 2px; }
+.milo-ctx-opt { display: flex; align-items: flex-start; gap: 10px; width: 100%; min-height: var(--tap); padding: 8px 10px; border: 0; border-radius: var(--r-sm); background: none; color: var(--c-ink); text-align: left; cursor: pointer; font: inherit; }
+.milo-ctx-opt:hover, .milo-ctx-opt:focus-visible { background: var(--c-sunk); outline: none; }
+.milo-ctx-opt .ic, .milo-ctx-gap { width: 16px; height: 16px; flex: none; margin-top: 2px; }
+.milo-ctx-opt b { display: block; font-weight: 600; font-size: var(--t-md); line-height: 1.3; }
+.milo-ctx-opt small { display: block; margin-top: 2px; font-size: var(--t-sm); line-height: 1.35; color: var(--c-ink-3); }
+.milo-ctx-meta { margin: 0; font-size: var(--t-sm); line-height: 1.35; color: var(--c-ink-3); }
+.milo-info-btn { position: relative; display: inline-grid; place-items: center; vertical-align: middle; width: 28px; height: 28px; margin: -6px 0 -4px 2px; border: 0; border-radius: 50%; background: none; color: var(--c-ink-3); cursor: pointer; }
+.milo-info-btn::after { content: ""; position: absolute; inset: -8px; }   /* a 44 px target without stretching the line */
+.milo-info-btn .ic { width: 15px; height: 15px; }
+.milo-info-btn:hover, .milo-info-btn[aria-expanded="true"] { background: var(--c-sunk); color: var(--c-ink); }
+.milo-set-btn { flex: none; gap: 8px; color: var(--c-ink-2); } .milo-set-btn .ic { width: 16px; height: 16px; }
+.milo-set-btn[aria-expanded="true"] { background: var(--c-active); color: var(--c-ink); }
+.milo-info { display: grid; gap: 6px; padding: 10px 20px 12px; border-bottom: 1px solid var(--c-line-2); font-size: var(--t-sm); line-height: 1.45; color: var(--c-ink-2); } .milo-info p { margin: 0; }
+.milo-moved { margin: 0; padding: 8px 20px; border-bottom: 1px solid var(--c-line-2); background: var(--c-sunk); font-size: var(--t-sm); line-height: 1.45; color: var(--c-ink-2); }
+/* Response settings: a popover under the context bar (a sheet on a phone) */
+.milo-sheet-scrim { display: none; }
+.milo-settings { position: absolute; z-index: 8; top: calc(100% - 2px); right: 16px; width: min(360px, calc(100% - 32px)); max-height: min(70vh, 520px); overflow-y: auto; overscroll-behavior: contain; display: grid; gap: 10px; padding: 10px 16px 14px; background: var(--c-raised); border: 1px solid var(--c-line); border-radius: var(--r-lg); box-shadow: var(--sh-pop); }
+.milo-set-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-right: -10px; }
+.milo-set-head h3 { margin: 0; font: 600 var(--t-base)/1.3 var(--f-sans); outline: none; }
+.milo-level { display: grid; gap: 6px; } .milo-level select { min-height: 40px; } .milo-level .t-label, .milo-hz .t-label { margin: 0; }
+.milo-hz { display: grid; gap: 6px; justify-items: start; }
+.milo-lens-blurb { margin: 0; font-size: var(--t-sm); line-height: 1.4; color: var(--c-ink-3); }
+.milo-pp-foot { font-size: var(--t-sm); color: var(--c-ink-2); } .milo-pp-foot ul { margin: 2px 0 6px; } .milo-pp-foot li { margin: 2px 0; }
+.milo-settings .asof { margin: 0; }
+/* the personas, always on show: one track, the chosen one in the active fill with a check and heavier type */
+.milo-persona { display: grid; gap: 6px; padding: 8px 20px 10px; border-bottom: 1px solid var(--c-line-2); }
+.milo-persona.is-loading { min-height: 74px; }
+.milo-pp-lab { margin: 0; }
+.milo-pp-row { display: grid; grid-template-columns: repeat(var(--n, 5), minmax(0, 1fr)); gap: 3px; padding: 3px; border-radius: var(--r-ctl); background: var(--c-plane-2); border: 1px solid var(--c-line-2); }
+.milo-pp-opt { display: flex; align-items: center; justify-content: center; gap: 4px; min-width: 0; min-height: 40px; padding: 4px 6px; border: 0; border-radius: var(--r-ctl-in); background: none; color: var(--c-ink-2); cursor: pointer; font: 500 var(--t-sm)/1.2 var(--f-sans); text-align: center; text-wrap: balance; }
+.milo-pp-opt:hover:not([aria-checked="true"]) { background: var(--c-sunk); color: var(--c-ink); }
+.milo-pp-opt[aria-checked="true"] { background: var(--c-active); color: var(--c-ink); font-weight: 600; box-shadow: 0 0 0 1px var(--c-line); }
+.milo-pp-opt .ic { width: 14px; height: 14px; stroke-width: 2.2; }
+.milo-pp-opt:focus-visible { outline: 2px solid var(--c-focus); outline-offset: 1px; }
+.milo-block { margin: 8px 20px; }
+/* the conversation: most of the height, its own scroll */
+.milo-log-wrap { position: relative; flex: 1; min-height: 0; display: flex; }
+.milo-log { flex: 1; min-width: 0; min-height: 0; overflow-y: auto; overscroll-behavior: contain; display: grid; align-content: start; gap: 18px; padding: 16px 20px 20px; }
+.milo-latest { position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%); display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 14px; border: 1px solid var(--c-line); border-radius: var(--r-ctl); background: var(--c-raised); color: var(--c-ink); box-shadow: var(--sh-pop); cursor: pointer; font: 600 var(--t-sm)/1 var(--f-label); }
+.milo-latest .ic { width: 15px; height: 15px; } .milo-latest[hidden] { display: none; }
+.milo-history { display: grid; gap: 10px; }
+.milo-hist-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; } .milo-hist-head h3 { margin: 0; font: 600 var(--t-base)/1.3 var(--f-sans); outline: none; }
+.milo-history ul { margin: 0; padding-left: 0; border-top: 1px solid var(--c-line-2); } .milo-history li { display: flex; align-items: center; gap: 6px; border-bottom: 1px solid var(--c-line-2); }
+.milo-history li.is-now { background: var(--c-sunk); }
 .milo-hist-open { flex: 1; min-width: 0; display: grid; text-align: left; gap: 2px; padding: 8px 4px; min-height: var(--tap); border: 0; background: none; color: var(--c-ink); font: inherit; cursor: pointer; }
 .milo-hist-open span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.milo-block { margin: 0; }
-.milo-log { overflow-y: auto; min-height: 120px; display: grid; align-content: start; gap: 14px; padding: 4px 2px; overscroll-behavior: contain; }
-.milo-empty { margin: 0; }
-.milo-msg { display: grid; gap: 4px; } .milo-who { margin: 0; font: 600 var(--t-sm)/1 var(--f-label); color: var(--c-ink-3); }
-.milo-you .milo-bubble { justify-self: end; max-width: 88%; background: var(--c-sunk); border-radius: var(--r-3) var(--r-3) 4px var(--r-3); padding: 10px 12px; white-space: pre-wrap; }
-.milo-you .milo-who { justify-self: end; }
-.milo-bot .milo-bubble { border-left: 2px solid var(--c-gold-light); padding: 2px 0 2px 12px; line-height: 1.55; }
-.milo-bubble p { margin: 0 0 8px; } .milo-bubble .milo-li { display: block; padding-left: 14px; position: relative; } .milo-bubble .milo-li::before { content: ""; position: absolute; left: 3px; top: .65em; width: 5px; height: 5px; border-radius: 50%; background: var(--c-ink-3); }
-.milo-bubble .milo-h { display: block; margin-top: 4px; } .milo-code { background: var(--c-sunk); padding: 8px; border-radius: var(--r-1); overflow-x: auto; font-size: var(--t-sm); }
+.milo-history .asof { margin: 0; }
+/* answers on the panel's own surface; the reader's questions in a quiet block at the right */
+.milo-msg { display: grid; gap: 6px; min-width: 0; }
+.milo-who { margin: 0; font: 600 var(--t-sm)/1 var(--f-label); color: var(--c-ink-3); }
+.milo-you { justify-items: end; }
+.milo-you .milo-bubble { max-width: 85%; padding: 10px 14px; border: 1px solid var(--c-line-2); border-radius: var(--r-lg) var(--r-lg) var(--r-xs) var(--r-lg); background: var(--c-sunk); color: var(--c-ink); font-size: var(--t-base); line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
+.milo-bot .milo-bubble { min-width: 0; font-size: var(--t-base); line-height: 1.6; color: var(--c-ink); overflow-wrap: anywhere; }
+.milo-bubble p { margin: 0 0 10px; } .milo-bubble p:last-child { margin-bottom: 0; }
+.milo-bubble .milo-li { display: block; padding-left: 14px; position: relative; } .milo-bubble .milo-li::before { content: ""; position: absolute; left: 3px; top: .7em; width: 5px; height: 5px; border-radius: 50%; background: var(--c-ink-3); }
+.milo-bubble .milo-li + br { display: none; }   /* each item is its own line already; the line break after it left a gap */
+.milo-bubble .milo-oli { padding-left: 22px; } .milo-bubble .milo-oli::before { content: none; } .milo-bubble .milo-n { position: absolute; left: 0; color: var(--c-ink-3); font-variant-numeric: tabular-nums; }
+.milo-bubble .milo-h { display: block; margin: 6px 0 2px; font-size: var(--t-lg); }
+.milo-bubble a { color: var(--c-ink); text-decoration: underline; text-underline-offset: 2px; }
+.milo-bubble code { padding: 1px 4px; border-radius: var(--r-xs); background: var(--c-sunk); font-size: .92em; }
+.milo-code { margin: 0 0 10px; padding: 10px; border-radius: var(--r-md); background: var(--c-sunk); overflow-x: auto; font-size: var(--t-sm); white-space: pre; }
+.milo-tbl { margin: 2px 0 10px; overflow-x: auto; border: 1px solid var(--c-line-2); border-radius: var(--r-md); }
+.milo-tbl table { width: 100%; border-collapse: collapse; font-size: var(--t-sm); font-variant-numeric: tabular-nums; }
+.milo-tbl th, .milo-tbl td { padding: 6px 10px; border-bottom: 1px solid var(--c-line-2); text-align: left; white-space: nowrap; }
+.milo-tbl th { background: var(--c-plane-2); color: var(--c-ink-2); font-weight: 600; } .milo-tbl tr:last-child td { border-bottom: 0; } .milo-tbl td.n { text-align: right; }
 .milo-tail { margin: 0; white-space: pre-wrap; } .milo-status { margin: 4px 0 0; color: var(--c-ink-3); font-size: var(--t-md); }
-.milo-src { display: inline-flex; align-items: center; min-height: 24px; padding: 0 8px; margin: 0 2px; border-radius: var(--r-pill); border: 1px solid var(--c-line); background: var(--c-raised); color: var(--c-gold-ink); font: 500 var(--t-sm)/1 var(--f-label); text-decoration: none; cursor: pointer; vertical-align: 1px; }
-.milo-src:hover { border-color: var(--c-gold); }
+.milo-src { display: inline-flex; align-items: center; min-height: 24px; padding: 0 7px; margin: 0 2px; border-radius: var(--r-xs); border: 1px solid var(--c-line); background: var(--c-raised); color: var(--c-ink-2); font: 500 var(--t-xs)/1 var(--f-label); text-decoration: none; vertical-align: 1px; cursor: pointer; }
+.milo-src:hover { border-color: var(--c-ink-3); color: var(--c-ink); }
 .milo-chart { margin: 8px 0; } .milo-chart-plot { min-height: 120px; }
-.milo-act { border: 1px solid var(--c-line); border-radius: var(--r-2); padding: 10px 12px; margin: 8px 0; background: var(--c-raised); } .milo-act p { margin: 0 0 6px; }
+.milo-act { border: 1px solid var(--c-line); border-radius: var(--r-md); padding: 10px 12px; margin: 8px 0; background: var(--c-raised); } .milo-act p { margin: 0 0 6px; }
 .milo-act-what { font-weight: 600; } .milo-act-sub { font-size: var(--t-md); color: var(--c-ink-3); } .milo-act-off { color: var(--c-ink-3); font-size: var(--t-md); }
 .milo-act-result { font-size: var(--t-md); } .milo-act-result:empty { display: none; }
-.milo-ups { margin-top: 4px; } .milo-acts { gap: 14px; } .milo-acts .textlink { font-size: var(--t-md); }
-.milo-sources { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: var(--t-md); } .milo-sources .t-label { flex-basis: 100%; margin: 0; }
-.milo-read { margin: 2px 0; font-size: var(--t-md); }
-.milo-note { margin: 0; font-size: var(--t-md); color: var(--c-ink-2); padding: 8px 10px; border-radius: var(--r-2); background: var(--c-sunk); }
-.gen-note, .milo-gen { margin: 6px 0 0; font-size: var(--t-sm); line-height: 1.4; color: var(--c-ink-3); }
+/* follow-ups the answer offers, as rows; sources and the answer's actions after it, quieter than the text */
+.milo-ups { display: grid; margin-top: 2px; border-top: 1px solid var(--c-line-2); }
+.milo-up { display: block; width: 100%; min-height: 40px; padding: 8px 2px; border: 0; border-bottom: 1px solid var(--c-line-2); background: none; color: var(--c-ink-2); font: 400 var(--t-sm)/1.4 var(--f-sans); text-align: left; cursor: pointer; }
+.milo-up:hover { background: var(--c-sunk); color: var(--c-ink); }
+.milo-foot { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 2px 12px; }
+.milo-src-all { flex: 1 1 200px; min-width: 0; font-size: var(--t-sm); }
+.milo-src-all > summary { display: inline-flex; align-items: center; gap: 8px; min-height: 32px; list-style: none; cursor: pointer; color: var(--c-ink-2); font-weight: 500; }
+.milo-src-all > summary::-webkit-details-marker { display: none; }
+.milo-src-all > summary::before { content: ""; width: 6px; height: 6px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: rotate(-45deg); transition: transform var(--d); }
+.milo-src-all[open] > summary::before { transform: rotate(45deg); }
+.milo-src-all > summary:hover { color: var(--c-ink); }
+.milo-src-body { display: grid; gap: 8px; padding: 2px 0 6px 14px; } .milo-src-body .t-label { margin: 0 0 2px; } .milo-src-body ul { margin: 0; } .milo-src-body small { font-size: inherit; }
+.milo-sources { display: flex; flex-wrap: wrap; gap: 2px 12px; } .milo-sources .t-label { flex-basis: 100%; }
+.milo-acts { display: flex; gap: 2px; margin-left: auto; }
+.milo-act-btn { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 0 8px; border: 0; border-radius: var(--r-ctl); background: none; color: var(--c-ink-2); cursor: pointer; font: 500 var(--t-sm)/1 var(--f-sans); }
+.milo-act-btn .ic { width: 15px; height: 15px; } .milo-act-btn:hover { background: var(--c-sunk); color: var(--c-ink); }
+.milo-note { margin: 0; font-size: var(--t-md); color: var(--c-ink-2); padding: 8px 10px; border-radius: var(--r-md); background: var(--c-sunk); }
+.gen-note, .milo-gen { margin: 0; font-size: var(--t-sm); line-height: 1.4; color: var(--c-ink-3); }
+/* the drawer's own paragraph colour (.drawer-body p) is not Milo's: an answer's text is ink, each note keeps its own */
+.milo .milo-bubble p { color: inherit; }
+.milo .milo-who, .milo .milo-about, .milo .milo-gen, .milo .milo-assumed, .milo .milo-lens-blurb, .milo .milo-ctx-meta, .milo .milo-attached, .milo .milo-allow { color: var(--c-ink-3); }
+.milo .milo-ended { color: var(--c-warn); }
+.milo .milo-hello-say, .milo .milo-moved, .milo .milo-note, .milo .milo-can-ask { color: var(--c-ink-2); }
 .milo-ended { margin: 0; font-size: var(--t-md); color: var(--c-warn); } .milo-assumed { margin: 0; font-size: var(--t-md); color: var(--c-ink-3); }
 /* Scout, Milo's mascot (components/scout.js and the sprites in /scout/, the classic app's own, made by
    optic-brand/scout/render_scout.py). The classic rules in v2's tokens: two layers per figure, ::after the pose
@@ -393,41 +467,94 @@ ul.plain { margin: 0; padding-left: 18px; } ul.plain li { margin-bottom: 7px; }
   95.22% { background-position-x: 4.7619%; } 95.54% { background-position-x: 9.5238%; } 95.99% { background-position-x: 4.7619%; } 96.35% { background-position-x: 0%; } 100% { background-position-x: 0%; } }
 :root[data-scout-motion="still"] .scout-badge-fig { animation: none; }
 @media (prefers-reduced-motion: reduce) { .scout-badge-fig { animation: none; } }
-/* the welcome: the whole figure beside the greeting, a button that opens his guide menu (no fill, no hover pill;
-   a focus ring for the keyboard and a target well over 44 px) */
-.milo-opening { display: grid; gap: 12px; }
-.milo-hello { position: relative; display: flex; align-items: center; gap: 12px; }
-.milo-hello-say { flex: 1 1 auto; min-width: 0; margin: 0; padding: 12px 14px; border-radius: var(--r-3); background: var(--c-sunk); color: var(--c-ink); font-size: var(--t-lg); line-height: 1.45; }
-.scout-btn { flex: none; display: block; width: 84px; padding: 0; border: 0; border-radius: var(--r-2); background: none; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+/* the welcome: the whole figure above the question, a button that opens his guide menu (no fill, no hover pill;
+   a focus ring for the keyboard and a target well over 44 px); then the starters as plain rows */
+.milo-opening { display: grid; justify-items: center; gap: 6px; padding: 4px 0; text-align: center; }
+.milo-hello { position: relative; display: flex; justify-content: center; }
+.milo .milo-hello-h { margin: 8px 0 0; font: 600 var(--t-2xl)/1.2 var(--f-sans); letter-spacing: -0.015em; text-wrap: balance; color: var(--c-ink); }
+.milo-hello-say { margin: 0; font-size: var(--t-base); line-height: 1.45; color: var(--c-ink-2); text-wrap: balance; }
+.scout-btn { flex: none; display: block; width: 88px; padding: 0; border: 0; border-radius: var(--r-md); background: none; cursor: pointer; -webkit-tap-highlight-color: transparent; }
 .scout-btn .scout { width: 100%; }
 .scout-btn:focus-visible { outline: 2px solid var(--c-focus); outline-offset: 2px; }
-.scout-menu { position: absolute; z-index: 5; top: calc(100% + 6px); left: 0; min-width: 15rem; padding: 6px; display: grid; gap: 2px; background: var(--c-raised); border: 1px solid var(--c-line); border-radius: var(--r-2); box-shadow: var(--sh-pop); }
+.scout-menu { position: absolute; z-index: 5; top: calc(100% + 6px); left: 50%; transform: translateX(-50%); min-width: 15rem; padding: 6px; display: grid; gap: 2px; background: var(--c-raised); border: 1px solid var(--c-line); border-radius: var(--r-md); box-shadow: var(--sh-pop); text-align: left; }
 .scout-menu[hidden] { display: none; }
-.scout-mi { display: flex; align-items: center; gap: 10px; min-height: var(--tap); width: 100%; padding: 6px 10px; border: 0; border-radius: var(--r-1); background: none; color: var(--c-ink); font: 400 var(--t-base)/1.3 var(--f-sans); text-align: left; cursor: pointer; }
+.scout-mi { display: flex; align-items: center; gap: 10px; min-height: var(--tap); width: 100%; padding: 6px 10px; border: 0; border-radius: var(--r-sm); background: none; color: var(--c-ink); font: 400 var(--t-base)/1.3 var(--f-sans); text-align: left; cursor: pointer; }
 .scout-mi:hover, .scout-mi:focus-visible { background: var(--c-sunk); outline: none; }
 .scout-mi[role="menuitemradio"]::before { content: ""; flex: none; width: 10px; height: 10px; border-radius: 50%; border: 1.5px solid var(--c-ink-3); }
 .scout-mi[aria-checked="true"]::before { border-color: var(--c-gold); background: var(--c-gold); }
 .scout-menu-sep { height: 1px; margin: 4px 0; background: var(--c-line); }
 .scout-menu-lab { margin: 0; padding: 4px 10px 0; font: 500 var(--t-sm)/1.3 var(--f-label); color: var(--c-ink-3); }
-.milo-can-ask { margin: 0; padding: 8px 12px; border-left: 2px solid var(--c-gold-light); color: var(--c-ink-2); }
-.milo-examples { display: grid; gap: 6px; }
+.milo-can-ask { margin: 4px 0 0; padding: 8px 12px; border-radius: var(--r-md); background: var(--c-sunk); color: var(--c-ink-2); text-align: left; }
+.milo-starters { width: 100%; margin: 12px 0 0; padding: 0; list-style: none; border-top: 1px solid var(--c-line-2); text-align: left; }
+.milo-starters li { border-bottom: 1px solid var(--c-line-2); }
+.milo-start { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; min-height: var(--tap); padding: 10px 4px; border: 0; background: none; color: var(--c-ink); font: 400 var(--t-base)/1.4 var(--f-sans); text-align: left; cursor: pointer; }
+.milo-start .ic { width: 16px; height: 16px; color: var(--c-ink-3); }
+.milo-start:hover { background: var(--c-sunk); } .milo-start:hover .ic { color: var(--c-ink); }
+.milo-start:focus-visible { outline: 2px solid var(--c-focus); outline-offset: -2px; }
+.milo-examples { width: 100%; margin-top: 8px; display: grid; gap: 6px; text-align: left; } .milo-examples .t-label { margin: 0; }
 .milo-ex { display: block; width: 100%; min-height: var(--tap); padding: 10px 12px; border: 1px solid var(--c-line); border-radius: var(--r-ctl); background: transparent; color: var(--c-ink-2); font: 400 var(--t-base)/1.4 var(--f-sans); text-align: left; cursor: pointer; }
 .milo-ex:hover { border-color: var(--c-ink-3); color: var(--c-ink); }
-/* beside an answer: the bust, in the row that names Milo, so it marks where an answer starts */
-.milo-bot .milo-who { display: flex; align-items: center; gap: 8px; }
-.milo-who .scout-compact { width: 36px; }
-@media (max-width: 640px) { .scout-btn { width: 72px; } }
+@media (max-width: 640px) { .scout-btn { width: 76px; } }
 /* where the conversation is short (a phone, a small window) the menu opens in the flow under him, so the log's
    scrolling can bring all of it into view; laid over the log, it was cut off at the log's edge */
-@media (max-width: 640px), (max-height: 760px) { .milo-hello { flex-wrap: wrap; } .scout-menu { position: static; order: 3; flex-basis: 100%; min-width: 0; box-shadow: none; } }
-.milo-form { display: grid; gap: 8px; border-top: 1px solid var(--c-line); padding-top: 10px; }
-.milo-form textarea { width: 100%; min-height: 64px; max-height: 180px; padding: 10px 12px; border-radius: var(--r-2); border: 1px solid var(--c-line); background: var(--c-raised); color: var(--c-ink); resize: vertical; font: 400 var(--t-lg)/1.45 var(--f-sans); }
-.milo-form .cluster { align-items: center; } .milo-form .asof { margin: 0; }
+@media (max-width: 640px), (max-height: 760px) { .milo-hello { flex-wrap: wrap; } .scout-menu { position: static; order: 3; flex-basis: 100%; min-width: 0; box-shadow: none; transform: none; } }
+/* the composer, pinned: a field that grows to a limit, with its send control inside it */
+.milo-form { flex: none; display: grid; gap: 6px; padding: 10px 16px 12px; border-top: 1px solid var(--c-line-2); background: var(--c-raised); }
+.milo-compose { display: flex; align-items: flex-end; gap: 8px; padding: 5px 5px 5px 14px; border: 1px solid var(--c-line); border-radius: var(--r-lg); background: var(--c-sunk); }
+.milo-compose:focus-within { border-color: var(--c-ink-3); box-shadow: 0 0 0 1px var(--c-ink-3); }
+.milo-compose textarea { flex: 1; min-width: 0; min-height: 34px; max-height: 160px; padding: 7px 0; border: 0; background: none; color: var(--c-ink); resize: none; overflow-y: hidden; font: 400 var(--t-base)/1.45 var(--f-sans); outline: none; }
+.milo-compose textarea::placeholder { color: var(--c-ink-3); }
+.milo-send, .milo-stop { flex: none; display: grid; place-items: center; width: 36px; height: 36px; border-radius: var(--r-ctl); cursor: pointer; }
+.milo-send { border: 0; background: var(--c-gold); color: var(--c-on-gold); }
+.milo-send:hover:not(:disabled) { opacity: .9; } .milo-send:disabled { opacity: .4; cursor: default; }
+.milo-compose:has(textarea:placeholder-shown) .milo-send:not(:disabled) { opacity: .55; }   /* nothing to send yet */
+.milo-stop { border: 1px solid var(--c-line); background: var(--c-raised); color: var(--c-ink); }
+.milo-send .ic { width: 18px; height: 18px; stroke-width: 2.2; } .milo-stop .ic { width: 14px; height: 14px; fill: currentColor; }
+.milo-send:focus-visible, .milo-stop:focus-visible { outline: 2px solid var(--c-focus); outline-offset: 2px; }
+.milo-send[hidden], .milo-stop[hidden] { display: none; }
+.milo-form-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 2px 12px; min-height: 18px; }
+.milo-attached { display: inline-flex; align-items: center; gap: 6px; min-width: 0; margin: 0; font-size: var(--t-sm); color: var(--c-ink-3); }
+.milo-attached .ic { width: 14px; height: 14px; }
+.milo-attached span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.milo-allow { margin: 0; font-size: var(--t-sm); color: var(--c-ink-3); }
+.milo-form[data-state="sending"] .milo-allow, .milo-form[data-state="streaming"] .milo-allow { color: var(--c-ink-2); }
+@media (pointer: coarse) {
+  .milo-send, .milo-stop { width: var(--tap); height: var(--tap); }
+  .milo-act-btn, .milo-ctx-btn, .milo-up, .milo-src-all > summary, .milo-latest, .milo-pp-opt { min-height: var(--tap); }
+  .milo-compose textarea { min-height: var(--tap); padding: 11px 0; }
+}
+/* a phone: the whole screen, inside its safe areas, the composer above the keyboard (the panel is the part of the
+   screen the keyboard leaves); Response settings rise as a sheet; the personas in two rows of full-size targets */
 @media (max-width: 860px) {
-  .drawer-panel.milo-panel { height: var(--vvh, 100dvh); max-height: var(--vvh, 100dvh); }
-  .milo-form textarea { min-height: 52px; font-size: var(--t-lg); }
+  .drawer-panel.milo-panel { top: var(--vvt, 0px); bottom: auto; left: 0; width: 100%; height: var(--vvh, 100dvh); max-height: var(--vvh, 100dvh); border-radius: 0; transform: none; padding-top: env(safe-area-inset-top, 0px); }
+  .milo-panel .drawer-head { padding: 6px max(6px, env(safe-area-inset-right, 0px)) 6px max(16px, env(safe-area-inset-left, 0px)); }
+  .milo-ctx, .milo-persona, .milo-info, .milo-moved, .milo-log { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  .milo-ctx { padding-right: max(8px, env(safe-area-inset-right, 0px)); }
+  .milo-form { padding: 8px max(12px, env(safe-area-inset-right, 0px)) max(10px, env(safe-area-inset-bottom, 0px)) max(12px, env(safe-area-inset-left, 0px)); }
+  .milo-compose textarea { font-size: var(--t-lg); }   /* 16 px: iOS zooms into a smaller field on focus */
   .milo-lens-blurb { display: none; }   /* as the classic panel does on a phone: the controls stay, the lines go */
-  .milo-pp-menu .milo-pp-b { display: block; }
+  .milo-settings .milo-lens-blurb { display: block; }
+  .milo-set-btn { width: var(--tap); min-width: var(--tap); min-height: var(--tap); padding: 0; justify-content: center; }
+  .milo-set-l { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  /* five personas in two full rows: three above, two below, each row filling the track */
+  .milo-pp-row { grid-template-columns: repeat(6, minmax(0, 1fr)); } .milo-pp-opt { grid-column: span 2; min-height: var(--tap); }
+  .milo-pp-row[style*="--n: 5"] .milo-pp-opt:nth-child(n+4) { grid-column: span 3; }
+  .milo-pp-row:not([style*="--n: 5"]) { grid-template-columns: repeat(3, minmax(0, 1fr)); } .milo-pp-row:not([style*="--n: 5"]) .milo-pp-opt { grid-column: auto; }
+  .milo-sheet-scrim { display: block; position: fixed; inset: 0; z-index: 7; background: var(--c-scrim); }
+  .milo-settings { position: fixed; z-index: 8; top: auto; left: 0; right: 0; bottom: 0; width: auto; max-height: 78%; padding: 12px max(16px, env(safe-area-inset-right, 0px)) max(16px, env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px)); border-radius: var(--r-xl) var(--r-xl) 0 0; border-width: 1px 0 0; box-shadow: var(--sh-sheet); }
+  .milo-settings .seg button { min-height: var(--tap); }
+}
+/* a short screen (a phone on its side): the conversation keeps its room; the personas stay, in one row */
+@media (max-height: 520px) {
+  .milo-sub, .milo-ctx-meta > span { display: none; }
+  .milo-ctx { padding-top: 2px; padding-bottom: 2px; align-items: center; } .milo-ctx-l { display: flex; align-items: center; gap: 4px; } .milo-ctx-l > .milo-ctx-pick { flex: none; max-width: 70vw; }
+  .milo-panel .drawer-head { padding-top: 2px; padding-bottom: 2px; } .milo-form-foot { display: none; }   /* what is attached is named in the context bar too */
+  .milo-persona { grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 12px; padding-top: 4px; padding-bottom: 4px; }
+  .milo-pp-row, .milo-pp-row:not([style*="--n: 5"]) { grid-template-columns: repeat(var(--n, 5), minmax(0, 1fr)); }
+  .milo-pp-opt, .milo-pp-row[style*="--n: 5"] .milo-pp-opt:nth-child(n+4) { grid-column: auto; }
+  .milo-lens-blurb { display: none; }
+  .scout-btn { width: 52px; } .milo-hello-h { margin-top: 2px; font-size: var(--t-xl); }
+  .milo-log { gap: 12px; padding-top: 10px; padding-bottom: 12px; }
 }
 
 /* ---------- states: loading, empty, stale, error ---------- */
@@ -653,7 +780,7 @@ table.st td a { text-decoration: none; font-weight: 600; } table.st td a:hover {
 /* a failure inside a panel is the panel's content, not a second card (editorial pass) */
 .dchart > .state.err, .ws-body > .state.err, .op-sec .state.err { border: 0; background: none; padding: 0; box-shadow: none; }
 /* Milo: what an answer was about, and a plain flag when the page now open is another symbol's (task 12) */
-.milo-about { margin: 0 0 6px; font-size: var(--t-sm); color: var(--c-ink-3); }
+.milo-about { margin: 0; font-size: var(--t-sm); color: var(--c-ink-3); }
 .milo-about.is-other b { color: var(--c-ink); font-weight: 600; }
 /* Milo's width grip, on the panel's left edge (desktop; on a phone the panel is a bottom sheet) */
 .milo-grip { position: absolute; left: -5px; top: 0; bottom: 0; width: 10px; cursor: col-resize; z-index: 2; touch-action: none; }

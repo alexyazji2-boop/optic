@@ -22,7 +22,9 @@ function ensure() {
 // sticky: a question that must survive navigation (the guest's things).
 // form: a sheet with fields in it. On a phone it shrinks to the part of the screen the keyboard
 // leaves (visualViewport), so the field being typed in and the button under it stay in view.
-export function open({ kicker = '', title, body, opener, mount, closed, keep = false, form = false }) {
+// head and actions: a panel's own header (it must hold the #drawer-title heading) and buttons before Close
+// (Milo's compact header, 2026-10-20); every other drawer keeps the kicker and title.
+export function open({ kicker = '', title, body, opener, mount, closed, keep = false, form = false, head = null, actions = null }) {
   ensure();
   if (!root.hidden) close({ silent: true, force: true });
   panel.classList.toggle('is-form', !!form);
@@ -31,8 +33,9 @@ export function open({ kicker = '', title, body, opener, mount, closed, keep = f
   sticky = keep;
   from = opener || document.activeElement;
   onClose = closed;
-  render(panel, html`<header class="drawer-head"><div><p class="drawer-kicker">${kicker}</p><h2 id="drawer-title" tabindex="-1">${title}</h2></div>
-    <button type="button" class="icon-btn" data-v2-close aria-label="Close">${icon('close')}</button></header>
+  const shut = html`<button type="button" class="icon-btn" data-v2-close aria-label="Close" ${actions ? html`title="Close"` : ''}>${icon('close')}</button>`;
+  render(panel, html`<header class="drawer-head">${head || html`<div><p class="drawer-kicker">${kicker}</p><h2 id="drawer-title" tabindex="-1">${title}</h2></div>`}
+    ${actions ? html`<div class="drawer-acts">${actions}${shut}</div>` : shut}</header>
     <div class="drawer-body">${body}</div>`);
   root.hidden = false;
   document.body.classList.add('drawer-open');

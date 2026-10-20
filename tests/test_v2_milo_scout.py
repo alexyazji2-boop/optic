@@ -53,7 +53,8 @@ def test_he_moves_on_milos_events_as_in_the_classic_panel():
 
 def test_the_welcome_figure_and_its_menu():
     assert "figure('full', 'Milo guide: what to ask, examples and animation')" in MILO
-    assert "Hi, I'm Milo. What would you like to explore?" in MILO and "Hi, I'm ${esc(ASSISTANT_NAME)}. What would you like to explore?" in CLASSIC
+    # the redesign's one heading over a new conversation (owner's brief, 2026-10-20), in place of the classic greeting
+    assert "What would you like to understand?" in MILO and "Hi, I'm ${esc(ASSISTANT_NAME)}. What would you like to explore?" in CLASSIC
     for item in ("What can I ask?", "Show example questions", "radio('full', 'Full')", "radio('subtle', 'Subtle')", "radio('still', 'Still')"):
         assert item in MILO, item
     assert "if (OS()) OS().setMotion(v);" in MILO, "the classic key, through the classic setter"
@@ -67,7 +68,9 @@ def test_the_welcome_figure_and_its_menu():
 
 
 def test_the_bust_beside_an_answer_and_the_head_on_the_button():
-    assert '<p class="milo-who">${figure(\'compact\')}<span>Milo</span></p>' in MILO, "the name stays readable beside him"
+    # since the redesign he sits beside the title in the header, and that figure carries his reactions to an answer
+    assert '<div class="milo-id">${figure(\'compact\')}<div><h2 id="drawer-title" tabindex="-1">Milo</h2>' in MILO, "the name stays readable beside him"
+    assert "const replyEl = (h, i) => (i === null || i === undefined ? null : headEl());" in MILO
     assert 'aria-label="Ask Milo"><span class="scout-badge" aria-hidden="true"><span class="scout-badge-fig"></span></span>' in SHELL
     assert ":root[data-scout-motion=\"still\"] .scout-badge-fig { animation: none; }" in CSS and "@media (prefers-reduced-motion: reduce) { .scout-badge-fig { animation: none; } }" in CSS
     assert ".topbar-milo .scout-badge { width: 26px; height: 26px; }" in PAGES
@@ -75,5 +78,6 @@ def test_the_bust_beside_an_answer_and_the_head_on_the_button():
 
 def test_short_screens_and_the_picker():
     assert "@media (max-width: 640px), (max-height: 760px) { .milo-hello { flex-wrap: wrap; } .scout-menu { position: static;" in CSS, "the menu is never cut off at the log's edge"
-    assert ".milo-top .milo-scope { display: flex;" in CSS and ".milo-top .milo-scope select { flex: 1; width: 100%; min-width: 0; }" in CSS
+    # what Milo receives is a menu in the context bar now; its name shortens rather than running under the buttons
+    assert ".milo-ctx-now { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }" in CSS and ".milo-ctx-l { min-width: 0;" in CSS
     assert "min-height: var(--tap)" in CSS[CSS.index(".scout-mi {"):CSS.index(".scout-mi:hover")], "44 px targets"

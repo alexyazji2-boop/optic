@@ -49,9 +49,18 @@ export function mdLite(text) {
   out = out.replace(/(^|[^*])\*([^*\n]+)\*(?!\*)/g, '$1<em>$2</em>');
   out = out.replace(/^#{2,3} (.*)$/gm, '<strong class="milo-h">$1</strong>');
   out = out.replace(/^\s*[-*] (.*)$/gm, '<span class="milo-li">$1</span>');
+  // numbered steps keep their numbers (2026-10-20: the redesign renders lists, tables and code as written)
+  out = out.replace(/^\s*(\d{1,2})[.)] (.*)$/gm, '<span class="milo-li milo-oli"><span class="milo-n">$1.</span> $2</span>');
   out = out.replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+  // tables: lines that start and end with "|", the second a separator row ("|---|:---:|"); figures right-aligned
+  out = out.replace(/(^|\n)((?:[ \t]*\|[^\n]*\|[ \t]*(?:\n|$)){2,})/g, (m, lead, block) => {
+    const rows = block.trim().split('\n').map((l) => l.trim().replace(/^\||\|$/g, '').split('|').map((c) => c.trim()));
+    if (rows.length < 2 || !rows[1].every((c) => /^:?-{2,}:?$/.test(c))) return m;
+    const fig = (c) => /^[−+\-]?[$€£]?\d[\d,.]*(?:%|x|bn|m|k|B|M|K)?$/.test(c);
+    return `${lead}\n\n<div class="milo-tbl"><table><thead><tr>${rows[0].map((c) => `<th>${c}</th>`).join('')}</tr></thead><tbody>${rows.slice(2).map((r) => `<tr>${r.map((c) => `<td${fig(c) ? ' class="n"' : ''}>${c}</td>`).join('')}</tr>`).join('')}</tbody></table></div>\n\n`;
+  });
   // paragraphs: blank lines separate; single newlines are line breaks
-  return out.split(/\n{2,}/).map((p) => (p.trim().startsWith('<pre') ? p : `<p>${p.replace(/\n/g, '<br>')}</p>`)).join('');
+  return out.split(/\n{2,}/).filter((p) => p.trim()).map((p) => (/^\s*<(pre|div class="milo-tbl")/.test(p) ? p.trim() : `<p>${p.replace(/^\n+|\n+$/g, '').replace(/\n/g, '<br>')}</p>`)).join('');
 }
 
 /** Trailing "→ question" lines become follow-up buttons (at most four). */
