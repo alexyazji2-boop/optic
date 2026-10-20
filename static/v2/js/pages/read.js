@@ -15,6 +15,7 @@ import { groupedTabs } from '../ui/grouptabs.js';
 import { toast } from '../ui/toast.js';
 import { button as miloButton, provideContext } from '../ui/milo.js';
 import { sectionHead } from './tabs.js';
+import { etDay } from '../core/marketTime.js';
 
 let D = {}, live = true, mainEl = null, tabState = { g: 0, s: {} }, cal = { impact: 'all', range: 'week' }, cat = { status: 'relevant', category: '', sector: '', theme: '', q: '' };
 const ask = (label, q) => miloButton(label, { ask: q, context: 'Markets, Read' });
@@ -86,7 +87,7 @@ function priority() {
   if (p === undefined) return skeleton('lines', 4, "Loading today's priority");
   if (!p || !p.available) return empty('Nothing on the board right now', '');
   return html`${p.columns.map((c) => html`<h3>${c.name} <span class="t-muted">${c.total ?? (c.rows || []).length}</span></h3><p class="t-muted">${clean(c.blurb || '')}</p>
-    ${(c.rows || []).length ? html`<ul class="plain">${c.rows.slice(0, 8).map((r) => html`<li>${r.ticker ? html`<a href="#/${r.ticker}"><b>${r.ticker}</b></a> ` : ''}<b>${clean(r.title)}</b> <span class="t-muted">${[r.when, r.time, r.impact ? `${r.impact} impact` : ''].filter(Boolean).join(', ')}</span>. ${clean(r.why || '')}</li>`)}</ul>` : html`<p class="quiet">Nothing here today.</p>`}`)}
+    ${(c.rows || []).length ? html`<ul class="plain">${c.rows.slice(0, 8).map((r) => html`<li>${r.ticker ? html`<a class="tk-link" href="#/${r.ticker}"><b>${r.ticker}</b></a> ` : ''}<b>${clean(r.title)}</b> <span class="t-muted">${[r.when, r.time, r.impact ? `${r.impact} impact` : ''].filter(Boolean).join(', ')}</span>. ${clean(r.why || '')}</li>`)}</ul>` : html`<p class="quiet">Nothing here today.</p>`}`)}
     <p class="asof">${clean(p.method || '')}</p>`;
 }
 
@@ -98,7 +99,7 @@ function catalystMode() {
   return html`<h3>${clean(r.title)}</h3><p class="t-muted">${r.source}${r.source_detail ? `, ${r.source_detail}` : ''}. Released ${(r.age || {}).at_et || ''}, ${(r.age || {}).label || ''}.</p>
     ${r.summary ? html`<p>${clean(r.summary)}</p>` : ''}${r.why_it_matters ? html`<p>${clean(r.why_it_matters)}</p>` : ''}
     <p><b>Consensus against actual:</b> not shown. ${clean((c.consensus || {}).reason || '')}</p>
-    ${(c.reaction || {}).available ? html`<h3>How markets took it</h3><div class="chips">${c.reaction.assets.map((a) => html`<span class="pill">${a.name} <b class="${dir(a.change_pct)}">${signed(a.change_pct)}</b></span>`)}</div><p class="asof">${clean(c.reaction.basis || '')}</p>` : ''}
+    ${(c.reaction || {}).available ? html`<h3>How markets took it</h3><ul class="plain cal-react">${c.reaction.assets.map((a) => html`<li>${a.name} <b class="${dir(a.change_pct)}">${signed(a.change_pct)}</b></li>`)}</ul><p class="asof">${clean(c.reaction.basis || '')}</p>` : ''}
     <h3>Optic's read of it</h3>
     ${rd.available ? html`<p><b>${clean(rd.headline || '')}</b></p>${(rd.paragraphs || []).map((p) => html`<p>${raw(bolded(p))}</p>`)}${generated(rd, { at: rd.written_at || rd.generated_at })}<p class="asof">${clean(rd.disclaimer || '')}</p>`
     : D.catWriting ? skeleton('lines', 3, 'Writing the read') : html`<p class="t-muted">Not written yet.</p><button type="button" class="btn btn-sm" data-v2-catread>Write the read</button><p class="asof">Written by an AI model when someone asks, then kept for an hour and shared with every reader.</p>`}
@@ -159,20 +160,64 @@ function regime() {
     ${how(html`<p>Positive at +12, negative at −12. ${clean(r.scale_note || '')} ${clean(r.method || '')}</p>`)}`;
 }
 
+// The calendar (backlog task 9, 2026-10-20). Each day's macro releases and the week's company reports
+// together, in time order; a release already out today says so; each date says whether the agency
+// published it, it recurs on a rule, or it is estimated; a previous reading names the period it is for.
+const ET_DAY = (() => { try { return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' }); } catch (e) { return null; } })();
+const dayOf = (iso) => { try { return ET_DAY ? ET_DAY.format(new Date(iso)) : String(iso).slice(0, 10); } catch (e) { return String(iso || '').slice(0, 10); } };
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+/** The period a reading is for, from its observation date: "September 2026", or "Q2 2026" for a quarterly series. */
+export function periodOf(asOf, label) {
+  const m = /^(\d{4})-(\d{2})/.exec(String(asOf || ''));
+  if (!m) return '';
+  const y = m[1], mo = Number(m[2]);
+  return /quarter/i.test(label || '') ? `Q${Math.floor((mo - 1) / 3) + 1} ${y}` : `${MONTHS[mo - 1]} ${y}`;
+}
+const DATE_WORD = { published: (e) => `Date published by ${e.agency_short || e.agency || 'the agency'}`, recurring: () => 'Recurring date, set by rule', estimated: () => 'Estimated date, not yet published' };
+const IMPACT_WORD = { high: 'High impact', medium: 'Medium impact', low: 'Low impact' };
+/** One timeline: macro events, then the week's company reports from Today's priority, each with an ET day. */
+export function calendarItems(c, pr, now = new Date()) {
+  const today = dayOf(now), tomorrow = dayOf(new Date(now.getTime() + 86400000));
+  const days = (d) => Math.round((Date.parse(`${d}T12:00:00Z`) - Date.parse(`${today}T12:00:00Z`)) / 86400000);
+  // days and "released" from the clock now, not the Read's build: a Read built yesterday called today's
+  // releases "tomorrow", and one built at 8 AM still called a 8:30 release due at noon
+  const ev = (c.events || []).map((e) => { const day = e.at ? dayOf(e.at) : ''; return { ...e, kind: 'macro', day, days_away: day ? days(day) : e.days_away, released: !!(e.released || (e.at && !e.all_day && Date.parse(e.at) <= now.getTime())) }; });
+  const col = ((pr || {}).columns || []).find((x) => x.id === 'earnings');
+  const reports = ((col || {}).rows || []).filter((r) => r.ticker && r.date).map((r) => ({ kind: 'report', day: String(r.date).slice(0, 10), days_away: days(String(r.date).slice(0, 10)), title: `${r.ticker} reports`, ticker: r.ticker, impact: r.impact, category: 'earnings', why: r.why }));
+  return { today, tomorrow, items: [...ev, ...reports].sort((a, b) => (a.day < b.day ? -1 : a.day > b.day ? 1 : (a.kind === 'report') - (b.kind === 'report') || String(a.at || '').localeCompare(String(b.at || '')))) };
+}
+function calItem(e) {
+  if (e.kind === 'report') return html`<li class="cal-i"><p class="cal-top"><b>Company report</b> <a class="textlink" href="#/${e.ticker}/earnings">${e.title}</a> <span class="cal-imp">${IMPACT_WORD[e.impact] || ''}</span></p><p class="t-muted">${clean(e.why || '')}</p></li>`;
+  const r = e.readings || {};
+  const when = e.all_day ? 'All day' : e.time_label || '';
+  const status = e.released ? `Released${when ? ` ${when}` : ''}` : when ? `Due ${when}` : 'Due';
+  const prev = r.available && isNum(r.previous) ? `Previous reading${r.as_of ? `, for ${periodOf(r.as_of, r.series_label)}` : ''}: ${r.previous}${r.unit || ''}${r.series_label ? ` (${r.series_label.toLowerCase()})` : ''}.` : '';
+  const actual = r.available ? (e.released || !r.is_upcoming ? (isNum(r.actual) ? ` Released: ${r.actual}${r.unit || ''}.` : ' The released figure has not reached the data feed yet.') : '') : '';
+  return html`<li class="cal-i ${e.released ? 'is-out' : ''}"><p class="cal-top"><b>${status}</b> ${/^https?:/.test(e.source_url || '') ? html`<a class="textlink" href="${e.source_url}" target="_blank" rel="noopener">${clean(e.title)}</a>` : clean(e.title)} <span class="cal-imp">${IMPACT_WORD[e.impact] || ''}</span></p>
+    <p class="t-muted cal-meta">${(DATE_WORD[e.confidence] || (() => ''))(e)}${e.category ? `. ${capFirst(e.category)}` : ''}.</p>
+    ${e.why ? html`<p class="cal-why">${clean(e.why)}</p>` : ''}
+    ${prev || actual ? html`<p class="cal-read">${prev}${actual}</p>` : ''}
+    ${e.previous && /^https?:/.test(e.previous.url || '') ? html`<p class="cal-read">Last release: <a class="textlink" href="${e.previous.url}" target="_blank" rel="noopener">${clean(e.previous.headline || 'the release')}</a></p>` : ''}</li>`;
+}
 function calendar() {
   const c = (D.brief || {}).calendar;
-  if (!c) return empty('No calendar', '');
-  const ev = c.events || [];
-  const cats = [...new Set(ev.map((e) => e.category).filter(Boolean))];
+  if (D.briefErr) return html`<p class="quiet">The calendar comes with today's Read, which did not load. Try again above.</p>`;
+  if (D.brief === undefined) return skeleton('lines', 4, 'Loading the calendar');
+  if (!c) return empty('No calendar', 'The Read for today has no calendar yet.');
+  const { today, tomorrow, items } = calendarItems(c, D.priority);
+  const cats = [...new Set(items.map((e) => e.category).filter(Boolean))];
   const inRange = (e) => (cal.range === 'today' ? e.days_away === 0 : cal.range === 'week' ? e.days_away <= 6 : true);
   const inImpact = (e) => (cal.impact === 'all' ? true : cal.impact === 'high' ? e.impact === 'high' : e.category === cal.impact);
-  const shown = ev.filter((e) => inRange(e) && inImpact(e));
-  const groups = [...new Set(shown.map((e) => e.when_label))];
-  return html`<div class="chips" role="group" aria-label="Which releases"><button type="button" class="chip" data-v2-cal-impact="all" aria-pressed="${cal.impact === 'all'}">All</button><button type="button" class="chip" data-v2-cal-impact="high" aria-pressed="${cal.impact === 'high'}">High impact</button>${cats.map((k) => html`<button type="button" class="chip" data-v2-cal-impact="${k}" aria-pressed="${cal.impact === k}">${capFirst(k)} <span class="t-muted">${ev.filter((e) => e.category === k).length}</span></button>`)}</div>
+  const shown = items.filter((e) => e.days_away >= 0 && inRange(e) && inImpact(e));
+  const days = [...new Set(shown.map((e) => e.day))];
+  const name = (d) => (d === today ? `Today, ${etDay(d)}` : d === tomorrow ? `Tomorrow, ${etDay(d)}` : etDay(d));
+  const noted = items.some((e) => (e.readings || {}).forecast_note);
+  const reportsIn = !!((((D.priority || {}).columns || []).find((x) => x.id === 'earnings') || {}).rows || []).length;
+  return html`<div class="chips" role="group" aria-label="Which releases"><button type="button" class="chip" data-v2-cal-impact="all" aria-pressed="${cal.impact === 'all'}">All</button><button type="button" class="chip" data-v2-cal-impact="high" aria-pressed="${cal.impact === 'high'}">High impact</button>${cats.map((k) => html`<button type="button" class="chip" data-v2-cal-impact="${k}" aria-pressed="${cal.impact === k}">${k === 'earnings' ? 'Company reports' : capFirst(k)} <span class="t-muted">${items.filter((e) => e.category === k).length}</span></button>`)}</div>
     <div class="seg" role="group" aria-label="When" style="margin-top:10px">${[['today', 'Today'], ['week', 'This week'], ['all', `Next ${c.horizon_days} days`]].map(([k, l]) => html`<button type="button" data-v2-cal-range="${k}" aria-pressed="${cal.range === k}">${l}</button>`)}</div>
-    ${shown.length ? groups.map((g) => html`<h3>${g}</h3><ul class="plain">${shown.filter((e) => e.when_label === g).map((e) => html`<li><b>${e.time_label || 'All day'}</b> ${/^https?:/.test(e.source_url || '') ? html`<a href="${e.source_url}" target="_blank" rel="noopener">${clean(e.title)}</a>` : clean(e.title)} <span class="pill">${e.impact} impact</span> <span class="t-muted">${e.agency_short || ''}${e.confidence !== 'published' ? `, date ${e.confidence}` : ''}</span><br><span class="t-muted">${clean(e.why || '')}</span>${(e.readings || {}).available ? html`<br><small>Previous ${e.readings.previous}${e.readings.unit || ''}${e.readings.is_upcoming ? ', actual pending' : `, actual ${e.readings.actual}${e.readings.unit || ''}`}</small>` : ''}</li>`)}</ul>`)
-    : html`<p class="quiet">${ev.length ? `Nothing in this window matches that filter. ${ev.length} releases scheduled overall.` : `Nothing scheduled in the next ${c.horizon_days} days.`}</p>`}
-    <p class="asof">${(c.degraded || []).length ? `Not available right now: ${c.degraded.join(', ')}. ` : ''}Dates the agencies have published, plus recurring and estimated ones marked as such.</p>`;
+    ${shown.length ? days.map((d) => { const xs = shown.filter((e) => e.day === d); return html`<h3 class="cal-day">${name(d)} <span class="t-muted">${xs.length}</span></h3><ul class="plain cal-list">${xs.map(calItem)}</ul>`; })
+    : html`<p class="quiet">${items.length ? `Nothing in this window matches that filter. ${items.length} events scheduled overall.` : `Nothing scheduled in the next ${c.horizon_days} days.`}</p>`}
+    <p class="asof">${(c.degraded || []).length ? `Not available right now: ${c.degraded.join(', ')}. ` : ''}Dates the agencies have published, plus recurring and estimated ones, each marked. Times are Eastern.${reportsIn ? " Company reports are this week's widely followed names, from Today's priority." : D.priority === undefined ? ' Company reports load with Today\'s priority.' : ''}${noted ? ' No consensus forecasts: they are surveyed and licensed, and the free sources publish what was released, not what was expected.' : ''}</p>`;
 }
 
 function headlines() {
