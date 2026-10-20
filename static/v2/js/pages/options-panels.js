@@ -7,7 +7,7 @@
 import { html, raw } from '../core/dom.js';
 import { CLASSIC } from '../core/classic.js';
 import { num, signed, dir, money, compact, clean, capFirst, shortDate, fullDate, isNum, score100 } from '../core/format.js';
-import { signedBars } from '../ui/bars.js';
+import { signedBars, periodLines } from '../ui/bars.js';
 import { xyChart } from '../ui/xychart.js';
 import { lineChart } from '../ui/chart.js';
 import { button as miloButton } from '../ui/milo.js';
@@ -50,6 +50,7 @@ export function pricing(t, sym) {
     ev.available ? [evMove ? `About ${num(ev.move_pct, 1)}% is priced for the report day itself.` : clean(ev.text), ''] : null,
   ].filter(Boolean);
   return html`<ul class="reads">${items.map(([a, b]) => html`<li><p>${a}</p>${b ? html`<p class="t-muted">${b}</p>` : ''}</li>`)}</ul>
+    ${(vs.expiries || []).filter((e) => isNum(e.atm_iv_pct)).length > 2 ? html`<figure class="fv opt-term"><figcaption><p class="t-label">Implied volatility by expiry</p><p class="fv-unit">At-the-money implied volatility, a year's worth, for each expiry; "Report" marks the first that spans the next earnings report. What options cost, not a forecast.</p></figcaption><div class="chart-slot" data-chart="term"></div></figure>` : ''}
     <details class="more-inline"><summary>Compare expiries</summary><div class="tscroll"><table class="t">
       <thead><tr><th>Expiry</th><th>Days</th><th>ATM IV</th><th>Straddle move</th><th>1-SD move</th><th>Put skew</th><th>Quoted</th><th>Report inside</th></tr></thead>
       <tbody>${(vs.expiries || []).map((e) => html`<tr><td>${shortDate(e.expiry)}</td><td>${e.dte}</td><td>${pct(e.atm_iv_pct)}</td><td>±${num(e.straddle_move_pct, 2)}%</td><td>±${num(e.one_sd_move_pct, 2)}%</td><td>${signed(e.rr25_pts, 1, '')}</td><td>${e.two_sided} of ${e.contracts}</td><td>${e.contains_event ? 'Yes' : 'No'}</td></tr>`)}</tbody></table></div>
@@ -61,6 +62,15 @@ export function pricing(t, sym) {
       evMove ? html`<p>The report day's move is read from the ${shortDate(ev.after)} expiry's IV against the ${shortDate(ev.before)} expiry's. ${clean(ev.method || '')}</p>` : '',
       vs.iv_method ? html`<p>${clean(vs.iv_method)}</p>` : '')}
     ${ask(sym, 'Ask Milo about implied volatility', `What is implied volatility telling me about ${sym} right now?`)}`;
+}
+
+// the term structure as a line: each expiry's at-the-money implied volatility, oldest expiry first
+export function pricingCharts(t) {
+  const rows = ((t.vol_surface || {}).expiries || []).filter((e) => isNum(e.atm_iv_pct));
+  if (rows.length < 3) return {};
+  const firstEvent = rows.findIndex((e) => e.contains_event);
+  const G = rows.map((e, i) => ({ x: shortDate(e.expiry), sub: i === firstEvent ? 'Report' : '' }));
+  return { term: (w) => periodLines(G, [{ name: 'At-the-money IV', cls: 's1', values: rows.map((e) => e.atm_iv_pct) }], { w, h: 190, zero: false, fmt: (v) => `${num(v, 1)}%`, axisFmt: (v) => `${num(v, 0)}%`, label: 'At-the-money implied volatility by expiry', summary: `Implied volatility by expiry, from ${num(rows[0].atm_iv_pct, 1)}% for ${shortDate(rows[0].expiry)} to ${num(rows[rows.length - 1].atm_iv_pct, 1)}% for ${shortDate(rows[rows.length - 1].expiry)}${firstEvent >= 0 ? `; the ${shortDate(rows[firstEvent].expiry)} expiry is the first to span the report` : ''}.` }) };
 }
 
 /* ---------- dealer gamma ---------- */

@@ -230,7 +230,7 @@ export function periodLines(groupsIn, seriesIn, opts = {}) {
   const S = (series || []).filter((s) => (s.values || []).some(fin));
   if (!(groups || []).length || !S.length) return { html: '', wire() {} };
   const W = Math.max(280, Math.round(opts.w || 600)), H = Math.round(opts.h || 200);
-  const pad = Object.assign({ t: 16, r: 12, b: 26, l: 46 }, opts.pad || {});
+  const pad = Object.assign({ t: 16, r: 12, b: groups.some((g) => g.sub) ? 40 : 26, l: 46 }, opts.pad || {});
   const fmt = opts.fmt || ((v) => num(v, 1));
   const all = S.flatMap((s) => s.values.filter(fin));
   let lo = opts.zero === false ? Math.min(...all) : Math.min(0, ...all), hi = Math.max(...all);

@@ -22,6 +22,7 @@ import { esc, compact } from '../core/format.js';
 import { GROUPS, SETTINGS } from '../nav.js';
 import { renderAnswer, streamingTail, sourcesAsText, STUDIES, SECTIONS as ACT_SECTIONS } from '../core/milo-text.js';
 import { lineChart, mountCharts } from './chart.js';
+import * as FF from './finfigs.js';
 import { CLASSIC } from '../core/classic.js';
 import { miloNotice } from '../core/legal.js';
 import { icon } from './icons.js';
@@ -441,7 +442,7 @@ function paintLog(stick = true) {
   const h = host(); if (!h) return;
   const log = $('.milo-log', h), pinned = !log || log.scrollHeight - log.scrollTop - log.clientHeight < 60;
   draw(log, logHTML());
-  mountAnswerCharts(log);
+  mountAnswerCharts(log); mountAnswerFigures(log);
   // the reader's own question always comes into view; new output follows only a reader already at the end
   if (S.toEnd || (stick && pinned)) log.scrollTop = log.scrollHeight;
   if (S.showHistory || !S.items.length) log.scrollTop = 0;
@@ -491,12 +492,27 @@ function paintLive() {
     const text = L.text, cut = text.lastIndexOf('\n\n');
     const settled = cut > 0 ? renderAnswer(text.slice(0, cut), L.symbol).html : '';
     node.innerHTML = `${settled}<p class="milo-tail">${esc(streamingTail(cut > 0 ? text.slice(cut + 2) : text))}</p>${L.status ? `<p class="milo-status" role="status">${esc(L.status)}…</p>` : ''}`;
-    mountAnswerCharts(node);
+    mountAnswerCharts(node); mountAnswerFigures(node);
     const log = $('.milo-log', h); if (log && log.scrollHeight - log.scrollTop - log.clientHeight < 120) log.scrollTop = log.scrollHeight;
     syncLatest(); paintForm();
   });
 }
 
+/* ---------------- figures inside answers: Optic's own data, never the model's numbers ---------------- */
+function mountAnswerFigures(root) {
+  root.querySelectorAll('[data-v2-milo-fig]:not([data-mounted])').forEach((fig) => {
+    fig.dataset.mounted = '1';
+    const kind = fig.dataset.v2MiloFig, sym = fig.dataset.sym;
+    FF.build(kind, sym).then((f) => {
+      if (!document.contains(fig)) return;
+      fig.removeAttribute('aria-busy');
+      if (f.missing) { render(fig, html`<p class="milo-fig-none" role="note">No figure: ${f.missing}</p>`); return; }
+      render(fig, html`<figcaption><p class="milo-fig-h">${f.title}</p><p class="fv-take">${f.take}</p>${f.keyHTML || ''}<p class="fv-unit">${f.unit}. From ${f.source}; drawn by Optic, not by Milo.</p></figcaption>
+        ${f.html ? raw(f.html) : html`<div class="chart-slot" data-chart="fig"></div>`}${f.table}`);
+      if (f.chart) mountCharts(fig, { fig: f.chart });
+    });
+  });
+}
 /* ---------------- charts inside answers ---------------- */
 const chartCache = new Map();
 function mountAnswerCharts(root) {

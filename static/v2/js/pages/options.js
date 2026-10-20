@@ -368,7 +368,7 @@ function paintTop() {
 
 const OPT_GROUPS = [
   { id: 'contracts', label: 'Contracts and pricing', sub: '', panels: [
-    ['What options are pricing', (t, s) => P.pricing(t, s)],
+    ['What options are pricing', (t, s) => P.pricing(t, s), (t) => P.pricingCharts(t)],
     ['How value moves', () => P.lab(D.lab), () => P.labCharts(D.lab)],
   ] },
   { id: 'positioning', label: 'Positioning and flow', sub: 'Dealer gamma is estimated from open interest, not reported positions; flow is the day\'s options volume, not a record of trades.', panels: [

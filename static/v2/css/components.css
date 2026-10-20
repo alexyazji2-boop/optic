@@ -830,3 +830,8 @@ table.st td a { text-decoration: none; font-weight: 600; } table.st td a:hover {
 .milo .milo-guest p { margin: 0; color: var(--c-ink-2); font-size: var(--t-md); line-height: 1.45; } .milo .milo-guest b { color: var(--c-ink); }
 .milo .milo-guest-sub { font-size: var(--t-sm); color: var(--c-ink-3); }
 .milo-form[hidden] { display: none; }
+/* a figure in an answer, drawn from Optic's data (ui/finfigs.js) */
+.milo-fig { margin: 10px 0; padding: 12px 14px; border: 1px solid var(--c-line-2); border-radius: var(--r-lg); background: var(--c-plane-2); display: grid; gap: 8px; }
+.milo-fig figcaption { display: grid; gap: 4px; } .milo .milo-fig p { margin: 0; }
+.milo .milo-fig-h { font-weight: 600; color: var(--c-ink); } .milo .milo-fig .fv-unit { font-size: var(--t-sm); color: var(--c-ink-3); }
+.milo .milo-fig-none { color: var(--c-ink-3); font-size: var(--t-sm); }

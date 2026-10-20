@@ -191,3 +191,29 @@ def test_a_term_explains_itself_on_tap_and_keyboard(tmp_path):
     src = (JS / "ui/term.js").read_text()
     assert "e.key === 'Escape' && pop" in src and "from.focus(" in src and "<span>Illustration:</span>" in src
     assert ".term:focus-visible" in CSS and ".term-pop-x { justify-self: end; min-height: var(--tap);" in CSS
+
+
+def test_milo_names_a_figure_and_optic_draws_it_from_its_own_data(tmp_path):
+    got = _run(tmp_path, f"""
+      const M = await import('{(JS / "core/milo-text.js").as_posix()}');
+      const r = M.renderAnswer("Revenue grew.\\n\\n[[figure revenue AAPL]]\\n\\n[[figure eps AAPL]]\\n\\n[[figure segments AAPL]]\\n\\n[[figure stock AAPL]]", 'AAPL');
+      print(JSON.stringify({{ html: r.html, copy: M.sourcesAsText("A [[figure revenue AAPL]] b") }}));
+    """)
+    h = got["html"]
+    assert h.count('class="milo-fig"') == 2, "two figures an answer at most"
+    assert 'data-v2-milo-fig="revenue" data-sym="AAPL"' in h and 'data-v2-milo-fig="eps"' in h and "[[figure stock" in h, "an unknown kind is not a figure"
+    assert "<p><figure" not in h, "a tag alone in its paragraph becomes the figure itself"
+    assert "[[figure" not in got["copy"], "Copy leaves the tag out"
+    ff = (JS / "ui/finfigs.js").read_text()
+    assert "drawn by Optic, not by Milo" in (JS / "ui/milo.js").read_text()
+    assert "FV.profitLine(" in ff and "FV.composition(" in ff and "FV.surprise(" in ff, "the same takeaway rules as the pages"
+    assert "return missing(" in ff and "No figure: ${f.missing}" in (JS / "ui/milo.js").read_text(), "no data: said, nothing drawn"
+    assert "nothing a model wrote is plotted" in ff.lower()
+    prompt = (V2.parent.parent / "app/ai.py").read_text()
+    assert "`[[figure KIND SYMBOL]]`" in prompt and "it never uses\nnumbers from your text" in prompt
+
+
+def test_options_draws_its_term_structure():
+    pc = (JS / "pages/options-panels.js").read_text()
+    assert "export function pricingCharts(t)" in pc and "sub: i === firstEvent ? 'Report' : ''" in pc and "zero: false" in pc
+    assert "['What options are pricing', (t, s) => P.pricing(t, s), (t) => P.pricingCharts(t)]," in (JS / "pages/options.js").read_text()

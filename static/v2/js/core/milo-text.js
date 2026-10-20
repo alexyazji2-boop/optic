@@ -10,6 +10,8 @@ import { esc } from './format.js';
 export const SRC_RE = /\s?\[\[src ([a-z_]{2,20})\]\]/g;
 export const CHART_RE = /\[\[chart ([A-Z0-9.^=-]{1,12}) (1m|3m|6m|1y|2y|5y)\]\]/g;
 export const ACTION_RE = /\[\[action ([a-z]+)((?: [^\]\n]*)?)\]\]/g;
+// a figure drawn from Optic's own data (ui/finfigs.js): the tag names it, the terminal fills it (2026-10-20)
+export const FIG_RE = /\[\[figure (revenue|margins|cashflow|segments|eps|reactions) ([A-Z0-9.^=-]{1,12})\]\]/g;
 const CHART_WORDS = { '1m': 'month', '3m': '3 months', '6m': '6 months', '1y': 'year', '2y': '2 years', '5y': '5 years' };
 
 // key -> [label, where it lives]. Where: a v2 view, or 'sources' for the list under the answer.
@@ -96,7 +98,7 @@ export function sourcesAsText(text) {
   return String(text || '').split(/(\n\s*\n)/).map((para) => {
     const seen = new Set();
     return para.replace(SRC_RE, (m, key) => { const s = SOURCES[key]; if (!s || seen.has(s[0])) return ''; seen.add(s[0]); return ` (${s[0]})`; });
-  }).join('').replace(CHART_RE, '').replace(ACTION_RE, '');
+  }).join('').replace(CHART_RE, '').replace(ACTION_RE, '').replace(FIG_RE, '');
 }
 
 /* ---------------- actions ---------------- */
@@ -139,12 +141,14 @@ function actionsIn(htmlText) { let n = 0; return htmlText.replace(ACTION_RE, (m,
 function chartsIn(htmlText) {
   return htmlText.replace(CHART_RE, (m, sym, span) => `<figure class="milo-chart" data-v2-milo-chart="${sym}" data-span="${span}"><div class="milo-chart-plot"></div><figcaption class="asof">${sym}, daily closes over the last ${CHART_WORDS[span]}</figcaption></figure>`);
 }
+// at most two figures an answer, each a placeholder the panel fills from Optic's data
+function figuresIn(htmlText) { let n = 0; return htmlText.replace(FIG_RE, (m, kind, sym) => { n += 1; return n > 2 ? '' : `<figure class="milo-fig" data-v2-milo-fig="${kind}" data-sym="${sym}" aria-busy="true"><p class="asof">Drawing ${esc(sym)}'s figures from Optic's data</p></figure>`; }); }
 /** A full answer: body markdown with tags drawn, plus its follow-up questions. */
 export function renderAnswer(text, symbol) {
   const { body, ups } = splitFollowUps(text);
   // a tag alone in its paragraph becomes the block itself, not a block inside a <p>
-  const md = mdLite(body).replace(/<p>\s*(\[\[(?:chart|action) [^\]]*\]\])\s*<\/p>/g, '$1');
-  return { html: sourcesIn(actionsIn(chartsIn(md)), symbol), ups };
+  const md = mdLite(body).replace(/<p>\s*(\[\[(?:chart|action|figure) [^\]]*\]\])\s*<\/p>/g, '$1');
+  return { html: sourcesIn(actionsIn(figuresIn(chartsIn(md))), symbol), ups };
 }
 /** Text still arriving: drop any tag, complete or half-written, so nothing raw flashes. */
 export function streamingTail(text) { return String(text || '').replace(/\s?\[\[[^\]\n]*\]\]/g, '').replace(/\s?\[\[?[^\]\n]*$/, ''); }
