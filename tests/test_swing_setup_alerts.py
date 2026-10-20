@@ -113,7 +113,9 @@ def test_the_runner_stores_a_trigger_once_however_many_days_it_stays_fresh(accou
 
 def test_every_other_watch_still_dedupes_by_day():
     when = datetime(2026, 10, 5, 15, tzinfo=timezone.utc)
-    assert watch_runner._dedupe_key("w", when) == "w:2026-10-05"
+    # the ET day and the state reached (2026-10-20): one hit per crossing per day
+    assert watch_runner._dedupe_key("w", when) == "w:2026-10-05:met"
+    assert watch_runner._dedupe_key("w", when, state="above") == "w:2026-10-05:above"
     assert watch_runner._dedupe_key("w", when, "setup:X") == "w:setup:X"
 
 

@@ -5,7 +5,7 @@
 import { $, html, render, trapFocus, announce } from '../core/dom.js';
 import { icon } from './icons.js';
 
-let root, panel, from, untrap, onClose, sticky = false;
+let root, panel, from, untrap, onClose, sticky = false, vvOff = null;
 
 function ensure() {
   if (root) return;
@@ -20,9 +20,14 @@ function ensure() {
 }
 
 // sticky: a question that must survive navigation (the guest's things).
-export function open({ kicker = '', title, body, opener, mount, closed, keep = false }) {
+// form: a sheet with fields in it. On a phone it shrinks to the part of the screen the keyboard
+// leaves (visualViewport), so the field being typed in and the button under it stay in view.
+export function open({ kicker = '', title, body, opener, mount, closed, keep = false, form = false }) {
   ensure();
   if (!root.hidden) close({ silent: true, force: true });
+  panel.classList.toggle('is-form', !!form);
+  const vv = window.visualViewport;
+  if (form && vv) { const fit = () => panel.style.setProperty('--vvh', `${Math.round(vv.height)}px`); fit(); vv.addEventListener('resize', fit); vvOff = () => { vv.removeEventListener('resize', fit); panel.style.removeProperty('--vvh'); vvOff = null; }; }
   sticky = keep;
   from = opener || document.activeElement;
   onClose = closed;
@@ -46,6 +51,7 @@ export function close({ silent, route, force } = {}) {
   root.hidden = true;
   document.body.classList.remove('drawer-open');
   if (untrap) untrap();
+  if (vvOff) vvOff();
   if (from && from.setAttribute && from.hasAttribute('aria-expanded')) from.setAttribute('aria-expanded', 'false');
   if (onClose) onClose();
   if (!silent && from && document.contains(from)) from.focus();

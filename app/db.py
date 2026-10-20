@@ -907,6 +907,31 @@ MIGRATION_16 = [
 ]
 
 
+# Alerts that fire on a change, not on a state (the 2026-10-20 alerts audit).
+#
+# `last_state` is what the condition read on its last check, met or not; a watch
+# fires when that changes into the met state, so "price above 350" fires once at
+# the crossing instead of every day it stays above. `ref_price` is the price the
+# reader saw when they made a price alert, which arms it from the first check.
+# `last_checked_at` and `last_error` let the page say a watch is being checked,
+# or why it could not be. `paused_at` keeps when it was switched off. A deleted
+# watch keeps its row (`deleted_at`) so what it fired stays in the history; the
+# hits record what was read (`observed`) and which check found it (`origin`).
+MIGRATION_17 = [
+    "ALTER TABLE watches ADD COLUMN last_state TEXT",
+    "ALTER TABLE watches ADD COLUMN last_checked_at TEXT",
+    "ALTER TABLE watches ADD COLUMN last_error TEXT",
+    "ALTER TABLE watches ADD COLUMN ref_price REAL",
+    "ALTER TABLE watches ADD COLUMN ref_at TEXT",
+    "ALTER TABLE watches ADD COLUMN paused_at TEXT",
+    "ALTER TABLE watches ADD COLUMN deleted_at TEXT",
+    "ALTER TABLE watches ADD COLUMN updated_at TEXT",
+    "ALTER TABLE watch_hits ADD COLUMN observed TEXT",
+    "ALTER TABLE watch_hits ADD COLUMN origin TEXT",
+    "ALTER TABLE watch_hits ADD COLUMN condition TEXT",
+]
+
+
 MIGRATIONS: List[Tuple[int, str, List[str]]] = [
     (1, "accounts", MIGRATION_1),
     (2, "oauth_pkce", MIGRATION_2),
@@ -924,6 +949,7 @@ MIGRATIONS: List[Tuple[int, str, List[str]]] = [
     (14, "brokerage_account_nickname", MIGRATION_14),
     (15, "brokerage_history", MIGRATION_15),
     (16, "brokerage_workspace", MIGRATION_16),
+    (17, "watch_state", MIGRATION_17),
 ]
 
 

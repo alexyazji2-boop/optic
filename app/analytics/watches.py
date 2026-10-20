@@ -65,9 +65,8 @@ CONDITIONS: Dict[str, Dict[str, Any]] = {
         "label": "RSI rises above",
         "param": {"key": "level", "kind": "number", "label": "RSI level", "default": 70},
         "needs": "technicals",
-        "why": "A state rather than a crossing: this is true for as long as RSI "
-               "stays above the line, so it tells you where momentum is, not the "
-               "moment it got there.",
+        "why": "A crossing: it fires when RSI moves from at or under the line to "
+               "above it, once, and again only after it has dropped back.",
     },
     "rsi_below": {
         "label": "RSI falls below",
@@ -94,11 +93,12 @@ CONDITIONS: Dict[str, Dict[str, Any]] = {
                "a move rather than anticipating one.",
     },
     "breakout": {
-        "label": "Breaks its 20-day range",
+        "label": "Breaks past every mapped level",
         "param": None,
         "needs": "technicals",
-        "why": "A close beyond the prior 20 sessions' high or low. A change of "
-               "state rather than a level.",
+        "why": "The price moving above every support and resistance level Optic maps "
+               "from the past year of swings, or below all of them. A change of state "
+               "rather than a level you set.",
     },
     "unusual_options": {
         "label": "Unusual options activity",
@@ -230,7 +230,7 @@ def _price_below(d, p):
 
 
 def _move_pct(d, p):
-    want = _num(p.get("pct")) or 4.0
+    want = _num(p.get("pct")) if _num(p.get("pct")) is not None else 4.0
     chg = _num((d.get("quote") or {}).get("change_pct"))
     if chg is None or abs(chg) < want:
         return None
@@ -301,7 +301,7 @@ def _breakout(d, p):
 
 
 def _unusual_options(d, p):
-    want = _num(p.get("min_ratio")) or 2.0
+    want = _num(p.get("min_ratio")) if _num(p.get("min_ratio")) is not None else 2.0
     rows = (d.get("flow") or {}).get("unusual") or []
     hits = [r for r in rows if (_num(r.get("vol_oi_ratio")) or 0) >= want]
     if not hits:
@@ -347,11 +347,13 @@ def _signal_flip(d, p):
 
 
 def _earnings_near(d, p):
-    within = int(_num(p.get("days")) or 7)
+    within = int(_num(p.get("days")) if _num(p.get("days")) is not None else 7)
     when = _iso_date(d.get("next_earnings_date"))
     if not when:
         return None
-    days = (when - datetime.now(timezone.utc).date()).days
+    # the runner's clock when it passes one (d["_now"]), so a test and a late pass agree with the schedule
+    today = (d.get("_now") or datetime.now(timezone.utc)).date()
+    days = (when - today).days
     if days < 0 or days > within:
         return None
     return {"evidence": "reports {}, {}".format(
@@ -408,7 +410,7 @@ def _insider_activity(d, p):
 
 
 def _short_interest(d, p):
-    want = _num(p.get("pct")) or 15.0
+    want = _num(p.get("pct")) if _num(p.get("pct")) is not None else 15.0
     si = ((d.get("company") or {}).get("short_interest")) or {}
     change = _num(si.get("change_vs_prior_pct"))
     if change is None or abs(change) < want:
@@ -438,6 +440,126 @@ def _swing_setup(d, p):
             "setup_row": hit,
             "setup_as_of": (d.get("setups") or {}).get("as_of"),
             "setup_params": setups_mod.resolve_params(hit["preset"], {})}
+
+
+# ------------------------------------------------------------------ states
+#
+# What a check records, met or not. A watch fires when its state CHANGES into the
+# met one, never because it is still met: "price above 350" fires once when the
+# price crosses 350, and again only after it has fallen back and crossed again.
+# Before this (the 2026-10-20 alerts audit) a level that was already crossed when
+# the alert was made fired on the first check and then every trading day.
+#
+# Two families. A CROSSING needs a state to change from: the first check of a new
+# or resumed alert only arms it (or the price the reader saw when they made it,
+# `ref_price`, stands in). An EVENT carries its own identity in the state (the
+# session, the report, the trigger), so the first sighting of a new one fires.
+
+def _quote(d):
+    q = d.get("quote") or {}
+    return q, _num(q.get("price"))
+
+
+def _session_of(d):
+    q = d.get("quote") or {}
+    stamp = str(q.get("market_time") or q.get("as_of") or "")[:10]
+    return stamp or (d.get("_now") or datetime.now(timezone.utc)).date().isoformat()
+
+
+def _st_level(value, level, word):
+    if value is None or level is None:
+        return None
+    if word == "above":
+        return "above" if value > level else "not above"
+    return "below" if value < level else "not below"
+
+
+def _st_insider(d, p):
+    want = str(p.get("side") or "any").lower()
+    own = ((d.get("company") or {}).get("ownership")) or {}
+    rows = (own.get("recent_transactions") or [])[:RECENT_FILINGS]
+    if want != "any":
+        rows = [r for r in rows if want in str(r.get("action") or r.get("kind") or r.get("type") or "").lower()]
+    if not rows:
+        return "none"
+    top = max(rows, key=lambda r: str(r.get("date") or ""))
+    return "filing:{}:{}:{}".format(top.get("date") or "", str(top.get("insider") or "")[:40], top.get("shares") or "")
+
+
+def state_of(kind, d, p, hit):
+    """The condition's state on this check. None when the figures it needs are missing."""
+    p = p or {}
+    if kind == "price_above":
+        return _st_level(_quote(d)[1], _num(p.get("level")), "above")
+    if kind == "price_below":
+        return _st_level(_quote(d)[1], _num(p.get("level")), "below")
+    if kind == "rsi_above":
+        return _st_level(_rsi(d), _num(p.get("level")), "above")
+    if kind == "rsi_below":
+        return _st_level(_rsi(d), _num(p.get("level")), "below")
+    if kind == "macd_cross":
+        s = str(((d.get("technicals") or {}).get("macd") or {}).get("state") or "").strip().lower()
+        return s or None
+    if kind == "breakout":
+        return "broken" if hit else ("inside" if (d.get("technicals") or {}).get("support_resistance") else None)
+    if kind == "signal_flip":
+        s = str(((d.get("verdict") or {}).get("stance") or "")).lower()
+        return s or None
+    if kind == "analyst_revisions":
+        s = str((d.get("earnings_momentum") or {}).get("revision_direction") or "").lower()
+        return s or None
+    if kind == "insider_activity":
+        return _st_insider(d, p)
+    if kind == "move_pct":
+        return "{}:{}".format("moved" if hit else "quiet", _session_of(d))
+    if kind == "unusual_options":
+        return "{}:{}".format("hit" if hit else "none", (d.get("_now") or datetime.now(timezone.utc)).date().isoformat())
+    if kind == "earnings_near":
+        when = d.get("next_earnings_date")
+        return "{}:{}".format("near" if hit else "far", str(when)[:10]) if when else None
+    if kind == "short_interest":
+        si = ((d.get("company") or {}).get("short_interest")) or {}
+        rep = si.get("settlement_date")
+        return "{}:{}".format("changed" if hit else "steady", rep) if rep else ("changed" if hit else None)
+    if kind == "swing_setup":
+        return (hit or {}).get("state") or "none"
+    return None
+
+
+CROSSINGS = {"price_above", "price_below", "rsi_above", "rsi_below", "macd_cross", "breakout",
+             "signal_flip", "analyst_revisions", "insider_activity"}
+
+
+def fires(kind, previous, current, met):
+    """Whether this check is news: met, and a state different from the last one recorded.
+    A crossing with nothing recorded before only arms (it fires on the next change)."""
+    if not met or current is None:
+        return False
+    if kind in CROSSINGS and previous is None:
+        return False
+    return previous != current
+
+
+def ref_state(kind, params, ref_price):
+    """The state the reader saw when they made a price alert, from the price on their screen."""
+    if ref_price is None or kind not in ("price_above", "price_below"):
+        return None
+    return _st_level(_num(ref_price), _num((params or {}).get("level")), "above" if kind == "price_above" else "below")
+
+
+def observed(kind, d, p, now=None):
+    """The figures a fired alert is explained by: what was read, what it was compared with, when."""
+    q, price = _quote(d)
+    out = {"price": price, "quote_time": q.get("market_time") or q.get("as_of"),
+           "source": q.get("source") or "Yahoo Finance",
+           "delay": "Prices from the free feed are about 15 minutes behind the exchange."}
+    if kind in ("price_above", "price_below"):
+        out["level"] = _num((p or {}).get("level"))
+    elif kind in ("rsi_above", "rsi_below"):
+        out.update(value=_rsi(d), level=_num((p or {}).get("level")))
+    elif kind == "move_pct":
+        out.update(value=_num(q.get("change_pct")), level=_num((p or {}).get("pct")))
+    return {k: v for k, v in out.items() if v is not None}
 
 
 EVALUATORS = {
@@ -486,6 +608,11 @@ def check(payload, watches):
                "met": hit is not None, "why": meta["why"]}
         if hit:
             row.update(hit)
+        try:
+            row["state"] = state_of(kind, payload, w.get("params") or {}, hit)
+            row["observed"] = observed(kind, payload, w.get("params") or {})
+        except Exception:                      # a state is extra: never what stops the check
+            row.setdefault("state", None)
         out.append(row)
     return out
 
@@ -495,10 +622,17 @@ def catalogue():
     return {
         "conditions": [dict(id=k, **v) for k, v in CONDITIONS.items()],
         "method": (
-            "A watch is evaluated against the same panels the analysis page "
-            "shows, at the moment it is checked. Signed in, your watches are "
-            "kept on your account; as a guest they are kept in this browser. "
-            "Either way a watch is checked while Optic is open rather than "
-            "pushed to you, because nothing here can send you a notification."
+            "An alert is checked against the same figures the Dossier shows. It "
+            "fires when its condition changes from not met to met, once, and again "
+            "only after it has stopped being met: a price alert fires when the price "
+            "crosses the level, not every day it stays past it. Signed in, Optic "
+            "checks your alerts on market days about every 30 minutes from 9:30 to "
+            "4:00 ET and once after the close, skipping exchange holidays, and keeps "
+            "what fired for you here. As a guest, alerts live in this browser and are "
+            "checked only while this page is open. Prices come from the free feed, "
+            "about 15 minutes behind the exchange. Optic shows alerts here; it does "
+            "not send email or push notifications."
         ),
+        "schedule": {"every_minutes": 30, "hours": "Mon to Fri, 9:30 to 4:00 ET, and once after the close",
+                     "holidays": "skipped", "delay_minutes": 15, "delivery": "In Optic only"},
     }

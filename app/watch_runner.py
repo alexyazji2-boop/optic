@@ -18,12 +18,14 @@ chain, the greeks and the technicals), so watches are grouped by symbol and each
 symbol is built once however many accounts are watching it. With ten accounts
 watching NVDA that is one snapshot rather than ten.
 
-**One hit per watch per UTC day.** Almost every condition reports a STATE rather
-than a transition: "RSI above 50" stays true for as long as it is true, so a
-runner on a fifteen-minute loop would write the same sentence ninety-six times.
-The unique index on (user_id, dedupe_key) enforces it rather than this module
-remembering to, because a restart mid-run is exactly when a caller's memory is
-wrong.
+**A hit is a change, not a state.** Every check records the condition's state
+(watches.state_of), met or not, and a watch fires when that state changes into
+the met one (watches.fires): "price above 350" fires when the price crosses 350,
+once, and again only after it has fallen back. Until 2026-10-20 a hit was one per
+watch per UTC day while the condition held, so a level crossed before the alert
+was made fired on the first check and every trading day after. The unique index
+on (user_id, dedupe_key) still backs it, keyed on the watch, the ET day and the
+new state, because a restart mid-run is exactly when a caller's memory is wrong.
 
 **A symbol that fails costs its own symbol.** One bad ticker in a hundred must
 not stop the other ninety-nine, so each is tried on its own and the failures are
@@ -38,7 +40,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Callable, Dict, Iterable, List, Optional
 
-from . import db, signal_history
+from . import db, session as session_mod, signal_history
 from .analytics import watches as watches_mod
 
 log = logging.getLogger("optic.watch_runner")
@@ -52,24 +54,28 @@ def _now() -> datetime:
     return datetime.now(timezone.utc)
 
 
-def _dedupe_key(watch_id: str, when: datetime, event: Optional[str] = None) -> str:
-    """One hit per watch per day, or per event when the evaluator names one.
+def _dedupe_key(watch_id: str, when: datetime, event: Optional[str] = None,
+                state: Optional[str] = None, armed: Optional[str] = None) -> str:
+    """One hit per watch, ET day and state reached, or per event when the evaluator names one.
 
-    The date is part of the key rather than a lookup, so the uniqueness is a
-    property of the row and survives two runners overlapping. A swing setup
-    names its trigger instead: it stays fresh for three candles, and keyed by
-    day the same trigger would have been stored three times.
+    The key is a property of the row, so two runners overlapping (or the page's
+    check and the schedule) store one hit. A swing setup names its trigger: it
+    stays fresh for three candles, and keyed by day it would be stored three times.
     """
     if event:
         return "%s:%s" % (watch_id, event)
-    return "%s:%s" % (watch_id, when.date().isoformat())
+    day = when.astimezone(session_mod.ET).date().isoformat()
+    key = "%s:%s:%s" % (watch_id, day, state or "met")
+    # re-armed since (edited, resumed, restored): a crossing after that is a new one, even the same day
+    return key + ":" + armed if armed else key
 
 
 def due_watches() -> List[Dict[str, Any]]:
-    """Every active watch across every account, with its owner."""
+    """Every active watch across every account, with its owner. A deleted one is not checked."""
     return db.rows(
-        "SELECT w.id, w.user_id, w.symbol, w.kind, w.params, w.note, w.last_evidence "
-        "FROM watches w WHERE w.active = 1 ORDER BY w.symbol, w.created_at")
+        "SELECT w.id, w.user_id, w.symbol, w.kind, w.params, w.note, w.last_evidence, "
+        "w.last_state, w.ref_price, w.updated_at "
+        "FROM watches w WHERE w.active = 1 AND w.deleted_at IS NULL ORDER BY w.symbol, w.created_at")
 
 
 def group_by_symbol(rows: Iterable[Dict[str, Any]]) -> Dict[str, List[Dict[str, Any]]]:
@@ -105,18 +111,41 @@ def _body(result: Dict[str, Any], note: Optional[str]) -> str:
     return ". ".join(parts)
 
 
+def condition_text(row: Dict[str, Any]) -> str:
+    """The alert as a sentence, kept on each hit so the history reads after the alert is deleted."""
+    meta = watches_mod.CONDITIONS.get(row.get("kind") or "") or {}
+    params = _params(row)
+    spec = meta.get("param") or {}
+    value = params.get(spec.get("key")) if spec else None
+    text = "%s %s" % (str(row.get("symbol") or "").upper(), (meta.get("label") or row.get("kind") or "").lower())
+    if value not in (None, "", "any"):
+        unit = {"percent": "%", "days": " days"}.get(spec.get("kind"), "")
+        text += " %s%s" % (value, unit)
+    return text
+
+
 def record_hit(row: Dict[str, Any], result: Dict[str, Any],
-               when: Optional[datetime] = None) -> bool:
-    """Write one hit. False means the dedupe index refused it, which is normal."""
+               when: Optional[datetime] = None, origin: str = "schedule",
+               previous: Optional[str] = None) -> bool:
+    """Write one hit. False means the dedupe index refused it, which is normal.
+
+    It keeps what was read and compared (`observed`), the state it changed from
+    and to, and which check found it, so the page can say why it fired."""
     when = when or _now()
     symbol = str(row["symbol"]).upper()
+    seen = dict(result.get("observed") or {})
+    seen.update({"from": previous, "to": result.get("state"), "checked_at": when.isoformat()})
+    if row.get("ref_price") is not None:
+        seen["ref_price"] = row.get("ref_price")
     try:
         db.execute(
             "INSERT INTO watch_hits (id, user_id, watch_id, symbol, kind, title, "
-            "body, created_at, dedupe_key) VALUES (?,?,?,?,?,?,?,?,?)",
+            "body, created_at, dedupe_key, observed, origin, condition) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
             (uuid.uuid4().hex, row["user_id"], row["id"], symbol, row["kind"],
              _title(symbol, result), _body(result, row.get("note")),
-             when.isoformat(), _dedupe_key(row["id"], when, result.get("dedupe"))))
+             when.isoformat(), _dedupe_key(row["id"], when, result.get("dedupe"), result.get("state"),
+                                           (row.get("updated_at") or "")[:19] or None),
+             json.dumps(seen, sort_keys=True, default=str)[:2000], origin, condition_text(row)))
     except Exception as exc:                      # the unique index, normally
         if "UNIQUE" not in str(exc).upper():
             log.warning("watch hit not stored: %s", exc)
@@ -140,7 +169,13 @@ def evidence_json(result: Dict[str, Any]) -> str:
 
 
 def previous_state(row: Dict[str, Any]) -> Optional[str]:
-    """The state a state-reporting watch last recorded, or None."""
+    """The state the watch's last check recorded; for a price alert never checked, the state
+    the reader saw when making it (its ref_price); else None, which arms a crossing."""
+    if row.get("last_state"):
+        return row["last_state"]
+    seeded = watches_mod.ref_state(row.get("kind"), _params(row), row.get("ref_price"))
+    if seeded:
+        return seeded
     try:
         stored = json.loads(row.get("last_evidence") or "null")
     except (TypeError, ValueError):
@@ -149,18 +184,23 @@ def previous_state(row: Dict[str, Any]) -> Optional[str]:
 
 
 def is_news(row: Dict[str, Any], result: Dict[str, Any]) -> bool:
-    """Whether a met result is worth a hit.
+    """Whether a result is worth a hit: met, and a change into a new state (watches.fires).
+    Without it a stance watch posted "stance reads bullish" every day nothing changed, and a
+    price alert repeated daily for as long as the price stayed past its level."""
+    return watches_mod.fires(row.get("kind"), previous_state(row), result.get("state"), bool(result.get("met")))
 
-    A level or event condition (price above, a breakout) is, once a day: the
-    inbox says "still true" daily by design. A condition that reports a state
-    (`signal_flip`, `analyst_revisions`) describes something that stays true
-    for weeks, so it is news only when the state differs from the last one
-    recorded, which is the rule the page's own check applies. Without it a
-    stance watch posted "stance reads bullish" every day nothing changed."""
-    state = result.get("state")
-    if state is None:
-        return True
-    return previous_state(row) != state
+
+def record_check(row: Dict[str, Any], result: Optional[Dict[str, Any]], when: datetime,
+                 error: Optional[str] = None) -> None:
+    """What every check leaves on the watch: its state (met or not), when, and any failure."""
+    state = (result or {}).get("state")
+    if error or not result:
+        db.execute("UPDATE watches SET last_checked_at = ?, last_error = ? WHERE id = ?",
+                   (when.isoformat(), (error or "Not checked")[:300], row["id"]))
+        return
+    reason = result.get("reason") if not result.get("met") and result.get("reason") else None
+    db.execute("UPDATE watches SET last_checked_at = ?, last_error = ?, last_state = COALESCE(?, last_state) WHERE id = ?",
+               (when.isoformat(), reason, state, row["id"]))
 
 
 def signal_record(result: Dict[str, Any]) -> Optional[Dict[str, Any]]:
@@ -201,6 +241,12 @@ def run_once(snapshot: Callable[[str], Dict[str, Any]],
     and so a test can drive it without the network.
     """
     when = _now()
+    # An exchange holiday has no session: a pass would read the last session's quote under today's
+    # date and could fire a day-move alert twice.
+    holiday = session_mod.holiday_name(when.astimezone(session_mod.ET))
+    if holiday:
+        return {"ran_at": when.isoformat(), "symbols": 0, "skipped_symbols": 0, "watches_checked": 0,
+                "hits": 0, "failed_symbols": [], "skipped": "holiday", "holiday": holiday}
     grouped = group_by_symbol(due_watches())
     ordered = sorted(grouped)
     if len(ordered) > limit:
@@ -223,15 +269,21 @@ def run_once(snapshot: Callable[[str], Dict[str, Any]],
             # means nothing.
             log.warning("watch snapshot failed for %s: %s", symbol, exc)
             failed.append(symbol)
+            for row in rows:
+                record_check(row, None, when, "Optic could not read %s on this check." % symbol)
             continue
+        if isinstance(payload, dict):
+            payload = dict(payload, _now=when)
         specs = [{"id": r["id"], "kind": r["kind"], "params": _params(r)} for r in rows]
         results = watches_mod.check(payload, specs)
         by_id = {r.get("id"): r for r in results}
         for row in rows:
             checked += 1
             result = by_id.get(row["id"])
-            if result and result.get("met") and is_news(row, result) and record_hit(row, result, when):
+            previous = previous_state(row)
+            if result and is_news(row, result) and record_hit(row, result, when, "schedule", previous):
                 fired += 1
+            record_check(row, result, when)
             if result and result.get("met") and row["kind"] == "swing_setup":
                 record_signal(row["user_id"], result, "scheduled alert check", when)
 
@@ -246,13 +298,26 @@ def run_once(snapshot: Callable[[str], Dict[str, Any]],
 
 
 def hits_for(user_id: str, limit: int = 50,
-             unseen_only: bool = False) -> List[Dict[str, Any]]:
-    sql = ("SELECT id, watch_id, symbol, kind, title, body, created_at, seen "
+             unseen_only: bool = False, watch_id: Optional[str] = None) -> List[Dict[str, Any]]:
+    sql = ("SELECT id, watch_id, symbol, kind, title, body, created_at, seen, observed, origin, condition "
            "FROM watch_hits WHERE user_id = ?")
+    args: List[Any] = [user_id]
     if unseen_only:
         sql += " AND seen = 0"
+    if watch_id:
+        sql += " AND watch_id = ?"
+        args.append(watch_id)
     sql += " ORDER BY created_at DESC LIMIT ?"
-    return [dict(r) for r in db.rows(sql, (user_id, max(1, min(200, limit))))]
+    args.append(max(1, min(200, limit)))
+    out = []
+    for r in db.rows(sql, tuple(args)):
+        d = dict(r)
+        try:
+            d["observed"] = json.loads(d.get("observed") or "null")
+        except (TypeError, ValueError):
+            d["observed"] = None
+        out.append(d)
+    return out
 
 
 def unseen_count(user_id: str) -> int:

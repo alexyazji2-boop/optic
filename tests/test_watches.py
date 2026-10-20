@@ -304,20 +304,29 @@ def test_recording_a_trip_keeps_the_state_a_flip_is_measured_against(signed_in):
                            json={"results": [{"id": made["id"], "met": True,
                                               "state": "bullish",
                                               "evidence": "stance reads bullish"}]})
-    assert recorded.json()["recorded"] == 1
+    assert recorded.json()["recorded"] == 1 and recorded.json()["fired"] == 0   # the first look arms it
     after = client.get("/api/watches").json()["watches"][0]
-    assert after["last_met_at"]
-    assert after["last_evidence"]["state"] == "bullish"
-    assert after["last_evidence"]["evidence"] == "stance reads bullish"
+    assert after["last_state"] == "bullish" and after["last_met_at"] is None
+    # the page sees the change first: it is stored as a hit, as the schedule would store it
+    changed = client.post("/api/watches/seen", headers={"X-Optic-CSRF": signed_in},
+                          json={"results": [{"id": made["id"], "met": True, "state": "bearish",
+                                             "evidence": "stance reads bearish"}]})
+    assert changed.json()["fired"] == 1
+    after = client.get("/api/watches").json()["watches"][0]
+    assert after["last_met_at"] and after["last_evidence"]["state"] == "bearish"
+    hits = client.get("/api/watches/hits").json()["hits"]
+    assert len(hits) == 1 and hits[0]["origin"] == "page check" and hits[0]["observed"]["from"] == "bullish"
 
 
 def test_a_watch_that_did_not_trip_is_not_recorded(signed_in):
     made = client.post("/api/watches", headers={"X-Optic-CSRF": signed_in},
                        json={"symbol": "NVDA", "kind": "breakout"}).json()["watch"]
     reply = client.post("/api/watches/seen", headers={"X-Optic-CSRF": signed_in},
-                        json={"results": [{"id": made["id"], "met": False}]})
-    assert reply.json()["recorded"] == 0
-    assert client.get("/api/watches").json()["watches"][0]["last_met_at"] is None
+                        json={"results": [{"id": made["id"], "met": False, "state": "inside"}]})
+    # the check is kept (when, and what it read); nothing fired
+    assert reply.json()["recorded"] == 1 and reply.json()["fired"] == 0
+    w = client.get("/api/watches").json()["watches"][0]
+    assert w["last_met_at"] is None and w["last_checked_at"] and w["last_state"] == "inside"
 
 
 def test_recording_cannot_touch_another_users_watch(signed_in):

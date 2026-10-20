@@ -46,6 +46,13 @@ def add_watch(user_id, symbol, kind, params, note=None):
     return wid
 
 
+def cross(user_rsi_level=50, after=62.4, before=40.0, run=None):
+    """A crossing: one pass below the level arms the watch, the next above it fires.
+    Alerts fire on a change of state since 2026-10-20, so a first look only arms."""
+    (run or watch_runner.run_once)(snapshot_with(rsi=before))
+    return (run or watch_runner.run_once)(snapshot_with(rsi=after))
+
+
 def snapshot_with(rsi=None, macd_state=None, price=None):
     tech = {}
     if rsi is not None:
@@ -118,7 +125,7 @@ def test_every_choice_the_catalogue_offers_is_one_the_evaluator_accepts():
 
 def test_a_hit_is_recorded_for_the_owner(account):
     add_watch(account, "NVDA", "rsi_above", {"level": 50})
-    out = watch_runner.run_once(snapshot_with(rsi=62.4))
+    out = cross()
     assert out["hits"] == 1 and out["watches_checked"] == 1
     hits = watch_runner.hits_for(account)
     assert len(hits) == 1
@@ -126,17 +133,17 @@ def test_a_hit_is_recorded_for_the_owner(account):
     assert "62.4" in hits[0]["body"]
 
 
-def test_a_watch_that_stays_true_reports_once_a_day(account):
-    """Almost every condition describes a STATE. RSI above 50 is true for as
-    long as it is true, so a runner on a fifteen-minute loop would write the
-    same sentence ninety-six times and the inbox would be one nobody opens
-    twice."""
+def test_a_watch_that_stays_true_reports_once_not_daily(account, monkeypatch):
+    """RSI above 50 is true for as long as it is true, so a runner on a
+    fifteen-minute loop would write the same sentence ninety-six times. Until
+    2026-10-20 it wrote it once a day; now once, at the crossing, and again only
+    after it has dropped back and crossed again."""
     add_watch(account, "NVDA", "rsi_above", {"level": 50})
-    first = watch_runner.run_once(snapshot_with(rsi=62.4))
-    second = watch_runner.run_once(snapshot_with(rsi=63.1))
-    assert first["hits"] == 1
-    assert second["hits"] == 0
-    assert len(watch_runner.hits_for(account)) == 1
+    days = iter([datetime(2026, 10, d, 15, 0, tzinfo=timezone.utc) for d in (5, 5, 5, 6, 7, 7, 8)])
+    monkeypatch.setattr(watch_runner, "_now", lambda: next(days))
+    seen = [watch_runner.run_once(snapshot_with(rsi=r))["hits"] for r in (40, 62.4, 63.1, 64.0, 48.0, 55.0, 56.0)]
+    assert seen == [0, 1, 0, 0, 0, 1, 0]
+    assert len(watch_runner.hits_for(account)) == 2
 
 
 def test_tomorrow_it_reports_again(account):
@@ -172,11 +179,15 @@ def test_one_snapshot_per_symbol_however_many_accounts_watch_it(account):
 
     calls = []
 
-    def snapshot(symbol):
-        calls.append(symbol)
-        return {"technicals": {"rsi": {"value": 62.4}}}
+    def snapshot(value):
+        def build(symbol):
+            calls.append(symbol)
+            return {"technicals": {"rsi": {"value": value}}}
+        return build
 
-    out = watch_runner.run_once(snapshot)
+    watch_runner.run_once(snapshot(30.0))          # arms all three
+    calls.clear()
+    out = watch_runner.run_once(snapshot(62.4))
     assert sorted(calls) == ["AMD", "NVDA"], calls
     assert out["watches_checked"] == 3 and out["hits"] == 3
 
@@ -187,14 +198,20 @@ def test_a_failing_symbol_costs_only_itself(account):
     add_watch(account, "NVDA", "rsi_above", {"level": 50})
     add_watch(account, "BADTICK", "rsi_above", {"level": 50})
 
-    def snapshot(symbol):
-        if symbol == "BADTICK":
-            raise RuntimeError("no such symbol")
-        return {"technicals": {"rsi": {"value": 62.4}}}
+    def snapshot(value):
+        def build(symbol):
+            if symbol == "BADTICK":
+                raise RuntimeError("no such symbol")
+            return {"technicals": {"rsi": {"value": value}}}
+        return build
 
-    out = watch_runner.run_once(snapshot)
+    watch_runner.run_once(snapshot(40.0))
+    out = watch_runner.run_once(snapshot(62.4))
     assert out["hits"] == 1
     assert out["failed_symbols"] == ["BADTICK"]
+    # and the bad one says why on the watch itself, so the page can show it
+    bad = db.row("SELECT last_error, last_checked_at FROM watches WHERE symbol = 'BADTICK'")
+    assert bad["last_checked_at"] and "could not read BADTICK" in bad["last_error"]
 
 
 def test_the_run_is_capped(account):
@@ -217,7 +234,7 @@ def test_the_reader_note_travels_with_the_hit(account):
     """The reason they made the watch is the context they will have lost by the
     time it fires."""
     add_watch(account, "NVDA", "rsi_above", {"level": 50}, note="momentum thesis")
-    watch_runner.run_once(snapshot_with(rsi=62.4))
+    cross()
     body = watch_runner.hits_for(account)[0]["body"]
     assert "momentum thesis" in body
     assert "RSI 62.4" in body
@@ -227,7 +244,7 @@ def test_a_hit_body_never_prints_a_missing_value(account):
     """"Exited at 0.05 for None" shipped once, from a format string over a value
     that was not there."""
     add_watch(account, "NVDA", "rsi_above", {"level": 50})
-    watch_runner.run_once(snapshot_with(rsi=62.4))
+    cross()
     body = watch_runner.hits_for(account)[0]["body"]
     assert "None" not in body
     assert "—" not in body
@@ -237,7 +254,7 @@ def test_a_hit_body_never_prints_a_missing_value(account):
 
 def test_unseen_is_counted_and_clearable(account):
     add_watch(account, "NVDA", "rsi_above", {"level": 50})
-    watch_runner.run_once(snapshot_with(rsi=62.4))
+    cross()
     assert watch_runner.unseen_count(account) == 1
     watch_runner.mark_seen(account)
     assert watch_runner.unseen_count(account) == 0
@@ -252,7 +269,7 @@ def test_one_account_cannot_mark_anothers_hits(account):
     db.execute("INSERT INTO users (id, email, created_at, updated_at) "
                "VALUES (?,?,?,?)", (other, "b@example.com", now, now))
     add_watch(account, "NVDA", "rsi_above", {"level": 50})
-    watch_runner.run_once(snapshot_with(rsi=62.4))
+    cross()
     mine = watch_runner.hits_for(account)[0]["id"]
     assert watch_runner.mark_seen(other, [mine]) == 0
     assert watch_runner.unseen_count(account) == 1
@@ -265,7 +282,7 @@ def test_hits_are_only_ever_the_callers_own(account):
                "VALUES (?,?,?,?)", (other, "b@example.com", now, now))
     add_watch(account, "NVDA", "rsi_above", {"level": 50})
     add_watch(other, "AMD", "rsi_above", {"level": 50})
-    watch_runner.run_once(snapshot_with(rsi=62.4))
+    cross()
     assert [h["symbol"] for h in watch_runner.hits_for(account)] == ["NVDA"]
     assert [h["symbol"] for h in watch_runner.hits_for(other)] == ["AMD"]
 
@@ -368,12 +385,13 @@ def _stance(stance):
 
 def test_a_state_watch_reports_a_change_not_the_same_state_daily(account, monkeypatch):
     """`signal_flip` describes a state. Recorded once a day while it held, it
-    posted "stance reads bullish" every day nothing changed."""
+    posted "stance reads bullish" every day nothing changed. Its first look only
+    arms it since 2026-10-20: "Any change" with no change is not news."""
     add_watch(account, "AAA", "signal_flip", {"to": "any"})
     days = iter([datetime(2026, 10, d, 15, 0, tzinfo=timezone.utc) for d in (5, 6, 7, 8)])
     monkeypatch.setattr(watch_runner, "_now", lambda: next(days))
-    assert watch_runner.run_once(_stance("bullish"))["hits"] == 1, "first sighting is news"
-    assert watch_runner.run_once(_stance("bullish"))["hits"] == 0, "the same state is not"
+    assert watch_runner.run_once(_stance("bullish"))["hits"] == 0, "the first look arms it"
+    assert watch_runner.run_once(_stance("bullish"))["hits"] == 0, "the same state is not news"
     assert watch_runner.run_once(_stance("bearish"))["hits"] == 1, "a change is"
     assert watch_runner.run_once(_stance("bearish"))["hits"] == 0
 
@@ -384,10 +402,12 @@ def test_what_the_schedule_saw_is_stored_the_way_the_page_reads_it(account):
     from app import account as account_mod
     wid = add_watch(account, "AAA", "signal_flip", {"to": "any"})
     watch_runner.run_once(_stance("bullish"))
-    row = db.row("SELECT * FROM watches WHERE id = ?", (wid,))
-    payload = account_mod._watch_payload(row)
-    assert payload["last_evidence"]["state"] == "bullish"
-    assert payload["last_evidence"]["evidence"].startswith("stance reads bullish")
+    payload = account_mod._watch_payload(db.row("SELECT * FROM watches WHERE id = ?", (wid,)))
+    assert payload["last_state"] == "bullish" and payload["armed"]     # every check is kept
+    watch_runner.run_once(_stance("bearish"))
+    payload = account_mod._watch_payload(db.row("SELECT * FROM watches WHERE id = ?", (wid,)))
+    assert payload["last_evidence"]["state"] == "bearish"
+    assert payload["last_evidence"]["evidence"].startswith("stance reads bearish")
 
 
 def test_names_past_the_cap_are_reached_on_later_passes(account, monkeypatch):

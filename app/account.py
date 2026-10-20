@@ -29,6 +29,7 @@ from __future__ import annotations
 import json
 import re
 import sqlite3
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Body, HTTPException, Query, Request
@@ -927,7 +928,75 @@ def _watch_payload(found: Dict[str, Any]) -> Dict[str, Any]:
         "created_at": found["created_at"],
         "last_met_at": found.get("last_met_at"),
         "last_evidence": evidence,
+        # what the last check read, met or not, and when; why it could not, if it could not
+        "last_state": found.get("last_state"),
+        "last_checked_at": found.get("last_checked_at"),
+        "last_error": found.get("last_error"),
+        "ref_price": found.get("ref_price"),
+        "ref_at": found.get("ref_at"),
+        "paused_at": found.get("paused_at"),
+        "updated_at": found.get("updated_at"),
+        "armed": bool(found.get("last_state")) or found.get("ref_price") is not None,
+        "condition": watch_runner.condition_text(found),
     }
+
+
+# The bounds a value has to be inside for the condition to mean anything. A zero or a
+# negative used to be accepted and then read as the default (a 0% move became 4%), so
+# the watch did something other than what it said (the 2026-10-20 alerts audit).
+_BOUNDS = {"price": (0.0, None, "above zero"), "percent": (0.0, 100.0, "between 0 and 100"),
+           "days": (1, 365, "from 1 to 365")}
+
+
+def _watch_params(kind: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+    spec = watches_mod.CONDITIONS[kind]
+    params: Dict[str, Any] = {}
+    if not spec.get("param"):
+        return params
+    key = spec["param"]["key"]
+    label = spec["param"]["label"]
+    raw = (payload.get("params") or {}).get(key, payload.get(key))
+    if raw is None or str(raw).strip() == "":
+        raise HTTPException(status_code=400,
+                            detail="{} needs a value for {}.".format(spec["label"], label))
+    kind_of = spec["param"].get("kind")
+    if kind_of in ("price", "percent", "number", "days"):
+        try:
+            number = float(raw)
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=400, detail="{} has to be a number.".format(label))
+        if number != number or number in (float("inf"), float("-inf")):
+            raise HTTPException(status_code=400, detail="{} has to be a real number.".format(label))
+        lo, hi, words = _BOUNDS.get(kind_of, (0.0, None, "above zero"))
+        if kind in ("rsi_above", "rsi_below"):
+            lo, hi, words = 0.0, 100.0, "between 0 and 100"
+        if number <= lo or (hi is not None and (number > hi if kind_of == "days" else number >= hi)):
+            raise HTTPException(status_code=400, detail="{} has to be {}.".format(label, words))
+        if kind_of == "days":
+            number = int(number)
+        params[key] = number
+    else:
+        value = str(raw).strip().lower()[:32]
+        allowed = [str(c["value"]) for c in (spec["param"].get("choices") or [])]
+        if allowed and value not in allowed:
+            # Refused rather than stored. A watch holding a value the
+            # evaluator does not recognise is silently dead, and "did not
+            # fire" is indistinguishable from the correct answer.
+            raise HTTPException(
+                status_code=400,
+                detail="{} has to be one of: {}.".format(label, ", ".join(allowed)))
+        params[key] = value
+    return params
+
+
+def _ref_price(payload: Dict[str, Any]) -> Optional[float]:
+    """The price on the reader's screen when they made or changed a price alert: it arms the
+    alert from the first check, so a crossing in the first half hour is not missed."""
+    try:
+        value = float(payload.get("ref_price"))
+    except (TypeError, ValueError):
+        return None
+    return value if value > 0 and value == value and value != float("inf") else None
 
 
 @router.get("/watches")
@@ -935,19 +1004,21 @@ async def list_watches(request: Request,
                        symbol: str = Query("", max_length=20)) -> Dict[str, Any]:
     user = deps.require_user(request)
     if symbol:
-        found = db.rows("SELECT * FROM watches WHERE user_id = ? AND symbol = ? "
+        found = db.rows("SELECT * FROM watches WHERE user_id = ? AND symbol = ? AND deleted_at IS NULL "
                         "ORDER BY created_at", (user["id"], _symbol(symbol)))
     else:
-        found = db.rows("SELECT * FROM watches WHERE user_id = ? "
+        found = db.rows("SELECT * FROM watches WHERE user_id = ? AND deleted_at IS NULL "
                         "ORDER BY symbol, created_at", (user["id"],))
-    return {"watches": [_watch_payload(w) for w in found], "limit": MAX_WATCHES}
+    return {"watches": [_watch_payload(w) for w in found], "limit": MAX_WATCHES,
+            "schedule": watches_mod.catalogue().get("schedule")}
 
 
 @router.get("/watches/hits")
 async def list_watch_hits(request: Request,
                           unseen: int = Query(0),
+                          watch: str = Query("", max_length=64),
                           limit: int = Query(50, ge=1, le=200)) -> Dict[str, Any]:
-    """What fired while you were away.
+    """What fired while you were away, newest first, each with what was read and why it fired.
 
     The point of the whole feature: a watch used to be evaluated only while the
     page was open and only on the symbol on screen, so it could not tell you
@@ -957,16 +1028,14 @@ async def list_watch_hits(request: Request,
     user = deps.require_user(request)
     return {
         "hits": watch_runner.hits_for(user["id"], limit=limit,
-                                      unseen_only=bool(unseen)),
+                                      unseen_only=bool(unseen), watch_id=watch or None),
         "unseen": watch_runner.unseen_count(user["id"]),
         "method": (
-            "Your watches are evaluated on Optic's own schedule against the same "
-            "panels the analysis page shows, and anything that fired is kept here "
-            "until you read it. It is not sent to you: there is no notification "
-            "channel configured, and an alert that quietly misses its move would "
-            "be worse than none. Each watch reports at most once a day, because "
-            "most conditions describe a state that stays true rather than a "
-            "moment that passes."
+            "Optic checks your alerts on its own schedule against the same figures "
+            "the Dossier shows, and keeps what fired here until you read it. An alert "
+            "fires when its condition changes from not met to met, so each crossing "
+            "is one entry. Nothing is sent to you: Optic has no email or push "
+            "delivery for alerts."
         ),
     }
 
@@ -996,46 +1065,9 @@ async def create_watch(request: Request,
         # broken instead of never having been valid.
         raise HTTPException(status_code=400,
                             detail="That is not a condition Optic can watch for.")
+    params = _watch_params(kind, payload)
 
-    spec = watches_mod.CONDITIONS[kind]
-    params: Dict[str, Any] = {}
-    if spec.get("param"):
-        key = spec["param"]["key"]
-        raw = (payload.get("params") or {}).get(key, payload.get(key))
-        if raw is None or str(raw).strip() == "":
-            raise HTTPException(
-                status_code=400,
-                detail="{} needs a value for {}.".format(spec["label"],
-                                                         spec["param"]["label"]))
-        kind_of = spec["param"].get("kind")
-        if kind_of in ("price", "percent", "number", "days"):
-            try:
-                number = float(raw)
-            except (TypeError, ValueError):
-                raise HTTPException(status_code=400,
-                                    detail="{} has to be a number.".format(
-                                        spec["param"]["label"]))
-            if number != number or number in (float("inf"), float("-inf")):
-                raise HTTPException(status_code=400,
-                                    detail="{} has to be a real number.".format(
-                                        spec["param"]["label"]))
-            if kind_of == "days":
-                number = max(1, min(365, int(number)))
-            params[key] = number
-        else:
-            value = str(raw).strip().lower()[:32]
-            allowed = [str(c["value"]) for c in (spec["param"].get("choices") or [])]
-            if allowed and value not in allowed:
-                # Refused rather than stored. A watch holding a value the
-                # evaluator does not recognise is silently dead, and "did not
-                # fire" is indistinguishable from the correct answer.
-                raise HTTPException(
-                    status_code=400,
-                    detail="{} has to be one of: {}.".format(
-                        spec["param"]["label"], ", ".join(allowed)))
-            params[key] = value
-
-    count = db.row("SELECT COUNT(*) AS n FROM watches WHERE user_id = ?", (user["id"],))
+    count = db.row("SELECT COUNT(*) AS n FROM watches WHERE user_id = ? AND deleted_at IS NULL", (user["id"],))
     if int((count or {}).get("n") or 0) >= MAX_WATCHES:
         raise HTTPException(
             status_code=403,
@@ -1043,13 +1075,26 @@ async def create_watch(request: Request,
                    "another.".format(MAX_WATCHES))
 
     now = db.utcnow()
+    ref = _ref_price(payload)
+    note = str(payload.get("note") or "").strip()[:200] or None
+    twin = db.row("SELECT * FROM watches WHERE user_id = ? AND symbol = ? AND kind = ? AND params = ?",
+                  (user["id"], symbol, kind, _params_key(params)))
+    if twin and twin.get("deleted_at") is None:
+        raise HTTPException(status_code=409,
+                            detail="You are already watching that on {}.".format(symbol))
+    if twin:
+        # the same alert made again after a delete: the old row comes back, re-armed, with its history
+        db.execute("UPDATE watches SET deleted_at = NULL, active = 1, paused_at = NULL, last_state = NULL, "
+                   "last_error = NULL, last_checked_at = NULL, ref_price = ?, ref_at = ?, note = ?, updated_at = ? WHERE id = ?",
+                   (ref, now if ref is not None else None, note, now, twin["id"]))
+        return {"ok": True, "watch": _watch_payload(db.row("SELECT * FROM watches WHERE id = ?", (twin["id"],)))}
     wid = db.new_id()
     try:
         db.execute(
-            "INSERT INTO watches (id,user_id,symbol,kind,params,note,active,created_at) "
-            "VALUES (?,?,?,?,?,?,1,?)",
-            (wid, user["id"], symbol, kind, _params_key(params),
-             str(payload.get("note") or "").strip()[:200] or None, now))
+            "INSERT INTO watches (id,user_id,symbol,kind,params,note,active,created_at,ref_price,ref_at,updated_at) "
+            "VALUES (?,?,?,?,?,?,1,?,?,?,?)",
+            (wid, user["id"], symbol, kind, _params_key(params), note, now,
+             ref, now if ref is not None else None, now))
     except sqlite3.IntegrityError:
         raise HTTPException(status_code=409,
                             detail="You are already watching that on {}.".format(symbol))
@@ -1061,18 +1106,47 @@ async def create_watch(request: Request,
 @router.patch("/watches/{watch_id}")
 async def update_watch(watch_id: str, request: Request,
                        payload: Dict[str, Any] = Body(default={})) -> Dict[str, Any]:
+    """Pause, resume, change the note, or change the condition's value.
+
+    Resuming and changing the value both re-arm the alert: it starts again from what
+    the next check reads (or the price sent with the change), so it does not fire on
+    the spot for a crossing that happened while it was paused or set elsewhere."""
     user = deps.require_user(request)
     deps.csrf_guard(request)
-    owned = db.row("SELECT * FROM watches WHERE id = ? AND user_id = ?",
+    owned = db.row("SELECT * FROM watches WHERE id = ? AND user_id = ? AND deleted_at IS NULL",
                    (watch_id, user["id"]))
     if not owned:
         raise HTTPException(status_code=404, detail="That watch does not exist.")
+    now = db.utcnow()
+    ref = _ref_price(payload)
+    if "params" in payload or any(k in payload for k in ("level", "pct", "min_ratio", "days", "to", "direction", "side", "preset")):
+        params = _watch_params(owned["kind"], payload)
+        # a deleted alert that held these values does not block the change: its history moves to this one
+        twin = db.row("SELECT id FROM watches WHERE user_id = ? AND symbol = ? AND kind = ? AND params = ? "
+                      "AND deleted_at IS NOT NULL AND id != ?",
+                      (user["id"], owned["symbol"], owned["kind"], _params_key(params), watch_id))
+        if twin:
+            db.execute("UPDATE watch_hits SET watch_id = ? WHERE watch_id = ? AND user_id = ?", (watch_id, twin["id"], user["id"]))
+            db.execute("DELETE FROM watches WHERE id = ? AND user_id = ?", (twin["id"], user["id"]))
+        try:
+            db.execute("UPDATE watches SET params = ?, last_state = NULL, last_error = NULL, last_checked_at = NULL, "
+                       "ref_price = ?, ref_at = ?, updated_at = ? WHERE id = ? AND user_id = ?",
+                       (_params_key(params), ref, now if ref is not None else None, now, watch_id, user["id"]))
+        except sqlite3.IntegrityError:
+            raise HTTPException(status_code=409,
+                                detail="You already have that alert on {}.".format(owned["symbol"]))
     if "active" in payload:
-        db.execute("UPDATE watches SET active = ? WHERE id = ? AND user_id = ?",
-                   (1 if payload.get("active") else 0, watch_id, user["id"]))
+        on = bool(payload.get("active"))
+        if on and not owned.get("active"):
+            db.execute("UPDATE watches SET active = 1, paused_at = NULL, last_state = NULL, ref_price = COALESCE(?, ref_price), "
+                       "ref_at = CASE WHEN ? IS NULL THEN ref_at ELSE ? END, updated_at = ? WHERE id = ? AND user_id = ?",
+                       (ref, ref, now, now, watch_id, user["id"]))
+        elif not on and owned.get("active"):
+            db.execute("UPDATE watches SET active = 0, paused_at = ?, updated_at = ? WHERE id = ? AND user_id = ?",
+                       (now, now, watch_id, user["id"]))
     if "note" in payload:
-        db.execute("UPDATE watches SET note = ? WHERE id = ? AND user_id = ?",
-                   (str(payload.get("note") or "").strip()[:200] or None,
+        db.execute("UPDATE watches SET note = ?, updated_at = ? WHERE id = ? AND user_id = ?",
+                   (str(payload.get("note") or "").strip()[:200] or None, now,
                     watch_id, user["id"]))
     found = db.row("SELECT * FROM watches WHERE id = ?", (watch_id,))
     assert found is not None
@@ -1081,29 +1155,44 @@ async def update_watch(watch_id: str, request: Request,
 
 @router.delete("/watches/{watch_id}")
 async def delete_watch(watch_id: str, request: Request) -> Dict[str, Any]:
+    """Takes the alert off the list and stops its checks. What it fired stays in the history,
+    which is why the row is kept (and why Undo can bring it straight back)."""
     user = deps.require_user(request)
     deps.csrf_guard(request)
-    removed = db.execute("DELETE FROM watches WHERE id = ? AND user_id = ?",
-                         (watch_id, user["id"]))
+    removed = db.execute("UPDATE watches SET deleted_at = ?, active = 0 WHERE id = ? AND user_id = ? AND deleted_at IS NULL",
+                         (db.utcnow(), watch_id, user["id"]))
     if not removed:
         raise HTTPException(status_code=404, detail="That watch does not exist.")
     return {"ok": True}
+
+
+@router.post("/watches/{watch_id}/restore")
+async def restore_watch(watch_id: str, request: Request) -> Dict[str, Any]:
+    """Undo a delete: the alert is back, re-armed from its next check."""
+    user = deps.require_user(request)
+    deps.csrf_guard(request)
+    done = db.execute("UPDATE watches SET deleted_at = NULL, active = 1, paused_at = NULL, last_state = NULL, "
+                      "updated_at = ? WHERE id = ? AND user_id = ? AND deleted_at IS NOT NULL",
+                      (db.utcnow(), watch_id, user["id"]))
+    if not done:
+        raise HTTPException(status_code=404, detail="Nothing to restore.")
+    return {"ok": True, "watch": _watch_payload(db.row("SELECT * FROM watches WHERE id = ?", (watch_id,)))}
 
 
 @router.post("/watches/seen")
 async def record_watch_results(request: Request,
                                payload: Dict[str, Any] = Body(default={})
                                ) -> Dict[str, Any]:
-    """Remember which watches have tripped, so a trip is news exactly once.
+    """What the page's own check read, kept as the scheduled check keeps it.
 
-    The client checks its watches and posts the outcome back here. Without this
-    step a watch that is met stays met, and every page load reports the same
-    thing as though it had just happened — which is how a notification feature
-    becomes something people turn off.
+    The page checks the alerts on screen and posts the results here. A result that
+    is news (met, and a change of state: watch_runner.is_news) is stored as a hit,
+    exactly as the schedule would store it, and every result's state is recorded.
+    Before 2026-10-20 this wrote the state without a hit, so a change the page saw
+    first never reached the history and the schedule then saw nothing new.
 
-    Only rows the caller owns are touched, and the id comes from the body only
-    as a *filter* alongside `user_id`; it can name another user's watch all it
-    likes and match nothing.
+    Only rows the caller owns are touched, and the id comes from the body only as a
+    *filter* alongside `user_id`; it can name another user's watch and match nothing.
     """
     user = deps.require_user(request)
     deps.csrf_guard(request)
@@ -1111,25 +1200,18 @@ async def record_watch_results(request: Request,
     if not isinstance(results, list):
         raise HTTPException(status_code=400, detail="Send a list of results.")
 
-    now = db.utcnow()
-    statements = []
+    when = datetime.now(timezone.utc)
+    recorded = fired = 0
     for row in results[:MAX_WATCHES]:
         if not isinstance(row, dict) or not row.get("id"):
             continue
-        if not row.get("met"):
+        owned = db.row("SELECT * FROM watches WHERE id = ? AND user_id = ? AND deleted_at IS NULL",
+                       (str(row["id"]), user["id"]))
+        if not owned:
             continue
-        # `state` matters as much as `evidence`. `_signal_flip` and
-        # `_analyst_revisions` report a *state*, not a transition, by design:
-        # they are stateless, so the comparison against the previous state is
-        # the client's job and it needs the previous state to have been kept.
-        evidence = {k: row[k] for k in ("evidence", "state", "level", "value",
-                                        "detail")
-                    if k in row}
-        statements.append((
-            "UPDATE watches SET last_met_at = ?, last_evidence = ? "
-            "WHERE id = ? AND user_id = ?",
-            (now, json.dumps(evidence, sort_keys=True)[:2000],
-             str(row["id"]), user["id"])))
-    if statements:
-        db.execute_many(statements)
-    return {"ok": True, "recorded": len(statements)}
+        previous = watch_runner.previous_state(owned)
+        if owned.get("active") and watch_runner.is_news(owned, row) and watch_runner.record_hit(owned, row, when, "page check", previous):
+            fired += 1
+        watch_runner.record_check(owned, row, when)
+        recorded += 1
+    return {"ok": True, "recorded": recorded, "fired": fired}

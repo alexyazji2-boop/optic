@@ -5197,18 +5197,24 @@ async def list_snapshots() -> Dict[str, Any]:
 
 
 @app.get("/api/alerts")
-async def list_alerts(limit: int = Query(50, ge=1, le=200),
+async def list_alerts(request: Request, limit: int = Query(50, ge=1, le=200),
                       unseen: bool = False) -> Dict[str, Any]:
-    """The alert inbox, plus what delivery would still need."""
+    """The alert inbox, plus what delivery would still need.
+
+    The delivery detail (which server settings are missing, the last attempt) is the
+    owner's to read: it named environment variables to every visitor before
+    2026-10-20. Anyone else is told only whether email delivery is on."""
+    status = alerts_mod.delivery_status()
+    delivery = ({**status, "last_attempt": dict(alerts_mod.LAST_ATTEMPT) or None,
+                 "undelivered_recent": alerts_mod.undelivered_recent()}
+                if _is_owner(request) else
+                {"enabled": bool(status.get("enabled")), "blockers": [],
+                 "note": "These alerts are shown in Optic; email delivery is not set up for readers."})
     return {
         "alerts": alerts_mod.recent(limit=limit, unseen_only=unseen),
         "unseen": alerts_mod.unseen_count(),
         "kinds": alerts_mod.KINDS,
-        # What delivery needs, and what it has actually done: the newest
-        # attempt in this process and how many recent alerts no email carried.
-        "delivery": {**alerts_mod.delivery_status(),
-                     "last_attempt": dict(alerts_mod.LAST_ATTEMPT) or None,
-                     "undelivered_recent": alerts_mod.undelivered_recent()},
+        "delivery": delivery,
     }
 
 
