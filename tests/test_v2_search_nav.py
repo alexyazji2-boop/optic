@@ -136,3 +136,14 @@ def test_a_malformed_address_still_renders(tmp_path):
 def test_the_instrument_page_paints_only_its_newest_answer():
     src = (JS / "pages/instrument.js").read_text()
     assert "if (my !== gen || !live || D.sym !== sym) return;" in src
+
+
+def test_scan_keeps_what_is_on_screen_and_runs_once():
+    """Backlog task 10: the chosen scan, the built screen and a request in words are in the address, so
+    Back from a result returns to them; a request already answered this visit is shown again, not asked
+    again (it can use a Milo question). scan_check.py: 45/45 at five widths."""
+    src = (JS / "pages/scan.js").read_text()
+    assert "remember(`id=${encodeURIComponent(id)}`)" in src and "remember('mode=build')" in src
+    assert "if (q && ASKED.has(q))" in src and "if (!text || S.asking) return;" in src
+    assert "if (S.screening && !again) return;" in src
+    assert "Compare the first" in src and "watchButton(sym, { compact: true })" in src
