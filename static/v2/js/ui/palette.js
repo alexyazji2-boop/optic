@@ -110,10 +110,11 @@ function savedFor(sym) {
 }
 /** The Open row and the symbol's own places. `kind` is the search's (stock, etf, index, ...), or ''
  * for a symbol taken as typed; `enter` marks the row Enter opens. */
-function symbolRows(sym, detail, { kind = '', enter = true } = {}) {
+function symbolRows(sym, detail, { kind = '', enter = true, bare = false } = {}) {
   const word = KIND_WORD[kind];
   const what = [detail, word && kind !== 'etf' ? word : ''].filter(Boolean).join(', ');
-  const out = [{ group: 'Open', lead: isInstrument(sym, kind || undefined) ? icon('chart') : icon('dossier'), label: sym, detail: what, tag: enter ? 'enter' : '', run: go(openHref(sym, kind || undefined)) }];
+  const out = [{ group: 'Open', lead: isInstrument(sym, kind || undefined) ? icon('markets') : icon('dossier'), label: sym, detail: what, tag: enter ? 'enter' : '', run: go(openHref(sym, kind || undefined)) }];
+  if (bare) return out;   // nothing listed under that name: no Chart, Options and the rest to offer for it
   if (isInstrument(sym, kind || undefined)) {
     const proxy = PROXY[sym];
     if (proxy) out.push({ group: sym, lead: icon('arrow'), label: `Options on ${proxy}`, detail: `The fund that tracks it; ${sym} has no option chain here`, run: go(hrefFor('swing', proxy)) });
@@ -185,13 +186,13 @@ async function build(q, early) {
     // nothing listed under that word: it can still be opened as typed (a foreign listing, a new issue),
     // said plainly, and a place or action that matched takes Enter instead
     const why = failed ? 'Search is unavailable; opens as typed' : results.length ? 'Not a listed symbol; opens as typed' : 'No listing found; opens as typed';
-    rows.splice(at, to - from, ...symbolRows(upper, why, { enter: !placeTakes && !(isQuestion && ask) }));
+    rows.splice(at, to - from, ...symbolRows(upper, why, { enter: !placeTakes && !(isQuestion && ask), bare: !failed }));
     if (placeTakes && !exact) { const row = rows.find((r) => r.group === 'Go to' || r.group === 'Actions'); if (row) row.tag = 'enter'; }
   }
   if (failed) notice = 'Company search is not answering right now. Typed symbols still open, and pages and Milo work as usual.';
   else if (lookUp && !results.length && !isTicker && !matched.length && !actions.length) notice = `No company, fund or index matches "${q}".`;
   const insertAt = rows.findIndex((r) => r.group === 'Ask Milo' && !isQuestion);
-  const symRows = others.map((r) => ({ group: 'Symbols', lead: isInstrument(r.symbol, r.kind) ? icon('chart') : r.etf ? 'ETF' : icon('dossier'), label: r.symbol, detail: [r.name, KIND_WORD[r.kind] && r.kind !== 'etf' ? KIND_WORD[r.kind] : ''].filter(Boolean).join(', '), run: go(openHref(r.symbol, r.kind)) }));
+  const symRows = others.map((r) => ({ group: 'Symbols', lead: isInstrument(r.symbol, r.kind) ? icon('markets') : r.etf ? 'ETF' : icon('dossier'), label: r.symbol, detail: [r.name, KIND_WORD[r.kind] && r.kind !== 'etf' ? KIND_WORD[r.kind] : ''].filter(Boolean).join(', '), run: go(openHref(r.symbol, r.kind)) }));
   if (insertAt >= 0) rows.splice(insertAt, 0, ...symRows); else rows.push(...symRows);
   if (looksLikeScreen(q)) {
     if (!catalogue) { try { catalogue = await api.get('/api/scanners', { ttl: 600000 }); } catch (e) { catalogue = { scans: [] }; } }
