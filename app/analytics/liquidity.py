@@ -51,6 +51,8 @@ def grade_row(row: Dict[str, Any], th: Optional[Dict[str, float]] = None) -> Dic
             "no_ask": "No ask: nobody is quoted to sell it.",
             "locked": "Bid equals ask, which on a delayed feed usually means one side is stale.",
             "crossed": "Bid above ask: a stale or mismatched quote, not a real market.",
+            "below_intrinsic": "The ask is below what exercising it is worth: a stale quote left over from an "
+                               "earlier session, not a price anyone would sell at.",
         }.get(state, "No usable quote."))
         grade = "not_tradable"
     else:
@@ -89,7 +91,9 @@ def grade_row(row: Dict[str, Any], th: Optional[Dict[str, float]] = None) -> Dic
     if state == "two_sided" and sa is not None and mid:
         # Buying at the ask and later selling at the bid crosses the whole spread.
         cost = {"per_contract": round(float(sa) * 100.0, 2), "pct_of_mid": round(float(sa) / float(mid) * 100.0, 1)}
-    return {"grade": grade, "label": LABELS[grade], "reasons": reasons, "round_trip_cost": cost}
+    # a two-sided quote too wide to cross is not the same thing as no quote: it is called what it is
+    label = "Too wide to trade" if grade == "not_tradable" and state == "two_sided" else LABELS[grade]
+    return {"grade": grade, "label": label, "reasons": reasons, "round_trip_cost": cost}
 
 
 def grade_frame(df: pd.DataFrame, th: Optional[Dict[str, float]] = None) -> List[Dict[str, Any]]:

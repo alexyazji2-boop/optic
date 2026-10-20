@@ -161,12 +161,20 @@ def _price_grid(legs: Sequence[Dict[str, Any]], spot: float, span_pct: float) ->
 
 
 def _roots(x: np.ndarray, y: np.ndarray) -> List[float]:
+    """Where the payoff changes sign. A stretch that sits exactly at zero (two legs at one strike
+    cancelling) is not a breakeven at every point of it: before 2026-10-20 such a payoff reported
+    243 breakevens. A crossing through a run of zeros is placed at the run's middle."""
     out = []
-    for i in range(1, len(x)):
-        if y[i - 1] == 0:
-            out.append(float(x[i - 1]))
-        elif y[i - 1] * y[i] < 0:
-            out.append(float(x[i - 1] - y[i - 1] * (x[i] - x[i - 1]) / (y[i] - y[i - 1])))
+    prev = None
+    for i in range(len(x)):
+        if y[i] == 0:
+            continue
+        if prev is not None and (y[prev] > 0) != (y[i] > 0):
+            if i == prev + 1:
+                out.append(float(x[prev] - y[prev] * (x[i] - x[prev]) / (y[i] - y[prev])))
+            else:
+                out.append(float((x[prev + 1] + x[i - 1]) / 2.0))
+        prev = i
     dedup: List[float] = []
     for v in out:
         if not dedup or abs(v - dedup[-1]) > 1e-6 * max(1.0, v):
@@ -208,14 +216,18 @@ def analyse(legs: Sequence[Dict[str, Any]], spot: float, rate: float, div: float
     today = value_at(0.0) - cost
     half = value_at(first_tau / 2.0) - cost
 
-    # Bounded or not: the slope as price runs away in each direction.
-    up_slope = sum(_sign(l) * _units(l) for l in legs if l["type"] in ("call", "stock")
-                   and (l["type"] == "stock" or l["tau"] <= first_tau + 1e-9))
+    # Bounded or not: the slope as price runs away upward. Every call counts, whatever its expiry: far
+    # above the strikes a later call is worth about the price less its strike, so two short near calls
+    # against one long far call still lose without limit. (Counting only the first expiry's calls, and
+    # then calling every calendar bounded, reported such a position's loss as the edge of the drawn grid.)
+    up_slope = sum(_sign(l) * _units(l) for l in legs if l["type"] in ("call", "stock"))
     calendar = any(l["type"] != "stock" and l["tau"] > first_tau + 1e-9 for l in legs)
     max_profit = float(np.max(at_expiry))
     max_loss = float(np.min(at_expiry))
-    profit_unbounded = up_slope > 1e-9 and not calendar
-    loss_unbounded = up_slope < -1e-9 and not calendar
+    profit_unbounded = up_slope > 1e-9
+    loss_unbounded = up_slope < -1e-9
+    # quotes that let a position open with no way to lose at expiry are not a market (stale or crossed legs)
+    riskless = bool(max_loss > 0.005)
 
     agg = {"delta": 0.0, "gamma": 0.0, "theta": 0.0, "vega": 0.0}
     leg_rows = []
@@ -267,6 +279,10 @@ def analyse(legs: Sequence[Dict[str, Any]], spot: float, rate: float, div: float
         "max_profit_unbounded": profit_unbounded,
         "max_loss": None if loss_unbounded else round(max_loss, 2),
         "max_loss_unbounded": loss_unbounded,
+        "cannot_lose_at_quotes": riskless,
+        "quotes_note": ("At these quotes the position makes money at expiry at every price, which a real market "
+                        "does not offer: at least one quote is stale or inconsistent. Check the legs' bids and asks."
+                        if riskless else None),
         "bounds_note": ("Within the drawn price range: the later leg's value is a model estimate, so the "
                         "true extremes depend on volatility then." if calendar else None),
         "greeks": {"delta_shares": round(agg["delta"], 1), "gamma_per_dollar": round(agg["gamma"], 3),

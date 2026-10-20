@@ -1492,13 +1492,26 @@ async def options_analyze(ticker: str, payload: Dict[str, Any] = Body(...)) -> D
             legs.append({"type": "stock", "side": "short" if l.get("side") == "short" else "long",
                          "qty": int(num(l.get("qty"), 1, 100000, 100)), "strike": None, "expiry": None,
                          "tau": 0.0, "iv": None, "mid": spot, "bid": spot, "ask": spot})
+        seen_contracts: Dict[Any, str] = {}
+        for l in legs:
+            if l["type"] == "stock":
+                continue
+            key = (l["expiry"], l["strike"], l["type"])
+            if key in seen_contracts and seen_contracts[key] != l["side"]:
+                problems.append("The {} {:g} {} is both bought and sold: the two legs cancel. Take one out.".format(
+                    l["expiry"], l["strike"], l["type"]))
+            seen_contracts.setdefault(key, l["side"])
         if problems:
             raise HTTPException(status_code=422, detail=" ".join(problems))
         out = position_mod.analyse(legs, spot, rate_info["rate"], div, days_forward=days_forward,
                                    slippage=slippage, fee_per_contract=fee,
                                    american=vol_surface_mod.is_american(sym))
         flags: List[str] = []
+        today = datetime.now(timezone.utc).astimezone(session_mod.ET).date()
         exd = _ex_dividend(sym)
+        # an ex-dividend date already gone is no reason to expect early assignment
+        if exd and str(exd)[:10] < today.isoformat():
+            exd = None
         first_exp = min((l["expiry"] for l in legs if l["type"] != "stock"), default=None)
         for l in legs:
             if l["type"] == "stock" or l["side"] != "short":
@@ -1514,7 +1527,6 @@ async def options_analyze(ticker: str, payload: Dict[str, Any] = Body(...)) -> D
                 flags.append("The short {:g} {} is within 1% of the price: if it finishes near the strike, "
                              "whether it is assigned is uncertain until after the close (pin risk).".format(
                                  l["strike"], l["type"]))
-        today = datetime.now(timezone.utc).astimezone(session_mod.ET).date()
         earn = None
         try:
             earn = YF_PROVIDER.earnings_date(sym)
@@ -1522,6 +1534,9 @@ async def options_analyze(ticker: str, payload: Dict[str, Any] = Body(...)) -> D
             earn = None
         out.update({
             "ticker": sym,
+            # when the chain these legs were priced from was read: the page says how old the prices are
+            "fetched_at": str(frame["fetched_at"].iloc[0]) if "fetched_at" in frame and len(frame) else None,
+            "clock": frame.attrs.get("clock"),
             "rate": rate_info,
             "leg_liquidity": [{"strike": l.get("strike"), "type": l["type"], "expiry": l.get("expiry"),
                                **(l.get("liquidity") or {})} for l in legs if l["type"] != "stock"],

@@ -11,7 +11,8 @@ import { $, $$, html, render as draw } from '../core/dom.js';
 import * as api from '../core/api.js';
 import * as store from '../core/store.js';
 import { holds } from '../core/device.js';
-import { num, signed, money, clean, shortDate, isNum } from '../core/format.js';
+import { num, signed, money, signedMoney, clean, shortDate, isNum, capFirst } from '../core/format.js';
+import { etStamp } from '../core/marketTime.js';
 import { mountCharts } from '../ui/chart.js';
 import { xyChart } from '../ui/xychart.js';
 import { skeleton, empty, failed, staleLine, how } from '../ui/states.js';
@@ -28,6 +29,13 @@ const TEMPLATES = [
   ['covered_call', 'Covered call'], ['csp', 'Cash-secured put'], ['straddle', 'Straddle'], ['strangle', 'Strangle'],
   ['iron_condor', 'Iron condor'], ['calendar', 'Call calendar'],
 ];
+// What a position was being built from, per symbol, for this visit: the expiry and the legs come back on a
+// return from another page (they used to be lost on every visit), and are dropped when the expiry is no
+// longer listed. Held in memory only: it is the reader's own work, and a sign-out (which reloads the page)
+// must not hand it to the next account.
+const KEPT = new Map();
+const readState = (sym) => KEPT.get(sym) || null;
+function saveState() { KEPT.set(D.sym, { expiry: R.expiry, legs: B.legs.map((l) => Object.assign({}, l)), template: B.template }); }
 const DELTAS = { any: [0, 1, 'Any'], far: [0.1, 0.3, 'Far, .10 to .30'], mid: [0.3, 0.5, 'Middle, .30 to .50'], atm: [0.4, 0.6, 'At the money, .40 to .60'], deep: [0.6, 0.9, 'Deep, .60 to .90'] };
 
 // GEN: one per render. Every await checks it, so an answer for the symbol (or page) before never lands on this one:
@@ -84,11 +92,12 @@ function builder(sym) {
   const a = B.analysis;
   return html`<section class="section builder" aria-labelledby="pb-h">
     <div class="section-head"><div><h2 class="t-h2" id="pb-h">Position builder</h2><p class="section-sub">${R.expiry ? `Priced on the ${shortDate(R.expiry)} expiry chosen above.` : 'Priced on the expiry chosen above, once the contracts load.'} Pick a template or press Add in the table. Figures are per position.</p></div></div>
-    <div class="tpl" role="group" aria-label="Templates">${TEMPLATES.map(([id, label]) => html`<button type="button" class="chip" data-v2-tpl="${id}" aria-pressed="${B.template === id}" ${R.expiry ? '' : 'disabled'}>${label}</button>`)}</div>
-    ${B.legs.length ? html`<ul class="legs-list" aria-label="Legs">${B.legs.map((l, i) => html`<li><span class="leg-l">${legLabel(l)}</span>
-        <button type="button" class="textlink" data-v2-leg-flip="${i}">${l.side === 'long' ? 'Make it a sale' : 'Make it a buy'}</button>
-        <label class="field field-xs"><span class="sr">Quantity for ${legLabel(l)}</span><input type="number" min="1" max="${l.type === 'stock' ? 100000 : 100}" value="${l.qty}" data-v2-leg-qty="${i}"></label>
-        <button type="button" class="icon-btn" data-v2-leg-del="${i}" aria-label="Remove ${legLabel(l)}">${icon('close')}</button></li>`)}</ul>` : ''}
+    ${noQuotes() ? html`<p class="stale">${noQuotes()} The templates need two-sided quotes, so they are off until there are some.</p>` : ''}
+    <div class="tpl" role="group" aria-label="Templates">${TEMPLATES.map(([id, label]) => html`<button type="button" class="chip" data-v2-tpl="${id}" aria-pressed="${B.template === id}" ${R.expiry && !noQuotes() ? '' : 'disabled'}>${label}</button>`)}</div>
+    ${B.legs.length ? html`<ul class="legs-list" aria-label="Legs">${B.legs.map((l, i) => { const q = legQuote(l); return html`<li><div class="leg-main"><span class="leg-l">${legLabel(l)}</span>${q ? html`<small class="t-muted leg-q">${q}</small>` : ''}</div>
+        <div class="leg-acts"><button type="button" class="btn btn-sm" data-v2-leg-flip="${i}">${l.side === 'long' ? 'Make it a sale' : 'Make it a buy'}</button>
+        <span class="qty"><button type="button" class="icon-btn" data-v2-leg-step="${i}:-1" aria-label="One fewer" ${l.qty <= 1 ? 'disabled' : ''}>${icon('minus')}</button><label class="field field-xs"><span class="sr">Quantity for ${legLabel(l)}</span><input type="number" inputmode="numeric" min="1" max="${l.type === 'stock' ? 100000 : 100}" value="${l.qty}" data-v2-leg-qty="${i}"></label><button type="button" class="icon-btn" data-v2-leg-step="${i}:1" aria-label="One more">${icon('plus')}</button></span>
+        <button type="button" class="icon-btn" data-v2-leg-del="${i}" aria-label="Remove ${legLabel(l)}">${icon('close')}</button></div></li>`; })}</ul>` : ''}
     <div id="op-result">${result(sym)}</div>
     <details class="more-inline costs"><summary>Costs and timing</summary><form class="cluster" data-v2-costs>
       <label class="field field-sm"><span class="t-label">Slippage, share of half-spread</span><input name="slippage" inputmode="decimal" value="${B.slippage}"></label>
@@ -99,32 +108,50 @@ function builder(sym) {
   void a; void exps;
 }
 
+// The chain's own reason when nothing is quoted (the free feed outside market hours), or ''.
+const noQuotes = () => { const d = R.data; if (!d) return ''; if (d.unusable) return clean(d.unusable); const rows = (d.table || {}).rows || []; return rows.length && !rows.some((r) => isNum(r.mid)) ? 'No contract at this expiry has a two-sided quote right now.' : ''; };
+// A leg's own quote, from what the server priced it at: bid and ask, the mid, the 100-share contract, liquidity.
+function legQuote(l) {
+  const a = B.analysis; if (!a || l.type === 'stock') return '';
+  const m = (a.legs || []).find((x) => x.type === l.type && x.strike === l.strike && x.expiry === l.expiry && x.side === l.side);
+  const liq = (a.leg_liquidity || []).find((x) => x.type === l.type && x.strike === l.strike && x.expiry === l.expiry);
+  if (!m || !isNum(m.mid)) return '';
+  return `Bid ${num(m.bid)}, ask ${num(m.ask)}, mid ${num(m.mid)}: ${money(m.mid * 100 * l.qty, 2)} for ${l.qty} contract${l.qty === 1 ? '' : 's'} of 100 shares${liq && liq.label ? `. Liquidity: ${liq.label.toLowerCase()}` : ''}.`;
+}
+const quotedAt = (iso) => (iso ? `Quotes read ${etStamp(iso)}${((D.session || {}).prices || {}).phase === 'regular' ? ', delayed about 15 minutes' : ', from the last session the feed has'}` : '');
 function result(sym) {
   if (B.analyzing) return skeleton('chart', 1, 'Pricing the position');
   if (B.error) return html`<div class="state err" role="alert"><p class="t-h3">The position could not be priced</p><p>${clean(B.error)}</p></div>`;
   const a = B.analysis;
   if (!B.legs.length || !a) return html`<p class="quiet">No position yet. A template fills the legs from the ${R.expiry ? shortDate(R.expiry) : 'selected'} expiry; Add in the table puts in one contract.</p>`;
   const en = a.entry || {}, gk = a.greeks || {};
-  const mp = a.max_profit_unbounded ? 'No cap (it rises with the price)' : money(a.max_profit, 0);
-  const ml = a.max_loss_unbounded ? 'No limit (a short call has no ceiling)' : money(Math.abs(a.max_loss), 0);
+  // the expiry figures are from the mid entry; "no limit" is said for what the position does, not for one kind of leg
+  const mp = a.max_profit_unbounded ? 'No cap: it gains as long as the price rises' : money(a.max_profit, 2);
+  const ml = a.max_loss_unbounded ? 'No limit: it loses as long as the price rises' : a.cannot_lose_at_quotes ? 'Nothing, at these quotes' : money(-a.max_loss, 2);
+  const withinUp = !!(a.calendar && a.bounds_note && !a.max_profit_unbounded), withinDown = !!(a.calendar && a.bounds_note && !a.max_loss_unbounded && !a.cannot_lose_at_quotes), within = withinUp || withinDown;
+  const spotY = (() => { const c = a.curves || {}; if (!c.price) return null; let k = 0; c.price.forEach((x, i) => { if (Math.abs(x - a.spot) < Math.abs(c.price[k] - a.spot)) k = i; }); return c.today[k]; })();
   const sc = a.scenarios || {}, when = B.when;
   const rows = (sc.rows || []).filter((r) => r.when === when);
   const whens = [...new Set((sc.rows || []).map((r) => r.when))];
-  return html`<dl class="kv tiles" style="--kv:3">
+  return html`${a.quotes_note ? html`<p class="stale" role="alert">${clean(a.quotes_note)}</p>` : ''}
+    <dl class="kv tiles" style="--kv:3">
       <div><dt>Entry at the mid</dt><dd>${paid(en.mid)}</dd></div>
       <div><dt>Crossing the spread (buy at the ask, sell at the bid)</dt><dd>${paid(en.natural)}</dd></div>
       <div><dt>With your slippage and fees</dt><dd>${paid(en.with_slippage_and_fees)}</dd></div>
-      <div><dt>Most it can make at expiry</dt><dd class="up">${a.bounds_note ? clean(a.bounds_note) : mp}</dd></div>
-      <div><dt>Most it can lose at expiry</dt><dd class="down">${a.bounds_note ? 'See the note' : ml}<small class="t-muted"> Not your broker's margin requirement.</small></dd></div>
+      <div><dt>Most it can make at expiry, from the mid</dt><dd class="up">${mp}${withinUp ? html`<small class="t-muted"> Within the drawn prices.</small>` : ''}</dd></div>
+      <div><dt>Most it can lose at expiry, from the mid</dt><dd class="down">${ml}${withinDown ? html`<small class="t-muted"> Within the drawn prices.</small>` : ''}<small class="t-muted"> Not your broker's margin requirement.</small></dd></div>
       <div><dt>Breakeven at expiry</dt><dd>${(a.breakevens_at_expiry || []).length ? a.breakevens_at_expiry.map((b) => num(b)).join(' and ') : 'None in range'}</dd></div></dl>
+    ${within ? html`<p class="asof">${clean(a.bounds_note)}</p>` : ''}
+    <p class="asof">${quotedAt(a.fetched_at)}${a.fetched_at ? '. ' : ''}Priced ${B.pricedAt ? etStamp(new Date(B.pricedAt).toISOString()) : 'now'}: a model value is an estimate, the mid is half way between a quoted bid and ask, and neither is a fill.</p>
     <div class="chart-slot" data-chart="payoff"></div>
     <p class="asof">Solid: at expiry. Gold: today. Dashed: in ${num((a.first_expiry_days || 0) / 2, 0)} days. The line marked Now is the price now.</p>
+    ${isNum(spotY) && Math.abs(spotY) > Math.max(1, 0.01 * Math.abs(en.mid || 0)) ? html`<p class="asof">At today's price the model values the position at ${signedMoney(spotY, 2)} against its mid entry: the model holds one implied volatility per strike, the out-of-the-money side's, which is not exactly where each leg is quoted.</p>` : ''}
     ${how(html`<p>The expiry line is exact from the mid entry. Today's and the dashed lines are model values that hold each leg's current implied volatility; the dashed line is halfway to the first expiry.</p>`)}
     <p><b>Greeks:</b> delta ${num(gk.delta_shares, 0)} shares, gamma ${num(gk.gamma_per_dollar, 2)} per dollar, decay ${money(gk.theta_per_day, 2)} a day, ${money(gk.vega_per_vol_pt, 2)} per volatility point.</p>
     ${rows.length ? html`<h3>If the price and the volatility change</h3>
-      <div class="seg" role="group" aria-label="When">${whens.map((w) => html`<button type="button" data-v2-when="${w}" aria-pressed="${w === when}">${w === 'now' ? 'Now' : w === 'expiry' || w === 'at expiry' ? 'At expiry' : `In ${num(B.days || (a.first_expiry_days || 0) / 2, 0)} days`}</button>`)}</div>
-      <div class="tscroll"><table class="t scen"><thead><tr><th>IV change</th>${(sc.moves_pct || []).map((m) => html`<th>${signed(m, 0)}</th>`)}</tr></thead>
-        <tbody>${rows.map((r) => html`<tr><td>${signed(r.iv_shift_pts, 0, ' pts')}</td>${r.pnl.map((p) => html`<td class="${p > 0 ? 'up' : p < 0 ? 'down' : ''}">${signed(p, 0, '')}</td>`)}</tr>`)}</tbody></table></div>` : ''}
+      <div class="seg" role="group" aria-label="When">${whens.map((w) => html`<button type="button" data-v2-when="${w}" aria-pressed="${w === when}">${capFirst(w)}</button>`)}</div>
+      <div class="tscroll"><table class="t scen"><caption class="sr">Profit or loss in dollars, by the move in price (columns) and the change in implied volatility (rows)</caption><thead><tr><th scope="col">IV change</th>${(sc.moves_pct || []).map((m) => html`<th scope="col">Price ${signed(m, 0)}</th>`)}</tr></thead>
+        <tbody>${rows.map((r) => html`<tr><th scope="row">${signed(r.iv_shift_pts, 0, ' pts')}</th>${r.pnl.map((p) => html`<td class="${p > 0 ? 'up' : p < 0 ? 'down' : ''}">${signedMoney(p, 0)}</td>`)}</tr>`)}</tbody></table></div>` : ''}
     ${(a.flags || []).map((f) => html`<p class="stale">${clean(f.text || f)}</p>`)}
     ${(a.events || []).length ? html`<ul class="plain">${a.events.map((ev) => html`<li>${clean(ev.text)}</li>`)}</ul>` : ''}
     <details class="more-inline"><summary>Liquidity and assumptions</summary>
@@ -155,7 +182,12 @@ async function rows(expiry, side) {
   mine.cache[key] = (d.table || {}).rows || [];   // into this render's cache, never the next symbol's
   return mine.cache[key];
 }
-const nearest = (list, target) => list.filter((r) => r.mid).reduce((best, r) => (!best || Math.abs(Math.abs(r.delta) - target) < Math.abs(Math.abs(best.delta) - target) ? r : best), null);
+// The quoted contract nearest a delta, within 0.15 of it, and never one too wide to trade: a stale deep
+// in-the-money call at delta 1.00 was the "0.50" pick for a long call, and both legs of a bull call spread.
+const usable = (r) => isNum(r.mid) && isNum(r.delta) && ((r.liquidity || {}).grade !== 'not_tradable');
+const nearest = (list, target) => { const best = list.filter(usable).reduce((b, r) => (!b || Math.abs(Math.abs(r.delta) - target) < Math.abs(Math.abs(b.delta) - target) ? r : b), null); return best && Math.abs(Math.abs(best.delta) - target) <= 0.15 ? best : null; };
+// a template's strikes in the order its shape needs, each its own
+const ordered = (legs, rule) => legs.every(Boolean) && rule(legs.filter((l) => l.type !== 'stock').map((l) => l.strike));
 
 async function template(id) {
   const exp = R.expiry;
@@ -173,7 +205,7 @@ async function template(id) {
     else if (id === 'bear_put') legs = [L(p(0.5), 'long'), L(p(0.3), 'short')];
     else if (id === 'covered_call') legs = [{ type: 'stock', side: 'long', qty: 100 }, L(c(0.3), 'short')];
     else if (id === 'csp') legs = [L(p(0.3), 'short')];
-    else if (id === 'straddle') { const k = c(0.5); legs = [L(k, 'long'), L(puts.find((r) => r.strike === (k || {}).strike), 'long')]; }
+    else if (id === 'straddle') { const k = c(0.5); legs = [L(k, 'long'), L(puts.filter(usable).find((r) => r.strike === (k || {}).strike), 'long')]; }
     else if (id === 'strangle') legs = [L(c(0.25), 'long'), L(p(0.25), 'long')];
     else if (id === 'iron_condor') legs = [L(p(0.10), 'long'), L(p(0.20), 'short'), L(c(0.20), 'short'), L(c(0.10), 'long')];
     else if (id === 'calendar') {
@@ -181,10 +213,12 @@ async function template(id) {
       const later = ((R.data || {}).listed_expiries || []).find((x) => x.dte >= cur.dte + 20);
       if (!later) throw new Error('No later expiry 20 or more days after this one for a calendar.');
       const back = await rows(later.expiry, 'call'); const k = c(0.5);
-      legs = [L(k, 'short'), L(back.find((r) => r.strike === (k || {}).strike) || nearest(back, 0.5), 'long')];
+      legs = [L(k, 'short'), L(back.filter(usable).find((r) => r.strike === (k || {}).strike) || nearest(back, 0.5), 'long')];
     }
     if (!stillHere(g) || mine !== B) return;
-    if (legs.some((l) => !l)) throw new Error('This expiry has no quoted contract near the deltas the template needs.');
+    if (legs.some((l) => !l)) throw new Error('This expiry has no tradable quoted contract near the deltas the template needs.');
+    const RULES = { bull_call: ([a, b]) => a < b, bear_put: ([a, b]) => a > b, strangle: ([c2, p2]) => c2 > p2, iron_condor: ([a, b, c2, d]) => a < b && b < c2 && c2 < d };
+    if (RULES[id] && !ordered(legs, RULES[id])) throw new Error('The quoted strikes at this expiry are too close together for this shape: its legs would share a strike or come out of order.');
     B.legs = legs;
     await analyze();
   } catch (e) { if (!stillHere(g) || mine !== B) return; B.analyzing = false; B.error = e.message; paintBuilder(); }
@@ -197,7 +231,7 @@ async function analyze() {
   try {
     const out = await api.post(`/api/options/${encodeURIComponent(D.sym)}/analyze`, { legs: B.legs, slippage: B.slippage, fee_per_contract: B.fee, days_forward: B.days || undefined }, { timeout: 45000 });
     if (!stillHere(g) || mine !== B) return;
-    B.analysis = out;
+    B.analysis = out; B.pricedAt = Date.now(); saveState();
     const whens = [...new Set(((B.analysis.scenarios || {}).rows || []).map((r) => r.when))];
     if (!whens.includes(B.when)) B.when = whens[0] || 'now';
   } catch (e) { if (!stillHere(g) || mine !== B) return; B.analysis = null; B.error = e.message || 'The server could not price it.'; }
@@ -252,26 +286,39 @@ function research() {
     rs = all.slice(lo, lo + 15);
   }
   return html`${head}
-    <p class="asof">${shortDate(s.expiry)}, ${s.dte} days.${ivLine} Price ${num(d.spot)}. Showing ${tbl.shown} of ${tbl.total}.</p>
+    <p class="asof">${shortDate(s.expiry)}, ${s.dte} days.${ivLine} Price ${num(d.spot)}. Showing ${tbl.shown} of ${tbl.total}.${d.fetched_at ? ` ${quotedAt(d.fetched_at)}.` : ''}</p>
     ${(d.events || []).filter((e) => /report/i.test(e.text || '')).length ? html`<ul class="plain events-note">${d.events.filter((e) => /report/i.test(e.text || '')).map((e) => html`<li>${clean(e.text)}</li>`)}</ul>` : ''}
     <div class="tscroll"><table class="t contracts"><caption class="sr">${R.side === 'call' ? 'Calls' : 'Puts'} expiring ${shortDate(s.expiry)}</caption>
       <thead><tr><th>Strike</th><th>Delta</th><th>Bid / ask</th><th>Spread</th><th>IV</th><th>Breakeven</th><th>Cost</th>${R.more ? html`<th>Decay a day</th><th>Per vol pt</th><th>ITM, model</th><th>OI / volume</th><th>Early exercise</th>` : ''}<th><span class="sr">Add</span></th></tr></thead>
-      <tbody>${rs.map((r) => html`<tr class="${Math.abs(r.moneyness_pct) < 1.5 ? 'atm' : ''}">
-        <td><b>${num(r.strike, r.strike % 1 ? 1 : 0)}</b> <small class="t-muted">${signed(r.moneyness_pct, 1)}</small></td><td>${num(r.delta, 2)}</td>
+      <tbody>${rs.map((r, n) => html`<tr class="${Math.abs(r.moneyness_pct) < 1.5 ? 'atm' : ''}">
+        <td><b>${num(r.strike, r.strike % 1 ? 1 : 0)}</b> <small class="t-muted">${signed(r.moneyness_pct, 1)}</small><button type="button" class="icon-btn op-rowbtn" data-v2-op-row="${n}" aria-expanded="false" aria-controls="op-rd-${n}" aria-label="The ${num(r.strike, 0)} ${r.type}'s details">${icon('chev')}</button></td><td class="op-wide">${num(r.delta, 2)}</td>
         <td>${num(r.bid)} / ${num(r.ask)} <small class="t-muted">mid ${num(r.mid)}</small></td>
         <td><span class="liq liq-${(r.liquidity || {}).grade}" title="${((r.liquidity || {}).reasons || []).join(' ')}">${(r.liquidity || {}).label || ''}</span> <small class="t-muted">${num(r.spread_pct, 1)}%</small></td>
-        <td>${num(r.iv_pct, 1)}%${r.iv_source === 'feed' || r.iv_source === 'filled' ? html` <small class="t-muted">feed</small>` : ''}</td>
-        <td>${num(r.breakeven_ask)} <small class="t-muted">${signed(r.breakeven_move_pct, 1)}</small></td><td>${money(r.cost_ask_contract, 0)}</td>
+        <td class="op-wide">${num(r.iv_pct, 1)}%${r.iv_source === 'filled' ? html` <small class="t-muted">assumed</small>` : r.iv_source === 'feed' ? html` <small class="t-muted">feed</small>` : ''}</td>
+        <td class="op-wide">${num(r.breakeven_ask)} <small class="t-muted">${signed(r.breakeven_move_pct, 1)}</small></td><td class="op-wide">${money(r.cost_ask_contract, 0)}</td>
         ${R.more ? html`<td>${money(r.theta_per_contract, 2)}</td><td>${money(r.vega_per_contract, 2)}</td><td>${isNum(r.p_itm_model) ? `${num(r.p_itm_model * 100, 0)}%` : 'n/a'}</td><td>${num(r.open_interest, 0)} / ${num(r.volume, 0)}</td><td>${r.exercise === 'european' ? 'European' : isNum(r.early_exercise_premium_contract) ? (r.early_exercise_premium_contract < 0.5 ? 'Under $1' : money(r.early_exercise_premium_contract, 0)) : 'n/a'}</td>` : ''}
-        <td>${r.mid ? html`<button type="button" class="btn btn-sm" data-v2-add-leg="${r.strike}" aria-label="Add the ${num(r.strike, 0)} ${r.type} to the position">Add</button>` : ''}</td></tr>`)}</tbody></table></div>
+        <td>${r.mid && (r.liquidity || {}).grade !== 'not_tradable' ? html`<button type="button" class="btn btn-sm" data-v2-add-leg="${r.strike}" aria-label="Add the ${num(r.strike, 0)} ${r.type} to the position">Add</button>` : html`<span class="t-muted">Not tradable</span>`}</td></tr>
+        <tr class="op-detail" id="op-rd-${n}" hidden><td colspan="${R.more ? 13 : 8}"><dl class="kv"><div><dt>Delta</dt><dd>${num(r.delta, 2)}</dd></div><div><dt>IV</dt><dd>${num(r.iv_pct, 1)}%${r.iv_source === 'filled' ? ' (assumed)' : ''}</dd></div><div><dt>Breakeven at expiry</dt><dd>${num(r.breakeven_ask)} (${signed(r.breakeven_move_pct, 1)})</dd></div><div><dt>One contract at the ask</dt><dd>${money(r.cost_ask_contract, 0)}</dd></div><div><dt>Open interest / volume</dt><dd>${num(r.open_interest, 0)} / ${num(r.volume, 0)}</dd></div><div><dt>In the money, model</dt><dd>${isNum(r.p_itm_model) ? `${num(r.p_itm_model * 100, 0)}%` : 'n/a'}</dd></div></dl>${((r.liquidity || {}).reasons || []).length ? html`<p class="t-muted">${r.liquidity.reasons.map(clean).join(' ')}</p>` : ''}</td></tr>`)}</tbody></table></div>
+    <div id="op-sum">${sumBar()}</div>
     ${all.length > 15 ? html`<button type="button" class="textlink" data-v2-op-all aria-expanded="${!!R.allStrikes}">${R.allStrikes ? 'Show the 15 nearest the money' : `Show all ${all.length} strikes`}</button>` : ''}
     ${how((d.events || []).filter((e) => !/report/i.test(e.text || '')).map((e) => html`<p>${clean(e.text)}</p>`),
       D.t && D.t.data_caveat ? html`<p>${clean(D.t.data_caveat)}</p>` : '',
       html`<p>Cost is one contract (100 shares) at the ask, before fees. Breakeven at expiry is the strike plus or minus the ask. ITM (model) is N(d2) under risk-neutral pricing: not a forecast, and not a chance of profit. ${clean(((d.liquidity_method || {}).text) || '')}</p>`)}`;
 }
 
-async function loadResearch() {
-  R.loading = true; R.error = null; paintResearch();
+// What the position is now, at the foot of the chain. An Add says it too, in its toast, with a way to the
+// builder: the page used to jump to the builder on every Add, which lost the reader's place in the chain.
+function sumBar() {
+  const a = B.analysis;
+  if (!B.legs.length || !a) return '';
+  return html`<div class="op-sum" role="status"><span>${B.legs.length} leg${B.legs.length === 1 ? '' : 's'}: ${paid((a.entry || {}).mid)} at the mid${a.max_loss_unbounded ? ', no limit to the loss' : a.cannot_lose_at_quotes ? ', the quotes look stale' : isNum(a.max_loss) ? `, most it can lose ${money(-a.max_loss, 2)}` : ''}.</span> <button type="button" class="btn btn-sm" data-v2-op-sum>See the position</button></div>`;
+}
+const paintSum = () => { const h = $('#op-sum', mainEl); if (h) draw(h, sumBar()); };
+const sumLine = () => { const a = B.analysis; return a ? ` ${B.legs.length} leg${B.legs.length === 1 ? '' : 's'}, ${paid((a.entry || {}).mid)} at the mid.` : ''; };
+function toBuilder() { const h = $('#pb-h', mainEl); if (h) { h.setAttribute('tabindex', '-1'); h.scrollIntoView({ block: 'start' }); h.focus({ preventScroll: true }); } }
+
+async function loadResearch({ quiet } = {}) {
+  if (!quiet) { R.loading = true; R.error = null; paintResearch(); }
   const my = ++R.seq, g = GEN;
   const [lo, hi] = DELTAS[R.delta] || DELTAS.any;
   const q = new URLSearchParams({ side: R.side, delta_lo: lo, delta_hi: hi, min_oi: R.minOi || 0, include_unquoted: R.unquoted ? 'true' : 'false' });
@@ -279,10 +326,10 @@ async function loadResearch() {
   if (Number(R.maxSpread)) q.set('max_spread', R.maxSpread);
   try {
     // 60 s, as the ticker snapshot it waits on gets: at 30 s the table timed out twice just after the open (2026-10-19)
-    const d = await api.get(`/api/options/${encodeURIComponent(D.sym)}/research?${q}`, { ttl: 60000, timeout: 60000 });
+    const d = await api.get(`/api/options/${encodeURIComponent(D.sym)}/research?${q}`, { ttl: quiet ? 0 : 60000, force: !!quiet, timeout: 60000 });
     if (my !== R.seq || !stillHere(g)) return;
-    R.data = d; R.expiry = d.expiry;
-  } catch (e) { if (my !== R.seq || !stillHere(g)) return; R.error = e; }
+    R.data = d; R.expiry = d.expiry; saveState();
+  } catch (e) { if (my !== R.seq || !stillHere(g)) return; if (!quiet) R.error = e; }
   R.loading = false;
   paintResearch(); paintBuilder();
 }
@@ -293,7 +340,7 @@ function paintResult() { const h = $('#op-result', mainEl); if (h) { draw(h, res
 function paintBuilder() {
   const h = $('#op-builder', mainEl); if (!h) return;
   const f = document.activeElement && h.contains(document.activeElement) ? Object.entries(document.activeElement.dataset || {})[0] : null;
-  draw(h, builder(D.sym)); mountCharts(h, payoffMaker());
+  draw(h, builder(D.sym)); mountCharts(h, payoffMaker()); paintSum();
   if (f) { const el = $(`[data-${f[0].replace(/[A-Z]/g, (m) => '-' + m.toLowerCase())}="${CSS.escape(f[1])}"]`, h); if (el) el.focus(); }
 }
 function paintTop() {
@@ -383,6 +430,8 @@ export async function render(main, route) {
   D = { sym, extra: {}, budget: readBudget() };
   R = { side: f.side, delta: f.delta, maxSpread: f.maxSpread, minOi: f.minOi, unquoted: f.unquoted, more: false, expiry: null, data: null, seq: 0 };
   B = { legs: [], analysis: null, analyzing: false, error: null, slippage: f.slippage, fee: f.fee, days: null, when: 'now', cache: {}, template: null };
+  const kept = readState(sym);
+  if (kept && kept.expiry) { R.expiry = kept.expiry; B.legs = Array.isArray(kept.legs) ? kept.legs.map((l) => Object.assign({}, l)) : []; B.template = kept.template || null; }
   store.pushRecent(sym);
   document.title = `${sym} Options, Optic`;
   provideContext(() => ({ view: 'swing', ticker: sym, quote: D.quote, gex: (D.t || {}).gex, greeks: (D.t || {}).greeks, flow: (D.t || {}).flow, vol_surface: (D.t || {}).vol_surface, iv_rank: (D.t || {}).iv_rank, entry_plan: (D.t || {}).entry_plan, verdict: (D.t || {}).verdict, naked_ideas: (D.t || {}).naked_ideas, strategy_ideas: (D.t || {}).strategy_ideas, rate: (D.t || {}).rate,
@@ -395,12 +444,23 @@ export async function render(main, route) {
   core(sym).then((c) => { if (!stillHere(g)) return; D.quote = fresher(D.quote, c.quote); D.session = c.session; D.quoteError = c.quoteError; paintTop(); });
   api.get(`/api/earnings/${encodeURIComponent(sym)}`, { ttl: 600000, timeout: 45000 }).then((e) => { if (stillHere(g)) { D.earn = e; paintTop(); } }).catch(() => {});
   loadTicker();
-  loadResearch();
-  // A light refresh while the market trades, of the readings only.
+  loadResearch().then(() => {
+    // a position kept from earlier in the visit is priced again, if its expiry is still listed
+    if (!stillHere(g) || !B.legs.length) return;
+    const listed = (((R.data || {}).listed_expiries) || []).map((x) => x.expiry);
+    if (B.legs.some((l) => l.type !== 'stock' && !listed.includes(l.expiry))) { B.legs = []; B.template = null; saveState(); paintBuilder(); return; }
+    analyze();
+  });
+  // While the market trades: the readings every minute, and the contracts and the position every two, so a
+  // quote on screen is never more than a couple of minutes older than the feed.
   clearInterval(refresh);
+  let beat = 0;
   refresh = setInterval(() => {
     const ph = ((D.session || {}).prices || {}).phase || ((D.session || {}).session || {}).phase;
-    if (live && document.visibilityState === 'visible' && ['pre', 'regular', 'after'].includes(ph)) loadTicker({ quiet: true });
+    if (!live || document.visibilityState !== 'visible' || !['pre', 'regular', 'after'].includes(ph)) return;
+    loadTicker({ quiet: true });
+    beat += 1;
+    if (beat % 2 === 0) { loadResearch({ quiet: true }); if (B.legs.length && !B.analyzing) analyze(); }
   }, 60000);
 }
 
@@ -414,19 +474,29 @@ function wire(main) {
     let b;
     if ((b = t('[data-v2-tpl]'))) { B.template = b.dataset.v2Tpl; B.analyzing = true; paintBuilder(); await template(b.dataset.v2Tpl); return; }
     if ((b = t('[data-v2-leg-flip]'))) { const l = B.legs[Number(b.dataset.v2LegFlip)]; l.side = l.side === 'long' ? 'short' : 'long'; B.template = null; await analyze(); return; }
-    if ((b = t('[data-v2-leg-del]'))) { B.legs.splice(Number(b.dataset.v2LegDel), 1); B.template = null; await analyze(); return; }
+    if ((b = t('[data-v2-leg-del]'))) { B.legs.splice(Number(b.dataset.v2LegDel), 1); B.template = null; saveState(); await analyze(); return; }
+    if ((b = t('[data-v2-leg-step]'))) { const [i, d] = b.dataset.v2LegStep.split(':').map(Number); const l = B.legs[i]; const max = l.type === 'stock' ? 100000 : 100; const q = Math.max(1, Math.min(max, l.qty + d * (l.type === 'stock' ? 100 : 1))); if (q !== l.qty) { l.qty = q; await analyze(); const again = $(`[data-v2-leg-step="${i}:${d}"]`, main); if (again && !again.disabled) again.focus(); } return; }
+    if ((b = t('[data-v2-op-row]'))) { const r = document.getElementById(b.getAttribute('aria-controls')); const open = b.getAttribute('aria-expanded') !== 'true'; if (r) r.hidden = !open; b.setAttribute('aria-expanded', String(open)); return; }
+    if (t('[data-v2-op-sum]')) { toBuilder(); return; }
     if ((b = t('[data-v2-when]'))) { B.when = b.dataset.v2When; paintResult(); const again = $(`[data-v2-when="${B.when}"]`, main); if (again) again.focus(); return; }
     if ((b = t('[data-v2-op-side]'))) { R.side = b.dataset.v2OpSide; saveFilters(); loadResearch(); return; }
     if (t('[data-v2-op-all]')) { R.allStrikes = !R.allStrikes; paintResearch(); const again = $('[data-v2-op-all]', main); if (again) again.focus(); return; }
     if ((b = t('[data-v2-op-more]'))) { R.more = !R.more; paintResearch(); const again = $('[data-v2-op-more]', main); if (again) again.focus(); return; }
     if ((b = t('[data-v2-add-leg]'))) {
-      if (B.legs.filter((l) => l.type !== 'stock').length >= 4) { toast('Up to four option legs.'); return; }
+      if (B.legs.filter((l) => l.type !== 'stock').length >= 4 && !B.legs.some((l) => String(l.strike) === b.dataset.v2AddLeg && l.type === R.side)) { toast('Up to four option legs.'); return; }
       const r = ((R.data.table || {}).rows || []).find((x) => String(x.strike) === b.dataset.v2AddLeg);
       if (!r) return;
-      B.legs.push({ type: r.type, side: 'long', qty: 1, strike: r.strike, expiry: r.expiry }); B.template = null;
-      toast(`Added the ${num(r.strike, 0)} ${r.type} to the position.`);
+      // the builder's repaint puts focus back where it was; it is here, so the page does not jump to the builder
+      b.focus({ preventScroll: true });
+      // the same contract again is one more of it, not a second leg (bought and sold, it would cancel)
+      const same = B.legs.find((l) => l.type === r.type && l.strike === r.strike && l.expiry === r.expiry);
+      let said;
+      if (same) { same.qty = Math.min(100, same.qty + 1); said = `${legLabel(same)} now.`; }
+      else { B.legs.push({ type: r.type, side: 'long', qty: 1, strike: r.strike, expiry: r.expiry }); said = `Added the ${num(r.strike, 0)} ${r.type}.`; }
+      B.template = null;
+      // the reader stays on the chain; the toast says what the position is now, and goes to it on a press
       await analyze();
-      const s = $('#pb-h', main); if (s) s.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      if (stillHere(GEN)) toast(`${said}${sumLine()}`, { action: 'See the position', run: toBuilder });
       return;
     }
     if ((b = t('[data-v2-opg]'))) { showGroup(Number(b.dataset.v2Opg)); return; }
@@ -442,7 +512,13 @@ function wire(main) {
   });
   main.addEventListener('change', async (e) => {
     const el = e.target;
-    if (el.matches('[data-v2-op-expiry]')) { R.expiry = el.value; B.cache = {}; loadResearch(); return; }
+    if (el.matches('[data-v2-op-expiry]')) {
+      // legs priced on the old expiry would be read as the new one: they go, and the reader is told
+      const had = B.legs.filter((l) => l.type !== 'stock').length;
+      R.expiry = el.value; B.cache = {};
+      if (had) { B.legs = B.legs.filter((l) => l.type === 'stock'); B.analysis = null; B.template = null; toast(`The ${had} option leg${had === 1 ? ' was' : 's were'} on another expiry, so the position was cleared. Pick a template or Add a contract on ${shortDate(el.value)}.`); paintBuilder(); }
+      saveState(); loadResearch(); return;
+    }
     if (el.matches('[data-v2-op-set]')) { const k = el.dataset.v2OpSet; R[k] = el.type === 'checkbox' ? el.checked : el.value; saveFilters(); loadResearch(); return; }
     if (el.matches('[data-v2-leg-qty]')) { const l = B.legs[Number(el.dataset.v2LegQty)]; const q = Math.round(Number(el.value)); const max = l.type === 'stock' ? 100000 : 100; if (q >= 1 && q <= max) { l.qty = q; await analyze(); } else { toast(`Quantity is 1 to ${num(max, 0)}.`); el.value = l.qty; } return; }
     if (el.matches('[data-v2-lab-iv]')) { const v = Number(el.value); if (v >= 5 && v <= 200) { D.lab.iv = v; paintMore(); } }

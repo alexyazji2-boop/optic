@@ -37,7 +37,14 @@
 .toast-act { margin-left: 10px; min-height: var(--tap); min-width: var(--tap); padding: 0 12px; border-radius: var(--r-ctl-in); border: 1px solid rgba(244, 239, 229, .4); background: transparent; color: inherit; font-weight: 600; cursor: pointer; }
 .toast { pointer-events: none; display: flex; align-items: center; visibility: hidden; transition: opacity var(--d), transform var(--d) var(--ease), visibility 0s linear var(--d); } .toast.show { pointer-events: auto; visibility: visible; transition: opacity var(--d), transform var(--d) var(--ease); }
 /* a phone: above the fixed phone bar, never on it */
-@media (max-width: 860px) { .toast { bottom: calc(76px + env(safe-area-inset-bottom, 0px)); } }
+/* A toast is as wide as its words need, up to the screen less the gutters (left at 50% alone held it to half
+   the screen, so an action's toast wrapped a word a line); a phone's spans the gutters, above the phone bar. */
+.toast { width: max-content; border-radius: var(--r-md); }
+@media (max-width: 860px) {
+  .toast { bottom: calc(76px + env(safe-area-inset-bottom, 0px)); left: 16px; right: 16px; width: auto; max-width: none; transform: translateY(8px); justify-content: space-between; gap: 10px; }
+  .toast.show { transform: none; }
+  .toast-act { margin-left: 0; flex: none; }
+}
 .toast[data-kind="bad"] { background: var(--c-neg); }
 .more-list { display: grid; gap: 2px; }
 
@@ -114,6 +121,26 @@
 .sc-t th[scope="row"] { position: sticky; left: 0; z-index: 1; background: var(--c-raised); text-align: left; }
 .sc-acts { white-space: nowrap; text-align: right; } .sc-acts .icon-btn { display: inline-grid; vertical-align: middle; } .sc-acts .icon-btn svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.7; }
 .sc-next { margin-top: 8px; } .flt-count { margin: 0 0 8px; display: flex; align-items: center; gap: 12px; }
+/* Options: a leg's quote under it, a quantity stepper, the position's summary at the foot of the chain */
+.legs-list li { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 12px; }
+.leg-main { display: grid; gap: 2px; min-width: 0; } .leg-acts { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.leg-acts .qty { display: inline-flex; align-items: center; gap: 2px; } .leg-acts .qty .field { width: 72px; } .leg-acts .qty input { text-align: center; }
+.op-sum { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; margin-top: 10px; padding: 8px 14px; border: 1px solid var(--c-line); border-radius: var(--r-md); background: var(--c-raised); font-size: var(--t-md); }
+.costs .field input { min-width: 72px; }
+@media (pointer: coarse), (max-width: 860px) { .leg-acts .qty .field { min-height: calc(var(--tap) + 2px); } .leg-acts .qty input { min-height: var(--tap); } }
+.op-rowbtn { display: none; } table.t.contracts tr.op-detail td { background: var(--c-plane-2); white-space: normal; } .op-detail .kv { --kv: 3; }
+@media (max-width: 640px) {
+  /* a phone: strike, the quote, liquidity and Add in the row; the rest opens under it */
+  table.contracts .op-wide, table.contracts thead th:nth-child(2), table.contracts thead th:nth-child(5), table.contracts thead th:nth-child(6), table.contracts thead th:nth-child(7) { display: none; }
+  .op-rowbtn { display: inline-grid; width: var(--tap); height: var(--tap); vertical-align: middle; }
+  /* each cell's second figure (moneyness, the mid, the spread's percent) goes under its first, so the four columns fit */
+  table.t.contracts td, table.t.contracts th { white-space: normal; padding-left: 6px; padding-right: 6px; }
+  table.contracts td > small, table.contracts td > .liq + small { display: block; }
+  table.contracts td:first-child .op-rowbtn { float: right; margin: -6px -6px 0 0; }
+  .op-rowbtn[aria-expanded="true"] svg { transform: rotate(90deg); }
+  .op-detail .kv { --kv: 2; }
+  .leg-acts .qty .field { width: 68px; }
+}
 .hit-list { margin: 0; padding: 0; list-style: none; border-top: 1px solid var(--c-line); }
 .hit-list li { padding: 14px 4px; border-bottom: 1px solid var(--c-line-2); display: grid; gap: 4px; }
 .hit-list li.is-new { box-shadow: inset 3px 0 0 var(--c-ink-3); padding-left: 14px; }   /* new: a mark, not gold (gold is selection and the main action) */
@@ -284,7 +311,7 @@ table.scen td { font-weight: 600; }
   .builder .section-head { align-items: flex-start; }
   /* the templates wrap: a sideways-scrolling row clipped its last chips with no sign more were there */
   .tpl { gap: 6px; }
-  .tpl .chip { min-height: 40px; padding: 0 12px; font-size: var(--t-md); }
+  .tpl .chip { min-height: var(--tap); padding: 0 12px; font-size: var(--t-md); }
   .tiles { --kv: 2 !important; }
   .lede-line { font-size: var(--t-lg); margin-top: 12px; }
 }

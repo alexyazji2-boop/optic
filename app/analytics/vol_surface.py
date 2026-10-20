@@ -98,7 +98,7 @@ def apply_clock(chain: pd.DataFrame, now: Optional[datetime] = None) -> pd.DataF
 
 # ----------------------------------------------------------------- the quote
 
-QUOTE_STATES = ("two_sided", "locked", "crossed", "no_bid", "no_ask", "no_quote")
+QUOTE_STATES = ("two_sided", "locked", "crossed", "no_bid", "no_ask", "no_quote", "below_intrinsic")
 
 
 def quote_state(bid: pd.Series, ask: pd.Series) -> np.ndarray:
@@ -232,6 +232,22 @@ def resolve_surface(chain: pd.DataFrame, spot: float, rate: float, div: float,
     out = chain.copy()
     if "quote_state" not in out:
         out = apply_quotes(out)
+    # A two-sided quote whose ask is under the option's intrinsic value is not a market: nobody sells
+    # an option for less than exercising it pays. Off hours the free feed serves such leftovers (the
+    # AAPL 105 call at a mid of 163 with the stock at 343, 2026-10-20), and priced as executable they
+    # made a "bull call spread" that paid to open. They are marked, and get no mid, no spread and no IV.
+    k = out["strike"].to_numpy(dtype=float)
+    calls = out["is_call"].to_numpy(dtype=bool)
+    intrinsic = np.where(calls, np.maximum(float(spot) - k, 0.0), np.maximum(k - float(spot), 0.0))
+    ask = pd.to_numeric(out.get("ask"), errors="coerce").to_numpy(dtype=float)
+    stale = (out["quote_state"].to_numpy() == "two_sided") & np.isfinite(ask) & (ask < intrinsic - 0.01)
+    if stale.any():
+        out.loc[stale, "quote_state"] = "below_intrinsic"
+        for col in ("quote_mid", "spread_abs", "spread_pct"):
+            if col in out:
+                out.loc[stale, col] = np.nan
+        if "mark_source" in out:
+            out.loc[stale, "mark_source"] = "stale"
     out["iv_feed"] = out["iv"]
     filled = out["iv_filled"].astype(bool) if "iv_filled" in out else pd.Series(False, index=out.index)
     solved = solve_iv(out["quote_mid"].to_numpy(), float(spot), out["strike"].to_numpy(),
