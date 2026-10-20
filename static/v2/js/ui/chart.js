@@ -128,9 +128,25 @@ export function lineChart(series, opts = {}) {
       tip.style.left = Math.min(box.width - 170, Math.max(0, (x / W) * box.width - 70)) + 'px';
     };
     const hide = () => { xh.style.display = 'none'; tip.style.display = 'none'; };
+    // Over the cone (past the last close): its outlook, the range options price through the expiry, instead of a
+    // bar's close. Reached by the pointer or by the right arrow from the last close (owner, 2026-10-20).
+    let onCone = false;
+    const showCone = () => {
+      if (!cone) return;
+      onCone = true; k = pts.length - 1;
+      xh.style.display = 'none';
+      const x0 = X(pts.length - 1), x1 = X(slots);
+      tip.style.display = '';
+      tip.innerHTML = `<b>${num(cone.lo, 0)} to ${num(cone.hi, 0)}</b> <span>${cone.expiry ? `through ${shortDate(cone.expiry)}` : 'the range options price'}</span>`
+        + `<em>${Number.isFinite(cone.pct) ? `Options price ±${num(cone.pct)}%` : 'The options market\'s range'}${Number.isFinite(cone.from) ? ` from ${num(cone.from, dp)}` : ''}${cone.event ? `, ${esc(cone.event)}` : ''}. What the market charges for, not a forecast.</em>`;
+      const box = el.getBoundingClientRect();
+      tip.style.left = Math.min(box.width - 220, Math.max(0, (((x0 + x1) / 2) / W) * box.width - 110)) + 'px';
+    };
     el.addEventListener('pointermove', (e) => {
       const box = el.getBoundingClientRect();
       const fx = ((e.clientX - box.left) / box.width) * W;
+      if (cone && fx > X(pts.length - 1) + 4) { showCone(); return; }
+      onCone = false;
       const i = Math.min(pts.length - 1, Math.max(0, Math.round(((fx - pad.l) / (W - pad.l - pad.r)) * slots)));
       show(i);
     });
@@ -139,10 +155,12 @@ export function lineChart(series, opts = {}) {
     el.addEventListener('keydown', (e) => {
       if (e.target !== el) return;
       const jump = e.shiftKey ? 20 : 1;
-      if (e.key === 'ArrowLeft') { show(Math.max(0, k - jump)); e.preventDefault(); }
-      else if (e.key === 'ArrowRight') { show(Math.min(pts.length - 1, k + jump)); e.preventDefault(); }
-      else if (e.key === 'Home') { show(0); e.preventDefault(); }
-      else if (e.key === 'End') { show(pts.length - 1); e.preventDefault(); }
+      const shown = tip.style.display !== 'none';
+      if (e.key === 'ArrowLeft') { if (onCone) { onCone = false; show(pts.length - 1); } else show(Math.max(0, k - jump)); e.preventDefault(); }
+      // past the last close, the right arrow steps onto the cone's outlook
+      else if (e.key === 'ArrowRight') { if (onCone) { /* already there */ } else if (cone && shown && k === pts.length - 1) showCone(); else show(Math.min(pts.length - 1, k + jump)); e.preventDefault(); }
+      else if (e.key === 'Home') { onCone = false; show(0); e.preventDefault(); }
+      else if (e.key === 'End') { onCone = false; show(pts.length - 1); e.preventDefault(); }
     });
     if (opts.onEvent) {
       el.querySelectorAll('.ev-mark').forEach((g) => {

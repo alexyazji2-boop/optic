@@ -71,7 +71,7 @@ function mountChart(main, sym) {
   mountCharts(main, { price: (w) => lineChart(pts, {
     w, h: Math.round(Math.max(220, Math.min(340, w * 0.3))), area: true, label: `${sym} closing price`,
     events: evs, monthStep: range === '1Y' ? 3 : 1, pad: { t: 26, r: 52, b: 24, l: 0 },
-    future: im ? im.sessions : 0, cone: im ? { lo: im.lo, hi: im.hi } : null, focusEnd: true,
+    future: im ? im.sessions : 0, cone: im ? { lo: im.lo, hi: im.hi, pct: im.pct, expiry: im.expiry, from: (D.quote || {}).price } : null, focusEnd: true,
     onEvent: (iso, el) => { const e = evs.find((x) => x.d === iso); if (e) drawer.open({ kicker: `${sym}, earnings`, title: `Reported ${longDate(iso)}`, opener: el, body: html`<p>${sym} reported ${timing[e.r.timing] || ''} on ${fullDate(iso)}. ${e.detail}.</p>${miloButton('Ask Milo about this report', { ask: `How did ${sym} react to the ${shortDate(iso)} report?`, context: `${sym}, the ${shortDate(iso)} report`, symbol: sym })}` }); },
   }) });
 }
@@ -280,6 +280,19 @@ function digest(sym) {
     <p class="asof">${clean(d.describes || '')}</p></section>`;
 }
 
+/* ---------------- what the company is, and its latest news: first on the page (owner, 2026-10-20) ---------------- */
+function about(sym) {
+  const t = D.ticker || {}, q = D.quote || {}, prof = (D.session || {}).profile || {};
+  const news = t.news || {};
+  const name = q.name || sym;
+  const items = [
+    ...(prof.summary ? [[isFundHere(sym) ? `What is ${name}?` : `What does ${name} do?`, html`<p>${clean(prof.summary)}</p>`, '']] : []),
+    ...((news.articles || []).length ? [['Latest headlines', html`<ul class="plain">${news.articles.slice(0, 6).map((a) => html`<li><a href="${a.url}" target="_blank" rel="noopener">${clean(a.title)}</a> <span class="t-muted">${a.publisher}, ${a.age_words || ''}, ${a.tone || ''}</span></li>`)}</ul><a class="textlink" href="${hrefFor('news', sym)}">All headlines on News ${icon('out')}</a>`, news.overall_tone || '']] : []),
+  ];
+  if (!items.length) return '';
+  return html`<section class="section about" aria-label="About ${name}"><div class="more">${items.map(([t1, b, hint]) => html`<details><summary>${t1}<span>${hint ? html`<small>${hint}</small>` : ''}${icon('chev')}</span></summary><div class="inner">${b}</div></details>`)}</div></section>`;
+}
+
 /* ---------------- the rest, one step away ---------------- */
 function more(sym) {
   const t = D.ticker || {}, q = D.quote || {}, prof = (D.session || {}).profile || {};
@@ -292,9 +305,7 @@ function more(sym) {
       ['Volume', compact(q.volume)], ['Average volume', compact(q.avg_volume)], ['Dividend yield', isNum(q.dividend_yield) ? `${num(q.dividend_yield * 100, 2)}%` : 'n/a'], ['Beta', num(q.beta, 2)]];
   const items = [
     ['Key figures', html`<dl class="kv">${kv.map(([k, v]) => html`<div><dt>${k}</dt><dd>${v}</dd></div>`)}</dl>`, ''],
-    ...(cases.available ? [['Bull case and bear case', html`<div class="cases"><div><h3>For</h3><ul class="plain">${(cases.bull || []).map((c) => html`<li><b>${clean(c.claim)}.</b> ${clean(c.detail)}</li>`)}</ul></div><div><h3>Against</h3><ul class="plain">${(cases.bear || []).map((c) => html`<li><b>${clean(c.claim)}.</b> ${clean(c.detail)}</li>`)}</ul></div></div>`, `${(cases.bull || []).length} for, ${(cases.bear || []).length} against`]] : []),
-    ...(prof.summary ? [[isFundHere(sym) ? `What is ${name}?` : `What does ${name} do?`, html`<p>${clean(prof.summary)}</p>`, '']] : []),
-    ...((news.articles || []).length ? [['Latest headlines', html`<ul class="plain">${news.articles.slice(0, 6).map((a) => html`<li><a href="${a.url}" target="_blank" rel="noopener">${clean(a.title)}</a> <span class="t-muted">${a.publisher}, ${a.age_words || ''}, ${a.tone || ''}</span></li>`)}</ul><a class="textlink" href="${hrefFor('news', sym)}">All headlines on News ${icon('out')}</a>`, news.overall_tone || '']] : []),
+    ...(cases.available ? [['Bull case and bear case', html`<div class="cases"><div><h3 class="case-h up">Bull case</h3><ul class="plain">${(cases.bull || []).map((c) => html`<li><b>${clean(c.claim)}.</b> ${clean(c.detail)}</li>`)}</ul></div><div><h3 class="case-h down">Bear case</h3><ul class="plain">${(cases.bear || []).map((c) => html`<li><b>${clean(c.claim)}.</b> ${clean(c.detail)}</li>`)}</ul></div></div>`, `${(cases.bull || []).length} for, ${(cases.bear || []).length} against`]] : []),
     ...(fil.length ? [['Recent SEC filings', html`<ul class="plain">${fil.slice(0, 5).map((f) => html`<li><a href="${f.url}" target="_blank" rel="noopener">${f.form}</a> ${clean(f.what)}, filed ${fullDate(f.filed)}</li>`)}</ul>`, `${Math.min(5, fil.length)} newest`]] : []),
     ['Thesis check', html`<p>Save the conditions your idea depends on, and Optic marks each one as holding or broken. The thesis check is in the classic app.</p><a class="textlink" href="${CLASSIC}#/${sym}">Open the thesis check ${icon('out')}</a>`, ''],
   ];
@@ -314,6 +325,7 @@ function paint(main, sym) {
   draw(main, html`${frameHeader(sym, D, 'overview')}${frameTabs(sym, 'overview', { fund: isFund(D) })}
     ${D.quoteError && !D.quote ? (D.quoteError.kind === 'notfound' ? empty(`Optic has no listing for ${sym}`, 'No quote came back for this symbol. It may be misspelled, delisted, or listed outside the US under another form.', html`<button type="button" class="btn btn-sm" data-v2-open-palette>Search for the company</button>`) : failed(`${sym}'s quote`, D.quoteError, { retry: 'dossier' })) : ''}
     ${((D.framework || {}).freshness || {}).state === 'stale' ? staleLine({ text: clean(D.framework.freshness.text) }) : ''}
+    ${about(sym)}
     <section class="section dchart" aria-label="Price chart">${D.tickerError ? failed('The price history', D.tickerError, { retry: 'dossier' }) : chartBlock(sym)}</section>
     ${D.fwError && D.fvError && D.earnError ? failed('The four answers', D.fwError, { retry: 'dossier' }) : answers(sym)}
     ${longViews(sym)}${combined()}${digest(sym)}${D.ticker ? more(sym) : ''}
