@@ -553,6 +553,7 @@ export function createPriceChart(host, opts) {
     return 'jump';
   }
   nav.addEventListener('pointerdown', (e) => {
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
     if (e.button !== 0) return;
     e.preventDefault();
     try { nav.setPointerCapture(e.pointerId); } catch (err) { /* a pointer the browser no longer tracks */ }
@@ -564,12 +565,13 @@ export function createPriceChart(host, opts) {
     nav.dataset.drag = mode;
   });
   nav.addEventListener('pointermove', (e) => {
+    if (ndrag && e.pointerType === 'mouse' && e.buttons === 0) { ndrag = null; delete nav.dataset.drag; return; }
     const x = navX(e);
     if (!ndrag) { nav.dataset.hover = navMode(x, e.pointerType === 'touch'); return; }
     setView(navWindow(ndrag.mode, ndrag, Math.round((x - ndrag.x) * ndrag.per), N));
   });
   const navUp = () => { ndrag = null; delete nav.dataset.drag; };
-  nav.addEventListener('pointerup', navUp); nav.addEventListener('pointercancel', navUp);
+  nav.addEventListener('pointerup', navUp); nav.addEventListener('pointercancel', navUp); nav.addEventListener('lostpointercapture', navUp);
   // a slider for the keyboard: arrows move a tenth of the view, Page Up and Page Down a whole view, Home and End
   // go to the ends, plus and minus show fewer or more bars
   nav.addEventListener('keydown', (e) => {
@@ -593,7 +595,16 @@ export function createPriceChart(host, opts) {
   /* ---------- pointer ---------- */
   const pt = (e) => { const r = svg.getBoundingClientRect(); return { x: (e.clientX - r.left) * (W / r.width), y: (e.clientY - r.top) * (H / r.height) }; };
   const pointers = new Map();
+  const up = (e) => {
+    pointers.delete(e.pointerId);
+    // a drawing moved is one change to undo, kept when the pointer lifts
+    if (drag && drag.mode && drag.moved) { undo.push(drag.before); if (undo.length > 40) undo.shift(); redo.length = 0; if (S.onDrawings) S.onDrawings(S.drawings); }
+    if (pointers.size < 2 && drag && drag.pinch) drag = null; else if (pointers.size === 0) drag = null;
+  };
   svg.addEventListener('pointerdown', (e) => {
+    // only the main button pans, draws or selects: a right click opened the browser's menu, which swallowed the
+    // release, and the chart then panned with the mouse and no button held (owner, 2026-10-20)
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
     try { svg.setPointerCapture(e.pointerId); } catch (err) { /* a pointer the browser no longer tracks */ }
     pointers.set(e.pointerId, pt(e));
     hoverP = pt(e);   // a tap on an arrow opens its box on a touch screen
@@ -618,6 +629,9 @@ export function createPriceChart(host, opts) {
     redraw();
   });
   svg.addEventListener('pointermove', (e) => {
+    // a mouse with no button down is not dragging, whatever release went missing (a menu, another window, a lost
+    // capture): end the drag here rather than pan with the cursor
+    if (e.pointerType === 'mouse' && e.buttons === 0 && (drag || pointers.has(e.pointerId))) up(e);
     const p = pt(e);
     if (pointers.has(e.pointerId)) pointers.set(e.pointerId, p);
     if (drag && drag.pinch && pointers.size === 2) { const [p1, p2] = [...pointers.values()]; const d = Math.abs(p1.x - p2.x) || 1; const ns = Math.max(10, Math.min(N, Math.round(drag.span * drag.pinch / d))); const c = to; from = Math.max(0, c - ns + 1); to = c; redraw(); return; }
@@ -628,13 +642,7 @@ export function createPriceChart(host, opts) {
     hoverP = p;
     redraw();
   });
-  const up = (e) => {
-    pointers.delete(e.pointerId);
-    // a drawing moved is one change to undo, kept when the pointer lifts
-    if (drag && drag.mode && drag.moved) { undo.push(drag.before); if (undo.length > 40) undo.shift(); redo.length = 0; if (S.onDrawings) S.onDrawings(S.drawings); }
-    if (pointers.size < 2 && drag && drag.pinch) drag = null; else if (pointers.size === 0) drag = null;
-  };
-  svg.addEventListener('pointerup', up); svg.addEventListener('pointercancel', up);
+  svg.addEventListener('pointerup', up); svg.addEventListener('pointercancel', up); svg.addEventListener('lostpointercapture', up);
   // a finger lifting also leaves: the box it opened stays until the next touch
   svg.addEventListener('pointerleave', (e) => { if (e.pointerType === 'touch') return; hoverP = null; if (!drag) { cross = -1; crossY = null; redraw(); } });
   svg.addEventListener('wheel', (e) => { e.preventDefault(); const p = pt(e); zoom(e.deltaY > 0 ? 1.15 : 1 / 1.15, Math.max(from, Math.min(to, layout.I(p.x)))); }, { passive: false });
