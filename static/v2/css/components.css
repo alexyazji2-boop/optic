@@ -652,3 +652,6 @@ table.st td a { text-decoration: none; font-weight: 600; } table.st td a:hover {
 
 /* a failure inside a panel is the panel's content, not a second card (editorial pass) */
 .dchart > .state.err, .ws-body > .state.err, .op-sec .state.err { border: 0; background: none; padding: 0; box-shadow: none; }
+/* Milo: what an answer was about, and a plain flag when the page now open is another symbol's (task 12) */
+.milo-about { margin: 0 0 6px; font-size: var(--t-sm); color: var(--c-ink-3); }
+.milo-about.is-other b { color: var(--c-ink); font-weight: 600; }
