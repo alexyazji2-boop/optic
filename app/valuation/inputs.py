@@ -885,9 +885,12 @@ def gather(provider, ticker: str, today: Optional[date] = None, force: bool = Fa
             str(exc)[:80])}
     qtype = (quote.get("quote_type") or "").upper()
     if qtype and qtype != "EQUITY":
+        # in words a reader uses ("SPY is a fund"), not the feed's type code ("a etf")
+        word = {"ETF": "fund", "MUTUALFUND": "mutual fund", "INDEX": "index", "CRYPTOCURRENCY": "cryptocurrency",
+                "CURRENCY": "currency", "FUTURE": "futures contract"}.get(qtype, qtype.lower())
         return {"available": False, "ticker": sym,
-                "reason": "{} is a {}, not a company; a cash-flow valuation needs a business's own "
-                          "statements.".format(sym, qtype.lower())}
+                "reason": "{} is {} {}, not a company; a cash-flow valuation needs a business's own "
+                          "statements.".format(sym, "an" if word[:1] in "aeiou" else "a", word)}
     fl, cik, reason = load_filings(sym, force=force)
     if fl is None:
         return {"available": False, "ticker": sym, "reason": reason}
