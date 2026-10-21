@@ -994,7 +994,7 @@ tr.sh-notes td { padding-top: 0; font-size: var(--t-md); color: var(--c-ink-3); 
 .pt-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; align-items: end; }
 .pt-row.pt-nums { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .pt-f { display: grid; gap: 6px; min-width: 0; align-content: end; }
-.pt-f > .field { min-height: var(--tap); padding: 0 12px; }
+.pt-f > .field { min-width: 0; min-height: var(--tap); padding: 0 12px; } .pt-f > .field input { width: 100%; }   /* a number input will not shrink below its own width otherwise */
 .pt-f > .seg { display: flex; } .pt-f > .seg button { flex: 1; }
 .pt-f.select { display: grid; } .pt-f.select select { width: 100%; min-width: 0; }
 @media (max-width: 640px) {

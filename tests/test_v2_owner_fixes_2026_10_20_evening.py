@@ -46,6 +46,7 @@ def test_the_ticket_puts_each_label_above_its_control():
     assert 'placeholder="required"' not in form and 'placeholder="optional"' not in form, "a placeholder is not a label"
     assert "Target <span class=\"t-muted\">(optional)</span>" in form
     assert ".pt-row.pt-nums { grid-template-columns: repeat(4, minmax(0, 1fr)); }" in CSS and ".pt-row > .pt-sym { grid-column: 1 / -1; }" in CSS
+    assert ".pt-f > .field { min-width: 0;" in CSS and ".pt-f > .field input { width: 100%; }" in CSS, "number boxes overlapped their neighbours (live check at 1440 and 390)"
 
 
 def test_the_what_if_lab_is_gone_from_both_apps_and_the_server():
