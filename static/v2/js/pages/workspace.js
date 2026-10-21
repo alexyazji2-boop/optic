@@ -236,7 +236,6 @@ const asof = (iso) => {
 
 /* ---------------- the panels ---------------- */
 const UNIT = { 'S&P 500': 'Index points', 'Nasdaq 100': 'Index points', 'Russell 2000': 'Index points', VIX: 'Volatility index', 'US 10Y': 'Yield, change in basis points', 'WTI Crude': 'Dollars a barrel', Gold: 'Dollars an ounce', Bitcoin: 'Dollars' };
-const NEUTRAL_MOVE = new Set(['volatility', 'rates']);
 // the regime in plain words, with what it means for prices, in place of "risk-on" and "tape" (beginner brief item 4)
 const PLAIN_REGIME = { 'risk-on': 'Investors are leaning toward risk', 'mildly risk-on': 'A mild lean toward risk', 'neutral / mixed': 'Mixed: no clear lean', 'mildly risk-off': 'A mild lean toward caution', 'risk-off': 'Investors are leaning toward caution' };
 const STANCE = { 'risk-on': 'Buyers have had the market behind them: rising prices have tended to hold.', 'mildly risk-on': 'Conditions are supportive, but not strongly enough to lift a weak company on their own.', 'neutral / mixed': 'The market is not pushing prices one way, so each company\'s own news matters more than the market.', 'mildly risk-off': 'Conditions are less forgiving than usual: rises have tended to fade faster.', 'risk-off': 'Investors have been seeking protection, and rises have often failed to hold.' };
@@ -328,14 +327,14 @@ export const PANELS = {
   indices: {
     // not only indices: volatility, a yield, oil, gold and bitcoin too, so the heading says markets (beginner brief item 4)
     title: 'Markets at a glance', span: 12,
-    how: 'The day\'s move for the main U.S. indices, volatility, the 10-year yield, oil, gold and bitcoin. Yields move in basis points (0.01 percentage points). The VIX is what S&P 500 options price for the next month\'s swings: lower means calmer trading is priced, not that prices will rise. A higher yield means lenders demand more; it is not good or bad on its own, so neither is coloured. Outside the regular session most of these are at the last close; futures and crypto keep trading.',
+    how: 'The day\'s move for the main U.S. indices, volatility, the 10-year yield, oil, gold and bitcoin. Yields move in basis points (0.01 percentage points). The VIX is what S&P 500 options price for the next month\'s swings: lower means calmer trading is priced, not that prices will rise. A higher yield means lenders demand more. Each move is coloured by its direction only, green up and red down: for the VIX and a yield the colour says which way it moved, not whether that is good. Outside the regular session most of these are at the last close; futures and crypto keep trading.',
     load: () => get('/api/home'),
     body: (d) => {
       const cells = STRIP.map(([g, l]) => inst(d, g, l)).filter((i) => i && isNum(i.last));
       if (!cells.length) return html`<p class="ws-note">No index readings came back from the feed.</p>`;
-      // each figure with its unit; volatility and yields are not coloured as good or bad: a falling VIX is calmer
-      // trading priced, a rising yield a higher return demanded, neither a win or a loss in itself
-      return html`<div class="ws-strip">${cells.map((i) => html`<a class="ws-cell" href="#/instrument/${enc(i.symbol)}"><span class="k">${i.label}</span><span class="v">${num(i.last, i.last < 20 ? 2 : i.last > 1000 ? 0 : 2)}${i.group === 'rates' ? '%' : ''}</span><span class="d ${NEUTRAL_MOVE.has(i.group) ? 'flat' : dir(i.chg_1d)}">${moveText(i)}</span><span class="u">${UNIT[i.label] || ''}</span></a>`)}</div>`;
+      // each figure with its unit, and each move coloured by its direction only, as Classic coloured its strip (owner,
+      // 2026-10-21): green up, red down, the VIX and the 10-year included; the colour says which way, not good or bad
+      return html`<div class="ws-strip">${cells.map((i) => html`<a class="ws-cell" href="#/instrument/${enc(i.symbol)}"><span class="k">${i.label}</span><span class="v">${num(i.last, i.last < 20 ? 2 : i.last > 1000 ? 0 : 2)}${i.group === 'rates' ? '%' : ''}</span><span class="d ${dir(i.chg_1d)}">${moveText(i)}</span><span class="u">${UNIT[i.label] || ''}</span></a>`)}</div>`;
     },
     foot: (d) => ({ source: 'Yahoo Finance via Optic', at: d.generated_at, note: ((d.session || {}).is_regular ? '' : 'Outside the regular session, equities are at the last close; futures and crypto keep trading.'), stale: (d.degraded || []).length ? 'Some missing' : '', staleWhy: (d.degraded || []).length ? `Not available: ${d.degraded.join(', ')}.` : '' }),
     milo: 'What do today\'s index, volatility, yield and commodity moves say together?',

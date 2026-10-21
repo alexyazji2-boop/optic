@@ -194,5 +194,7 @@ def test_the_dossier_link_follows_this_visit_never_the_saved_recent_list(tmp_pat
     shell = (JS / "ui/shell.js").read_text()
     assert "const sym = (route.view !== 'instrument' && route.symbol) || openedNow() || null;" in shell
     assert "const sym = openedNow() || null;" in shell and "recent()" not in shell
-    assert "data-v2-open-palette aria-label=\"${name}, search for a company\"" in shell, "with no company yet, Dossier opens the search"
+    # with no company yet, Dossier opens its own start page, not the search (owner, 2026-10-21: "pressing dossier
+    # redirects me to the search bar, fix this issue")
+    assert ": '#/dossier';" in shell and "SLUG_VIEW.dossier = 'dossierstart';" in (JS / "core/router.js").read_text()
     assert "const r = store.openedNow(); if (r) inputs[0] = r;" in (JS / "pages/compare.js").read_text()

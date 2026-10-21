@@ -1824,3 +1824,11 @@ html.eff-1100 .ob-ways { grid-template-columns: minmax(0, 1fr); }
 /* a bar in Scan's ranked column (B9.4): beside the figure, which says the value */
 .sc-barred { white-space: nowrap; } .sc-bar { display: inline-block; vertical-align: middle; margin-right: 8px; }
 .sc-bar line { stroke: var(--c-line); stroke-width: 1; } .sc-bar rect.one { fill: var(--c-gold); opacity: .85; } .sc-bar rect.pos { fill: var(--c-pos); } .sc-bar rect.neg { fill: var(--c-neg); }
+/* Dossier with no company open (pages/dossierstart.js) */
+.ds-search { display: flex; gap: 10px; max-width: 640px; } .ds-search .field { flex: 1; min-width: 0; }
+.ds-list { list-style: none; margin: 8px 0 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px; }
+.ds-row { display: flex; align-items: center; gap: 10px; min-height: var(--tap); padding: 0 14px; border: 0; border-radius: var(--r-md); background: var(--c-sunk); color: var(--c-ink); text-decoration: none; }
+.ds-row:hover { background: var(--c-active); } .ds-row .t-muted { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .ds-row .ic { margin-left: auto; width: 16px; height: 16px; color: var(--c-ink-3); }
+.ds-row .sym-logo { width: 24px; height: 24px; flex: none; background: var(--c-raised); }
+@media (max-width: 560px) { .ds-search { flex-wrap: wrap; } .ds-search .btn { width: 100%; } }
+
