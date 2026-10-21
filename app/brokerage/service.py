@@ -49,7 +49,13 @@ log = logging.getLogger("optic.brokerage")
 
 LAPSE_CLOSE_DAYS = 7
 LAPSE_PURGE_DAYS = 30
-AUTO_SYNC_HOURS = 20          # the aggregator itself refreshes once a day on the Daily plan
+AUTO_SYNC_HOURS = 20          # a day without a session: one background pull, as before
+# A trading day: four background pulls, at these Eastern times (owner, 2026-10-20: "sync Brokerage four times
+# each trading day"). Before the open, midday, after the close and after the after-hours session. Four is
+# SnapTrade's launch-guide ceiling for background holdings pulls per user per day, and on the Real-time plan
+# the free key runs on, each pull reads the broker live. A reader's own "Sync now" counts as the pull for the
+# slot it falls after.
+SYNC_SLOTS_ET = ((9, 0), (12, 30), (16, 15), (20, 15))
 
 _provider: Optional[Provider] = None
 _provider_key: Optional[str] = None
@@ -801,11 +807,30 @@ def enforce_lapses(now: Optional[datetime] = None) -> Dict[str, int]:
     return {"closed": closed, "purged": purged}
 
 
-def auto_sync_due(limit: int = 10) -> int:
-    """Background pull for entitled readers whose data is older than a day."""
+def sync_cutoff(now: Optional[datetime] = None) -> Optional[datetime]:
+    """A connection last tried before this instant is due a background pull; None, nothing is due.
+
+    On a trading day, the latest of SYNC_SLOTS_ET that has passed (one pull per slot, however late the loop
+    gets there), and nothing before the first. On a weekend or a market holiday, AUTO_SYNC_HOURS ago."""
+    from .. import session as session_mod
+    now = now or datetime.now(timezone.utc)
+    et = now.astimezone(session_mod.ET)
+    day = et.date()
+    trading = day.weekday() < 5 and not session_mod.market_holidays(day.year).get(day)
+    if not trading:
+        return now - timedelta(hours=AUTO_SYNC_HOURS)
+    passed = [et.replace(hour=h, minute=m, second=0, microsecond=0) for h, m in SYNC_SLOTS_ET if (et.hour, et.minute) >= (h, m)]
+    return passed[-1].astimezone(timezone.utc) if passed else None
+
+
+def auto_sync_due(limit: int = 10, now: Optional[datetime] = None) -> int:
+    """Background pull for entitled readers whose data is older than the latest sync slot."""
     if not status()["enabled"]:
         return 0
-    cutoff = (datetime.now(timezone.utc) - timedelta(hours=AUTO_SYNC_HOURS)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    when = sync_cutoff(now)
+    if when is None:
+        return 0
+    cutoff = when.strftime("%Y-%m-%dT%H:%M:%SZ")
     due = db.rows("SELECT c.* FROM brokerage_connections c JOIN brokerage_users u ON u.user_id = c.user_id "
                   "WHERE u.paused_at IS NULL AND c.status IN ('active', 'partial', 'outage') "
                   "AND (c.last_attempt_at IS NULL OR c.last_attempt_at < ?) ORDER BY c.last_attempt_at "

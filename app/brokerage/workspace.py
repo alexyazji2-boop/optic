@@ -132,11 +132,14 @@ def _freshness(core: Dict[str, Any], quotes: Optional[Dict[str, Dict[str, Any]]]
     as_of = core.get("as_of") or {}
     qt = [q.get("as_of") for q in (quotes or {}).values() if q.get("as_of")]
     delays = [q.get("delayed_minutes") for q in (quotes or {}).values() if q.get("delayed_minutes") is not None]
+    newest = max((q for q in (quotes or {}).values() if q.get("as_of")), key=lambda q: str(q.get("as_of")), default={})
     return {
         "broker": {"oldest_broker_as_of": as_of.get("oldest_broker"), "broker_complete": as_of.get("broker_complete"),
                    "oldest_sync": as_of.get("oldest_sync"), "newest_sync": as_of.get("newest_sync")},
         "market": {"quotes_oldest": min(qt) if qt else None, "quotes_newest": max(qt) if qt else None,
-                   "delayed_minutes": max(delays) if delays else None},
+                   "delayed_minutes": max(delays) if delays else None,
+                   # "pre" or "post" when the newest price is a pre-market or after-hours print
+                   "extended": newest.get("session") if newest.get("session") in ("pre", "post") else None},
     }
 
 
@@ -213,7 +216,7 @@ def value_now(holdings: List[Dict[str, Any]], quotes: Dict[str, Dict[str, Any]],
         return {"available": False, "reason": "The broker's total is not in one currency, so there is nothing to "
                                               "reprice."}
     broker_part = at_quotes = 0.0
-    priced, kept, times = [], [], []
+    priced, kept, times, sessions = [], [], [], {}
     for h in holdings or []:
         sym = str(h.get("symbol") or "").upper()
         if not sym or h.get("kind") not in PRICED_KINDS or (h.get("currency") or "USD") != "USD":
@@ -229,13 +232,15 @@ def value_now(holdings: List[Dict[str, Any]], quotes: Dict[str, Dict[str, Any]],
         stamp = q.get("price_time") or q.get("as_of")
         if stamp:
             times.append(str(stamp))
+            sessions[str(stamp)] = q.get("session")
     if not priced:
         return {"available": False, "reason": "No holding could be priced at a current quote just now."}
     return {"available": True, "value": round(float(base) - broker_part + at_quotes, 2), "currency": "USD",
             "broker_value": round(float(base), 2), "change_from_broker": round(at_quotes - broker_part, 2),
             "priced": priced, "kept_at_broker": kept,
             "quotes_oldest": min(times) if times else None, "quotes_newest": max(times) if times else None,
-            "basis": "Your broker's quantities at Optic's delayed quotes; cash and options as the broker last "
+            "extended": (sessions.get(max(times)) if times and sessions.get(max(times)) in ("pre", "post") else None),
+            "basis": "Your broker's quantities at Optic's delayed quotes, the latest print including pre-market and after-hours trading; cash and options as the broker last "
                      "reported them. Quantities change only at a sync, so a trade since then is not in it."}
 
 

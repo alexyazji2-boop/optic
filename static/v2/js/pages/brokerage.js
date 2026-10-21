@@ -143,12 +143,14 @@ function connections() {
 }
 
 /* ---------------- workspace frame ---------------- */
+// the newest price may be a pre-market or after-hours print (the server picks the latest; owner, 2026-10-20)
+const EXT_QUOTES = { pre: 'Pre-market quotes', post: 'After-hours quotes' }, EXT_WORD = { pre: 'pre-market ', post: 'after-hours ' };
 function freshness() {
   const o = W.data.overview || W.data.holdings || {}, f = o.freshness || {}, b = f.broker || {}, m = f.market || {};
   const out = [];
   if (b.oldest_broker_as_of) out.push(html`<span class="pill">Broker data as of ${day(b.oldest_broker_as_of)} ${new Date(b.oldest_broker_as_of).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}</span>`);
   else if (b.newest_sync) out.push(html`<span class="pill">Synced ${ago(b.newest_sync)}</span>`);
-  if (m.quotes_newest) out.push(html`<span class="pill">Quotes ${ago(m.quotes_newest)}${m.delayed_minutes ? ` (delayed ${Math.round(m.delayed_minutes)} min)` : ''}</span>`);
+  if (m.quotes_newest) out.push(html`<span class="pill">${EXT_QUOTES[m.extended] || 'Quotes'} ${ago(m.quotes_newest)}${m.delayed_minutes ? ` (delayed ${Math.round(m.delayed_minutes)} min)` : ''}</span>`);
   return out;
 }
 function frame(sec) {
@@ -181,9 +183,9 @@ function overview(d) {
   const today = d.today || {}, since = d.since_sync || {}, perf = d.performance || {}, pl = perf.unrealized_pl_by_currency || {}, now = d.value_now || {}, bw = ((d.freshness || {}).broker || {}).oldest_broker_as_of;
   const nScope = ((d.scope || {}).scope || []).length;
   return html`<div class="bk-tiles">
-      ${now.available ? tile('Value now', money(now.value, 'USD'), html`${src('market')} Your broker's quantities at Optic's delayed prices, ${ago(now.quotes_newest) || 'just now'}. The broker's own total is ${totalText}${bw ? ` (${ago(bw)})` : ''}${(now.kept_at_broker || []).length ? `; ${now.kept_at_broker.join(', ')} kept at the broker's price` : ''}. Cash and options as last reported.`)
+      ${now.available ? tile('Value now', money(now.value, 'USD'), html`${src('market')} Your broker's quantities at Optic's delayed ${EXT_WORD[now.extended] || ''}prices, ${ago(now.quotes_newest) || 'just now'}. The broker's own total is ${totalText}${bw ? ` (${ago(bw)})` : ''}${(now.kept_at_broker || []).length ? `; ${now.kept_at_broker.join(', ')} kept at the broker's price` : ''}. Cash and options as last reported.`)
         : tile('Total value', totalText, html`${src('broker')} Securities, options at the broker's last price, and cash.`)}
-      ${tile('Today', today.available ? html`${signedMoney(today.total, 'USD')} ${sPct(today.total_pct)}` : html`<span class="t-muted">No quotes</span>`, html`${src('market')} ${today.available ? `Quantity x price change since the previous close, quotes ${ago(today.quotes_newest)}. Covers ${money(today.covered_value_at_prev_close, 'USD')}.` : 'Optic could not price your holdings just now.'}`)}
+      ${tile('Today', today.available ? html`${signedMoney(today.total, 'USD')} ${sPct(today.total_pct)}` : html`<span class="t-muted">No quotes</span>`, html`${src('market')} ${today.available ? `Quantity x price change since the previous close${{ pre: ', at pre-market prices', post: ', including after-hours trading' }[((d.freshness || {}).market || {}).extended] || ''}, quotes ${ago(today.quotes_newest)}. Covers ${money(today.covered_value_at_prev_close, 'USD')}.` : 'Optic could not price your holdings just now.'}`)}
       ${tile('Since your last sync', since.available ? (Object.entries(since.value_change_by_currency || {}).map(([c, v]) => signedMoney(v, c)) || '0') : html`<span class="t-muted">After the next sync</span>`, html`${src('optic')} ${since.available ? html`Price effect ${Object.entries(since.price_effect_by_currency || {}).length ? Object.entries(since.price_effect_by_currency).map(([c, v]) => signedMoney(v, c)) : 'none'}; the rest is trades, deposits or new positions.` : clean(since.reason || '')}`)}
       ${tile('Unrealised gain', Object.keys(pl).length ? Object.entries(pl).map(([c, v]) => signedMoney(v, c)) : html`<span class="t-muted">Not supplied</span>`, html`${src('optic')} Market value minus the broker's average cost, on ${isNum(perf.basis_coverage_pct) ? `${perf.basis_coverage_pct}% of value with a cost basis` : 'the holdings the broker gave a cost for'}. Not a return.`)}</div>
     <div class="grid2"><section class="section" aria-labelledby="bo-h"><h2 class="t-h2" id="bo-h">What you own</h2>
@@ -464,7 +466,8 @@ async function loadExtras() {
   }));
 }
 // The Overview's prices refresh every minute while the regular session is open and the tab is visible.
-function tapeLive() { const p = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', weekday: 'short', hour: 'numeric', minute: 'numeric', hour12: false }).formatToParts(new Date()); const g = (t) => (p.find((x) => x.type === t) || {}).value; const m = Number(g('hour')) * 60 + Number(g('minute')); return !['Sat', 'Sun'].includes(g('weekday')) && m >= 570 && m < 960; }
+// 4:00 am to 8:00 pm Eastern, weekdays: pre-market, the session and after hours, whose prints Brokerage now prices
+function tapeLive() { const p = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', weekday: 'short', hour: 'numeric', minute: 'numeric', hour12: false }).formatToParts(new Date()); const g = (t) => (p.find((x) => x.type === t) || {}).value; const m = Number(g('hour')) * 60 + Number(g('minute')); return !['Sat', 'Sun'].includes(g('weekday')) && m >= 240 && m < 1200; }
 function scheduleRefresh() { clearTimeout(refreshT); if (!tapeLive()) return; refreshT = setTimeout(refreshOverview, 60000); }
 async function refreshOverview() {
   if (!live || S.section !== 'overview') return;

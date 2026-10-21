@@ -355,9 +355,10 @@ async def sandbox_abandon(request: Request) -> RedirectResponse:
 # ------------------------------------------------------------- background job
 
 
-async def background_loop(interval: int = 1800) -> None:
-    """Every half hour: owed provider deletions, plan lapses, then daily
-    syncs that are due. Each step is caught on its own so one failing does
+async def background_loop(interval: int = 600) -> None:
+    """Every ten minutes, so a sync slot is met within ten minutes of its
+    time: owed provider deletions, plan lapses, then the syncs that are due
+    (service.sync_cutoff). Each step is caught on its own so one failing does
     not stop the others."""
     await asyncio.sleep(60)
     while True:

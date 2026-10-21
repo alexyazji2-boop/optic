@@ -83,3 +83,36 @@ def test_periods_the_history_cannot_reach_wait_and_say_why(tmp_path):
 def test_the_server_says_where_the_history_begins():
     perf = (V2.parent.parent / "app/brokerage/performance.py").read_text()
     assert '"history_start": _iso(history_start),' in perf and '"starts": {p: period_start(p, today).isoformat() for p in PERIODS if p != "all"}' in perf
+
+
+def test_brokerage_syncs_four_times_a_trading_day_and_once_on_other_days():
+    # "sync Brokerage four times each trading day"
+    from datetime import datetime, timezone
+    from app.brokerage import service
+    at = lambda iso: datetime.fromisoformat(iso).replace(tzinfo=timezone.utc)  # noqa: E731
+    cut = lambda iso: service.sync_cutoff(at(iso))  # noqa: E731
+    assert service.SYNC_SLOTS_ET == ((9, 0), (12, 30), (16, 15), (20, 15))
+    assert cut("2026-10-21T12:00:00") is None, "before 9:00 ET on a trading day: nothing due"
+    assert cut("2026-10-21T13:05:00") == at("2026-10-21T13:00:00"), "9:00 ET"
+    assert cut("2026-10-21T17:00:00") == at("2026-10-21T16:30:00"), "12:30 ET"
+    assert cut("2026-10-21T20:20:00") == at("2026-10-21T20:15:00"), "4:15 pm ET"
+    assert cut("2026-10-22T00:30:00") == at("2026-10-22T00:15:00"), "8:15 pm ET, after the after-hours session"
+    assert cut("2026-10-24T15:00:00") == at("2026-10-23T19:00:00"), "a Saturday: once a day, as before"
+    assert cut("2026-11-26T15:00:00") == at("2026-11-25T19:00:00"), "Thanksgiving: once a day"
+    loop = (V2.parent.parent / "app/brokerage/routes.py").read_text()
+    assert "async def background_loop(interval: int = 600)" in loop, "a slot is met within ten minutes"
+
+
+def test_holdings_are_priced_at_the_newest_print_including_extended_hours():
+    reg = {"price": 100.0, "prev_close": 98.0, "change_pct": 2.04, "regular_market_time": "2026-10-20T20:00:00Z"}
+    post = main._latest_print(dict(reg, post_market_price=101.0, post_market_time="2026-10-20T23:59:00Z"))
+    assert post["price"] == 101.0 and post["session"] == "post" and post["prev_close"] == 98.0, "after hours: against the previous close"
+    pre = main._latest_print(dict(reg, post_market_price=101.0, post_market_time="2026-10-20T23:59:00Z",
+                                  pre_market_price=103.0, pre_market_time="2026-10-21T11:30:00Z"))
+    assert pre["price"] == 103.0 and pre["session"] == "pre" and pre["prev_close"] == 100.0 and abs(pre["change_pct"] - 3.0) < 1e-9, \
+        "a new day's pre-market: against the last regular close, not the one before it"
+    old = main._latest_print(dict(reg, pre_market_price=97.0, pre_market_time="2026-10-20T12:00:00Z"))
+    assert old["session"] == "regular" and old["price"] == 100.0, "an earlier pre-market print never replaces the close"
+    src = (JS / "pages/brokerage.js").read_text()
+    assert "m >= 240 && m < 1200" in src, "the Overview reprices every minute from 4 am to 8 pm Eastern"
+    assert "post: 'After-hours quotes'" in src and "delayed ${EXT_WORD[now.extended] || ''}prices" in src

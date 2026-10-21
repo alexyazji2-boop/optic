@@ -7476,12 +7476,38 @@ def _ws_dividend(sym: str) -> Optional[Dict[str, Any]]:
     return {"ex_date": ex, "last_amount": last[0].get("amount"), "currency": None}
 
 
+def _latest_print(q: Dict[str, Any]) -> Dict[str, Any]:
+    """The newest of a symbol's regular, pre-market and after-hours prints, for the Brokerage workspace
+    (owner, 2026-10-20: "reprice it before and after market hours too").
+
+    The day's change is measured from the close before the session the print belongs to: an after-hours
+    print against the previous close, like the regular price it follows; a pre-market print of a new day
+    against the last regular close, which Yahoo still reports as the price until the open."""
+    def at(iso: Any) -> Optional[datetime]:
+        try:
+            return datetime.fromisoformat(str(iso).replace("Z", "+00:00")) if iso else None
+        except ValueError:
+            return None
+    price, prev, reg_t = q.get("price"), q.get("prev_close"), at(q.get("regular_market_time"))
+    session, when = "regular", reg_t
+    for name, p, t in (("pre", q.get("pre_market_price"), at(q.get("pre_market_time"))),
+                       ("post", q.get("post_market_price"), at(q.get("post_market_time")))):
+        if p and t and (when is None or t > when):
+            session, when, price = name, t, p
+    base = prev
+    if session != "regular" and reg_t and when and when.astimezone(session_mod.ET).date() > reg_t.astimezone(session_mod.ET).date():
+        base = q.get("price")
+    change_pct = q.get("change_pct") if session == "regular" else (
+        (float(price) / float(base) - 1.0) * 100.0 if price and base else None)
+    stamp = when.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ") if when and when.tzinfo else q.get("regular_market_time")
+    return {"price": price, "prev_close": base, "change_pct": change_pct, "session": session, "as_of": stamp,
+            "market_time": stamp}
+
+
 def _ws_quotes(symbols: List[str]) -> Dict[str, Dict[str, Any]]:
     got = YF_PROVIDER.session_quotes(list(symbols)) or {}
-    return {s: {"price": q.get("price"), "prev_close": q.get("prev_close"), "change_pct": q.get("change_pct"),
-                "as_of": q.get("regular_market_time"), "market_time": q.get("regular_market_time"),
-                "delayed_minutes": q.get("delayed_minutes"), "market_state": q.get("market_state"),
-                "source": "Yahoo Finance"} for s, q in got.items()}
+    return {s: dict(_latest_print(q), delayed_minutes=q.get("delayed_minutes"), market_state=q.get("market_state"),
+                    source="Yahoo Finance") for s, q in got.items()}
 
 
 def _ws_closes(symbols: List[str], period: str = "1y") -> Dict[str, List[List[Any]]]:
