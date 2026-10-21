@@ -1510,4 +1510,8 @@ ul.cal-react { display: flex; flex-wrap: wrap; gap: 4px 18px; padding-left: 0; l
 .ds-row { display: flex; align-items: center; gap: 10px; min-height: var(--tap); padding: 0 14px; border: 0; border-radius: var(--r-md); background: var(--c-sunk); color: var(--c-ink); text-decoration: none; }
 .ds-row:hover { background: var(--c-active); } .ds-row .t-muted { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .ds-row .ic { margin-left: auto; width: 16px; height: 16px; color: var(--c-ink-3); }
 @media (max-width: 560px) { .ds-search { flex-wrap: wrap; } .ds-search .btn { width: 100%; } }
+/* a Macro instrument's row opens its full chart (Classic's inst-clickable rows) */
+.inst-row { cursor: pointer; } .inst-row:hover td { background: var(--c-sunk); }
+.inst-spark { display: inline-block; color: inherit; } .inst-spark:focus-visible { outline: 2px solid var(--c-focus); outline-offset: 2px; }
+.inst-back { margin: 0 0 8px; } .inst-back .textlink { display: inline-flex; align-items: center; gap: 4px; min-height: var(--tap); font-size: var(--t-md); } .inst-back .ic { width: 16px; height: 16px; transform: scaleX(-1); }
 
