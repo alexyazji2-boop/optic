@@ -162,11 +162,20 @@ Retention, as the panel says it ("Sent with your next question to Milo's model p
 |---|---|---|---|---|---|---|---|---|---|
 | B4b.1 | Attach files (button, drop); type, size and count checked in the browser and on the server | The clip beside Milo's box; file tiles above it; `attachProblem`, `bytesMatch` in `ui/milo.js`; `attachment_blocks` in `app/ai.py` | The clip or a drop on the panel; PNG, JPEG, GIF, WebP or PDF, up to 4 of 5 MB; each refused file says why on its tile ("not a PNG file, whatever its name says", "larger than the 5 MB limit"); the server checks the type, the decoded size and the file's own first bytes again, and its refusals stay under the answer | The clip and the remove buttons at 44 px | Nothing: see retention | A send that fails gives the files back with the question | `/api/chat` $ on Send (files add to the cost) | b4b desk and 390 | done (stand-in verification; the provider's handling of the files is untested) |
 
-### B4c to B4d
+### B4c. Web search, Deep research and the modes
+Evidence:
+- `b4c_check.py`: 10 of 10 in headless Chrome at 1440 and 390, against the stand-in model. Its log shows the web tool on the request and the research route used.
+- This is stand-in verification: no real web search or research has run.
+- `tests/test_v2_parity_b4c.py`.
+
+| Row | Task | Where | Desktop | Phone | Keeps | States | Deps | Evidence | Status |
+|---|---|---|---|---|---|---|---|---|---|
+| B4c.1 | Web search toggle ($, on send) | "Search the web" in the row above Milo's box | Off until pressed; on, the next questions go with web search, and each answer says "Web search was on for this answer"; its label says searches add to the cost | 44 px | Not saved: off again when the panel closes | Off while answering | `/api/chat` with `web` $ per search, on Send | b4c: off by default, the web tool on the request, the note, off after reopening | differs: off by default (Classic had it on). v2's Milo looks Optic's own data up with its tools, so the web is the reader's spend to choose |
+| B4c.2 | Deep research and the modes row ($, on send) | "Deep research" and "Modes" in the same row | Modes: Classic's research modes for the page (company, chart, Brokerage, portfolio or watchlist, Scan, the market), word for word, each only writing its question into the box; the Deep research mode points at the Deep research button. Deep research runs the box's question, or the symbol on screen, or the market, by `/api/research`, and the answer says it read live web sources | 44 px; the menu opens upward | none | Off while answering | `/api/research` $ (one question and several searches), on a press | b4c: five company modes, drafting only, the hint, Deep research on an empty box as "Deep research: AAPL", Brokerage's five modes | differs: the modes sit in a Modes menu rather than a row of chips (amendment 3, and room beside a docked page) |
+
+### B4d
 | Row | Task | Status |
 |---|---|---|
-| B4c.1 | Web search toggle ($, on send) | open |
-| B4c.2 | Deep research and the modes row ($, on send) | open |
 | B4d.1 | Save a question; Saved research hub | open |
 
 ## B5. Alerts and signals

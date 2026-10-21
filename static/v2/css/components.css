@@ -1043,4 +1043,14 @@ html.eff-1100 .answers { grid-template-columns: 1fr 1fr; } html.eff-1100 .answer
 .milo-sent-files { display: flex; align-items: center; justify-content: flex-end; gap: 4px; margin: 4px 0 0; font-size: var(--t-xs); color: var(--c-ink-3); }
 .milo-sent-files svg { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 1.8; }
 .milo-not-sent { margin: 6px 0 0; font-size: var(--t-sm); color: var(--c-ink-2); }
+/* web search, Deep research and the modes (B4c): one quiet row above the box */
+.milo-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin: 0 0 6px; }
+.milo-tools .btn svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; }
+.milo-web[aria-pressed="true"] { background: var(--c-active); color: var(--c-ink); }
+.milo-deep.is-suggested { box-shadow: inset 0 0 0 1px var(--c-line); color: var(--c-ink); }
+.milo-modes .menu-body { top: auto; bottom: calc(100% + 6px); width: min(360px, calc(100vw - 32px)); max-height: 60vh; overflow: auto; display: grid; gap: 2px; padding: 8px; }   /* the row sits on the box: the menu opens upward */
+.milo-mode { display: grid; gap: 2px; padding: 8px 10px; border: 0; border-radius: var(--r-sm); background: none; color: var(--c-ink); text-align: left; cursor: pointer; font: inherit; }
+.milo-mode b { font-weight: 600; font-size: var(--t-md); } .milo-mode span { font-size: var(--t-sm); color: var(--c-ink-3); }
+.milo-mode:hover { background: var(--c-sunk); } .milo-mode:focus-visible { outline: 2px solid var(--c-focus); outline-offset: -2px; }
+@media (pointer: coarse) { .milo-tools .btn { min-height: var(--tap); } .milo-mode { min-height: var(--tap); } }
 
