@@ -10,7 +10,6 @@
 import * as FV from '../core/finviz.js';
 import { term } from '../ui/term.js';
 import { $, $$, html, render as draw, raw } from '../core/dom.js';
-import { CLASSIC } from '../core/classic.js';
 import * as api from '../core/api.js';
 import * as store from '../core/store.js';
 import { sections } from '../ui/sections.js';
@@ -24,6 +23,7 @@ import { button as miloButton, provideContext } from '../ui/milo.js';
 import * as drawer from '../ui/drawer.js';
 import { hrefFor } from '../nav.js';
 import { kindOf, learn } from '../core/instrument.js';
+import { mountThesis, disposeThesis, thesisContext } from './thesis.js';
 let lp = null;   // the header's price refresh (dossier-frame livePrice), stopped in dispose()
 
 let live = true;
@@ -396,7 +396,6 @@ function more(sym) {
     ...(tradeNow(sym) ? [['Short-term trade setup', tradeNow(sym), 'Swing grade']] : []),
     ...(cases.available ? [['Bull case and bear case', html`<div class="cases"><div><h3 class="case-h up">Bull case</h3><ul class="plain">${(cases.bull || []).map((c) => html`<li><b>${clean(c.claim)}.</b> ${clean(c.detail)}</li>`)}</ul></div><div><h3 class="case-h down">Bear case</h3><ul class="plain">${(cases.bear || []).map((c) => html`<li><b>${clean(c.claim)}.</b> ${clean(c.detail)}</li>`)}</ul></div></div>`, `${(cases.bull || []).length} for, ${(cases.bear || []).length} against`]] : []),
     ...(fil.length ? [['Recent SEC filings', html`<ul class="plain">${fil.slice(0, 5).map((f) => html`<li><a href="${f.url}" target="_blank" rel="noopener">${f.form}</a> ${clean(f.what)}, filed ${fullDate(f.filed)}</li>`)}</ul>`, `${Math.min(5, fil.length)} newest`]] : []),
-    ['Thesis check', html`<p>Save the conditions your idea depends on, and Optic marks each one as holding or broken. The thesis check is in the classic app.</p><a class="textlink" href="${CLASSIC}#/${sym}">Open the thesis check ${icon('out')}</a>`, ''],
   ];
   return html`<section class="section" aria-labelledby="mr-h"><h2 class="t-h2" id="mr-h">More on ${name}</h2>
     <div class="more">${items.map(([t1, b, hint]) => html`<details><summary>${t1}<span>${hint ? html`<small>${hint}</small>` : ''}${icon('chev')}</span></summary><div class="inner">${b}</div></details>`)}</div></section>`;
@@ -417,8 +416,9 @@ function paint(main, sym) {
     ${about(sym)}
     <section class="section dchart" aria-label="Price chart">${D.tickerError ? failed('The price history', D.tickerError, { retry: 'dossier' }) : chartBlock(sym)}</section>
     ${D.fwError && D.fvError && D.earnError ? failed('The four answers', D.fwError, { retry: 'dossier' }) : answers(sym)}
-    ${longViews(sym)}${combined()}${digest(sym)}${D.ticker ? more(sym) : ''}
+    ${longViews(sym)}${combined()}${digest(sym)}${isFundHere(sym) ? '' : html`<div data-tc-slot></div>`}${D.ticker ? more(sym) : ''}
     <p class="asof disclaimer">${clean((D.ticker || {}).disclaimer || 'Not financial advice. For research and education only.')}</p>`);
+  mountThesis(main, sym, () => D);   // the thesis check: one node for the visit, so a half-typed note survives this redraw
   if (D.ticker) mountChart(main, sym);
   $$('details summary', main).forEach((x) => { if (openDetails.includes(x.textContent.trim())) x.parentElement.open = true; });
   openEvs.forEach((id) => { const b = $(`[aria-controls="${id}"]`, main); const body = document.getElementById(id); if (b && body) { b.setAttribute('aria-expanded', 'true'); body.hidden = false; } });
@@ -431,7 +431,7 @@ export async function render(main, route) {
   const sym = route.symbol;
   D = { sym };
   store.pushRecent(sym);
-  provideContext(() => ({ view: 'overview', ticker: sym, quote: D.quote, verdict: (D.ticker || {}).verdict, company: (D.ticker || {}).company, news: (D.ticker || {}).news, framework: D.framework, fair_value: D.fairValue, earnings: D.earnings, digest: D.digest }));
+  provideContext(() => ({ view: 'overview', ticker: sym, quote: D.quote, verdict: (D.ticker || {}).verdict, company: (D.ticker || {}).company, news: (D.ticker || {}).news, framework: D.framework, fair_value: D.fairValue, earnings: D.earnings, digest: D.digest, thesis_check: thesisContext() }));
   document.title = `${sym} Dossier, Optic`;
   if (lp) lp.stop();
   lp = livePrice(main, route.symbol, () => D, 'overview', undefined);
@@ -454,7 +454,7 @@ export async function render(main, route) {
   step(api.get(`/api/segments/${enc}`, { ttl: 600000, timeout: 60000 }), (d) => { D.segments = d; }, () => { D.segments = null; });
 }
 
-export function dispose() { if (lp) { lp.stop(); lp = null; } live = false; drawer.close({ silent: true }); }
+export function dispose() { if (lp) { lp.stop(); lp = null; } live = false; disposeThesis(); drawer.close({ silent: true }); }
 
 function wire(main, sym) {
   main.addEventListener('click', (e) => {
