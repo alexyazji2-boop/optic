@@ -1820,3 +1820,6 @@ html.eff-1100 .ob-ways { grid-template-columns: minmax(0, 1fr); }
 .ta-list b { color: var(--c-ink); font-weight: 600; } .ta-sym b { text-decoration: underline; text-underline-offset: 3px; }
 @media (pointer: coarse) { .ta-list li { min-height: var(--tap); } }
 .read-build { margin-top: 6px; }
+/* a bar in Scan's ranked column (B9.4): beside the figure, which says the value */
+.sc-barred { white-space: nowrap; } .sc-bar { display: inline-block; vertical-align: middle; margin-right: 8px; }
+.sc-bar line { stroke: var(--c-line); stroke-width: 1; } .sc-bar rect.one { fill: var(--c-gold); opacity: .85; } .sc-bar rect.pos { fill: var(--c-pos); } .sc-bar rect.neg { fill: var(--c-neg); }
