@@ -101,3 +101,99 @@ def test_the_thesis_section_survives_the_overviews_redraws():
     assert "The thesis check is in the classic app." not in dossier
     assert "slot.replaceWith(TC.node);" in THESIS and "n.addEventListener('focusin'" in THESIS, "one node for the visit; focus and the caret put back"
     assert "not by an AI model, and not a recommendation" in THESIS and "/api/chat" not in THESIS
+
+
+# ---------------------------------------------------------------- the Overview's deeper research (B6a.2 to B6a.6)
+RESEARCH = (JS / "pages/overview-research.js").read_text()
+T = """{ quote: { price: 250, market_cap: 3.7e12, trailing_pe: 30, forward_pe: 0, trailing_eps: 8.3, dividend_yield: 0, volume: 4.1e7, fifty_two_high: 260, fifty_two_low: 180, profit_margin: 0.27, revenue_growth: 0.164, beta: 1.1 },
+  company: { financials: { available: true, growth: { revenue_yoy_pct: 6.4, net_income_yoy_pct: -3 }, margins: { net_pct: 26.9 }, balance_sheet: { net_cash: -6e10 } },
+    earnings_history: { available: true, sample_size: 8, beat_count: 7, upcoming: [{ date: '2026-11-02', timing: 'before_open', eps_estimate: 1.98 }] },
+    short_interest: { available: true, percent_of_float: 0.0083, days_to_cover: 2.8, settlement_date: '2026-09-30', squeeze_potential: 'low' }, ownership: { available: true, insider_signal: 'selling' } },
+  news: { overall_tone: 'mildly bearish', article_count: 12 }, sector_confirm: { available: true, rs_vs_sector_label: 'Leading its sector', rs_vs_spy_label: 'Outperforming SPY', window_sessions: 21, stock_return_pct: 0.2, etf_return_pct: -4.8, spy_return_pct: -0.6 },
+  gex: { regime: { state: 'negative' } }, verdict: { composite_score: 7.4 },
+  pulse: { stance: 'bullish', conviction: 'low', agreement_pct: 60, factors_priced: 4, factors_total: 5, pending_catalyst: { pending: true },
+    factors: [{ key: 'technicals', label: 'Momentum', score: 60, weight_pct: 17 }, { key: 'gamma', label: 'Options', score: 40, weight_pct: 24 }, { key: 'flow', label: 'Positioning', score: 5, weight_pct: 20 },
+      { key: 'news', label: 'News', score: -30, weight_pct: 29 }, { key: 'macro', label: 'Macro', unavailable: true, why_unavailable: 'no FRED key' }], conflicts: ['A conflict.'] },
+  whats_next: { this_week: [{ date: '2026-10-23', label: 'CFTC Commitments of Traders (COT)', kind: 'macro' }, { date: '2026-10-28', label: 'FOMC statement and rate decision (FOMC)', kind: 'macro' }] } }"""
+
+
+def test_the_case_for_and_against_follows_classics_rules(tmp_path):
+    got = _run(tmp_path, f"""
+      const R = await import('{(JS / "pages/overview-research.js").as_posix()}');
+      const t = {T}, lt = {LT}, today = new Date(2026, 9, 21);
+      const f = R.factors(t, {{ lt, stars: {{ available: true, stars: 3 }}, price: {{ yr: 12, m3: -2, off: -25 }}, today }});
+      const fund = R.factors(t, {{ lt, fund: true, today }});
+      const pr = R.priceRead(Array.from({{ length: 100 }}, (_, i) => ({{ c: 100 + i }}))).yr;
+      print(JSON.stringify({{ f, fundNeg: fund.neg.map((x) => x.text), pr, ev: R.events(t, false, today), evAdv: R.events(t, true, today).map((e) => e.label),
+        steps: R.nextSteps('AAPL', t, f, false, today), fsteps: R.nextSteps('SPY', t, f, true, today).map((s) => s.view || 'compare'), drv: R.drivers(t).map((d) => d.kind) }}));
+    """)
+    f = got["f"]
+    assert [x["text"] for x in f["pos"]] == ["Revenue grew 6.4% in the latest fiscal year", "Profitable: about 27 cents of profit per dollar of sales",
+                                             "Beat analysts' earnings estimates in 7 of the last 8 quarters", "Share price up 12% over the period shown"], "four at most, in Classic's order"
+    neg = [x["text"] for x in f["neg"]]
+    assert neg[0] == "Earnings report on Nov 2, in 12 days" and neg[1].startswith("Priced above its own history: 30.0 times earnings against a 4-year average of 24.0")
+    assert len(neg) == 4 and neg[2] == "Net income fell 3.0% in the latest fiscal year" and neg[3] == "Options positioning may amplify price swings"
+    assert all(x.get("view") for x in f["neg"]) and f["neg"][0]["why"].startswith("Results and guidance")
+    assert not any("Priced above" in x for x in got["fundNeg"]), "a fund's price is not read against a P/E history"
+    assert round(got["pr"]) == 99
+    ev = got["ev"]
+    assert ev[0] == {"date": "2026-11-02", "label": "Earnings report", "detail": "in 12 days, analysts expect EPS of 1.98", "view": "earnings"}, "the date alone: no time of day (B1 rule)"
+    assert [e["label"] for e in ev] == ["Earnings report", "FOMC statement and rate decision"] and "CFTC Commitments of Traders" in got["evAdv"], "positioning reports at Advanced (the abbreviation dropped, as Classic does)"
+    assert [s.get("view") or "compare" for s in got["steps"]] == ["earnings", "financials", "long", "news"] and got["steps"][1]["text"] == "Check the statements behind the weaker figures"
+    assert "financials" not in got["fsteps"]
+    assert got["drv"] == ["Market and sector", "Optic's short-term signals", "Options positioning"]
+    assert "'Earnings report', detail: [" in RESEARCH and "reportTiming" not in RESEARCH
+
+
+def test_the_pulse_read_and_the_scores(tmp_path):
+    got = _run(tmp_path, f"""
+      const R = await import('{(JS / "pages/overview-research.js").as_posix()}');
+      const t = {T}, lt = {{ holding: {{ conviction_score: 60, conviction_scale: {{ min_possible: -40, max_possible: 100 }}, conviction: 'high', long_trend: {{ phase: 'secular uptrend' }}, valuation_history: {{ available: true, usable_years: 4, current_pe: 30, median_pe: 24 }} }} }};
+      const w = R.pulseWhy(t.pulse), neutral = R.pulseWhy(Object.assign({{}}, t.pulse, {{ stance: 'neutral' }}));
+      const agree = R.pulseWhy({{ stance: 'bearish', factors: [{{ label: 'A', score: -50, weight_pct: 50 }}, {{ label: 'B', score: -10, weight_pct: 50 }}] }});
+      print(JSON.stringify({{ w, neutral: neutral.against, agree: agree.against, none: R.pulseWhy({{ factors: [{{ unavailable: true }}] }}), sc: R.scores(t, lt), scNone: R.scores(t, null), cw: [R.convictionWords('none'), R.convictionWords('High'), R.convictionWords('')] }}));
+    """)
+    w = got["w"]
+    assert w["carrying"] == "Momentum is doing most of the work, at +60 on 17% of the weight, with Options behind it at +40 on 24%.", "ranked by score times weight (10.2 against 9.6)"
+    assert w["against"] == {"lead": "Against it:", "text": "News at \u221230 on 29%."}, "a true minus, as num() writes it"
+    assert w["conviction"]["lead"] == "Low conviction" and "held short of high while a scheduled event is still ahead" in w["conviction"]["text"] and "same option chain" in w["conviction"]["text"]
+    assert w["limits"][0] == "A conflict." and w["limits"][1].startswith("Macro had no data on this run (no FRED key)") and w["limits"][2].startswith("These are weights this app chose")
+    assert got["neutral"]["lead"] == "The inputs do not agree on a direction,"
+    assert got["agree"]["lead"] == "Every input that had data points the same way." and "B at \u221210" in got["agree"]["text"]
+    assert got["none"] is None
+    sc = got["sc"]
+    assert round(sc["short"], 1) == 53.7 and sc["long"] == 80 and sc["shortWords"] == "Bullish, low conviction" and sc["longWords"] == "High conviction, Secular uptrend"
+    assert sc["apart"].startswith("The two horizons disagree: the long-run record is stronger") and sc["priceNote"].startswith("The long-term score is built mostly from the price trend")
+    assert got["scNone"]["long"] is None and got["scNone"]["longWords"] == "Working out the long-term score…"
+    assert got["cw"] == ["no conviction", "high conviction", ""]
+
+
+def test_all_key_statistics_with_their_definitions(tmp_path):
+    got = _run(tmp_path, f"""
+      const R = await import('{(JS / "pages/overview-research.js").as_posix()}');
+      const Tm = await import('{(JS / "ui/term.js").as_posix()}');
+      const t = {T};
+      Tm.defineLive('stage:aapl', 'Price is 10% above a rising 30-week average.');
+      print(JSON.stringify({{ rows: R.keyStats(t.quote, t.company.short_interest, 'closed'), live: R.keyStats(t.quote, null, 'regular').map((r) => r[1]),
+        defs: ['stat:pe_forward', 'stat:open', 'stat:nonesuch', 'open', 'stage:AAPL'].map((k) => (Tm.define(k) || {{}}).def || null) }}));
+    """)
+    rows = {r[0]: (r[1], r[2]) for r in got["rows"]}
+    assert rows["market_cap"] == ("Market cap", "$3.70T") and rows["pe_trailing"][1] == "30.0" and "pe_forward" not in rows, "a figure the feed lacks (or a P/E of 0) is left out"
+    assert "dividend_yield" not in rows and rows["short_float"] == ("Short interest", "0.83% of float, as of Sep 30") and rows["revenue_growth"][1] == "+16.4%"
+    assert "Price to earnings against what analysts expect" in got["defs"][0] and got["defs"][1].startswith("The price the regular session opened at")
+    assert got["defs"][2] is None and got["defs"][3] is None, "a bare word such as 'open' is not a term: only stat: keys reach these"
+    assert got["defs"][4] == "Price is 10% above a rising 30-week average."
+    classic = CLASSIC
+    for k in ("pe_forward", "open", "beta", "revenue_growth"):
+        assert f"  {k}: " in classic, k
+
+
+def test_the_research_sections_and_where_they_sit():
+    dossier = (JS / "pages/dossier.js").read_text()
+    assert "${OR.nextSection(sym, rc)}${D.ticker ? more(sym) : ''}${OR.advancedSection(sym, rc)}" in dossier
+    assert "levels: { 'advanced research': 2 }" in dossier, "one press away below the Advanced level"
+    assert "${rc.fund ? OR.fundRisk(sym, rc.f) : ''}" in dossier
+    assert "step(api.get(`/api/stage?symbol=${enc}`" in dossier and "{ stage: () => stageLabel(sym) }" in dossier, "the stage survives the live price's redraws"
+    assert "/api/chat" not in RESEARCH and "repeating-linear-gradient" not in (V2 / "css/pages.css").read_text()
+    for w in ("before the open", "after the close"):
+        assert w not in RESEARCH
