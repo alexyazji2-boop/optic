@@ -39,6 +39,10 @@ export function parse(hash = location.hash) {
   return { view: TAB_VIEW[tab] || 'overview', symbol, params };
 }
 
+// The address before this one, for a page that offers a way back to it (the instrument chart's "Back to Macro",
+// Classic's instrumentBack)
+let prevHash = null, curHash = null;
+export const previous = () => prevHash;
 const listeners = new Set();
 export function onRoute(fn) { listeners.add(fn); }
 export function go(hash) {
@@ -46,6 +50,7 @@ export function go(hash) {
   location.hash = hash;
 }
 export function start() {
-  window.addEventListener('hashchange', () => { const r = parse(); listeners.forEach((fn) => fn(r)); });
+  curHash = location.hash;
+  window.addEventListener('hashchange', () => { prevHash = curHash; curHash = location.hash; const r = parse(); listeners.forEach((fn) => fn(r)); });
   const r = parse(); listeners.forEach((fn) => fn(r));
 }

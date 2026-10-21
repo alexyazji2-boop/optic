@@ -178,7 +178,7 @@ function forex() {
 function crossAsset() {
   const g = ((D.m || {}).macro || {}).groups || {};
   return html`${['volatility', 'rates', 'fx', 'commodities', 'credit', 'crypto'].filter((k) => (g[k] || []).length).map((k) => html`<h3>${capFirst(k === 'fx' ? 'currencies' : k)}</h3><div class="tscroll"><table class="t"><thead><tr><th>Instrument</th><th>Last</th><th>Day</th><th>5 days</th><th>20 days</th><th>Against the 200-day</th><th>RSI</th><th>90 sessions</th></tr></thead>
-    <tbody>${g[k].filter((r) => !r.error).map((r) => html`<tr><td>${instLink(r.symbol, r.label)}${r.note ? html`<br><small class="t-muted">${clean(r.note)}</small>` : ''}</td><td>${num(r.last, r.last < 10 ? 3 : 2)}</td><td class="${dir(r.chg_1d)}">${signed(r.chg_1d)}</td><td>${signed(r.chg_5d)}</td><td>${signed(r.chg_20d)}</td><td>${signed(r.vs_sma200)}</td><td>${num(r.rsi, 0)}</td><td>${raw(spark(r.series || []))}</td></tr>`)}</tbody></table></div>`)}`;
+    <tbody>${g[k].filter((r) => !r.error).map((r) => html`<tr class="inst-row" data-v2-inst="${r.symbol}"><td>${instLink(r.symbol, r.label)}${r.note ? html`<br><small class="t-muted">${clean(r.note)}</small>` : ''}</td><td>${num(r.last, r.last < 10 ? 3 : 2)}</td><td class="${dir(r.chg_1d)}">${signed(r.chg_1d)}</td><td>${signed(r.chg_5d)}</td><td>${signed(r.chg_20d)}</td><td>${signed(r.vs_sma200)}</td><td>${num(r.rsi, 0)}</td><td><a class="inst-spark" href="#/instrument/${encodeURIComponent(r.symbol)}" tabindex="-1" aria-label="Open the full chart for ${r.label}">${raw(spark(r.series || []))}</a></td></tr>`)}</tbody></table></div>`)}`;
 }
 function ratios() {
   const r = ((D.m || {}).macro || {}).ratios || [];
@@ -275,6 +275,10 @@ function wire(main) {
   main.addEventListener('click', async (e) => {
     const t = (s) => e.target.closest(s);
     let b;
+    // an instrument's row, anywhere on it, opens its full chart, as Classic's rows did (owner, 2026-10-21: "when i
+    // click the charts here, load a subchart like i used to on the classic version"); its name and its sparkline are
+    // links to the same page, so the keyboard reaches it by the name
+    if ((b = t('tr[data-v2-inst]')) && !t('a, button, input, select, summary')) { location.hash = `#/instrument/${encodeURIComponent(b.dataset.v2Inst)}`; return; }
     if ((b = t('[data-v2-econ]'))) { D.econCode = b.dataset.v2Econ; D.econ = null; paintMore(); try { D.econ = await api.get(`/api/econ/${encodeURIComponent(D.econCode)}?years=12`, { ttl: 3600000 }); } catch (err) { D.econ = { error: err.message }; } paintMore(); return; }
     if ((b = t('[data-v2-map]'))) { D.map = undefined; paintMore(); try { D.map = await api.get(`/api/stockmap?template=${encodeURIComponent(b.dataset.v2Map)}`, { ttl: 600000 }); } catch (err) { D.map = null; } paintMore(); return; }
     if ((b = t('[data-v2-map-sector]'))) { const tpl = (D.map.template || {}).id; D.map = undefined; paintMore(); try { D.map = await api.get(`/api/stockmap?template=${encodeURIComponent(tpl)}&sector=${encodeURIComponent(b.dataset.v2MapSector)}`, { ttl: 600000 }); } catch (err) { D.map = null; } paintMore(); return; }

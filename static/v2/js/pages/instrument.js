@@ -8,6 +8,9 @@ import { num, signed, clean, isNum, dir } from '../core/format.js';
 import { skeleton, failed } from '../ui/states.js';
 import { button as miloButton, provideContext } from '../ui/milo.js';
 import { createPriceChart } from '../ui/pricechart.js';
+import { previous, parse } from '../core/router.js';
+import { pageOf } from '../nav.js';
+import { icon } from '../ui/icons.js';
 
 const RANGES = [['1mo', '1M'], ['3mo', '3M'], ['6mo', '6M'], ['1y', '1Y'], ['2y', '2Y'], ['5y', '5Y']];
 let D = {}, live = true, mainEl = null, chart = null, range = '1y', style = 'line';
@@ -18,7 +21,7 @@ function paint() {
   if (chart) { chart.destroy(); chart = null; }
   const sn = (d || {}).snapshot || {}, dp = Math.abs(sn.last) < 10 ? 4 : 2;
   const rsiWord = !isNum(sn.rsi) ? 'Not enough history' : sn.rsi >= 70 ? 'Overbought territory' : sn.rsi <= 30 ? 'Oversold territory' : 'Mid-range';
-  draw(mainEl, html`<header class="page-head"><p class="t-label">${d ? (d.group === 'fx' ? 'FX' : (d.group || 'Instrument')) : 'Instrument'}</p><div class="split"><h1 class="t-display-m">${d ? `${d.name || d.label} (${d.label && d.label !== (d.name || d.label) ? d.label : sym})` : sym}</h1>
+  draw(mainEl, html`<header class="page-head">${backLink()}<p class="t-label">${d ? (d.group === 'fx' ? 'FX' : (d.group || 'Instrument')) : 'Instrument'}</p><div class="split"><h1 class="t-display-m">${d ? `${d.name || d.label} (${d.label && d.label !== (d.name || d.label) ? d.label : sym})` : sym}</h1>
       ${miloButton('Ask Milo what this is', { ask: `What is ${d ? d.label || sym : sym}, and why does it matter for markets right now?`, context: `Instrument, ${sym}` })}</div>${d && (d.about || d.note) ? html`<p class="section-sub">${clean(d.about || d.note)}</p>` : ''}</header>
     ${D.err ? failed('This instrument', D.err, { retry: 'instrument' }) : !d ? skeleton('chart', 1, 'Loading the history') : html`
       <dl class="kv" style="--kv:5"><div><dt>Last</dt><dd>${num(sn.last, dp)} <small class="${dir(sn.chg_1d)}">${signed(sn.chg_1d)}</small></dd></div>
@@ -32,6 +35,15 @@ function paint() {
     const bars = d.dates.map((t, i) => ({ t: Date.parse(t), o: (d.open || [])[i] ?? d.close[i], h: (d.high || [])[i] ?? d.close[i], l: (d.low || [])[i] ?? d.close[i], c: d.close[i], v: (d.volume || [])[i] || 0 })).filter((b) => isNum(b.c));
     chart = createPriceChart(mainEl.querySelector('#inst-chart'), { bars, style, overlays: { events: false }, panes: { volume: !!d.volume, rsi: false, macd: false }, window: bars.length, label: d.label || sym, height: Math.max(240, Math.min(400, Math.round(window.innerHeight * 0.62))) });   // a landscape phone keeps the whole chart in view
   }
+}
+
+// Back to the page the chart was opened from (Classic's "Back to Macro"), when there is one and it is not another
+// instrument
+function backLink() {
+  const prev = previous(); if (!prev) return '';
+  const r = parse(prev); if (r.view === 'instrument') return '';
+  const p = pageOf(r.view), label = r.symbol ? `${r.symbol}${p && p.label && r.view !== 'overview' ? ` ${p.label}` : ''}` : (p && p.label) || (r.view === 'home' ? 'Home' : '');
+  return label ? html`<p class="inst-back"><a class="textlink" href="${prev}">${icon('arrow')}Back to ${label}</a></p>` : '';
 }
 
 let gen = 0;
