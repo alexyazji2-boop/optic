@@ -115,7 +115,8 @@ def test_the_composer_is_pinned_with_its_send_control_inside():
     opener = MILO[MILO.index("export async function openMilo("):MILO.index("// Milo's panel is as wide")]
     assert '<div class="milo-compose">' in opener and 'class="milo-send" data-v2-milo-send aria-label="Send"' in opener and 'class="milo-stop" data-v2-milo-stop aria-label="Stop the answer"' in opener
     assert "btn btn-primary\" data-v2-milo-send" not in MILO, "the separate yellow Send button is gone"
-    assert "paperclip" not in MILO and "attachments: []" in MILO, "no attachment control: Milo takes no files"
+    # Classic parity B4b (2026-10-21, the owner's plan) brought attachments back: the clip sits inside the composer
+    assert 'class="milo-attach" data-v2-milo-attach' in MILO and "attachments, persona: persona()," in MILO, "the clip, in the composer, and the files sent"
     assert ".milo-compose textarea { flex: 1; min-width: 0; min-height: 34px; max-height: 160px;" in CSS and "function grow(ta)" in MILO
     assert "if (!text || S.busy || blocked()) return;" in MILO, "no second request while one is out"
     assert "f.dataset.state = !S.busy ? 'idle' : S.live && S.live.text ? 'streaming' : 'sending';" in MILO
