@@ -1815,10 +1815,10 @@ html.eff-1100 .ob-ways { grid-template-columns: minmax(0, 1fr); }
 .ta-host { position: relative; } .ta-wrap { display: inline-block; }
 .ta-list { position: absolute; z-index: 30; top: calc(100% + 4px); left: 0; min-width: 100%; width: max-content; max-width: min(420px, calc(100vw - 32px)); max-height: 320px; overflow-y: auto;
   margin: 0; padding: 4px; list-style: none; background: var(--c-raised); border: 1px solid var(--c-line); border-radius: var(--r-lg); box-shadow: var(--sh-pop); }
-.ta-list li { display: grid; grid-template-columns: minmax(56px, auto) minmax(0, 1fr) auto; gap: 10px; align-items: baseline; min-height: 40px; padding: 8px 10px; border-radius: var(--r-sm); cursor: pointer; font-size: var(--t-md); }
+.ta-list li.sym-row { grid-template-columns: 26px minmax(52px, max-content) minmax(0, 1fr) auto; gap: 10px; min-height: 44px; padding: 6px 10px; border-radius: var(--r-sm); cursor: pointer; }
+.ta-list .sym-sym, .ta-list .sym-name { font-size: var(--t-md); } .ta-list .sym-kind { font-size: var(--t-sm); } .ta-list .sym-logo { width: 24px; height: 24px; }
 .ta-list li:hover, .ta-list li.on { background: var(--c-sunk); }
-.ta-sym { font: 600 var(--t-md)/1.2 var(--f-label); } .ta-name { color: var(--c-ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .ta-tag { color: var(--c-ink-3); font-size: var(--t-xs); }
-.ta-list b { color: var(--c-ink); font-weight: 600; } .ta-sym b { text-decoration: underline; text-underline-offset: 3px; }
+
 @media (pointer: coarse) { .ta-list li { min-height: var(--tap); } }
 .read-build { margin-top: 6px; }
 /* a bar in Scan's ranked column (B9.4): beside the figure, which says the value */

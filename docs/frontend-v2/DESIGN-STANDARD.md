@@ -32,6 +32,9 @@ A score with a good and a bad side is coloured and has a thin line filled to it 
 
 The figure carries the colour too and the words say the reading, so colour never carries it alone; the line is hidden from a screen reader. A reading with no good side (RSI, IV rank, the trend strength oscillator) stays uncoloured, and a rank (Compare's "best") is not a direction.
 
+### Search (owner, 2026-10-21)
+Every search for a symbol looks like TradingView's, squared: the top bar's search has a search icon, the box, Clear and close; then a filter row (All, and only the kinds of listing the results hold: Stocks, Funds, Indices, Futures, Crypto, Currencies); then one row per listing: the logo (from Optic's `/api/logo`, the symbol's initial where there is none), the symbol, the name, and the kind of listing on the right (`ui/symbols.js`). The letters typed are gold in the symbol and the name (the owner's choice). The symbol boxes on the pages (Watchlist, Alerts, Analysts, Compare, the Chart tab, Home's linked ticker) show the same rows under them (`ui/typeahead.js`, opted into with `data-v2-ta`). No exchange is shown: the search does not carry one.
+
 ### Surfaces and borders
 | Token | Used for |
 |---|---|

@@ -15,7 +15,7 @@
 // no wrapper; a page that redraws a strip loses them, and one observer puts them back.
 import { icon } from './icons.js';
 
-export const STRIPS = '.tabs, .tabset, .mstrip, .drail, .bk-tabs, .chw-rail, .ch-draw, .ws-presets, .chips-scroll, .sec-list, .cs-strip';
+export const STRIPS = '.tabs, .tabset, .mstrip, .drail, .bk-tabs, .chw-rail, .ch-draw, .ws-presets, .chips-scroll, .sec-list, .cs-strip, .palette-filters';
 const LATCH_MS = 200;
 let lastWheel = { at: -1e9, el: null };
 

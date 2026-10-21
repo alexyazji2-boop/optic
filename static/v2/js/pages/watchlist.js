@@ -201,7 +201,7 @@ function paint(main) {
     ${store.state.listsError ? failed('Your watchlists', store.state.listsError, { retry: 'lists' }) : ''}
     ${!lists.length ? empty('You are not following anything yet', 'Add a ticker below to start your watchlist.') : listsBar()}
     <form class="add-form" data-v2-add>
-      <label class="field">${icon('plus')}<span class="sr">Add a ticker${a ? ` to ${a.name}` : ''}</span><input name="sym" data-v2-wl-add placeholder="Add a ticker, such as MSFT" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="12" enterkeyhint="done" required></label>
+      <label class="field">${icon('plus')}<span class="sr">Add a ticker${a ? ` to ${a.name}` : ''}</span><input name="sym" data-v2-wl-add data-v2-ta="submit" placeholder="Add a ticker, such as MSFT" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="12" enterkeyhint="done" required></label>
       <button type="submit" class="btn btn-primary">Add</button></form>
     ${savedNote()}
     ${S.rows ? pulse(S.rows) : ''}${controls()}<div id="wl-rows">${rowsBlock()}</div>`);

@@ -3,12 +3,13 @@
 // take the highlighted one, Escape to close. Enter with nothing highlighted takes the one company whose name the
 // reader typed ("apple" is AAPL), never a symbol typed as itself (F, AI, ^GSPC, BRK-B). Classic's logos came from two
 // outside services keyed by the symbol, so every symbol typed went to them; v2 shows no outside logos anywhere, and
-// these rows carry the symbol, the name and whether it is a fund.
+// these rows carry a logo Optic fetches itself (ui/symbols.js), the symbol, the name and the kind of listing.
 //
 // Delegated from the page's root, so a page that redraws its boxes keeps it: one list at a time, under the box that
 // has focus, and gone when focus leaves it. A box opts in with data-v2-ta.
 import * as api from '../core/api.js';
-import { esc } from '../core/format.js';
+import { marked, rowHTML } from './symbols.js';
+export { marked };
 
 export const DEBOUNCE_MS = 160;
 
@@ -23,16 +24,8 @@ export function typedNamePick(items, listedFor, typed) {
   const lower = q.toLowerCase();
   return items.findIndex((r) => String(r.name || '').toLowerCase().includes(lower));
 }
-/** The text with the first match of the query in bold, escaped. */
-export function marked(text, query) {
-  const t = String(text || ''), q = String(query || '').trim();
-  const at = q ? t.toLowerCase().indexOf(q.toLowerCase()) : -1;
-  if (at < 0) return esc(t);
-  return `${esc(t.slice(0, at))}<b>${esc(t.slice(at, at + q.length))}</b>${esc(t.slice(at + q.length))}`;
-}
-
 let uid = 0;
-export function wire(root, onChoose) {
+export function wire(root, onChoose = null) {
   const S = { input: null, list: null, items: [], active: -1, timer: null, listedFor: '', seq: 0 };
   const close = () => {
     clearTimeout(S.timer);
@@ -47,12 +40,11 @@ export function wire(root, onChoose) {
       S.list = document.createElement('ul');
       S.list.className = 'ta-list'; S.list.id = input.getAttribute('aria-controls') || `ta-${(uid += 1)}`; S.list.setAttribute('role', 'listbox');
       S.list.setAttribute('aria-label', 'Suggestions');
-      const host = input.closest('[data-v2-ta-host]') || input.parentElement;
+      const lab = input.closest('label'), host = input.closest('[data-v2-ta-host]') || (lab ? lab.parentElement : input.parentElement);
       host.classList.add('ta-host'); host.appendChild(S.list);
       input.setAttribute('aria-controls', S.list.id);
     }
-    S.list.innerHTML = S.items.map((r, i) => `<li role="option" id="${S.list.id}-${i}" aria-selected="${i === S.active}" class="${i === S.active ? 'on' : ''}" data-ta-i="${i}">
-      <span class="ta-sym">${marked(r.symbol, S.listedFor)}</span><span class="ta-name">${marked(r.name, S.listedFor)}</span>${r.etf ? '<span class="ta-tag">Fund</span>' : ''}</li>`).join('');
+    S.list.innerHTML = S.items.map((r, i) => `<li role="option" id="${S.list.id}-${i}" aria-selected="${i === S.active}" class="sym-row${i === S.active ? ' on' : ''}" data-ta-i="${i}">${rowHTML(r, S.listedFor)}</li>`).join('');
     input.setAttribute('aria-expanded', 'true');
     // kept on screen: a box at the right of a phone row opens its list leftward as far as it needs
     S.list.style.left = ''; const lr = S.list.getBoundingClientRect(), vw = document.documentElement.clientWidth, hl = S.list.parentElement.getBoundingClientRect().left;
@@ -63,7 +55,10 @@ export function wire(root, onChoose) {
   const choose = (i) => {
     const pick = S.items[i], input = S.input; if (!pick || !input) return;
     input.value = pick.symbol; close();
-    onChoose(pick, input);
+    if (onChoose) onChoose(pick, input);
+    // the page hears it as v2:ta-pick; a box marked data-v2-ta="submit" sends its form, as Enter would
+    input.dispatchEvent(new CustomEvent('v2:ta-pick', { detail: pick, bubbles: true }));
+    if (input.dataset.v2Ta === 'submit' && input.form) { if (input.form.requestSubmit) input.form.requestSubmit(); else input.form.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true })); }
   };
   root.addEventListener('input', (e) => {
     const input = e.target.closest && e.target.closest('[data-v2-ta]'); if (!input) return;

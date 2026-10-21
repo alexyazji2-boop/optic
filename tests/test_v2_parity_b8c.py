@@ -34,8 +34,10 @@ def test_the_typed_text_is_marked_and_escaped(tmp_path):
 
 
 def test_the_boxes_use_it():
-    assert "data-v2-ta" in AN and "typeahead(main, (pick) => { Q.ticker = String(pick.symbol).toUpperCase(); load(); });" in AN
-    assert "data-v2-ta value=" in CMP and "<datalist" not in CMP and "typeahead(main, (pick, input) =>" in CMP, "Compare's native datalist is replaced"
+    app = (JS / "app.js").read_text()
+    assert "wireTypeahead(document);" in app, "wired once for the app; a box opts in with data-v2-ta"
+    assert "data-v2-ta" in AN and "main.addEventListener('v2:ta-pick', (e) => { Q.ticker = String(e.detail.symbol).toUpperCase(); load(); });" in AN
+    assert "data-v2-ta value=" in CMP and "<datalist" not in CMP and "main.addEventListener('v2:ta-pick', (e) => {" in CMP, "Compare's native datalist is replaced"
     assert "attachTypeahead('an-ticker'" in CLASSIC and "attachTypeahead(`cmp-input-${i}`" in CLASSIC
 
 

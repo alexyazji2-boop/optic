@@ -6,7 +6,7 @@
 //   results, screens that match a request for a list of names, and an Ask
 //   Milo row (first when it reads as a question). Asking drafts the question
 //   in Milo; nothing is sent until the reader presses Send there.
-import { html, render, $, $$, trapFocus } from '../core/dom.js';
+import { html, raw, render, $, $$, trapFocus } from '../core/dom.js';
 import * as api from '../core/api.js';
 import * as store from '../core/store.js';
 import { holds } from '../core/device.js';
@@ -16,6 +16,7 @@ import { getFlags } from './shell.js';
 import { openMilo } from './milo.js';
 // Row markers are the app's own line icons: the sparkle and arrow characters read as emoji (owner's checklist, 2026-10-19).
 import { icon } from './icons.js';
+import { rowHTML, filterOf, FILTERS } from './symbols.js';
 
 // The classic labels and search words, so nothing becomes unfindable by the word it was found by.
 export const PLACES = [
@@ -77,7 +78,7 @@ export function screenMatches(text, scans) {
 export function exactPlace(q, places) { const l = String(q).trim().toLowerCase(); return places.find((p) => p.label.toLowerCase() === l || p.terms.split(/\s+/).indexOf(l) !== -1) || null; }
 
 let root, input, list, note, untrap, opener, timer, seq = 0, items = [], sel = 0, catalogue = null, research = null, ctxSym = null, vvOff = null, scrollY0 = 0;
-let moved = null, pending = null, pendingFor = null, settledFor = null, notice = '';
+let allItems = [], moved = null, pending = null, pendingFor = null, settledFor = null, notice = '', filter = 'all', shownFor = '', filtersEl = null, clearBtn = null;
 const allowed = (p) => (!p.owner || !!(store.state.me && store.state.me.admin)) && (!p.feature || !!getFlags()[p.feature]);
 const symFor = () => ctxSym || store.recent().find((s) => !isInstrument(s)) || null;
 const placeHref = (p) => (p.href ? p.href : p.symbol ? (symFor() ? hrefFor(p.view, symFor()) : '#/') : hrefFor(p.view));
@@ -114,7 +115,7 @@ function savedFor(sym) {
 function symbolRows(sym, detail, { kind = '', enter = true, bare = false } = {}) {
   const word = KIND_WORD[kind];
   const what = [detail, word && kind !== 'etf' ? word : ''].filter(Boolean).join(', ');
-  const out = [{ group: 'Open', lead: isInstrument(sym, kind || undefined) ? icon('markets') : icon('dossier'), label: sym, detail: what, tag: enter ? 'enter' : '', run: go(openHref(sym, kind || undefined)) }];
+  const out = [{ group: 'Open', lead: isInstrument(sym, kind || undefined) ? icon('markets') : icon('dossier'), label: sym, detail: what, sym: { symbol: sym, name: detail, kind }, tag: enter ? 'enter' : '', run: go(openHref(sym, kind || undefined)) }];
   if (bare) return out;   // nothing listed under that name: no Chart, Options and the rest to offer for it
   if (isInstrument(sym, kind || undefined)) {
     const proxy = PROXY[sym];
@@ -136,10 +137,10 @@ async function build(q, early) {
   notice = '';
   if (!q) {
     const rec = store.recent().slice(0, 5);
-    rec.forEach((s) => rows.push({ group: 'Recent', lead: icon(isInstrument(s) ? 'chart' : 'dossier'), label: s, detail: 'Open again', run: go(openHref(s)) }));
+    rec.forEach((s) => rows.push({ group: 'Recent', lead: icon(isInstrument(s) ? 'chart' : 'dossier'), label: s, detail: 'Open again', sym: { symbol: s, name: 'Open again', kind: isInstrument(s) ? 'index' : '' }, run: go(openHref(s)) }));
     if (rec.length) rows.push({ group: 'Recent', lead: icon('close'), label: 'Clear recent symbols', detail: 'Forgets them in this browser', keep: true, run: () => store.clearRecent() });
     // companies first, by the names a newcomer knows, then a few actions; the full list of pages answers to typing
-    POPULAR.filter(([s2]) => !rec.includes(s2)).slice(0, rec.length ? 2 : 4).forEach(([s2, name, d]) => rows.push({ group: 'Companies', lead: icon(s2 === 'SPY' ? 'markets' : 'dossier'), label: `${name} · ${s2}`, detail: d, run: go(openHref(s2)) }));
+    POPULAR.filter(([s2]) => !rec.includes(s2)).slice(0, rec.length ? 2 : 4).forEach(([s2, name, d]) => rows.push({ group: 'Companies', lead: icon(s2 === 'SPY' ? 'markets' : 'dossier'), label: s2, detail: d, sym: { symbol: s2, name: `${name}: ${d}`, kind: s2 === 'SPY' ? 'etf' : 'stock' }, run: go(openHref(s2)) }));
     QUICK.slice(0, 3).forEach((x) => rows.push({ group: 'Actions', lead: icon('arrow'), label: x.label, detail: x.detail, run: x.run }));
     places.slice(0, 4).forEach((p) => rows.push({ group: 'Go to', lead: icon('arrow'), label: p.label, run: go(placeHref(p)) }));
     return rows;
@@ -165,7 +166,7 @@ async function build(q, early) {
   const lookUp = q.length <= 40 && !(isQuestion && q.split(/\s+/).length > 3);
   let results = [], failed = false;
   if (lookUp) {
-    try { const r = await api.get(`/api/search?q=${encodeURIComponent(q)}&limit=8`, { ttl: 300000, timeout: 8000 }); results = (r && r.results) || []; failed = !!(r && r.available === false); } catch (e) { failed = true; }
+    try { const r = await api.get(`/api/search?q=${encodeURIComponent(q)}&limit=12`, { ttl: 300000, timeout: 8000 }); results = (r && r.results) || []; failed = !!(r && r.available === false); } catch (e) { failed = true; }
   }
   if (my !== seq) return null;
   const at = from + (ask && isQuestion && !exact ? 1 : 0);
@@ -195,8 +196,17 @@ async function build(q, early) {
   if (failed) notice = 'Company search is not answering right now. Typed symbols still open, and pages and Milo work as usual.';
   else if (lookUp && !results.length && !isTicker && !matched.length && !actions.length) notice = `No company, fund or index matches "${q}".`;
   const insertAt = rows.findIndex((r) => r.group === 'Ask Milo' && !isQuestion);
-  const symRows = others.map((r) => ({ group: 'Symbols', lead: isInstrument(r.symbol, r.kind) ? icon('markets') : r.etf ? 'ETF' : icon('dossier'), label: r.symbol, detail: [r.name, KIND_WORD[r.kind] && r.kind !== 'etf' ? KIND_WORD[r.kind] : ''].filter(Boolean).join(', '), run: go(openHref(r.symbol, r.kind)) }));
+  const symRows = others.map((r) => ({ group: 'Symbols', lead: isInstrument(r.symbol, r.kind) ? icon('markets') : r.etf ? 'ETF' : icon('dossier'), label: r.symbol, detail: [r.name, KIND_WORD[r.kind] && r.kind !== 'etf' ? KIND_WORD[r.kind] : ''].filter(Boolean).join(', '), sym: { symbol: r.symbol, name: r.name, kind: r.kind || (r.etf ? 'etf' : 'stock') }, run: go(openHref(r.symbol, r.kind)) }));
   if (insertAt >= 0) rows.splice(insertAt, 0, ...symRows); else rows.push(...symRows);
+  // the symbols read as one list, as TradingView's do: the top symbol's pages (Chart, Options and the rest) follow it
+  if (top && symRows.length) {
+    const g = String(top.symbol).toUpperCase(), subs = rows.filter((r) => r.group === g);
+    if (subs.length) {
+      const rest = rows.filter((r) => r.group !== g), lastSym = rest.map((r) => r.group).lastIndexOf('Symbols');
+      rest.splice(lastSym + 1, 0, ...subs.map((r) => Object.assign(r, { group: `More for ${g}` })));
+      rows.splice(0, rows.length, ...rest);
+    }
+  }
   if (looksLikeScreen(q)) {
     if (!catalogue) { try { catalogue = await api.get('/api/scanners', { ttl: 600000 }); } catch (e) { catalogue = { scans: [] }; } }
     if (my !== seq) return null;
@@ -216,17 +226,24 @@ function ensure() {
   root = document.createElement('div');
   root.className = 'palette'; root.hidden = true;
   root.innerHTML = `<div class="palette-scrim"></div><div class="palette-panel" role="dialog" aria-modal="true" aria-label="Search or ask Optic">
-    <div class="palette-top"><input type="search" role="combobox" aria-expanded="true" aria-controls="pal-list" aria-autocomplete="list" aria-label="Search a company, fund, index or page, or ask Milo a question" placeholder="Search a company" autocomplete="off" autocapitalize="none" autocorrect="off" enterkeyhint="go" spellcheck="false">
-      <button type="button" class="palette-x" data-pal-close>Cancel</button></div>
+    <div class="palette-top"><span class="pal-glass" aria-hidden="true">${icon('search').s}</span><input type="search" role="combobox" aria-expanded="true" aria-controls="pal-list" aria-autocomplete="list" aria-label="Search a company, fund, index or page, or ask Milo a question" placeholder="Search a company, fund or ticker" autocomplete="off" autocapitalize="none" autocorrect="off" enterkeyhint="go" spellcheck="false">
+      <button type="button" class="palette-clear" data-pal-clear hidden>Clear</button><span class="pal-div" aria-hidden="true"></span><button type="button" class="palette-x" data-pal-close aria-label="Close search" title="Close">${icon('close').s}</button></div>
+    <div class="palette-filters" role="group" aria-label="Show" hidden></div>
     <div class="palette-list" id="pal-list" role="listbox" aria-label="Results"></div>
     <p class="palette-note" role="status" aria-live="polite" hidden></p>
     <p class="palette-foot" aria-hidden="true"><span><kbd>↑</kbd><kbd>↓</kbd> move</span><span><kbd>↵</kbd> open</span><span><kbd>esc</kbd> close</span></p></div>`;
   document.body.appendChild(root);
-  input = $('input', root); list = $('.palette-list', root); note = $('.palette-note', root);
+  input = $('input', root); list = $('.palette-list', root); note = $('.palette-note', root); filtersEl = $('.palette-filters', root); clearBtn = $('[data-pal-clear]', root);
   // the scrim, Cancel or Escape close it and put the reader back where they were (beginner brief item 12: a phone
   // has no Escape key, and the menu showed no way out)
-  root.addEventListener('click', (e) => { if (e.target.classList.contains('palette-scrim') || e.target.closest('[data-pal-close]')) { close(); return; } const it = e.target.closest('.palette-item'); if (it) choose(Number(it.dataset.v2Idx)); });
-  input.addEventListener('input', () => { moved = null; clearTimeout(timer); timer = setTimeout(() => paint(input.value.trim()), 120); });
+  root.addEventListener('click', (e) => {
+    if (e.target.classList.contains('palette-scrim') || e.target.closest('[data-pal-close]')) { close(); return; }
+    if (e.target.closest('[data-pal-clear]')) { input.value = ''; clearBtn.hidden = true; moved = null; paint(''); input.focus({ preventScroll: true }); return; }
+    const f = e.target.closest('[data-pal-filter]');
+    if (f) { filter = f.dataset.palFilter; moved = null; draw(items); const again = $(`[data-pal-filter="${filter}"]`, filtersEl); if (again) again.focus({ preventScroll: true }); return; }
+    const it = e.target.closest('.palette-item'); if (it) choose(Number(it.dataset.v2Idx));
+  });
+  input.addEventListener('input', () => { moved = null; clearBtn.hidden = !input.value; clearTimeout(timer); timer = setTimeout(() => paint(input.value.trim()), 120); });
   input.addEventListener('keydown', (e) => {
     if (e.isComposing) return;
     if (e.key === 'ArrowDown') { e.preventDefault(); move(1); } else if (e.key === 'ArrowUp') { e.preventDefault(); move(-1); }
@@ -245,15 +262,30 @@ function paint(q) {
   pending = build(q, (early) => { if (my === seq) draw(early); }).then((out) => { if (out && my === seq) { draw(out); settledFor = q; } });
   return pending;
 }
-function draw(out) {
+// TradingView's filter row (owner, 2026-10-21): All, then only the kinds of listing the results hold. A filter keeps
+// the symbols of that kind and nothing else; All brings the pages, actions and Ask Milo back.
+function drawFilters(all) {
+  const q = input ? input.value.trim() : '';
+  const kinds = [...new Set(all.filter((r) => r.sym && r.group !== 'Recent' && r.group !== 'Companies').map((r) => filterOf(r.sym.kind)))];
+  if (filter !== 'all' && !kinds.includes(filter)) filter = 'all';
+  const show = !!q && kinds.length > 0;
+  filtersEl.hidden = !show;
+  if (show) render(filtersEl, html`${FILTERS.filter(([k]) => k === 'all' || kinds.includes(k)).map(([k, l]) => html`<button type="button" class="chip" data-pal-filter="${k}" aria-pressed="${filter === k}">${l}</button>`)}`);
+}
+function draw(all) {
+  allItems = all;
+  drawFilters(all);
+  const out = filter === 'all' ? all : all.filter((r) => r.sym && filterOf(r.sym.kind) === filter);
   items = out;
+  shownFor = input ? input.value.trim() : '';
   // once the reader has moved the selection, results arriving keep it on the same row
   const keep = moved ? out.findIndex((r) => `${r.group}|${r.label}` === moved) : -1;
   sel = keep >= 0 ? keep : Math.max(0, out.findIndex((r) => r.tag === 'enter'));
   if (note) { note.textContent = notice; note.hidden = !notice; }
   let last = null;
   render(list, out.length ? out.map((it, i) => { const head = it.group !== last ? html`<p class="palette-group" role="presentation">${it.group}</p>` : ''; last = it.group;
-    return html`${head}<button type="button" class="palette-item" role="option" id="pal-${i}" data-v2-idx="${i}" aria-selected="${i === sel}"><span class="pal-lead" aria-hidden="true">${it.lead}</span><span class="pal-main">${it.group === 'Open' || it.group === 'Symbols' || it.group === 'Recent' ? html`<b class="tick">${it.label}</b>` : it.label}</span>${it.detail ? html`<small>${it.detail}</small>` : ''}${it.tag ? html`<kbd class="pal-tag">${it.tag}</kbd>` : ''}</button>`; })
+    if (it.sym) return html`${head}<button type="button" class="palette-item sym-row" role="option" id="pal-${i}" data-v2-idx="${i}" aria-selected="${i === sel}">${raw(rowHTML(it.sym, shownFor))}${it.tag ? html`<kbd class="pal-tag">${it.tag}</kbd>` : ''}</button>`;
+    return html`${head}<button type="button" class="palette-item" role="option" id="pal-${i}" data-v2-idx="${i}" aria-selected="${i === sel}"><span class="pal-lead" aria-hidden="true">${it.lead}</span><span class="pal-main">${it.label}</span>${it.detail ? html`<small>${it.detail}</small>` : ''}${it.tag ? html`<kbd class="pal-tag">${it.tag}</kbd>` : ''}</button>`; })
     : html`<p class="quiet">${notice ? '' : 'Nothing matches. Try a ticker such as AAPL, or ask a question.'}</p>`);
   input.setAttribute('aria-activedescendant', out.length ? `pal-${sel}` : '');
   const b = $(`#pal-${sel}`, list); if (b) b.scrollIntoView({ block: 'nearest' });
@@ -280,7 +312,7 @@ export function open(from, { seed = '', symbol = null } = {}) {
   opener = from || document.activeElement; ctxSym = symbol;
   scrollY0 = window.scrollY; moved = null; settledFor = null;
   if (!onEntry()) { try { history.pushState(Object.assign({}, history.state || {}, { v2palette: 1 }), ''); } catch (e) { /* a sandboxed frame */ } }
-  root.hidden = false; input.value = seed;
+  root.hidden = false; input.value = seed; filter = 'all'; clearBtn.hidden = !seed;
   paint(seed.trim());
   untrap = trapFocus($('.palette-panel', root), () => close());
   // a phone's keyboard covers the bottom of the screen: the list fits the visible part (visualViewport) instead

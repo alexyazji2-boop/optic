@@ -9,6 +9,7 @@
   --c-plane-2: #efe9dd;
   --c-raised: #fffcf6;
   --c-sunk: #e9e2d3;
+  --c-logo-bg: #f6f4ef;   /* the disc a company's logo sits on, light in both themes so dark marks stay visible */
   --c-active: #fffcf6;   /* the fill of a chosen segment or tab */
   --c-scene: #1b1a18;
   --c-scene-2: #252320;

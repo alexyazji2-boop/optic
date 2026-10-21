@@ -285,7 +285,7 @@ function formBody(f) {
   if (!c) return S.catErr ? failed('The list of conditions', S.catErr, { retry: 'catalogue' }) : skeleton('lines', 2, 'Loading the conditions');
   const p = c.param;
   return html`<form class="stack al-form" data-v2-al-form="${f.id || 'new'}" novalidate>
-    <label class="field"><span class="sr">Symbol</span><input name="symbol" value="${f.symbol || ''}" placeholder="Symbol, such as AAPL" maxlength="12" required autocomplete="off" autocapitalize="characters" spellcheck="false" enterkeyhint="next" ${f.id ? 'readonly' : ''}></label>
+    <label class="field"><span class="sr">Symbol</span><input name="symbol" value="${f.symbol || ''}" data-v2-ta="submit" placeholder="Symbol, such as AAPL" maxlength="12" required autocomplete="off" autocapitalize="characters" spellcheck="false" enterkeyhint="next" ${f.id ? 'readonly' : ''}></label>
     <label class="select"><span class="t-label">When</span><select name="kind" data-v2-al-kind ${f.id ? 'disabled' : ''}>${GROUPS.map(([g, fam]) => html`<optgroup label="${g}">${cat().filter((x) => (FAMILY[x.id] || 'research') === fam).map((x) => html`<option value="${x.id}" ${x.id === c.id ? 'selected' : ''}>${x.label}</option>`)}</optgroup>`)}</select></label>
     ${p ? (p.choices ? html`<label class="select"><span class="t-label">${p.label}</span><select name="param" data-v2-al-param>${p.choices.map((ch) => html`<option value="${ch.value}" ${String(ch.value) === String(f.param ?? p.default) ? 'selected' : ''}>${ch.label}</option>`)}</select></label>`
     : html`<label class="field"><span class="t-label">${p.label}</span><input name="param" data-v2-al-param inputmode="decimal" enterkeyhint="done" value="${f.param ?? p.default ?? ''}" placeholder="${p.label}" required></label>`) : ''}
