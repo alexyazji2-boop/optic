@@ -103,8 +103,28 @@ export const FIELDS = [
   { group: 'Cross-check', key: 'exit_multiple', label: 'Exit EV/EBITDA (cross-check only)', unit: 'x', why: 'exit_multiple', step: 0.1 },
 ];
 export const GROUPS = ['Growth', 'Profitability', 'Reinvestment', 'Taxes', 'Discount rate', 'Cross-check'];
+/** The equity-side models' assumptions (B7c): residual income for banks and insurers, the dividend model, and a REIT's
+ *  price-to-FFO. Same mechanics as the DCF form; kept in edits.equity. */
+export const EQ_FIELDS = [
+  { group: 'Residual income', model: 'residual_income', key: 'ri.roe_start', label: 'Starting return on equity', unit: '%' },
+  { group: 'Residual income', model: 'residual_income', key: 'ri.roe_terminal', label: 'Return on equity after ten years', unit: '%' },
+  { group: 'Residual income', model: 'residual_income', key: 'ri.book_growth_start', label: 'Book value growth, first year', unit: '%' },
+  { group: 'Residual income', model: 'residual_income', key: 'ri.growth_terminal', label: 'Growth after the forecast', unit: '%' },
+  { group: 'Dividend model', model: 'ddm', key: 'ddm.growth_high', label: 'Dividend growth, first years', unit: '%' },
+  { group: 'Dividend model', model: 'ddm', key: 'ddm.years_high', label: 'Years of that growth', unit: 'yrs' },
+  { group: 'Dividend model', model: 'ddm', key: 'ddm.growth_terminal', label: 'Dividend growth after that', unit: '%' },
+  { group: 'REIT', model: 'reit', key: 'reit.p_ffo', label: 'Price-to-FFO to value FFO at', unit: 'x' },
+];
+const EQ_SOURCE = { 'ri.roe_start': 'roe_start', 'ri.roe_terminal': 'roe_terminal', 'ri.book_growth_start': 'book_growth_start', 'ri.growth_terminal': 'growth_terminal', 'ddm.growth_high': 'growth_high', 'ddm.years_high': 'years_high', 'ddm.growth_terminal': 'growth_terminal' };
+const COST_FIELDS = ['wacc.risk_free', 'wacc.beta_raw', 'wacc.erp', 'wacc.extra_premium'];
+export function eqValue(d, f, which) {
+  const m = d[f.model];
+  if (!m || !m.available) return null;
+  if (f.key === 'reit.p_ffo') return which === 'default' ? (m.own_history || {}).median : (m.at_multiple || {}).multiple;
+  return which === 'default' ? (m.defaults || {})[EQ_SOURCE[f.key]] : m[EQ_SOURCE[f.key]];
+}
 const getPath = (o, key) => key.split('.').reduce((x, k) => (x && typeof x === 'object' ? x[k] : undefined), o);
-export const fieldOf = (key) => FIELDS.find((x) => x.key === key) || null;
+export const fieldOf = (key) => FIELDS.find((x) => x.key === key) || EQ_FIELDS.find((x) => x.key === key) || null;
 export function fieldValue(d, f, which) {
   const a = which === 'default' ? d.defaults : d.assumptions;
   if (!a) return null;
@@ -123,6 +143,13 @@ export function setEdit(e, f, raw) {
     const n = Number(text.replace(/[,%x×\s]/g, ''));
     if (!Number.isFinite(n)) return `${f.label} needs a number.`;
     value = f.unit === '%' ? n / 100 : n;
+  }
+  if (f.model) {
+    const [model, field] = f.key.split('.');
+    e.equity = e.equity || {}; e.equity[model] = e.equity[model] || {};
+    if (value === undefined || value === null) delete e.equity[model][field]; else e.equity[model][field] = value;
+    if (!Object.keys(e.equity[model]).length) delete e.equity[model];
+    return null;
   }
   if (f.wacc) { const k = f.key.slice(5); if (value === undefined) delete e.wacc[k]; else e.wacc[k] = value; return null; }
   const [head, tail] = f.key.split('.');
@@ -143,7 +170,7 @@ export function parseAmount(text) {
 }
 
 /* ---------------- state ---------------- */
-const V = { sym: null, node: null, data: null, defaults: null, edits: null, loading: false, error: '', seq: 0, timer: null, open: {}, tab: 'wacc_growth', focus: null, sel: null, extra: {}, saved: null, status: '', replays: {}, compares: {}, armed: null };
+const V = { sym: null, node: null, data: null, defaults: null, edits: null, loading: false, error: '', seq: 0, timer: null, open: {}, tab: 'wacc_growth', focus: null, sel: null, extra: {}, saved: null, status: '', replays: {}, compares: {}, armed: null, comps: null, sotp: null, peers: '', sotpM: {} };
 const editsFor = () => { if (!V.edits) V.edits = Object.assign(blankEdits(), readStore().edits[V.sym] || {}); ['drivers', 'wacc', 'base', 'equity'].forEach((k) => { V.edits[k] = V.edits[k] || {}; }); return V.edits; };
 
 async function load(force) {
@@ -267,7 +294,7 @@ export function rangeRows(d, extra = {}) {
   return rows;
 }
 function range(d) {
-  const m = d.market || {}, rows = rangeRows(d, V.extra);
+  const m = d.market || {}, rows = rangeRows(d, { rows: extraRows() });
   if (!rows.length) return html`<p class="t-muted">Nothing to compare yet.</p>`;
   const vals = rows.flatMap((r) => [r.lo, r.mid, r.hi]).filter(has).concat(has(m.price) ? [m.price] : []);
   let lo = Math.min(0, ...vals), hi = Math.max(...vals); const padv = (hi - lo) * 0.06; lo -= lo < 0 ? padv : 0; hi += padv;
@@ -455,6 +482,103 @@ function form(d) {
     ${overrides(d)}</div></details>`;
 }
 
+/* ---------------- the other methods, peers and the sum of the parts (B7c; Classic valuation.js:904-1013, 1087-1150) ---------------- */
+/** Peers' multiples (not price to book, not a spread too wide to read) and the sum of the parts, as rows beside the DCF. */
+export function extraRowsOf(comps, sotp) {
+  const rows = [];
+  if (comps && comps.available) (comps.implied || []).filter((c) => c.implied && c.key !== 'pb' && !c.wide).forEach((c) => rows.push({ label: `Peers' ${c.label}`, lo: c.implied.low.per_share, mid: c.implied.mid.per_share, hi: c.implied.high.per_share, fit: 'supporting' }));
+  if (sotp && sotp.available && has(sotp.per_share)) rows.push({ label: 'Sum of the parts', mid: sotp.per_share, fit: 'supporting' });
+  return rows;
+}
+const extraRows = () => extraRowsOf(V.comps, V.sotp);
+async function loadComps() {
+  const sym = V.sym, peers = String(V.peers || '').trim();
+  V.comps = { loading: true }; V.open.methods = true; paintResults();
+  try { V.comps = await api.get(`/api/valuation/${encodeURIComponent(sym)}/comps${peers ? `?peers=${encodeURIComponent(peers)}` : ''}`, { ttl: 0, force: true, timeout: 90000 }); }
+  catch (err) { V.comps = { available: false, reason: api.explain(err, 'The peer multiples') }; }
+  if (V.sym === sym) { paintResults(); const b = V.node.querySelector('[data-dcf-comps]'); if (b) b.focus({ preventScroll: true }); }
+}
+async function loadSotp(withInputs) {
+  const sym = V.sym, e = editsFor(), body = { drivers: e.drivers, wacc: e.wacc, base: e.base || {}, equity: e.equity || {} };
+  if (withInputs) { body.multiples = {}; Object.entries(V.sotpM).forEach(([k, v]) => { if (k !== '__u') body.multiples[k] = String(v).trim(); }); if (V.sotpM.__u !== undefined) body.unallocated_multiple = String(V.sotpM.__u).trim(); }
+  if (!withInputs) V.sotp = { loading: true };
+  V.open.methods = true; paintResults();
+  try { V.sotp = await api.post(`/api/valuation/${encodeURIComponent(sym)}/sotp`, body, { timeout: 90000 }); V.sotpM = {}; }
+  catch (err) { V.sotp = { available: false, reason: api.explain(err, 'The segments') }; }
+  if (V.sym === sym) { paintResults(); const b = V.node.querySelector(withInputs ? '[data-dcf-sotp-run]' : '[data-dcf-sotp]'); if (b) b.focus({ preventScroll: true }); }
+}
+const mult = (v) => (has(v) && v > 0 ? `${num(v, 1)} times` : 'n/a');
+function compsHTML() {
+  const c = V.comps, sym = V.sym;
+  const ask = html`<div class="dcf-save-row"><label class="dcf-save-name"><span class="t-label">Peers (optional, comma-separated)</span><input type="text" data-dcf-peers value="${V.peers}" placeholder="for example ORCL, ADBE, CRM" autocomplete="off" autocapitalize="characters" spellcheck="false"></label>
+    <button type="button" class="btn" data-dcf-comps>${c && c.available ? 'Compare again' : 'Compare with peers'}</button></div>`;
+  if (!c) return html`${ask}<p class="t-muted">Without a list, the largest companies in the same industry within 25 times of its size, the eight closest.</p>`;
+  if (c.loading) return html`${ask}<p class="t-muted" role="status">Reading peer multiples…</p>`;
+  if (!c.available) return html`${ask}<p class="dcf-flag">${clean(c.reason || 'No peers.')}</p>`;
+  return html`${ask}
+    <p class="t-muted">${clean(c.note || '')} Source: ${clean(c.source || '')}. Peers: ${c.peer_source === 'reader' ? 'yours' : c.peer_source === 'industry_and_sector' ? 'the industry’s largest within the size band, with the sector’s largest added because the industry has too few of this size' : 'the industry’s largest within the size band'}.</p>
+    ${(c.flags || []).length ? html`<p class="dcf-flag"><b>Peers disagree widely.</b> ${c.flags.map(clean).join(' ')} Read these values as a range, not an answer, or enter peers you consider comparable above.</p>` : ''}
+    <div class="tscroll"><table class="t"><thead><tr><th class="l">Multiple</th><th>${sym}</th><th>Peers: 25th, median, 75th</th><th>Implied a share</th></tr></thead><tbody>
+      ${(c.implied || []).map((i) => html`<tr><th scope="row" class="l">${i.label}</th><td>${mult(i.own_multiple)}</td>
+        <td>${i.implied ? `${mult(i.implied.low.multiple)}, ${mult(i.implied.mid.multiple)}, ${mult(i.implied.high.multiple)}` : 'n/a'} <span class="t-muted">${String(i.peers_with_value)} peers${(i.outliers || []).length ? `; set aside as outliers: ${i.outliers.join(', ')}` : ''}</span></td>
+        <td>${i.implied ? html`${money(i.implied.low.per_share)} to <b>${money(i.implied.mid.per_share)}</b> to ${money(i.implied.high.per_share)}` : clean(i.reason || '')}${i.note ? html` <span class="t-muted">${clean(i.note)}</span>` : ''}</td></tr>`)}</tbody></table></div>
+    <div class="tscroll"><table class="t"><thead><tr><th class="l">Peer</th><th>Market value</th><th>EV / EBITDA</th><th>EV / revenue</th><th>P / E</th><th>P / B</th></tr></thead><tbody>
+      ${(c.peers || []).map((x) => html`<tr><th scope="row" class="l"><b class="tick">${x.symbol}</b> <span class="t-muted">${x.name || ''}${x.origin === 'sector' ? ', sector peer' : ''}</span></th><td>${big(x.market_cap)}</td><td>${mult(x.ev_ebitda)}</td><td>${mult(x.ev_revenue)}</td><td>${mult(x.pe)}</td><td>${mult(x.pb)}</td></tr>`)}
+      ${(c.excluded || []).map((x) => html`<tr class="is-off"><th scope="row" class="l">${x.symbol}</th><td colspan="5" class="l t-muted">Not used: ${clean(x.why)}</td></tr>`)}</tbody></table></div>`;
+}
+function sotpHTML() {
+  const r = V.sotp;
+  if (!r) return html`<div class="cluster"><button type="button" class="btn" data-dcf-sotp>Value the segments</button></div><p class="t-muted">Reads segment operating income from the last four quarterly filings.</p>`;
+  if (r.loading) return html`<p class="t-muted" role="status">Reading the segment filings…</p>`;
+  if (!r.available) return html`<p class="dcf-flag">${clean(r.reason || 'Not available.')}</p><div class="cluster"><button type="button" class="btn btn-sm" data-dcf-sotp>Try again</button></div>`;
+  const per = r.period || {}, rec = r.reconciles === true ? `The parts add up to the company's operating income for the same year (${big(r.company_ebit_fy0)}).`
+    : r.reconciles === false ? `The parts add up to ${big(r.segments_ttm_total)} against operating income of ${big(r.company_ebit_fy0)}, so a line is missing or counted twice; treat the result with care.` : '';
+  const mIn = (key, v, label) => html`<input type="text" inputmode="decimal" class="dcf-ovin" data-dcf-sotp-m="${key}" value="${V.sotpM[key] !== undefined ? V.sotpM[key] : has(v) ? num(v, 1) : ''}" aria-label="${label}" autocomplete="off"> <span class="t-muted">times</span>`;
+  return html`<p class="t-muted">${clean(r.note || '')} ${clean(r.period_note || '')} ${rec} ${per.kind === 'trailing_four_quarters' && r.q4_derived ? 'A fourth quarter is derived as the year less the first three.' : ''}</p>
+    <div class="tscroll"><table class="t dcf-sotp"><thead><tr><th class="l">${r.axis_label || 'Segment'}</th><th>Operating income, ${per.kind === 'fiscal_year' ? `fiscal year to ${day(per.end)}` : 'last 4 quarters'}</th><th>EV / EBIT</th><th>Value</th></tr></thead><tbody>
+      ${(r.segments || []).map((g) => html`<tr><th scope="row" class="l">${g.name}</th><td>${big(g.operating_income)}</td><td>${has(g.operating_income) ? mIn(g.name, g.multiple, `EV/EBIT for ${g.name}`) : clean(g.note || '')}</td><td>${big(g.value)}</td></tr>`)}
+      <tr><th scope="row" class="l">Corporate and eliminations</th><td>${big(r.unallocated)}</td><td>${mIn('__u', r.unallocated_value && r.unallocated ? r.unallocated_value / r.unallocated : r.dcf_implied_ev_ebit, 'EV/EBIT for unallocated costs')}</td><td>${big(r.unallocated_value)}</td></tr>
+      <tr class="is-total"><th scope="row" class="l">Enterprise value</th><td>${big(r.segments_ttm_total)}</td><td></td><td>${big(r.enterprise_value)}</td></tr>
+      <tr class="is-total"><th scope="row" class="l">Value per share (same bridge as the DCF)</th><td></td><td></td><td><b>${money(r.per_share)}</b></td></tr></tbody></table></div>
+    <p><b>Sum of the parts: ${money(r.per_share)} a share</b> (enterprise value ${big(r.enterprise_value)}, ${signedPct(r.upside, 0)} against the price).</p>
+    <p class="t-muted">Multiples start at the DCF's implied ${num(r.dcf_implied_ev_ebit, 1)} times EV/EBIT, which reproduces the whole; change the segments you think are worth more or less.</p>
+    <div class="cluster"><button type="button" class="btn btn-sm" data-dcf-sotp-run>Recalculate</button></div>`;
+}
+function methodsHTML(d) {
+  const c = d.classification || {}, fits = c.models || {};
+  const order = ['dcf', 'fcfe', 'ddm', 'residual_income', 'reit_ffo', 'comps', 'sotp', 'reverse_dcf'];
+  const word = { primary: 'Fits', supporting: 'Supporting', limited: 'Limited', not_applicable: 'Does not apply' };
+  const out = {
+    fcfe: () => (d.fcfe && d.fcfe.available ? `${money(d.fcfe.per_share)} a share at a ${pct(d.fcfe.cost_equity, 2)} cost of equity. ${clean((d.fcfe.notes || []).join(' '))}` : d.fcfe ? clean(d.fcfe.reason || '') : ''),
+    ddm: () => (d.ddm && d.ddm.available ? `${money(d.ddm.per_share)} a share: dividends of ${money(d.ddm.dps0)} growing ${pct(d.ddm.growth_high)} for five years, then ${pct(d.ddm.growth_terminal)}, at ${pct(d.ddm.cost_equity, 2)}. ${clean(d.ddm.growth_note || '')}` : d.ddm ? clean(d.ddm.reason || '') : ''),
+    residual_income: () => { const r = d.residual_income; if (!r) return ''; if (!r.available) return clean(r.reason || '');
+      return html`${money(r.per_share)} a share: book value ${money(r.book_value_0)} plus the value of a ${pct(r.roe_start)} return on equity against a ${pct(r.cost_equity, 2)} cost, fading to ${pct(r.roe_terminal)}. Today's price is ${num(r.price_to_book, 2)} times book, which in perpetuity needs a ${pct(r.implied_roe)} return on equity. ${clean((r.notes || []).join(' '))} ${(r.flags || []).map((f) => html`<b>Check:</b> ${clean(f)} `)}`; },
+    reit_ffo: () => { const r = d.reit; if (!r) return ''; if (!r.available) return clean(r.reason || '');
+      return `FFO ${money(r.ffo_per_share)} a share; the price is ${num(r.price_to_ffo, 1)} times FFO, and dividends take ${pct(r.ffo_payout, 0)} of FFO. ${r.own_history ? `At the multiples of the last few years (${num(r.own_history.low, 1)} to ${num(r.own_history.high, 1)} times, median ${num(r.own_history.median, 1)}), today's FFO is worth ${money(r.own_history.per_share_low)} to ${money(r.own_history.per_share_high)}. ${clean(r.own_history.note || '')}` : ''} ${clean(r.affo_reason || '')}`; },
+    comps: compsHTML, sotp: sotpHTML,
+  };
+  return html`<p class="t-muted">${clean(c.label || '')}. Which methods suit this business, and why. Values from different methods answer different questions, so they are shown side by side and never averaged.</p>
+    <ul class="dcf-methods">${order.filter((k) => fits[k]).map((k) => html`<li><p><b>${fits[k].name}</b> <span class="dcf-kind">${word[fits[k].fit] || ''}</span></p><p class="t-muted">${clean(fits[k].why || '')}</p>${out[k] ? html`<div class="dcf-m-out">${out[k]()}</div>` : ''}</li>`)}</ul>`;
+}
+/** The equity models' form: residual income, the dividend model and a REIT's multiple, with the cost of equity when the
+ *  cash-flow model does not suit. */
+function equityForm(d) {
+  const fields = EQ_FIELDS.filter((f) => d[f.model] && d[f.model].available && has(eqValue(d, f, 'default')));
+  if (!fields.length) return '';
+  const e = editsFor(), ok = (d.dcf || {}).available, parts = d.equity_wacc_parts || {}, defParts = d.wacc_parts_default || {};
+  const fmtv = (f, v) => (has(v) ? `${shown(f, v)}${f.unit === '%' ? '%' : f.unit === 'x' ? ' times' : ''}` : 'none');
+  const field = (f, cur, def, typed, edited) => html`<label class="dcf-field${edited ? ' is-edited' : ''}"><span class="dcf-flabel">${f.label}</span>
+    <span class="dcf-finput"><input type="text" inputmode="decimal" data-dcf-field="${f.key}" value="${typed === undefined ? '' : shown(f, typed)}" placeholder="${has(cur) ? shown(f, cur) : ''}" autocomplete="off"><span class="dcf-unit" aria-hidden="true">${unitText(f)}</span></span>
+    <span class="dcf-fwhy">Default ${fmtv(f, def)}.</span></label>`;
+  const groups = [...new Set(fields.map((f) => f.group))];
+  const costs = ok ? '' : html`<fieldset class="dcf-group"><legend class="t-label">Cost of equity</legend>${COST_FIELDS.map((k) => { const f = FIELDS.find((x) => x.key === k), sub = k.slice(5); return field(f, parts[sub], defParts[sub], e.wacc[sub], has(e.wacc[sub])); })}</fieldset>`;
+  const open = V.open.equityform || (!ok && V.open.equityform !== false);
+  return html`<details class="more-inline dcf-fold" data-dcf-sec="equityform" ${open ? 'open' : ''}><summary>${ok ? 'Assumptions for the dividend model' : 'Assumptions: see the defaults, and change any of them'}</summary><div class="how-body">
+    <p class="t-muted">Leave a box empty to use the default. Values recalculate as you type.</p>
+    ${groups.map((g) => html`<fieldset class="dcf-group"><legend class="t-label">${g}</legend>${fields.filter((f) => f.group === g).map((f) => { const [model, sub] = f.key.split('.'); const typed = ((e.equity || {})[model] || {})[sub]; return field(f, eqValue(d, f, 'current'), eqValue(d, f, 'default'), typed, has(typed)); })}</fieldset>`)}
+    ${costs}<p class="dcf-status"><button type="button" class="btn btn-sm btn-quiet" data-dcf-reset>Reset to the defaults</button></p></div></details>`;
+}
+
 /* ---------------- saved models (B7b; Classic valuation.js:1194-1364) ---------------- */
 async function loadSaved() {
   const sym = V.sym;
@@ -579,8 +703,9 @@ function paintSaved(focusSel) {
 /* ---------------- the whole ---------------- */
 function results(d) {
   const dcf = d.dcf || {}, m = d.market || {}, ri = d.residual_income;
+  if (!dcf.available && V.open.methods === undefined) V.open.methods = true;
   const err = V.error ? html`<p class="dcf-flag" role="alert">${V.error} The figures below are from the last assumptions that worked.</p>` : '';
-  const noDcf = !dcf.available && (rangeRows(d, V.extra).length || (ri && ri.available))
+  const noDcf = !dcf.available && (rangeRows(d, { rows: extraRows() }).length || (ri && ri.available))
     ? html`<h3>The methods that fit, side by side</h3>${range(d)}${ri && ri.available && ri.sensitivity ? html`<h3>Sensitivity</h3>${heat(ri.sensitivity, m.price, (k, v) => pct(v, 1))}` : ''}` : '';
   return html`${err}${lede(d)}${confidence(d)}${dcf.available ? tiles(d) : ''}${checks(d)}${noDcf}
     ${dcf.available ? html`<div class="dcf-cols"><div><h3>What moves the value most</h3>${tornado(d)}</div><div><h3>Scenarios and other methods, side by side</h3>${range(d)}</div></div>
@@ -589,7 +714,7 @@ function results(d) {
       ${cases(d)}
       ${fold('forecast', 'The forecast, year by year', forecast(d))}${fold('wacc', 'How the discount rate is built', wacc(d))}
       ${fold('bridge', 'From enterprise value to a value per share', bridge(d))}${fold('statements', 'Linked income statement, balance sheet and cash flow', statements(d))}` : ''}
-    ${(V.extraFolds || []).map((x) => x(d))}
+    ${fold('methods', 'Other valuation methods and when each fits', methodsHTML(d))}
     ${fold('sources', 'Reported history and sources', sources(d))}${fold('formulas', 'Formulas and conventions', formulas())}
     ${asks(d)}`;
 }
@@ -598,7 +723,7 @@ function bodyHTML() {
   if (!d) return html`<p class="t-muted" role="status">Loading the fair-value model…</p>`;
   if (!d.available) return html`<p class="${d.failed ? 'dcf-flag' : 't-muted'}">${clean(d.reason || 'A model cannot be built for this symbol.')}</p>${d.failed ? html`<button type="button" class="btn btn-sm" data-dcf-retry>Try again</button>` : ''}`;
   const dg = d.inputs_digest || {};
-  return html`<div data-dcf-results>${results(d)}</div>${form(d)}${(V.extraForms || []).map((x) => x(d))}<div data-dcf-saved-host>${savedHTML(d)}</div>
+  return html`<div data-dcf-results>${results(d)}</div>${form(d)}${equityForm(d)}<div data-dcf-saved-host>${savedHTML(d)}</div>
     <p class="asof dcf-foot">Model ${d.model_version || ''}, filings retrieved ${day(dg.filings_retrieved)}, balance sheet ${day(dg.balance_date)}, ${priceWhen(d.market || {})}. A model-implied value under stated assumptions. It is not a price target, a forecast Optic stands behind, or a signal to buy or sell.</p>`;
 }
 /** The whole section: on load, reset and a method change. Focus and the caret are put back. */
@@ -614,15 +739,23 @@ function paint() {
 function paintResults() {
   const n = V.node, d = V.data; if (!n || !d) return;
   const out = n.querySelector('[data-dcf-results]'); if (!out) { paint(); return; }
+  const a = document.activeElement, sel = a && out.contains(a) ? (a.matches('[data-dcf-peers]') ? '[data-dcf-peers]' : a.getAttribute('data-dcf-sotp-m') ? `[data-dcf-sotp-m="${CSS.escape(a.getAttribute('data-dcf-sotp-m'))}"]` : null) : null;
+  const caret = sel && typeof a.selectionStart === 'number' ? [a.selectionStart, a.selectionEnd] : null;
   draw(out, results(d));
+  if (sel) { const again = out.querySelector(sel); if (again) { again.focus({ preventScroll: true }); if (caret) try { again.setSelectionRange(caret[0], caret[1]); } catch (e) { /* not a text box */ } } }
   const st = n.querySelector('[data-dcf-status]'); if (st) draw(st, formStatus(d));
   const changed = new Set((d.assumptions || {}).changed || []);
-  n.querySelectorAll('[data-dcf-field]').forEach((el) => { const row = el.closest('.dcf-field'); if (row) row.classList.toggle('is-edited', changed.has(el.getAttribute('data-dcf-field'))); });
+  n.querySelectorAll('[data-dcf-field]').forEach((el) => {
+    const f = fieldOf(el.getAttribute('data-dcf-field')), row = el.closest('.dcf-field'); if (!f || !row) return;
+    row.classList.toggle('is-edited', f.model ? ((d[f.model] || {}).edited || []).includes(f.key.split('.')[1]) : changed.has(f.key));
+  });
 }
 
 function wire(n) {
   n.addEventListener('input', (e) => {
     const t = e.target;
+    if (t.matches('[data-dcf-peers]')) { V.peers = t.value; return; }
+    if (t.matches('[data-dcf-sotp-m]')) { V.sotpM[t.getAttribute('data-dcf-sotp-m')] = t.value; return; }
     if (t.matches('[data-dcf-field]')) {
       const f = fieldOf(t.getAttribute('data-dcf-field')); if (!f) return;
       const msg = setEdit(editsFor(), f, t.value);
@@ -660,6 +793,9 @@ function wire(n) {
     if (t('[data-dcf-reset]')) { V.edits = blankEdits(); rememberEdits(V.sym, V.edits); V.data = V.defaults || V.data; V.error = ''; paint(); const s = n.querySelector('[data-dcf-status]'); if (s) { s.tabIndex = -1; s.focus({ preventScroll: true }); } return; }
     if (t('[data-dcf-retry]')) { load(true); return; }
     if (t('[data-dcf-save]')) { save(n); return; }
+    if (t('[data-dcf-comps]')) { loadComps(); return; }
+    if (t('[data-dcf-sotp]')) { loadSotp(false); return; }
+    if (t('[data-dcf-sotp-run]')) { loadSotp(true); return; }
     if ((b = t('[data-dcf-replay]'))) { replay(b.dataset.dcfReplay); return; }
     if ((b = t('[data-dcf-compare]'))) { compare(b.dataset.dcfCompare); return; }
     if ((b = t('[data-dcf-use]'))) { useModel(b.dataset.dcfUse); return; }
@@ -686,7 +822,7 @@ export function mountDcf(root, sym) {
   const slot = root.querySelector('[data-dcf-slot]');
   if (V.sym !== sym || !V.node) {
     clearTimeout(V.timer);
-    Object.assign(V, { sym, data: null, defaults: null, edits: null, loading: false, error: '', open: {}, tab: 'wacc_growth', focus: null, sel: null, extra: {}, saved: null, status: '', replays: {}, compares: {}, armed: null });
+    Object.assign(V, { sym, data: null, defaults: null, edits: null, loading: false, error: '', open: {}, tab: 'wacc_growth', focus: null, sel: null, extra: {}, saved: null, status: '', replays: {}, compares: {}, armed: null, comps: null, sotp: null, peers: '', sotpM: {} });
     const n = document.createElement('section');
     n.className = 'section dcf'; n.id = 'dcf'; n.setAttribute('aria-labelledby', 'dcf-h');
     n.innerHTML = '<div class="section-head"><div><h2 class="t-h2" id="dcf-h">Fair-value model, discounted cash flow</h2></div></div><div class="dcf-body"></div>';

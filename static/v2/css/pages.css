@@ -231,6 +231,10 @@ table.t.dcf-wacc td.l, table.t.dcf-bridge td.l { white-space: normal; min-width:
 .dcf-saved { list-style: none; margin: 10px 0 0; padding: 0; border-top: 1px solid var(--c-line-2); }
 .dcf-saved > li { display: grid; gap: 4px; padding: 12px 0; border-bottom: 1px solid var(--c-line-2); }
 .dcf-saved p { margin: 0; } .dcf-saved-h b { color: var(--c-ink); }
+.dcf-methods { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 0; }
+.dcf-methods > li { display: grid; gap: 4px; padding: 12px 0; border-top: 1px solid var(--c-line-2); }
+.dcf-methods p { margin: 0; } .dcf-m-out { display: grid; gap: 8px; color: var(--c-ink-2); }
+table.t.dcf-sotp td .dcf-ovin { width: 5em; }
 .dcf-compare { display: grid; gap: 6px; margin-top: 6px; padding-left: 12px; border-left: 2px solid var(--c-line); }
 @media (max-width: 860px) { .dcf-save-name input { font-size: var(--t-lg); } }
 @media (max-width: 860px) {
