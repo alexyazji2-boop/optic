@@ -16,6 +16,7 @@ import { button as miloButton, provideContext } from '../ui/milo.js';
 import { sectionHead } from './tabs.js';
 import { etDay } from '../core/marketTime.js';
 import * as TR from '../core/track.js';
+import { scoreLine, toneBand } from '../ui/score.js';
 
 let D = {}, live = true, mainEl = null, tabState = { g: 0, s: {} }, cal = { impact: 'all', range: 'week' }, cat = { status: 'relevant', category: '', sector: '', theme: '', q: '' };
 const ask = (label, q) => miloButton(label, { ask: q, context: 'Markets, Read' });
@@ -170,8 +171,8 @@ function sentiment() {
   if (s === undefined) return skeleton('lines', 3, 'Loading Fear and Greed');
   if (!s || !s.available) return empty('Fear and Greed is not available', '');
   const h = s.history || {};
-  return html`<div class="figure"><p class="t-display-m">${num(s.score, 0)} <small class="t-muted">of 100</small></p><p class="delta"><span><b>${s.label}</b></span>${['prev_close', 'week', 'month'].map((k) => (h[k] ? html`<span class="t-muted">${k === 'prev_close' ? 'Last close' : k === 'week' ? 'A week ago' : 'A month ago'} ${num(h[k].score, 0)} (${signed(h[k].change, 1, '')})</span>` : ''))}</p></div>
-    <div class="tscroll"><table class="t"><thead><tr><th>Input</th><th>Weight</th><th>Score</th><th>Reading</th></tr></thead><tbody>${(s.components || []).map((c) => html`<tr><td>${c.label}<br><small class="t-muted">${clean(c.question || '')}</small></td><td>${num(c.weight_pct, 0)}%</td><td>${num(c.score, 0)} <small class="t-muted">${c.label_text}</small></td><td style="text-align:left">${clean(c.reading || '')} <small class="t-muted">${clean(c.detail || '')}</small></td></tr>`)}</tbody></table></div>
+  return html`<div class="figure"><p class="t-display-m ${toneBand(s.label)}">${num(s.score, 0)} <small class="t-muted">of 100</small></p>${scoreLine(s.score, { tone: toneBand(s.label) })}<p class="delta"><span><b class="${toneBand(s.label)}">${s.label}</b></span>${['prev_close', 'week', 'month'].map((k) => (h[k] ? html`<span class="t-muted">${k === 'prev_close' ? 'Last close' : k === 'week' ? 'A week ago' : 'A month ago'} ${num(h[k].score, 0)} (${signed(h[k].change, 1, '')})</span>` : ''))}</p></div>
+    <div class="tscroll"><table class="t"><thead><tr><th>Input</th><th>Weight</th><th>Score</th><th>Reading</th></tr></thead><tbody>${(s.components || []).map((c) => html`<tr><td>${c.label}<br><small class="t-muted">${clean(c.question || '')}</small></td><td>${num(c.weight_pct, 0)}%</td><td><span class="${toneBand(c.label_text)}">${num(c.score, 0)}</span> <small class="t-muted">${c.label_text}</small>${scoreLine(c.score, { tone: toneBand(c.label_text) })}</td><td style="text-align:left">${clean(c.reading || '')} <small class="t-muted">${clean(c.detail || '')}</small></td></tr>`)}</tbody></table></div>
     <p class="asof">${s.inputs_used} of ${s.inputs_total} inputs. ${clean(s.method || '')} ${clean(s.caveat || '')}</p>
     ${ask('Ask Milo what goes into this', 'What goes into Optic\'s Fear and Greed reading, and how should I use it?')}`;
 }

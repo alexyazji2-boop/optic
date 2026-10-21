@@ -28,6 +28,7 @@ import * as OR from './overview-research.js';
 import { knowledge } from '../core/prefs.js';
 import { defineLive } from '../ui/term.js';
 import * as TR from '../core/track.js';
+import { scoreLine, tone100 } from '../ui/score.js';
 let lp = null;   // the header's price refresh (dossier-frame livePrice), stopped in dispose()
 
 let live = true;
@@ -267,7 +268,7 @@ function fundRecord(sym) {
     <div class="section-head"><div><h2 class="t-h2" id="lv-h">The long-term record</h2><p class="section-sub">From ${num((h.data_quality || {}).history_years, 0)} years of daily closes.</p></div></div>
     <div class="views">
       <div class="view"><p class="t-label">Long-term trend score, from price history</p>
-        <p class="n">${s100 === null ? 'n/a' : num(s100, 0)}<small> of 100</small></p><p>${clean(h.plan || '')}</p>
+        <p class="n ${tone100(s100)}">${s100 === null ? 'n/a' : num(s100, 0)}<small> of 100</small></p>${scoreLine(s100)}<p>${clean(h.plan || '')}</p>
         <p class="asof">The 200-week and 40-week trends, return per unit of risk and distance from the high.</p></div>
       <div class="view"><p class="t-label">Returns a year, and the falls along the way</p>
         <dl class="kv"><div><dt>1 year</dt><dd>${pct(hz.return_1y_pct)}</dd></div><div><dt>3 years</dt><dd>${pct(hz.cagr_3y_pct)}</dd></div><div><dt>5 years</dt><dd>${pct(hz.cagr_5y_pct)}</dd></div><div><dt>10 years</dt><dd>${pct(hz.cagr_10y_pct)}</dd></div>
@@ -297,7 +298,7 @@ function longViews(sym) {
     ${syn ? html`<p class="synth">${syn}</p>` : ''}
     <div class="views">
       <div class="view"><p class="t-label">Price trend score: how the share price has behaved over about five years</p>
-        <p class="n">${s100 === null ? 'n/a' : num(s100, 0)}<small> of 100</small></p>
+        <p class="n ${tone100(s100)}">${s100 === null ? 'n/a' : num(s100, 0)}<small> of 100</small></p>${scoreLine(s100)}
         <p>${s100 === null ? 'Not available.' : `${trendBand(s100)}. A finding about the share price's path, not about the business, its price today or whether it suits you.`}</p>
         ${how(html`<p>From the 200-week and 40-week trends, five years against the S&amp;P 500, return per unit of risk, forward P/E, distance from the high, the dividend and catalysts.</p>`, h && h.plan ? html`<p>The trend model's own wording: "${clean(h.plan)}" It reads the price trend only.</p>` : '')}</div>
       <div class="view"><p class="t-label">Long-term case: the business and what it costs, over years</p>

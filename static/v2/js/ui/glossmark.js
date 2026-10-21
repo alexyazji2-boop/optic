@@ -12,7 +12,7 @@
 import { GLOSSARY, LABEL_DEFS, TH_HINTS } from '../core/glossary.js';
 
 // words whose everyday sense is the common one on these pages ("the model on screen"); still available by hand
-const AUTO_SKIP = new Set(['screen', 'universe', 'surprise']);
+const AUTO_SKIP = new Set(['screen', 'universe', 'surprise', 'support']);   // "likely to support estimates" is not a price level
 const KEYS = Object.keys(GLOSSARY).filter((k) => !AUTO_SKIP.has(k)).sort((a, b) => b.length - a.length);
 export const TERM_RE = new RegExp(`\\b(${KEYS.map((k) => k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})\\b`, 'i');
 const SKIP = ['a', 'button', 'input', 'textarea', 'select', 'option', 'label', 'summary', 'code', 'pre', 'kbd', 'samp', 'svg', 'canvas', 'script', 'style', 'nav', 'h1',

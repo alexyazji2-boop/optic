@@ -29,6 +29,7 @@ import { hello, etDate, portfolio, eventsBlock, STARTERS, STARTER_NAMES, STARTER
 import { term } from '../ui/term.js';
 import * as FV from '../core/finviz.js';
 import { poll } from '../core/poll.js';
+import { scoreLine, signedLine, toneSign, toneBand } from '../ui/score.js';
 
 const KEY = 'optic.v2.workspace.v1';
 const VERSION = 5;   // 5: each layout knows whether the reader changed it, panel settings are kept, and any older version carries over (2026-10-20)
@@ -351,16 +352,16 @@ export const PANELS = {
       // In plain words first (beginner brief item 4): what conditions are, then the two readings' figures with their
       // scales, then every factor and input one step away. The labels, scores and rules are unchanged.
       const all = (m.factors || []).slice().sort((a, b) => Math.abs(b.contribution) - Math.abs(a.contribution)), top = all.slice(0, 3);
-      const frow = (f) => html`<tr><td>${f.factor}<span class="ws-rule ws-clip" title="${f.rule || ''}">${f.rule || ''}</span></td><td class="n">${num(f.value, 2)}</td><td class="n">${f.contribution > 0 ? '+' : ''}${num(f.contribution, 1)}</td></tr>`;
+      const frow = (f) => html`<tr><td>${f.factor}<span class="ws-rule ws-clip" title="${f.rule || ''}">${f.rule || ''}</span></td><td class="n">${num(f.value, 2)}</td><td class="n ${dir(f.contribution)}">${f.contribution > 0 ? '+' : ''}${num(f.contribution, 1)}</td></tr>`;
       const plain = PLAIN_REGIME[m.regime] || capitalize(m.regime || 'Not available');
       const sent = s && s.available !== false;
       return html`<p class="ws-lead"><b>${plain}.</b> ${clean(STANCE[m.regime] || m.stance || '')}</p>
-        <dl class="ws-kv ws-cond"><div><dt>Optic's market score</dt><dd>${num(m.risk_score, 0)}<small>From −100, cautious, to +100, leaning toward ${term('risk-on', 'risk')}</small></dd></div>
-          <div><dt>Sentiment gauge</dt><dd>${sent ? html`${num(s.score, 0)} <span class="ws-word">${s.label}</span><small>0 is extreme fear, 100 extreme greed</small>` : html`<small>${(s && s.reason) || 'Not available right now.'}</small>`}</dd></div></dl>
+        <dl class="ws-kv ws-cond"><div><dt>Optic's market score</dt><dd><span class="${toneSign(m.risk_score)}">${num(m.risk_score, 0)}</span>${signedLine(m.risk_score)}<small>From −100, cautious, to +100, leaning toward ${term('risk-on', 'risk')}</small></dd></div>
+          <div><dt>Sentiment gauge</dt><dd>${sent ? html`<span class="${toneBand(s.label)}">${num(s.score, 0)}</span> <span class="ws-word ${toneBand(s.label)}">${s.label}</span>${scoreLine(s.score, { tone: toneBand(s.label) })}<small>0 is extreme fear, 100 extreme greed</small>` : html`<small>${(s && s.reason) || 'Not available right now.'}</small>`}</dd></div></dl>
         <details class="ws-more"><summary>How these readings are built</summary>
           <p class="ws-rule">The market score adds up named rules (volatility, trend, credit, the yield curve); each factor shows how much it moved the score. The sentiment gauge averages several market inputs. When they disagree, the factors say why.</p>
           <table class="ws-t"><caption class="sr">The regime factors, largest first</caption><thead><tr><th scope="col">Factor</th><th scope="col" class="n">Reading</th><th scope="col" class="n">Effect on the score</th></tr></thead><tbody>${all.map(frow)}</tbody></table>
-          ${sent ? html`<p class="ws-k">The sentiment gauge's ${(s.components || []).length} inputs</p><ul class="ws-bars">${(s.components || []).map((c) => html`<li><span>${c.label}</span><span class="ws-gauge" aria-hidden="true"><i style="width:${Math.max(2, Math.min(100, c.score || 0))}%"></i></span><b>${num(c.score, 0)}</b></li>`)}</ul>` : ''}</details>`;
+          ${sent ? html`<p class="ws-k">The sentiment gauge's ${(s.components || []).length} inputs</p><ul class="ws-bars">${(s.components || []).map((c) => html`<li><span>${c.label}</span><span class="ws-gauge is-${toneBand(c.label_text) || 'flat'}" aria-hidden="true"><i style="width:${Math.max(2, Math.min(100, c.score || 0))}%"></i></span><b class="${toneBand(c.label_text)}">${num(c.score, 0)}</b></li>`)}</ul>` : ''}</details>`;
     },
     foot: ({ h, s }) => ({ source: 'Optic regime rules; Optic sentiment gauge', at: (s && s.generated_at) || (h || {}).generated_at }),
     milo: 'Where do the regime factors and the sentiment components agree or conflict right now?',

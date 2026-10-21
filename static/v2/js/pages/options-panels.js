@@ -14,6 +14,7 @@ import { button as miloButton } from '../ui/milo.js';
 import { empty, how } from '../ui/states.js';
 import { icon } from '../ui/icons.js';
 import * as TR from '../core/track.js';
+import { scoreLine, tone100 } from '../ui/score.js';
 
 const pct = (v, dp = 1) => (isNum(v) ? `${num(v, dp)}%` : 'n/a');
 const usd = (v, dp = 0) => (isNum(v) ? money(v, dp) : 'n/a');
@@ -221,10 +222,10 @@ export function verdict(t, sym) {
   const v = t.verdict || {}, c = t.cases || {};
   const s = score100(v.composite_score);
   return html`<p><b>${capFirst(v.stance || '')}, ${v.conviction || ''} conviction.</b> ${clean(v.summary || '')}</p>
-    ${kv([['Composite', isNum(s) ? `${num(s, 0)} of 100` : 'n/a'], ['Signal agreement', pct(v.signal_agreement_pct, 0)]], 2)}${note(v.agreement_note)}
+    ${kv([['Composite', isNum(s) ? html`<span class="${tone100(s)}">${num(s, 0)} of 100</span>${scoreLine(s)}` : 'n/a'], ['Signal agreement', pct(v.signal_agreement_pct, 0)]], 2)}${note(v.agreement_note)}
     ${TR.slot('composite')}
     <div class="tscroll"><table class="t"><thead><tr><th>Input</th><th>Score</th><th>Weight</th><th>Adds</th><th>Status</th></tr></thead>
-      <tbody>${(v.breakdown || []).map((b) => html`<tr><td>${capFirst(b.component)}</td><td>${signed(b.score, 0, '')}</td><td>${num(b.weight_pct, 0)}%${Math.abs((b.nominal_weight_pct || 0) - (b.weight_pct || 0)) >= 1 ? html` <span class="t-muted">(of ${num(b.nominal_weight_pct, 0)}%)</span>` : ''}</td><td>${signed(b.contribution, 1, '')}</td><td>${b.unavailable ? clean(b.status_reason || 'Excluded') : 'Included'}</td></tr>`)}</tbody></table></div>
+      <tbody>${(v.breakdown || []).map((b) => html`<tr><td>${capFirst(b.component)}</td><td class="${dir(b.score)}">${signed(b.score, 0, '')}</td><td>${num(b.weight_pct, 0)}%${Math.abs((b.nominal_weight_pct || 0) - (b.weight_pct || 0)) >= 1 ? html` <span class="t-muted">(of ${num(b.nominal_weight_pct, 0)}%)</span>` : ''}</td><td class="${dir(b.contribution)}">${signed(b.contribution, 1, '')}</td><td>${b.unavailable ? clean(b.status_reason || 'Excluded') : 'Included'}</td></tr>`)}</tbody></table></div>
     <p class="asof">50 is no edge either way. Bullish at +30, leaning at +10 on the composite's own scale. ${clean(v.scale_note || '')}</p>
     <details class="more-inline"><summary>What each input measures</summary><ul class="plain">${(v.breakdown || []).map((b) => html`<li><b>${capFirst(b.component)}.</b> ${clean(b.measures || '')}</li>`)}</ul></details>
     ${t.why && t.why.available ? html`<h3>What's pulling hardest</h3><ul class="plain">${t.why.reasons.map((r) => html`<li><b class="${r.direction === 'up' ? 'up' : r.direction === 'down' ? 'down' : ''}">${clean(r.headline)}.</b> ${(r.evidence || []).map(clean).join('; ')}</li>`)}</ul>` : ''}
