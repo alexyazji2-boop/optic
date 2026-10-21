@@ -267,3 +267,10 @@ def test_the_page_shows_the_watch_beside_the_books_not_in_them():
     assert "Research status." in sec and "Shadow trades" in sec
     for bad in ("probability", "confidence", "high-conviction"):
         assert bad not in sec.lower(), bad
+
+
+def test_a_redraw_keeps_the_folds_the_reader_opened():
+    """The page redraws when the risk read lands and every 4s while a scan runs; it used to
+    close every open fold, the research cards' included."""
+    paint = PAGE[PAGE.index("function paint()"):PAGE.index("async function load(")]
+    assert "details[open] > summary" in paint and "x.parentElement.open = true" in paint

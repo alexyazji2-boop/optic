@@ -315,7 +315,7 @@ function rbCard(c, S) {
     </dl>
     <details class="more-inline"><summary>Options, gamma and missing inputs</summary>${rbPositioning(c.positioning)}${(c.missing || []).length ? html`<p class="t-muted">Missing: ${clean(c.missing.join(', '))}.</p>` : ''}</details></article>`;
 }
-function research(r) {
+export function research(r) {
   if (r === undefined) return html`<section class="section" aria-labelledby="rw-h"><h2 class="t-h2" id="rw-h">Research watch</h2><p class="section-sub">Loading the research archive…</p></section>`;
   if (!r || r.error) return html`<section class="section" aria-labelledby="rw-h"><h2 class="t-h2" id="rw-h">Research watch</h2>${failed('The research archive', (r || {}).error, { retry: 'rb' })}</section>`;
   const S = r.setups || {}, cand = r.candidates || [], open = r.open || [], closed = r.recent_closed || [], rec = r.record || {};
@@ -348,6 +348,8 @@ function paint() {
   // a background repaint (risk, a scan poll) must not take focus away from the reader
   const a = document.activeElement, fid = a && mainEl.contains(a) ? a.id || (a.dataset && Object.keys(a.dataset).length ? a.outerHTML.match(/data-v2-[a-z-]+="[^"]*"/)?.[0] : '') : '';
   const empty = d && !(d.open || []).length && !(d.closed || []).length;
+  // A redraw (the risk read arriving, a scan poll every 4s) replaced every fold closed; keep the ones the reader opened
+  const opened = [...mainEl.querySelectorAll('details[open] > summary')].map((x) => x.textContent.trim());
   // whose portfolio this is, before any figure (beginner brief item 9): Optic's own simulated record, the same for
   // every reader, with pretend money; the reader's own practice portfolio and real accounts are elsewhere
   draw(mainEl, html`<header class="page-head">${sectionHead('portfolio', 'tracker')}
@@ -357,6 +359,7 @@ function paint() {
       ${books(d)}${ledger(d)}${openPositions(d.open || [])}${months(d)}${funnel(d)}
       ${empty ? html`<section class="section"><h2 class="t-h2">No trades yet</h2><p>The ledger is empty. It only opens a position when a name's composite score clears ${num((d.config || {}).min_composite, 0)}, and most scans find nothing. Open "Run the shared scan" above to run one, or wait for the scheduled one.</p></section>` : ''}
       ${record(d.summary || {})}${risk(d)}${(d.open || []).length ? scenariosSection(D.scen, { id: 'bsc-h' }) : ''}${rest(d)}${research(D.rb)}`}`);
+  if (opened.length) mainEl.querySelectorAll('details > summary').forEach((x) => { if (opened.includes(x.textContent.trim())) x.parentElement.open = true; });
   if (Math.abs(window.scrollY - y) > 2) window.scrollTo(0, y);
   if (fid) { const el = fid.startsWith('data-') ? mainEl.querySelector(`[${fid}]`) : mainEl.querySelector(`#${fid}`); if (el) { if (!el.hasAttribute('tabindex') && /^H\d$/.test(el.tagName)) el.setAttribute('tabindex', '-1'); el.focus({ preventScroll: true }); } }
   if (!d) return;
