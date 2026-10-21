@@ -15,6 +15,7 @@ import { button as miloButton, provideContext } from '../ui/milo.js';
 import { toast } from '../ui/toast.js';
 import { sectionHead } from './tabs.js';
 import { scenariosSection } from '../ui/scenarios.js';
+import { sections } from '../ui/sections.js';
 
 let book = 'balanced', month = null, D = {}, live = true, mainEl = null, poll = null, scanning = false, notice = null;
 const $0 = (v) => (isNum(v) ? money(v, 0) : 'n/a');
@@ -314,6 +315,9 @@ export async function render(main) {
     if ((b = t('[data-v2-tk]'))) action(b.dataset.v2Tk);
   });
   main.addEventListener('change', (e) => { if (e.target.matches('[data-v2-tk-month]')) { month = e.target.value; load(true); } });
+  // each section folds, remembered under Classic's keys (Classic parity B9.2); Classic's four open at first, the
+  // record's detail one press away (app.js PANELS_OPEN_BY_DEFAULT.tracker; "three books" is v2's three accounts)
+  sections(main, 'tracker', { open: ['optic portfolio', 'open positions', 'three simulated accounts', 'no trades yet'] });
   load();
 }
 export function dispose() { live = false; clearTimeout(poll); }

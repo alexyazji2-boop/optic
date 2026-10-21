@@ -396,9 +396,20 @@ Evidence:
 | Row | Task | Status |
 |---|---|---|
 | B9.1 | Glossary marking on eligible text, with hover, tap and keys; "Explain this with Milo" | open |
-| B9.2 | Optic Portfolio header definitions; collapsible panels | open |
-| B9.3 | Financials flow-ratio chart, dividend columns, excess-return bars | open |
-| B9.4 | Bars inside Scan's table cells | open |
+| B9.2 | Optic Portfolio header definitions; collapsible panels | folds done (see B9a below); header definitions with B9.1 |
+| B9.3 | Financials flow-ratio chart, dividend columns, excess-return bars | done (see B9a below) |
+| B9.4 | Bars inside Scan's table cells | done (see B9a below) |
+
+### B9a. The Portfolio page's folds, Financials' charts, Scan's bars
+Evidence:
+- `b9a_check.py`: 8 of 8 in headless Chrome, as a guest, on the preview's own feeds, at 1440 and 390.
+- `tests/test_v2_parity_b9a.py`.
+
+| Row | Task | Where | Desktop | Phone | Keeps | States | Deps | Evidence | Status |
+|---|---|---|---|---|---|---|---|---|---|
+| B9.2 (folds) | The Optic Portfolio page's sections fold | `tracker.js` with `ui/sections.js`, which gains `open` (Classic's PANELS_OPEN_BY_DEFAULT) | Every section folds by its heading; Classic's four open at first (Optic Portfolio, Open positions, the three accounts, No trades yet), the record's detail folded; Expand all, Collapse all and Panels as on the other long pages | 44 px fold buttons | `optic.panels.open` `{"tracker\|<heading>": bool}`, Classic's key; kept across a reload | n/a | none | b9a | done. Differs: Classic's "three books" is v2's "Three simulated accounts", so a choice saved for it in Classic does not carry over |
+| B9.3 | The stock against the index; dividends as columns | Financials, Corporate actions and flow (`financials.js` `extraCharts`) | The stock divided by SPY as one line from 100, the line at 100 drawn and named as even; a year's dividends a share as columns, the table folded under them; the five excess returns stay as figures | Same, fits | n/a | No dividends: says so; too little history: no line | `/api/extras/{T}?benchmark=SPY` (already loaded; free) | b9a (AAPL) | done. Differs: the excess returns are not drawn as bars; bars without their values would repeat the five figures beside them |
+| B9.4 | Bars in Scan's ranked column | Scan's results (`scan.js` `rankBars`, `cellBar`) | A bar beside the figure in the ranked column, only when the rows spread by a third or more (the month's movers yes, momentum scores of 74 to 82 no): from zero either way for a signed measure, from the left for one that only runs up, a share against its whole and a percentile against 100; hidden from a screen reader, since the figure says it | The table scrolls inside its box | n/a | A missing value has no bar | none | b9a: movers, momentum, volume leaders | done |
 
 ## Not ported
 | Row | What | Why |

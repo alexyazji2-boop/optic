@@ -5,7 +5,8 @@
 // - What persists is Classic's, in its keys and formats: optic.panels.open {"view|title": true or false} for a
 //   section the reader opened or folded, optic.panels.hidden.v1 {"view|title": true} for one they took off. A
 //   section nobody has touched follows its default: open, unless it is above the reader's level.
-// - A page calls sections(pageView, view, opts) once as it renders. An observer applies it again after every
+// - A page calls sections(pageView, view, opts) once as it renders; opts.open lists the headings open by default,
+//   as Classic's PANELS_OPEN_BY_DEFAULT did (the rest start folded). An observer applies it again after every
 //   redraw, so a refresh never resets what the reader folded, hid or jumped to (owner's amendment 6).
 // - A folded section is its heading line alone. The heading's button says what it does, and the heading itself is a
 //   large target.
@@ -32,7 +33,10 @@ export function levelOf(levels, title) {
   return Object.entries(levels || {}).reduce((n, [k, v]) => (t.includes(k) ? Math.max(n, v) : n), 0);
 }
 /** Open or folded: what the reader chose for it, else open when it is at or under their rung. */
-export const startsOpen = (saved, id, rung, level) => (Object.prototype.hasOwnProperty.call(saved, id) ? !!saved[id] : rung <= level);
+export const startsOpen = (saved, id, rung, level, dflt = true) => (Object.prototype.hasOwnProperty.call(saved, id) ? !!saved[id] : rung <= level && dflt);
+/** Whether a section nobody has touched starts open by the page's own list (Classic's PANELS_OPEN_BY_DEFAULT): with no
+ *  list, every section; with one, those whose heading holds one of its words. */
+export const openByDefault = (open, title) => (!open ? true : open.some((k) => String(title).toLowerCase().includes(k)));
 /** The current section: the last shown one whose top has reached the bottom of the sticky header (`stack`). */
 export function currentOf(tops, stack) { let k = -1; tops.forEach((t, i) => { if (t <= stack + 12) k = i; }); return Math.max(0, k); }
 
@@ -56,7 +60,7 @@ function apply(root) {
     const title = s.dataset.secTitle, id = panelId(view, title), min = levelOf(opts.levels, title);
     if (!s.id) s.id = `sec-${slug(title)}`;
     if (s.dataset.secKey !== id) s.dataset.secKey = id;
-    const off = !!hidden[id], open = startsOpen(saved, id, min, level);
+    const off = !!hidden[id], open = startsOpen(saved, id, min, level, openByDefault(opts.open, title));
     if (s.hidden !== off) s.hidden = off;
     s.classList.toggle('is-folded', !open);
     let b = h.querySelector('.sec-fold');

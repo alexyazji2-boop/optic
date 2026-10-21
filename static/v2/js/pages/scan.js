@@ -6,7 +6,7 @@
 //   Build a screen: the reader's own bounds (POST /api/screener).
 // "Does the score work?" replays the score on history (/api/evaluate) when
 // asked. Recent requests and the built screen are kept in the classic keys.
-import { $, html, render as draw } from '../core/dom.js';
+import { $, html, raw, render as draw } from '../core/dom.js';
 import * as api from '../core/api.js';
 import * as store from '../core/store.js';
 import { holds } from '../core/device.js';
@@ -48,6 +48,28 @@ export function scanCell(kind, v) {
   if (kind === 'score') return html`<span class="${dir(v)}">${num(v, 0)}</span>`;
   if (kind === 'usd') return `$${compact(v)}`;
   return num(v, 2);
+}
+/* A bar in the ranked column, and only where the rows spread enough to tell apart (Classic's fillScanBars and
+ * inlineBar; parity B9.4): the top momentum scores run 74 to 82, and the same bar 25 times says nothing, while dollar
+ * volume or the month's movers have a shape worth seeing. One-sided for a measure that only runs up, from zero either
+ * way for a signed one; a share against its whole, a percentile against 100. The figure beside it says the value. */
+const ONE_SIDED = new Set(['usd', 'mult', 'ratio', 'pct_plain', 'num']);
+export function rankBars(res) {
+  const cols = (res || {}).columns || [], rk = res && res.ranked_by && cols.some((c) => c.key === res.ranked_by.key) ? res.ranked_by : null;
+  if (!rk) return null;
+  const vals = (res.rows || []).map((r) => Number(r[rk.key])).filter(Number.isFinite), abs = vals.map(Math.abs);
+  const top = abs.length ? Math.max(...abs) : 0;
+  if (!(abs.length >= 3 && top > 0 && (top - Math.min(...abs)) / top >= 0.35)) return null;
+  const kind = (cols.find((c) => c.key === rk.key) || {}).kind;
+  const max = kind === 'ratio' ? 1 : kind === 'num' && Math.max(...vals) <= 100 ? 100 : top;
+  return { key: rk.key, oneSided: ONE_SIDED.has(kind), max };
+}
+export function cellBar(v, b, w = 52, h = 8) {
+  if (!b || v === null || v === undefined || v === '' || !Number.isFinite(Number(v)) || !(b.max > 0)) return '';   // a missing value is no bar, not a zero one
+  const x = Number(v), f = Math.min(1, Math.abs(x) / b.max);
+  if (b.oneSided) return `<svg class="sc-bar" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" aria-hidden="true"><rect class="one" x="0" y="1" width="${Math.max(1.5, f * (w - 1)).toFixed(1)}" height="${h - 2}" rx="2"/></svg>`;
+  const mid = w / 2, bw = Math.max(1.5, f * (mid - 1));
+  return `<svg class="sc-bar" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" aria-hidden="true"><line x1="${mid}" x2="${mid}" y1="0" y2="${h}"/><rect class="${x >= 0 ? 'pos' : 'neg'}" x="${(x >= 0 ? mid : mid - bw).toFixed(1)}" y="1" width="${bw.toFixed(1)}" height="${h - 2}" rx="2"/></svg>`;
 }
 export function screenCell(c, v) {
   if (v === null || v === undefined) return 'n/a';
@@ -101,7 +123,7 @@ function named() {
       <p>${clean(r.looks_for || '')}</p>${r.stale ? html`<p class="stale">The ranking is ${num(r.age_hours, 0)} hours old, so these results describe an earlier session.</p>` : ''}
       <p class="asof">${r.matched} matched, showing the first ${r.shown}. Ranking ${num(r.age_hours, 1)} hours old.</p>
       ${(r.rows || []).length ? html`<p class="asof">Ranked by ${((r.columns || []).find((c) => c.key === (r.ranked_by || {}).key) || {}).label || 'score'}, ${(r.ranked_by || {}).order === 'asc' ? 'lowest' : 'highest'} first.</p><div class="tscroll"><table class="t sc-t"><thead><tr><th scope="col">Symbol</th><th scope="col">Price</th>${(r.columns || []).map((c) => html`<th scope="col" aria-sort="${(r.ranked_by || {}).key === c.key ? ((r.ranked_by || {}).order === 'asc' ? 'ascending' : 'descending') : 'none'}">${c.label}${(r.ranked_by || {}).key === c.key ? ((r.ranked_by || {}).order === 'asc' ? ' ▲' : ' ▼') : ''}</th>`)}<th scope="col"><span class="sr">Next</span></th></tr></thead>
-        <tbody>${r.rows.map((x) => html`<tr><th scope="row"><a href="${hrefFor('overview', x.symbol)}">${x.symbol}</a></th><td>${num(x.price)}</td>${(r.columns || []).map((c) => html`<td>${scanCell(c.kind, x[c.key])}</td>`)}${rowActs(x.symbol)}</tr>`)}</tbody></table></div>${compareTop(r.rows)}${readings(r)}`
+        <tbody>${((bars) => r.rows.map((x) => html`<tr><th scope="row"><a href="${hrefFor('overview', x.symbol)}">${x.symbol}</a></th><td>${num(x.price)}</td>${(r.columns || []).map((c) => html`<td${bars && c.key === bars.key ? html` class="sc-barred"` : ''}>${bars && c.key === bars.key ? raw(cellBar(x[c.key], bars)) : ''}${scanCell(c.kind, x[c.key])}</td>`)}${rowActs(x.symbol)}</tr>`))(rankBars(r))}</tbody></table></div>${compareTop(r.rows)}${readings(r)}`
       : html`<p class="quiet">No symbols match this scan right now: it ran over ${r.considered || 'the'} ranked names and none clears its conditions. That is a result, not a failure.</p>`}
       ${r.blind_spot ? html`<p class="stale">What this scan cannot see: ${clean(r.blind_spot)}</p>` : ''}<p class="asof">${clean(r.method || '')}</p>`}</div>
     ${(S.groups || {}).note ? html`<p class="asof">${clean(S.groups.note)}</p>` : ''}`;

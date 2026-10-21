@@ -247,17 +247,26 @@ function extras() {
   const a = x.actions || {}, sv = x.short_volume || {}, rl = x.relative || {};
   return html`<section class="section" id="fin-actions" aria-labelledby="ca-h"><h2 class="t-h2" id="ca-h">Corporate actions and flow</h2>
     ${a.pays_dividend ? html`<h3>Dividends</h3>${kv([['Payments on record', a.payment_count], ['Years of growth', a.growth_streak_years], ['Last cut', a.last_cut_year || 'None on record'], ['Latest', (a.dividends || []).length ? `$${num(a.dividends[a.dividends.length - 1].amount, 3)} on ${fullDate(a.dividends[a.dividends.length - 1].date)}` : 'n/a']], 4)}
-      ${(a.annual || []).length ? html`<div class="tscroll"><table class="t"><thead><tr><th>Year</th><th>Total a share</th></tr></thead><tbody>${a.annual.slice(-8).map((y) => html`<tr><td>${y.year}</td><td>$${num(y.total, 3)}</td></tr>`)}</tbody></table></div>` : ''}` : html`<p>No dividend on record.</p>`}
+      ${(a.annual || []).length >= 2 ? html`<div class="chart-slot" data-chart="divs"></div>` : ''}
+      ${(a.annual || []).length ? html`<details class="more-inline"><summary>Each year's total</summary><div class="tscroll"><table class="t"><thead><tr><th>Year</th><th>Total a share</th></tr></thead><tbody>${a.annual.slice(-8).map((y) => html`<tr><td>${y.year}</td><td>$${num(y.total, 3)}</td></tr>`)}</tbody></table></div></details>` : ''}` : html`<p>No dividend on record.</p>`}
     ${(a.splits || []).length ? html`<h3>Splits</h3><ul class="plain">${a.splits.map((s) => html`<li>${fullDate(s.date)}: ${splitWords(s.ratio)}</li>`)}</ul>` : ''}
     ${a.note ? html`<p class="asof">${clean(a.note)}</p>` : ''}
     ${(sv.rows || []).length ? html`<h3>Off-exchange short volume</h3>${kv([['Latest session', pct(sv.latest_pct)], [`Average, ${sv.days} sessions`, pct(sv.average_pct)]], 2)}<div class="chart-slot" data-chart="sv"></div><p class="asof">${clean(sv.caveat || '')}</p>` : ''}
-    ${rl.excess ? html`<h3>Against ${rl.benchmark || 'the index'}</h3>${kv(Object.entries(rl.excess).map(([k, v]) => [k.replace('d', ' sessions'), signed(v)]), 5)}<p class="asof">${clean(rl.note || '')}</p>` : ''}
+    ${rl.excess ? html`<h3>Against ${rl.benchmark || 'the index'}</h3>${kv(Object.entries(rl.excess).map(([k, v]) => [k.replace('d', ' sessions'), signed(v)]), 5)}
+      ${(rl.ratio || []).length > 2 ? html`<div class="chart-slot" data-chart="rel"></div><p class="asof">${rl.ticker || 'The stock'} divided by ${rl.benchmark || 'the index'}, indexed to 100 at the start; the line at 100 is even, above it the stock did better.</p>` : ''}
+      <p class="asof">${clean(rl.note || '')}</p>` : ''}
   </section>`;
 }
 function extraCharts() {
-  const sv = ((D.x || {}).short_volume || {}).rows || [];
+  const x = D.x || {}, sv = (x.short_volume || {}).rows || [], rl = x.relative || {}, ann = ((x.actions || {}).annual || []).slice(-10);
   const pts = sv.slice().reverse().map((r) => ({ d: r.date, c: r.short_pct }));
-  return pts.length > 2 ? { sv: (w) => lineChart(pts, { measure: 'points', msUnit: ' pts', w, h: 150, dp: 1, label: 'Off-exchange short volume, share of the day', pad: { t: 12, r: 46, b: 24, l: 0 } }) } : {};
+  const out = pts.length > 2 ? { sv: (w) => lineChart(pts, { measure: 'points', msUnit: ' pts', w, h: 150, dp: 1, label: 'Off-exchange short volume, share of the day', pad: { t: 12, r: 46, b: 24, l: 0 } }) } : {};
+  // the stock against the index as one line from 100 (Classic's mountRelativeChart; parity B9.3)
+  const rel = (rl.dates || []).map((d, i) => ({ d: String(d).slice(0, 10), c: Number((rl.ratio || [])[i]) })).filter((p2) => isNum(p2.c));
+  if (rel.length > 2) out.rel = (w) => lineChart(rel, { w, h: 200, dp: 1, area: true, refs: [{ v: 100 }], label: `${rl.ticker || ''} against ${rl.benchmark || 'the index'}, indexed to 100`, pad: { t: 12, r: 46, b: 24, l: 0 } });
+  // a year's dividends a share as columns (Classic's dividend columnChart)
+  if (ann.length >= 2) out.divs = (w) => groupedBars(ann.map((y) => ({ x: `'${String(y.year).slice(2)}` })), [{ name: 'Dividends a share', cls: 's1', values: ann.map((y) => y.total) }], { w, h: 150, fmt: (v) => `$${num(v, 2)}`, label: 'Dividends a share, each year' });
+  return out;
 }
 
 function congress() {
