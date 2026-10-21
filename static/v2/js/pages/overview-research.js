@@ -13,6 +13,7 @@ import { term } from '../ui/term.js';
 import { button as miloButton } from '../ui/milo.js';
 import { hrefFor } from '../nav.js';
 import { valuationRead } from './thesis.js';
+import { scoreLine, tone100 } from '../ui/score.js';
 
 const g = (o, ...ks) => ks.reduce((x, k) => (x && typeof x === 'object' ? x[k] : undefined), o);
 const fin = (v) => typeof v === 'number' && Number.isFinite(v);
@@ -259,7 +260,7 @@ function scoreBlock(sym, t, lt) {
   if (!t.verdict) return '';
   const s = scores(t, lt);
   const tile = (label, horizon, n, words, basis, view, viewLabel) => html`<div class="ovx-score"><p class="t-label">${label} <span class="t-muted">${horizon}</span></p>
-    <p class="ovx-n ${n === null ? '' : n >= 55 ? 'up' : n <= 45 ? 'down' : ''}">${n === null ? 'n/a' : html`${num(n, 0)}<small> of 100</small>`}</p>
+    <p class="ovx-n ${tone100(n)}">${n === null ? 'n/a' : html`${num(n, 0)}<small> of 100</small>`}</p>${scoreLine(n)}
     ${words ? html`<p>${words}</p>` : ''}<p class="asof">${basis} ${tabLink(sym, view, viewLabel)}</p></div>`;
   return html`<div class="ovx-block" aria-labelledby="ovx-sc-h"><h3 class="t-h3" id="ovx-sc-h">Optic Score, both horizons</h3>
     <div class="ovx-scores">${tile('Short term', 'the next 2 to 8 weeks', s.short, s.shortWords, 'Built from the daily chart trend, current options positioning, the tone of recent headlines and the economy, weighted into one reading for a 2-to-8-week swing.', 'swing', 'How it is scored, on Options')}

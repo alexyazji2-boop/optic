@@ -12,6 +12,7 @@ import { hbars } from '../ui/bars.js';
 import { button as miloButton, provideContext } from '../ui/milo.js';
 import { icon } from '../ui/icons.js';
 import { wire as typeahead } from '../ui/typeahead.js';
+import { scoreLine, tone100 } from '../ui/score.js';
 
 const MAX = 4, TIE = 5;
 export const GROUPS = [
@@ -165,7 +166,7 @@ function grid(c) {
       <thead><tr><th scope="col">Metric</th>${rows.map((r) => html`<th scope="col"><a href="#/${r.ticker}">${r.ticker}</a>${r.name && r.name !== r.ticker ? html`<small class="t-muted cmp-name">${r.name}</small>` : ''}${what(r) ? html`<small class="t-muted cmp-sector">${what(r)}</small>` : ''}</th>`)}</tr></thead>
       <tbody>${(c.horizons || []).map((h) => { const rk = (c.ranks || {})[h.id] || [];
         const st = standing(rk);
-        return html`<tr class="cmp-rank"><th scope="row">${h.name}<small class="t-muted cmp-means">${rankRead(rk.slice().sort((x, y) => y.score - x.score))}</small></th>${rows.map((r) => { const x = rk.find((y) => y.ticker === r.ticker), w = x ? st[x.ticker] : ''; const part = x && x.inputs && x.inputs[0] < x.inputs[1]; return html`<td>${x ? html`<span class="${w === 'best' ? 'cmp-best' : w === 'level' ? 'cmp-level' : 't-muted'}">${w}</span> ${num(x.score, 0)}${part ? html`<small class="t-muted cmp-part">from ${x.inputs[0]} of ${x.inputs[1]} inputs</small>` : ''}` : 'n/a'}</td>`; })}</tr>`; })}
+        return html`<tr class="cmp-rank"><th scope="row">${h.name}<small class="t-muted cmp-means">${rankRead(rk.slice().sort((x, y) => y.score - x.score))}</small></th>${rows.map((r) => { const x = rk.find((y) => y.ticker === r.ticker), w = x ? st[x.ticker] : ''; const part = x && x.inputs && x.inputs[0] < x.inputs[1]; return html`<td>${x ? html`<span class="${w === 'best' ? 'cmp-best' : w === 'level' ? 'cmp-level' : 't-muted'}">${w}</span> <span class="${tone100(x.score)}">${num(x.score, 0)}</span>${scoreLine(x.score)}${part ? html`<small class="t-muted cmp-part">from ${x.inputs[0]} of ${x.inputs[1]} inputs</small>` : ''}` : 'n/a'}</td>`; })}</tr>`; })}
       ${GROUPS.map((g) => html`<tr class="cmp-group"><th scope="rowgroup" colspan="${rows.length + 1}">${g.title}</th></tr>
         ${g.rows.map((m) => { const lead = leader(m, rows, c.leaders);
           return html`<tr><th scope="row">${m.label}${m.note ? html` <small class="t-muted">${m.note}</small>` : ''}<small class="t-muted cmp-means">${m.means}</small></th>${rows.map((r) => html`<td>${cell(m.kind, r[m.key], (r.why_na || {})[m.key])}${lead === r.ticker ? html` <span class="cmp-dot" title="${m.lead === 'high' ? 'Higher' : 'Lower'} on this measure">·<span class="sr">, leads this row</span></span>` : ''}${m.sub && r[m.sub] ? html`<br><small class="t-muted">${clean(r[m.sub])}</small>` : ''}</td>`)}</tr>`; })}`)}</tbody></table></div>

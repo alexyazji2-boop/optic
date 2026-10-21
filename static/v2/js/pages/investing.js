@@ -24,6 +24,7 @@ import * as VS from './valuation-scenarios.js';
 import { kindOf, can } from '../core/instrument.js';
 import * as TR from '../core/track.js';
 import { mountDcf, disposeDcf, dcfContext } from './dcf.js';
+import { scoreLine, tone100, toneBand } from '../ui/score.js';
 let lp = null;   // the header's price refresh (dossier-frame livePrice), stopped in dispose()
 
 const RANGES = { '1Y': 52, '3Y': 156, '5Y': 260, '10Y': 520, All: Infinity };
@@ -66,12 +67,12 @@ function trend(sym) {
   const clash = s !== null && s >= 60 && ((st.available && st.stars <= 2) || (vh.available && vh.percentile >= 80));
   return html`<section class="section" aria-labelledby="lt-h">
     <div class="section-head"><div><h2 class="t-h2" id="lt-h">Long-term trend score, from price history</h2><p class="section-sub">How the ${kindOf(sym, D) === 'fund' ? 'fund' : 'stock'} has traded over the years: trend, strength against the S&amp;P 500 and risk. It does not measure valuation.</p></div>${ask(sym, 'Ask Milo about this score', `What is ${sym}'s long-term trend score built from, and what does it leave out?`)}</div>
-    <div class="figure"><p class="t-display-m">${s === null ? 'n/a' : num(s, 0)} <small class="t-muted">of 100</small></p><p class="delta"><span>${capFirst(h.conviction || '')} conviction</span><span class="t-muted">${capFirst((h.long_trend || {}).phase || '')}</span></p></div>
+    <div class="figure"><p class="t-display-m ${tone100(s)}">${s === null ? 'n/a' : num(s, 0)} <small class="t-muted">of 100</small></p>${scoreLine(s)}<p class="delta"><span>${capFirst(h.conviction || '')} conviction</span><span class="t-muted">${capFirst((h.long_trend || {}).phase || '')}</span></p></div>
     <p><b>The model's rule:</b> ${clean(h.plan || '')}</p>${TR.historySlot('long_term')}
     ${clash ? html`<p class="reconcile"><b>Read it beside the price.</b> The score is built from trend and the five-year record${st.available ? `, while the price earns ${st.stars} of 5 stars against its own usual valuation` : ''}${vh.available ? ` and the P/E sits at the ${ordinal(vh.percentile)} percentile of its own history` : ''}.${conv.label ? ` The business-and-price case on the Overview reads ${conv.label}.` : ''}</p>` : ''}
     ${(h.data_quality || {}).warnings && h.data_quality.warnings.length ? h.data_quality.warnings.map((w) => html`<p class="stale">${clean(w)}</p>`) : ''}
     <div class="tscroll"><table class="t"><thead><tr><th>Factor</th><th>Type</th><th>Points</th><th>Why</th></tr></thead>
-      <tbody>${(h.conviction_factors || []).map((f) => html`<tr><td>${f.label}</td><td>${f.kind}</td><td>${signed(f.points, 0, '')}</td><td style="text-align:left">${clean(f.detail)}</td></tr>`)}
+      <tbody>${(h.conviction_factors || []).map((f) => html`<tr><td>${f.label}</td><td>${f.kind}</td><td class="${dir(f.points)}">${signed(f.points, 0, '')}</td><td style="text-align:left">${clean(f.detail)}</td></tr>`)}
       <tr><td><b>Total</b></td><td></td><td><b>${signed(h.conviction_score, 0, '')}</b></td><td style="text-align:left" class="t-muted">On a scale of ${sc.min_possible} to ${sc.max_possible}; ${num(s, 0)} of 100 when mapped.</td></tr></tbody></table></div>
   </section>`;
 }
@@ -231,7 +232,7 @@ function fairValue(sym) {
       ${fv.wide ? html`<p class="stale">${clean(fv.wide_note)}</p>` : ''}<p class="asof">${clean(fv.basis || '')}</p>
       <details class="more-inline"><summary>What this range cannot say</summary><ul class="plain">${(fv.limits || []).map((l) => html`<li>${clean(l)}</li>`)}</ul></details>` : html`<p>${clean(fv.reason || 'No fair value estimate for this company.')}</p>`}
     ${isNum(an.target_mean) ? html`<h3>What analysts say</h3>${kv([['Average target', html`${num(an.target_mean)} <span class="t-muted">${signed(an.upside_pct, 1)}</span>`], ['Range of targets', `${num(an.target_low)} to ${num(an.target_high)}`], ['Ratings', isNum(an.buys) ? `${an.buys} buy, ${an.holds} hold, ${an.sells} sell` : `${num(an.buy_share_pct, 0)}% buy`]], 3)}${an.note ? html`<p class="asof">${clean(an.note)}</p>` : ''}` : ''}
-    ${dv.available ? html`<h3>Dividend score: ${dv.score} of 100, ${dv.band}</h3><div class="tscroll"><table class="t"><thead><tr><th>Part</th><th>Value</th><th>Points</th><th>Why</th></tr></thead><tbody>${(dv.parts || []).map((p) => html`<tr><td>${p.label}</td><td>${clean(p.value)}</td><td>${num(p.points, 0)}</td><td style="text-align:left">${clean(p.why)}</td></tr>`)}</tbody></table></div><p class="asof">${clean(dv.method || '')}</p>` : ''}
+    ${dv.available ? html`<h3>Dividend score: <span class="${toneBand(dv.band)}">${dv.score} of 100, ${dv.band}</span></h3>${scoreLine(dv.score, { tone: toneBand(dv.band) })}<div class="tscroll"><table class="t"><thead><tr><th>Part</th><th>Value</th><th>Points</th><th>Why</th></tr></thead><tbody>${(dv.parts || []).map((p) => html`<tr><td>${p.label}</td><td>${clean(p.value)}</td><td>${num(p.points, 0)}</td><td style="text-align:left">${clean(p.why)}</td></tr>`)}</tbody></table></div><p class="asof">${clean(dv.method || '')}</p>` : ''}
     ${ms.available ? html`<h3>Morningstar</h3><p>${ms.stars} stars, ${clean(ms.risk_word || ms.risk || '')}. ${clean(ms.note || '')}</p>` : ''}
   </section>`;
 }

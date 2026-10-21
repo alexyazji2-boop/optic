@@ -1510,7 +1510,8 @@ html[data-milo="off"] .ws-ask { opacity: .55; }
 .ws-bars { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 .ws-bars li { display: grid; grid-template-columns: minmax(0, 1fr) 70px 28px; align-items: center; gap: 8px; font-size: var(--t-sm); }
 .ws-gauge { height: 6px; border-radius: var(--r-xs); background: var(--c-sunk); overflow: hidden; }
-.ws-gauge i { display: block; height: 100%; background: var(--c-gold); }
+.ws-gauge i { display: block; height: 100%; background: var(--c-ink-3); }
+.ws-gauge.is-up i { background: var(--c-pos); } .ws-gauge.is-down i { background: var(--c-neg); }   /* greed green, fear red, neutral grey (ui/score.js toneBand) */
 .ws-bars b { text-align: right; font-variant-numeric: tabular-nums; }
 .ws-kv { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 0; }
 .ws-kv dt { font: 500 var(--t-xs)/1.2 var(--f-label); color: var(--c-ink-3); }

@@ -827,6 +827,15 @@ table.st td a { text-decoration: none; font-weight: 600; } table.st td a:hover {
 .term-pop p { margin: 0; } .term-pop-h { color: var(--c-ink); font-weight: 600; }
 .term-pop-ex span { color: var(--c-ink-3); font-weight: 600; }
 .term-pop-x { justify-self: end; min-height: var(--tap); padding: 0 12px; margin: -4px -6px -6px 0; border: 0; border-radius: var(--r-ctl); background: none; color: var(--c-ink); font: 600 var(--t-md)/1 var(--f-sans); cursor: pointer; }
+/* a score's line (ui/score.js): a thin track filled to the score, green or red by its side, grey between; a signed
+   score fills out from a middle line. The figure beside it says the value. */
+.sline { display: block; position: relative; height: 6px; margin-top: 8px; max-width: 280px; border-radius: 2px; background: var(--c-sunk); box-shadow: inset 0 0 0 1px var(--c-line-2); overflow: hidden; }
+.sline i { display: block; height: 100%; border-radius: 2px; background: var(--c-ink-3); }
+.sline.is-up i { background: var(--c-pos); } .sline.is-down i { background: var(--c-neg); }
+.sline.is-none { background: none; box-shadow: none; border: 1px dashed var(--c-line); }
+.sline-signed { display: grid; grid-template-columns: 1fr 2px 1fr; background: none; box-shadow: none; overflow: visible; }
+.sline-signed .sl-half { display: flex; height: 100%; background: var(--c-sunk); box-shadow: inset 0 0 0 1px var(--c-line-2); border-radius: 2px; overflow: hidden; } .sline-signed .sl-neg { justify-content: flex-end; }
+.sline-signed .sl-mid { display: block; height: 10px; margin-top: -2px; background: var(--c-ink-3); border-radius: 2px; }
 .term-pop-x:hover { background: var(--c-sunk); }
 .term-pop-acts { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin-top: 2px; } .term-pop-acts .term-pop-x { margin: 0; }
 .term-pop-milo { min-height: var(--tap); }

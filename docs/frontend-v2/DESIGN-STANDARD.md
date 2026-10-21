@@ -24,6 +24,14 @@ There are four levels, and each has one look.
 ### Figures
 `font-variant-numeric: tabular-nums` applies to every place numbers are compared: value tiles, tables, the header price, panels, the chart readout, segmented controls, chips and legends. Numbers in tables are right-aligned (`table.t`, `table.st .n`).
 
+### Scores (owner, 2026-10-21)
+A score with a good and a bad side is coloured and has a thin line filled to it (`ui/score.js`), as Classic showed:
+- a 0 to 100 score where 50 is no edge (the Optic Score, the composite, the long-term trend score, Compare's horizon scores): green from 55, red to 45, grey between;
+- a signed score (the market score, −100 to +100): green above zero, red below, its line filled out from a middle mark;
+- a banded reading (the dividend score, the sentiment gauge): its band's side (strong or solid, greed: green; weak, fear: red).
+
+The figure carries the colour too and the words say the reading, so colour never carries it alone; the line is hidden from a screen reader. A reading with no good side (RSI, IV rank, the trend strength oscillator) stays uncoloured, and a rank (Compare's "best") is not a direction.
+
 ### Surfaces and borders
 | Token | Used for |
 |---|---|
