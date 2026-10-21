@@ -13,6 +13,7 @@ import { lineChart } from '../ui/chart.js';
 import { button as miloButton } from '../ui/milo.js';
 import { empty, how } from '../ui/states.js';
 import { icon } from '../ui/icons.js';
+import * as TR from '../core/track.js';
 
 const pct = (v, dp = 1) => (isNum(v) ? `${num(v, dp)}%` : 'n/a');
 const usd = (v, dp = 0) => (isNum(v) ? money(v, dp) : 'n/a');
@@ -85,6 +86,7 @@ export function gex(t, sym) {
       ['Flip point', isNum(reg.flip_point) ? html`${num(reg.flip_point)} <span class="t-muted">(${signed(reg.flip_distance_pct)}, ${reg.flip_direction || ''})</span>` : 'No crossing within 12%'],
     ])}
     <p>${clean(reg.note || '')} <b>Walls:</b> ${clean(reg.swing_implication || '')}</p>${note(reg.sign_note)}
+    ${TR.slot('regime')}${TR.slot('walls')}
     <h3>Key levels</h3>${kv([wall('Call wall', lv.call_wall), wall('Put wall', lv.put_wall), wall('Gamma pin', lv.gamma_pin), lv.max_oi_strike ? ['Most open interest', html`${num(lv.max_oi_strike.strike, 0)} <span class="t-muted">(${compact(lv.max_oi_strike.total_oi)} contracts)</span>`] : null], 4)}
     <h3>Net dealer gamma by strike</h3><div class="chart-slot" data-chart="gexStrikes"></div>
     ${(g.profile || {}).spots ? html`<h3>Gamma profile across price</h3><div class="chart-slot" data-chart="gexProfile"></div><p class="asof">Net dealer gamma if the price moved to each level, everything else held. ${isNum(reg.flip_point) ? `It crosses zero near ${num(reg.flip_point)}.` : 'It does not cross zero within 12% of the price.'}</p>` : ''}
@@ -196,7 +198,7 @@ export function entry(t, sym) {
   const ep = t.entry_plan || {};
   const ivc = ep.iv_context || {}, vol = (t.technicals || {}).volatility || {};
   const volBlock = html`<h3>Volatility context</h3>${kv([['At-the-money IV', pct(ivc.atm_iv_pct)], ['Realised, 20 days', pct(ivc.realised_vol_20d_pct)], ['IV against realised', isNum(ivc.iv_to_realised_ratio) ? `${num(ivc.iv_to_realised_ratio, 2)}×` : 'n/a'], ['Realised vol, 10 / 20 / 30 / 60 days', `${num(vol.hv_10d, 1)} / ${num(vol.hv_20d, 1)} / ${num(vol.hv_30d, 1)} / ${num(vol.hv_60d, 1)}%`]], 2)}
-    <p>${clean(ivc.verdict || '')} ${clean(ivc.guidance || '')}</p>${note(vol.hv_trend_note)}${note(ivc.term_structure)}`;
+    <p>${clean(ivc.verdict || '')} ${clean(ivc.guidance || '')}</p>${TR.historySlot('iv_verdict')}${note(vol.hv_trend_note)}${note(ivc.term_structure)}`;
   if (!ep.actionable) {
     return html`<p><b>${clean(ep.headline || 'No entry right now.')}</b> ${clean(ep.reason || '')}</p>
       ${(ep.reasoning || []).length ? html`<ul class="plain">${ep.reasoning.map((r) => html`<li>${clean(r)}</li>`)}</ul>` : ''}
@@ -220,6 +222,7 @@ export function verdict(t, sym) {
   const s = score100(v.composite_score);
   return html`<p><b>${capFirst(v.stance || '')}, ${v.conviction || ''} conviction.</b> ${clean(v.summary || '')}</p>
     ${kv([['Composite', isNum(s) ? `${num(s, 0)} of 100` : 'n/a'], ['Signal agreement', pct(v.signal_agreement_pct, 0)]], 2)}
+    ${TR.slot('composite')}
     <div class="tscroll"><table class="t"><thead><tr><th>Input</th><th>Score</th><th>Weight</th><th>Adds</th><th>Status</th></tr></thead>
       <tbody>${(v.breakdown || []).map((b) => html`<tr><td>${capFirst(b.component)}</td><td>${signed(b.score, 0, '')}</td><td>${num(b.weight_pct, 0)}%${Math.abs((b.nominal_weight_pct || 0) - (b.weight_pct || 0)) >= 1 ? html` <span class="t-muted">(of ${num(b.nominal_weight_pct, 0)}%)</span>` : ''}</td><td>${signed(b.contribution, 1, '')}</td><td>${b.unavailable ? clean(b.status_reason || 'Excluded') : 'Included'}</td></tr>`)}</tbody></table></div>
     <p class="asof">50 is no edge either way. Bullish at +30, leaning at +10 on the composite's own scale. ${clean(v.scale_note || '')}</p>
@@ -380,6 +383,7 @@ export function labCharts(L) {
 /* ---------- swing setups (Classic parity B6b): the tool itself is pages/setups.js, one node put in this slot ---------- */
 export function swingSetups(t, sym) {
   return html`<p class="section-sub">Bullish and bearish entry rules on completed candles, each with its context, setup, trigger and invalidation. For review: nothing here places a trade, and every rule is a hypothesis to test, not a strategy known to work.</p>
+    ${TR.slot('setups')}
     <div data-ss-slot></div>
     ${ask(sym, 'Ask Milo about the setups', `Is there a swing setup worth acting on in ${sym}, and what would invalidate it?`)}`;
 }
@@ -403,7 +407,7 @@ export function patterns(t, sym, extra) {
   const p = t.patterns || {}, rates = extra.rates, se = extra.seasonality, rp = extra.relperf;
   const loading = extra.loading === undefined;
   const pats = !p.available ? html`<p class="t-muted">${clean(p.reason || 'Not enough history to read structure.')}</p>` : html`
-    <p class="section-sub">Structure, candles and zones read mechanically off the daily bars, each beside what actually happened afterwards across 43 names and ten years. The two often disagree, and this panel does not resolve that for you.</p>
+    <p class="section-sub">Structure, candles and zones read mechanically off the daily bars, each beside what actually happened afterwards across 43 names and ten years. The two often disagree, and this panel does not resolve that for you.</p>${TR.historySlot('candles')}
     ${(p.chart_patterns || []).length ? html`<h3>Structure</h3><div class="tscroll"><table class="t pat-t"><thead><tr><th class="l">Pattern</th><th class="l">State</th><th>Conventional reading held, 21 sessions</th></tr></thead>
       <tbody>${p.chart_patterns.slice().reverse().map((x) => { const st = x.confirmed === null ? 'candle' : x.confirmed ? 'confirmed' : 'unconfirmed';
         return html`<tr><td class="l"><b>${x.name}</b><span class="t-muted pat-sub">${shortDate(x.start_date)} to ${shortDate(x.end_date)}, ${num(x.span_bars, 0)} bars${isNum(x.amplitude_atr) ? `, ${num(x.amplitude_atr, 1)} times a typical day's range` : ''}</span><span class="pat-sub">Conventionally: ${x.conventional}</span></td>

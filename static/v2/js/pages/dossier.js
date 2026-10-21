@@ -27,6 +27,7 @@ import { mountThesis, disposeThesis, thesisContext } from './thesis.js';
 import * as OR from './overview-research.js';
 import { knowledge } from '../core/prefs.js';
 import { defineLive } from '../ui/term.js';
+import * as TR from '../core/track.js';
 let lp = null;   // the header's price refresh (dossier-frame livePrice), stopped in dispose()
 
 let live = true;
@@ -418,7 +419,8 @@ function researchCtx(sym) {
 function stageLabel(sym) {
   const r = D.stage;
   if (!r || r.available !== true) return '';
-  defineLive(`stage:${sym}`, [r.explain, r.transition, r.limits].filter(Boolean).join(' '));
+  const tested = TR.historyLine('stage');
+  defineLive(`stage:${sym}`, [r.explain, r.transition, r.limits, tested ? `Replayed on history: ${tested}` : ''].filter(Boolean).join(' '));
   return `Stage ${r.stage}, ${String(r.name || '').toLowerCase()}${r.transition_short ? `, ${String(r.transition_short).toLowerCase()}` : ''}`;
 }
 
@@ -475,6 +477,7 @@ export async function render(main, route) {
   step(api.get(`/api/digest/${enc}`, { ttl: 300000, timeout: 30000 }), (d) => { D.digest = d; }, () => { D.digest = null; });
   step(api.get(`/api/segments/${enc}`, { ttl: 600000, timeout: 60000 }), (d) => { D.segments = d; }, () => { D.segments = null; });
   step(api.get(`/api/stage?symbol=${enc}`, { ttl: 3600000, timeout: 45000 }), (d) => { D.stage = d; }, () => { D.stage = null; });
+  TR.load().then(() => { if (D.sym === sym && D.stage) stageLabel(sym); });   // the stage's explanation adds what history says
 }
 
 export function dispose() { if (lp) { lp.stop(); lp = null; } live = false; disposeThesis(); drawer.close({ silent: true }); }

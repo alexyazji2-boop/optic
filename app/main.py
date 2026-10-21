@@ -1944,12 +1944,26 @@ def _validation_bars(symbols: List[str]) -> Dict[str, pd.DataFrame]:
     return out
 
 
+# What Optic's rules did on history: the historical validation program's
+# classification (app/validation/report.py writes it; docs/validation/PROTOCOL.md
+# says how). Static between program runs, so read once.
+_VALIDATION_HISTORY_PATH = Path(__file__).resolve().parent / "validation" / "history.json"
+
+
+def _validation_history() -> Optional[Dict[str, Any]]:
+    try:
+        return json.loads(_VALIDATION_HISTORY_PATH.read_text())
+    except (OSError, ValueError):
+        return None
+
+
 @app.get("/api/validation")
 async def validation() -> Dict[str, Any]:
     """Whether the composite score, the gamma regime, the walls and the swing
     setups have predicted anything (Options audit O3; app/signal_archive.py).
     Each claim says "collecting" with its counts until it has enough
-    observations to test against its baseline."""
+    observations to test against its baseline. `history` adds what the rules
+    that free history can replay did from 1993 to 2026."""
     now = time.time()
     if _VALIDATION["body"] is not None and now - _VALIDATION["at"] < VALIDATION_TTL:
         return _VALIDATION["body"]
@@ -1958,6 +1972,7 @@ async def validation() -> Dict[str, Any]:
         return signal_archive.evaluate(signal_archive.reads(), _validation_bars, _setup_observations())
 
     body = await _run(build)
+    body["history"] = _validation_history()
     body["as_of"] = datetime.now(timezone.utc).isoformat()
     _VALIDATION.update(at=now, body=body)
     return body

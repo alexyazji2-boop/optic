@@ -26,6 +26,7 @@ import { createPriceChart } from '../ui/pricechart.js';
 import { sections } from '../ui/sections.js';
 import { insiderMarks, barKey, barTime } from './chart-widgets.js';
 import { mountSetups, disposeSetups, setupsContext } from './setups.js';
+import * as TR from '../core/track.js';
 let lp = null;   // the header's price refresh (dossier-frame livePrice), stopped in dispose()
 
 const FILTER_KEY = 'optic.options.filters.v1';   // a tool setting, as in the classic app
@@ -464,7 +465,7 @@ export async function render(main, route) {
   document.title = `${sym} Options, Optic`;
   if (lp) lp.stop();
   lp = livePrice(main, route.symbol, () => D, 'swing', undefined);
-  provideContext(() => ({ view: 'swing', ticker: sym, quote: D.quote, gex: (D.t || {}).gex, greeks: (D.t || {}).greeks, flow: (D.t || {}).flow, vol_surface: (D.t || {}).vol_surface, iv_rank: (D.t || {}).iv_rank, entry_plan: (D.t || {}).entry_plan, verdict: (D.t || {}).verdict, naked_ideas: (D.t || {}).naked_ideas, strategy_ideas: (D.t || {}).strategy_ideas, rate: (D.t || {}).rate, swing_setups: setupsContext(),
+  provideContext(() => ({ view: 'swing', ticker: sym, quote: D.quote, gex: (D.t || {}).gex, greeks: (D.t || {}).greeks, flow: (D.t || {}).flow, vol_surface: (D.t || {}).vol_surface, iv_rank: (D.t || {}).iv_rank, entry_plan: (D.t || {}).entry_plan, verdict: (D.t || {}).verdict, naked_ideas: (D.t || {}).naked_ideas, strategy_ideas: (D.t || {}).strategy_ideas, rate: (D.t || {}).rate, swing_setups: setupsContext(), track_record: TR.context(),
     options_research: R.data ? { expiry: R.expiry, side: R.side, summary: R.data.summary, events: R.data.events, rows: ((R.data.table || {}).rows || []).slice(0, 20),
       // when the quotes were read, and why figures are missing when they are (no two-sided quotes overnight)
       quotes_read_at: R.data.fetched_at || null, quotes_unusable: noQuotes() || null, position: B.analysis ? { legs: B.legs, analysis: { entry: B.analysis.entry, max_profit: B.analysis.max_profit, max_loss: B.analysis.max_loss, breakevens: B.analysis.breakevens_at_expiry, greeks: B.analysis.greeks, scenarios: B.analysis.scenarios, flags: B.analysis.flags } } : null } : null }));

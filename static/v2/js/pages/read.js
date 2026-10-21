@@ -16,6 +16,7 @@ import { toast } from '../ui/toast.js';
 import { button as miloButton, provideContext } from '../ui/milo.js';
 import { sectionHead } from './tabs.js';
 import { etDay } from '../core/marketTime.js';
+import * as TR from '../core/track.js';
 
 let D = {}, live = true, mainEl = null, tabState = { g: 0, s: {} }, cal = { impact: 'all', range: 'week' }, cat = { status: 'relevant', category: '', sector: '', theme: '', q: '' };
 const ask = (label, q) => miloButton(label, { ask: q, context: 'Markets, Read' });
@@ -154,7 +155,7 @@ function regime() {
   if (!r || !r.available) return empty('No regime reading', '');
   const comps = Object.entries(r.components || {});
   return html`<div class="figure"><p class="t-display-m">${signed(r.score, 1, '')}</p><p class="delta"><span><b>${capFirst(r.stance || r.regime)}</b></span><span class="t-muted">${clean(r.plain || '')}</span></p></div>
-    <p>${clean(r.effect || '')}</p>
+    <p>${clean(r.effect || '')}</p>${TR.historySlot('regime')}
     <div class="tscroll"><table class="t"><thead><tr><th>Input</th><th>Weight</th><th>Reading</th><th>How it is scaled</th></tr></thead><tbody>${comps.map(([k, v]) => html`<tr><td>${capFirst(k)}</td><td>${num((r.weights || {})[k], 0)}%</td><td>${signed(v, 1, '')}</td><td style="text-align:left"><small>${clean((r.scales || {})[k] || '')}</small></td></tr>`)}</tbody></table></div>
     <p>${isNum(r.agreement_pct) ? `${num(r.agreement_pct, 0)}% of the inputs point the same way.` : ''} ${(r.conflicts || []).map(clean).join(' ')}</p>
     ${how(html`<p>Positive at +12, negative at −12. ${clean(r.scale_note || '')} ${clean(r.method || '')}</p>`)}`;

@@ -25,6 +25,7 @@ import { skeleton, failed } from '../ui/states.js';
 import { icon } from '../ui/icons.js';
 import { button as miloButton } from '../ui/milo.js';
 import { toast } from '../ui/toast.js';
+import * as TR from '../core/track.js';
 
 /* The classic marks, drawn to the rail's recipe: a 24-unit box, no fill, a 1.8 stroke, round caps. */
 export const WIDGETS = [
@@ -424,7 +425,7 @@ const BODY = {
         ${tile(isNum(st.reward_risk) ? num(st.reward_risk, 2) : 'n/a', '', 'Reward / risk', `Average win ${signed(st.avg_win_pct, 1)}, loss ${signed(st.avg_loss_pct, 1)}`)}
         ${tile(signed(st.max_drawdown_pct, 0), 'down', 'Max drawdown', `Buy and hold ${signed(bm.buy_hold_max_drawdown_pct, 0)}`)}
       </div>
-      <p class="chw-verdict">${clean(r.verdict || '')}</p>
+      <p class="chw-verdict">${clean(r.verdict || '')}</p>${session ? '' : TR.historySlot('backtest')}
       ${isNum(bm.beats_random_pct) ? fine(`Beat ${num(bm.beats_random_pct, 0)}% of ${num(bm.random_runs, 0)} ${session ? 'books with the same trades entered at random times on the same days' : 'random-entry books with the same number of trades and holding periods'} (median ${signed(bm.random_median_pct, session ? 1 : 0)}).`) : ''}
       ${pb ? fine(`The plain break, entering on the first close outside the range with the same exits: ${num(pb.trades || 0, 0)} trades, ${signed(pb.total_return_pct, 1)}${isNum(pb.win_rate_pct) ? `, ${num(pb.win_rate_pct, 0)}% winners` : ''}.`) : ''}
       ${curveSvg(r.equity)}
