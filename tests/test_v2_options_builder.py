@@ -189,7 +189,7 @@ def test_the_position_is_kept_for_the_visit_in_memory_only():
 
 
 def test_in_session_the_contracts_and_the_position_are_priced_again():
-    tick = PAGE.split("refresh = setInterval(")[1].split("}, 60000);")[0]
+    tick = PAGE.split("refresh = poll(")[1].split("}, { every: 60000, closed: 600000 });")[0]   # core/poll.js since B1 (2026-10-21)
     assert "loadResearch({ quiet: true })" in tick and "analyze({ quiet: true })" in tick
 
 

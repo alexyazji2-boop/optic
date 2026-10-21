@@ -68,7 +68,7 @@ export const MOBILE_TABS = [
 ];
 
 // an instrument (an index, a rate, a commodity) opens from Markets, Indices, so Markets is where the reader is
-const HOME_GROUP = { instrument: 'market' };
+const HOME_GROUP = { instrument: 'market', earningsweek: 'market' };   // the week's earnings is a market-wide calendar
 export const groupOf = (view) => GROUPS.find((g) => g.pages.some((p) => p.view === view)) || GROUPS.find((g) => g.id === HOME_GROUP[view]) || null;
 export const pageOf = (view) => { for (const g of GROUPS) { const p = g.pages.find((x) => x.view === view); if (p) return p; } return view === 'settings' ? SETTINGS : null; };
 

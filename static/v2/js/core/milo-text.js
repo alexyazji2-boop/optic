@@ -105,9 +105,9 @@ export function sourcesAsText(text) {
 const SYMBOL = /^[A-Z][A-Z0-9.\-]{0,9}$/;
 export const SECTIONS = { overview: 'Overview', chart: 'Chart', options: 'Options', investing: 'Investing', earnings: 'Earnings', financials: 'Financials', news: 'News' };
 const RANGES = ['1m', '3m', '6m', '1y', 'all'], INTERVALS = ['daily', 'weekly'];
-// The classic study ids, and what each is on v2's chart (or null: the Classic chart has it).
+// The classic study ids, and what each is on v2's chart (every one of them is on it since 2026-10-19).
 export const STUDIES = { sma20: ['SMA 20', 'ov:ma'], sma50: ['SMA 50', 'ov:ma'], sma200: ['SMA 200', 'ov:ma'], ema9: ['EMA 9', 'ov:ema'], ema21: ['EMA 21', 'ov:ema'], ema50: ['EMA 50', 'ov:ema'],
-  vol: ['Volume', 'pane:volume'], rsi: ['RSI pane', 'pane:rsi'], macd: ['MACD pane', 'pane:macd'], stages: ['Weinstein stages', null], matrend: ['MA Trend Identifier', null], tso: ['Trend Strength Oscillator pane', null] , msb: ['Market structure breaks', 'ov:msb'] };
+  vol: ['Volume', 'pane:volume'], rsi: ['RSI pane', 'pane:rsi'], macd: ['MACD pane', 'pane:macd'], stages: ['Weinstein stages', 'ov:stages'], matrend: ['MA Trend Identifier', 'ov:matrend'], tso: ['Trend Strength Oscillator pane', 'pane:tso'] , msb: ['Market structure breaks', 'ov:msb'] };
 export function actionArgs(rawArgs) {
   const text = String(rawArgs || '').replace(/&quot;|[“”]/g, '"').replace(/&#39;|[‘’]/g, "'").trim();
   const out = []; const re = /"([^"]{0,200})"|(\S+)/g; let m;

@@ -14,8 +14,9 @@ import * as FV from '../core/finviz.js';
 import { closeCell, CLOSE_NOTE } from '../core/congress.js';
 import { skeleton, empty, failed } from '../ui/states.js';
 import { button as miloButton, provideContext } from '../ui/milo.js';
-import { core, header, tabs, isFund } from './dossier-frame.js';
+import { core, header, tabs, isFund, livePrice } from './dossier-frame.js';
 import { kindOf, can, kindWord } from '../core/instrument.js';
+let lp = null;   // the header's price refresh (dossier-frame livePrice), stopped in dispose()
 
 let D = {}, live = true, mainEl = null;
 // Fiscal years or quarters, for the statements and the segments: a display choice kept on this device.
@@ -349,7 +350,7 @@ function paint() {
   else if (D.tErr) body = failed('The financial statements', D.tErr, { retry: 'ticker' });
   else if (!D.t) body = skeleton('lines', 6, 'Loading the statements');
   else body = html`${readings()}${jumpList()}${statements(sym)}${segments()}${record('earnings')}${ownership(sym)}${record('short')}${extras()}${filings()}${congress()}`;
-  draw(mainEl, html`${header(sym, D, 'financials')}${tabs(sym, 'financials', { fund: isFund(D) })}<div class="fin">${body}</div>`);
+  draw(mainEl, html`<div class="dstick">${header(sym, D, 'financials')}${tabs(sym, 'financials', { fund: isFund(D) })}</div><div class="fin">${body}</div>`);
   mountCharts(mainEl, Object.assign({}, statementCharts(), segmentCharts(), extraCharts()));
   if (Math.abs(window.scrollY - y) > 2) window.scrollTo(0, y);
 }
@@ -378,6 +379,8 @@ export async function render(main, route) {
   D = { sym };
   store.pushRecent(sym);
   document.title = `${sym} Financials, Optic`;
+  if (lp) lp.stop();
+  lp = livePrice(main, route.symbol, () => D, 'financials', undefined);
   provideContext(() => ({ view: 'financials', ticker: sym, quote: D.quote, company: (D.t || {}).company, filings: (D.t || {}).filings, extras: D.x }));
   if (!main.dataset.finWired) {
     main.dataset.finWired = '1';
@@ -404,6 +407,6 @@ export async function render(main, route) {
   step(api.get(`/api/congress?ticker=${enc}&limit=40`, { ttl: 600000, timeout: 30000 }), (d) => { D.cg = d; }, () => { D.cg = null; });
   loadSegments(sym);
 }
-export function dispose() { live = false; }
+export function dispose() { if (lp) { lp.stop(); lp = null; } live = false; }
 export const retry = { ticker: (m, r) => render(m, r) };
 void empty;

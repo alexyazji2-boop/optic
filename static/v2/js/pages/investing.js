@@ -19,9 +19,10 @@ import { icon } from '../ui/icons.js';
 import { skeleton, empty, failed } from '../ui/states.js';
 import { button as miloButton, provideContext } from '../ui/milo.js';
 import { toast } from '../ui/toast.js';
-import { core, header, tabs, isFund } from './dossier-frame.js';
+import { core, header, tabs, isFund, livePrice } from './dossier-frame.js';
 import * as VS from './valuation-scenarios.js';
 import { kindOf, can } from '../core/instrument.js';
+let lp = null;   // the header's price refresh (dossier-frame livePrice), stopped in dispose()
 
 const RANGES = { '1Y': 52, '3Y': 156, '5Y': 260, '10Y': 520, All: Infinity };
 let D = {}, live = true, mainEl = null;
@@ -287,7 +288,7 @@ function paint() {
   const keepKey = keep && (keep.name || Object.entries(keep.dataset || {}).map((e) => e.join('=')).join('&'));
   const y = window.scrollY;
   const company = can(kindOf(sym, D)).valuation;
-  draw(mainEl, html`${header(sym, D, 'long')}${tabs(sym, 'long', { fund: isFund(D) })}
+  draw(mainEl, html`<div class="dstick">${header(sym, D, 'long')}${tabs(sym, 'long', { fund: isFund(D) })}</div>
     ${trend(sym)}${returnsRisk()}${weekly(sym)}${drawdown()}${company ? html`${multiple(sym)}${fairValue(sym)}${dcf(sym)}${scenarios(sym)}` : fundValuation(sym)}${accumulation()}`);
   mountCharts(mainEl, Object.assign({}, ddMaker(), peMaker()));
   mountWeekly();
@@ -305,6 +306,8 @@ export async function render(main, route) {
   D = { sym };
   store.pushRecent(sym);
   document.title = `${sym} Investing, Optic`;
+  if (lp) lp.stop();
+  lp = livePrice(main, route.symbol, () => D, 'long', undefined);
   provideContext(() => ({ view: 'long', ticker: sym, quote: D.quote, long_term: D.lt, fair_value: D.fv, valuation: D.val ? { dcf: (D.val.dcf || {}).per_share, scenarios: D.val.scenarios, reverse: D.val.reverse } : null, scenarios: D.vsBody }));
   paint(); wire(main);
   const step = (p, ok, bad) => p.then((d) => { if (D.sym === sym) ok(d); }, (e) => { if (D.sym === sym) bad(e); }).finally(() => { if (D.sym === sym) paint(); });
@@ -326,7 +329,7 @@ async function loadAll() {
   try { D.allWeeks = await api.get(`/api/weekly-bars/${encodeURIComponent(D.sym)}?span=max`, { ttl: 3600000, timeout: 45000 }); } catch (e) { toast('The full weekly history did not load.'); }
   paint();
 }
-export function dispose() { live = false; if (WK.chart) WK.chart.destroy(); WK = { chart: null, host: null, key: '' }; }
+export function dispose() { if (lp) { lp.stop(); lp = null; } live = false; if (WK.chart) WK.chart.destroy(); WK = { chart: null, host: null, key: '' }; }
 export const retry = { lt: (m, r) => { api.invalidate('/api/longterm'); render(m, r); } };
 
 function wire(main) {

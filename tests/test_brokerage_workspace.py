@@ -37,7 +37,7 @@ H = [  # an overview's holdings, as portfolio.build returns them
 
 
 def test_the_calendar_marks_estimates_skips_funds_and_reads_expiries_exactly():
-    cal = {"NVDA": {"dates": ["2026-10-20"], "confirmed": True, "timing": "after_close"},
+    cal = {"NVDA": {"dates": ["2026-10-20"], "confirmed": True, "timing": "after_close", "usual_timing": {"timing": "after_close", "count": 4}},
            "JNJ": {"dates": ["2026-10-27", "2026-10-31"], "confirmed": False}}
     div = {"JNJ": {"ex_date": "2026-10-21", "last_amount": 1.3}, "QQQ": {"ex_date": "2026-09-22", "last_amount": 0.6}}
     asked = []
@@ -48,7 +48,9 @@ def test_the_calendar_marks_estimates_skips_funds_and_reads_expiries_exactly():
     assert kinds == [("option_expiry", "NVDA"), ("earnings", "NVDA"), ("ex_dividend", "JNJ"), ("earnings", "JNJ")]
     assert "QQQ" not in asked                                  # a fund has no earnings date of its own
     nv = out["events"][1]
-    assert nv["confirmed"] is True and nv["timing"] == "after_close" and nv["days_away"] == 5
+    # the feed's time on an upcoming report is a placeholder (2026-10-21), so the event carries none of its own;
+    # the company's habit from its past reports travels separately
+    assert nv["confirmed"] is True and nv["timing"] is None and nv["usual_timing"] == {"timing": "after_close", "count": 4} and nv["days_away"] == 5
     jnj = out["events"][3]
     assert jnj["confirmed"] is False and jnj["range_end"] == "2026-10-31" and jnj["timing"] is None
     assert "not confirmed" in jnj["note"]

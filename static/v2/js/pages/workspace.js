@@ -13,6 +13,7 @@ import * as api from '../core/api.js';
 import * as store from '../core/store.js';
 import * as prefs from '../core/prefs.js';
 import { num, signed, money, compact, dir, isNum, ago, clean, shortDate, longDate, capFirst } from '../core/format.js';
+import * as RP from '../core/reports.js';
 import { etDay } from '../core/marketTime.js';
 import { marketSession } from '../core/status.js';
 import { kindOf, kindWord, learn, onLearn } from '../core/instrument.js';
@@ -26,6 +27,7 @@ import { go } from '../core/router.js';
 import { hello, etDate, portfolio, eventsBlock, STARTERS, STARTER_NAMES, STARTER_ABOUT, portfolioSeries } from './home.js';
 import { term } from '../ui/term.js';
 import * as FV from '../core/finviz.js';
+import { poll } from '../core/poll.js';
 
 const KEY = 'optic.v2.workspace.v1';
 const VERSION = 5;   // 5: each layout knows whether the reader changed it, panel settings are kept, and any older version carries over (2026-10-20)
@@ -398,7 +400,7 @@ export const PANELS = {
       return html`${tabs}${done ? html`<p class="ws-note">Every report in ${d.week_label || 'this week'} is out. The coming week is under Next week.</p>` : ''}<table class="ws-t"><caption class="sr">Earnings, ${d.week_label}</caption><thead><tr><th scope="col">Day</th><th scope="col">Company</th><th scope="col" class="n">EPS est.</th><th scope="col" class="n ws-sec">Revenue est.</th><th scope="col" class="n">Implied move</th></tr></thead><tbody>
         ${rows.map((r) => { const im = P.im[r.ticker];
           return html`<tr class="${r.past ? 'ws-past' : ''}"><td class="ws-time">${r.day}</td><td>${tickBtn(r.ticker)} <span class="ws-name">${r.name || ''}</span>${r.confirmed ? '' : html` <span class="ws-flag">Unconfirmed</span>`}</td><td class="n">${isNum(r.eps_consensus) ? num(r.eps_consensus) : ''}</td><td class="n ws-sec">${isNum(r.revenue_consensus) ? compact(r.revenue_consensus) : ''}</td>
-            <td class="n">${r.past ? html`<span class="ws-rule">Reported</span>` : im === undefined ? html`<button type="button" class="textlink" data-ws-im="${r.ticker}" aria-label="Load the implied move for ${r.ticker}">Load</button>` : im === 'loading' ? 'Reading the chain...' : im && isNum(im.pct) ? html`±${num(im.pct)}%<span class="ws-rule">to ${shortDate(im.expiry)}</span>` : html`<span class="ws-rule">${(im && im.reason) || 'Not available'}</span>`}</td></tr>`; })}</tbody></table>`;
+            <td class="n">${r.past ? html`<span class="ws-rule">Reported</span>` : im === undefined ? html`<button type="button" class="textlink" data-ws-im="${r.ticker}" aria-label="Load the implied move for ${r.ticker}">Load</button>` : im === 'loading' ? 'Reading the chain...' : im && isNum(im.pct) ? html`±${num(im.pct)}%<span class="ws-rule">to ${shortDate(im.expiry)}</span>` : html`<span class="ws-rule">${(im && im.reason) || 'Not available'}</span>`}</td></tr>`; })}</tbody></table><p class="ws-note"><a class="textlink" href="#/earnings${P.offset ? '?week=1' : ''}">See the whole week, by day</a></p>`;
     },
     foot: (d) => ({ source: 'Company calendars and consensus via Yahoo Finance', at: (d || {}).generated_at, note: d && d.checked ? `${d.checked} companies checked${d.failed ? `, ${d.failed} could not be read` : ''}.` : '' }),
     milo: 'Which of this week\'s earnings reports matter most, and what do their options price?',
@@ -580,7 +582,7 @@ export const PANELS = {
       if (e.not_applicable) return html`<p class="ws-note">${clean(e.reason || `${link} does not report earnings.`)}</p>`;
       const nr = e.next_report || {}, pr = e.pricing || {}, su = e.surprise || {};
       return html`<dl class="ws-kv">
-        <div><dt>Next report</dt><dd>${nr.date ? longDate(nr.date) : 'No date yet'}</dd><small>${nr.date ? `${nr.days_away} days${nr.confirmed ? ', confirmed' : ', not confirmed'}` : ''}</small></div>
+        <div><dt>Next report</dt><dd>${nr.date ? longDate(nr.date) : 'No date yet'}</dd><small>${nr.date ? `${nr.days_away} days, ${RP.dateStatus(nr)}` : ''}</small></div>
         <div><dt>Options price for it</dt><dd>${pr.available && isNum(pr.implied_move_pct) ? `±${num(pr.implied_move_pct, 2)}%` : 'n/a'}</dd><small>${pr.available && isNum(pr.ratio) ? `${num(pr.ratio, 2)}× its usual move` : ''}</small></div>
         <div><dt>Average report-day move</dt><dd>${isNum(pr.event_day_avg_pct) ? `±${num(pr.event_day_avg_pct, 1)}%` : 'n/a'}</dd><small>${su.quarters ? `Last ${su.quarters} reports` : ''}</small></div>
         <div><dt>Beat rate</dt><dd>${isNum(su.beat_rate_pct) ? `${num(su.beat_rate_pct, 0)}%` : 'n/a'}</dd><small>${isNum(su.beat_count) ? `${su.beat_count} of ${su.quarters}` : ''}</small></div></dl>
@@ -1053,15 +1055,16 @@ export async function render(main) {
   wire(); paintAll();
   try { mq = matchMedia(PHONE); mq.onchange = () => { if (live) paintAll(); }; } catch (e) { mq = null; }
   try { mq2 = matchMedia('(max-width: 1100px)'); mq2.onchange = () => { if (live) fillRows(); }; } catch (e) { mq2 = null; }
-  clearInterval(timer);
-  // refresh the market panels every minute while the regular session is open and the tab is visible
-  timer = setInterval(() => {
+  if (timer) timer.stop();
+  // the market panels every 20 s while the regular session is open (the classic app's pace), quietly: a panel that
+  // changed nothing repaints nothing; paused while the tab is hidden, caught up once on return (core/poll.js)
+  timer = poll(async (current) => {
     const open = (((DATA.indices || {}).session) || {}).is_regular;
-    if (!live || document.hidden || !open) return;
-    layout().filter((x) => !x.hidden && MARKET_PANELS.includes(x.id)).forEach((x) => loadPanel(x.id, { quiet: true }));
-  }, 60000);
+    if (!live || !open || !current()) return;
+    await Promise.all(layout().filter((x) => !x.hidden && MARKET_PANELS.includes(x.id)).map((x) => loadPanel(x.id, { quiet: true })));
+  }, { every: 20000, closed: 300000 });
 }
-export function dispose() { lastScroll = window.scrollY; live = false; clearInterval(timer); if (mq) mq.onchange = null; if (mq2) mq2.onchange = null; }
+export function dispose() { lastScroll = window.scrollY; live = false; if (timer) { timer.stop(); timer = null; } if (mq) mq.onchange = null; if (mq2) mq2.onchange = null; }
 export function onLists() {
   if (!live) return;
   if (!!$('#ws-new', root) !== isNew()) { paintAll(); return; }

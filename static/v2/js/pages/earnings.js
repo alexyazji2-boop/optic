@@ -9,6 +9,7 @@ import { html, raw, render as draw } from '../core/dom.js';
 import * as api from '../core/api.js';
 import * as store from '../core/store.js';
 import { num, signed, dir, compact, clean, bolded, capFirst, longDate, fullDate, shortDate, isNum, ago } from '../core/format.js';
+import * as RP from '../core/reports.js';
 import { mountCharts } from '../ui/chart.js';
 import { signedBars, groupedBars } from '../ui/bars.js';
 import * as FV from '../core/finviz.js';
@@ -16,9 +17,10 @@ import { term } from '../ui/term.js';
 import { how } from '../ui/states.js';
 import { skeleton, empty, failed, generated } from '../ui/states.js';
 import { button as miloButton, provideContext } from '../ui/milo.js';
-import { core, header, tabs, isFund } from './dossier-frame.js';
+import { core, header, tabs, isFund, livePrice } from './dossier-frame.js';
 import { etStamp, sessionWord } from '../core/marketTime.js';
 import { historyRatio } from './dossier.js';
+let lp = null;   // the header's price refresh (dossier-frame livePrice), stopped in dispose()
 
 let D = {}, live = true, mainEl = null;
 const timing = { before_open: 'before the open', after_close: 'after the close', during: 'during the session' };
@@ -43,7 +45,7 @@ function hero(sym) {
   const upcoming = nr.date && !lr.just_reported;
   const R = rows8(), beats = R.filter((r) => r.cls === 'beat').length, misses = R.filter((r) => r.cls === 'miss').length, inl = R.filter((r) => r.cls === 'in line').length;
   const ab = afterBeats(R);
-  const when = upcoming ? html`<p class="ern-when"><b>${name} reports on ${longDate(nr.date)}${timing[nr.timing] ? `, ${timing[nr.timing]}` : ''}</b>, in ${nr.days_away} ${nr.days_away === 1 ? 'day' : 'days'}. ${nr.confirmed ? 'The company has confirmed the date.' : 'The date is an estimate; the company has not confirmed it yet.'}</p>`
+  const when = upcoming ? html`<p class="ern-when"><b>${name} reports on ${longDate(nr.date)}</b>, in ${nr.days_away} ${nr.days_away === 1 ? 'day' : 'days'}: ${RP.dateStatus(nr)}${nr.confirmed ? '' : ', so it may move'}. ${RP.habitLine(nr, `${name}'s`)}</p>`
     : lr.date ? html`<p class="ern-when"><b>${name} last reported on ${fullDate(lr.date)}.</b> ${nr.date ? '' : 'No next date is in the data yet.'}</p>`
       : html`<p class="ern-when"><b>No report date on record for ${sym}.</b> There is no next report date and no latest result in the feed for this company.</p>`;
   const expect = upcoming && isNum(nr.eps_consensus) ? html`<p>Analysts expect ${term('earnings per share', 'earnings per share')} (${term('eps', 'EPS')}) of <b>$${num(nr.eps_consensus)}</b> for the quarter, the average of their estimates (the ${term('consensus', 'consensus')}), within a range of $${num(nr.eps_low)} to $${num(nr.eps_high)}${nr.revenue_consensus_label ? html`, on revenue of about <b>${nr.revenue_consensus_label}</b>` : ''}.</p>` : '';
@@ -195,7 +197,7 @@ function paint() {
   else if (D.e.not_applicable) body = empty(`No earnings for ${sym}`, clean(D.e.reason || 'Funds and indices do not report earnings.'));
   // the newcomer's questions first; Optic's reading, revisions, analysts and options after (beginner brief item 7)
   else body = html`${hero(sym)}${history(sym)}${growth()}${brief(sym)}${revisions(sym)}${analysts(sym)}${verdictBlock()}${pricing(sym)}<p class="asof disclaimer">${clean(D.e.data_caveat || '')} ${clean(D.e.disclaimer || '')}</p>`;
-  draw(mainEl, html`${header(sym, D, 'earnings')}${tabs(sym, 'earnings', { fund: isFund(D) })}<div class="earn">${body}</div>`);
+  draw(mainEl, html`<div class="dstick">${header(sym, D, 'earnings')}${tabs(sym, 'earnings', { fund: isFund(D) })}</div><div class="earn">${body}</div>`);
   if (D.e && !D.e.not_applicable) mountCharts(mainEl, makers());
   if (Math.abs(window.scrollY - y) > 2) window.scrollTo(0, y);
 }
@@ -216,6 +218,8 @@ export async function render(main, route) {
   D = { sym };
   store.pushRecent(sym);
   document.title = `${sym} Earnings, Optic`;
+  if (lp) lp.stop();
+  lp = livePrice(main, route.symbol, () => D, 'earnings', undefined);
   provideContext(() => ({ view: 'earnings', ticker: sym, quote: D.quote, earnings: D.e }));
   paint();
   main.addEventListener('click', (e) => { if (e.target.closest('[data-v2-brief]')) loadBrief(); });
@@ -227,6 +231,6 @@ export async function render(main, route) {
   catch (e) { if (D.sym === sym) D.err = e; }
   if (D.sym === sym) paint();
 }
-export function dispose() { live = false; }
+export function dispose() { if (lp) { lp.stop(); lp = null; } live = false; }
 export const retry = { earnings: (m, r) => { api.invalidate('/api/earnings'); render(m, r); }, brief: () => loadBrief() };
 void ago;

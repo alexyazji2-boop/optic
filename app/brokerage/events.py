@@ -93,7 +93,7 @@ def build(holdings: Iterable[Dict[str, Any]], options: Iterable[Dict[str, Any]],
                     events.append(dict(base, kind="earnings", date=first.isoformat(),
                                        days_away=(first - today).days, confirmed=confirmed,
                                        range_end=max(dates).isoformat() if len(dates) > 1 else None,
-                                       timing=cal.get("timing") if confirmed else None,
+                                       timing=None, usual_timing=cal.get("usual_timing"),
                                        title="{} reports earnings".format(sym),
                                        note=None if confirmed else
                                        "Estimated date{}: the company has not confirmed it.".format(

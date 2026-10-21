@@ -19,6 +19,7 @@ import { getFlags } from '../ui/shell.js';
 import { provideContext } from '../ui/milo.js';
 import { hrefFor } from '../nav.js';
 import { sectionHead } from './tabs.js';
+import { refreshUnread } from '../core/unread.js';
 
 const LOCAL_KEY = 'optic.watches.v1';
 let S = {};
@@ -459,7 +460,7 @@ function wire(main) {
       return;
     }
     if (t('[data-v2-hits-seen]')) {
-      try { await api.post('/api/watches/hits/seen', {}); S.hits = S.hits.map((h) => Object.assign(h, { seen: true })); paint(main); }
+      try { await api.post('/api/watches/hits/seen', {}); S.hits = S.hits.map((h) => Object.assign(h, { seen: true })); paint(main); refreshUnread(); }
       catch (err) { toast(api.explain(err, 'That'), { kind: 'bad' }); }
     }
   });

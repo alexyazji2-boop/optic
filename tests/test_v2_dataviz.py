@@ -186,7 +186,8 @@ def test_the_server_reads_the_lines_behind_the_charts():
 
 def test_earnings_leads_with_the_newcomers_questions():
     hero = EARN[EARN.index("function hero(sym) {"):EARN.index("// What Optic's earnings verdict")]
-    assert "reports on ${longDate(nr.date)}" in hero and "The company has confirmed the date." in hero and "the company has not confirmed it yet" in hero
+    # the date's status is Yahoo Finance's, said through core/reports.js; no session for a report not yet made (B1.9)
+    assert "reports on ${longDate(nr.date)}</b>" in hero and "${RP.dateStatus(nr)}" in hero and "so it may move" in hero
     assert "${term('earnings report', 'earnings report')}" in hero and "${term('earnings per share', 'earnings per share')} (${term('eps', 'EPS')})" in hero
     assert "But the share price fell after ${ab.fell} of those ${ab.n} beats" in hero and "Beating estimates does not mean the price rises" in hero
     order = EARN[EARN.index("else body = html`${hero(sym)}"):]

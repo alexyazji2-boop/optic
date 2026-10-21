@@ -125,7 +125,7 @@ def test_the_chart_is_the_interactive_one_and_survives_a_repaint():
     assert "if (WK.chart && WK.key === key && WK.host) { slot.replaceWith(WK.host); WK.chart.set(looks);" in m, "a pan or a zoom outlasts the other sections arriving"
     assert "[D.sym, iv, range," in m, "built again only for another symbol, interval, range or history"
     assert "series: [{ values: sma(closes, 40), cls: 'o1' }, { values: sma(closes, 200), cls: 'o2' }]" in m, "the averages over the whole history, so they are right at the left edge"
-    assert "export function dispose() { live = false; if (WK.chart) WK.chart.destroy();" in INV
+    assert "live = false; if (WK.chart) WK.chart.destroy();" in INV.split("export function dispose() {")[1].split("\n")[0]
     assert "Drag to pan, scroll or pinch to zoom, arrow keys to step through each ${unit}." in INV
     # the tiles hold one value each
     assert "['Weekly RSI', num(lt.weekly_rsi, 1)], ['40-week slope over 3 months', signed(lt.slope_40w_pct_3m)]], 4)" in INV

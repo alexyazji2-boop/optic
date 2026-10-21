@@ -13,6 +13,7 @@ import { html, raw, render as draw } from '../core/dom.js';
 import * as api from '../core/api.js';
 import * as store from '../core/store.js';
 import { num, clean, capFirst, ago, isNum, billingOff } from '../core/format.js';
+import * as RP from '../core/reports.js';
 import { stamp } from '../core/prefs.js';
 import { skeleton } from '../ui/states.js';
 import { lineChart, mountCharts } from '../ui/chart.js';
@@ -341,7 +342,7 @@ function eventRows(list, compact) {
   if (!list || !list.length) return html`<p class="t-muted">Nothing scheduled in the window for what you hold.</p>`;
   const kind = { earnings: 'Earnings', ex_dividend: 'Ex-dividend', option_expiry: 'Option expiry' };
   return html`<ul class="bk-events">${list.map((e) => html`<li><span class="bk-when">${day(e.date)}<small class="t-muted">${e.days_away === 0 ? 'today' : `in ${e.days_away} day${e.days_away === 1 ? '' : 's'}`}</small></span>
-    <span><b>${e.symbol}</b> ${kind[e.kind] || e.kind} ${e.kind === 'earnings' ? tag(e.confirmed ? 'on' : 'warn', e.confirmed ? 'Confirmed' : 'Estimated') : ''} ${e.timing ? html`<small class="t-muted">${e.timing === 'before_open' ? 'before the open' : 'after the close'}</small>` : ''} ${e.weight_pct ? html`<small class="t-muted">${pct(e.weight_pct)} of portfolio</small>` : ''} ${!compact && e.note ? html`<small class="t-muted">${clean(e.note)}</small>` : ''}</span>
+    <span><b>${e.symbol}</b> ${kind[e.kind] || e.kind} ${e.kind === 'earnings' ? tag(e.confirmed ? 'on' : 'warn', e.confirmed ? 'Confirmed' : 'Estimated') : ''} ${RP.habitLine(e) ? html`<small class="t-muted">${RP.habitLine(e)}</small>` : ''} ${e.weight_pct ? html`<small class="t-muted">${pct(e.weight_pct)} of portfolio</small>` : ''} ${!compact && e.note ? html`<small class="t-muted">${clean(e.note)}</small>` : ''}</span>
     ${!compact && e.links ? html`<span class="cluster">${e.links.earnings ? html`<a class="btn btn-sm" href="${v2href(e.links.earnings)}">Earnings analysis</a>` : ''}${e.links.overview ? html`<a class="btn btn-sm" href="${v2href(e.links.overview)}">Dossier</a>` : ''}${e.links.options ? html`<a class="btn btn-sm" href="${v2href(e.links.options)}">Options</a>` : ''}</span>` : ''}</li>`)}</ul>`;
 }
 // the server writes classic addresses ("#/AAPL/earnings"); they are the same in v2

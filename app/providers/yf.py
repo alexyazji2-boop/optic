@@ -1587,11 +1587,20 @@ class YFinanceProvider(MarketDataProvider):
             dates = cal.get("Earnings Date") or []
             if not isinstance(dates, list):
                 dates = [dates]
+            # Yahoo's own flag says whether the date is an estimate; only without
+            # it does the shape stand in (one date, or a two-date window). Read
+            # from the quote's cached document, so it costs no extra request
+            # when the quote was just read.
+            flag = None
+            try:
+                flag = (self._info(ticker) or {}).get("isEarningsDateEstimate")
+            except Exception:                                   # noqa: BLE001
+                flag = None
+            by_flag = isinstance(flag, bool) and bool(dates)
             return {
-                # yfinance returns a list: one entry is a confirmed date, two is
-                # an estimated window the company hasn't pinned down yet.
                 "dates": [str(d) for d in dates],
-                "confirmed": len(dates) == 1,
+                "confirmed": (not flag) if by_flag else len(dates) == 1,
+                "confirmed_basis": "yahoo_flag" if by_flag else "date_count",
                 "eps_avg": _f(cal.get("Earnings Average")),
                 "eps_low": _f(cal.get("Earnings Low")),
                 "eps_high": _f(cal.get("Earnings High")),

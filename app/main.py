@@ -7457,14 +7457,13 @@ brokerage_routes.set_lookups(
 def _ws_earnings_calendar(sym: str) -> Optional[Dict[str, Any]]:
     cal = YF_PROVIDER.earnings_calendar(sym) or {}
     dates = cal.get("dates") or []
-    timing = None
-    if dates and cal.get("confirmed"):
-        # BMO/AMC exists only in the earnings-history scrape; unknown is left unknown.
-        for row in YF_PROVIDER.earnings_history(sym, limit=4) or []:
-            if str(row.get("date") or "")[:10] == str(dates[0])[:10]:
-                timing = row.get("timing")
-                break
-    return {"dates": dates, "confirmed": bool(cal.get("confirmed")), "timing": timing}
+    # The coming report's own time is not known (the feed's time on an upcoming
+    # row is a placeholder); the company's habit from its last reports is.
+    past = [r for r in (YF_PROVIDER.earnings_history(sym, limit=6) or [])
+            if r.get("eps_reported") is not None and r.get("timing")][:4]
+    usual = ({"timing": past[0]["timing"], "count": len(past)}
+             if len(past) >= 3 and len({r["timing"] for r in past}) == 1 else None)
+    return {"dates": dates, "confirmed": bool(cal.get("confirmed")), "timing": None, "usual_timing": usual}
 
 
 def _ws_dividend(sym: str) -> Optional[Dict[str, Any]]:

@@ -8,7 +8,8 @@ import * as store from '../core/store.js';
 import { signed, num, clean, capFirst, esc, isNum } from '../core/format.js';
 import { skeleton, empty, failed, how } from '../ui/states.js';
 import { button as miloButton, provideContext } from '../ui/milo.js';
-import { core, header, tabs, isFund } from './dossier-frame.js';
+import { core, header, tabs, isFund, livePrice } from './dossier-frame.js';
+let lp = null;   // the header's price refresh (dossier-frame livePrice), stopped in dispose()
 
 let D = {}, live = true, mainEl = null, filter = null;
 const TIER_W = { breaking: 3, major: 3, notable: 2, background: 1 };
@@ -69,7 +70,7 @@ function body(sym) {
 function paint() {
   if (!live) return;
   const sym = D.sym;
-  draw(mainEl, html`${header(sym, D, 'news')}${tabs(sym, 'news', { fund: isFund(D) })}${D.err ? failed('The headlines', D.err, { retry: 'news' }) : !D.t ? skeleton('rows', 5, 'Loading headlines') : body(sym)}`);
+  draw(mainEl, html`<div class="dstick">${header(sym, D, 'news')}${tabs(sym, 'news', { fund: isFund(D) })}</div>${D.err ? failed('The headlines', D.err, { retry: 'news' }) : !D.t ? skeleton('rows', 5, 'Loading headlines') : body(sym)}`);
 }
 
 export async function render(main, route) {
@@ -78,6 +79,8 @@ export async function render(main, route) {
   D = { sym };
   store.pushRecent(sym);
   document.title = `${sym} News, Optic`;
+  if (lp) lp.stop();
+  lp = livePrice(main, route.symbol, () => D, 'news', undefined);
   provideContext(() => ({ view: 'news', ticker: sym, news: (D.t || {}).news }));
   paint();
   main.addEventListener('click', (e) => {
@@ -91,6 +94,6 @@ export async function render(main, route) {
   catch (e) { D.err = e; }
   if (D.sym === sym) paint();
 }
-export function dispose() { live = false; }
+export function dispose() { if (lp) { lp.stop(); lp = null; } live = false; }
 export const retry = { news: (m, r) => render(m, r) };
 void num; void isNum;

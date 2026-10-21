@@ -24,11 +24,12 @@ import { chartReadCard } from '../ui/chartread.js';
 import { button as miloButton, provideContext, openMilo } from '../ui/milo.js';
 import { toast } from '../ui/toast.js';
 import { createPriceChart } from '../ui/pricechart.js';
-import { core, header, tabs, isFund } from './dossier-frame.js';
+import { core, header, tabs, isFund, livePrice } from './dossier-frame.js';
 import { kindOf } from '../core/instrument.js';
 import * as W from './chart-widgets.js';
 import * as ST from './chart-studies.js';
 import * as C from './chart-chrome.js';
+let lp = null;   // the header's price refresh (dossier-frame livePrice), stopped in dispose()
 
 const VIEW_KEY = 'optic.v2.chart.v1';
 const DRAW_KEY = 'optic.chart.drawings.v2';
@@ -492,7 +493,7 @@ export async function render(main, route) {
   if (INTERVALS.some((x) => x.key === pr.interval)) V.interval = pr.interval;
   if (RANGES.daily[pr.range] !== undefined) V.range = pr.range;
   const [kind, id] = String(pr.show || '').split(':');
-  if (kind === 'ov' && id in V.overlays) V.overlays[id] = true;
+  if (kind === 'ov' && id in V.overlays) { V.overlays[id] = true; if (id === 'stages' || id === 'matrend') V.style = 'candles'; }   // they colour candles
   if (kind === 'pane' && id in V.panes) V.panes[id] = true;
   D = { sym, drawings: readDrawings(sym) };
   W.bind({ sym: () => D.sym, t: () => D.t, tErr: () => D.tErr, phase, repaint: repaintWidget, chart: paintExtras,
@@ -509,6 +510,8 @@ export async function render(main, route) {
   window.addEventListener('resize', onResize); window.addEventListener('storage', onStorage);
   store.pushRecent(sym);
   document.title = `${sym} Chart, Optic`;
+  if (lp) lp.stop();
+  lp = livePrice(main, route.symbol, () => D, 'chart', { bar: true });
   provideContext(() => ({ view: 'chart', ticker: sym, chart: { symbol: sym, interval: V.interval, range: V.range, studies_on: OVERLAYS.filter(([k]) => V.overlays[k]).map(([, l]) => l).concat(PANES.filter(([k]) => V.panes[k] && k !== 'volume').map(([, l]) => l)), drawings: D.drawings.length, bars: (D.bars || []).length, market_structure_breaks: V.overlays.msb && chart ? { method: `Swing high or low with ${V.msbK || 5} bars either side. The swing forms at its own bar but is only known once the ${V.msbK || 5} bars after it have closed; a close beyond the latest known, unbroken swing is a break. Earlier breaks never change as new bars arrive.`, in_view: chart.structure().slice(-6) } : undefined }, technicals: D.t ? { bias: D.t.technicals.bias, rsi: D.t.technicals.rsi, macd: D.t.technicals.macd, support_resistance: D.t.technicals.support_resistance, moving_averages: D.t.technicals.moving_averages } : null, widgets: W.context(shown()) }));
   paint(); wire(main);
   core(sym).then((c) => { if (D.sym !== sym || !live) return; Object.assign(D, { quote: c.quote, session: c.session, quoteError: c.quoteError }); const h = $('.dhead', mainEl); if (h) { const tmp = document.createElement('div'); draw(tmp, header(sym, D, 'chart', { bar: true })); h.replaceWith(tmp.firstElementChild); } repaintWidget('stats'); });
@@ -526,7 +529,7 @@ function onPhoneChange() {
   const r = $('#ch-wrail', mainEl); if (r) draw(r, W.rail(shown(), isPhone()));
   paintTools(); syncSide(); paintExtras(); refit();
 }
-export function dispose() {
+export function dispose() { if (lp) { lp.stop(); lp = null; }
   live = false; W.flush(mainEl || document);
   if (C.isMax()) C.setMax(false);
   document.removeEventListener('keydown', onMaxKey, true);

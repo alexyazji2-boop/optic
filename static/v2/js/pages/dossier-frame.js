@@ -13,6 +13,7 @@ import { GROUPS, pageOf } from '../nav.js';
 import { tabSelect, tabLinks } from './tabs.js';
 import { learn, kindOf, can, onLearn } from '../core/instrument.js';
 import { etStamp, etDay, sessionWord } from '../core/marketTime.js';
+import { poll } from '../core/poll.js';
 
 // The price's session and time in words: the close it is, or the trade time when the session is open, and any
 // extended print with the moment it was struck (core/marketTime.js).
@@ -69,6 +70,28 @@ export async function core(sym) {
   else out.quoteError = q.status === 'rejected' ? q.reason : new api.ApiError('notfound', 404, `No quote for ${sym}`);
   learn(sym, out);
   return out;
+}
+
+/** Keep a Dossier tab's header price current: every 20 s through the trading day, every 5 minutes outside it,
+ *  paused while the tab is hidden (core/poll.js). Only the price lines are swapped, so an open menu, focus and
+ *  everything below the header are untouched, and nothing is repainted when nothing changed. The price says
+ *  how fresh it is from the quote's own time (priceWhen), never from how often this asks. Stop it in dispose(). */
+export function livePrice(root, sym, getD, view, opts) {
+  const enc = encodeURIComponent(sym);
+  const key = (D) => JSON.stringify([D.quote && D.quote.price, D.quote && D.quote.change_pct, D.quote && D.quote.market_time,
+    ((D.session || {}).prices || {}).extended]);
+  return poll(async (current) => {
+    const [q, s] = await Promise.allSettled([api.get(`/api/quote/${enc}`, { ttl: 0, force: true, timeout: 15000 }), api.get(`/api/session/${enc}`, { ttl: 60000 })]);
+    const D = getD();
+    if (!current() || !D || D.sym !== sym) return;
+    const was = key(D);
+    if (q.status === 'fulfilled' && q.value && q.value.available !== false) D.quote = fresher(D.quote, q.value.quote || q.value);
+    if (s.status === 'fulfilled' && s.value) D.session = s.value;
+    if (key(D) === was) return;
+    const h = root.querySelector('.dhead'); if (!h) return;
+    const tmp = document.createElement('div'); draw(tmp, header(sym, D, view, opts));
+    ['.dh-price', '.dh-state'].forEach((sel) => { const a = h.querySelector(sel), b = tmp.querySelector(sel); if (a && b && a.innerHTML !== b.innerHTML) a.innerHTML = b.innerHTML; });
+  });
 }
 
 // The ticker's actions, grouped at the right of its header (owner, 2026-10-19). Alert and Compare are

@@ -19,8 +19,10 @@ import { skeleton, empty, failed, staleLine, how } from '../ui/states.js';
 import { icon } from '../ui/icons.js';
 import { button as miloButton, provideContext } from '../ui/milo.js';
 import { toast } from '../ui/toast.js';
-import { core, header, tabs, isFund, fresher } from './dossier-frame.js';
+import { core, header, tabs, isFund, fresher, livePrice } from './dossier-frame.js';
 import * as P from './options-panels.js';
+import { poll } from '../core/poll.js';
+let lp = null;   // the header's price refresh (dossier-frame livePrice), stopped in dispose()
 
 const FILTER_KEY = 'optic.options.filters.v1';   // a tool setting, as in the classic app
 const BUDGET_KEY = 'optic.entry.budget.v1';      // personal: read only while this browser holds it
@@ -359,8 +361,9 @@ function paintBuilder() {
   if (f) { const el = $(`[data-${f[0].replace(/[A-Z]/g, (m) => '-' + m.toLowerCase())}="${CSS.escape(f[1])}"]`, h); if (el) el.focus(); }
 }
 function paintTop() {
-  const h = $('#op-top', mainEl); if (!h) return;
-  draw(h, html`${header(D.sym, D, 'swing')}${tabs(D.sym, 'swing', { fund: isFund(D) })}
+  const h = $('#op-top', mainEl), hd = $('#op-head', mainEl); if (!h) return;
+  if (hd) draw(hd, html`${header(D.sym, D, 'swing')}${tabs(D.sym, 'swing', { fund: isFund(D) })}`);   // sticks (.dstick) above the long page
+  draw(h, html`${hd ? '' : html`${header(D.sym, D, 'swing')}${tabs(D.sym, 'swing', { fund: isFund(D) })}`}
     ${D.tErr ? failed('Options data', D.tErr, { retry: 'ticker' }) : ''}
     ${D.t && D.t.digest && D.t.digest.lede ? html`<p class="lede-line">${clean(D.t.digest.lede)}</p>` : ''}
     ${readings(D.sym)}`);
@@ -449,11 +452,13 @@ export async function render(main, route) {
   if (kept && kept.expiry) { R.expiry = kept.expiry; B.legs = Array.isArray(kept.legs) ? kept.legs.map((l) => Object.assign({}, l)) : []; B.template = kept.template || null; }
   store.pushRecent(sym);
   document.title = `${sym} Options, Optic`;
+  if (lp) lp.stop();
+  lp = livePrice(main, route.symbol, () => D, 'swing', undefined);
   provideContext(() => ({ view: 'swing', ticker: sym, quote: D.quote, gex: (D.t || {}).gex, greeks: (D.t || {}).greeks, flow: (D.t || {}).flow, vol_surface: (D.t || {}).vol_surface, iv_rank: (D.t || {}).iv_rank, entry_plan: (D.t || {}).entry_plan, verdict: (D.t || {}).verdict, naked_ideas: (D.t || {}).naked_ideas, strategy_ideas: (D.t || {}).strategy_ideas, rate: (D.t || {}).rate,
     options_research: R.data ? { expiry: R.expiry, side: R.side, summary: R.data.summary, events: R.data.events, rows: ((R.data.table || {}).rows || []).slice(0, 20),
       // when the quotes were read, and why figures are missing when they are (no two-sided quotes overnight)
       quotes_read_at: R.data.fetched_at || null, quotes_unusable: noQuotes() || null, position: B.analysis ? { legs: B.legs, analysis: { entry: B.analysis.entry, max_profit: B.analysis.max_profit, max_loss: B.analysis.max_loss, breakevens: B.analysis.breakevens_at_expiry, greeks: B.analysis.greeks, scenarios: B.analysis.scenarios, flags: B.analysis.flags } } : null } : null }));
-  draw(main, html`<div id="op-top"></div>${groupBar()}
+  draw(main, html`<div class="dstick" id="op-head"></div><div id="op-top"></div>${groupBar()}
     ${OPT_GROUPS.map((x, i) => html`<div class="op-gpanel" id="opg-p${i}" role="tabpanel" aria-labelledby="opg-t${i}" ${i === panelState ? '' : 'hidden'}>${x.sub ? html`<p class="section-sub op-gsub">${x.sub}</p>` : ''}
       ${i === 0 ? html`<section class="section" id="op-research" aria-labelledby="rc-h"></section><div id="op-builder"></div>` : ''}<div id="opg-x${i}"></div></div>`)}`);
   paintTop(); paintBuilder(); paintResearch(); paintMore();
@@ -470,18 +475,20 @@ export async function render(main, route) {
   });
   // While the market trades: the readings every minute, and the contracts and the position every two, so a
   // quote on screen is never more than a couple of minutes older than the feed.
-  clearInterval(refresh);
+  if (refresh) refresh.stop();
   let beat = 0;
-  refresh = setInterval(() => {
+  // the header's price refreshes every 20 s on its own (livePrice); the readings here are a full option read, so
+  // every minute, never two at once, paused while hidden and caught up on return (core/poll.js)
+  refresh = poll(async (current) => {
     const ph = ((D.session || {}).prices || {}).phase || ((D.session || {}).session || {}).phase;
-    if (!live || document.visibilityState !== 'visible' || !['pre', 'regular', 'after'].includes(ph)) return;
+    if (!live || !current() || !['pre', 'regular', 'after'].includes(ph)) return;
     loadTicker({ quiet: true });
     beat += 1;
     if (beat % 2 === 0) { loadResearch({ quiet: true }); if (B.legs.length && !B.analyzing) analyze({ quiet: true }); }
-  }, 60000);
+  }, { every: 60000, closed: 600000 });
 }
 
-export function dispose() { live = false; clearInterval(refresh); }
+export function dispose() { if (lp) { lp.stop(); lp = null; } live = false; if (refresh) { refresh.stop(); refresh = null; } }
 
 export const retry = { ticker: () => loadTicker(), research: () => loadResearch() };
 

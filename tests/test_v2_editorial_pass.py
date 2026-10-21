@@ -141,7 +141,7 @@ def test_no_figures_under_the_wrong_ticker_and_retry_works():
     assert "const box = D;\n  box.brief = 'loading'" in earn and "catch (e) { if (D.sym === sym) D.err = e; }" in earn
     assert "if (mine !== seq) return;" in cmp and "result = null; seq++;" in cmp
     assert "render(main, route); } };" in dos and "draw(main, route); } };" not in dos, "Try again re-renders the page, not '[object Object]'"
-    assert "const HOME_GROUP = { instrument: 'market' };" in SRC["nav.js"], "an instrument page marks Markets in the sidebar"
+    assert "const HOME_GROUP = { instrument: 'market'," in SRC["nav.js"], "an instrument page marks Markets in the sidebar"
 
 
 def test_the_copy_rules():

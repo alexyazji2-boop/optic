@@ -26,6 +26,7 @@ import { watchStatus } from './core/status.js';
 import { openReport } from './pages/settings.js';
 import * as bridge from './pages/bridge.js';
 import { watchTables } from './ui/align.js';
+import { startUnread } from './core/unread.js';
 
 // Home is the research workspace (Market Overview by default); pages/home.js supplies its blocks
 // Each page's module is fetched the first time it is opened, not with the shell: a first visit on a phone
@@ -49,9 +50,9 @@ const P = {
   analysts: lazy(() => import('./pages/analysts.js'), 'analysts'), compare: lazy(() => import('./pages/compare.js'), 'compare'), tracker: lazy(() => import('./pages/tracker.js'), 'tracker'),
   paper: lazy(() => import('./pages/paper.js'), 'paper'), retirement: lazy(() => import('./pages/retirement.js'), 'retirement'), brokerage: lazy(() => import('./pages/brokerage.js'), 'brokerage'),
   reports: lazy(() => import('./pages/reports.js'), 'reports'), watchlist: lazy(() => import('./pages/watchlist.js'), 'watchlist'), alerts: lazy(() => import('./pages/alerts.js'), 'alerts'),
-  legal: lazy(() => import('./pages/legalpages.js'), 'legalpages'),
+  legal: lazy(() => import('./pages/legalpages.js'), 'legalpages'), earningsweek: lazy(() => import('./pages/earningsweek.js'), 'earningsweek'),
 };
-const PAGES = { home: P.workspace, overview: P.dossier, swing: P.options, long: P.investing, earnings: P.earnings, financials: P.financials, news: P.news, chart: P.chart, brief: P.read, market: P.macro, indices: P.indices, instrument: P.instrument, explore: P.explore, scan: P.scan, insiders: P.insiders, analysts: P.analysts, settings: () => settingsPage, compare: P.compare, tracker: P.tracker, paper: P.paper, roth: P.retirement, brokerage: P.brokerage, reports: P.reports, usage: P.reports, accounts: P.reports, watchlist: P.watchlist, alerts: P.alerts, signin: () => signin, terms: P.legal, privacy: P.legal };
+const PAGES = { home: P.workspace, overview: P.dossier, swing: P.options, long: P.investing, earnings: P.earnings, financials: P.financials, news: P.news, chart: P.chart, brief: P.read, market: P.macro, indices: P.indices, instrument: P.instrument, explore: P.explore, scan: P.scan, insiders: P.insiders, analysts: P.analysts, settings: () => settingsPage, compare: P.compare, tracker: P.tracker, paper: P.paper, roth: P.retirement, brokerage: P.brokerage, reports: P.reports, usage: P.reports, accounts: P.reports, watchlist: P.watchlist, alerts: P.alerts, signin: () => signin, terms: P.legal, privacy: P.legal, earningsweek: P.earningsweek };
 // The pages a reader most often opens next, fetched (not run) once the first page has settled and the
 // connection is not marked as costly: a later move to them does not wait on the network.
 function warmNext() {
@@ -175,7 +176,7 @@ function accountBody() {
   return html`<dl class="kv"><div><dt>Name</dt><dd>${u.name || `${u.first_name || ''} ${u.last_name || ''}`}</dd></div><div><dt>Email</dt><dd>${u.email}</dd></div>
       <div><dt>Plan</dt><dd>${plan.label || 'Free'}${(store.state.me || {}).admin ? ', owner' : ''}</dd></div></dl>
     ${u.email_verified ? '' : html`<p class="stale">Your email is not verified yet. The link is in your inbox.</p>`}
-    <nav class="more-list" aria-label="Account"><a class="rail-row" href="#/watchlist">Watchlists</a><a class="rail-row" href="#/settings">Settings</a><a class="rail-row" href="${CLASSIC}#/read">Saved research, in the classic app</a></nav>
+    <nav class="more-list" aria-label="Account"><a class="rail-row" href="#/watchlist">Watchlists</a><a class="rail-row" href="#/settings">Settings</a><a class="rail-row" href="${CLASSIC}#/scan">Saved research, in the classic app</a></nav>
     <button type="button" class="btn" data-v2-signout>Sign out</button>`;
 }
 
@@ -281,6 +282,7 @@ async function boot() {
   if (store.state.auth === 'unknown') toast('Optic could not check your sign-in. Showing this browser\'s lists for now.');
   await afterAuth();
   checkAvailability();
+  startUnread(shell.setUnread);   // the bell and the phone bar's Watchlist count (signed in only)
   scrollmem.start();
   router.onRoute(show);
   if (link && link.reset) { startReset(link.reset); history.replaceState(history.state, '', `${location.pathname}${location.search}#/signin?mode=reset`); }

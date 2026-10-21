@@ -391,7 +391,8 @@ def _earn_dates(ea: Optional[Dict[str, Any]], quote: Optional[Dict[str, Any]] = 
     if qtype in NO_EARNINGS_TYPES or (ea or {}).get("not_applicable"):
         return {"not_applicable": True, "what": NO_EARNINGS_TYPES.get(qtype, "this instrument")}
     nr = (ea or {}).get("next_report") or {}
-    return {"date": nr.get("date"), "confirmed": nr.get("confirmed"), "timing": nr.get("timing")}
+    return {"date": nr.get("date"), "confirmed": nr.get("confirmed"), "timing": nr.get("timing"),
+            "usual_timing": nr.get("usual_timing")}
 
 
 def _swing(yf, daily, spy, ea, fresh, quote, vals) -> Dict[str, Any]:
@@ -454,7 +455,8 @@ def _earnings(sym, mode, ea, g, daily, spy, lt, quote, fresh, vol_event, vals, p
         if saved and rx.get("observation") == "completed session" and rv.get("available"):
             forecasts.record_outcome(saved["id"], {"eps": post["headline_audit"]["eps"], "reaction": rx}, rv, now=now)
         out["post"] = post
-    out["next_report"] = {"date": nr.get("date"), "confirmed": nr.get("confirmed"), "timing": nr.get("timing")}
+    out["next_report"] = {"date": nr.get("date"), "confirmed": nr.get("confirmed"), "timing": nr.get("timing"),
+                          "usual_timing": nr.get("usual_timing")}
     return out
 
 

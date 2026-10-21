@@ -14,14 +14,16 @@ import { CLASSIC } from '../core/classic.js';
 import * as api from '../core/api.js';
 import * as store from '../core/store.js';
 import { num, signed, dir, money, compact, clean, capFirst, longDate, fullDate, shortDate, isNum, score100 } from '../core/format.js';
+import * as RP from '../core/reports.js';
 import { lineChart, meter, mountCharts } from '../ui/chart.js';
 import { skeleton, empty, failed, staleLine, how } from '../ui/states.js';
 import { icon } from '../ui/icons.js';
-import { header as frameHeader, tabs as frameTabs, isFund, fresher } from './dossier-frame.js';
+import { header as frameHeader, tabs as frameTabs, isFund, fresher, livePrice } from './dossier-frame.js';
 import { button as miloButton, provideContext } from '../ui/milo.js';
 import * as drawer from '../ui/drawer.js';
 import { hrefFor } from '../nav.js';
 import { kindOf, learn } from '../core/instrument.js';
+let lp = null;   // the header's price refresh (dossier-frame livePrice), stopped in dispose()
 
 let live = true;
 let D = {};
@@ -143,7 +145,7 @@ function answers(sym) {
   out.push(trendItem(sym));
   const nextA = D.earnError ? 'Not available right now.' : !D.earnings ? null : nr.date ? `Earnings on ${longDate(nr.date)}.` : 'No report date yet.';
   out.push({ k: 'next', q: "What's next?", a: nextA,
-    because: D.earnError ? gone(D.earnError).because : nr.date ? html`${capFirst(timing[nr.timing] || '')}${timing[nr.timing] ? ', ' : ''}in ${nr.days_away} days${nr.confirmed ? ', confirmed' : ''}.${im ? html` Options price ±${num(im.pct)}% through the ${shortDate(im.expiry)} expiry; report days have averaged ±${num(pr.event_day_avg_pct)}%.` : ''}` : '' });
+    because: D.earnError ? gone(D.earnError).because : nr.date ? html`In ${nr.days_away} days, ${RP.dateStatus(nr)}.${RP.habitLine(nr) ? ` ${RP.habitLine(nr)}` : ''}${im ? html` Options price ±${num(im.pct)}% through the ${shortDate(im.expiry)} expiry; report days have averaged ±${num(pr.event_day_avg_pct)}%.` : ''}` : '' });
   return answerGrid(out);
 }
 function answerGrid(out) {
@@ -225,7 +227,7 @@ function evidence(k, sym) {
       <h3>Method</h3><p>${clean(sw.framework_note || '')}</p><p class="asof">Model output, not a recommendation to trade.</p>`;
   }
   // what's next: the two figures kept apart, then the comparison with its basis
-  return html`${nr.date ? html`<p><b>${longDate(nr.date)}, ${timing[nr.timing] || ''}.</b> ${nr.confirmed ? 'Confirmed.' : 'Not yet confirmed.'} Consensus EPS ${num(nr.eps_consensus)}, revenue ${nr.revenue_consensus_label || 'n/a'}. ${clean(nr.dispersion_note || '')}</p>` : ''}
+  return html`${nr.date ? html`<p><b>${longDate(nr.date)}</b>, ${RP.dateStatus(nr)}. ${RP.habitLine(nr)} Consensus EPS ${num(nr.eps_consensus)}, revenue ${nr.revenue_consensus_label || 'n/a'}. ${clean(nr.dispersion_note || '')}</p>` : ''}
     <h3>Two different figures</h3>
     ${im ? html`<p><b>±${num(im.pct)}% through the ${shortDate(im.expiry)} expiry.</b> What the at-the-money straddle (the ${num(im.strike, 0)} strike, $${num(im.cost)}) costs as a share of the price, ${im.dte} days out. It covers ordinary trading as well as the report.</p>` : ''}
     ${isNum(pr.event_day_avg_pct) ? html`<p><b>±${num(pr.event_day_avg_pct)}% on report days.</b> ${sym}'s average move on the session after its last ${((e.surprise || {}).quarters) || 8} reports. History, not a price.</p>` : ''}
@@ -408,7 +410,7 @@ function paint(main, sym) {
   const openDetails = $$('details[open] summary', main).map((x) => x.textContent.trim());
   const openEvs = $$('[data-v2-ev][aria-expanded="true"]', main).map((x) => x.getAttribute('aria-controls'));
   const scrollY = window.scrollY;
-  draw(main, html`${frameHeader(sym, D, 'overview')}${frameTabs(sym, 'overview', { fund: isFund(D) })}
+  draw(main, html`<div class="dstick">${frameHeader(sym, D, 'overview')}${frameTabs(sym, 'overview', { fund: isFund(D) })}</div>
     ${D.quoteError && !D.quote ? (D.quoteError.kind === 'notfound' ? empty(`Optic has no listing for ${sym}`, 'No quote came back for this symbol. It may be misspelled, delisted, or listed outside the US under another form.', html`<button type="button" class="btn btn-sm" data-v2-open-palette>Search for the company</button>`) : failed(`${sym}'s quote`, D.quoteError, { retry: 'dossier' })) : ''}
     ${((D.framework || {}).freshness || {}).state === 'stale' ? staleLine({ text: clean(D.framework.freshness.text) }) : ''}
     ${about(sym)}
@@ -430,6 +432,8 @@ export async function render(main, route) {
   store.pushRecent(sym);
   provideContext(() => ({ view: 'overview', ticker: sym, quote: D.quote, verdict: (D.ticker || {}).verdict, company: (D.ticker || {}).company, news: (D.ticker || {}).news, framework: D.framework, fair_value: D.fairValue, earnings: D.earnings, digest: D.digest }));
   document.title = `${sym} Dossier, Optic`;
+  if (lp) lp.stop();
+  lp = livePrice(main, route.symbol, () => D, 'overview', undefined);
   paint(main, sym);
   wire(main, sym);
   const enc = encodeURIComponent(sym);
@@ -448,7 +452,7 @@ export async function render(main, route) {
   step(api.get(`/api/segments/${enc}`, { ttl: 600000, timeout: 60000 }), (d) => { D.segments = d; }, () => { D.segments = null; });
 }
 
-export function dispose() { live = false; drawer.close({ silent: true }); }
+export function dispose() { if (lp) { lp.stop(); lp = null; } live = false; drawer.close({ silent: true }); }
 
 function wire(main, sym) {
   main.addEventListener('click', (e) => {

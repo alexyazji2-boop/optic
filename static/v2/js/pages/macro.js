@@ -14,6 +14,7 @@ import { groupedTabs } from '../ui/grouptabs.js';
 import { button as miloButton, provideContext } from '../ui/milo.js';
 import { sectionHead } from './tabs.js';
 import { sectorBoard, sectorReadBlock, loadSectorRead } from './market-shared.js';
+import { poll } from '../core/poll.js';
 
 let D = {}, live = true, mainEl = null, tabState = { g: 0, s: {} }, refresh = null;
 const kv = (rows, n = 3) => html`<dl class="kv" style="--kv:${n}">${rows.filter(Boolean).map(([k, v]) => html`<div><dt>${k}</dt><dd>${v}</dd></div>`)}</dl>`;
@@ -221,10 +222,11 @@ export async function render(main) {
   side(api.get('/api/implied-correlation', { ttl: 600000, timeout: 60000 }), (d) => { D.ic = d; });
   side(api.get('/api/dispersion', { ttl: 600000 }), (d) => { D.disp = d; });
   side(api.get('/api/sectors/board', { ttl: 120000 }), (d) => { D.board = d; });
-  clearInterval(refresh);
-  refresh = setInterval(() => { if (live && document.visibilityState === 'visible' && D.m && ['pre', 'regular', 'after'].includes((D.m.session || {}).phase)) loadMarket(true); }, 60000);
+  if (refresh) refresh.stop();
+  // the boards every minute through the trading day, quietly; paused while hidden, caught up on return (core/poll.js)
+  refresh = poll(async (current) => { if (live && current() && D.m && ['pre', 'regular', 'after'].includes((D.m.session || {}).phase)) loadMarket(true); }, { every: 60000, closed: 600000 });
 }
-export function dispose() { live = false; clearInterval(refresh); }
+export function dispose() { live = false; if (refresh) { refresh.stop(); refresh = null; } }
 export const retry = { market: () => loadMarket() };
 
 function wire(main) {

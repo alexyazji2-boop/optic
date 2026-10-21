@@ -628,7 +628,8 @@ def pre_earnings(ticker: str, ea: Dict[str, Any], *, sec: Optional[Dict[str, Any
     last = (ea.get("latest_result") or {}).get("date")
     view = best_view(ticker, res, gd, rx, hurdle, opts, nr, spot or ea.get("spot"), ea.get("surprise") or {})
     release = {
-        "date": nr.get("date"), "timing": nr.get("timing") or "unknown", "days_away": nr.get("days_away"),
+        "date": nr.get("date"), "timing": nr.get("timing") or "unknown", "usual_timing": nr.get("usual_timing"),
+        "days_away": nr.get("days_away"),
         "confirmed": nr.get("confirmed"),
         "date_status": ("confirmed" if nr.get("confirmed") else "estimated (not confirmed by the company)"),
         "cutoff_utc": release_cutoff(nr.get("date"), nr.get("timing")),

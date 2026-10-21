@@ -80,13 +80,23 @@ def _next_report(history: List[Dict[str, Any]], calendar: Dict[str, Any],
         dates = [d for d in (calendar.get("dates") or []) if str(d) not in already_reported]
         date = dates[0] if dates else None
 
+    # No session for a report that has not happened. The time Yahoo lists on an
+    # upcoming row is a placeholder: on 2026-10-21 it put Apple's and NVIDIA's
+    # next reports "before the open", where both report after the close, and an
+    # implied move priced on that read an expiry that stops trading first. What
+    # is known is the company's habit, from the reports it has made: kept apart,
+    # as `usual_timing`, and said as a habit, never as the coming report's time.
+    past = sorted((r for r in history if r.get("eps_reported") is not None and r.get("timing") and r.get("date")),
+                  key=lambda r: str(r["date"]), reverse=True)[:4]
+    usual = ({"timing": past[0]["timing"], "count": len(past)}
+             if len(past) >= 3 and len({r["timing"] for r in past}) == 1 else None)
     out: Dict[str, Any] = {
         "date": date,
-        # Before the open or after the close, when the feed times it: the chart
-        # labels the coming result with it, as "after the close".
-        "timing": future[0].get("timing") if future and future[0]["date"] == date else None,
+        "timing": None,
+        "usual_timing": usual,
         "days_away": None,
         "confirmed": calendar.get("confirmed"),
+        "confirmed_basis": calendar.get("confirmed_basis"),
         "eps_consensus": calendar.get("eps_avg") or (future[0].get("eps_estimate") if future else None),
         "eps_low": calendar.get("eps_low"),
         "eps_high": calendar.get("eps_high"),

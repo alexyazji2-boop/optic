@@ -838,3 +838,31 @@ table.st td a { text-decoration: none; font-weight: 600; } table.st td a:hover {
 .milo-fig figcaption { display: grid; gap: 4px; } .milo .milo-fig p { margin: 0; }
 .milo .milo-fig-h { font-weight: 600; color: var(--c-ink); } .milo .milo-fig .fv-unit { font-size: var(--t-sm); color: var(--c-ink-3); }
 .milo .milo-fig-none { color: var(--c-ink-3); font-size: var(--t-sm); }
+
+/* ---------- the Dossier header stays in view (the classic app's sticky .sec-head): ticker, price and tabs under the
+   top bar while a long tab scrolls; jumps to a section land below both (scroll padding from measured heights) ---------- */
+html { scroll-padding-top: calc(var(--topbar-h, 72px) + var(--dstick-h, 0px) + 8px); }
+@media (min-width: 641px) and (min-height: 561px) {
+  .dstick { position: sticky; top: var(--topbar-h, 72px); z-index: 20; background: var(--c-plane); box-shadow: 0 1px 0 var(--c-line-2); }
+  .dstick .dhead { padding-top: 14px; }
+}
+@media (max-width: 640px), (max-height: 560px) { html { scroll-padding-top: calc(var(--topbar-h, 60px) + 8px); } }
+
+/* ---------- the More sheet: each page with what it is for; quiet rows (the gold hover is the sidebar's alone) ---------- */
+.more-list { display: grid; gap: 14px; }
+.more-group { display: grid; }
+.more-glab { margin: 0 0 4px; font: 500 var(--t-sm)/1.3 var(--f-label); color: var(--c-ink-3); }
+.more-row { display: flex; align-items: center; gap: 12px; min-height: var(--tap); padding: 8px 10px; border-radius: var(--r-md); color: var(--c-ink); text-decoration: none; }
+.more-row:hover { background: var(--c-sunk); }
+.more-row:focus-visible { outline: 2px solid var(--c-focus); outline-offset: 2px; }
+.more-row svg { width: 20px; height: 20px; flex: none; fill: none; stroke: var(--c-ink-2); stroke-width: 1.7; }
+.more-lab { display: grid; gap: 2px; min-width: 0; font-size: var(--t-lg); }
+.more-lab small { font-size: var(--t-sm); color: var(--c-ink-2); }
+.more-row .legacy { margin-left: auto; }
+
+/* ---------- unread alerts: a bell on the top bar only when something is unread, a count on the phone bar's Watchlist ---------- */
+.topbar-bell { position: relative; color: var(--c-ink); }
+.topbar-bell svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.7; }
+.bell-n, .tab-n { position: absolute; top: 4px; right: 2px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: var(--r-pill); background: var(--c-ink); color: var(--c-plane); font: 600 var(--t-xs)/18px var(--f-sans); text-align: center; font-variant-numeric: tabular-nums; }
+.tabbar a, .tabbar button { position: relative; }
+.tab-n { top: 2px; right: calc(50% - 22px); }
