@@ -13,6 +13,8 @@
 // Nothing is sent until the reader presses Send. Every entry point drafts.
 import { html, render, $, raw, announce, reducedMotion } from '../core/dom.js';
 import { makeDrawer } from './drawer.js';
+import { saveQuestion } from '../core/research.js';
+import { toast } from './toast.js';
 import * as api from '../core/api.js';
 import * as store from '../core/store.js';
 import * as prefs from '../core/prefs.js';
@@ -384,7 +386,9 @@ const host = () => S.mounted && document.contains(S.mounted) ? S.mounted : null;
 function msgHTML(it) {
   if (it.kind === 'note') return html`<p class="milo-note" role="note">${it.text}</p>`;
   const m = S.conv.messages[it.i] || {}, info = meta.get(it.i) || {};
-  if (m.role === 'user') return html`<div class="milo-msg milo-you${S.fresh === it.i ? ' is-new' : ''}"><p class="sr">You asked</p><div class="milo-bubble">${m.content}</div>${info.files ? html`<p class="milo-sent-files">${icon('clip')}<span>${info.files.join(', ')}</span></p>` : ''}</div>`;
+  // a question worth keeping can be saved, to ask again from Saved research (Classic's msg-save, B4d)
+  const savable = String(m.content || '').trim().length > 12;
+  if (m.role === 'user') return html`<div class="milo-msg milo-you${S.fresh === it.i ? ' is-new' : ''}"><p class="sr">You asked</p><div class="milo-bubble">${m.content}</div>${info.files ? html`<p class="milo-sent-files">${icon('clip')}<span>${info.files.join(', ')}</span></p>` : ''}${savable ? html`<p class="milo-you-acts"><button type="button" class="milo-save" data-v2-milo-save="${it.i}" ${info.saved ? html`disabled` : ''} title="Keep this question in Saved research, to ask again">${info.saved ? 'Saved' : 'Save'}</button></p>` : ''}</div>`;
   const shown = String(m.content || '').replace(/\n\n\[(Stopped by the reader|Cut off): incomplete\]$/, '');
   const { html: body, ups } = renderAnswer(shown, info.symbol || null);
   const live = S.live && S.live.i === it.i;
@@ -932,13 +936,8 @@ async function runAction(a, card, i) {
     say(`Added ${a.sym} to ${target ? target.name : 'your watchlist'}.${a.list && !named ? ` There is no list called "${a.list}", so it went on your current list.` : ''}`, true); return;
   }
   if (a.kind === 'save') {
-    if (store.signedIn()) {
-      try { await api.post('/api/saved-research', { title: a.question.slice(0, 200), symbol: sym, content: a.question, research_type: 'pulse' }); say('Saved to Research.', true); } catch (e) { say(api.explain(e, 'Saving'), false); }
-      return;
-    }
-    if (!holds(store.state.user)) { say('It was not saved.', false); return; }
-    try { const all = JSON.parse(localStorage.getItem(RESEARCH_KEY) || '[]'); if (all.some((r) => String(r.question || '').trim().toLowerCase() === a.question.toLowerCase())) { say('That question is already in Research.', true); return; } all.unshift({ question: a.question, ticker: sym, at: new Date().toISOString() }); localStorage.setItem(RESEARCH_KEY, JSON.stringify(all.slice(0, 40))); say('Saved to Research in this browser.', true); } catch (e) { say('It was not saved.', false); }
-    return;
+    const r = await saveQuestion({ question: a.question, symbol: sym });
+    say(r.text, r.ok); return;
   }
   if (a.kind === 'level') {
     if (route.view !== 'chart' || !route.symbol) { say('Open the chart first; a level is drawn on the chart on screen.', false); return; }
@@ -1236,6 +1235,17 @@ function wire(root) {
       S.showHistory = false; S.toEnd = true; paintChrome(); paintLog(); const ta = $('#milo-q', root); if (ta) ta.focus(); return;
     }
     if ((b = t('[data-v2-milo-del]'))) { const id = b.dataset.v2MiloDel; saveHistory(loadHistory().filter((c) => c.id !== id)); if (S.conv.id === id && !S.busy) { S.conv = blankConv(); S.items = []; meta.clear(); } paintChrome(); paintLog(false); const hd = $('#milo-hist-h', root); if (hd) { hd.setAttribute('tabindex', '-1'); hd.focus({ preventScroll: true }); } return; }
+    if ((b = t('[data-v2-milo-save]'))) {
+      const i = Number(b.dataset.v2MiloSave), q = (S.conv.messages[i] || {}).content, ans = meta.get(i + 1) || {};
+      b.disabled = true;
+      saveQuestion({ question: q, symbol: ans.symbol || route.symbol || null }).then((r) => {
+        if (r.ok) meta.set(i, Object.assign({}, meta.get(i), { saved: true })); else b.disabled = false;
+        paintLog(false);
+        const guestSave = r.ok && !r.already && r.where === 'browser';
+        toast(r.text, guestSave ? { action: 'Create a free account', run: () => { location.hash = '#/signin'; } } : r.ok ? { action: 'Open Saved research', run: () => { location.hash = '#/research'; } } : { kind: 'bad' });
+      });
+      return;
+    }
     if (t('[data-v2-milo-web]')) { S.web = !S.web; paintTools(); const w = $('[data-v2-milo-web]', root); if (w) w.focus(); announce(S.web ? 'Milo will also search the web. Searches add to the cost.' : 'Web search off.'); return; }
     if (t('[data-v2-milo-deep]')) { const ta = $('#milo-q', root); send(ta ? ta.value : '', { deep: true }); return; }
     if ((b = t('[data-v2-milo-mode]'))) { const d = b.closest('details'); if (d) d.open = false; S.deepHint = b.dataset.deep === '1'; }

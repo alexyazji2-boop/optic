@@ -32,7 +32,7 @@ Evidence: `b1_check.py`, 78 of 78 at 1440, 1024, 430, 390 and 360 in headless Ch
 | Row | Task | Where | Desktop | Phone | Keeps | States | Deps | Evidence | Status |
 |---|---|---|---|---|---|---|---|---|---|
 | B1.1 | `#/earnings` opens the week's earnings by day, not a ticker called EARNINGS | `pages/earningsweek.js`; Markets highlighted; Home's earnings panel links to it | Last, This and Next week buttons; a report opens `#/SYM/earnings` | One column of rows | The week is kept in the address (`?week=`) | Skeleton; the API's reason; a retry on failure | `/api/earnings-week` (free) | b1 B1.1 at all 5 sizes, no overflow | done |
-| B1.2 | Saved research opens the page that holds it | Account sheet | Link to Classic `#/scan` until B4d builds v2's hub | Same | none | none | none | b1 B1.2 | done (B4d replaces it) |
+| B1.2 | Saved research opens the page that holds it | Account sheet | v2's Saved research at `#/research` (B4d; before it, a link to Classic's `#/scan`) | Same | none | none | none | b1 B1.2 | done |
 | B1.3 | Milo's stage, MA-trend and TSO actions open v2's chart | `core/milo-text.js` STUDIES; Chart `show=` | The study switched on; stages and MA trend switch the chart to candles | Same | none | none | none | b1 B1.3 (the control is pressed and candles chosen) | done |
 | B1.4 | A section returns to the page last used in it | `ui/shell.js` NAV_LAST (memory, this visit, as in Classic) | Rail rows | Phone bar and More | In memory only (Classic kept no key) | n/a | none | b1 B1.4: Markets returns to Macro; Dossier returns to AAPL Financials | done |
 | B1.5 | More says what each page is for; a guest can sign in from it | More sheet | n/a | Rows of 44 px or more, grouped by section | none | none | none | b1 B1.5, guest and signed in | done |
@@ -173,10 +173,15 @@ Evidence:
 | B4c.1 | Web search toggle ($, on send) | "Search the web" in the row above Milo's box | Off until pressed; on, the next questions go with web search, and each answer says "Web search was on for this answer"; its label says searches add to the cost | 44 px | Not saved: off again when the panel closes | Off while answering | `/api/chat` with `web` $ per search, on Send | b4c: off by default, the web tool on the request, the note, off after reopening | differs: off by default (Classic had it on). v2's Milo looks Optic's own data up with its tools, so the web is the reader's spend to choose |
 | B4c.2 | Deep research and the modes row ($, on send) | "Deep research" and "Modes" in the same row | Modes: Classic's research modes for the page (company, chart, Brokerage, portfolio or watchlist, Scan, the market), word for word, each only writing its question into the box; the Deep research mode points at the Deep research button. Deep research runs the box's question, or the symbol on screen, or the market, by `/api/research`, and the answer says it read live web sources | 44 px; the menu opens upward | none | Off while answering | `/api/research` $ (one question and several searches), on a press | b4c: five company modes, drafting only, the hint, Deep research on an empty box as "Deep research: AAPL", Brokerage's five modes | differs: the modes sit in a Modes menu rather than a row of chips (amendment 3, and room beside a docked page) |
 
-### B4d
-| Row | Task | Status |
-|---|---|---|
-| B4d.1 | Save a question; Saved research hub | open |
+### B4d. Saved research
+Evidence:
+- `b4d_check.py`: 10 of 10 in headless Chrome at 1440 and 390, signed in (rows in the local test database) and as a guest (Classic-format browser records).
+- `tests/test_v2_parity_b4d.py`.
+
+| Row | Task | Where | Desktop | Phone | Keeps | States | Deps | Evidence | Status |
+|---|---|---|---|---|---|---|---|---|---|
+| B4d.1 | Save a question; Saved research hub | Save under each question in Milo; `#/research` (`pages/saved.js`, `core/research.js`), from the Account sheet, the palette and Milo's Open Saved research | Save keeps a question with the account (or this browser), says where, and refuses a duplicate; the hub lists the questions with their symbol and date; Ask again puts the question in Milo's box and sends nothing; Forget with Undo; Classic's four ways to start an investigation | Same; 44 px buttons; one column | Signed in: `/api/saved-research` rows as Classic writes them (`research_type: 'pulse'`); a guest: `optic.research.v1` `[{question, ticker, at}]`, 40 at most, Classic's format and key, old and partial records read | Empty: how to save one; a failed load: Retry | `/api/saved-research` (free) | b4d: save, duplicate, the hub from the Account sheet, Ask again, Forget and Undo, the palette, a guest's Classic records | done. Differs in where it lives: a page of its own rather than inside Scan, with no new sidebar item (sidebar changes need the owner's approval) |
+
 
 ## B5. Alerts and signals
 | Row | Task | Status |

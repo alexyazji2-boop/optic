@@ -1053,4 +1053,10 @@ html.eff-1100 .answers { grid-template-columns: 1fr 1fr; } html.eff-1100 .answer
 .milo-mode b { font-weight: 600; font-size: var(--t-md); } .milo-mode span { font-size: var(--t-sm); color: var(--c-ink-3); }
 .milo-mode:hover { background: var(--c-sunk); } .milo-mode:focus-visible { outline: 2px solid var(--c-focus); outline-offset: -2px; }
 @media (pointer: coarse) { .milo-tools .btn { min-height: var(--tap); } .milo-mode { min-height: var(--tap); } }
+/* Save under a question (B4d) */
+.milo-you-acts { display: flex; justify-content: flex-end; margin: 2px 0 0; }
+.milo-save { min-height: 28px; padding: 0 8px; border: 0; border-radius: var(--r-sm); background: none; color: var(--c-ink-3); font: 500 var(--t-xs)/1 var(--f-sans); cursor: pointer; }
+.milo-save:hover:not(:disabled) { background: var(--c-sunk); color: var(--c-ink); } .milo-save:disabled { cursor: default; color: var(--c-ink-3); }
+.milo-save:focus-visible { outline: 2px solid var(--c-focus); outline-offset: 1px; }
+@media (pointer: coarse) { .milo-save { min-height: var(--tap); padding: 0 12px; } }
 

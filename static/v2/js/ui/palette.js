@@ -36,6 +36,7 @@ export const PLACES = [
   { view: 'watchlist', label: 'Watchlist', terms: 'watchlist watching follow list' },
   { view: 'alerts', label: 'Alerts', terms: 'alerts alarms notifications fired' },
   { view: 'compare', label: 'Compare', terms: 'compare versus vs side by side' },
+  { view: 'saved', label: 'Saved research', href: '#/research', terms: 'saved research questions kept investigation ask again' },
   { view: 'overview', label: 'Dossier: Overview', symbol: true, terms: 'overview dossier ticker security summary company snapshot' },
   { view: 'chart', label: 'Chart', symbol: true, terms: 'chart charting drawings indicators advanced studies backtest back-test pairs stop' },
   { view: 'swing', label: 'Options', symbol: true, terms: 'options option chain greeks gamma gex flow swing setup calls puts strategies levels payoff builder spread' },

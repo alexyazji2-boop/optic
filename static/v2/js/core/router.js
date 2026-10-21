@@ -13,6 +13,7 @@ SLUG_VIEW.instrument = 'instrument';
 SLUG_VIEW.workspace = 'home';   // the workspace is Home (owner, 2026-10-18); old #/workspace links land there
 SLUG_VIEW.dossier = 'dossierstart';   // Dossier with no company open (pages/dossierstart.js)
 SLUG_VIEW.earnings = 'earningsweek';   // the classic app's #/earnings, the week's reports (a ticker's own Earnings tab is #/SYM/earnings)
+SLUG_VIEW.research = 'saved';   // Saved research (Classic parity B4d): the account sheet, the palette and Milo link here
 const TAB_VIEW = {};
 GROUPS.find((g) => g.id === 'security').pages.forEach((p) => { TAB_VIEW[p.slug || ''] = p.view; });
 const BROKERAGE_SECTIONS = ['overview', 'holdings', 'performance', 'events', 'connections'];
