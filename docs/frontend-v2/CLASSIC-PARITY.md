@@ -65,7 +65,7 @@ Not tested on a physical phone.
 | B2a.5 | A freshness label from the feed's own times | Moved to B2b: it belongs with the Chart tab's live ticks | | | | | | | moved to B2b.7 |
 
 ## B2b. Chart tab (`ui/pricechart.js`) and other price charts
-B2b ships in two parts.
+B2b ships in two parts. Part 1 shipped on 2026-10-21 as dc98fa0. Its rollback point is b38ae02. Live v2 build dc389bfd058b matches the candidate, and `b2b_live.py` passed 5 of 5, run read-only as a guest.
 - **Part 1:** the price chart's own interactions, on the Chart tab, Investing's weekly chart and the Instrument page.
 - **Part 2:** live ticks and the freshness label, a price chart on Options, and the rotation chart.
 
