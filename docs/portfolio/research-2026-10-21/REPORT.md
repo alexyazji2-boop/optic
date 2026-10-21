@@ -72,7 +72,7 @@ setup and date, so repeated scans cannot duplicate it, and there is a five-sessi
 | R1, R2 final (once) | 2019-2026 | Nothing changes. G1 FULL t 1.23 (fails); G1 control +0.31R, t 2.87 |
 | Equivalence | App rules against harness | 0 differences in 2,762 triggers and 516 shadow trades |
 | Live stress | Today's books | See section 6 |
-| Options (descriptive) | Shares against calls on DoltHub quotes, 593 sampled trades | **Not completed.** DoltHub serves about 7 lookups a minute; 27 priced so far (6 of the earnings lead), too few to judge. Nothing is estimated in place of the missing quotes |
+| Options (descriptive) | Shares against calls on DoltHub quotes, 593 sampled trades | 195 priced on observed quotes (84 price-setup trades, 111 earnings trades); 398 had no chain within two sessions of entry or exit and are left unpriced, not estimated. "Cheap" IV did not pick better call trades (section 7) |
 
 ## 5. Comparison (net of costs; trades · mean R · t)
 
@@ -123,10 +123,26 @@ open CVX call would lose 91% of its premium if CVX fell 5% and IV 20% over ten d
 
 ## 7. Options selection
 
-"Cheap IV" no longer turns a share trade into a call: every book takes shares. The historical comparison on DoltHub
-quotes was not finished (section 4). The research watch now keeps Optic's recommended contract, with its quote and
-IV verdict, beside every trigger, so the comparison continues forward on observed quotes. No short-premium strategy
-was added.
+"Cheap IV" no longer turns a share trade into a call: every book takes shares. On observed DoltHub quotes (the call
+nearest 0.50 delta, 30 to 60 days, bought at the ask on the signal day's chain and sold at the bid on the exit
+day's chain, at the same dollar risk as the shares, 2019-2026):
+
+| Trades | IV | Priced | Call, mean R | Shares, mean R | Call minus shares (t) | Median spread |
+|---|---|---|---|---|---|---|
+| Price setups (sample) | not cheap | 73 | -0.04 | -0.09 | +0.05 (0.4) | 9.0% |
+| Price setups (sample) | cheap | 11 | -0.09 | -0.37 | +0.28 (1.4) | 5.4% |
+| Earnings reaction (G1) | not cheap | 71 | +0.33 | -0.12 | +0.44 (3.3) | 5.4% |
+| Earnings reaction (G1) | cheap | 40 | +0.20 | +0.08 | +0.12 (0.8) | 5.6% |
+
+* **Cheap IV did not pick better call trades.** If anything the advantage was larger when IV was not cheap. That
+  supports keeping options paused rather than restoring the cheap-IV rule.
+* On the earnings trades a call beat the shares at equal dollar risk when IV was not cheap (t 3.3, 71 trades). This
+  is a lead for round R3, not a rule. The priced trades are the ones with quotes on both dates (many earlier dates
+  have weekly snapshots only), so they are a subset whose share result (-0.12R) is far below the full G1 average
+  (+0.31R). The call is bought at the signal day's close while the shares enter at the next open, which gives the
+  call the overnight move. Two paired cells out of four is thin evidence.
+* No short-premium strategy was added. The research watch keeps Optic's recommended contract, with its quote and IV
+  verdict, beside every trigger, so the comparison continues forward on observed quotes.
 
 ## 8. Exits
 
@@ -180,8 +196,8 @@ The trailing exit is a candidate for the next round, not a change now: in PT-1 i
   they stood: strategies E and F, and any news rule, can only be tested forward.
 * No survivorship-free stock universe. The earnings lead needs point-in-time index membership, with delisted names,
   before it means anything.
-* DoltHub option quotes are slow to query, so an options comparison on history needs a bulk copy or a long
-  background run.
+* DoltHub option quotes are slow to query (about 7 lookups a minute) and weekly before about 2020, so 398 of 593
+  sampled trades could not be priced.
 * The forward record needs hundreds of independent trades. At about 20 triggers a day it reaches 300 closed shadow
   trades in a few months, but triggers cluster in time, so independence is lower than the count.
 
