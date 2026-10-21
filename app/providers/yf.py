@@ -415,6 +415,54 @@ def _failed(value, exc: Optional[BaseException] = None):
     return _Failed(value)
 
 
+# An empty price history (2026-10-21, live): SPY's two years, IWM, DIA, the S&P 500, oil and gold came back empty
+# from the live server for hours while every quote, the six-month histories and the same requests from elsewhere
+# answered in full. yfinance hands a refusal back as an empty frame rather than raising, so the empty answer was kept
+# for five minutes as the fact "no price data" and fetched again into another empty one: the Dossier said "No price
+# data found for 'SPY'" and Home's board went without the S&P 500. Now an empty answer is asked again by date, and
+# if it is still empty, the last good history for that request stands in (up to STAND_IN_MAX_AGE old) and nothing is
+# kept, so the next request after EMPTY_KEEP asks Yahoo again. A request that never had data is still held back for
+# EMPTY_KEEP, so a mistyped symbol is not asked for on every request.
+# Kept in _CACHE under their own prefixes ("good:", "empty:", "partial:"), so whatever resets the cache resets them.
+STAND_IN_MAX_AGE = 6 * 3600.0
+EMPTY_KEEP = 60.0
+
+
+def _empty_recently(key: str) -> bool:
+    got = _CACHE.get("empty:" + key)
+    return got is not None and time.time() - got[0] < EMPTY_KEEP
+
+
+def _hist_key(sym: str, period: str, interval: str) -> str:
+    return "hist:{}:{}:{}".format(sym, period, interval)
+
+
+def _keep_good(key: str, value) -> None:
+    _CACHE["good:" + key] = (time.time(), value)
+    _CACHE.pop("empty:" + key, None)
+
+
+def _stand_in(key: str, empty):
+    got = _CACHE.get("good:" + key)
+    return got[1] if got is not None and time.time() - got[0] <= STAND_IN_MAX_AGE else empty
+
+
+def _empty_answer(key: str, empty) -> "_Failed":
+    """An empty answer from Yahoo: the stand-in (or the empty value) handed back, not kept, and the key held back
+    for EMPTY_KEEP before it is asked for again."""
+    _CACHE["empty:" + key] = (time.time(), None)
+    return _Failed(_stand_in(key, empty))
+
+
+def _period_days(period: str) -> Optional[int]:
+    """A yfinance period in days, for asking for the same span by date; None for "max" and "ytd"."""
+    m = re.fullmatch(r"(\d+)(d|mo|y)", str(period or ""))
+    if not m:
+        return None
+    n = int(m.group(1))
+    return n if m.group(2) == "d" else n * 31 if m.group(2) == "mo" else n * 366
+
+
 def _cached(key: str, ttl: float, producer, gate: bool = True):
     """Tiny TTL memo. Chains move fast, price history doesn't — callers pick.
 
@@ -1181,18 +1229,30 @@ class YFinanceProvider(MarketDataProvider):
     # ----------------------------------------------------------- history
 
     def history(self, ticker: str, period: str = "2y", interval: str = "1d") -> pd.DataFrame:
-        key = "hist:{}:{}:{}".format(ticker, period, interval)
+        key = _hist_key(ticker, period, interval)
+        # An empty answer seen within the last minute: the stand-in, or nothing, without asking again.
+        if _empty_recently(key):
+            return _stand_in(key, pd.DataFrame())
+
+        def fetch(**kw) -> pd.DataFrame:
+            df = yf.Ticker(ticker).history(interval=interval, auto_adjust=False, **kw)
+            return pd.DataFrame() if df is None or df.empty else df.dropna(subset=["Close"])
 
         def build() -> pd.DataFrame:
             try:
-                df = yf.Ticker(ticker).history(
-                    period=period, interval=interval, auto_adjust=False
-                )
+                df = fetch(period=period)
+                if df.empty:
+                    # The same days asked for by date: another address, which Yahoo's edge has not stored an empty
+                    # answer for (see _empty_answer)
+                    span = _period_days(period)
+                    if span and interval in ("1d", "1wk", "1mo"):
+                        end = datetime.now(timezone.utc) + timedelta(days=1)
+                        df = fetch(start=(end - timedelta(days=span + 1)).date().isoformat(), end=end.date().isoformat())
             except Exception as exc:
-                return _failed(pd.DataFrame(), exc)
-            if df is None or df.empty:
-                return pd.DataFrame()
-            df = df.dropna(subset=["Close"])
+                return _failed(_stand_in(key, pd.DataFrame()), exc)
+            if df.empty:
+                return _empty_answer(key, pd.DataFrame())
+            _keep_good(key, df)
             return df
 
         return _cached(key, self.TTL_HISTORY, build)
@@ -1218,11 +1278,13 @@ class YFinanceProvider(MarketDataProvider):
                         threads=True,
                     )
             except Exception as exc:
-                return _failed({}, exc)
+                # refused: no more requests on top of it, only what each name last had
+                return _failed({sym: v for sym in tickers if (v := _stand_in(_hist_key(sym, period, interval), None)) is not None}, exc)
 
             out: Dict[str, pd.DataFrame] = {}
             if raw is None or len(raw) == 0:
-                return out
+                filled = self._fill_missing(out, tickers, period, interval)
+                return _empty_answer(key, filled) if not filled else _Failed(filled)
 
             if isinstance(raw.columns, pd.MultiIndex):
                 for sym in tickers:
@@ -1234,9 +1296,33 @@ class YFinanceProvider(MarketDataProvider):
                 frame = raw.dropna(subset=["Close"])
                 if not frame.empty:
                     out[tickers[0]] = frame
-            return out
+            for sym, frame in out.items():
+                _keep_good(_hist_key(sym, period, interval), frame)   # each name's own stand-in, should a later answer leave it out
+            if len(out) == len(tickers):
+                return out
+            # A partial download is not the answer: the names it left out are asked for one at a time, and the
+            # board is not kept until every name is in it
+            return _Failed(self._fill_missing(out, tickers, period, interval))
 
-        return _cached(key, self.TTL_HISTORY, build)
+        held = _CACHE.get("partial:" + key)
+        if held is not None and time.time() - held[0] < EMPTY_KEEP:
+            return held[1]
+        got = _cached(key, self.TTL_HISTORY, build)
+        if len(got) < len(tickers):
+            _CACHE["partial:" + key] = (time.time(), got)   # a partial board, held back a minute before it is asked for again
+        else:
+            _CACHE.pop("partial:" + key, None)
+        return got
+
+    def _fill_missing(self, out: Dict[str, pd.DataFrame], tickers: List[str], period: str, interval: str) -> Dict[str, pd.DataFrame]:
+        """The names a batch download left out, each from its own history (with its retry and its stand-in)."""
+        for sym in tickers:
+            if sym in out:
+                continue
+            frame = self.history(sym, period=period, interval=interval)
+            if frame is not None and not frame.empty:
+                out[sym] = frame
+        return out
 
     def intraday_history(self, ticker: str, period: str = "5d", interval: str = "1m",
                          prepost: bool = False) -> pd.DataFrame:
