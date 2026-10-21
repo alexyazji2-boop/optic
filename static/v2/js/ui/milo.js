@@ -145,9 +145,33 @@ function persist() {
 
 /* ---------------- state ---------------- */
 const blankConv = () => ({ id: newId(), messages: [], lastTicker: null });
-const S = { conv: blankConv(), items: [], busy: false, abort: null, scope: 'auto', showHistory: false, showSettings: false, showInfo: false, allowance: null, personas: null, modes: null, draft: '', live: null, mounted: null, panel: null, toEnd: false, symbolAtAsk: null, dropped: new Set(), report: null };
+const S = { files: [], conv: blankConv(), items: [], busy: false, abort: null, scope: 'auto', showHistory: false, showSettings: false, showInfo: false, allowance: null, personas: null, modes: null, draft: '', live: null, mounted: null, panel: null, toEnd: false, symbolAtAsk: null, dropped: new Set(), report: null };
 // items: what the log shows this session: {kind:'msg', i} for conv.messages[i], or {kind:'note', text}; meta per message index
 const meta = new Map();
+/* ---------------- attachments (Classic parity B4b; Classic's app.js:46216-46345) ----------------
+ * An image or a PDF goes with the next question: PNG, JPEG, GIF, WebP or PDF, up to 4 files of 5 MB each, by the
+ * button or by dropping them on the panel. Checked here (type, size, count and the file's own first bytes) and
+ * again on the server (app/ai.py attachment_blocks), which says what it turned away. Retention: a file is held in
+ * this tab's memory until it is sent or removed, never written to the conversation history (only its name is shown,
+ * and only in this tab), sent once with its question to Optic's server, which writes nothing to disk and passes it
+ * to the model provider in that request (docs/frontend-v2/CLASSIC-PARITY.md, B4b). */
+export const ATTACH_TYPES = { 'image/png': 'PNG', 'image/jpeg': 'JPEG', 'image/gif': 'GIF', 'image/webp': 'WebP', 'application/pdf': 'PDF' };
+export const ATTACH_MAX_BYTES = 5 * 1024 * 1024, ATTACH_MAX_FILES = 4;
+const MAGIC = { 'image/png': ['\x89PNG\r\n\x1a\n'], 'image/jpeg': ['\xff\xd8\xff'], 'image/gif': ['GIF87a', 'GIF89a'], 'application/pdf': ['%PDF-'] };
+/** Whether a file's first bytes (a binary string) are the type it claims, as the server checks. */
+export function bytesMatch(type, head) {
+  if (type === 'image/webp') return head.slice(0, 4) === 'RIFF' && head.slice(8, 12) === 'WEBP';
+  return (MAGIC[type] || []).some((m) => head.startsWith(m));
+}
+/** Why a file cannot go, or '' when it can: its type, its size, the count already attached. */
+export function attachProblem({ type, size }, count) {
+  if (count >= ATTACH_MAX_FILES) return `only ${ATTACH_MAX_FILES} files can go with one question`;
+  if (!ATTACH_TYPES[type]) return 'not a PNG, JPEG, GIF, WebP or PDF';
+  if (size > ATTACH_MAX_BYTES) return `larger than the ${ATTACH_MAX_BYTES / 1048576} MB limit`;
+  if (!size) return 'the file is empty';
+  return '';
+}
+export const fmtSize = (n) => (n >= 1048576 ? `${(n / 1048576).toFixed(1)} MB` : n >= 1024 ? `${Math.round(n / 1024)} KB` : `${n} bytes`);
 const persona = () => { try { return localStorage.getItem(PERSONA_KEY) || 'neutral'; } catch (e) { return 'neutral'; } };
 const horizon = () => { try { return localStorage.getItem(HORIZON_KEY) || 'auto'; } catch (e) { return 'auto'; } };
 const setPref = (k, v) => { try { localStorage.setItem(k, v); } catch (e) { /* private mode */ } };
@@ -360,7 +384,7 @@ const host = () => S.mounted && document.contains(S.mounted) ? S.mounted : null;
 function msgHTML(it) {
   if (it.kind === 'note') return html`<p class="milo-note" role="note">${it.text}</p>`;
   const m = S.conv.messages[it.i] || {}, info = meta.get(it.i) || {};
-  if (m.role === 'user') return html`<div class="milo-msg milo-you${S.fresh === it.i ? ' is-new' : ''}"><p class="sr">You asked</p><div class="milo-bubble">${m.content}</div></div>`;
+  if (m.role === 'user') return html`<div class="milo-msg milo-you${S.fresh === it.i ? ' is-new' : ''}"><p class="sr">You asked</p><div class="milo-bubble">${m.content}</div>${info.files ? html`<p class="milo-sent-files">${icon('clip')}<span>${info.files.join(', ')}</span></p>` : ''}</div>`;
   const shown = String(m.content || '').replace(/\n\n\[(Stopped by the reader|Cut off): incomplete\]$/, '');
   const { html: body, ups } = renderAnswer(shown, info.symbol || null);
   const live = S.live && S.live.i === it.i;
@@ -368,6 +392,7 @@ function msgHTML(it) {
   return html`<article class="milo-msg milo-bot" data-v2-milo-i="${it.i}" aria-label="Milo's answer"><p class="milo-who">Milo</p>
     ${aboutLine(info)}
     ${info.assumed ? html`<p class="milo-assumed">${info.assumed}</p>` : ''}
+    ${info.notSent && info.notSent.length ? html`<p class="milo-not-sent" role="note"><b>Not sent with this question:</b> ${info.notSent.join('; ')}.</p>` : ''}
     <div class="milo-bubble">${raw(body)}</div>
     ${live ? html`<span class="activity" role="progressbar" aria-label="Milo is working on this answer"></span>` : ''}
     ${info.ended || /\[(Stopped by the reader|Cut off): incomplete\]$/.test(m.content || '') ? html`<p class="milo-ended" role="note">${(info.ended || (/Stopped by the reader/.test(m.content) ? 'stopped' : 'cut')) === 'stopped' ? 'Stopped by you. This answer is incomplete.' : 'The connection ended before Milo finished. This answer is incomplete.'}</p>` : ''}
@@ -531,6 +556,37 @@ function suggestHTML(empty) {
   return html`${follow.length ? html`<div class="milo-suggest" role="group" aria-label="Follow-up questions">${follow.map((q) => html`<button type="button" class="btn btn-quiet btn-sm" data-v2-milo-follow="${q}">${q}</button>`)}</div>` : ''}
     <p class="milo-eg"><span><span class="t-muted">For example:</span> ${eg}</span><button type="button" class="btn btn-quiet btn-sm" data-v2-milo-follow="${eg}">Use this example</button></p>`;
 }
+function filesHTML() {
+  if (!S.files.length) return '';
+  return html`<ul class="milo-files" aria-label="Files to send with your question">${S.files.map((f, i) => html`<li class="milo-file ${f.error ? 'is-bad' : ''}">
+      ${f.thumb ? html`<img data-v2-milo-thumb="${i}" alt="">` : html`<span class="milo-file-kind" aria-hidden="true">${ATTACH_TYPES[f.type] || 'File'}</span>`}
+      <span class="milo-file-meta"><span class="milo-file-name">${f.name}</span><span class="milo-file-size">${f.error ? `Not sent: ${f.error}` : fmtSize(f.size)}</span></span>
+      <button type="button" class="icon-btn" data-v2-milo-unattach="${i}" aria-label="Remove ${f.name}" title="Remove">${icon('close')}</button></li>`)}</ul>
+    <p class="milo-files-note">Sent with your next question to Milo's model provider. Optic does not keep them.</p>`;
+}
+function paintFiles() {
+  const h = host(); if (!h) return; draw($('[data-v2-milo-files]', h), filesHTML());
+  // the reader's own image, from its own file: set here, as the template turns every data: address into "#"
+  h.querySelectorAll('[data-v2-milo-thumb]').forEach((im) => { const f = S.files[Number(im.dataset.v2MiloThumb)]; if (f && f.thumb) im.src = f.thumb; }); const b = $('[data-v2-milo-attach]', h); if (b) b.disabled = S.busy || S.files.filter((f) => !f.error).length >= ATTACH_MAX_FILES; }
+const readFile = (file) => new Promise((ok, bad) => { const r = new FileReader(); r.onload = () => ok(String(r.result || '')); r.onerror = () => bad(new Error('unreadable')); r.readAsDataURL(file); });
+async function addFiles(list) {
+  for (const file of [...(list || [])]) {
+    const good = S.files.filter((f) => !f.error).length;
+    const f = { name: String(file.name || 'attachment').slice(0, 120), type: file.type || '', size: file.size || 0, data: null, thumb: null, error: attachProblem({ type: file.type || '', size: file.size || 0 }, good) };
+    if (!f.error) {
+      try {
+        const url = await readFile(file), data = url.slice(url.indexOf(',') + 1);
+        const head = atob(data.slice(0, 16));
+        if (!bytesMatch(f.type, head)) f.error = `not a ${ATTACH_TYPES[f.type]} file, whatever its name says`;
+        else { f.data = data; if (f.type.startsWith('image/')) f.thumb = url; }
+      } catch (e) { f.error = 'the file could not be read'; }
+    }
+    S.files.push(f);
+  }
+  paintFiles();
+  const bad = S.files.filter((f) => f.error);
+  if (bad.length) announce(`${bad.length === 1 ? `${bad[0].name} cannot be sent: ${bad[0].error}` : `${bad.length} files cannot be sent`}.`);
+}
 function paintSuggest() {
   const h = host(); if (!h) return;
   const slot = $('[data-v2-milo-suggest]', h), ta = $('#milo-q', h); if (!slot) return;
@@ -621,6 +677,7 @@ function paintForm() {
   const al = $('#milo-allow', h); if (al) al.textContent = !S.busy ? allowanceLine() : S.live && S.live.text ? 'Milo is answering' : 'Sending';
   paintHead();
   paintSuggest();
+  paintFiles();
 }
 const draw = (el, tpl) => { if (el) render(el, tpl); };
 
@@ -689,6 +746,9 @@ export async function send(text) {
   const focusTicker = context.focus.ticker;
   if (context.focus.previous_ticker) S.items.push({ kind: 'note', text: `Now asking about ${focusTicker}. The earlier answers were about ${context.focus.previous_ticker}, and Milo is told so.` });
   S.conv.messages.push({ role: 'user', content: text }); S.items.push({ kind: 'msg', i: S.conv.messages.length - 1 }); S.fresh = S.conv.messages.length - 1;
+  const going = S.files.filter((f) => f.data && !f.error), attachments = going.map((f) => ({ name: f.name, media_type: f.type, data: f.data }));
+  if (going.length) meta.set(S.conv.messages.length - 1, { files: going.map((f) => f.name) });
+  S.files = [];
   if (focusTicker) S.conv.lastTicker = focusTicker;
   const ai = S.conv.messages.length; // index the answer will take
   S.conv.messages.push({ role: 'assistant', content: '' }); S.items.push({ kind: 'msg', i: ai });
@@ -705,7 +765,7 @@ export async function send(text) {
     const res = await fetch('/api/chat', {
       method: 'POST', credentials: 'same-origin', signal: ctl.signal,
       headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream', 'X-Optic-CSRF': (document.cookie.match(/(?:^|; )optic_csrf=([^;]*)/) || [])[1] || '' },
-      body: JSON.stringify({ messages: S.conv.messages.slice(0, ai).map((m) => ({ role: m.role, content: m.content })), context, web: false, attachments: [], persona: persona(), mode: prefs.knowledge(), horizon: horizon() }),
+      body: JSON.stringify({ messages: S.conv.messages.slice(0, ai).map((m) => ({ role: m.role, content: m.content })), context, web: false, attachments, persona: persona(), mode: prefs.knowledge(), horizon: horizon() }),
     });
     // the server has the question and has put its context together: the answer is being prepared
     heard();
@@ -731,6 +791,7 @@ export async function send(text) {
           let p; try { p = JSON.parse(data); } catch (e) { continue; }
           if (ev === 'delta') { S.live.text += p.text || ''; S.live.status = ''; S.conv.messages[ai].content = S.live.text; paintLive(); if (SC.i === ai && SC.state !== 'streaming') scoutTo(ai, 'streaming'); }
           else if (ev === 'status') { const w = STEP_WORDS[String(p.state || '')] || String(p.state || '').replace(/^./, (x) => x.toUpperCase()); S.live.status = w; paintLive(); if (SC.i === ai && SC.state !== 'streaming') scoutTo(ai, SEARCHING.has(String(p.state || '')) ? 'searching' : 'thinking'); }
+          else if (ev === 'attachments') { const m = meta.get(ai); if (m && Array.isArray(p.problems)) m.notSent = p.problems.map(String).slice(0, 5); }
           else if (ev === 'assumed') { const hz = (((S.personas || {}).horizons || {}).horizons || []).find((x) => x.id === p.horizon); if (hz && p.horizon_source === 'question' && p.horizon !== horizon()) meta.get(ai).assumed = `Answered for a ${hz.label.toLowerCase()} timeframe, from your question. Your setting is unchanged.`; }
           else if (ev === 'retrieved') { S.live.got = Array.isArray(p.items) ? p.items : []; paintLive(); }
           else if (ev === 'error') { finished = true; failed = { text: p.message || 'Milo could not answer.' }; }
@@ -748,8 +809,9 @@ export async function send(text) {
   S.live = null; S.busy = false; S.abort = null;
   if (failed && !reply) {
     // nothing came back: take the exchange out, and give the question back
-    S.conv.messages.splice(ai - 1, 2); S.items = S.items.filter((it) => !(it.kind === 'msg' && it.i >= ai - 1)); meta.delete(ai);
+    S.conv.messages.splice(ai - 1, 2); S.items = S.items.filter((it) => !(it.kind === 'msg' && it.i >= ai - 1)); meta.delete(ai); meta.delete(ai - 1);
     S.items.push({ kind: 'note', text: failed.text });
+    if (going.length && !S.files.length) S.files = going;   // and the files with it
     S.draft = text; const box = host() && $('#milo-q', host()); if (box && !box.value.trim()) { box.value = text; grow(box); }
     if (failed.signin) loadAllowance();
     SC.i = null;
@@ -900,7 +962,9 @@ export async function openMilo({ question = '', opener, send: sendNow = false, a
     body: html`<div class="milo"><div class="milo-chrome">${chromeHTML()}</div>
       <div class="milo-log-wrap"><div class="milo-log" role="log" aria-live="polite" aria-label="Conversation with Milo">${logHTML()}</div>
         <button type="button" class="milo-latest" data-v2-milo-latest hidden>${icon('arrowDown')}<span>Latest</span></button></div>
-      <form class="milo-form" data-v2-milo-form data-state="idle"><div class="milo-suggest-slot" data-v2-milo-suggest></div><div class="milo-compose"><label class="sr" for="milo-q">Your question to Milo</label>
+      <form class="milo-form" data-v2-milo-form data-state="idle"><div class="milo-suggest-slot" data-v2-milo-suggest></div><div data-v2-milo-files>${filesHTML()}</div><div class="milo-compose">
+        <button type="button" class="milo-attach" data-v2-milo-attach aria-label="Attach an image or PDF" title="Attach an image or PDF: PNG, JPEG, GIF, WebP or PDF, up to 4 files of 5 MB each. You can also drop them here.">${icon('clip')}</button>
+        <input type="file" hidden multiple accept="${Object.keys(ATTACH_TYPES).join(',')}" data-v2-milo-file tabindex="-1"><label class="sr" for="milo-q">Your question to Milo</label>
         <textarea id="milo-q" rows="1" maxlength="4000" placeholder="${placeholder()}" aria-describedby="milo-attached milo-allow">${S.draft}</textarea>
         <button type="submit" class="milo-send" data-v2-milo-send aria-label="Send" title="Send (Enter). Shift and Enter for a new line">${icon('send')}</button>
         <button type="button" class="milo-stop" data-v2-milo-stop aria-label="Stop the answer" title="Stop the answer" hidden>${icon('stop')}</button></div>
@@ -1058,6 +1122,11 @@ function wire(root) {
     else if (e.key === 'End') { e.preventDefault(); items[items.length - 1].focus(); }
     else if (e.key === 'Tab') setMenu(false);
   });
+  // attachments: the button, the file picker, a tile's remove, and files dropped on the panel
+  root.addEventListener('change', (e) => { const inp = e.target.closest && e.target.closest('[data-v2-milo-file]'); if (inp) { addFiles(inp.files).then(() => { inp.value = ''; const b = $('[data-v2-milo-attach]', root); if (b && !b.disabled) b.focus(); }); } });
+  root.addEventListener('dragover', (e) => { if (!e.dataTransfer || ![...(e.dataTransfer.types || [])].includes('Files') || blocked()) return; e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; root.classList.add('is-drop'); });
+  root.addEventListener('dragleave', (e) => { if (!root.contains(e.relatedTarget)) root.classList.remove('is-drop'); });
+  root.addEventListener('drop', (e) => { if (!e.dataTransfer || !e.dataTransfer.files || !e.dataTransfer.files.length) return; e.preventDefault(); root.classList.remove('is-drop'); if (!blocked()) addFiles(e.dataTransfer.files); });
   root.addEventListener('input', (e) => { if (e.target.id === 'milo-q') { const was = !S.draft.trim(), now = !e.target.value.trim(); S.draft = e.target.value; grow(e.target); scoutListen(e.target.value); if (was !== now) paintSuggest(); } });
   root.addEventListener('scroll', (e) => { if (e.target.classList && e.target.classList.contains('milo-log')) syncLatest(); }, true);
   root.addEventListener('change', (e) => {
@@ -1101,6 +1170,8 @@ function wire(root) {
       S.showHistory = false; S.toEnd = true; paintChrome(); paintLog(); const ta = $('#milo-q', root); if (ta) ta.focus(); return;
     }
     if ((b = t('[data-v2-milo-del]'))) { const id = b.dataset.v2MiloDel; saveHistory(loadHistory().filter((c) => c.id !== id)); if (S.conv.id === id && !S.busy) { S.conv = blankConv(); S.items = []; meta.clear(); } paintChrome(); paintLog(false); const hd = $('#milo-hist-h', root); if (hd) { hd.setAttribute('tabindex', '-1'); hd.focus({ preventScroll: true }); } return; }
+    if (t('[data-v2-milo-attach]')) { const inp = $('[data-v2-milo-file]', root); if (inp) inp.click(); return; }
+    if ((b = t('[data-v2-milo-unattach]'))) { const i = Number(b.dataset.v2MiloUnattach), gone = S.files[i]; S.files.splice(i, 1); paintFiles(); const nb = $('[data-v2-milo-unattach]', root) || $('[data-v2-milo-attach]', root); if (nb) nb.focus(); if (gone) announce(`${gone.name} removed.`); return; }
     if ((b = t('[data-v2-milo-follow]'))) { const ta = $('#milo-q', root); if (ta) { ta.value = b.dataset.v2MiloFollow; S.draft = ta.value; grow(ta); ta.focus(); scoutListen(ta.value); paintSuggest(); } return; }
     if ((b = t('[data-v2-milo-again]'))) { const q = (meta.get(Number(b.dataset.v2MiloAgain)) || {}).question; const ta = $('#milo-q', root); if (q && ta) { ta.value = q; S.draft = q; grow(ta); ta.focus(); } return; }
     if ((b = t('[data-v2-milo-report]'))) {

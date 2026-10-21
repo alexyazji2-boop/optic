@@ -15,6 +15,8 @@ clear message instead of failing, and the rest of the terminal is unaffected.
 
 from __future__ import annotations
 
+import base64
+import binascii
 import json
 import math
 import os
@@ -1028,6 +1030,24 @@ ATTACH_MAX_BYTES = int(os.environ.get("CHAT_ATTACH_MAX_MB", "5")) * 1024 * 1024
 ATTACH_MAX_FILES = int(os.environ.get("CHAT_ATTACH_MAX_FILES", "4"))
 
 
+# What each accepted type's bytes start with. The declared type is the browser's guess from the file name; the
+# bytes are the file (Classic parity B4b, 2026-10-21: a renamed file is turned away here, not at the model).
+_ATTACH_MAGIC = {
+    "image/png": (b"\x89PNG\r\n\x1a\n",),
+    "image/jpeg": (b"\xff\xd8\xff",),
+    "image/gif": (b"GIF87a", b"GIF89a"),
+    "application/pdf": (b"%PDF-",),
+}
+_ATTACH_WORD = {"image/png": "PNG", "image/jpeg": "JPEG", "image/gif": "GIF", "image/webp": "WebP", "application/pdf": "PDF"}
+
+
+def _attach_bytes_match(media: str, raw: bytes) -> bool:
+    """Whether the decoded bytes are the type they claim: the file's own signature, not its name."""
+    if media == "image/webp":
+        return len(raw) >= 12 and raw[:4] == b"RIFF" and raw[8:12] == b"WEBP"
+    return any(raw.startswith(m) for m in _ATTACH_MAGIC.get(media, ()))
+
+
 def attachment_blocks(items: Any) -> Tuple[List[Dict[str, Any]], List[str]]:
     """Turn posted attachments into API content blocks, plus any rejections.
 
@@ -1052,23 +1072,34 @@ def attachment_blocks(items: Any) -> Tuple[List[Dict[str, Any]], List[str]]:
             problems.append(f"{name}: no data received")
             continue
 
-        # base64 inflates by 4/3; check the decoded size, which is what counts.
+        # base64 inflates by 4/3; a body far over the limit is turned away before it is decoded
         approx = (len(data) * 3) // 4
-        if approx > ATTACH_MAX_BYTES:
-            problems.append(
-                f"{name}: {approx // (1024 * 1024)}MB is over the "
-                f"{ATTACH_MAX_BYTES // (1024 * 1024)}MB limit")
+        if approx > ATTACH_MAX_BYTES + 4:
+            problems.append(f"{name}: larger than the {ATTACH_MAX_BYTES // (1024 * 1024)} MB limit")
+            continue
+        if media not in ATTACH_IMAGE_TYPES and media not in ATTACH_DOC_TYPES:
+            problems.append(f"{name}: {media or 'unknown type'} is not supported "
+                            "(PNG, JPEG, GIF, WebP or PDF)")
+            continue
+        # strict base64, then the decoded size (what counts) and the file's own signature against its declared type
+        try:
+            raw = base64.b64decode(data, validate=True)
+        except (binascii.Error, ValueError):
+            problems.append(f"{name}: the file did not arrive whole; attach it again")
+            continue
+        if len(raw) > ATTACH_MAX_BYTES:
+            problems.append(f"{name}: larger than the {ATTACH_MAX_BYTES // (1024 * 1024)} MB limit")
+            continue
+        if not _attach_bytes_match(media, raw):
+            problems.append(f"{name}: this is not a {_ATTACH_WORD.get(media, 'supported')} file, whatever its name says")
             continue
 
         if media in ATTACH_IMAGE_TYPES:
             blocks.append({"type": "image", "source": {
                 "type": "base64", "media_type": media, "data": data}})
-        elif media in ATTACH_DOC_TYPES:
+        else:
             blocks.append({"type": "document", "source": {
                 "type": "base64", "media_type": media, "data": data}})
-        else:
-            problems.append(f"{name}: {media or 'unknown type'} is not supported "
-                            "(PNG, JPEG, GIF, WebP or PDF)")
 
     if isinstance(items, list) and len(items) > ATTACH_MAX_FILES:
         problems.append(f"only the first {ATTACH_MAX_FILES} files were sent")
@@ -3277,9 +3308,11 @@ async def stream_chat(
         return
     if meta.get("problems"):
         # Told, not swallowed: a silently dropped file makes the answer look wrong
-        # for no visible reason.
+        # for no visible reason. The status line is the classic app's; v2 keeps the
+        # list under the question (the attachments event).
         yield _sse("status", {"state": "some files were not sent: "
                               + "; ".join(meta["problems"][:3])})
+        yield _sse("attachments", {"problems": meta["problems"][:ATTACH_MAX_FILES + 1]})
     # What Milo assumed, so the panel can say it and offer the other horizon.
     yield _sse("assumed", {"level": meta.get("level"), "horizon": meta.get("horizon"),
                            "horizon_source": meta.get("horizon_source")})

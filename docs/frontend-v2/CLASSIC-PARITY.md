@@ -143,10 +143,28 @@ Not tested:
 | B4a.4 | Suggestions as quiet buttons; a "Use this example" button | `suggestHTML`, `exampleAsk`, `OPTIONS_FOLLOWUPS` | After an answer: on Options, Classic's six follow-ups; on every page, the example and "Use this example"; each drafts into the box and focuses it, never sends; Tab moves on as usual | Same | none | Hidden while typing, answering or blocked | none | b4a: six follow-ups, the example drafted and focused, no message sent, Tab to Send | differs: quiet buttons, not chips (amendment 3); a button, not Tab, takes the example (amendment 7) |
 | B4a.5 | A 1024 window, found by the width sweep | `pages.css`, `components.css` | The Watchlist drops volume and earnings under 1100 px (they are in each row's detail); the Dossier header puts its actions on a row of their own between 861 and 1100 px; the top bar's Ask Milo no longer wraps; end-aligned menus open leftward (the B3 Panels menu had widened the page by 128 px) | n/a | none | n/a | none | b4a widths at 1024; b3 desk overflow 0 | done |
 
-### B4b to B4d
+### B4b. Attachments
+Evidence:
+- `b4b_check.py`: 11 of 11 in headless Chrome at 1440 and 390, with real files on disk.
+  - The file picker and drag and drop.
+  - Refusals: a renamed file, a 6 MB file, a text file and a fifth file.
+  - Removal, sending, and the saved conversation.
+  - The server's own checks, by a direct request that skips the browser's.
+- Against the stand-in model, whose log shows the image and document blocks that reached it. This is stand-in verification only: the model provider's own handling of the files has not been exercised.
+- `tests/test_v2_parity_b4b.py`.
+
+Retention, as the panel says it ("Sent with your next question to Milo's model provider. Optic does not keep them."):
+- **In the browser:** a file is held in the tab's memory until it is sent or removed. It is never written to the saved conversation (`optic.pulse.history.v1` keeps role and text only). Its name shows under the question in this tab only.
+- **On Optic's server:** the file arrives base64 in the `/api/chat` request and is checked by `app/ai.py` `attachment_blocks`. It is passed to the model provider (Anthropic) in that one request. Nothing is written to disk and nothing is logged.
+- **At the provider:** its own API data-retention terms apply.
+
+| Row | Task | Where | Desktop | Phone | Keeps | States | Deps | Evidence | Status |
+|---|---|---|---|---|---|---|---|---|---|
+| B4b.1 | Attach files (button, drop); type, size and count checked in the browser and on the server | The clip beside Milo's box; file tiles above it; `attachProblem`, `bytesMatch` in `ui/milo.js`; `attachment_blocks` in `app/ai.py` | The clip or a drop on the panel; PNG, JPEG, GIF, WebP or PDF, up to 4 of 5 MB; each refused file says why on its tile ("not a PNG file, whatever its name says", "larger than the 5 MB limit"); the server checks the type, the decoded size and the file's own first bytes again, and its refusals stay under the answer | The clip and the remove buttons at 44 px | Nothing: see retention | A send that fails gives the files back with the question | `/api/chat` $ on Send (files add to the cost) | b4b desk and 390 | done (stand-in verification; the provider's handling of the files is untested) |
+
+### B4c to B4d
 | Row | Task | Status |
 |---|---|---|
-| B4b.1 | Attach files (button, drop); type, size and count checked in the browser and on the server | open |
 | B4c.1 | Web search toggle ($, on send) | open |
 | B4c.2 | Deep research and the modes row ($, on send) | open |
 | B4d.1 | Save a question; Saved research hub | open |
