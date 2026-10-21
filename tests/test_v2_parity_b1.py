@@ -89,7 +89,7 @@ def test_the_shell_routes_and_names_from_b1():
     assert "row('#/signin', 'user', 'Sign in'" in shell and "store.user ? ''" in shell, "Sign in in More for a guest only"
     assert "t.setAttribute('aria-label', `Watchlist. ${words}`)" in shell, "the count's name starts with the visible word"
     assert "['ov:stages']" not in (JS / "core/milo-text.js").read_text() and "null]" not in (JS / "core/milo-text.js").read_text()
-    assert "${CLASSIC}#/scan\">Saved research, in the classic app" in (JS / "app.js").read_text()
+    assert '<a class="rail-row" href="#/research">Saved research</a>' in (JS / "app.js").read_text(), "B4d replaced the link to Classic"
     css = (V2 / "css/components.css").read_text()
     assert "html { scroll-padding-top: calc(var(--topbar-h, 72px) + var(--dstick-h, 0px) + var(--secidx-h, 0px) + 8px); }" in css   # B3 adds the section strip
     assert ".dstick { position: sticky; top: var(--topbar-h, 72px);" in css
