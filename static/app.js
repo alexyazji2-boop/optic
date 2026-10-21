@@ -13278,7 +13278,7 @@ function renderOptionsPricing(d) {
           <td class="num">${r.one_sd_move_pct ? '±' + fmt(r.one_sd_move_pct, 1) + '%' : '—'}</td>
           <td class="num">${Number.isFinite(r.rr25_pts) ? fmt(r.rr25_pts, 1) : '—'}</td>
           <td class="num">${fmt(r.two_sided, 0)} of ${fmt(r.contracts, 0)}</td>
-          <td>${r.contains_event ? 'Report inside' : ''}</td></tr>`).join('')}</tbody>
+          <td>${r.contains_event ? 'Report inside' : r.contains_event === null ? 'Time not known' : ''}</td></tr>`).join('')}</tbody>
       </table></div>
       <p class="ov-fine">${esc((vs.notes || []).join(' '))}</p>
     </details>

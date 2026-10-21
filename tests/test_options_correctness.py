@@ -123,7 +123,7 @@ def test_term_structure_names_an_event_only_when_one_is_inside():
 
 def test_an_after_close_report_on_expiry_day_is_outside_that_expiry():
     rows = [{"expiry": "2026-10-30"}, {"expiry": "2026-11-06"}]
-    vs.mark_events(rows, "2026-10-30", after_close=True)
+    vs.mark_events(rows, "2026-10-30", timing="after_close")
     assert [r["contains_event"] for r in rows] == [False, True]
 
 

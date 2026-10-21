@@ -403,10 +403,13 @@ def term_read(rows: List[Dict[str, Any]], event_date: Optional[str] = None) -> D
     text = "{} ({:.1f}% for {} against {:.1f}% for {}).".format(
         words, front["atm_iv_pct"], front["expiry"], back["atm_iv_pct"], back["expiry"])
     with_event = [r["expiry"] for r in pts if r.get("contains_event")]
+    same_day = _timing_note(rows)
     if with_event:
         text += " The company's report on {} falls inside the {} expiry{}, which usually lifts its IV.".format(
             event_date, with_event[0], " and later ones" if len(with_event) > 1 else "")
-    elif shape == "inverted":
+    if same_day:
+        text += " " + same_day
+    elif not with_event and shape == "inverted":
         text += " No scheduled company event falls inside these expiries in Optic's data, so the reason is not known from this page."
     return {"available": True, "shape": shape, "front": front["expiry"], "back": back["expiry"],
             "front_iv_pct": front["atm_iv_pct"], "back_iv_pct": back["atm_iv_pct"],
@@ -416,17 +419,54 @@ def term_read(rows: List[Dict[str, Any]], event_date: Optional[str] = None) -> D
                       "5% above the back, upward when more than 5% below."}
 
 
+# When in the day a company reports: before the open, after the close, or None
+# when Optic does not know. The feed's time on an upcoming report is a
+# placeholder (see analytics/earnings._next_report), so for a report still to
+# come it is None unless the report is already out.
+REPORT_TIMINGS = ("before_open", "after_close")
+
+
+_TIMING_WORDS = {"before_open": "before the open", "after_close": "after the close"}
+
+
+def _unknown_timing_words(expiry: str, usual: Optional[Dict[str, Any]] = None) -> str:
+    text = ("The {} expiry ends on the report date, and whether the report comes before the open or after "
+            "the close is not known, so that expiry is counted on neither side of it.").format(expiry)
+    if usual and usual.get("timing") in _TIMING_WORDS and usual.get("count"):
+        text += " The company's last {} reports came {}: its habit, not this report's announced time.".format(
+            usual["count"], _TIMING_WORDS[usual["timing"]])
+    return text
+
+
+def _timing_note(rows: List[Dict[str, Any]]) -> str:
+    """The unknown-timing sentence on the expiry that ends on the report date, if one does."""
+    return next((r["event_note"] for r in rows if r.get("event_note")), "")
+
+
 def mark_events(rows: List[Dict[str, Any]], event_date: Optional[str],
-                after_close: bool = False) -> None:
-    """Flag the expiries that are still open when the report comes out. A
-    report after the close on an expiry day lands after that expiry ends."""
+                timing: Optional[str] = None, usual_timing: Optional[Dict[str, Any]] = None) -> None:
+    """Flag the expiries that are still open when the report comes out.
+
+    An expiry on the report date itself spans a report before the open and not
+    one after the close, which lands after that expiry ends. At an unknown time
+    it is neither: `contains_event` is None and the readings leave it out. It
+    used to count as spanning the report whatever the time, because main.py
+    never passed the timing and `after_close` defaulted to False, so an
+    after-close report was read into an expiry that stops trading first."""
     if not event_date:
         return
     for r in rows:
-        r["contains_event"] = r["expiry"] > event_date or (r["expiry"] == event_date and not after_close)
+        if r["expiry"] != event_date:
+            r["contains_event"] = r["expiry"] > event_date
+        elif timing in REPORT_TIMINGS:
+            r["contains_event"] = timing == "before_open"
+        else:
+            r["contains_event"] = None
+            r["event_note"] = _unknown_timing_words(r["expiry"], usual_timing)
 
 
-def event_move(rows: List[Dict[str, Any]], event_date: Optional[str]) -> Dict[str, Any]:
+def event_move(rows: List[Dict[str, Any]], event_date: Optional[str],
+               timing: Optional[str] = None) -> Dict[str, Any]:
     """The move priced for the report itself, from the term structure.
 
     Total variance of the first expiry after the report, minus what that same
@@ -436,11 +476,17 @@ def event_move(rows: List[Dict[str, Any]], event_date: Optional[str]) -> Dict[st
     expiry is only days out, weekend and calendar effects move the answer."""
     if not event_date:
         return {"available": False, "reason": "no scheduled report in Optic's data"}
+    timing_word = timing if timing in REPORT_TIMINGS else "unknown"
     pts = [r for r in rows if r.get("atm_iv_pct") and r.get("tau_years")]
-    after = next((r for r in pts if r.get("contains_event")), None)
-    before = [r for r in pts if not r.get("contains_event") and r["dte"] >= 3]
+    # An expiry on the report date at an unknown time (contains_event None) is
+    # on neither side: True and False only.
+    after = next((r for r in pts if r.get("contains_event") is True), None)
+    before = [r for r in pts if r.get("contains_event") is False and r["dte"] >= 3]
+    same_day = _timing_note(rows)
+    left_out = (" " + same_day) if same_day else ""
     if not after or not before:
-        return {"available": False, "reason": "needs a quoted expiry on each side of the report"}
+        return {"available": False, "timing": timing_word,
+                "reason": "needs a quoted expiry on each side of the report" + left_out}
     b = before[-1]
     ta = after["tau_years"]
     # Total variance = the ordinary days at the earlier expiry's rate + the
@@ -450,22 +496,27 @@ def event_move(rows: List[Dict[str, Any]], event_date: Optional[str]) -> Dict[st
     var = (after["atm_iv_pct"] / 100) ** 2 * ta - (b["atm_iv_pct"] / 100) ** 2 * max(ta - day, 0.0)
     if var <= 0:
         return {"available": True, "move_pct": 0.0, "after": after["expiry"], "before": b["expiry"],
+                "timing": timing_word,
                 "text": "The expiry that spans the report carries no more implied volatility than the "
-                        "one before it, so no extra move for the report is priced in on this method."}
+                        "one before it, so no extra move for the report is priced in on this method." + left_out}
     move = float(np.sqrt(var) * 100)
     return {"available": True, "move_pct": _f(move, 2), "after": after["expiry"], "before": b["expiry"],
+            "timing": timing_word,
             "text": "About {:.1f}% priced for the report day itself, from the {} expiry's IV against "
-                    "the {} expiry's.".format(move, after["expiry"], b["expiry"]),
+                    "the {} expiry's.".format(move, after["expiry"], b["expiry"]) + left_out,
             "method": "sqrt(IV_after^2 x T_after - IV_before^2 x (T_after - 1 day)): the variance the "
                       "later expiry carries beyond the earlier one's rate on the ordinary days. A model "
                       "reading of what is priced, not a forecast of the move."}
 
 
 def build(chain: pd.DataFrame, spot: float, rate: float, div: float,
-          event_date: Optional[str] = None, after_close: bool = False) -> Dict[str, Any]:
-    """The surface block for the payload. `chain` must already be resolved."""
+          event_date: Optional[str] = None, timing: Optional[str] = None,
+          usual_timing: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """The surface block for the payload. `chain` must already be resolved.
+    `timing` is when in the day the report comes, if Optic knows it;
+    `usual_timing` the company's habit, said beside an unknown time, never used for it."""
     rows = expiry_rows(chain, spot, rate, div)
-    mark_events(rows, event_date, after_close)
+    mark_events(rows, event_date, timing, usual_timing)
     states = chain["quote_state"].value_counts().to_dict() if "quote_state" in chain else {}
     sources = chain["iv_source"].value_counts().to_dict() if "iv_source" in chain else {}
     return {
@@ -473,8 +524,9 @@ def build(chain: pd.DataFrame, spot: float, rate: float, div: float,
         "expiries": rows,
         "iv30": constant_maturity(rows, 30),
         "term": term_read(rows, event_date),
-        "event": event_move(rows, event_date),
+        "event": event_move(rows, event_date, timing),
         "event_date": event_date,
+        "event_timing": (timing if timing in REPORT_TIMINGS else "unknown") if event_date else None,
         "quote_states": {k: int(v) for k, v in states.items()},
         "iv_sources": {k: int(v) for k, v in sources.items()},
         "clock": chain.attrs.get("clock"),

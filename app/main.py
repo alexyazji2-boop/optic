@@ -612,6 +612,38 @@ def _upcoming(day: Any) -> Optional[str]:
     return day if str(day)[:10] >= session_mod.market_today().isoformat() else None
 
 
+def _report_timing_for_surface(ticker: str, event_date: Optional[str],
+                               chain: Optional[pd.DataFrame]) -> Tuple[Optional[str], Optional[Dict[str, Any]]]:
+    """When in the day the next report comes, where Optic knows it, and the company's habit.
+
+    Asked only when a listed expiry ends on the report date, the one case where
+    the time of day moves a reading: that expiry spans a report before the open
+    and not one after the close. Otherwise no lookup is made.
+
+    The time the feed lists for a report still to come is a placeholder (see
+    analytics/earnings._next_report), so the time is known only once the report
+    is out, from its row with a reported EPS. Before then it is None, which the
+    surface says as unknown. The habit, the same side of the session on the last
+    three or four reports, rides along to be said beside it, never used for it.
+    """
+    if not event_date or chain is None or chain.empty or "expiry" not in chain:
+        return None, None
+    if event_date not in {str(e) for e in chain["expiry"].unique()}:
+        return None, None
+    try:
+        history = YF_PROVIDER.earnings_history(ticker, limit=6) or []
+    except Exception:                                             # noqa: BLE001
+        return None, None
+    timing = next((r["timing"] for r in history if str(r.get("date")) == event_date
+                   and r.get("eps_reported") is not None and r.get("timing")), None)
+    past = sorted((r for r in history if r.get("eps_reported") is not None and r.get("timing")
+                   and r.get("date") and str(r["date"]) < event_date),
+                  key=lambda r: str(r["date"]), reverse=True)[:4]
+    usual = ({"timing": past[0]["timing"], "count": len(past)}
+             if len(past) >= 3 and len({r["timing"] for r in past}) == 1 else None)
+    return timing, usual
+
+
 def _sector_confirm(ticker: str) -> Dict[str, Any]:
     prof = YF_PROVIDER.profile(ticker) or {}
     return sector_confirm_mod.build(YF_PROVIDER, ticker, prof.get("sector"))
@@ -901,7 +933,9 @@ def _swing_snapshot(
         chain = vol_surface_mod.apply_quotes(chain, clock)
         chain = vol_surface_mod.resolve_surface(chain, spot, rate, div,
                                                 american=vol_surface_mod.is_american(ticker))
-        surface = vol_surface_mod.build(chain, spot, rate, div, event_date=event_date)
+        timing, usual_timing = _report_timing_for_surface(ticker, event_date, chain)
+        surface = vol_surface_mod.build(chain, spot, rate, div, event_date=event_date,
+                                        timing=timing, usual_timing=usual_timing)
         iv30 = (surface.get("iv30") or {}).get("iv_pct")
         iv_history_mod.record(ticker, iv30)
         iv_rank = iv_history_mod.rank_for(ticker, iv30, YF_PROVIDER)
