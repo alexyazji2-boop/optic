@@ -210,7 +210,7 @@ def test_the_arrows_their_box_and_the_switches():
     assert "tipEl.className = 'pc-tip'; tipEl.setAttribute('role', 'tooltip')" in pc
     assert "svg.offsetTop" not in pc, "an <svg> has no offsetTop; the box is placed from the two bounding boxes"
     assert "insider ${g.side === 'buy' ? 'purchase' : 'sale'}" in pc, "the keyboard's bar reads its trades aloud"
-    assert "if (e.pointerType === 'touch') return; hoverP = null;" in pc, "a tap opens the box and lifting the finger keeps it"
+    assert "if (e.pointerType !== 'mouse') return; hoverP = null;" in pc, "a tap opens the box and lifting the finger keeps it"
     # on by default, in Indicators and in the Insiders panel
     assert "['ins', 'Insider trades']" in CH and "events: true, ins: true," in CH
     assert "insiders: place(ins, 4)" in CH

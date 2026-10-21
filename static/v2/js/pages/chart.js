@@ -184,6 +184,18 @@ function cannot(k) {
 const ovRow = (k) => { const l = (OVERLAYS.find((x) => x[0] === k) || [])[1], no = cannot(k); return html`<label class="check ${no ? 'is-off' : ''}"><input type="checkbox" data-v2-ch-ov="${k}" ${V.overlays[k] && !no ? 'checked' : ''} ${no ? 'disabled' : ''} ${k === 'msb' ? html`aria-describedby="ch-msb-help"` : ST.HELP[k] ? html`aria-describedby="ch-help-${k}"` : ''}> <span>${l}</span></label>${no ? html`<p class="menu-help ch-cannot">${no}</p>` : ''}${ST.HELP[k] ? html`<p class="menu-help" id="ch-help-${k}">${ST.HELP[k]}</p>` : ''}${k === 'msb' ? html`<p class="menu-help" id="ch-msb-help">Marks where a close moved beyond the latest swing high (bullish) or swing low (bearish). A swing is a bar above or below the bars on each side. Its level is drawn back to where it formed, but it only became known once those later bars had closed: the line is dotted before then, with a tick where it became known, and only a close after that counts as a break.</p>
   <label class="ws-sel menu-help">Swing strength <select data-v2-ch-msbk aria-label="Market structure swing strength">${[3, 5, 10].map((n) => html`<option value="${n}" ${V.msbK === n ? 'selected' : ''}>${n} bars each side${n === 3 ? ', more breaks' : n === 10 ? ', fewer' : ''}</option>`)}</select></label>` : ''}`; };
 const countOf = (keys) => keys.filter((k) => V.overlays[k]).length;
+// what each is also called, for Find (Classic's indicator search): a reader types RSI, moving average or volume profile
+const ALSO = { ma: 'moving average sma simple', ema: 'exponential moving average', cloud921: 'ema cloud', cloud2150: 'ema cloud', bb: 'bollinger bands volatility', keltner: 'atr channel', donchian: 'breakout channel high low', sec: 'linear regression', vwap: 'volume weighted average price',
+  fib: 'fibonacci retracement', sr: 'support resistance levels', gex: 'gamma exposure call wall put wall flip', zones: 'supply demand', accum: 'accumulation', trends: 'trendlines', vbp: 'volume profile point of control', msb: 'market structure break swing', events: 'earnings reports', ins: 'insider buying selling form 4', sessions: 'session dividers intraday',
+  stages: 'stage analysis weinstein', matrend: 'moving average trend', volume: 'volume', rsi: 'relative strength index momentum', macd: 'moving average convergence divergence momentum', tso: 'trend strength oscillator', adx: 'directional movement di', stochastic: 'stoch oscillator', obv: 'on balance volume', mfi: 'money flow index', rs: 'relative strength line versus spy' };
+const paneRow = (k) => { const l = (PANES.find((x) => x[0] === k) || [])[1]; return html`<label class="check ${cannot(k) ? 'is-off' : ''}"><input type="checkbox" data-v2-ch-pane="${k}" ${V.panes[k] && !cannot(k) ? 'checked' : ''} ${cannot(k) ? 'disabled' : ''}> <span>${l}</span> <small class="t-muted">pane</small></label>`; };
+/** The overlays and panes whose name, key or other names hold every word of `q`. */
+export function findIndicators(q) {
+  const words = String(q || '').toLowerCase().split(/\s+/).filter(Boolean);
+  if (!words.length) return { overlays: [], panes: [] };
+  const hit = (k, l) => { const hay = `${k} ${l} ${ALSO[k] || ''}`.toLowerCase(); return words.every((w) => hay.includes(w)); };
+  return { overlays: OVERLAYS.filter(([k, l]) => hit(k, l)).map(([k]) => k), panes: PANES.filter(([k, l]) => hit(k, l)).map(([k]) => k) };
+}
 // what is drawing inside Layers, for the count on its button: a closed drawer must not hide what is on
 const layersOn = () => LAYER_MENUS.reduce((n, [, , ks]) => n + countOf(ks), 0) + PANES.filter(([k]) => k !== 'volume' && V.panes[k]).length;
 // price and volume and nothing else, the state Reset goes back to
@@ -209,7 +221,7 @@ const menu = (id, label, n, body, cls = '') => html`<details class="menu ${cls}"
 function toolbar() {
   const iv = INTERVALS.find((x) => x.key === V.interval), n = layersOn();
   return html`<div class="ctools" role="toolbar" aria-label="Chart settings">
-    ${menu('ind', 'Indicators', countOf(IND_KEYS), IND_KEYS.map(ovRow))}
+    ${menu('ind', 'Indicators', countOf(IND_KEYS), html`<label class="field field-sm ch-find"><span class="sr">Find an indicator, level or pane</span><input type="search" data-v2-ch-find placeholder="Find an indicator" autocomplete="off" spellcheck="false"></label><div data-ch-ind-list>${IND_KEYS.map(ovRow)}</div><div data-ch-found role="group" aria-label="Matches" hidden></div>`)}
     <button type="button" class="btn btn-sm ch-layers-btn" data-v2-ch-layers aria-expanded="${!!V.layers}" aria-controls="ch-layers" title="Levels, events, candle colours, panes and colours">Layers${n ? html` <span class="ch-count">${n}</span>` : ''}${icon('down')}</button>
     ${isPhone() ? html`<details class="menu ch-more" data-ch-menu="more"><summary class="btn btn-sm" aria-label="More chart settings">${icon('more')}</summary><div class="menu-body">
         <div class="seg seg-ic" role="group" aria-label="Style">${[['candles', 'Candles', 'candles'], ['line', 'Line', 'lineChart'], ['area', 'Area', 'area']].map(([k, l, ic]) => html`<button type="button" data-v2-ch-style="${k}" aria-pressed="${V.style === k}" aria-label="${l}" title="${l}">${icon(ic)}</button>`)}</div>
@@ -273,7 +285,7 @@ function paintChart() {
     ...kept, extended: D.intra && D.intra.extended, onChange: (c) => { D.can = c; syncDrawButtons(); },
     bars: D.bars, intraday: !!iv.intraday, msbK: V.msbK || 5, style: V.style, snap: V.snap, title: titleOf(),
     onView: (v) => { D.zoomed = v.zoomed; const z = $('[data-v2-ch-home]', mainEl); if (z) z.hidden = !v.zoomed; }, overlays: V.overlays, panes: V.panes, levels: levels(), events: events(),
-    drawings: D.drawings, tool: V.tool, window: windowBars(), label: `${D.sym}, ${iv.label} bars`, ...extras(), ...studies(),
+    drawings: D.drawings, tool: V.tool, window: windowBars(), label: `${D.sym}, ${iv.label} bars`, ...extras(), ...studies(), pageKeys: mainEl,
     height: plotHeight(host),
     onDrawings: (list) => { D.drawings = list; saveDrawings(D.sym, list); paintTools(); },
     askText: (dr, done) => { D.textFor = done; paintTools(); const i = $('[data-v2-ch-text] input', mainEl); if (i) i.focus(); },
@@ -318,6 +330,12 @@ function refit() {
 const LEGEND_NAMES = Object.fromEntries([...OVERLAYS, ['volume', 'Volume']]);
 // the legend's cross: the overlay (or the volume pane) off, as unticking it in Indicators does
 function removeOverlay(k) {
+  if (k !== 'volume' && k in V.panes) {
+    V.panes[k] = false; saveView(); syncToolbar(); paintChart();
+    $$(`[data-v2-ch-pane="${CSS.escape(k)}"]`, mainEl).forEach((x) => { x.checked = false; });
+    const f = $('.pc-svg', mainEl); if (f) f.focus({ preventScroll: true });
+    announce(`${(PANES.find((x) => x[0] === k) || [])[1] || k} taken off the chart.`); return;
+  }
   if (k === 'volume') V.panes.volume = false; else V.overlays[k] = false;
   saveView(); paintTools(); if (chart) chart.set({ overlays: V.overlays, panes: V.panes });
   if (k === 'sr') repaintWidget('levels'); if (k === 'ins') repaintWidget('insiders');
@@ -551,8 +569,8 @@ function wire(main) {
     if (el.matches('[data-v2-ch-iv]')) { V.interval = el.value; V.wantInterval = null; if (V.interval === 'weekly' && !RANGES.weekly[V.range]) V.range = '1Y'; saveView(); paintTools(); loadBars(); return; }
     if (el.matches('[data-v2-ch-rangesel]')) { const was = V.range; V.range = el.value; saveView(); paintTools(); if (V.range === 'All' || was === 'All') loadBars(); else paintChart(); return; }
     if (el.matches('[data-v2-ch-msbk]')) { V.msbK = Number(el.value) || 5; saveView(); paintChart(); return; }
-    if (el.matches('[data-v2-ch-ov]')) { V.overlays[el.dataset.v2ChOv] = el.checked; saveView(); ST.need(ticked()); paintStudies(); syncToolbar(); if (el.dataset.v2ChOv === 'sr') repaintWidget('levels'); if (el.dataset.v2ChOv === 'ins') repaintWidget('insiders'); return; }
-    if (el.matches('[data-v2-ch-pane]')) { V.panes[el.dataset.v2ChPane] = el.checked; saveView(); paintChart(); syncToolbar(); }
+    if (el.matches('[data-v2-ch-ov]')) { $$(`[data-v2-ch-ov="${CSS.escape(el.dataset.v2ChOv)}"]`, mainEl).forEach((x) => { if (x !== el) x.checked = el.checked; }); V.overlays[el.dataset.v2ChOv] = el.checked; saveView(); ST.need(ticked()); paintStudies(); syncToolbar(); if (el.dataset.v2ChOv === 'sr') repaintWidget('levels'); if (el.dataset.v2ChOv === 'ins') repaintWidget('insiders'); return; }
+    if (el.matches('[data-v2-ch-pane]')) { $$(`[data-v2-ch-pane="${CSS.escape(el.dataset.v2ChPane)}"]`, mainEl).forEach((x) => { if (x !== el) x.checked = el.checked; }); V.panes[el.dataset.v2ChPane] = el.checked; saveView(); paintChart(); syncToolbar(); }
   });
   main.addEventListener('click', (e) => {
     const t = (s) => e.target.closest(s);
@@ -598,6 +616,12 @@ function wire(main) {
     all[k].focus();
   });
   main.addEventListener('input', (e) => {
+    if (e.target.matches && e.target.matches('[data-v2-ch-find]')) {
+      const q = e.target.value.trim(), m = e.target.closest('.menu-body'), list = $('[data-ch-ind-list]', m), found = $('[data-ch-found]', m), r = findIndicators(q);
+      list.hidden = !!q; found.hidden = !q;
+      if (q) draw(found, r.overlays.length || r.panes.length ? html`${r.overlays.map(ovRow)}${r.panes.map(paneRow)}` : html`<p class="menu-help">Nothing here is called ${q}. Try a word such as average, RSI or volume.</p>`);
+      return;
+    }
     const p = e.target.closest && e.target.closest('[data-v2-cc-pick]'); if (!p) return;
     V.colours = Object.assign({}, V.colours, { [p.dataset.v2CcPick]: p.value }); applyColours(); C.liveRow(p, chartBg());
   });

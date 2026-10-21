@@ -665,6 +665,25 @@ table.chw-table { font-size: var(--t-sm); } table.chw-table th { padding: 6px 4p
 .pc .dr-dot { fill: var(--c-ink-3); stroke: var(--c-plane); stroke-width: 2; } .pc .dr-dot.up { fill: var(--c-pos); } .pc .dr-dot.dn { fill: var(--c-neg); }
 .pc .dr-plate { fill: var(--c-raised); stroke: var(--c-line); } .pc .dr-pt { fill: var(--c-ink-3); font: 500 var(--t-xs)/1 var(--f-label); }
 .pc .dr-pf { fill: var(--c-ink); font: 600 var(--t-md)/1 var(--f-label); font-variant-numeric: tabular-nums; } .pc .dr-pf.up { fill: var(--c-pos); } .pc .dr-pf.dn { fill: var(--c-neg); }
+/* B2b (docs/frontend-v2/CHART-GESTURES.md): a pan holds the paper and the price scale is a handle */
+.pc-svg[data-drag="pan"] { cursor: grabbing; } .pc-svg[data-drag="scale"] { cursor: ns-resize; }
+.pc .pc-ms { pointer-events: none; }
+.pc-scale { position: absolute; z-index: 2; cursor: ns-resize; touch-action: none; }
+.pc-ctl { position: absolute; z-index: 3; display: flex; gap: 4px; }
+.pc-cb { width: var(--ctl-sm); height: var(--ctl-sm); display: grid; place-items: center; padding: 0; border: 1px solid var(--c-line); border-radius: var(--r-ctl); background: var(--c-raised); color: var(--c-ink-2); cursor: pointer; }
+.pc-cb svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.7; }
+.pc-cb:hover { background: var(--c-sunk); color: var(--c-ink); }
+.pc-cb[aria-pressed="true"] { background: var(--c-active); color: var(--c-ink); }
+.pc-cb:focus-visible { outline: 2px solid var(--c-focus); outline-offset: 2px; }
+/* Measure shows on hover and focus, and stays while it is on; zoom out and in only on touch screens (Classic's
+   wsZoomButtons), where a thumb has no wheel. Coarse pointers get the full 44 px. */
+.pc-msb { opacity: 0; } .pc:hover .pc-msb, .pc-msb:focus-visible, .pc-msb[aria-pressed="true"] { opacity: 1; }
+.pc-z { display: none; }
+@media (hover: none), (pointer: coarse) { .pc-msb { opacity: 1; } .pc-z { display: grid; } .pc-cb { width: var(--tap); height: var(--tap); } }
+.pc-px { position: absolute; z-index: 3; width: 28px; height: 28px; display: grid; place-items: center; padding: 0; border: 0; border-radius: var(--r-sm); background: none; color: var(--c-ink-3); cursor: pointer; }
+.pc-px svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.8; }
+.pc-px:hover { background: var(--c-sunk); color: var(--c-ink); } .pc-px:focus-visible { outline: 2px solid var(--c-focus); outline-offset: 1px; }
+@media (pointer: coarse) { .pc-px { width: var(--tap); height: var(--tap); } }
 .pc .dr-risk { fill: color-mix(in srgb, var(--c-neg) 16%, transparent); stroke: var(--c-neg); stroke-width: 1; } .pc .dr-reward { fill: color-mix(in srgb, var(--c-pos) 16%, transparent); stroke: var(--c-pos); stroke-width: 1; }
 .pc .dr-tb { fill: var(--c-ink); font: 600 var(--t-xs)/1 var(--f-label); paint-order: stroke; stroke: var(--c-plane); stroke-width: 3px; }
 

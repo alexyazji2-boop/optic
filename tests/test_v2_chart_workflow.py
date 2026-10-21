@@ -67,8 +67,8 @@ def test_the_page_keeps_the_bar_size_and_says_what_cannot_be_drawn():
     assert "e.key === DRAW_KEY" in src                              # another tab's drawings
     assert "chart.keep()" in src and "D.intra" in src
     pc = (JS / "ui/pricechart.js").read_text()
-    assert "svg.style.touchAction = S.tool !== 'select' || sel >= 0 ? 'none' : 'pan-y'" in pc   # the page scrolls over the chart
-    assert "if (e.pointerType === 'touch') return;" in pc           # a tap's reading stays when the finger lifts
+    assert "svg.style.touchAction = S.tool !== 'select' || sel >= 0 || mOn ? 'none' : 'pan-y'" in pc   # the page scrolls over the chart (B2b: and Measure on takes it)
+    assert "svg.addEventListener('pointerleave', (e) => { if (e.pointerType !== 'mouse') return;" in pc           # a tap's reading stays when the finger lifts
     assert "touchy ? 20 : 9" in pc and "ext-band" in pc
     assert "lineChart:" in (JS / "ui/icons.js").read_text()
 
@@ -78,11 +78,13 @@ def test_a_mouse_with_no_button_down_never_pans():
     panning with the cursor and no button held (owner, 2026-10-20). Driven in headless Chrome by drag_check.py:
     before the fix both cases panned, after it neither does, and a held drag still pans."""
     src = (V2 / "js/ui/pricechart.js").read_text()
-    down = src[src.index("svg.addEventListener('pointerdown'"):src.index("svg.addEventListener('pointermove'")]
-    move = src[src.index("svg.addEventListener('pointermove'"):src.index("svg.addEventListener('pointerup'")]
+    # B2b (2026-10-21) named the handlers: down, move and up, wired once below them
+    down = src[src.index("  function down(e) {"):src.index("  function place(p) {")]
+    move = src[src.index("  function move(e) {"):src.index("  function up(e) {")]
     assert "if (e.pointerType === 'mouse' && e.button !== 0) return;" in down
     assert "if (e.pointerType === 'mouse' && e.buttons === 0 && (drag || pointers.has(e.pointerId))) up(e);" in move
-    assert "svg.addEventListener('lostpointercapture', up);" in src
-    assert src.index("const up = (e) =>") < src.index("svg.addEventListener('pointermove'"), "up is defined before the handler calls it"
+    # a lost capture is a release only with no button held (headless Chrome drops capture mid-drag on the bare plot)
+    assert "svg.addEventListener('lostpointercapture', (e) => { if (pointers.has(e.pointerId) && e.pointerType === 'mouse' && e.buttons === 0) up(e); });" in src
+    assert src.index("svg.addEventListener('pointermove', move);") > src.index("  function up(e) {"), "wired after the handlers"
     nav = src[src.index("nav.addEventListener('pointerdown'"):src.index("nav.addEventListener('pointerup', navUp)")]
     assert "e.button !== 0" in nav and "e.buttons === 0" in nav and "lostpointercapture" in src.split("nav.addEventListener('pointerup', navUp)")[1].split("\n")[0]

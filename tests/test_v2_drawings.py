@@ -75,7 +75,7 @@ def test_snap_move_and_redo_in_the_chart():
     assert "const at = S.snap ? snap(bars[i], price, layout.ps.Y) : { price, field: null };" in PC
     assert "drag = { mode: 'handle', k: sel, h, before: S.drawings, moved: false };" in PC, "a handle moves one point"
     assert "moved(drag.pts, di, dp, AX)" in PC, "the body moves it all, through the time axis"
-    assert "if (drag && drag.mode && drag.moved) { undo.push(drag.before);" in PC, "a move is one change to undo"
+    assert "if ((drag.mode === 'handle' || drag.mode === 'body') && drag.moved) { undo.push(drag.before);" in PC, "a move is one change to undo"
     assert "function redoOne()" in PC and "data-v2-ch-redo" in CH and "k.toLowerCase() === 'y'" in PC
     for k in ("channel", "fibext", "pitchfork", "arrow", "ruler", "rr", "position"):
         assert f"dr.kind === '{k}'" in PC, k
@@ -91,7 +91,7 @@ def test_the_classic_layout():
     assert "['ruler', 'Measure']" in CH and "Regular hours" in tb and "Extended hours" in tb
     assert "title=\"Back to price and volume. Your drawings are kept.\">Reset</button>" in tb
     assert 'id="ch-layers" role="group" aria-label="Layers"' in tb and "menu('panes', 'Panes'" in tb
-    assert "onView: (v) => { D.zoomed = v.zoomed;" in CH and "home() { from = home0.from; to = home0.to; redraw(); }" in PC, "Reset zoom shows once zoomed"
+    assert "onView: (v) => { D.zoomed = v.zoomed;" in CH and "home() { from = home0.from; to = home0.to; yZoom = 1; redraw(); }" in PC, "Reset zoom shows once zoomed (and puts a stretched price scale back)"
     assert "${miloButton('Explain'" in CH and "<div class=\"ch-pacts\"></div><div class=\"pc-host\"></div>" in CH, "Explain and full screen at the plot's corner"
     assert '<b class="pc-sym">' in PC, "the symbol and the bar size head the readout"
     assert "lastp-tag" in PC and "if (S.intraday && lb)" in PC, "the last price tagged, green or red with the day"

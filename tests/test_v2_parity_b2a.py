@@ -52,16 +52,17 @@ def test_the_gesture_precedence_holds_in_the_source():
     assert ".chart .ms { pointer-events: none; }" in CSS and ".chart .ev-rule { pointer-events: none; }" in CSS
     # a plain mouse drag never measures: Shift or the Measure button
     assert "if (e.button !== 0 || !(e.shiftKey || mOn))" in CHART
-    # iOS Safari's long press is the system's: hold-to-measure is skipped there, before the timer starts
-    hold = CHART.index("hold = setTimeout(")
-    assert CHART.index("if (IOS_TOUCH) return;") < hold
-    assert "typeof window.GestureEvent !== 'undefined' && (navigator.maxTouchPoints || 0) > 0" in CHART
+    # iOS Safari's long press selects text near the finger: while a finger is on a chart nothing is selectable, so
+    # hold-to-measure works there too (B2b, checked in Mobile Safari on the iOS simulator)
+    assert "IOS_TOUCH" not in CHART and "document.documentElement.classList.add('pc-touching');" in CHART
+    assert "if (!touches.size) document.documentElement.classList.remove('pc-touching');" in CHART
+    assert "html.pc-touching, html.pc-touching * { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }" in CSS
     # the page's scroll taking a touch clears the reading it started
     assert "if (e.pointerType === 'touch' && !was) hide();" in CHART
     # keys: M, the arrows and Escape, never Tab, and never while a field has focus (the chart is the focused element)
     assert "e.key === 'Tab'" not in CHART
     doc = (V2.parent.parent / "docs/frontend-v2/CHART-GESTURES.md").read_text()
-    assert "except in iOS and iPadOS Safari" in doc and "Taking Tab" in doc
+    assert "html.pc-touching" in doc and "Taking Tab" in doc
 
 
 def test_series_in_points_measure_in_points():

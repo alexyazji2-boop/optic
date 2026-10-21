@@ -9,9 +9,6 @@ import { icon } from './icons.js';
 import { toString as markup } from '../core/dom.js';
 
 let seq = 0;
-// iOS and iPadOS WebKit: a held finger opens the system's text selection and loupe, whatever the page does, and
-// moved the page under the finger (iOS simulator, 2026-10-21); hold-to-measure is left to other browsers there
-const IOS_TOUCH = typeof window !== 'undefined' && typeof window.GestureEvent !== 'undefined' && (navigator.maxTouchPoints || 0) > 0;
 
 /**
  * series: [{d: 'YYYY-MM-DD', c: number}]
@@ -192,10 +189,12 @@ export function lineChart(series, opts = {}) {
     el.addEventListener('pointerdown', (e) => {
       if (!mode || e.target.closest('.ev-mark')) return;
       if (e.pointerType === 'touch') {
+        // nothing on the page is selectable while a finger is on a chart: iOS's long press would select text near it
+        // and show its loupe, which took the hold from the chart (iOS simulator, 2026-10-21)
+        document.documentElement.classList.add('pc-touching');
         touches.set(e.pointerId, e.clientX);
         if (touches.size === 2) { clearTimeout(hold); const [x1, x2] = [...touches.values()]; drag = 'two'; anchor = idxAt(x1); end = idxAt(x2); drawMs(anchor, end); return; }
         if (mOn) { drag = 'one'; anchor = end = idxAt(e.clientX); drawMs(anchor, end); return; }
-        if (IOS_TOUCH) return;   // Safari's long press is the system's text selection: there, the Measure button or two fingers
         hx = e.clientX; hy = e.clientY; clearTimeout(hold);
         hold = setTimeout(() => { hold = null; drag = 'one'; anchor = end = idxAt(hx); drawMs(anchor, end); }, 400);
         return;
@@ -215,6 +214,7 @@ export function lineChart(series, opts = {}) {
     });
     const lift = (e) => {
       touches.delete(e.pointerId); clearTimeout(hold); hold = null;
+      if (!touches.size) document.documentElement.classList.remove('pc-touching');
       if (drag) { const r = anchor !== null && end !== null ? reading(anchor, end) : null; drag = null; announce(r); }
     };
     el.addEventListener('pointerup', lift);

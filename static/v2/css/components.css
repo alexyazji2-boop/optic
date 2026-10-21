@@ -874,7 +874,10 @@ html { scroll-padding-top: calc(var(--topbar-h, 72px) + var(--dstick-h, 0px) + 8
 /* ---------- measuring on the shared charts (docs/frontend-v2/CHART-GESTURES.md) ---------- */
 .chart-wrap.can-measure svg.chart { touch-action: pan-y; }                 /* a vertical swipe still scrolls the page */
 /* a held finger measures: iOS must not select the axis text or open its callout and loupe instead */
-.chart-wrap.can-measure { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; padding-bottom: 18px; }   /* room for the Measure button below the price labels */
+.chart-wrap.can-measure { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; padding-bottom: 18px; }
+/* while a finger is on any chart (html.pc-touching, set by ui/chart.js and ui/pricechart.js) nothing on the page is
+   selectable: iOS's long press selects the nearest text and shows its loupe, whatever the chart itself allows */
+html.pc-touching, html.pc-touching * { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }   /* room for the Measure button below the price labels */
 .chart-wrap.is-measuring svg.chart { touch-action: none; cursor: crosshair; }
 .chart .ms { pointer-events: none; }
 .chart .ms-band { fill: var(--c-ink-2); opacity: .14; }

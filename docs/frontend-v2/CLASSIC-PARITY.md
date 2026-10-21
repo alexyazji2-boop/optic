@@ -58,28 +58,51 @@ Not tested on a physical phone.
 
 | Row | Task | Where | Desktop | Phone | Keeps | States | Deps | Evidence | Status |
 |---|---|---|---|---|---|---|---|---|---|
-| B2a.1 | Measure between two dates on any shared chart | `ui/chart.js` `measured()`, the Measure button, `[data-ms-say]` | Shift-drag, or the Measure button then a drag; M then the arrows from the keys; Escape clears; a plain drag and the wheel do what they did | The Measure button (always shown on touch screens), then a drag; hold then slide outside iOS Safari | Nothing: a measurement is a reading, not saved (Classic kept none) | A one-bar measurement says "Drag to the other date"; the result is announced once it ends | none | b2a desk: plain drag, Shift-drag, button on and off, wheel, keys, Tab, no click ring; phones: hold, quick slide, the button's place; RSI reads in points; iOS: the button and a drag | differs: in iOS and iPadOS Safari a long press is the system's text selection, so hold-to-measure is off there and the Measure button or two fingers measure |
+| B2a.1 | Measure between two dates on any shared chart | `ui/chart.js` `measured()`, the Measure button, `[data-ms-say]` | Shift-drag, or the Measure button then a drag; M then the arrows from the keys; Escape clears; a plain drag and the wheel do what they did | The Measure button (always shown on touch screens), then a drag; hold then slide outside iOS Safari | Nothing: a measurement is a reading, not saved (Classic kept none) | A one-bar measurement says "Drag to the other date"; the result is announced once it ends | none | b2a desk: plain drag, Shift-drag, button on and off, wheel, keys, Tab, no click ring; phones: hold, quick slide, the button's place; RSI reads in points; iOS: the button and a drag | done. Shipped with an iOS difference, which B2b-1 removed: while a finger is on a chart nothing on the page is selectable (`html.pc-touching`), so hold-to-measure works in iOS Safari too (simulator: "+68.50 (+27.58%) Jan 22, 2026 to Aug 31, 2026", no selection or loupe) |
 | B2a.2 | Two fingers measure on touch | Same | n/a | Two fingers on the chart measure between them; pinch-zoom is off over a chart only | none | Lifting announces it | none | b2a phones at 360, 390 and 430; iOS Safari two fingers | done |
 | B2a.3 | The readout sits above the finger and on the screen | `place()` in `ui/chart.js` | The tip centres on the point and stays inside the chart | Above the finger; one wider than the chart stacks its dates on a second line | none | n/a | none | b2a phones: tip above the finger, measurement inside the chart and the screen at 360; screenshots in `out-b2a/` | done |
 | B2a.4 | An insider marker opens Insiders | Moved to B2b: insider markers live on the price charts (`ui/pricechart.js`) | | | | | | | moved to B2b.11 |
 | B2a.5 | A freshness label from the feed's own times | Moved to B2b: it belongs with the Chart tab's live ticks | | | | | | | moved to B2b.7 |
 
 ## B2b. Chart tab (`ui/pricechart.js`) and other price charts
-| Row | Task | Status |
-|---|---|---|
-| B2b.1 | Wheel, trackpad and pinch as in Classic (200 ms gesture lock; page scroll kept) | open |
-| B2b.2 | Safari trackpad pinch | open |
-| B2b.3 | Touch: direction lock, hold to read, two-finger pan and pinch about the midpoint | open |
-| B2b.4 | Measure by Shift-drag, by hold, or with the Measure button | open |
-| B2b.5 | Stretch the price scale; double-click or Fit to reset | open |
-| B2b.6 | − and + on touch screens | open |
-| B2b.7 | Live ticks every 15 s, the price in the tab title, never moving the view; a freshness label from the feed's own times (was B2a.5) | open |
-| B2b.8 | Draw a two-point shape in one drag; Escape cancels a drag | open |
-| B2b.9 | Undo, redo and Delete page-wide, never in fields | open |
-| B2b.10 | Indicator search; × on each pane; a grabbing cursor | open |
-| B2b.11 | A price chart on Options (pan, zoom, measure, insider markers); an insider marker opens Insiders (was B2a.4) | open |
-| B2b.12 | Measure on Investing's weekly chart | open |
-| B2b.13 | Hover and focus on the sector rotation chart | open |
+B2b ships in two parts.
+- **Part 1:** the price chart's own interactions, on the Chart tab, Investing's weekly chart and the Instrument page.
+- **Part 2:** live ticks and the freshness label, a price chart on Options, and the rotation chart.
+
+The precedence is in `docs/frontend-v2/CHART-GESTURES.md`.
+
+Part 1 evidence:
+- `b2b_check.py`: 55 of 55 at 1440, 430, 390 and 360 in headless Chrome, with touch emulated.
+- Mobile Safari on the iPhone 17 simulator (iOS 27):
+  - a vertical swipe on the chart scrolls the page and leaves no reading;
+  - a sideways slide pans (Jul to Oct became May to Aug) and the page holds still;
+  - hold then slide reads the bars with no text selection or loupe;
+  - a two-finger pinch zooms (May to Aug became Jul 2 to 27) and the page never zooms;
+  - zoom out and in step the view;
+  - Measure then a drag measures ("+50.04 (+18.14%)", dates on two lines, clear of the legend);
+  - a drag on the price scale stretches it (a 52-point range became 32).
+- `tests/test_v2_parity_b2b.py`.
+
+Not tested:
+- Hold then a second finger (the simulator puts both fingers down at once), emulated only.
+- Safari's trackpad gesture events (macOS Safari is not available here; the code path stands aside for touch).
+- A physical phone.
+
+| Row | Task | Where | Desktop | Phone | Keeps | States | Deps | Evidence | Status |
+|---|---|---|---|---|---|---|---|---|---|
+| B2b.1 | Wheel, trackpad and pinch as in Classic | `onDocWheel` and the chart's wheel handle in `ui/pricechart.js` | A notch zooms 1.15, a trackpad stroke by its distance, ctrl + wheel at the pinch rate, sideways or Shift pans; one owner a gesture for 200 ms; zoomed fully out, a wheel down is the page's | n/a | The view survives a rebuild on the same bars, as before | n/a | none | b2b desk: notch 449 to 390, stroke 390 to 349, pinch 349 to 316, pans; Investing: a page scroll started above the chart scrolls over it, one started on it zooms | done |
+| B2b.2 | Safari trackpad pinch | `gesturestart` / `gesturechange` / `gestureend` on the chart | Zooms from the pinch's start, about the pointer; the page never zooms | Stands aside for a touch pinch | none | n/a | none | Source test only: Chrome cannot send gesture events and macOS Safari is not available | untested |
+| B2b.3 | Touch: direction lock, hold to read, pinch and pan with two fingers | `touchDown` / `touchMove` in `ui/pricechart.js`; `html.pc-touching` | n/a | Tap reads; sideways pans, up and down scrolls; held 300 ms reads; two fingers zoom about their midpoint and pan; the finger left pans | none | A cancelled touch drops its reading | none | b2b phones at 360, 390, 430; iOS Safari swipe, pan, hold, pinch | done |
+| B2b.4 | Measure by Shift-drag, by hold and a second finger, by the Measure button, or by M | `measuredBars`, `msSvg`, `fitPlate`, the Measure button | Shift-drag, or Measure then a drag (no pan); M then the arrows; announced at the end; Escape clears | Measure then a drag; hold then a second finger | none (a reading) | One bar: a line only | none | b2b desk and phones (plate holds its text, clear of the legend); iOS Measure and drag | done |
+| B2b.5 | Stretch the price scale; double-click, Fit or Reset zoom resets | `.pc-scale` strip, `yZoom` | Drag up stretches, down squeezes; Up and Down keys; double-click fits | A drag on the axis strip (`touch-action: none`) | Kept through a rebuild (`keep()`) | n/a | none | b2b desk (range to under 70%, double-click and Fit restore); iOS drag (52 to 32 points) | done |
+| B2b.6 | Zoom out and in on touch screens | `.pc-ctl` buttons, bottom left of the price | Hidden (wheel and keys) | 44 px, about the latest bar; after the Volume label where the band is short | none | n/a | none | b2b phones; iOS (−, −, + stepped Jul 2, Jun 22, Jun 3, Jun 22) | done |
+| B2b.7 | Live ticks every 15 s, the price in the tab title, never moving the view; a freshness label from the feed's own times (was B2a.5) | Part 2 | | | | | | | open |
+| B2b.8 | Draw a two-point shape in one drag; Escape mid-drag puts it back | `place()`, `cancelDrag()` | One drag places both points (or two presses); Escape mid-drag restores the drawing, the view or the scale | Same with a finger (the chart takes the touch while a tool is chosen) | Drawings in `optic.chart.drawings.v2`, Classic's format, unchanged | n/a | none | b2b desk: a trend line in one drag, Escape restores the points | done |
+| B2b.9 | Undo, redo and Delete page-wide, never in fields | `pageKey`, `keyIsFree` (the Chart tab passes `pageKeys`) | Cmd or Ctrl + Z, Shift or Y to redo, Delete, from the page or a toolbar button | n/a | Undo history survives a rebuild, as before | n/a | none | b2b desk: undo and redo from a button, nothing from the Find field, Delete only outside fields | done |
+| B2b.10 | Indicator search; × on each pane; a grabbing cursor | Find in Indicators (`findIndicators`), `.pc-px`, `data-drag` | Find by name or what it is also called (RSI, volume profile), across overlays and panes; × takes a pane off and unticks it everywhere; grabbing while panning | Same Find; × at 44 px | The overlay and pane choices in `optic.v2.chart.v1`, as before | "Nothing here is called ..." | none | b2b desk | done |
+| B2b.11 | A price chart on Options (pan, zoom, measure, insider markers); an insider marker opens Insiders (was B2a.4) | Part 2 | | | | | | | open |
+| B2b.12 | Measure on Investing's weekly chart | The same chart (`pages/investing.js`) | Shift-drag, Measure, keys | As on the Chart tab | none | n/a | none | b2b Investing: "+82.83 (+53.61%) Week of Jan 30, 2023 to Week of Nov 25, 2024, 95 bars" | done |
+| B2b.13 | Hover and focus on the sector rotation chart | Part 2 | | | | | | | open |
 
 ## B3. Long-page navigation
 | Row | Task | Status |

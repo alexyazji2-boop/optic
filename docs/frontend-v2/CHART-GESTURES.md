@@ -13,7 +13,7 @@ These charts don't pan or zoom: Overview's year chart, RSI and MACD on Options, 
 | Measure button (corner of the chart; shown on hover and focus, always shown on touch screens) | Turns measuring on for this chart: the next drag measures without Shift. Pressing it again turns it off | n/a |
 | Touch, vertical swipe | Scrolls the page (`touch-action: pan-y`); a reading the touch started goes when the page takes it | Being held by the chart |
 | Touch, tap or horizontal slide | Readout of the bar under the finger; the tip sits above the finger and inside the chart, its dates on a second line when it is wider than the chart | n/a |
-| Touch, hold about 400 ms without moving, then slide | Measure from where the finger held, except in iOS and iPadOS Safari, where a long press belongs to the system's text selection (it took the gesture and moved the page in the simulator); there, the Measure button or two fingers | Starting a measure from a scroll |
+| Touch, hold about 400 ms without moving, then slide | Measure from where the finger held. While a finger is on any chart nothing on the page is selectable (`html.pc-touching`), so iOS's long press cannot select nearby text or show its loupe; checked in Mobile Safari on the iOS simulator | Starting a measure from a scroll |
 | Touch, two fingers | Measure between the two fingers | Zooming the page (pinch is off over a chart, as in Classic; zoom works everywhere else) |
 | Touch, with the Measure button on | A drag measures (`touch-action: none` only while it is on) | n/a |
 | Keyboard, chart focused | Left and Right step one bar (Shift for 20), Home and End jump; M toggles measuring, which anchors at the current bar, then the arrows move the other end; Escape clears; Tab leaves as usual; the gold focus ring shows for the keyboard, never after a mouse press | Taking Tab, or any key while a field has focus |
@@ -33,10 +33,13 @@ These are zoomable: the Chart tab, Investing's weekly chart, and the price chart
 | Pinch (ctrl + wheel, or Safari's gesture events) | Zooms about the pointer at the pinch's own rate | Zooming the page |
 | Mouse drag | Pans, after a few pixels of slack | n/a |
 | Shift + drag, or the Measure tool | Measures | n/a |
-| Drag on the price scale | Stretches the price axis; double-click or Fit resets it | n/a |
-| Touch, one finger | Direction lock: sideways pans, up and down scrolls the page; hold about 300 ms to read bars | n/a |
-| Touch, two fingers | Pinch zooms about the midpoint and pans; holding one finger then adding a second measures | n/a |
-| Touch screens | − and + buttons on the chart | Gestures as the only route |
-| Keyboard | As now (arrows, ± zoom, Home and End), plus page-wide undo, redo and Delete for drawings, except while a field or a menu has focus | Overriding a field's own undo |
+| Drag on the price scale (a strip over the axis gutter, `touch-action: none`) | Up stretches the prices, down squeezes them; double-click, Fit or Reset zoom puts them back | n/a |
+| Touch, one finger | A tap reads the bar. Direction lock over the first 8 px: sideways pans, up and down scrolls the page and clears the reading; hold about 300 ms, then the finger reads the bars and the page holds still. With every bar shown, sideways reads | n/a |
+| Touch, two fingers | Pinch zooms about the midpoint, and moving both pans; holding one finger, then adding a second, measures; the finger left after a pinch pans | Zooming the page |
+| Measure button (bottom left of the price; on hover and focus, always on touch screens) | Turns measuring on: the next drag measures instead of panning | n/a |
+| Touch screens | Zoom out and zoom in buttons beside it, 44 px, about the latest bar | Gestures as the only route |
+| Keyboard, chart focused | Left and Right read the bars (Shift pans), Up and Down stretch the price scale, + and − zoom, Home and End jump, M measures from the current bar (the arrows move its other end), Escape cancels a drag, then a measurement, then a tool | n/a |
+| Keyboard, page-wide (the Chart tab) | Cmd or Ctrl + Z undoes a drawing change, with Shift or Y redoes, Delete removes the selected drawing, from the page or a toolbar button | Acting while a field, an open menu, a dialog or another widget has focus |
+| Drawing tools | A press places a point; a drag from it places the next where it lifts, so a two-point shape takes one drag (or two presses); Escape mid-drag puts a moved drawing back | n/a |
 
 Live ticks never move the view the reader set, and wait while a drag is in progress.

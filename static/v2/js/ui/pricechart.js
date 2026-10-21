@@ -3,15 +3,19 @@
 // markers, what an open side widget asks for (`marks`, `lines`) and the reader's
 // drawings), volume, and optional RSI and MACD panes.
 //
-// Interaction: wheel or pinch to zoom, drag to pan, a crosshair that drives an
-// OHLC readout, and the keyboard (arrows move the crosshair, Shift+arrows pan,
-// + and - zoom, Home and End jump, Delete removes the selected drawing).
+// Interaction, under the precedence in docs/frontend-v2/CHART-GESTURES.md: the
+// wheel, a trackpad and a pinch zoom and pan (one owner a gesture, the page or the
+// chart), a drag pans, Shift-drag or the Measure button measures, the price scale
+// stretches, a finger pans sideways and scrolls the page up and down, two pinch,
+// and the keyboard (left and right move the crosshair, Shift pans, up and down
+// stretch the price scale, + and - zoom, Home and End jump, M measures, Delete
+// removes the selected drawing; undo, redo and Delete page-wide where asked).
 // Asked for by the Chart page (`names`, `navigator`): the classic chart's legend
 // over the plot's corner and its navigator, the whole history small under the
 // plot for moving along it.
 // Drawings are stored as {kind, points:[{t: epoch ms, p: price}]}, the classic
 // app's format, so they line up whatever the bar size.
-import { num, esc, compact } from '../core/format.js';
+import { num, esc, compact, signed } from '../core/format.js';
 import { makeAxis } from './timeaxis.js';
 import { drawOn } from './drawon.js';
 import { tsoSeries, maTrendSeries, volumeByPrice, sessionStarts, nyDate, TSO_LEVEL } from './studies.js';
@@ -53,6 +57,66 @@ const PANE_NAMES = { adx: 'ADX and DI', stochastic: 'Stochastic 14', obv: 'On-ba
 const BOUNDED = { stochastic: [0, 100], mfi: [0, 100], adx: [0, 50] };
 const PANE_LINE = { adx: ['ip0', 'ipu', 'ipd'] };
 let clipSeq = 0;   // ids for each chart's price-pane clip   // ids for each chart's legend body
+
+/* ---------- wheel, trackpad and pinch (docs/frontend-v2/CHART-GESTURES.md; Classic's app.js:27896-28177) ----------
+ * The zoom follows how far the input moved, e^(k * pixels): a 100 px mouse notch is the 1.15 it always was, and a
+ * trackpad's stream of small events no longer jumps to the limit. A pinch (ctrl + wheel) zooms at Chrome's own
+ * rate. A sideways stroke, or Shift + wheel, pans. And one gesture has one owner, the page or a chart, until it
+ * pauses for LATCH_MS: a page scroll stays a page scroll when a chart passes under the pointer, a zoom stays a zoom
+ * when the pointer drifts off, and a gesture that starts on a chart with nowhere to go (every bar shown and
+ * scrolling out, or the closest zoom and scrolling in) is the page's. */
+export const ZOOM_PER_PX = Math.log(1.15) / 100, PINCH_PER_PX = 0.01, LATCH_MS = 200, MIN_BARS = 10;
+/** A wheel delta in pixels: Firefox's lines are 33 px, so one notch zooms alike in every browser. */
+export const wheelPx = (d, mode) => (mode === 1 ? d * 33 : mode === 2 ? d * 800 : d);
+/** The window `want` bars wide that keeps the bar at `abs` (fractional, over the whole series) `fx` of the way
+ *  across the plot, inside the N bars. `to` is inclusive. */
+export function zoomedAt(abs, fx, want, N) {
+  const w = Math.max(Math.min(MIN_BARS, N), Math.min(N, Math.round(want)));
+  const from = Math.max(0, Math.min(N - w, Math.round(abs - fx * (w - 1))));
+  return { from, to: from + w - 1 };
+}
+/** Whether a wheel event has somewhere to go on a window of `span` bars out of N. */
+export function wheelRoom(e, span, N) {
+  if (e.ctrlKey || e.shiftKey) return true;
+  const dx = wheelPx(e.deltaX, e.deltaMode), dy = wheelPx(e.deltaY, e.deltaMode);
+  if (Math.abs(dx) > Math.abs(dy)) return true;
+  if (dy > 0) return span < N;
+  if (dy < 0) return span > Math.min(MIN_BARS, N);
+  return false;
+}
+/** Which way a finger has gone once it has gone `slop` px: 'x', 'y', or null. A tie is the page's. */
+export const touchLock = (dx, dy, slop = 8) => (Math.abs(dx) < slop && Math.abs(dy) < slop ? null : Math.abs(dx) > Math.abs(dy) ? 'x' : 'y');
+const CHARTS = new Set();   // the price charts on the page, each {host, over(e), room(e), wheel(e)}
+let latch = null;           // {owner: 'page' or a chart, at}
+function onDocWheel(e) {
+  CHARTS.forEach((c) => { if (!c.host.isConnected) CHARTS.delete(c); });
+  if (!CHARTS.size) { document.removeEventListener('wheel', onDocWheel, { capture: true }); latch = null; return; }
+  const now = e.timeStamp > 0 ? e.timeStamp : performance.now();
+  const held = latch && now - latch.at >= 0 && now - latch.at < LATCH_MS ? latch : null;
+  if (held && held.owner === 'page' && !e.ctrlKey) { held.at = now; return; }
+  let c = [...CHARTS].find((x) => x.over(e)) || null;
+  if (held && held.owner !== 'page' && CHARTS.has(held.owner) && c !== held.owner) c = held.owner;   // its gesture, carried on off it
+  else if (!c || (!held && !c.room(e))) { latch = { owner: 'page', at: now }; return; }
+  latch = { owner: c, at: now };
+  e.preventDefault();   // the page must not scroll, or zoom, while the chart does
+  c.wheel(e);
+}
+function registerChart(c) { if (!CHARTS.size) document.addEventListener('wheel', onDocWheel, { capture: true, passive: false }); CHARTS.add(c); }
+function unregisterChart(c) { CHARTS.delete(c); if (!CHARTS.size) { document.removeEventListener('wheel', onDocWheel, { capture: true }); latch = null; } }
+/** What a measurement between bars a and b of `bars` says, earlier first: the change between their closes, its
+ *  percent, the dates (`fmt` turns a bar's time into words) and the bars between. */
+export function measuredBars(bars, a, b, fmt) {
+  const i = Math.min(a, b), j = Math.max(a, b), ch = bars[j].c - bars[i].c, pct = bars[i].c > 0 ? (ch / bars[i].c) * 100 : null;
+  return { i, j, head: `${signed(ch, 2, '')}${pct !== null ? ` (${signed(pct)})` : ''}`, span: `${fmt(bars[i].t)} to ${fmt(bars[j].t)}`, bars: j - i, tone: ch > 0 ? 'up' : ch < 0 ? 'dn' : '' };
+}
+/** A page-wide key belongs to the chart only while nothing else is handling keys: the page itself, or a button or
+ *  link inside `scope`. Never a field, an open menu or dialog, or another widget (amendment 7, 2026-10-21). */
+export function keyIsFree(a, scope) {
+  if (!a || a === document.body || a === document.documentElement) return true;
+  if (!scope || !scope.contains(a)) return false;
+  if (a.closest('details[open] .menu-body, [role="dialog"], [role="menu"], [role="listbox"], .drawer')) return false;
+  return a.matches('button, a[href], summary') && !a.isContentEditable;
+}
 
 /**
  * The navigator's window after a drag: `w` ({from, to}, bar indexes) moved by `d` bars in `mode` ('move' the
@@ -135,16 +199,26 @@ export function createPriceChart(host, opts) {
   // the undo history survives a rebuild on the same bars, as the view does
   const undo = (S.history && S.history.undo) || [], redo = (S.history && S.history.redo) || [];
   let touchy = false;   // the last pointer was a finger: wider targets, a larger move before a drag
+  // the price scale's stretch (1 is the range the bars ask for), a measurement {a, b} in bar indexes ({key} when the
+  // keyboard made it), Measure on, and the touch gesture under way
+  let yZoom = S.yZoom || 1, ms = null, mOn = false, tg = null;
   const changed = () => { if (S.onChange) S.onChange({ canUndo: undo.length > 0, canRedo: redo.length > 0, selected: sel >= 0 }); };
   // A finger scrolls the page up and down over the chart and pans it sideways (pan-y); while a tool is placing
   // points or a drawing is selected, the chart takes the whole gesture.
-  const syncTouch = () => { svg.style.touchAction = S.tool !== 'select' || sel >= 0 ? 'none' : 'pan-y'; };
+  const syncTouch = () => { svg.style.touchAction = S.tool !== 'select' || sel >= 0 || mOn ? 'none' : 'pan-y'; };
   const CLIP = `pc-clip-${++clipSeq}`;
 
   host.classList.add('pc');
   // the legend sits over the plot's top-left corner (absolute, at its place in the flow); the navigator under it
-  host.innerHTML = `<div class="pc-read" aria-live="off"></div>${S.names ? '<div class="pc-leg" role="group" aria-label="Legend"></div>' : ''}<svg class="pc-svg" tabindex="0" role="application" aria-roledescription="price chart"></svg>${S.navigator ? '<svg class="pc-nav" tabindex="0" role="slider" aria-label="Bars shown, from the whole history" aria-valuemin="1"></svg>' : ''}<div class="pc-sr sr" aria-live="polite"></div>`;
+  host.innerHTML = `<div class="pc-read" aria-live="off"></div>${S.names ? '<div class="pc-leg" role="group" aria-label="Legend"></div>' : ''}<svg class="pc-svg" tabindex="0" role="application" aria-roledescription="price chart"></svg>${S.navigator ? '<svg class="pc-nav" tabindex="0" role="slider" aria-label="Bars shown, from the whole history" aria-valuemin="1"></svg>' : ''}<div class="pc-sr sr" aria-live="polite"></div>`
+    // the price scale as a handle (a strip over the axis gutter that the page's scroll never takes), the chart's own
+    // buttons at the foot of the price (Measure; on touch screens, zoom out and in), and a remove button on each pane
+    + `<div class="pc-scale" title="Drag up or down to stretch the price scale. Double-click to fit it to the bars."></div>`
+    + `<div class="pc-ctl" role="group" aria-label="Chart tools"><button type="button" class="pc-cb pc-msb" data-pc-measure aria-pressed="false" aria-label="Measure between two bars" title="Measure: drag between two bars (or Shift-drag, or M)">${icon('ruler').s}</button>`
+    + `<button type="button" class="pc-cb pc-z" data-pc-zoom="out" aria-label="Zoom out" title="Zoom out">${icon('minus').s}</button><button type="button" class="pc-cb pc-z" data-pc-zoom="in" aria-label="Zoom in" title="Zoom in">${icon('plus').s}</button></div>`
+    + `<div class="pc-panex"></div>`;
   const svg = host.querySelector('.pc-svg'), read = host.querySelector('.pc-read'), live = host.querySelector('.pc-sr');
+  const scaleEl = host.querySelector('.pc-scale'), ctl = host.querySelector('.pc-ctl'), panex = host.querySelector('.pc-panex');
   // a chart that asked for neither (the Instrument page's) gets detached stand-ins, so nothing below needs a guard
   const leg = host.querySelector('.pc-leg') || document.createElement('div'), nav = host.querySelector('.pc-nav') || document.createElementNS('http://www.w3.org/2000/svg', 'svg');
   // the box that names an insider trade under the pointer (or the keyboard's bar); `flags` are the arrows drawn
@@ -180,6 +254,7 @@ export function createPriceChart(host, opts) {
     let lo = Infinity, hi = -Infinity;
     for (let i = from; i <= to; i++) { const b = bars[i]; if (!b) continue; lo = Math.min(lo, S.style === 'candles' ? b.l : b.c); hi = Math.max(hi, S.style === 'candles' ? b.h : b.c); }
     const sp = (hi - lo) || 1; lo -= sp * 0.06; hi += sp * 0.08;
+    if (yZoom !== 1) { const mid = (lo + hi) / 2, half = (hi - lo) / 2 / yZoom; lo = mid - half; hi = mid + half; }
     return { lo, hi, Y: (v) => p.y0 + (1 - (v - lo) / (hi - lo)) * (p.y1 - p.y0), P: (y) => lo + (1 - (y - p.y0) / (p.y1 - p.y0)) * (hi - lo) };
   }
   const path = (vals, X, Y) => { let d = '', pen = false; for (let i = from; i <= to; i++) { const v = vals[i]; if (v === null || v === undefined || !Number.isFinite(v)) { pen = false; continue; } d += `${pen ? 'L' : 'M'}${X(i).toFixed(1)} ${Y(v).toFixed(1)}`; pen = true; } return d; };
@@ -323,6 +398,7 @@ export function createPriceChart(host, opts) {
     // the tool being placed, to the pointer (snapped as a click there would be)
     if (pending && pending.points.length) pending.points.forEach((q) => { o += `<circle class="dr-h dr-placed" cx="${X(AX.f(q.t)).toFixed(1)}" cy="${ps.Y(q.p).toFixed(1)}" r="5"/>`; });
     if (pending && pending.points.length && cross >= 0 && crossY !== null) o += drawing({ kind: pending.kind, points: [...pending.points, { t: bars[cross].t, p: S.snap ? snap(bars[cross], crossY, ps.Y).price : crossY }] }, false, true);
+    o += msSvg();
     o += '</g>';
     // panes
     panes.slice(1).forEach((p) => {
@@ -374,12 +450,74 @@ export function createPriceChart(host, opts) {
     }
     svg.setAttribute('viewBox', `0 0 ${W} ${H}`); svg.setAttribute('width', W); svg.setAttribute('height', H);
     svg.innerHTML = o;
+    if (ms) fitPlate();
     if (first) { first = false; if (S.animate !== false && !S.view && (S.style === 'line' || S.style === 'area')) anim = drawOn(svg, { lines: '.pline', fades: '.area' }); }
     svg.setAttribute('aria-label', summary());
     readout();
-    const zoomed = from !== home0.from || to !== home0.to;
+    const zoomed = from !== home0.from || to !== home0.to || yZoom !== 1;
+    place2();
     if (S.onView && zoomed !== zoomedWas) { zoomedWas = zoomed; S.onView({ zoomed }); }
     legend(); drawNav();
+  }
+
+  // A measurement: the band between the two bars, their closes marked, and a plate with the change and the dates.
+  function msSvg() {
+    if (!ms) return '';
+    const r = measuredBars(bars, ms.a, ms.b, fmtT), X = layout.X, ps = layout.ps, pp = layout.panes[0], right = W - layout.r;
+    const xa = X(r.i), xb = X(r.j);
+    const dots = [r.i, r.j].filter((i) => i >= from && i <= to).map((i) => `<circle class="dr-dot ${r.tone}" cx="${X(i).toFixed(1)}" cy="${ps.Y(bars[i].c).toFixed(1)}" r="4"/>`).join('');
+    if (r.i === r.j) return `<g class="pc-ms"><line class="dr-edge" x1="${xa.toFixed(1)}" x2="${xa.toFixed(1)}" y1="${pp.y0}" y2="${pp.y1}"/>${dots}</g>`;
+    // the dates and the bars on one line, or on two where a narrow chart cannot hold them; the plate is fitted to
+    // the drawn text afterwards (fitPlate)
+    const nb = `${r.bars} bar${r.bars === 1 ? '' : 's'}`, one = `${r.span}, ${nb}`;
+    const lines = one.length * 7.2 + 24 <= right - 8 ? [one] : [`${fmtT(bars[r.i].t)} to`, `${fmtT(bars[r.j].t)}, ${nb}`];
+    const w = Math.min(right - 8, Math.max(r.head.length * 8.4, ...lines.map((t) => t.length * 7.2)) + 24), mx = Math.min(Math.max((xa + xb) / 2, w / 2 + 4), right - w / 2 - 4), ph = 22 + 16 * lines.length;
+    // the plate sits at the top of the price, clear of the legend over its corner (below it, or at the foot when the
+    // open legend runs down the plot); seen under the folded legend on a phone, 2026-10-21
+    let y = pp.y0 + 6;
+    const lr = S.names ? leg.getBoundingClientRect() : null;
+    if (lr && lr.width) {
+      const sr = svg.getBoundingClientRect(), k = sr.width / (W || 1), lx0 = (lr.left - sr.left) / k, lx1 = (lr.right - sr.left) / k, ly1 = (lr.bottom - sr.top) / k;
+      if (mx - w / 2 < lx1 + 4 && mx + w / 2 > lx0 - 4 && y < ly1 + 4) y = ly1 + 6 > pp.y0 + (pp.y1 - pp.y0) / 2 ? pp.y1 - ph - 6 : ly1 + 6;
+    }
+    return `<g class="pc-ms"><rect class="dr-rng ${r.tone}" x="${xa.toFixed(1)}" y="${pp.y0}" width="${Math.max(1, xb - xa).toFixed(1)}" height="${pp.y1 - pp.y0}"/>`
+      + `<line class="dr-edge ${r.tone}" x1="${xa.toFixed(1)}" x2="${xa.toFixed(1)}" y1="${pp.y0}" y2="${pp.y1}"/><line class="dr-edge ${r.tone}" x1="${xb.toFixed(1)}" x2="${xb.toFixed(1)}" y1="${pp.y0}" y2="${pp.y1}"/>${dots}`
+      + `<rect class="dr-plate" x="${(mx - w / 2).toFixed(1)}" y="${y.toFixed(1)}" width="${w.toFixed(1)}" height="${ph}" rx="6"/><text class="dr-pf ${r.tone}" x="${mx.toFixed(1)}" y="${(y + 15).toFixed(1)}" text-anchor="middle">${esc(r.head)}</text>`
+      + lines.map((t, n) => `<text class="dr-pt" x="${mx.toFixed(1)}" y="${(y + 31 + 16 * n).toFixed(1)}" text-anchor="middle">${esc(t)}</text>`).join('') + '</g>';
+  }
+  // The plate's width from its drawn text (a font's real widths, not a guess), centred where it was and kept inside
+  // the plot.
+  function fitPlate() {
+    const g = svg.querySelector('.pc-ms'), plate = g && g.querySelector('.dr-plate'); if (!plate) return;
+    const ts = [...g.querySelectorAll('text')], right = W - layout.r;
+    let w = 0; ts.forEach((t) => { try { w = Math.max(w, t.getBBox().width); } catch (e) { /* not laid out */ } });
+    if (!w) return;
+    w = Math.min(right - 4, w + 24);
+    const c = Number(plate.getAttribute('x')) + Number(plate.getAttribute('width')) / 2, mx = Math.min(Math.max(c, w / 2 + 2), right - w / 2 - 2);
+    plate.setAttribute('x', (mx - w / 2).toFixed(1)); plate.setAttribute('width', w.toFixed(1));
+    ts.forEach((t) => t.setAttribute('x', mx.toFixed(1)));
+  }
+  // The chart's own HTML over the plot, placed from the layout: the price scale's strip over the axis gutter, the
+  // buttons at the foot of the price, and a remove button at the top right of each pane (rebuilt only when the
+  // panes change, so a button is never replaced under the pointer).
+  let placedSig = '', paneSig = '';
+  const PANE_LABEL = Object.assign({ vol: 'Volume', rsi: 'RSI 14', macd: 'MACD 12, 26, 9', tso: 'Trend Strength Oscillator' }, PANE_NAMES);
+  function place2() {
+    const panes = layout.panes, foot = (panes.find((q) => q.id === 'vol') || panes[0]).y1, sig = [W, H, panes.map((q) => `${q.id}:${q.y0}`).join(',')].join('|');
+    const ps2 = S.onRemove ? panes.slice(1).map((q) => q.id).join(',') : '';
+    if (ps2 !== paneSig) { paneSig = ps2; panex.innerHTML = S.onRemove ? panes.slice(1).map((q) => { const k = q.id === 'vol' ? 'volume' : q.id, name = esc(PANE_LABEL[q.id] || q.id); return `<button type="button" class="pc-px" data-pc-pane="${esc(k)}" data-pane-at="${esc(q.id)}" aria-label="Remove the ${name} pane" title="Remove ${name}">${icon('close').s}</button>`; }).join('') : ''; placedSig = ''; }
+    // an <svg> has no offsetTop: its place in the host comes from the two boxes
+    const r = svg.getBoundingClientRect(), hr = host.getBoundingClientRect(), k = r.width / (W || 1), top0 = r.top - hr.top, left0 = r.left - hr.left;
+    const at = `${sig}|${Math.round(top0)}|${Math.round(left0)}|${k.toFixed(3)}|${ctl.offsetHeight}`;
+    if (at === placedSig) return;
+    placedSig = at;
+    Object.assign(scaleEl.style, { left: `${left0 + (W - layout.r) * k}px`, top: `${top0 + panes[0].y0 * k}px`, width: `${layout.r * k}px`, height: `${(panes[0].y1 - panes[0].y0) * k}px` });
+    // where the volume band is too short for its label and the buttons (a 360 px phone), they start after the label
+    const vol = panes.find((q) => q.id === 'vol'), bh = ctl.offsetHeight || 36;
+    let lx = (layout.l + 6) * k;
+    if (vol && (vol.y1 - vol.y0) * k < bh + 16) { const t = [...svg.querySelectorAll('text.pane-t')].find((x) => x.textContent === 'Volume'); if (t) lx = (6 + t.getBBox().width + 10) * k; }
+    Object.assign(ctl.style, { left: `${left0 + lx}px`, top: `${top0 + foot * k - bh - 4}px` });
+    panex.querySelectorAll('[data-pane-at]').forEach((b) => { const q = panes.find((x) => x.id === b.dataset.paneAt); if (q) Object.assign(b.style, { top: `${top0 + (q.y0 - 2) * k}px`, left: `${left0 + (W - layout.r) * k - 40}px` }); });
   }
 
   // One drawing as SVG: its shape, its labels, and on the selected one a handle at each point (drag one to move
@@ -464,7 +602,7 @@ export function createPriceChart(host, opts) {
     const last = breaks[breaks.length - 1];
     const msb = S.overlays.msb ? (last ? ` ${breaks.length} market structure break${breaks.length === 1 ? '' : 's'} in view; the latest is ${last.dir === 'bull' ? 'bullish' : 'bearish'}, on ${fmtT(bars[last.at].t)} through ${num(last.price)}.` : ' No market structure break in view.') : '';
     const ins = flags.length ? ` ${flags.reduce((a, g) => a + g.items.length, 0)} insider trades marked.` : '';
-    return `${S.label || 'Price'}, ${to - from + 1} bars from ${fmtT(a.t)} to ${fmtT(b.t)}: from ${num(a.c)} to ${num(b.c)}, ${ch >= 0 ? 'up' : 'down'} ${num(Math.abs(ch), 1)} percent.${msb}${ins} Use the arrow keys to read each bar.`;
+    return `${S.label || 'Price'}, ${to - from + 1} bars from ${fmtT(a.t)} to ${fmtT(b.t)}: from ${num(a.c)} to ${num(b.c)}, ${ch >= 0 ? 'up' : 'down'} ${num(Math.abs(ch), 1)} percent.${msb}${ins} Left and right read each bar, up and down stretch the price scale, plus and minus zoom, M measures.`;
   }
   const redraw = () => { if (!raf) raf = requestAnimationFrame(draw); };
 
@@ -596,62 +734,267 @@ export function createPriceChart(host, opts) {
     redraw();
   }
   function pan(d) { const span = to - from; from = Math.max(0, Math.min(N - 1 - span, from + d)); to = from + span; redraw(); }
-  const fit = () => { from = 0; to = N - 1; redraw(); };
+  const fit = () => { from = 0; to = N - 1; yZoom = 1; redraw(); };
 
-  /* ---------- pointer ---------- */
+  /* ---------- pointer, touch and wheel (docs/frontend-v2/CHART-GESTURES.md) ---------- */
   const pt = (e) => { const r = svg.getBoundingClientRect(); return { x: (e.clientX - r.left) * (W / r.width), y: (e.clientY - r.top) * (H / r.height) }; };
+  const idx = (p) => Math.max(from, Math.min(to, layout.I(p.x)));
+  const plotFx = (x) => Math.max(0, Math.min(1, (x - layout.l) / Math.max(1, W - layout.l - layout.r)));
+  const onScale = (p) => !!layout && p.x > W - layout.r && p.y >= layout.panes[0].y0 && p.y <= layout.panes[0].y1;
+  const setWin = (w) => { from = w.from; to = w.to; };
+  const readAt = (p) => { cross = idx(p); crossY = p.y <= layout.panes[0].y1 ? layout.ps.P(p.y) : null; };
   const pointers = new Map();
-  const up = (e) => {
-    pointers.delete(e.pointerId);
-    // a drawing moved is one change to undo, kept when the pointer lifts
-    if (drag && drag.mode && drag.moved) { undo.push(drag.before); if (undo.length > 40) undo.shift(); redo.length = 0; if (S.onDrawings) S.onDrawings(S.drawings); }
-    if (pointers.size < 2 && drag && drag.pinch) drag = null; else if (pointers.size === 0) drag = null;
-  };
-  svg.addEventListener('pointerdown', (e) => {
+  function down(e) {
     // only the main button pans, draws or selects: a right click opened the browser's menu, which swallowed the
     // release, and the chart then panned with the mouse and no button held (owner, 2026-10-20)
     if (e.pointerType === 'mouse' && e.button !== 0) return;
+    if (!layout) return;
     try { svg.setPointerCapture(e.pointerId); } catch (err) { /* a pointer the browser no longer tracks */ }
-    pointers.set(e.pointerId, pt(e));
-    hoverP = pt(e);   // a tap on an arrow opens its box on a touch screen
-    touchy = e.pointerType === 'touch' || e.pointerType === 'pen';
-    // a tap reads that bar: the crosshair goes there and stays when the finger lifts
-    if (touchy && layout) { const q = pt(e); cross = Math.max(from, Math.min(to, layout.I(q.x))); crossY = q.y <= layout.panes[0].y1 ? layout.ps.P(q.y) : null; }
-    if (pointers.size === 2) { const [p1, p2] = [...pointers.values()]; drag = { pinch: Math.abs(p1.x - p2.x), span: to - from + 1 }; return; }
     const p = pt(e);
-    if (S.tool !== 'select') {
-      if (!pending) pending = { kind: S.tool, points: [] };
-      const at = pointAt(p);
-      pending.points.push({ t: at.t, p: at.p });
-      if (pending.points.length >= TOOL_POINTS[S.tool]) finishDrawing();
-      redraw(); return;
-    }
-    // on the selected drawing's handle: move that point; on a drawing: select it and move it all; else pan
+    pointers.set(e.pointerId, p);
+    hoverP = p;   // a tap on an arrow opens its box on a touch screen
+    touchy = e.pointerType === 'touch' || e.pointerType === 'pen';
+    if (touchy) { touchDown(e, p); return; }
+    if (S.tool !== 'select') { place(p); return; }
+    if (onScale(p)) { drag = { mode: 'scale', cy: e.clientY, z: yZoom }; svg.dataset.drag = 'scale'; return; }
+    // on the selected drawing's handle: move that point; Shift or Measure: measure; on a drawing: select it and
+    // move it all; else pan
     const h = handleAt(p);
     if (h >= 0) { drag = { mode: 'handle', k: sel, h, before: S.drawings, moved: false }; return; }
+    if (e.shiftKey || mOn) { ms = { a: idx(p), b: idx(p) }; drag = { mode: 'measure' }; redraw(); return; }
+    ms = null;
     const hit = hitTest(p);
     sel = hit; if (S.onSelect) S.onSelect(hit >= 0 ? S.drawings[hit] : null); syncTouch(); changed();
-    drag = hit >= 0 ? { mode: 'body', k: hit, x: p.x, y: p.y, pts: S.drawings[hit].points, before: S.drawings, moved: false } : { x: p.x, from, moved: false };
+    drag = hit >= 0 ? { mode: 'body', k: hit, x: p.x, y: p.y, pts: S.drawings[hit].points, before: S.drawings, moved: false } : { mode: 'pan', x: p.x, from, moved: false };
     redraw();
-  });
-  svg.addEventListener('pointermove', (e) => {
+  }
+  // A tool placing points: a press puts one down, and a drag from it puts the next where it lifts (a two-point
+  // shape in one drag), or the next press does.
+  function place(p) {
+    if (!pending) pending = { kind: S.tool, points: [] };
+    const at = pointAt(p);
+    pending.points.push({ t: at.t, p: at.p });
+    if (pending.points.length >= TOOL_POINTS[S.tool]) { finishDrawing(); drag = null; } else drag = { mode: 'place', x: p.x, y: p.y, n: pending.points.length, moved: false };
+    redraw();
+  }
+  // One finger: a tap reads the bar; sideways first pans, up or down first is the page's scroll (the svg keeps
+  // pan-y), decided over the first 8 px; held still 300 ms, it reads the bars as it moves and the page holds still.
+  // Two fingers pinch about their midpoint, and moving both pans; held, then a second finger, measures.
+  function touchDown(e, p) {
+    document.documentElement.classList.add('pc-touching');   // iOS's long press would select text and show its loupe
+    if (pointers.size === 2) {
+      if (!tg || tg.mode === 'page' || tg.mode === 'cancelled') return;
+      clearTimeout(tg.hold);
+      const [a, b] = [...pointers.values()];
+      cross = -1; crossY = null;
+      if (tg.held || mOn) { tg.mode = 'measure'; ms = { a: idx(a), b: idx(b) }; drag = { mode: 'measure' }; redraw(); return; }
+      const span = to - from + 1, fx = plotFx((a.x + b.x) / 2);
+      tg.mode = 'pinch'; tg.pinch = { a, b, span, abs: from + fx * Math.max(0, span - 1) }; drag = null; redraw(); return;
+    }
+    if (pointers.size > 2) return;
+    tg = { mode: 'wait', x0: e.clientX, y0: e.clientY, p0: p, held: false, locked: false, hold: 0 };
+    if (onScale(p)) { tg.mode = 'scale'; drag = { mode: 'scale', cy: e.clientY, z: yZoom }; cross = -1; crossY = null; return; }
+    if (mOn && S.tool === 'select') { tg.mode = 'measure1'; ms = { a: idx(p), b: idx(p) }; drag = { mode: 'measure' }; cross = -1; crossY = null; redraw(); return; }
+    readAt(p);
+    if (S.tool !== 'select') { tg.mode = 'place'; place(p); return; }
+    const h = handleAt(p);
+    if (h >= 0) { tg.mode = 'draw'; drag = { mode: 'handle', k: sel, h, before: S.drawings, moved: false }; redraw(); return; }
+    const hit = hitTest(p);
+    if (hit >= 0 || sel >= 0) { sel = hit; if (S.onSelect) S.onSelect(hit >= 0 ? S.drawings[hit] : null); syncTouch(); changed(); }
+    if (hit >= 0) { tg.mode = 'draw'; drag = { mode: 'body', k: hit, x: p.x, y: p.y, pts: S.drawings[hit].points, before: S.drawings, moved: false }; redraw(); return; }
+    ms = null;
+    tg.mode = to - from + 1 < N ? 'wait' : 'scrub';   // with every bar shown there is nothing to pan: sideways reads
+    const t = tg;
+    t.hold = setTimeout(() => { if (tg === t && !t.locked && (t.mode === 'wait' || t.mode === 'scrub')) { t.held = true; t.mode = 'hold'; } }, 300);
+    redraw();
+  }
+  function touchMove(e, p) {
+    const t = tg;
+    if (t.mode === 'pinch') {
+      if (pointers.size < 2) return;
+      const [a, b] = [...pointers.values()], q = t.pinch;
+      const d0 = Math.hypot(q.b.x - q.a.x, q.b.y - q.a.y), d1 = Math.hypot(b.x - a.x, b.y - a.y);
+      setWin(zoomedAt(q.abs, plotFx((a.x + b.x) / 2), q.span / (d0 > 0 && d1 > 0 ? d1 / d0 : 1), N)); redraw(); return;
+    }
+    if (t.mode === 'measure') { if (pointers.size === 2) { const [a, b] = [...pointers.values()]; ms = { a: idx(a), b: idx(b) }; redraw(); } return; }
+    if ((t.mode === 'wait' || t.mode === 'scrub') && !t.locked) {
+      const lock = touchLock(e.clientX - t.x0, e.clientY - t.y0);
+      if (!lock) return;
+      t.locked = true; clearTimeout(t.hold);
+      if (lock === 'y') { t.mode = 'page'; cross = -1; crossY = null; hoverP = null; redraw(); return; }   // the page's scroll
+      if (t.mode === 'wait') { t.mode = 'pan'; cross = -1; crossY = null; drag = { mode: 'pan', x: t.p0.x, from, moved: true }; }
+    }
+    if (t.mode === 'scrub' || t.mode === 'hold') { readAt(p); redraw(); return; }
+    if (t.mode === 'measure1') { if (ms) ms.b = idx(p); redraw(); return; }
+    if (t.mode === 'place') { dragMove(e, p); readAt(p); redraw(); return; }
+    if (t.mode === 'pan' || t.mode === 'scale' || t.mode === 'draw') { dragMove(e, p); redraw(); }
+  }
+  function dragMove(e, p) {
+    if (!drag) return;
+    if (drag.mode === 'scale') { yZoom = Math.max(0.25, Math.min(8, drag.z * Math.exp((drag.cy - e.clientY) / 160))); return; }
+    if (drag.mode === 'measure') { if (ms) ms.b = idx(p); return; }
+    if (drag.mode === 'place') { if (Math.hypot(p.x - drag.x, p.y - drag.y) > (touchy ? 8 : 4)) drag.moved = true; return; }
+    if (drag.mode === 'handle') { const at = pointAt(p), dr = S.drawings[drag.k]; S.drawings = S.drawings.map((x, j) => (j === drag.k ? Object.assign({}, dr, { points: dr.points.map((q, n) => (n === drag.h ? { t: at.t, p: at.p } : q)) }) : x)); drag.moved = true; return; }
+    if (drag.mode === 'body') { const di = Math.round((p.x - drag.x) / layout.bw), dp = layout.ps.P(p.y) - layout.ps.P(drag.y); if (Math.abs(p.x - drag.x) > (touchy ? 8 : 3) || Math.abs(p.y - drag.y) > (touchy ? 8 : 3)) { drag.moved = true; S.drawings = S.drawings.map((x, j) => (j === drag.k ? Object.assign({}, x, { points: moved(drag.pts, di, dp, AX) }) : x)); } return; }
+    if (drag.mode === 'pan') {
+      const dx = p.x - drag.x;
+      if (!drag.moved && Math.abs(dx) <= 3) return;   // a few pixels of slack before a press becomes a pan
+      drag.moved = true; svg.dataset.drag = 'pan';
+      const span = to - from; from = Math.max(0, Math.min(N - 1 - span, drag.from - Math.round(dx / layout.bw))); to = from + span;
+    }
+  }
+  function move(e) {
     // a mouse with no button down is not dragging, whatever release went missing (a menu, another window, a lost
     // capture): end the drag here rather than pan with the cursor
     if (e.pointerType === 'mouse' && e.buttons === 0 && (drag || pointers.has(e.pointerId))) up(e);
+    if (!layout) return;
     const p = pt(e);
-    if (pointers.has(e.pointerId)) pointers.set(e.pointerId, p);
-    if (drag && drag.pinch && pointers.size === 2) { const [p1, p2] = [...pointers.values()]; const d = Math.abs(p1.x - p2.x) || 1; const ns = Math.max(10, Math.min(N, Math.round(drag.span * drag.pinch / d))); const c = to; from = Math.max(0, c - ns + 1); to = c; redraw(); return; }
-    if (drag && drag.mode === 'handle') { const at = pointAt(p), dr = S.drawings[drag.k]; S.drawings = S.drawings.map((x, j) => (j === drag.k ? Object.assign({}, dr, { points: dr.points.map((q, n) => (n === drag.h ? { t: at.t, p: at.p } : q)) }) : x)); drag.moved = true; }
-    else if (drag && drag.mode === 'body') { const di = Math.round((p.x - drag.x) / layout.bw), dp = layout.ps.P(p.y) - layout.ps.P(drag.y); if (Math.abs(p.x - drag.x) > (touchy ? 8 : 3) || Math.abs(p.y - drag.y) > (touchy ? 8 : 3)) { drag.moved = true; S.drawings = S.drawings.map((x, j) => (j === drag.k ? Object.assign({}, x, { points: moved(drag.pts, di, dp, AX) }) : x)); } }
-    else if (drag && !drag.pinch) { const dx = p.x - drag.x; if (Math.abs(dx) > (touchy ? 8 : 3)) drag.moved = true; const span = to - from; from = Math.max(0, Math.min(N - 1 - span, drag.from - Math.round(dx / layout.bw))); to = from + span; }
-    cross = Math.max(from, Math.min(to, layout.I(p.x))); crossY = p.y <= layout.panes[0].y1 ? layout.ps.P(p.y) : null;
+    if (pointers.has(e.pointerId)) { pointers.set(e.pointerId, p); if (!svg.hasPointerCapture(e.pointerId)) { try { svg.setPointerCapture(e.pointerId); } catch (err) { /* no longer active */ } } }
     hoverP = p;
+    if (e.pointerType !== 'mouse' && tg && pointers.has(e.pointerId)) { touchMove(e, p); return; }
+    dragMove(e, p);
+    // the crosshair follows the pointer, except while it stretches the scale or measures (the band is the reading)
+    if (drag && (drag.mode === 'scale' || drag.mode === 'measure')) { cross = -1; crossY = null; } else readAt(p);
     redraw();
-  });
-  svg.addEventListener('pointerup', up); svg.addEventListener('pointercancel', up); svg.addEventListener('lostpointercapture', up);
+  }
+  function up(e) {
+    const had = pointers.delete(e.pointerId), touch = e.pointerType !== 'mouse';
+    if (touch && tg && had) {
+      if (e.type === 'pointercancel') { endTouch(true); return; }
+      if (pointers.size === 1) {
+        // the finger left over from a pinch pans from where it is; one lifted from a measurement leaves it read
+        if (tg.mode === 'pinch') { const [rest] = [...pointers.values()]; tg.mode = 'pan'; drag = { mode: 'pan', x: rest.x, from, moved: true }; }
+        else if (tg.mode === 'measure') { finishMeasure(); tg.mode = 'hold'; drag = null; }
+        return;
+      }
+      if (pointers.size) return;
+    }
+    if (drag) {
+      // a drawing moved is one change to undo, kept when the pointer lifts
+      if ((drag.mode === 'handle' || drag.mode === 'body') && drag.moved) { undo.push(drag.before); if (undo.length > 40) undo.shift(); redo.length = 0; if (S.onDrawings) S.onDrawings(S.drawings); }
+      else if (drag.mode === 'place' && drag.moved && pending && pending.points.length === drag.n && layout) { const at = pointAt(pt(e)); pending.points.push({ t: at.t, p: at.p }); if (pending.points.length >= TOOL_POINTS[pending.kind]) finishDrawing(); }
+      else if (drag.mode === 'measure') finishMeasure();
+    }
+    drag = null; delete svg.dataset.drag;
+    if (touch) endTouch(false);
+    redraw();
+  }
+  function endTouch(cancelled) {
+    if (tg) clearTimeout(tg.hold);
+    if (cancelled) {
+      // a cancel is the page's scroll taking the finger: the reading it started goes with it, and a drawing half
+      // moved goes back
+      if (tg && ['wait', 'page', 'scrub', 'hold'].includes(tg.mode)) { cross = -1; crossY = null; hoverP = null; }
+      if (drag && (drag.mode === 'handle' || drag.mode === 'body') && drag.moved) S.drawings = drag.before;
+      if (drag && drag.mode === 'measure') finishMeasure();
+      drag = null; delete svg.dataset.drag;
+    }
+    tg = null; pointers.clear();
+    document.documentElement.classList.remove('pc-touching');
+    redraw();
+  }
+  function finishMeasure() { if (ms && ms.a !== ms.b) { const r = measuredBars(bars, ms.a, ms.b, fmtT); live.textContent = `Measured ${r.span}: ${r.head}.`; } }
+  // Escape mid-drag puts things back: a drawing where it was, the view, the price scale; a measurement goes
+  function cancelDrag() {
+    if (!drag || drag.mode === 'cancelled') return false;
+    if ((drag.mode === 'handle' || drag.mode === 'body') && drag.moved) S.drawings = drag.before;
+    else if (drag.mode === 'pan') { const w = to - from; from = drag.from; to = from + w; }
+    else if (drag.mode === 'scale') yZoom = drag.z;
+    else if (drag.mode === 'measure') ms = null;
+    else if (drag.mode === 'place') pending = null;
+    drag = { mode: 'cancelled' }; if (tg) tg.mode = 'cancelled';   // nothing more until the pointer lifts
+    delete svg.dataset.drag; redraw(); return true;
+  }
+  function setMeasure(on) {
+    mOn = !!on; if (!mOn) ms = null;
+    host.classList.toggle('is-measuring', mOn);
+    const b = host.querySelector('[data-pc-measure]'); if (b) b.setAttribute('aria-pressed', String(mOn));
+    syncTouch(); redraw();
+  }
+  [svg, scaleEl].forEach((el) => el.addEventListener('pointerdown', down));
+  svg.addEventListener('pointermove', move);
+  // the price scale's strip carries its own drag when the svg could not take the pointer from it
+  scaleEl.addEventListener('pointermove', (e) => { if (!svg.hasPointerCapture(e.pointerId)) move(e); });
+  ['pointerup', 'pointercancel'].forEach((t) => scaleEl.addEventListener(t, (e) => { if (!svg.hasPointerCapture(e.pointerId)) up(e); }));
+  svg.addEventListener('pointerup', up); svg.addEventListener('pointercancel', up);
+  // a capture lost with the button still down is not a release (headless Chrome drops it at the first move after a
+  // press on the bare plot); one lost with nothing held is the release that went missing
+  svg.addEventListener('lostpointercapture', (e) => { if (pointers.has(e.pointerId) && e.pointerType === 'mouse' && e.buttons === 0) up(e); });
   // a finger lifting also leaves: the box it opened stays until the next touch
-  svg.addEventListener('pointerleave', (e) => { if (e.pointerType === 'touch') return; hoverP = null; if (!drag) { cross = -1; crossY = null; redraw(); } });
-  svg.addEventListener('wheel', (e) => { e.preventDefault(); const p = pt(e); zoom(e.deltaY > 0 ? 1.15 : 1 / 1.15, Math.max(from, Math.min(to, layout.I(p.x)))); }, { passive: false });
+  svg.addEventListener('pointerleave', (e) => { if (e.pointerType !== 'mouse') return; hoverP = null; if (!drag) { cross = -1; crossY = null; if (ms && !mOn && !ms.key) ms = null; redraw(); } });
+  // once a hold, a pinch, a pan, a measurement or a drawing has the finger, the page holds still; before a direction
+  // is decided it does not, so a swipe up or down still scrolls
+  const HELD = ['hold', 'pinch', 'measure', 'measure1', 'pan', 'scale', 'draw', 'place', 'cancelled'];
+  svg.addEventListener('touchmove', (e) => { if (tg && (HELD.includes(tg.mode) || (tg.mode === 'scrub' && tg.locked))) e.preventDefault(); }, { passive: false });
+  svg.addEventListener('touchstart', (e) => { if (e.touches.length > 1) e.preventDefault(); }, { passive: false });
+  ['contextmenu', 'selectstart'].forEach((t) => svg.addEventListener(t, (e) => { if (tg || drag) e.preventDefault(); }));
+  // the price scale: drag up to stretch the prices, down to squeeze them; a double press fits them to the bars
+  scaleEl.addEventListener('dblclick', (e) => { e.preventDefault(); yZoom = 1; redraw(); });
+  svg.addEventListener('dblclick', (e) => { if (layout && onScale(pt(e))) { yZoom = 1; redraw(); } });
+  // Safari's trackpad pinch: gesture events with a scale from the pinch's start (no ctrl + wheel), which would
+  // otherwise zoom the whole page. A pinch of two fingers on a phone is the touch handler's, so these stand aside.
+  let gst = null;
+  svg.addEventListener('gesturestart', (e) => { e.preventDefault(); if (tg || !layout) return; const r = svg.getBoundingClientRect(), fx = plotFx((e.clientX - r.left) * (W / (r.width || 1))); gst = { span: to - from + 1, abs: from + fx * (to - from), fx }; }, { passive: false });
+  svg.addEventListener('gesturechange', (e) => { e.preventDefault(); if (!gst || tg) return; const sc = Number(e.scale); if (!(sc > 0)) return; setWin(zoomedAt(gst.abs, gst.fx, gst.span / sc, N)); redraw(); }, { passive: false });
+  svg.addEventListener('gestureend', (e) => { e.preventDefault(); gst = null; }, { passive: false });
+  // the wheel: one listener for every chart on the page (onDocWheel), so each gesture has one owner
+  const acc = { z: 0, p: 0, abs: NaN, fx: 0.5, x: NaN, win: null, raf: 0 };
+  const wheelHandle = {
+    host,
+    over: (e) => !!layout && (svg.contains(e.target) || scaleEl.contains(e.target)),
+    room: (e) => wheelRoom(e, to - from + 1, N),
+    wheel(e) {
+      if (gst) return;
+      const dx = wheelPx(e.deltaX, e.deltaMode), dy = wheelPx(e.deltaY, e.deltaMode);
+      // the point to zoom about, held while the pointer stays still and nothing else moves the window, so a run of
+      // notches does not slide the chart sideways under it
+      const r = svg.getBoundingClientRect(), fx = plotFx((e.clientX - r.left) * (W / (r.width || 1)));
+      const ours = acc.win && acc.win.from === from && acc.win.to === to, still = Math.abs(e.clientX - acc.x) <= 1;
+      if (!(ours && still && Number.isFinite(acc.abs))) { acc.abs = from + fx * Math.max(0, to - from); acc.fx = fx; acc.x = e.clientX; acc.win = { from, to }; }
+      if (e.ctrlKey) acc.z += dy * PINCH_PER_PX;
+      else if (e.shiftKey) acc.p += dx || dy;
+      else if (Math.abs(dx) > Math.abs(dy)) acc.p += dx;
+      else acc.z += dy * ZOOM_PER_PX;
+      if (!acc.raf) acc.raf = requestAnimationFrame(flushWheel);
+    },
+  };
+  // gathered per frame: redrawing on each of sixty events a second is what makes a smooth gesture judder
+  function flushWheel() {
+    acc.raf = 0;
+    if (!layout) return;
+    const span = to - from + 1, lo = Math.min(MIN_BARS, N);
+    if (acc.z) {
+      const want = Math.max(lo, Math.min(N, Math.round(span * Math.exp(acc.z))));
+      if (want !== span) { setWin(zoomedAt(acc.abs, acc.fx, want, N)); acc.z -= Math.log(want / span); }
+      if (want === lo || want === N) acc.z = 0;   // at a limit, carrying the rest would make the first move back feel stuck
+    }
+    if (acc.p) {
+      const r = svg.getBoundingClientRect(), perPx = 1 / (layout.bw * ((r.width || W) / W)), n = Math.trunc(acc.p * perPx);
+      if (n) { const w = to - from; from = Math.max(0, Math.min(N - 1 - w, from + n)); to = from + w; acc.p -= n / perPx; acc.abs += n; }
+    }
+    acc.win = { from, to };
+    redraw();
+  }
+  registerChart(wheelHandle);
+  // undo, redo and Delete from anywhere on the page that asked (`pageKeys`, its scope), never from a field, an open
+  // menu or another widget; and Escape mid-drag wherever focus is (Classic's app.js:28680-28709)
+  const pageKey = (e) => {
+    if (e.defaultPrevented || !host.isConnected || document.activeElement === svg) return;
+    if (e.key === 'Escape') { if (drag && cancelDrag()) e.preventDefault(); return; }
+    if (!S.pageKeys || !keyIsFree(document.activeElement, S.pageKeys)) return;
+    const k = e.key, meta = e.metaKey || e.ctrlKey;
+    if (meta && !e.altKey && k.toLowerCase() === 'z') { e.preventDefault(); if (e.shiftKey) redoOne(); else undoOne(); }
+    else if (meta && !e.altKey && k.toLowerCase() === 'y') { e.preventDefault(); redoOne(); }
+    else if ((k === 'Delete' || k === 'Backspace') && !meta && sel >= 0) { e.preventDefault(); commit(S.drawings.filter((_, j) => j !== sel)); sel = -1; }
+  };
+  document.addEventListener('keydown', pageKey);
+  host.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-pc-zoom], [data-pc-measure], [data-pc-pane]');
+    if (!b || !host.contains(b)) return;
+    if (b.dataset.pcZoom) { zoom(b.dataset.pcZoom === 'in' ? 1 / 1.5 : 1.5, to); return; }   // about the latest bar shown
+    if (b.hasAttribute('data-pc-measure')) { setMeasure(!mOn); return; }
+    if (b.dataset.pcPane && S.onRemove) S.onRemove(b.dataset.pcPane);
+  });
 
   // The drawing under the pointer, or -1: within 9 px of a line, or inside a box or a measured range.
   function hitTest(p) {
@@ -707,16 +1050,20 @@ export function createPriceChart(host, opts) {
   svg.addEventListener('keydown', (e) => {
     if (cross < 0) cross = to;
     const k = e.key;
-    if (k === 'ArrowLeft' || k === 'ArrowRight') { const d = k === 'ArrowLeft' ? -1 : 1; if (e.shiftKey) pan(d * Math.max(1, Math.round((to - from) / 10))); else { cross = Math.max(0, Math.min(N - 1, cross + d)); if (cross < from) pan(cross - from); if (cross > to) pan(cross - to); } crossY = bars[cross].c; announce(); e.preventDefault(); }
+    if (k === 'ArrowLeft' || k === 'ArrowRight') { const d = k === 'ArrowLeft' ? -1 : 1; if (e.shiftKey) pan(d * Math.max(1, Math.round((to - from) / 10))); else { cross = Math.max(0, Math.min(N - 1, cross + d)); if (cross < from) pan(cross - from); if (cross > to) pan(cross - to); } crossY = bars[cross].c; if (ms && ms.key) ms.b = cross; announce(); e.preventDefault(); }
+    else if (k === 'ArrowUp' || k === 'ArrowDown') { yZoom = Math.max(0.25, Math.min(8, yZoom * (k === 'ArrowUp' ? 1.12 : 1 / 1.12))); e.preventDefault(); }
+    else if ((k === 'm' || k === 'M') && !e.metaKey && !e.ctrlKey && !e.altKey) { ms = ms && ms.key ? null : { a: cross, b: cross, key: true }; announce(); e.preventDefault(); }
     else if (k === '+' || k === '=') { zoom(1 / 1.25, cross); e.preventDefault(); } else if (k === '-' || k === '_') { zoom(1.25, cross); e.preventDefault(); }
     else if (k === 'Home') { cross = from; crossY = bars[cross].c; announce(); e.preventDefault(); } else if (k === 'End') { cross = to; crossY = bars[cross].c; announce(); e.preventDefault(); }
     else if ((k === 'Delete' || k === 'Backspace') && sel >= 0) { commit(S.drawings.filter((_, j) => j !== sel)); sel = -1; e.preventDefault(); }
-    else if (k === 'Escape') { pending = null; sel = -1; syncTouch(); changed(); if (S.onEscape) S.onEscape(); }
+    else if (k === 'Escape') { if (cancelDrag()) { e.preventDefault(); return; } if (ms) { ms = null; redraw(); return; } pending = null; sel = -1; syncTouch(); changed(); if (S.onEscape) S.onEscape(); }
     else if ((e.metaKey || e.ctrlKey) && k.toLowerCase() === 'z') { if (e.shiftKey) redoOne(); else undoOne(); e.preventDefault(); }
     else if ((e.metaKey || e.ctrlKey) && k.toLowerCase() === 'y') { redoOne(); e.preventDefault(); }
     redraw();
   });
-  function announce() { const b = bars[cross], ins = flags.filter((g) => g.i === cross).map((g) => `${g.items.length} insider ${g.side === 'buy' ? 'purchase' : 'sale'}${g.items.length === 1 ? '' : 's'}: ${g.items.map((it) => `${it.who}, ${it.amount}`).join('; ')}`).join('. '); live.textContent = `${fmtT(b.t)}: open ${num(b.o)}, high ${num(b.h)}, low ${num(b.l)}, close ${num(b.c)}.${ins ? ` ${ins}.` : ''}`; }
+  function announce() {
+    if (ms && ms.key) { const r = measuredBars(bars, ms.a, ms.b, fmtT); live.textContent = ms.a === ms.b ? `Measuring from ${fmtT(bars[ms.a].t)}. Move with the arrow keys; Escape clears.` : `${r.span}: ${r.head}.`; return; }
+    const b = bars[cross], ins = flags.filter((g) => g.i === cross).map((g) => `${g.items.length} insider ${g.side === 'buy' ? 'purchase' : 'sale'}${g.items.length === 1 ? '' : 's'}: ${g.items.map((it) => `${it.who}, ${it.amount}`).join('; ')}`).join('. '); live.textContent = `${fmtT(b.t)}: open ${num(b.o)}, high ${num(b.h)}, low ${num(b.l)}, close ${num(b.c)}.${ins ? ` ${ins}.` : ''}`; }
 
   const ro = new ResizeObserver(() => redraw()); ro.observe(host);
   syncTouch();
@@ -724,17 +1071,18 @@ export function createPriceChart(host, opts) {
 
   return {
     set(next) { Object.assign(S, next); if (next.tool) pending = null; if ('drawings' in next && sel >= S.drawings.length) sel = -1; syncTouch(); redraw(); },
-    zoom: (f) => zoom(f, cross >= 0 ? cross : to), fit, pan, home() { from = home0.from; to = home0.to; redraw(); },
+    zoom: (f) => zoom(f, cross >= 0 ? cross : to), fit, pan, home() { from = home0.from; to = home0.to; yZoom = 1; redraw(); },
+    measure: (on) => setMeasure(on), measuring: () => mOn,
     view: () => ({ from, to }),
     height: () => S.height, navH: () => S.navH || 40,
     /** The market structure breaks in view, newest last, for Milo and the page. */
     structure: () => ind.msb.filter((m) => m.at >= from && m.at <= to).map((m) => ({ direction: m.dir === 'bull' ? 'bullish' : 'bearish', swing_formed_on: fmtT(bars[m.from].t), swing_known_on: fmtT(bars[m.known].t), broke_on: fmtT(bars[m.at].t), close: bars[m.at].c, level: m.price })),
     undo: undoOne, redo: redoOne, canUndo: () => undo.length > 0, canRedo: () => redo.length > 0, selected: () => sel >= 0,
-    /** What a rebuild on the same bars carries over: the zoom and the undo history. */
-    keep: () => ({ view: { from, to }, history: { undo, redo } }),
+    /** What a rebuild on the same bars carries over: the zoom, the price scale's stretch and the undo history. */
+    keep: () => ({ view: { from, to }, history: { undo, redo }, yZoom }),
     deleteSelected() { if (sel >= 0) { commit(S.drawings.filter((_, j) => j !== sel)); sel = -1; } },
     clearDrawings() { commit([]); },
-    destroy() { ro.disconnect(); clearTimeout(holdT); anim = null; },
+    destroy() { ro.disconnect(); clearTimeout(holdT); anim = null; unregisterChart(wheelHandle); document.removeEventListener('keydown', pageKey); cancelAnimationFrame(acc.raf); if (tg) clearTimeout(tg.hold); document.documentElement.classList.remove('pc-touching'); },
     focus() { svg.focus(); },
   };
 }
