@@ -34,11 +34,12 @@ def test_the_phone_bar_has_its_height_before_its_buttons():
 
 
 def test_the_drawer_plays_its_exit_before_it_hides():
-    close = DRAWER[DRAWER.index("export function close("):DRAWER.index("export const isOpen")]
+    # close() lives inside makeDrawer() since Classic parity B4a, so Milo's docked drawer exits the same way
+    close = DRAWER[DRAWER.index("  function close("):DRAWER.index("  function setDocked(")]
     assert "root.hidden = true" not in close.split("leaving = () =>")[0], "nothing hides the drawer before its exit has run"
     assert "hideT = setTimeout(leaving, ms + 20)" in close and "root.inert = true" in close
     assert "if (done) done();" in close.split("leaving = () =>")[1], "the owner's teardown runs once the panel has left"
-    assert "export const isOpen = () => !!root && shown;" in DRAWER, "closed at once for every caller"
+    assert "isOpen: () => !!root && shown," in DRAWER and "export const isOpen = main.isOpen;" in DRAWER, "closed at once for every caller"
     assert "if (leaving) { clearTimeout(hideT); leaving(); }" in DRAWER, "a reopen finishes the last close first"
     # the exit is the CSS's to time: --m-exit, and nothing under reduced motion (base.css zeroes transitions)
     assert ".drawer:not(.is-open) .drawer-panel, .drawer:not(.is-open) .drawer-scrim { transition-duration: var(--m-exit); pointer-events: none; }" in COMP

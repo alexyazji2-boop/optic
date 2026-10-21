@@ -33,7 +33,7 @@ def js(tmp_path, body):
 def test_the_header_is_milo_by_his_name_with_three_named_icons():
     opener = MILO[MILO.index("export async function openMilo("):MILO.index("// Milo's panel is as wide")]
     assert "kicker: 'Ask Milo'" not in opener, "no Ask Milo above Milo"
-    assert '<div class="milo-id">${figure(\'compact\')}<div><h2 id="drawer-title" tabindex="-1">Milo</h2><p class="milo-sub">Research assistant</p></div></div>' in opener
+    assert '<div class="milo-id">${figure(\'compact\')}<div><h2 id="milo-title" tabindex="-1">Milo</h2><p class="milo-sub">Research assistant</p></div></div>' in opener
     for label, ic in (("Conversation history", "history"), ("New conversation", "compose")):
         assert f'aria-label="{label}" title="{label}">${{icon(\'{ic}\')}}' in opener, label
     assert "head = null, actions = null" in DRAWER and '<div class="drawer-acts">${actions}${shut}</div>' in DRAWER

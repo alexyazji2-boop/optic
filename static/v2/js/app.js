@@ -13,7 +13,7 @@ import * as palette from './ui/palette.js';
 import * as drawer from './ui/drawer.js';
 import { openShortcuts } from './ui/shortcuts.js';
 import * as motion from './ui/motion.js';
-import { openMilo, resetContext, checkAvailability, markButtons } from './ui/milo.js';
+import { openMilo, resetContext, checkAvailability, markButtons, panelFigures } from './ui/milo.js';
 import { toggleWatch } from './ui/company.js';
 import { linkHome } from './core/homelink.js';
 import { toast } from './ui/toast.js';
@@ -237,7 +237,8 @@ function wireGlobal() {
     if ((b = t('[data-v2-copy]')) || (b = t('[data-v2-copy-price]'))) { copyFrom(b); return; }
     if ((b = t('[data-v2-open-palette]'))) { e.preventDefault(); palette.open(b, { symbol: current && current.route.symbol }); return; }
     if ((b = t('[data-v2-milo]'))) {
-      openMilo({ question: b.dataset.v2Milo || '', opener: b, about: b.dataset.v2MiloCtx || '', symbol: b.dataset.v2MiloSym || '' });
+      // the panel's own figures go with it (B4a.3); the top bar's Ask Milo sits in no panel and sends none
+      openMilo({ question: b.dataset.v2Milo || '', opener: b, about: b.dataset.v2MiloCtx || '', symbol: b.dataset.v2MiloSym || '', figures: panelFigures(b) });
       return;
     }
     if ((b = t('[data-v2-watch]'))) { e.preventDefault(); await toggleWatch(b.dataset.v2Watch); return; }

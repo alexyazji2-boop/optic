@@ -108,6 +108,8 @@
 .select select { min-height: var(--tap); padding: 0 34px 0 14px; border-radius: var(--r-ctl); border: 1px solid var(--c-line); background: var(--c-raised); color: var(--c-ink); font-size: var(--t-base); }
 .wl-rows { border-top: 1px solid var(--c-line); --wl: minmax(110px, 1fr) 96px 92px 120px 76px 96px minmax(140px, 1.8fr) 92px; }
 @media (max-width: 1240px) { .wl-rows { --wl: minmax(100px, 1fr) 92px 88px 76px 96px minmax(130px, 1.6fr) 88px; } .wl-rows .spark-cell { display: none; } }
+/* narrower still (a 1024 window, or a page beside a docked Milo): volume and earnings go too; both are in the row's detail */
+@media (max-width: 1100px) { .wl-rows { --wl: minmax(90px, 1fr) 92px 88px minmax(120px, 1.6fr) 88px; } .wl-rows .wl-vol, .wl-rows .wl-earn { display: none; } }
 .wl-alert { display: inline-flex; align-items: center; gap: 4px; margin-left: 8px; font: 500 var(--t-sm)/1 var(--f-label); color: var(--c-ink-3); white-space: nowrap; }
 .wl-alert svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.7; }
 .wl-alert.is-fired { color: var(--c-ink); font-weight: 600; }
@@ -406,6 +408,10 @@ table.scen td { font-weight: 600; }
 .dhead.bar .dh-price { display: flex; align-items: baseline; gap: 4px 10px; margin: 0; flex-wrap: wrap; flex: 1 1 auto; min-width: 0; }
 /* the actions keep their row; the price's time wraps inside its own space */
 @media (min-width: 861px) { .dhead.bar { flex-wrap: nowrap; } .dhead.bar .acts { flex: none; } }
+/* 861 to 1100 px of page (a 1024 window, or beside a docked Milo): one row squeezed the name and the price into
+   narrow columns, so the actions take a row of their own and the identity keeps its line (B4a, 2026-10-21) */
+@media (min-width: 861px) and (max-width: 1100px) { .dhead.bar { flex-wrap: wrap; } .dhead.bar .acts { margin-left: auto; } .dhead.bar .name { white-space: nowrap; } }
+html.eff-1100 .dhead.bar { flex-wrap: wrap; } html.eff-1100 .dhead.bar .acts { margin-left: auto; } html.eff-1100 .dhead.bar .name { white-space: nowrap; }
 .dhead.bar .dh-px { font: 600 var(--t-2xl)/1 var(--f-sans); letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
 .dhead.bar .dh-chg { font-size: var(--t-base); }
 .dhead.bar .dh-ext { font-size: var(--t-sm); color: var(--c-ink-3); }
@@ -1697,3 +1703,14 @@ ul.cal-react { display: flex; flex-wrap: wrap; gap: 4px 18px; padding-left: 0; l
 .cmp-key { width: 14px; height: 0; border-top: 2px solid; } .cmp-key.cm1 { border-color: var(--c-cat-1); } .cmp-key.cm2 { border-color: var(--c-cat-2); } .cmp-key.cm3 { border-color: var(--c-cat-3); }
 /* drawing tools rest while comparing: a point placed on a percent scale would be saved as a price */
 #ch-draw.is-cmp { opacity: .45; }
+
+/* docked Milo (B4a): the 1240 and 1100 px rules above, from the width the page has (see components.css) */
+html.eff-1240 .wl-rows { --wl: minmax(100px, 1fr) 92px 88px 76px 96px minmax(130px, 1.6fr) 88px; } html.eff-1240 .wl-rows .spark-cell { display: none; }
+html.eff-1100 .wl-rows { --wl: minmax(90px, 1fr) 92px 88px minmax(120px, 1.6fr) 88px; } html.eff-1100 .wl-rows .wl-vol, html.eff-1100 .wl-rows .wl-earn { display: none; }
+html.eff-1100 .vs-cases { grid-template-columns: 1fr; }
+html.eff-1100 .ws-panel { grid-column: span 12; }
+html.eff-1100 .ws-panel[data-span="3"], html.eff-1100 .ws-panel[data-span="4"], html.eff-1100 .ws-panel[data-span="6"] { grid-column: span 6; }
+html.eff-1100 .ws-xl-only { display: none !important; }
+html.eff-1100 .ws-strip { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+html.eff-1100 .ob-ways { grid-template-columns: minmax(0, 1fr); }
+

@@ -125,12 +125,27 @@ Not tested on a physical phone.
 | B3.8 | Insider tables capped in height, with sticky headers | Financials' insider and Congress tables; the Insiders page | Capped at the smaller of 62% of the window and 560 px; the header stays as the rows scroll | Same | none | n/a | none | b3: 558 px cap, 969 px of rows, header at the top after scrolling | done |
 
 ## B4. Milo
+### B4a. Docking and context
+Evidence:
+- `b4a_check.py`: 16 of 16 in headless Chrome at 1440, 1200 and 390 (touch emulated), against the stand-in model (one question sent, nothing billed).
+- `b4a_widths.py`: Milo docked at 1316, 1160 (rail folded) and 1440; 15 pages each, nothing spills and no page-wide overflow. The same sweep at 1024 with Milo over the page.
+- Mobile Safari on the iPhone 17 simulator: Milo opens as the full sheet, not docked.
+- `tests/test_v2_parity_b4a.py`.
+Not tested:
+- The phone keyboard with a signed-in session in real Safari: the guest sees the sign-in prompt instead of the box, and B4a leaves the keyboard-fitting code unchanged.
+- A physical phone.
+
+| Row | Task | Where | Desktop | Phone | Keeps | States | Deps | Evidence | Status |
+|---|---|---|---|---|---|---|---|---|---|
+| B4a.1 | Docked panel, only when the research column keeps its usable width | `ui/milo.js` `dockFit`, `layout`; `makeDrawer` in `ui/drawer.js` | Beside the page while it keeps 760 px (`CONTENT_MIN`, measured on 15 pages); Milo narrows to fit, to 320 px; below that, over the page as a dialog. A resize across the line moves it | The full sheet, as before | The chosen width in Classic's `optic.chat.width.v2`, as before; the docked width is never saved | n/a | none | b4a: docked at 1440 (page 760, Milo 444), over the page at 1200 and back; widths sweep | differs: the line is the page's usable width (760 px), not Classic's 240 px left over (owner's amendment 8) |
+| B4a.2 | The panel stays open across pages; no focus trap while docked | Same | Docked: no scrim, `role="complementary"`, no `aria-modal`, Tab moves on to the page, a page link beside it works, it stays open and its context follows the page; another drawer opens over it; Escape inside it closes it, focus back; over the page it is the dialog it was and closes with the page | n/a | none | n/a | none | b4a desk and 1200 | done |
+| B4a.3 | Ask Milo from a panel sends that panel's own figures | `panelFigures` in `ui/milo.js`, read at the press by `app.js` | Every panel's Ask Milo: the heading, the value tiles, the finding line and the first table rows that are on screen go as `panel` in the context; the box says "attached, with its N figures" | Same | none | A panel with nothing to read sends none | `/api/chat` $ only on Send | b4a: Investing's Fair value and stars, the figures sent equal to those shown | differs: read from what the panel shows rather than wired by hand at each of Classic's 44 call sites, so every panel has it and the figures are the ones on screen |
+| B4a.4 | Suggestions as quiet buttons; a "Use this example" button | `suggestHTML`, `exampleAsk`, `OPTIONS_FOLLOWUPS` | After an answer: on Options, Classic's six follow-ups; on every page, the example and "Use this example"; each drafts into the box and focuses it, never sends; Tab moves on as usual | Same | none | Hidden while typing, answering or blocked | none | b4a: six follow-ups, the example drafted and focused, no message sent, Tab to Send | differs: quiet buttons, not chips (amendment 3); a button, not Tab, takes the example (amendment 7) |
+| B4a.5 | A 1024 window, found by the width sweep | `pages.css`, `components.css` | The Watchlist drops volume and earnings under 1100 px (they are in each row's detail); the Dossier header puts its actions on a row of their own between 861 and 1100 px; the top bar's Ask Milo no longer wraps; end-aligned menus open leftward (the B3 Panels menu had widened the page by 128 px) | n/a | none | n/a | none | b4a widths at 1024; b3 desk overflow 0 | done |
+
+### B4b to B4d
 | Row | Task | Status |
 |---|---|---|
-| B4a.1 | Docked panel, only when the research column keeps its usable width | open |
-| B4a.2 | The panel stays open across pages; no focus trap while docked | open |
-| B4a.3 | Ask Milo from a panel sends that panel's own figures | open |
-| B4a.4 | Suggestions as quiet buttons; a "Use this example" button | open |
 | B4b.1 | Attach files (button, drop); type, size and count checked in the browser and on the server | open |
 | B4c.1 | Web search toggle ($, on send) | open |
 | B4c.2 | Deep research and the modes row ($, on send) | open |

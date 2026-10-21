@@ -69,7 +69,7 @@ def test_the_welcome_figure_and_its_menu():
 
 def test_the_bust_beside_an_answer_and_the_head_on_the_button():
     # since the redesign he sits beside the title in the header, and that figure carries his reactions to an answer
-    assert '<div class="milo-id">${figure(\'compact\')}<div><h2 id="drawer-title" tabindex="-1">Milo</h2>' in MILO, "the name stays readable beside him"
+    assert '<div class="milo-id">${figure(\'compact\')}<div><h2 id="milo-title" tabindex="-1">Milo</h2>' in MILO, "the name stays readable beside him"
     assert "const replyEl = (h, i) => (i === null || i === undefined ? null : headEl());" in MILO
     assert 'aria-label="Ask Milo"><span class="scout-badge" aria-hidden="true"><span class="scout-badge-fig"></span></span>' in SHELL
     assert ":root[data-scout-motion=\"still\"] .scout-badge-fig, :root[data-motion=\"reduce\"] .scout-badge-fig { animation: none; }" in CSS and "@media (prefers-reduced-motion: reduce) { .scout-badge-fig { animation: none; } }" in CSS
