@@ -240,7 +240,9 @@ function welcomeLine() {
 function openingHTML() {
   const fig = figure('full', 'Milo guide: what to ask, examples and animation');
   const sym = onSymbol();
+  // the owner's ask: Milo says hello first, from under Scout, then the question
   return html`<div class="milo-opening"><div class="milo-hello">${fig}${fig ? menuHTML() : ''}</div>
+    <p class="milo-hi">Hey, I'm Milo!</p>
     <h3 class="milo-hello-h">What would you like to understand?</h3>
     <p class="milo-hello-say">${welcomeLine()}</p>
     ${SC.canAsk ? html`<p class="milo-can-ask" role="note">${CAN_ASK}</p>` : ''}

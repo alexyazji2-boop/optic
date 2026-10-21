@@ -473,6 +473,9 @@ ul.plain { margin: 0; padding-left: 18px; } ul.plain li { margin-bottom: 7px; }
 .milo-hello { position: relative; display: flex; justify-content: center; }
 .milo .milo-hello-h { margin: 8px 0 0; font: 600 var(--t-2xl)/1.2 var(--f-sans); letter-spacing: -0.015em; text-wrap: balance; color: var(--c-ink); }
 .milo-hello-say { margin: 0; font-size: var(--t-base); line-height: 1.45; color: var(--c-ink-2); text-wrap: balance; }
+/* his hello: a speech bubble whose tail points up at him */
+.milo .milo-hi { position: relative; margin: 8px 0 0; padding: 8px 16px; border-radius: var(--r-lg); background: var(--c-sunk); color: var(--c-ink); font: 500 var(--t-lg)/1.35 var(--f-sans); }
+.milo-hi::before { content: ''; position: absolute; top: -5px; left: 50%; width: 10px; height: 10px; background: inherit; border-radius: 2px 0 0 0; transform: translateX(-50%) rotate(45deg); }
 .scout-btn { flex: none; display: block; width: 88px; padding: 0; border: 0; border-radius: var(--r-md); background: none; cursor: pointer; -webkit-tap-highlight-color: transparent; }
 .scout-btn .scout { width: 100%; }
 .scout-btn:focus-visible { outline: 2px solid var(--c-focus); outline-offset: 2px; }
@@ -553,7 +556,7 @@ ul.plain { margin: 0; padding-left: 18px; } ul.plain li { margin-bottom: 7px; }
   .milo-pp-row, .milo-pp-row:not([style*="--n: 5"]) { grid-template-columns: repeat(var(--n, 5), minmax(0, 1fr)); }
   .milo-pp-opt, .milo-pp-row[style*="--n: 5"] .milo-pp-opt:nth-child(n+4) { grid-column: auto; }
   .milo-lens-blurb { display: none; }
-  .scout-btn { width: 52px; } .milo-hello-h { margin-top: 2px; font-size: var(--t-xl); }
+  .scout-btn { width: 52px; } .milo-hello-h { margin-top: 2px; font-size: var(--t-xl); } .milo .milo-hi { margin-top: 6px; padding: 4px 12px; font-size: var(--t-base); }
   .milo-log { gap: 12px; padding-top: 10px; padding-bottom: 12px; }
 }
 
