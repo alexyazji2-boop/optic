@@ -377,22 +377,55 @@ export function labCharts(L) {
   };
 }
 
-/* ---------- setups and patterns ---------- */
-export function setups(t, sym, extra) {
-  const p = t.patterns || {};
-  const st = extra.setups, se = extra.seasonality, rp = extra.relperf;
-  const live = st && (st.rows || []).filter((r) => r.symbol === sym && ['armed', 'triggered', 'watching'].includes(r.status));
-  return html`<h3>Swing setups</h3>
-    ${st === undefined ? html`<p class="t-muted" role="status">Loading setups…</p>` : !st ? note('Setups did not load.') : live.length ? html`<div class="tscroll"><table class="t"><thead><tr><th>Setup</th><th>Direction</th><th>Status</th><th>Trigger</th><th>Invalidation</th><th><span class="sr">Alert</span></th></tr></thead>
-      <tbody>${live.slice(0, 12).map((r) => html`<tr><td>${r.label}${r.experimental ? ' (experimental)' : ''}</td><td>${r.direction === 'bull' ? 'Up' : 'Down'}</td><td>${capFirst(r.status)}</td><td>${num(r.trigger_level)}</td><td>${num(r.invalidation)}</td>
-        <td>${(extra.alerted || new Set()).has(r.preset) ? html`<button type="button" class="btn btn-sm btn-quiet" aria-disabled="true" data-v2-setup-alert="${r.preset}" data-label="${r.label}">Alert set</button>`
-          : html`<button type="button" class="btn btn-sm btn-quiet" data-v2-setup-alert="${r.preset}" data-label="${r.label}" aria-label="Alert me when the ${r.label} setup triggers on ${sym}">Alert me</button>`}</td></tr>`)}</tbody></table></div>` : html`<p>No setup is armed, triggered or being watched on ${sym} now.</p>`}
-    <p class="asof">${st ? clean(st.method || '') : ''} Alert me sets an alert for that setup on ${sym}: a trigger on a completed daily candle lands in <a class="textlink" href="#/alerts">Alerts</a>, with its signal history. Filters, rule settings and back-tests for setups are in the <a href="${CLASSIC}#/${sym}/options">classic app</a>.</p>
-    ${p.available ? html`<h3>Chart patterns</h3><ul class="plain">${(p.candles || []).slice(0, 6).map((c) => html`<li><b>${c.name}</b>, ${shortDate(c.date)}: ${clean(c.note)} <span class="t-muted">${c.direction}, ${clean(c.conventional)}</span></li>`)}</ul>${note(p.method)}` : ''}
+/* ---------- swing setups (Classic parity B6b): the tool itself is pages/setups.js, one node put in this slot ---------- */
+export function swingSetups(t, sym) {
+  return html`<p class="section-sub">Bullish and bearish entry rules on completed candles, each with its context, setup, trigger and invalidation. For review: nothing here places a trade, and every rule is a hypothesis to test, not a strategy known to work.</p>
+    <div data-ss-slot></div>
+    ${ask(sym, 'Ask Milo about the setups', `Is there a swing setup worth acting on in ${sym}, and what would invalidate it?`)}`;
+}
+
+/* ---------- chart patterns, each beside what followed it (Classic's renderPatterns and baseRateCell) ---------- */
+/** What followed a pattern across 43 names and ten years, 21 sessions on: its hit rate against 50%, and its edge
+ *  over the stock's own drift. A pattern still forming has nothing to measure. */
+export function baseRate(rates, name, state) {
+  const entry = ((rates && rates.patterns) || {})[`${name}|${state}`], h = entry && entry.h21;
+  if (!h || h.hit_rate === null || h.hit_rate === undefined) return { text: `too few to measure${entry ? ` (${num(entry.sample, 0)})` : ''}`, tone: 'none' };
+  // against 50%, not zero: the question is whether the conventional reading beat a coin toss
+  return { text: `${num(h.hit_rate * 100, 0)}% of ${num(h.n, 0)}`, edge: `${h.edge_mean_pct > 0 ? '+' : ''}${num(h.edge_mean_pct, 2)}% against its own drift`, tone: h.hit_rate > 0.53 ? 'up' : h.hit_rate < 0.47 ? 'down' : 'flat' };
+}
+const rateCell = (r) => html`<span class="pat-rate ${r.tone}">${r.text}${r.edge ? html` <span class="t-muted">${r.edge}</span>` : ''}</span>`;
+export function ratesMissing(rates) {
+  if (!rates) return 'Base rates are on their way, so the measured column is empty for now. With none cached, the server builds them from ten years of daily bars first, which takes about ninety seconds, and the column fills in when they land.';
+  if (rates.failed) return 'Base rates could not be loaded, so the measured column is empty. They are asked for again when the page is reloaded.';
+  return `${clean(rates.reason || 'Base rates are not available.')} The measured column stays empty until they are.`;
+}
+export function patterns(t, sym, extra) {
+  const p = t.patterns || {}, rates = extra.rates, se = extra.seasonality, rp = extra.relperf;
+  const loading = extra.loading === undefined;
+  const pats = !p.available ? html`<p class="t-muted">${clean(p.reason || 'Not enough history to read structure.')}</p>` : html`
+    <p class="section-sub">Structure, candles and zones read mechanically off the daily bars, each beside what actually happened afterwards across 43 names and ten years. The two often disagree, and this panel does not resolve that for you.</p>
+    ${(p.chart_patterns || []).length ? html`<h3>Structure</h3><div class="tscroll"><table class="t pat-t"><thead><tr><th class="l">Pattern</th><th class="l">State</th><th>Conventional reading held, 21 sessions</th></tr></thead>
+      <tbody>${p.chart_patterns.slice().reverse().map((x) => { const st = x.confirmed === null ? 'candle' : x.confirmed ? 'confirmed' : 'unconfirmed';
+        return html`<tr><td class="l"><b>${x.name}</b><span class="t-muted pat-sub">${shortDate(x.start_date)} to ${shortDate(x.end_date)}, ${num(x.span_bars, 0)} bars${isNum(x.amplitude_atr) ? `, ${num(x.amplitude_atr, 1)} times a typical day's range` : ''}</span><span class="pat-sub">Conventionally: ${x.conventional}</span></td>
+          <td class="l">${x.confirmed === null ? 'Forming' : x.confirmed ? `Confirmed${x.confirmed_on ? ` ${shortDate(x.confirmed_on)}` : ''}` : 'Not confirmed'}</td>
+          <td>${x.confirmed === null ? html`<span class="t-muted">nothing to measure until it resolves</span>` : rateCell(baseRate(rates, x.name, st))}</td></tr>`; })}</tbody></table></div>
+      ${note('A reversal pattern is only confirmed once a close has cleared its neckline, and cleared it promptly; a crossing months later is a coincidence, not a resolution. Confirmation is the whole difference on this data: confirmed structures land between 51% and 55%, unconfirmed ones at or below 50%. A pattern that fails to confirm is not a weaker version of the same signal, it is the trend carrying on.')}`
+    : html`<p class="t-muted">No structural pattern currently passes the size, prior-move and freshness tests over the last year.</p>`}
+    ${(p.zones || []).length ? html`<h3>Supply and demand</h3><div class="tscroll"><table class="t pat-t"><thead><tr><th class="l">Zone</th><th>Range</th><th>From the price</th></tr></thead>
+      <tbody>${p.zones.map((z) => html`<tr><td class="l"><b>${z.side === 'supply' ? 'Supply' : 'Demand'} zone</b><span class="t-muted pat-sub">Based ${shortDate(z.formed)}, left ${shortDate(z.left_on)} on a move of ${num(z.departure_atr, 1)} times a typical day's range over ${num(z.base_bars, 0)} bars of base</span><span class="pat-sub">${z.side === 'supply' ? 'Sellers were waiting here and price could not hold above it.' : 'Buyers were waiting here and price could not stay below it.'}</span></td>
+        <td>${num(z.bottom, 2)} to ${num(z.top, 2)}</td><td class="${dir(z.distance_pct)}">${signed(z.distance_pct, 1)}</td></tr>`)}</tbody></table></div>
+      ${note(`A zone is not the same thing as support: support is a price that held; a zone is a price where one side was so outnumbered that price could not stay there. A base no wider than ${num((p.tolerances || {}).base_max_atr, 1)} times a typical day's range, then a departure of at least ${num((p.tolerances || {}).departure_atr, 1)} times it within 4 bars.${p.zones_out_of_horizon ? ` ${p.zones_out_of_horizon} further zone${p.zones_out_of_horizon === 1 ? ' is' : 's are'} too far from the price to be reached in ${p.zone_horizon_bars} sessions and not listed.` : ''}`)}` : ''}
+    ${(p.candles || []).length ? html`<h3>Recent candles</h3><div class="tscroll"><table class="t pat-t"><thead><tr><th class="l">Bar</th><th class="l">Direction</th><th>That direction held, 21 sessions</th></tr></thead>
+      <tbody>${p.candles.slice(0, 6).map((c) => html`<tr><td class="l"><b>${c.name}</b><span class="t-muted pat-sub">${shortDate(c.date)}, ${c.bar_offset === 0 ? 'the latest bar' : `${num(c.bar_offset, 0)} bars ago`}. ${clean(c.note)}</span><span class="pat-sub">Conventionally: ${c.conventional}</span></td>
+        <td class="l ${c.direction === 'bullish' ? 'up' : c.direction === 'bearish' ? 'down' : ''}">${capFirst(c.direction)}</td><td>${rateCell(baseRate(rates, c.name, 'candle'))}</td></tr>`)}</tbody></table></div>
+      ${note('Every candlestick pattern here measures between 46% and 51% on samples of two to twelve thousand. That is a coin toss, and it is the most useful thing this panel can tell you about them: they describe what the bar did, and on this evidence they do not forecast what the next twenty do.')}` : ''}
+    ${how(html`<p>${clean(p.method || '')}</p>${rates && rates.available ? html`<p>Base rates: ${clean(rates.method || '')} Cached, ${num(rates.cache_age_days || 0, 0)} days old.</p>` : html`<p>${ratesMissing(rates)}</p>`}`)}
+    ${rates && rates.available ? '' : html`<p class="asof" role="status">${loading ? 'Loading the base rates…' : ratesMissing(rates)}</p>`}`;
+  return html`${pats}
     ${rp && rp.available ? html`<h3>Relative performance</h3><p>${clean(rp.headline)}</p>${note(rp.method)}` : ''}
     ${se && se.monthly ? html`<h3>Seasonality, ${num(se.years, 0)} years</h3><div class="tscroll"><table class="t"><thead><tr><th>Month</th><th>Average</th><th>Median</th><th>Up years</th><th>Against baseline</th><th>Reading</th></tr></thead>
       <tbody>${se.monthly.rows.map((m) => html`<tr><td>${m.short}</td><td>${signed(m.raw.mean)}</td><td>${signed(m.raw.median)}</td><td>${num(m.raw.hit_rate, 0)}%</td><td>${signed(m.raw.vs_baseline)}</td><td>${m.raw.verdict}</td></tr>`)}</tbody></table></div>
       ${note(`${se.significant_count} reading${se.significant_count === 1 ? '' : 's'} clear the significance test. "Noise" means the average could be chance.`)}` : ''}
-    ${ask(sym, 'Ask Milo about the setup', `Is there a swing setup worth acting on in ${sym}, and what would invalidate it?`)}`;
+    ${ask(sym, 'Ask Milo about the patterns', `Do any of ${sym}'s chart patterns have a measured edge, and what does the base rate say?`)}`;
 }
 void fullDate; void dir; void raw; void icon;

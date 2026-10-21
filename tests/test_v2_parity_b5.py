@@ -128,9 +128,8 @@ def test_a_setup_alert_is_classics_swing_setup_watch(tmp_path):
     assert [w["id"] for w in got["list"]][:1] == ["local-old"] and len(got["list"]) == 2, "the other alerts are kept, in order"
     assert got["full"] == "That is 40 alerts, which is the limit. Delete one to add another."
     assert "addWatchDef(row.symbol, 'swing_setup', { preset: row.preset })" in CLASSIC
-    panels = (JS / "pages/options-panels.js").read_text()
-    assert 'data-v2-setup-alert="${r.preset}"' in panels and "Filters, rule settings and back-tests for setups are in the" in panels
-    assert "await addAlert({ symbol: sym, kind: 'swing_setup', params: { preset: b.dataset.v2SetupAlert } });" in (JS / "pages/options.js").read_text()
+    # since B6b the alert is in a setup's opened row, in the full Swing setups tool
+    assert "await addAlert({ symbol: r.symbol, kind: 'swing_setup', params: { preset: r.preset } });" in (JS / "pages/setups.js").read_text()
 
 
 def test_signal_history_is_shown_as_recorded():
