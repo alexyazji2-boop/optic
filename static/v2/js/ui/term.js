@@ -5,7 +5,8 @@
 // from the classic glossary (core/glossary.js, word for word) and, for the few beginner terms it lacks, from BASICS.
 import { html, raw } from '../core/dom.js';
 import { esc } from '../core/format.js';
-import { GLOSSARY } from '../core/glossary.js';
+import { GLOSSARY, LABEL_DEFS, TH_HINTS } from '../core/glossary.js';
+import { icon } from './icons.js';
 
 // beginner terms the classic glossary does not carry; each a sentence or two, and an example where it helps
 const BASICS = {
@@ -60,6 +61,7 @@ export function defineLive(key, def) { if (def) LIVE.set(String(key).toLowerCase
 export function define(key) {
   const k = String(key || '').toLowerCase(), a = ALIAS[k] || k;
   if (k.startsWith('stat:')) return STATS[k.slice(5)] ? { def: STATS[k.slice(5)], ex: null } : null;
+  if (k.startsWith('head:')) { const h = LABEL_DEFS[k.slice(5)] || TH_HINTS[k.slice(5)]; return h ? { def: h, ex: null } : null; }
   if (LIVE.has(k)) return { def: LIVE.get(k).def, ex: null };
   const b = BASICS[a] || BASICS[k];
   if (b) return { def: b.def, ex: b.ex || EXAMPLE[a] || null };
@@ -73,6 +75,35 @@ export function term(key, shown) {
   const d = define(key), label = shown || key;
   if (!d) return html`${label}`;
   return html`<button type="button" class="term" data-v2-term="${String(key).toLowerCase()}" aria-expanded="false" aria-haspopup="dialog">${label}</button>`;
+}
+
+/* "Explain this with Milo" (Classic's miloExplainPrompt, word for word): the term, the figure beside it when it labels
+ * one (a tile's value), the company and the page. It only drafts; nothing is sent until the reader presses Send. */
+const where = () => String(document.title || '').replace(/, Optic$/, '').trim();
+const symbolHere = () => { const m = /^#\/([A-Z0-9.^=-]{1,12})(?:\/|\?|$)/.exec(location.hash || ''); return m && /[A-Z]/.test(m[1]) ? m[1] : ''; };
+export function explainPrompt(btn, page = where(), sym = symbolHere()) {
+  const label = String(btn.textContent || '').trim().slice(0, 80);
+  const dt = btn.closest && btn.closest('dt'), dd = dt && dt.nextElementSibling && dt.nextElementSibling.tagName === 'DD' ? dt.nextElementSibling : null;
+  const value = String(dd ? dd.textContent : '').trim().slice(0, 60);
+  const subject = `${label}${value ? ` (${value})` : ''}${sym ? ` for ${sym}` : ''}${page ? ` on the ${page} page` : ''}`;
+  return `Explain ${subject}: what it measures, why someone would use it, what this value suggests, and what it cannot tell me.`;
+}
+
+/* A hover, or keyboard focus, shows the definition as a tip beside the word; a press opens it with Explain this with
+ * Milo (Classic's on-demand glossary: app.js initGlossaryTooltips). The tip is a preview only, hidden from a screen
+ * reader, which hears the word as a button that opens the explanation. A finger has no hover: a tap opens it. */
+let tip = null, tipFor = null, tipT = null;
+function hideTip() { clearTimeout(tipT); if (tip) { tip.remove(); tip = null; } tipFor = null; }
+function showTip(btn) {
+  if (pop || tipFor === btn) return;
+  const d = define(btn.dataset.v2Term); if (!d) return;
+  hideTip(); tipFor = btn;
+  tip = document.createElement('div'); tip.className = 'term-tip'; tip.setAttribute('aria-hidden', 'true');
+  tip.innerHTML = `<p class="term-pop-h">${esc(btn.textContent.trim())}</p><p>${esc(d.def)}</p>`;
+  document.body.appendChild(tip);
+  const r = btn.getBoundingClientRect(), w = Math.min(300, window.innerWidth - 24), h = tip.offsetHeight;
+  tip.style.width = `${w}px`; tip.style.left = `${Math.min(Math.max(12, r.left + r.width / 2 - w / 2), window.innerWidth - w - 12) + window.scrollX}px`;
+  tip.style.top = `${(r.bottom + 8 + h <= window.innerHeight - 12 ? r.bottom + 8 : Math.max(12, r.top - 8 - h)) + window.scrollY}px`;
 }
 
 let pop = null, from = null;
@@ -90,7 +121,9 @@ function open(btn) {
   const id = `term-pop-${++seq}`;
   pop = document.createElement('div');
   pop.className = 'term-pop'; pop.id = id; pop.setAttribute('role', 'dialog'); pop.setAttribute('aria-label', btn.textContent.trim());
-  pop.innerHTML = `<p class="term-pop-h">${esc(btn.textContent.trim())}</p><p>${esc(d.def)}</p>${d.ex ? `<p class="term-pop-ex"><span>Illustration:</span> ${esc(d.ex)}</p>` : ''}<button type="button" class="term-pop-x" aria-label="Close the explanation">Close</button>`;
+  hideTip();
+  const ask = explainPrompt(btn);
+  pop.innerHTML = `<p class="term-pop-h">${esc(btn.textContent.trim())}</p><p>${esc(d.def)}</p>${d.ex ? `<p class="term-pop-ex"><span>Illustration:</span> ${esc(d.ex)}</p>` : ''}<div class="term-pop-acts"><button type="button" class="btn btn-sm btn-milo term-pop-milo" data-v2-milo="${esc(ask)}" data-v2-milo-ctx="${esc(where())}">${icon('milo').s}Explain this with Milo</button><button type="button" class="term-pop-x" aria-label="Close the explanation">Close</button></div>`;
   document.body.appendChild(pop);
   from = btn; btn.setAttribute('aria-expanded', 'true'); btn.setAttribute('aria-controls', id);
   // beside the word, inside the screen: under it when there is room, over it when not
@@ -102,7 +135,16 @@ function open(btn) {
   pop.querySelector('.term-pop-x').focus({ preventScroll: true });
 }
 if (typeof document !== 'undefined' && document.addEventListener) {
+  document.addEventListener('pointerover', (e) => {
+    if (e.pointerType !== 'mouse') return;
+    const b = e.target.closest && e.target.closest('[data-v2-term]'); if (!b) return;
+    clearTimeout(tipT); tipT = setTimeout(() => showTip(b), 250);
+  });
+  document.addEventListener('pointerout', (e) => { if (e.target.closest && e.target.closest('[data-v2-term]')) hideTip(); });
+  document.addEventListener('focusin', (e) => { const b = e.target.closest && e.target.closest('[data-v2-term]'); if (b && b.matches(':focus-visible')) showTip(b); });
+  document.addEventListener('focusout', (e) => { if (e.target.closest && e.target.closest('[data-v2-term]')) hideTip(); });
   document.addEventListener('click', (e) => {
+    if (pop && e.target.closest && e.target.closest('.term-pop [data-v2-milo]')) { setTimeout(() => close(false), 0); return; }   // drafted into Milo; the explanation steps aside
     const b = e.target.closest && e.target.closest('[data-v2-term]');
     if (b) { e.preventDefault(); open(b); return; }
     if (pop && e.target.closest && e.target.closest('.term-pop-x')) { close(); return; }
@@ -110,6 +152,6 @@ if (typeof document !== 'undefined' && document.addEventListener) {
   });
   // Escape shuts the explanation and nothing else (a drawer under it stays open)
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && pop) { e.preventDefault(); e.stopPropagation(); close(); } }, true);
-  window.addEventListener('hashchange', () => close(false));
+  window.addEventListener('hashchange', () => { close(false); hideTip(); });
 }
 export { raw };

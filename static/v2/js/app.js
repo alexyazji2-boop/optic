@@ -28,6 +28,7 @@ import * as bridge from './pages/bridge.js';
 import { watchTables } from './ui/align.js';
 import { startUnread } from './core/unread.js';
 import { startStrips } from './ui/strips.js';
+import { watch as watchGlossary } from './ui/glossmark.js';
 
 // Home is the research workspace (Market Overview by default); pages/home.js supplies its blocks
 // Each page's module is fetched the first time it is opened, not with the shell: a first visit on a phone
@@ -286,6 +287,7 @@ async function boot() {
   await afterAuth();
   checkAvailability();
   startUnread(shell.setUnread);
+  watchGlossary($('#main'));   // glossary terms marked on eligible text, once per section (Classic parity B9.1)
   startStrips();   // sideways strips: edge arrows, the wheel and a mouse drag (Classic parity B3)   // the bell and the phone bar's Watchlist count (signed in only)
   scrollmem.start();
   router.onRoute(show);
