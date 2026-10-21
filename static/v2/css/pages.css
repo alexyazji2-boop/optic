@@ -1810,4 +1810,13 @@ html.eff-1100 .ob-ways { grid-template-columns: minmax(0, 1fr); }
 .sv-route b { font-weight: 600; } .sv-route span { font-size: var(--t-sm); color: var(--c-ink-3); }
 .sv-route:hover { background: var(--c-sunk); } .sv-route:focus-visible { outline: 2px solid var(--c-focus); outline-offset: 2px; }
 @media (max-width: 640px) { .sv-routes { grid-template-columns: minmax(0, 1fr); } .sv-item { grid-template-columns: minmax(0, 1fr); } .sv-acts { grid-column: 1; grid-row: auto; } }
-
+/* ticker suggestions under a symbol box (ui/typeahead.js, Classic parity B8.10) */
+.ta-host { position: relative; } .ta-wrap { display: inline-block; }
+.ta-list { position: absolute; z-index: 30; top: calc(100% + 4px); left: 0; min-width: 100%; width: max-content; max-width: min(420px, calc(100vw - 32px)); max-height: 320px; overflow-y: auto;
+  margin: 0; padding: 4px; list-style: none; background: var(--c-raised); border: 1px solid var(--c-line); border-radius: var(--r-lg); box-shadow: var(--sh-pop); }
+.ta-list li { display: grid; grid-template-columns: minmax(56px, auto) minmax(0, 1fr) auto; gap: 10px; align-items: baseline; min-height: 40px; padding: 8px 10px; border-radius: var(--r-sm); cursor: pointer; font-size: var(--t-md); }
+.ta-list li:hover, .ta-list li.on { background: var(--c-sunk); }
+.ta-sym { font: 600 var(--t-md)/1.2 var(--f-label); } .ta-name { color: var(--c-ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .ta-tag { color: var(--c-ink-3); font-size: var(--t-xs); }
+.ta-list b { color: var(--c-ink); font-weight: 600; } .ta-sym b { text-decoration: underline; text-underline-offset: 3px; }
+@media (pointer: coarse) { .ta-list li { min-height: var(--tap); } }
+.read-build { margin-top: 6px; }

@@ -8,6 +8,7 @@ import { skeleton, failed } from '../ui/states.js';
 import { table, nextSort } from '../ui/table.js';
 import { provideContext } from '../ui/milo.js';
 import { sectionHead } from './tabs.js';
+import { wire as typeahead } from '../ui/typeahead.js';
 
 const SHOWS = [['', 'All'], ['upgrades', 'Upgrades'], ['downgrades', 'Downgrades'], ['initiations', 'Initiations'], ['raised', 'Target raised'], ['lowered', 'Target lowered']];
 const RATINGS = [['', 'Any'], ['buy', 'Buy'], ['hold', 'Hold'], ['sell', 'Sell']];
@@ -42,7 +43,7 @@ function paint() {
   const days = Q.ticker ? [[1, 'Day'], [7, '7 days'], [30, '30 days'], [365, 'Year']] : [[1, 'Day'], [7, '7 days'], [30, '30 days']];
   draw(mainEl, html`<header class="page-head">${sectionHead('discover', 'analysts')}</header>
     <section class="section first" aria-labelledby="an-h"><h2 class="t-h2" id="an-h">Analyst actions${Q.ticker ? `: ${Q.ticker}` : ''}</h2>
-      <form class="op-filters" data-v2-an-form role="search"><label class="field field-sm"><span class="sr">Symbol</span><input name="t" value="${Q.ticker}" placeholder="Symbol, such as NVDA" maxlength="12" autocomplete="off"></label><button type="submit" class="btn btn-sm">Search</button>${Q.ticker ? html`<button type="button" class="btn btn-sm" data-v2-an-clear>All names</button>` : ''}</form>
+      <form class="op-filters" data-v2-an-form role="search"><span class="ta-wrap" data-v2-ta-host><label class="field field-sm"><span class="sr">Symbol or company</span><input name="t" value="${Q.ticker}" placeholder="Symbol, such as NVDA" maxlength="24" autocomplete="off" spellcheck="false" data-v2-ta></label></span><button type="submit" class="btn btn-sm">Search</button>${Q.ticker ? html`<button type="button" class="btn btn-sm" data-v2-an-clear>All names</button>` : ''}</form>
       <div class="cluster an-filters">
         <div class="seg" role="group" aria-label="Show">${SHOWS.map(([v, l]) => html`<button type="button" data-v2-an-show="${v}" aria-pressed="${Q.show === v}">${l}</button>`)}</div>
         <div class="seg" role="group" aria-label="Rating">${RATINGS.map(([v, l]) => html`<button type="button" data-v2-an-rating="${v}" aria-pressed="${Q.rating === v}">${l}</button>`)}</div>
@@ -72,6 +73,7 @@ export async function render(main) {
     if (t('[data-v2-an-clear]')) { Q.ticker = ''; if (Q.days === 365) Q.days = 30; load(); return; }
     if ((b = t('[data-v2-sort]'))) { const [, k] = b.dataset.v2Sort.split(':'); sort = nextSort(sort, k, COLS); paint(); const again = mainEl.querySelector(`[data-v2-sort="an:${k}"]`); if (again) again.focus(); }
   });
+  typeahead(main, (pick) => { Q.ticker = String(pick.symbol).toUpperCase(); load(); });   // suggestions under the box (Classic parity B8.10)
   main.addEventListener('submit', (e) => { const f = e.target.closest('[data-v2-an-form]'); if (!f) return; e.preventDefault(); Q.ticker = String(f.t.value || '').trim().toUpperCase(); load(); });
   load();
 }

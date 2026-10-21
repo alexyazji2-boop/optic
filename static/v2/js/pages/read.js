@@ -6,7 +6,6 @@
 // already written; the server's own loop keeps the Read current. Writing a
 // missing piece is a labelled button, because it spends a model call.
 import { $, html, raw, render as draw } from '../core/dom.js';
-import { CLASSIC } from '../core/classic.js';
 import * as api from '../core/api.js';
 import { num, signed, clean, bolded, capFirst, ago, shortDate, fullDate, isNum, dir } from '../core/format.js';
 import { skeleton, empty, failed, how, generated } from '../ui/states.js';
@@ -40,18 +39,45 @@ function desk() {
 }
 
 /* ---------------- the Read ---------------- */
+// Building the Read on request (Classic parity B8.7). Classic built it whenever its tab opened with no edition ready;
+// here it is built only when the reader presses, and says what it costs first: the server writes the edition's text
+// with one model call, kept and shared by every reader, so a second press does not write it again.
+const BUILD_COST = 'Building it gathers the day\'s moves, the calendar and the wires, and an AI model writes the summary: one model call for this edition, shared by every reader. It can take half a minute.';
+function buildControl(label, quiet) {
+  if (D.building) return html`<p class="asof" role="status">Building today's Read. It appears here when it is done.</p>`;
+  return html`${D.buildNote ? html`<p class="asof" role="status">${D.buildNote}</p>` : ''}<button type="button" class="${quiet ? 'textlink' : 'btn'}" data-v2-read-build>${label}</button>${quiet ? html`<span class="asof"> One model call for this edition, shared by every reader.</span>` : ''}`;
+}
+const pause = (ms) => new Promise((r) => setTimeout(r, ms));
+async function buildRead() {
+  if (D.building) return;
+  const was = D.brief && !D.brief.missing ? `${D.brief.day}|${D.brief.built_at}` : '';
+  D.building = true; D.buildNote = ''; paint();
+  try {
+    let r = await api.get('/api/brief', { ttl: 0, force: true, timeout: 120000 });
+    // an aged Read comes back at once while a newer one is built behind it: asked again until it lands, about two minutes
+    for (let i = 0; r && r.refreshing && i < 15 && live; i += 1) {
+      await pause(8000);
+      const c = await api.get('/api/brief?cached=true', { ttl: 0, force: true, timeout: 30000 });
+      if (c && !c.missing && !c.previous_day && `${c.day}|${c.built_at}` !== was) { r = c; break; }
+    }
+    if (r && !r.missing) { D.brief = r; D.briefErr = null; }
+    if (r && (r.refreshing || r.missing) && live) D.buildNote = 'It is still being built. It appears here when you come back, or press again in a minute.';
+  } catch (err) { toast(api.explain(err, "Today's Read"), { kind: 'bad' }); }
+  D.building = false; if (live) { paint(); const f = mainEl.querySelector('#rd-h') || mainEl.querySelector('[data-v2-read-build]'); if (f) { if (!f.hasAttribute('tabindex')) f.setAttribute('tabindex', '-1'); f.focus({ preventScroll: true }); } }
+}
 function readHero() {
   const b = D.brief;
   if (D.briefErr) return failed("Today's Read", D.briefErr, { retry: 'brief' });
   if (!b) return skeleton('lines', 6, "Loading today's Read");
-  if (b.missing) return empty("Today's Read is not ready yet", `${clean(b.reason || '')} The classic app can build it on request.`, html`<a class="btn" href="${CLASSIC}#/read">Open the Read in the classic app ${icon('out')}</a>`);
+  if (b.missing) return empty("Today's Read is not ready yet", `${clean(b.reason || '')} ${BUILD_COST}`, buildControl("Build today's Read"));
   const s = b.summary || {}, w = b.wires || {};
   const idx = ((b.overview || {}).groups || {}).indices || [];
   return html`${idx.length ? html`<div class="mstrip" style="--n:${idx.length}" role="group" aria-label="Indices">${idx.map((r) => html`<a class="mcell" href="#/${r.symbol}"><span class="k">${r.symbol} ${r.name}</span><span class="v">${num(r.last)}</span><span class="d ${dir(r.day)}">${signed(r.day)}</span></a>`)}</div>
       <p class="asof">Fund prices, not index levels.</p>` : ''}
     <section class="section read-hero" aria-labelledby="rd-h">
       <div class="section-head"><div><p class="t-label">Optic's Read, ${fullDate(b.day)}</p><h2 class="t-display-m" id="rd-h">${clean(s.headline || 'The Read')}</h2>
-        <p class="section-sub">Prices and headlines updated ${ago(b.built_at)}${b.previous_day ? '. Showing the previous day\'s Read until today\'s is ready' : b.stale ? '. A newer edition is due shortly' : ''}.${w.window_hours ? ` Covering the ${w.window_hours} hours since the previous session closed${w.window_hours >= 48 ? ', the whole weekend' : ''}.` : ''}</p></div>
+        <p class="section-sub">Prices and headlines updated ${ago(b.built_at)}${b.previous_day ? '. Showing the previous day\'s Read until today\'s is ready' : b.stale ? '. A newer edition is due shortly' : ''}.${w.window_hours ? ` Covering the ${w.window_hours} hours since the previous session closed${w.window_hours >= 48 ? ', the whole weekend' : ''}.` : ''}</p>
+        ${b.previous_day || b.stale ? html`<div class="read-build">${buildControl(b.previous_day ? "Build today's Read now" : 'Update it now', true)}</div>` : ''}</div>
         ${ask('Ask Milo about the Read', 'What matters most in today\'s Read, and what period does it cover?')}</div>
       <div class="read-prose">${(s.paragraphs || []).map((p) => (String(p).startsWith('## ') ? html`<h3>${raw(bolded(p.slice(3)))}</h3>` : html`<p>${raw(bolded(p))}</p>`))}</div>
       <!-- two clocks, said apart (design review, 2026-10-19): the data refresh above and when this text was written -->
@@ -308,6 +334,7 @@ function wire(main) {
   main.addEventListener('click', async (e) => {
     const b = (s) => e.target.closest(s);
     let x;
+    if (b('[data-v2-read-build]')) { buildRead(); return; }
     if ((x = b('[data-v2-cal-impact]'))) { cal.impact = x.dataset.v2CalImpact; paintMore(); return; }
     if ((x = b('[data-v2-cal-range]'))) { cal.range = x.dataset.v2CalRange; paintMore(); return; }
     if (b('[data-v2-catread]')) {
