@@ -25,7 +25,7 @@ import { poll } from '../core/poll.js';
 import { createPriceChart } from '../ui/pricechart.js';
 import { sections } from '../ui/sections.js';
 import { insiderMarks, barKey, barTime } from './chart-widgets.js';
-import { addAlert } from '../core/watches.js';
+import { mountSetups, disposeSetups, setupsContext } from './setups.js';
 let lp = null;   // the header's price refresh (dossier-frame livePrice), stopped in dispose()
 
 const FILTER_KEY = 'optic.options.filters.v1';   // a tool setting, as in the classic app
@@ -389,7 +389,8 @@ const OPT_GROUPS = [
     ['Ideas', (t, s) => P.ideas(t, s, D.budget), (t) => P.ideaCharts(t, (t.quote || {}).price)],
     ['Price', (t, s) => priceBody(t, s), null, () => mountPrice()],
     ['Levels and momentum', (t, s) => P.levels(t, s), (t) => P.levelCharts(t)],
-    ['Setups and patterns', (t, s) => P.setups(t, s, D.extra), null, () => loadExtra()],
+    ['Swing setups', (t, s) => P.swingSetups(t, s), null, () => mountSetups(mainEl, D.sym, { budget: () => D.budget || 0, live: () => String((D.quote || {}).market_state || '').toUpperCase() === 'REGULAR' })],
+    ['Chart patterns and seasonality', (t, s) => P.patterns(t, s, D.extra), null, () => loadExtra()],
   ] },
 ];
 const GROUP_KEY = 'optic.options.group.v1';   // a tool setting
@@ -431,9 +432,10 @@ async function loadExtra() {
   if (D.extra.loading) return;
   D.extra.loading = true;
   const enc = encodeURIComponent(D.sym), g = GEN;
-  const [st, se, rp] = await Promise.allSettled([api.get(`/api/setups?symbols=${enc}&status=recent`, { ttl: 300000 }), api.get(`/api/seasonality/${enc}`, { ttl: 3600000 }), api.get(`/api/relperf/${enc}`, { ttl: 600000 })]);
+  // the base rates are the same for every symbol and can take ninety seconds to build when none are cached
+  const [se, rp, br] = await Promise.allSettled([api.get(`/api/seasonality/${enc}`, { ttl: 3600000 }), api.get(`/api/relperf/${enc}`, { ttl: 600000 }), api.get('/api/patterns/base-rates', { ttl: 3600000, timeout: 150000 })]);
   if (!stillHere(g)) return;
-  D.extra = { loading: true, setups: st.status === 'fulfilled' ? st.value : null, seasonality: se.status === 'fulfilled' ? se.value : null, relperf: rp.status === 'fulfilled' ? rp.value : null };
+  D.extra = { loading: true, seasonality: se.status === 'fulfilled' ? se.value : null, relperf: rp.status === 'fulfilled' ? rp.value : null, rates: br.status === 'fulfilled' ? br.value : { failed: true } };
   if (live && panelState === 2) paintMore();
 }
 
@@ -462,7 +464,7 @@ export async function render(main, route) {
   document.title = `${sym} Options, Optic`;
   if (lp) lp.stop();
   lp = livePrice(main, route.symbol, () => D, 'swing', undefined);
-  provideContext(() => ({ view: 'swing', ticker: sym, quote: D.quote, gex: (D.t || {}).gex, greeks: (D.t || {}).greeks, flow: (D.t || {}).flow, vol_surface: (D.t || {}).vol_surface, iv_rank: (D.t || {}).iv_rank, entry_plan: (D.t || {}).entry_plan, verdict: (D.t || {}).verdict, naked_ideas: (D.t || {}).naked_ideas, strategy_ideas: (D.t || {}).strategy_ideas, rate: (D.t || {}).rate,
+  provideContext(() => ({ view: 'swing', ticker: sym, quote: D.quote, gex: (D.t || {}).gex, greeks: (D.t || {}).greeks, flow: (D.t || {}).flow, vol_surface: (D.t || {}).vol_surface, iv_rank: (D.t || {}).iv_rank, entry_plan: (D.t || {}).entry_plan, verdict: (D.t || {}).verdict, naked_ideas: (D.t || {}).naked_ideas, strategy_ideas: (D.t || {}).strategy_ideas, rate: (D.t || {}).rate, swing_setups: setupsContext(),
     options_research: R.data ? { expiry: R.expiry, side: R.side, summary: R.data.summary, events: R.data.events, rows: ((R.data.table || {}).rows || []).slice(0, 20),
       // when the quotes were read, and why figures are missing when they are (no two-sided quotes overnight)
       quotes_read_at: R.data.fetched_at || null, quotes_unusable: noQuotes() || null, position: B.analysis ? { legs: B.legs, analysis: { entry: B.analysis.entry, max_profit: B.analysis.max_profit, max_loss: B.analysis.max_loss, breakevens: B.analysis.breakevens_at_expiry, greeks: B.analysis.greeks, scenarios: B.analysis.scenarios, flags: B.analysis.flags } } : null } : null }));
@@ -496,7 +498,7 @@ export async function render(main, route) {
   }, { every: 60000, closed: 600000 });
 }
 
-export function dispose() { if (lp) { lp.stop(); lp = null; } live = false; if (refresh) { refresh.stop(); refresh = null; } if (pc) { pc.destroy(); pc = null; } }
+export function dispose() { if (lp) { lp.stop(); lp = null; } live = false; disposeSetups(); if (refresh) { refresh.stop(); refresh = null; } if (pc) { pc.destroy(); pc = null; } }
 
 /* ---------------- the price chart (Classic's Options price chart, app.js:12383, 12786-12865) ----------------
  * The daily bars of the ticker payload on the shared price chart: pan, zoom, measure and the price scale as on the
@@ -543,19 +545,6 @@ function wire(main) {
     if ((b = t('[data-v2-leg-step]'))) { const [i, d] = b.dataset.v2LegStep.split(':').map(Number); const l = B.legs[i]; const max = l.type === 'stock' ? 100000 : 100; const q = Math.max(1, Math.min(max, l.qty + d * (l.type === 'stock' ? 100 : 1))); if (q !== l.qty) { l.qty = q; await analyze(); const again = $(`[data-v2-leg-step="${i}:${d}"]`, main); if (again && !again.disabled) again.focus(); } return; }
     if ((b = t('[data-v2-op-row]'))) { const r = document.getElementById(b.getAttribute('aria-controls')); const open = b.getAttribute('aria-expanded') !== 'true'; if (r) r.hidden = !open; b.setAttribute('aria-expanded', String(open)); return; }
     if (t('[data-v2-op-sum]')) { toBuilder(); return; }
-    if ((b = t('[data-v2-setup-alert]'))) {
-      // Classic's setup alert (app.js:6471): a swing_setup alert naming the preset, set in one press, nothing traded
-      if (b.getAttribute('aria-disabled') === 'true') return;
-      const sym = store.canon(D.sym || ''), label = String(b.dataset.label || 'setup');
-      b.setAttribute('aria-disabled', 'true');
-      try {
-        await addAlert({ symbol: sym, kind: 'swing_setup', params: { preset: b.dataset.v2SetupAlert } });
-        b.textContent = 'Alert set'; b.removeAttribute('aria-label');
-        (D.extra.alerted = D.extra.alerted || new Set()).add(b.dataset.v2SetupAlert);   // kept across the panel's repaints this visit
-        toast(`Alert set: ${sym}, the ${label.toLowerCase()}. A trigger on a completed daily candle lands in Alerts.`, { action: 'Open Alerts', run: () => { location.hash = '#/alerts'; } });
-      } catch (err) { b.removeAttribute('aria-disabled'); toast(err.kind ? api.explain(err, 'The alert') : err.message, { kind: 'bad' }); }
-      return;
-    }
     if ((b = t('[data-v2-when]'))) { B.when = b.dataset.v2When; paintResult(); const again = $(`[data-v2-when="${B.when}"]`, main); if (again) again.focus(); return; }
     if ((b = t('[data-v2-op-side]'))) { R.side = b.dataset.v2OpSide; saveFilters(); loadResearch(); return; }
     if (t('[data-v2-op-all]')) { R.allStrikes = !R.allStrikes; R.allByUnq = false; paintResearch(); const again = $('[data-v2-op-all]', main); if (again) again.focus(); return; }

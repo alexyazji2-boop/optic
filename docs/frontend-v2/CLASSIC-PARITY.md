@@ -223,12 +223,25 @@ Not tested:
 | B6a.6 | Fund takeaways and the risk card | Overview, under a fund's four answers (`fundRisk`) | "A risk to weigh", the first point against it, with its evidence's tab; a fund has no Financials card or step and no thesis check | Same | Nothing | No point against: nothing shown | `/api/ticker` | b6a_research: SPY | done |
 | B6a.7 | Stage label in the header | The Overview's header line (`dossier-frame.js` `header({stage})`) | "Stage 2, advancing" as text, opening what it means for the symbol and its limits; kept when the live price redraws the line | Same | Nothing | Unavailable: no label | `/api/stage` (free) | b6a_research: the label, its explanation, after a redraw, at every width | done |
 
-### B6b and B6c
+### B6b. Swing setups in full, and chart patterns with their base rates
+Evidence:
+- `b6b_check.py`: 19 of 19 in headless Chrome at 1440, 1024, 390 and 360, a guest, on the preview's own data. Classic's saved view and rule settings were seeded; the one write is a guest alert in the browser.
+- `b5_check.py` (38 of 38) now presses the alert in the opened row.
+- `tests/test_v2_parity_b6b.py`: Classic's stored shapes, partial and junk values included; the scan's request; the rules form; the base-rate reading.
+
+Not tested:
+- A watchlist scan of 40 symbols against the live feed (it is the same request with more symbols).
+- Real Safari and a physical phone.
+
+| Row | Task | Where | Desktop | Phone | Keeps | States | Deps | Evidence | Status |
+|---|---|---|---|---|---|---|---|---|---|
+| B6b.1 | Swing setups: scope, filters, rules form (`optic.setups.*`) | Options, Setups and strategy, "Swing setups" (`pages/setups.js`), in place of the compact list and its link to Classic | Symbols (this one or a watchlist), direction, timeframe (4-hour for one symbol), strategy and status as selects, each rescanning with focus kept; the summary line (the candles, through when, the count in each state); Rule settings: the shared context and each preset's parameters and on-off, Apply keeping only changes, Back to the defaults; a row on changed settings says "your settings" | Filters two to a row; the scan as a list, no sideways scroll | `optic.setups.view.v1`, `optic.setups.params.v1`, Classic's keys and formats | Reading; failed: Retry; an empty watchlist; nothing matches: says how to see everything | `/api/setups`, `/api/setups/catalogue` (free) | b6b: the saved view and settings read, the request, filters, scope, the rules form, the reset | done. Differs: a row opened under old settings closes when they change (Classic left it reading forever) |
+| B6b.2 | Setup detail, back-test table, contract finder | A row's Details | The rule, Alert me when this triggers (B5's alert), the chart (the close, the rule's own lines, trigger and invalidation, where it armed, triggered or ended, a legend), the conditions met, the readings and volume, the back-test (all, earlier 70%, held out 30%, in R, with its assumptions), and the contract finder (days to expiry, open interest, volume, spread; what passed and why; the tab's budget) | The detail as wide as the screen | Opened rows and the contract filters survive the group's redraws (one node for the visit) | Each part loads on its own; a failed chain says so | `/api/setups/{T}/detail`, `/api/setups/{T}/options` (free) | b6b: a row opened, chart drawn, back-test rows, contracts asked with the typed filters, the alert, a group switch | done. The chart is v2's line chart with the levels, not Classic's candles |
+| B6b.3 | Chart patterns with measured base rates | Options, "Chart patterns and seasonality" | Structure, supply and demand zones, and recent candles, each beside the hit rate of its conventional reading over 21 sessions across 43 names and ten years, and its edge over the stock's own drift; Classic's caveats; the base rates' method folded; relative performance and seasonality as before | Same; tables scroll inside their box | Nothing | Base rates loading (the server may build them for 90 s): says so; failed: says so | `/api/patterns/base-rates` (free, the same for every symbol) | b6b: rates beside patterns | done |
+
+### B6c
 | Row | Task | Status |
 |---|---|---|
-| B6b.1 | Swing setups: scope, filters, rules form (`optic.setups.*`) | open |
-| B6b.2 | Setup detail, back-test table, contract finder | open |
-| B6b.3 | Chart patterns with measured base rates | open |
 | B6c.1 | `validation` branch reviewed; only the compatible work it needs taken | open |
 | B6c.2 | Track-record slots on Options and Investing | open |
 
