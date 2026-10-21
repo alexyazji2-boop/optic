@@ -154,7 +154,7 @@ def test_insiders_views_have_counts_coverage_filters_and_both_dates():
     loadc = ins[ins.index("async function loadC"):ins.index("\n", ins.index("async function loadC"))]
     for p in ("'side'", "'member'", "'since'"):
         assert p in loadc, p
-    assert "<th>Traded</th><th>Filed</th>" in ins
+    assert "<th>Traded</th>${Q.ticker ? html`<th>Close that day</th>` : ''}<th>Filed</th>" in ins, "both dates, and the day's close when one symbol is shown"
     assert "is-partial" in ins and "Partial." in ins
 
 

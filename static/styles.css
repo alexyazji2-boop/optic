@@ -13578,14 +13578,9 @@ body.auth-open { overflow: hidden; }
 .bkw-alert-set { display: flex; flex-direction: column; gap: var(--space-2); margin: var(--space-2) 0; }
 .bkw-check { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
 .bkw-check select { min-height: 32px; }
-.bkw-scen-row {
-  display: grid; grid-template-columns: minmax(90px, 1fr) minmax(120px, 1fr) minmax(90px, 1fr) minmax(110px, 1fr) auto;
-  gap: var(--space-2); align-items: end; margin-bottom: var(--space-2);
-}
 @media (max-width: 720px) {
   .bkw-ask { margin-left: 0; }
   .bkw-events li { grid-template-columns: 1fr; }
-  .bkw-scen-row { grid-template-columns: 1fr 1fr; }
 }
 .bk-tiles {
   display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));

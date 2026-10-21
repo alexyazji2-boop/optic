@@ -11,6 +11,7 @@ import { num, signed, dir, money, compact, clean, capFirst, fullDate, shortDate,
 import { lineChart, mountCharts } from '../ui/chart.js';
 import { signedBars, hbars, groupedBars, periodLines, bridgeBars, stackedBars } from '../ui/bars.js';
 import * as FV from '../core/finviz.js';
+import { closeCell, CLOSE_NOTE } from '../core/congress.js';
 import { skeleton, empty, failed } from '../ui/states.js';
 import { button as miloButton, provideContext } from '../ui/milo.js';
 import { core, header, tabs, isFund } from './dossier-frame.js';
@@ -254,9 +255,9 @@ function congress() {
   if (!c || !c.available) return '';
   return html`<section class="section" id="fin-congress" aria-labelledby="cg-h"><h2 class="t-h2" id="cg-h">Congressional disclosures</h2>
     <p>${c.count} trades by ${c.members} members of the House: ${c.buys} buys and ${c.sells} sales, worth ${money(c.amount_low, 0)} to ${money(c.amount_high, 0)} in the bands filed. Filed a median ${c.lag_median} days after the trade.</p>
-    <div class="tscroll"><table class="t"><thead><tr><th>Traded</th><th>Member</th><th>Action</th><th>Amount</th><th>Filed after</th></tr></thead>
-      <tbody>${(c.trades || []).slice(0, 15).map((t) => html`<tr><td>${t.traded_iso ? fullDate(t.traded_iso) : t.traded}</td><td>${t.member} <small class="t-muted">${t.district || ''}</small></td><td>${capFirst(t.transaction || '')}</td><td>${money(t.amount_low, 0)} to ${money(t.amount_high, 0)}</td><td>${isNum(t.disclosure_lag_days) ? `${t.disclosure_lag_days} days` : ''}</td></tr>`)}</tbody></table></div>
-    <p class="asof">${clean(c.caveat || '')} Source: House Clerk disclosures${c.complete ? '' : ', partly read'}.</p></section>`;
+    <div class="tscroll"><table class="t"><thead><tr><th>Traded</th><th>Member</th><th>Action</th><th>Amount</th><th>Close that day</th><th>Filed after</th></tr></thead>
+      <tbody>${(c.trades || []).slice(0, 15).map((t) => html`<tr><td>${t.traded_iso ? fullDate(t.traded_iso) : t.traded}</td><td>${t.member} <small class="t-muted">${t.district || ''}</small></td><td>${capFirst(t.transaction || '')}</td><td>${money(t.amount_low, 0)} to ${money(t.amount_high, 0)}</td><td>${closeCell(t)}</td><td>${isNum(t.disclosure_lag_days) ? `${t.disclosure_lag_days} days` : ''}</td></tr>`)}</tbody></table></div>
+    <p class="asof">${clean(c.caveat || '')} ${CLOSE_NOTE} Source: House Clerk disclosures${c.complete ? '' : ', partly read'}.</p></section>`;
 }
 
 // The reported total a segment table should add up to, on the same period end (within 15 days): revenue or

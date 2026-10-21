@@ -47374,7 +47374,7 @@ function parseRoute(hash) {
   if (head === 'brokerage' && parts.length === 2) {
     const section = parts[1].toLowerCase();
     // The workspace's sections; static/brokerage.js labels the same ids.
-    return ['overview', 'holdings', 'performance', 'events', 'scenarios', 'connections'].includes(section)
+    return ['overview', 'holdings', 'performance', 'events', 'connections'].includes(section)
       ? { view: 'brokerage', symbol: null, section } : null;
   }
   const symbol = head.toUpperCase();

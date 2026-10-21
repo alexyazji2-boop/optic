@@ -1,7 +1,7 @@
 // Brokerage: the reader's own linked accounts, read-only. Before a link it is
-// sign-in, plan and consent; after, six sections at their own addresses
+// sign-in, plan and consent; after, five sections at their own addresses
 // (#/brokerage/<section>): Overview, Holdings & Exposure, Performance,
-// Events & Research, Scenarios and Connections. Every figure says which kind
+// Events & Research and Connections. Every figure says which kind
 // it is: broker-reported, market data, or Optic's calculation.
 //
 // Against the same /api/brokerage routes as static/brokerage.js. What can cost
@@ -24,7 +24,6 @@ export const SECTIONS = [
   { id: 'holdings', label: 'Holdings & Exposure', ask: 'Where am I concentrated, counting what my ETFs hold?' },
   { id: 'performance', label: 'Performance', ask: 'How has my portfolio done against the S&P 500, and how much of the change was my own deposits and withdrawals?' },
   { id: 'events', label: 'Events & Research', ask: 'Which earnings and events affect me in the next two weeks?' },
-  { id: 'scenarios', label: 'Scenarios', ask: 'If I added to my largest position, how would my concentration change?' },
   { id: 'connections', label: 'Connections', ask: 'What can Optic see in my linked accounts, and what can it not?' },
 ];
 const SECTION_KEY = 'optic.brokerage.section.v1', SCOPE_KEY = 'optic.brokerage.scope.v1';
@@ -71,7 +70,7 @@ const tag = (tone, text) => html`<span class="set-tag ${tone === 'on' ? 'on' : t
 /* ---------------- state ---------------- */
 let S = { status: null }, live = true, mainEl = null, refreshT = null, appRef = null;
 const W = { data: {}, key: {}, extra: {}, loading: {}, error: {}, scopeKey: null, period: '1y', bench: 'SPY', sectors: 'look',
-  scenario: { rows: [{ symbol: '', action: 'buy', amount_type: 'dollars', amount: '' }], funding: 'cash' }, thesisEdit: null, thesisArmed: null, alertDraft: null };
+  thesisEdit: null, thesisArmed: null, alertDraft: null };
 const stored = (k, d) => { try { const v = localStorage.getItem(k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } };
 const keep = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* private mode */ } };
 const accounts = () => { const out = []; ((S.status || {}).connections || []).forEach((c) => (c.accounts || []).forEach((a) => out.push({ institution: c.institution, ...a }))); return out; };
@@ -164,7 +163,6 @@ function safe(sec) {
 }
 function sectionHTML(sec) {
   if (sec === 'connections') return connections();
-  if (sec === 'scenarios') return scenarios();
   if (W.error[sec]) return html`<div class="state err" role="alert"><p class="t-h3">${(SECTIONS.find((s) => s.id === sec) || {}).label} did not load</p><p>${W.error[sec]}</p><button type="button" class="btn btn-sm" data-v2-bk-retry>Try again</button></div>`;
   const d = W.data[sec];
   if (!d) return skeleton('rows', 5, `Loading ${(SECTIONS.find((s) => s.id === sec) || {}).label}`);
@@ -279,16 +277,27 @@ function optionsRisk(o) {
 }
 
 /* ---------------- performance ---------------- */
+// the periods whose start is more than four days before the first value Optic holds (a long weekend is not a gap)
+export function shortPeriods(period) {
+  const hs = period && period.history_start, st = (period && period.starts) || {};
+  if (!hs) return [];
+  return PERIODS.map(([k]) => k).filter((k) => k !== 'all' && st[k] && (Date.parse(hs) - Date.parse(st[k])) / 864e5 > 4);
+}
+const listWords = (xs) => (xs.length < 2 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`);
 function performance(d) {
   const r = d.returns || {}, twr = r.twr || {}, mwr = r.mwr || {}, bench = r.benchmark || {}, period = d.period || {}, ccy = d.currency || 'USD';
   const words = { provider_estimate: 'SnapTrade\'s estimated daily balances', collected: 'snapshots Optic collected at each sync', mixed: 'SnapTrade\'s estimates, then Optic\'s own snapshots', none: 'no value history yet' }[(d.sources || {}).values] || (d.sources || {}).values || 'unknown';
   const flows = d.flows || {}, inc = d.income || {}, att = d.attribution || {}, enough = isNum(twr.pct);
   const needsAddon = (d.data_status || []).some((s) => s.balance_history === 'unavailable');
+  // a period that reaches back past the first value Optic holds measures the same days as All: it waits, said so,
+  // rather than offering buttons that all show one number (owner, 2026-10-20: "these percentages remain a constant")
+  const short = shortPeriods(period), shown = short.includes(W.period) ? 'all' : W.period;
   return html`<section class="section first" aria-labelledby="bp-h"><h2 class="t-h2" id="bp-h">Performance</h2>
-      <div class="cluster"><div class="seg" role="group" aria-label="Period">${PERIODS.map(([k, l]) => html`<button type="button" data-v2-bk-period="${k}" aria-pressed="${W.period === k}">${l}</button>`)}</div>
+      <div class="cluster"><div class="seg" role="group" aria-label="Period">${PERIODS.map(([k, l]) => html`<button type="button" data-v2-bk-period="${k}" aria-pressed="${shown === k}" ${short.includes(k) ? html`disabled title="Needs history back to ${day(period.starts[k])}"` : ''}>${l}</button>`)}</div>
         <label class="select"><span class="t-label">Benchmark</span><select data-v2-bk-bench>${BENCHMARKS.map(([k, l]) => html`<option value="${k}" ${W.bench === k ? 'selected' : ''}>${l}</option>`)}</select></label></div>
+      ${short.length ? html`<p class="bk-short">Optic has values for these accounts from ${day(period.history_start)}, so ${listWords(short.map((k) => PERIODS.find((x) => x[0] === k)[1]))} would measure the same days as All. ${short.length > 1 ? 'They open' : 'It opens'} as the history grows: Optic records a value at each sync.</p>` : ''}
       ${enough ? html`<div class="bk-tiles">${tile('Time-weighted return', sPct(twr.pct), html`${src('optic')} The investments' own result, with deposits and withdrawals taken out.${twr.annualized ? ` Annualised ${pct(twr.annualized_pct, 2, true)}.` : ' Not annualised: under a year.'}`)}
-          ${tile('Money-weighted return', sPct(mwr.period_pct), html`${src('optic')} Your own result, weighted by when you added or took out money.${isNum(mwr.irr_annualized_pct) ? ` Annualised ${pct(mwr.irr_annualized_pct, 2, true)}.` : ''}`)}
+          ${tile('Money-weighted return', sPct(mwr.period_pct), html`${src('optic')} Your own result, weighted by when you added or took out money.${twr.annualized && isNum(mwr.irr_annualized_pct) ? ` Annualised ${pct(mwr.irr_annualized_pct, 2, true)}.` : ''}`)}
           ${tile(`Benchmark (${bench.symbol || W.bench})`, sPct(bench.twr_pct), html`${src('market')} Total return with dividends reinvested, over the same dates.`)}${tile('Difference', sPct(r.excess_pct), html`${src('optic')} Your time-weighted return minus the benchmark's.`)}</div>
         ${period.measured_start ? html`<p class="asof">Measured ${day(period.measured_start)} to ${day(period.measured_end)} (${period.days || ''} days) from ${words}.</p>` : ''}
         <h3>Cumulative return, yours and the benchmark's</h3><p class="legend-line cmp-legend"><span><i class="c1"></i>Your time-weighted return</span><span><i class="c2"></i>${bench.symbol || W.bench} total return</span></p><div class="chart-slot" data-chart="cum"></div>
@@ -378,45 +387,6 @@ function alertsBlock(a, s, choices) {
       ${on('thesis', 'Something new about a name with a thesis')}${on('connection', 'A connection needs attention')}
       <label class="check"><input type="checkbox" data-v2-bk-alert="email" ${draft.email ? 'checked' : ''}> <span>Also email me a count of new alerts (nothing about holdings is put in the email)</span></label>
       <div><button type="button" class="btn btn-primary btn-sm" data-v2-bk-alerts="save">Save alert settings</button></div></div></details></section>`;
-}
-
-/* ---------------- scenarios ---------------- */
-function scenarios() {
-  const sc = W.scenario, held = ((W.data.overview || {}).top_holdings || []).map((h) => h.symbol).filter(Boolean);
-  return html`<section class="section first" aria-labelledby="bw-h"><h2 class="t-h2" id="bw-h">What-if lab</h2>
-      <p class="section-sub">Try changes to your holdings and see what they would do to weights, concentration and historical risk. Nothing is traded: this is arithmetic on a copy.</p>
-      <datalist id="bk-held">${held.map((s) => html`<option value="${s}"></option>`)}</datalist>
-      ${sc.rows.map((r, i) => html`<div class="bk-scen-row" role="group" aria-label="Change ${i + 1}">
-        <label class="field"><span class="t-label">Symbol</span><input data-v2-bk-scen="${i}.symbol" value="${r.symbol}" maxlength="15" list="bk-held" placeholder="NVDA" autocomplete="off" autocapitalize="characters"></label>
-        <label class="select"><span class="t-label">Change</span><select data-v2-bk-scen="${i}.action">${[['buy', 'Add'], ['sell', 'Reduce'], ['target_weight', 'Set weight to']].map(([k, l]) => html`<option value="${k}" ${r.action === k ? 'selected' : ''}>${l}</option>`)}</select></label>
-        <label class="field"><span class="t-label">Amount</span><input type="number" step="any" min="0" inputmode="decimal" data-v2-bk-scen="${i}.amount" value="${r.amount}"></label>
-        <label class="select"><span class="t-label">In</span><select data-v2-bk-scen="${i}.amount_type">${(r.action === 'target_weight' ? [['weight_pct', '% of portfolio']] : [['dollars', 'dollars'], ['shares', 'shares']]).map(([k, l]) => html`<option value="${k}" ${r.amount_type === k ? 'selected' : ''}>${l}</option>`)}</select></label>
-        <button type="button" class="btn btn-sm" data-v2-bk-scen-del="${i}" aria-label="Remove change ${i + 1}">Remove</button></div>`)}
-      <div class="cluster"><button type="button" class="btn btn-sm" data-v2-bk-scen-add ${sc.rows.length >= 12 ? 'disabled' : ''}>Add a change</button>
-        <label class="select"><span class="t-label">Paid for by</span><select data-v2-bk-scen-funding>${[['cash', 'cash in the accounts'], ['new_money', 'new money'], ['pro_rata', 'selling the rest evenly']].map(([k, l]) => html`<option value="${k}" ${sc.funding === k ? 'selected' : ''}>${l}</option>`)}</select></label>
-        <button type="button" class="btn btn-primary" data-v2-bk-scen-run ${sc.running ? 'disabled' : ''}>${sc.running ? 'Working it out...' : 'Run'}</button></div>
-      ${sc.error ? html`<p class="stale" role="alert">${sc.error}</p>` : ''}</section>
-    <div aria-live="polite">${sc.result ? scenarioResult(sc.result) : ''}</div>`;
-}
-function scenarioResult(r) {
-  if (r.available === false) return html`<section class="section"><p>${clean(r.reason || 'The scenario could not be run.')}</p></section>`;
-  const conc = r.concentration || {}, hist = r.history || {}, hb = hist.before || {}, ha = hist.after || {};
-  const n2 = (v) => (v === null || v === undefined ? 'n/a' : Number(v).toFixed(2)), hc = (h, k, f) => (h.available ? f(h[k]) : html`<span class="t-muted">n/a</span>`);
-  const row = (label, b, a) => html`<tr><th scope="row">${label}</th><td>${b}</td><td>${a}</td></tr>`;
-  const lt = (r.sectors || {}).look_through, sl = Array.isArray(lt) ? lt : ((r.sectors || {}).direct || []), stress = r.stress || {};
-  const weights = (r.weights || []).filter((w) => w.changed).slice(0, 15), sectorsCh = sl.filter((x) => Math.abs(x.change_pts || 0) >= 0.05), notApplied = (r.changes || []).filter((c) => c.status !== 'applied');
-  return html`<section class="section" aria-labelledby="bz-h" tabindex="-1" id="bk-result"><h2 class="t-h2" id="bz-h">Before and after</h2><p class="section-sub">${clean(r.funding_rule || '')}</p>
-    <div class="tscroll"><table class="t bk-ba"><thead><tr><th scope="col"><span class="sr">Measure</span></th><th scope="col">Now</th><th scope="col">After</th></tr></thead><tbody>
-      ${row('Total', money((r.total || {}).before), money((r.total || {}).after))}${row('Cash', money((r.cash || {}).before), money((r.cash || {}).after))}
-      ${row('Effective number of holdings', n2((conc.before || {}).effective_holdings), n2((conc.after || {}).effective_holdings))}${row('Largest holding', pct((conc.before || {}).top1_pct), pct((conc.after || {}).top1_pct))}${row('Largest five holdings', pct((conc.before || {}).top5_pct), pct((conc.after || {}).top5_pct))}
-      ${row('Volatility over the past year (annualised)', hc(hb, 'vol_pct', (v) => pct(v)), hc(ha, 'vol_pct', (v) => pct(v)))}${row('Beta to the S&P 500, past year', hc(hb, 'beta', n2), hc(ha, 'beta', n2))}${row('Worst fall at these weights, past year', hc(hb, 'max_drawdown_pct', (v) => pct(v)), hc(ha, 'max_drawdown_pct', (v) => pct(v)))}</tbody></table></div>
-    <p class="asof">${clean(hist.label || '')}${hb.available ? '' : ` ${clean(hb.reason || '')}`}</p>
-    ${weights.length ? html`<h3>Weights that change</h3><div class="tscroll"><table class="t"><thead><tr><th scope="col">Holding</th><th scope="col">Now</th><th scope="col">After</th><th scope="col">Change</th></tr></thead><tbody>${weights.map((w) => html`<tr><td>${w.symbol}</td><td>${pct(w.before_pct)}</td><td>${pct(w.after_pct)}</td><td>${sPct(w.change_pts, 1)}</td></tr>`)}</tbody></table></div>` : ''}
-    ${sectorsCh.length ? html`<h3>Sectors that change</h3><ul class="plain">${sectorsCh.map((x) => html`<li>${x.sector || x.label} ${pct(x.before_pct)} to ${pct(x.after_pct)}</li>`)}</ul>${lt && !Array.isArray(lt) && lt.reason ? html`<p class="asof">Sectors are shown for directly held stocks: ${clean(lt.reason)}</p>` : ''}` : ''}
-    ${stress.before ? html`<p class="asof">${clean(stress.label || '')}: ${pct(stress.before.pct)} now, ${pct((stress.after || {}).pct)} after.</p>` : ''}
-    ${notApplied.length ? html`<h3>Not applied</h3><ul class="plain">${notApplied.map((c) => html`<li><b>${c.symbol}</b>: ${clean(c.reason || c.status)}</li>`)}</ul>` : ''}
-    ${(r.warnings || []).length ? html`<ul class="plain">${r.warnings.map((w) => html`<li class="stale">${clean(w)}</li>`)}</ul>` : ''}
-    <details class="more-inline"><summary>Method</summary><p>${clean(r.method || '')}</p><p class="asof">${r.version || ''}</p></details>${limits(r.limitations)}</section>`;
 }
 
 /* ---------------- page ---------------- */
@@ -585,9 +555,6 @@ function wire(main) {
     if ((b = t('[data-v2-bk-rename]'))) { S.renaming = b.dataset.v2BkRename; paint('[data-v2-bk-rename-input]'); const f = mainEl.querySelector('[data-v2-bk-rename-input]'); if (f) f.select(); return; }
     if (t('[data-v2-bk-rename-cancel]')) { S.renaming = null; paint(); return; }
     if ((b = t('[data-v2-bk-rename-save]'))) { saveRename(b.dataset.v2BkRenameSave); return; }
-    if ((b = t('[data-v2-bk-scen-add]'))) { if (W.scenario.rows.length < 12) W.scenario.rows.push({ symbol: '', action: 'buy', amount_type: 'dollars', amount: '' }); paint(`[data-v2-bk-scen="${W.scenario.rows.length - 1}.symbol"]`); return; }
-    if ((b = t('[data-v2-bk-scen-del]'))) { W.scenario.rows.splice(Number(b.dataset.v2BkScenDel), 1); if (!W.scenario.rows.length) W.scenario.rows.push({ symbol: '', action: 'buy', amount_type: 'dollars', amount: '' }); paint(); return; }
-    if (t('[data-v2-bk-scen-run]')) { runScenario(); return; }
     if ((b = t('[data-v2-bk-thesis-edit]'))) { W.thesisEdit = b.dataset.v2BkThesisEdit; W.thesisArmed = null; paint('[data-v2-bk-thesis-form] textarea'); return; }
     if (t('[data-v2-bk-thesis-cancel]')) { W.thesisEdit = null; paint(); return; }
     if ((b = t('[data-v2-bk-thesis-del]'))) {
@@ -623,17 +590,14 @@ function wire(main) {
       if (!r) { t.checked = !t.checked; t.disabled = false; return; }
       W.scopeKey = null; loadAll(true); return;
     }
-    if (t.matches('[data-v2-bk-scope]')) { keep(SCOPE_KEY, t.value ? [t.value] : []); W.scopeKey = null; W.scenario.result = null; paint('[data-v2-bk-scope]'); loadSection(false); return; }
+    if (t.matches('[data-v2-bk-scope]')) { keep(SCOPE_KEY, t.value ? [t.value] : []); W.scopeKey = null; paint('[data-v2-bk-scope]'); loadSection(false); return; }
     if (t.matches('[data-v2-bk-bench]')) { W.bench = t.value; delete W.data.performance; paint('[data-v2-bk-bench]'); loadSection(false); return; }
-    if (t.matches('[data-v2-bk-scen]')) { const [i, k] = t.dataset.v2BkScen.split('.'), row = W.scenario.rows[Number(i)]; if (!row) return; row[k] = t.value; if (k === 'action') { row.amount_type = t.value === 'target_weight' ? 'weight_pct' : 'dollars'; paint(`[data-v2-bk-scen="${i}.action"]`); } return; }
-    if (t.matches('[data-v2-bk-scen-funding]')) { W.scenario.funding = t.value; return; }
     if (t.matches('[data-v2-bk-alert]')) {
       W.alertDraft = W.alertDraft || JSON.parse(JSON.stringify((W.data.events || {}).alert_settings || {}));
       const path = t.dataset.v2BkAlert; if (path === 'email') { W.alertDraft.email = t.checked; return; }
       const [k, f] = path.split('.'); W.alertDraft[k] = W.alertDraft[k] || {}; W.alertDraft[k][f] = f === 'on' ? t.checked : Number(t.value);
     }
   });
-  main.addEventListener('input', (e) => { const t = e.target; if (t.matches && t.matches('input[data-v2-bk-scen]')) { const [i, k] = t.dataset.v2BkScen.split('.'), row = W.scenario.rows[Number(i)]; if (row) row[k] = t.value; } });
   main.addEventListener('submit', async (e) => {
     const f = e.target.closest('[data-v2-bk-thesis-form]'); if (!f) return;
     e.preventDefault();
@@ -646,15 +610,5 @@ async function saveRename(id) {
   const field = mainEl.querySelector('[data-v2-bk-rename-input]');
   const r = await act(() => api.patch(`/api/brokerage/accounts/${encodeURIComponent(id)}`, { nickname: field ? field.value : '' }), null, 'Could not rename that.');
   if (r) { S.renaming = null; loadAll(true); }
-}
-async function runScenario() {
-  const sc = W.scenario;
-  const changes = sc.rows.filter((r) => String(r.symbol).trim() && String(r.amount).trim() !== '').map((r) => ({ symbol: String(r.symbol).trim().toUpperCase(), action: r.action, amount_type: r.amount_type, amount: Number(r.amount) }));
-  if (!changes.length) { sc.error = 'Add at least one change with a symbol and an amount.'; paint(); return; }
-  sc.error = null; sc.running = true; paint();
-  try { sc.result = await api.post('/api/brokerage/workspace/scenario', { changes, funding: sc.funding, accounts: scopeIds() }, { timeout: 90000 }); }
-  catch (e) { sc.error = e.message && e.kind !== 'server' ? e.message : 'The scenario could not be run.'; }
-  sc.running = false; paint();
-  const res = mainEl.querySelector('#bk-result'); if (res) res.focus();
 }
 void store; void raw; void stamp; void num;

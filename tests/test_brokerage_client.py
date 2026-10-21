@@ -94,9 +94,9 @@ def test_the_workspace_loads_after_app_and_is_handed_the_linked_page():
 
 def test_every_section_is_an_address_the_router_knows():
     ids = re.findall(r"\{ id: '([a-z]+)', label: ", WS.split("const BKW_SECTIONS = [", 1)[1].split("];", 1)[0])
-    assert ids == ["overview", "holdings", "performance", "events", "scenarios", "connections"]
+    assert ids == ["overview", "holdings", "performance", "events", "connections"]
     parse = APP.split("function parseRoute(hash)", 1)[1].split("\n}", 1)[0]
-    assert "['overview', 'holdings', 'performance', 'events', 'scenarios', 'connections']" in parse
+    assert "['overview', 'holdings', 'performance', 'events', 'connections']" in parse
     route = APP.split("function routeFor(view)", 1)[1].split("\n}", 1)[0]
     assert "`#/brokerage/${sec}`" in route and "typeof BROKER !== 'undefined'" in route
     apply = APP.split("function applyRoute(hash)", 1)[1].split("\n}", 1)[0]
@@ -117,7 +117,8 @@ def test_the_workspace_has_no_trading_control():
     words = re.findall(r">([^<>{}$]{2,60})</button>", WS)
     for w in words:
         assert not re.search(r"\b(buy|sell|trade|order|transfer|withdraw|deposit)\b", w, re.I), w
-    assert "Nothing is traded" in WS
+    # the what-if lab, which carried "Nothing is traded", was removed on the owner's word (2026-10-20)
+    assert "Nothing here can trade" in WS and "workspace/scenario" not in WS
 
 
 def test_ask_milo_is_the_approved_button_with_milos_head():

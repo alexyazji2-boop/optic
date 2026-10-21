@@ -308,7 +308,7 @@ def holdings(user: Dict[str, Any], account_ids: Optional[List[str]] = None) -> D
 
 def exposure(user: Dict[str, Any], account_ids: Optional[List[str]] = None,
              core: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-    """Cached like the core: holdings, scorecard and scenarios all read it, and
+    """Cached like the core: holdings and the scorecard both read it, and
     a cold one spends up to 40 sector lookups on fund constituents."""
     core = core or _core(user, account_ids)
     key = "{}:exposure:{}".format(user["id"], _version(user["id"], core.get("scope") or []))
@@ -505,28 +505,6 @@ def facts_key(brief: Dict[str, Any]) -> str:
              "since": (brief.get("since_sync") or {}).get("since"),
              "upcoming": [(e.get("symbol"), e.get("kind"), e.get("date")) for e in brief.get("upcoming") or []]}
     return hashlib.sha256(json.dumps(basis, sort_keys=True).encode()).hexdigest()[:24]
-
-
-# ---------------------------------------------------------------- scenarios
-
-
-def scenario(user: Dict[str, Any], changes: List[Dict[str, Any]], funding: str,
-             account_ids: Optional[List[str]] = None) -> Dict[str, Any]:
-    from . import scenarios as scen_mod
-    core = _core(user, account_ids)
-    held = core.get("holdings") or []
-    syms = sorted({str(h["symbol"]).upper() for h in held if h.get("symbol")} |
-                  {str(c.get("symbol") or "").upper() for c in changes or [] if c.get("symbol")})[:30]
-    closes = _closes(syms + ["SPY"], "1y")
-    cash_usd = sum(float(c.get("amount") or 0) for c in core.get("cash") or [] if (c.get("currency") or "USD") == "USD")
-    exp = exposure(user, account_ids, core=core)
-    out = scen_mod.run(held, round(cash_usd, 2), changes or [], funding,
-                       _m("price_of") or (lambda s: None),
-                       _budgeted(_m("sector_of"), LOOKUP_BUDGET) or (lambda s: None),
-                       {s: v for s, v in closes.items() if s != "SPY"}, closes.get("SPY") or [], exposure=exp)
-    out["section"] = "scenarios"
-    out["scope"] = _scope_meta(user, core)
-    return out
 
 
 # ------------------------------------------------------------------- alerts

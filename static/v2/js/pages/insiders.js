@@ -6,6 +6,7 @@
 import { html, render as draw } from '../core/dom.js';
 import * as api from '../core/api.js';
 import { num, signed, money, compact, clean, capFirst, fullDate, shortDate, isNum } from '../core/format.js';
+import { closeCell, CLOSE_NOTE } from '../core/congress.js';
 import { skeleton, failed } from '../ui/states.js';
 import { mountCharts } from '../ui/chart.js';
 import { icon } from '../ui/icons.js';
@@ -62,12 +63,12 @@ function house() {
       ${activityChart(c)}<p class="asof">Filed a median ${c.lag_median} days after the trade (longest ${c.lag_max}).${c.dates_suspect ? ` ${c.dates_suspect} trade dates look mistyped and are shown as filed.` : ''}</p></div>
     <div><h3>Most disclosed</h3><p class="t-muted">By how often a symbol appears, not by money.</p><ul class="top-list">${top.map((t) => html`<li><button type="button" class="textlink" data-v2-ins-pick="${t.ticker}">${t.ticker}</button><span class="t-muted">${t.count} filings, ${t.buys} buys, ${t.sells} sales, ${t.members} members</span><span class="tl-bar" style="--w:${(t.count / tmax) * 100}%"></span></li>`)}</ul></div></div>
     <h3>The filings <span class="t-muted">newest ${trades.length} of ${num(c.count, 0)}, traded ${span(trades.filter((t) => !t.date_suspect).map((t) => t.traded_iso))}</span></h3>
-    <div class="tscroll"><table class="t"><thead><tr><th>Member</th><th>Owner</th><th>Symbol</th><th>Transaction</th><th>Amount</th><th>Traded</th><th>Filed</th><th><span class="sr">Filing</span></th></tr></thead>
+    <div class="tscroll"><table class="t"><thead><tr><th>Member</th><th>Owner</th><th>Symbol</th><th>Transaction</th><th>Amount</th><th>Traded</th>${Q.ticker ? html`<th>Close that day</th>` : ''}<th>Filed</th><th><span class="sr">Filing</span></th></tr></thead>
       <tbody>${trades.map((t) => html`<tr><td>${t.member}<br><small class="t-muted">${t.district || ''}</small></td><td>${OWNER[t.owner] || 'Self'}</td><td>${t.ticker ? html`<button type="button" class="textlink" data-v2-ins-pick="${t.ticker}">${t.ticker}</button>` : ''}</td>
         <td class="${t.side === 'buy' ? 'up' : t.side === 'sell' ? 'down' : ''}">${capFirst(t.transaction || '')}${t.description ? html`<br><small class="t-muted">${clean(t.description)}</small>` : ''}</td>
-        <td>${money(t.amount_low, 0)} to ${money(t.amount_high, 0)}</td><td>${t.traded_iso ? fullDate(t.traded_iso) : t.traded}${t.date_suspect ? html` <small class="t-muted">as filed</small>` : ''}</td>
+        <td>${money(t.amount_low, 0)} to ${money(t.amount_high, 0)}</td><td>${t.traded_iso ? fullDate(t.traded_iso) : t.traded}${t.date_suspect ? html` <small class="t-muted">as filed</small>` : ''}</td>${Q.ticker ? html`<td>${closeCell(t)}</td>` : ''}
         <td>${t.filed ? fullDate(t.filed) : ''}${isNum(t.disclosure_lag_days) ? html`<br><small class="${t.disclosure_lag_days > 45 ? 'down' : 't-muted'}">${t.disclosure_lag_days} days after the trade${t.disclosure_lag_days > 45 ? ', past the 45-day limit' : ''}</small>` : ''}</td><td>${/^https?:/.test(t.source_url || '') ? html`<a href="${t.source_url}" target="_blank" rel="noopener">Filing</a>` : ''}</td></tr>`)}</tbody></table></div>
-    <p class="asof">${clean(c.caveat || '')} Source: House Clerk.</p>`;
+    <p class="asof">${clean(c.caveat || '')}${Q.ticker ? ` ${CLOSE_NOTE}` : ''} Source: House Clerk.</p>`;
 }
 
 function filings() {

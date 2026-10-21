@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import bisect
 import contextvars
 from concurrent.futures import ThreadPoolExecutor
 import json
@@ -4412,9 +4413,39 @@ async def congress_trades(
     # everything in order to narrow it -- and the counts, the per-day series
     # and the ranking all have to describe the filtered set, which means
     # whatever computes them has to see all of it.
-    return congress_mod.summary(
+    out = congress_mod.summary(
         ticker=ticker, limit=limit, member=member, side=side,
         since=since, until=until, activity_days=activity_days)
+    if ticker and out.get("available") and out.get("trades"):
+        await _run(_congress_closes, ticker.strip().upper(), out["trades"])
+    return out
+
+
+def _congress_closes(sym: str, trades: List[Dict[str, Any]]) -> None:
+    """The stock's close on each trade's date, for one symbol's disclosures.
+
+    A filing reports a dollar band, never a price, so the owner's "include the
+    price bought and sold at" can only be answered with the market's close that
+    day, and the field says that is what it is. On a day with no session (a
+    weekend trade) it is the last close before it, dated; past the two years of
+    bars the ticker payload already caches, there is none."""
+    try:
+        df = YF_PROVIDER.history(sym, period="2y", interval="1d")
+    except Exception:
+        return
+    if df is None or df.empty:
+        return
+    days = [d.strftime("%Y-%m-%d") for d in df.index]
+    closes = [float(v) for v in df["Close"]]
+    for t in trades:
+        iso = t.get("traded_iso")
+        if not iso or t.get("date_suspect"):    # a mistyped trade date would price the wrong day
+            continue
+        k = bisect.bisect_right(days, iso) - 1
+        if k < 0:
+            continue
+        t["close"] = round(closes[k], 2)
+        t["close_date"] = days[k]
 
 
 @app.get("/api/catalysts")

@@ -261,7 +261,7 @@ def build(accounts: List[Dict[str, Any]],
     for h in holdings:
         v = usd(h["market_value"], h["currency"])
         h["weight_pct"] = _r(100.0 * v / long_value, 1) if v is not None and long_value and v > 0 else None
-        # The workspace's exposure, scorecard and scenarios add across
+        # The workspace's exposure and scorecard add across
         # currencies, so they read this rather than converting again.
         h["value_usd"] = _r(v)
     holdings.sort(key=lambda h: -(usd(h["market_value"], h["currency"]) or 0.0))

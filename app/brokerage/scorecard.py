@@ -242,7 +242,7 @@ def _series(rows: Any) -> Dict[str, float]:
 def history_risk(values: Dict[str, float], closes: Dict[str, Any], benchmark_closes: Any,
                  cash: float = 0.0, min_days: int = MIN_OVERLAP_DAYS) -> Dict[str, Any]:
     """Volatility, beta and drawdown of a portfolio held at fixed weights over
-    the window of `closes`. Shared with scenarios.py.
+    the window of `closes`.
 
     `values` is {symbol: US-dollar value} of long holdings. Cash, when given,
     is a zero-return holding in the denominator, so moving cash into stocks

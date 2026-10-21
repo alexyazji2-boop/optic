@@ -30,8 +30,6 @@ router = APIRouter(prefix="/api/brokerage/workspace", tags=["brokerage-workspace
 HOOKS: Dict[str, Callable] = {}       # spend_guard, write_brief: set by app.main
 PERIODS = ("1m", "3m", "ytd", "1y", "all")
 BENCHMARKS = ("SPY", "VTI", "QQQ", "ACWI", "AGG")
-FUNDING = ("cash", "new_money", "pro_rata")
-MAX_CHANGES = 12
 
 
 def set_hooks(**fns: Callable) -> None:
@@ -131,34 +129,6 @@ async def ws_briefing_write(request: Request, payload: Dict[str, Any] = Body(def
         raise HTTPException(status_code=502, detail=out.get("reason") or "The briefing could not be written.")
     await run_in_threadpool(store.save_briefing, user["id"], facts["facts_key"], out)
     return {"written": dict(out, facts_key=facts["facts_key"]), "cached": False}
-
-
-@router.post("/scenario")
-async def ws_scenario(request: Request, payload: Dict[str, Any] = Body(default={})) -> Dict[str, Any]:
-    """A what-if on the current holdings. Nothing is traded: the result is
-    arithmetic on hypothetical changes, and is not stored."""
-    user = _reader(request)
-    deps.csrf_guard(request)
-    changes = (payload or {}).get("changes") or []
-    funding = (payload or {}).get("funding") or "cash"
-    if not isinstance(changes, list) or len(changes) > MAX_CHANGES:
-        raise HTTPException(status_code=400, detail="Up to {} changes at a time.".format(MAX_CHANGES))
-    if funding not in FUNDING:
-        raise HTTPException(status_code=400, detail="funding must be one of {}.".format(", ".join(FUNDING)))
-    clean = []
-    for c in changes:
-        if not isinstance(c, dict):
-            raise HTTPException(status_code=400, detail="Each change is an object.")
-        sym = str(c.get("symbol") or "").strip().upper()[:15]
-        if not sym:
-            raise HTTPException(status_code=400, detail="Each change needs a symbol.")
-        try:
-            amount = float(c.get("amount"))
-        except (TypeError, ValueError):
-            raise HTTPException(status_code=400, detail="{}: the amount is not a number.".format(sym))
-        clean.append({"symbol": sym, "action": str(c.get("action") or ""), "amount_type": str(c.get("amount_type") or ""),
-                      "amount": amount})
-    return await _run(workspace.scenario, user, clean, funding, _scope((payload or {}).get("accounts")))
 
 
 @router.get("/alerts")

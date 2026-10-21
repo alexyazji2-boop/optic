@@ -682,6 +682,10 @@ def _group(ccy: str, accts: List[Dict[str, Any]], rows: Dict[str, List[Dict[str,
     if first_txn and first_txn > start:
         window_start = first_txn
     pts_all, vinfo = _value_points(ccy, accts, histories, snapshots, current, today)
+    # Where the measurable history begins: a period reaching further back measures the same days as All, and
+    # the page says so rather than offering five buttons that show one number (owner, 2026-10-20)
+    known = [p for p in pts_all if p[1] > 0 and (not first_txn or p[0] >= first_txn)]
+    history_start = known[0][0] if known else None
     pts = [p for p in pts_all if window_start <= p[0] <= today]
     # A provider history can open with zero balances before the first deposit
     # arrives; a return on no capital is undefined, so the measured span starts
@@ -1020,7 +1024,9 @@ def _group(ccy: str, accts: List[Dict[str, Any]], rows: Dict[str, List[Dict[str,
                    "measured_start": None if reasons else _iso(measured_start),
                    "measured_end": None if reasons else _iso(measured_end),
                    "days": None if reasons else (measured_end - measured_start).days,
-                   "covered_days": returns["twr"]["covered_days"]},
+                   "covered_days": returns["twr"]["covered_days"],
+                   "history_start": _iso(history_start),
+                   "starts": {p: period_start(p, today).isoformat() for p in PERIODS if p != "all"}},
         "sources": {"values": values, "values_label": SOURCE_LABELS[values], "points": used_src,
                     "provider_window": ({"start": vinfo["provider_window"][0].isoformat(),
                                          "end": vinfo["provider_window"][1].isoformat()}

@@ -988,9 +988,19 @@ tr.sh-notes td { padding-top: 0; font-size: var(--t-md); color: var(--c-ink-3); 
 @media (max-width: 860px) { .grid2 { grid-template-columns: 1fr; } .funnel-steps { grid-template-columns: 1fr 1fr; } .bk-figs { grid-template-columns: repeat(2, auto); } }
 .kv dd.up { color: var(--c-pos); } .kv dd.down { color: var(--c-neg); }
 /* Positions: Paper Desk */
-.pt-form { display: grid; gap: 14px; max-width: 860px; }
-.pt-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px 18px; align-items: end; }
-.pt-grid .field, .pt-form > .field { display: grid; gap: 6px; } .pt-grid .select { display: grid; gap: 6px; }
+/* the ticket: every control has its label above it, on rows of even columns (owner, 2026-10-20: "clear this up
+   and organize it"); the boxes are the controls only, never the label */
+.pt-form { display: grid; gap: 16px; max-width: 760px; margin-top: 14px; }
+.pt-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; align-items: end; }
+.pt-row.pt-nums { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.pt-f { display: grid; gap: 6px; min-width: 0; align-content: end; }
+.pt-f > .field { min-height: var(--tap); padding: 0 12px; }
+.pt-f > .seg { display: flex; } .pt-f > .seg button { flex: 1; }
+.pt-f.select { display: grid; } .pt-f.select select { width: 100%; min-width: 0; }
+@media (max-width: 640px) {
+  .pt-row, .pt-row.pt-nums { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 12px; }
+  .pt-row > .pt-sym { grid-column: 1 / -1; }
+}
 .pt-quote { margin: 0; font-size: var(--t-base); } .pt-read { margin: 0; } .pt-note { margin: 0; font-weight: 500; }
 .pt-preview { display: flex; flex-wrap: wrap; gap: 6px 22px; margin: 0; font-variant-numeric: tabular-nums; }
 .pt-src { font-size: var(--t-md); text-align: left !important; }
@@ -1030,6 +1040,7 @@ tr.sh-notes td { padding-top: 0; font-size: var(--t-md); color: var(--c-ink-3); 
 #bk-panel:focus { outline: none; }
 .bk-src { display: inline-block; font: 500 var(--t-xs)/1 var(--f-label); padding: 3px 7px; border-radius: var(--r-pill); border: 1px solid var(--c-line); color: var(--c-ink-2); margin-right: 4px; vertical-align: 1px; }
 .bk-src-broker { border-color: color-mix(in srgb, var(--c-cat-1) 50%, var(--c-line)); } .bk-src-market { border-color: color-mix(in srgb, var(--c-gold) 55%, var(--c-line)); } .bk-src-optic { border-style: dashed; }
+.bk-short { margin: 10px 0 0; color: var(--c-ink-2); }
 .bk-tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0 24px; margin: 14px 0 6px; }
 .bk-tile { padding: 14px 0; border-top: 1px solid var(--c-line); } .bk-tile p { margin: 0; } .bk-v { font: 600 var(--t-2xl)/1.2 var(--f-sans); margin: 6px 0 !important; font-variant-numeric: tabular-nums; }
 .bk-bars { list-style: none; margin: 8px 0; padding: 0; display: grid; gap: 6px; }
@@ -1055,12 +1066,10 @@ tr.sh-notes td { padding-top: 0; font-size: var(--t-md); color: var(--c-ink-3); 
 .bk-thesis textarea, .bk-alert-set textarea { width: 100%; font: 400 var(--t-base)/1.5 var(--f-sans); color: var(--c-ink); background: var(--c-raised); border: 1px solid var(--c-line); border-radius: var(--r-2); padding: 8px 10px; }
 .bk-alerts li.is-unseen b { color: var(--c-gold-ink); } .bk-alerts li { padding: 8px 0; border-bottom: 1px solid var(--c-line-2); }
 .bk-alert-row { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; } .select-inline select { min-height: 36px; }
-.bk-scen-row { display: grid; grid-template-columns: minmax(110px, 1fr) minmax(130px, 1fr) minmax(100px, 1fr) minmax(130px, 1fr) auto; gap: 10px; align-items: end; padding: 10px 0; border-bottom: 1px solid var(--c-line-2); }
-.bk-scen-row .field, .bk-scen-row .select { display: grid; gap: 4px; }
 .bk-ba th[scope="row"] { text-align: left; font-weight: 500; } #bk-result:focus { outline: none; }
 .bk-hold td:first-child { min-width: 200px; } td.bk-left { text-align: left !important; }
 @media (max-width: 860px) {
-  .bk-tiles { grid-template-columns: 1fr 1fr; } .bk-events li { grid-template-columns: 1fr; } .bk-scen-row { grid-template-columns: 1fr 1fr; }
+  .bk-tiles { grid-template-columns: 1fr 1fr; } .bk-events li { grid-template-columns: 1fr; }
   .bk-head { align-items: stretch; } .bk-accts li .bk-acct-side { width: 100%; justify-content: space-between; }
 }
 .cmp-t thead th a { display: inline-flex; align-items: center; min-height: 32px; min-width: 44px; }

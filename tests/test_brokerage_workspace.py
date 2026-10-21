@@ -3,7 +3,7 @@ calendar, alerts, the Desk read for one portfolio, the measured briefing, the
 workspace routes' access rules, position theses and Milo's portfolio tool.
 
 The analytics modules built alongside (performance, exposure, scorecard,
-options risk, scenarios) have their own test files; here they are only reached
+options risk) have their own test files; here they are only reached
 through the routes.
 """
 

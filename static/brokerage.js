@@ -23,7 +23,6 @@ const BKW_SECTIONS = [
   { id: 'holdings', label: 'Holdings & Exposure', ask: 'Where am I concentrated, counting what my ETFs hold?' },
   { id: 'performance', label: 'Performance', ask: 'How has my portfolio done against the S&P 500, and how much of the change was my own deposits and withdrawals?' },
   { id: 'events', label: 'Events & Research', ask: 'Which earnings and events affect me in the next two weeks?' },
-  { id: 'scenarios', label: 'Scenarios', ask: 'If I added to my largest position, how would my concentration change?' },
   { id: 'connections', label: 'Connections', ask: 'What can Optic see in my linked accounts, and what can it not?' },
 ];
 const BKW_SECTION_KEY = 'optic.brokerage.section.v1';
@@ -41,7 +40,6 @@ const BKW = {
   period: '1y',
   bench: 'SPY',
   sectors: 'look',
-  scenario: { rows: [{ symbol: '', action: 'buy', amount_type: 'dollars', amount: '' }], funding: 'cash' },
   thesisEdit: null,
   thesisArmed: null,
   alertDraft: null,
@@ -200,7 +198,6 @@ function bkWorkspaceRender(host, flash) {
 
 function bkwSectionHTML(sec) {
   if (sec === 'connections') return bkConnectionsHTML();
-  if (sec === 'scenarios') return bkwScenariosHTML();
   if (BKW.error[sec]) {
     return `<div class="panel span2"><p class="sub">${esc(BKW.error[sec])}</p><button type="button" class="btn" data-bkw-retry>Try again</button></div>`;
   }
@@ -214,7 +211,7 @@ function bkwSectionHTML(sec) {
 }
 
 /* A renderer that throws must not leave the last state on screen: the first
- * local run showed "Working it out..." under a finished scenario because one
+ * local run showed "Working it out..." under a finished section because one
  * field had an unexpected shape. The section says so instead. */
 function bkwSafeSection(sec) {
   try {
@@ -578,7 +575,7 @@ function bkwPerformanceHTML(d) {
   const tile = (k, v, n) => `<div class="bk-tile"><span class="bk-k">${esc(k)}</span><span class="bk-v">${v}</span><span class="bk-n">${n}</span></div>`;
   const tiles = `<div class="bk-tiles">
     ${tile('Time-weighted return', bkwSignedPct(twr.pct), `${bkwSrc('optic')} The investments' own result, with deposits and withdrawals taken out.${twr.annualized ? ` Annualised ${bkwPct(twr.annualized_pct, 2, true)}.` : ' Not annualised: under a year.'}`)}
-    ${tile('Money-weighted return', bkwSignedPct(mwr.period_pct), `${bkwSrc('optic')} Your own result, weighted by when you added or took out money.${mwr.irr_annualized_pct !== null && mwr.irr_annualized_pct !== undefined ? ` Annualised ${bkwPct(mwr.irr_annualized_pct, 2, true)}.` : ''}`)}
+    ${tile('Money-weighted return', bkwSignedPct(mwr.period_pct), `${bkwSrc('optic')} Your own result, weighted by when you added or took out money.${twr.annualized && mwr.irr_annualized_pct !== null && mwr.irr_annualized_pct !== undefined ? ` Annualised ${bkwPct(mwr.irr_annualized_pct, 2, true)}.` : ''}`)}
     ${tile(`Benchmark (${esc(bench.symbol || BKW.bench)})`, bkwSignedPct(bench.twr_pct), `${bkwSrc('market')} Total return with dividends reinvested, over the same dates.`)}
     ${tile('Difference', bkwSignedPct(r.excess_pct), `${bkwSrc('optic')} Your time-weighted return minus the benchmark's.`)}
   </div>`;
@@ -762,85 +759,6 @@ function bkwAlertsHTML(a, s, choices) {
     </details></div>`;
 }
 
-// ------------------------------------------------------------------ scenarios
-
-function bkwScenariosHTML() {
-  const sc = BKW.scenario;
-  const held = ((BKW.data.overview || {}).top_holdings || []).map((h) => h.symbol).filter(Boolean);
-  const rows = sc.rows.map((r, i) => `<div class="bkw-scen-row">
-      <label class="bkw-field"><span class="bk-k">Symbol</span><input type="text" data-bkw-scen="${i}.symbol" value="${esc(r.symbol)}" maxlength="15" list="bkw-held" placeholder="NVDA" autocomplete="off"></label>
-      <label class="bkw-field"><span class="bk-k">Change</span><select data-bkw-scen="${i}.action">${[['buy', 'Add'], ['sell', 'Reduce'], ['target_weight', 'Set weight to']].map(([k, l]) => `<option value="${k}"${r.action === k ? ' selected' : ''}>${l}</option>`).join('')}</select></label>
-      <label class="bkw-field"><span class="bk-k">Amount</span><input type="number" step="any" min="0" data-bkw-scen="${i}.amount" value="${esc(String(r.amount))}"></label>
-      <label class="bkw-field"><span class="bk-k">In</span><select data-bkw-scen="${i}.amount_type">${(r.action === 'target_weight' ? [['weight_pct', '% of portfolio']] : [['dollars', 'dollars'], ['shares', 'shares']]).map(([k, l]) => `<option value="${k}"${r.amount_type === k ? ' selected' : ''}>${l}</option>`).join('')}</select></label>
-      <button type="button" class="btn sm" data-bkw-scen-del="${i}" aria-label="Remove this change">Remove</button></div>`).join('');
-  return `<div class="panel span2"><h2>${hg('What-if lab')}</h2>
-    <p class="sub">Try changes to your holdings and see what they would do to weights, concentration and historical risk. Nothing is traded: this is arithmetic on a copy.</p>
-    <datalist id="bkw-held">${held.map((s) => `<option value="${esc(s)}">`).join('')}</datalist>
-    ${rows}
-    <div class="bkw-row bkw-controls"><button type="button" class="btn sm" data-bkw-scen-add>Add a change</button>
-      <label class="bkw-inline">Paid for by <select data-bkw-scen-funding>${[['cash', 'cash in the accounts'], ['new_money', 'new money'], ['pro_rata', 'selling the rest evenly']].map(([k, l]) => `<option value="${k}"${sc.funding === k ? ' selected' : ''}>${l}</option>`).join('')}</select></label>
-      <button type="button" class="btn primary" data-bkw-scen-run>Run</button></div>
-    ${sc.error ? `<p class="sub">${esc(sc.error)}</p>` : ''}
-    ${sc.running ? '<p class="sub">Working it out...</p>' : ''}
-  </div>
-  ${sc.result ? bkwScenarioResult(sc.result) : ''}`;
-}
-
-function bkwScenarioResult(r) {
-  if (r.available === false) return `<div class="panel span2"><p class="sub">${esc(r.reason || 'The scenario could not be run.')}</p></div>`;
-  const conc = r.concentration || {};
-  const hist = r.history || {};
-  const hb = hist.before || {};
-  const ha = hist.after || {};
-  const row = (label, b, a) => `<tr><td>${esc(label)}</td><td class="num">${b}</td><td class="num">${a}</td></tr>`;
-  const money = (v) => esc(bkMoney(v, 'USD'));
-  const num = (v) => (v === null || v === undefined ? 'n/a' : Number(v).toFixed(2));
-  const histCell = (h, k, fmt) => (h.available ? fmt(h[k]) : '<span class="bk-na">n/a</span>');
-  const weights = (r.weights || []).filter((w) => w.changed).slice(0, 15).map((w) => `<tr><td class="name">${esc(w.symbol)}</td><td class="num">${bkwPct(w.before_pct)}</td><td class="num">${bkwPct(w.after_pct)}</td><td class="num">${bkwSignedPct(w.change_pts, 1)}</td></tr>`).join('');
-  const changes = (r.changes || []).filter((c) => c.status !== 'applied').map((c) => `<li><b>${esc(c.symbol)}</b>: ${esc(c.reason || c.status)}</li>`).join('');
-  // look_through is a list when the fund holdings could be re-split after the
-  // change, and {available: false, reason} when not; direct is always a list.
-  const lt = (r.sectors || {}).look_through;
-  const sectorList = Array.isArray(lt) ? lt : (((r.sectors || {}).direct) || []);
-  const sectors = sectorList.filter((x) => Math.abs(x.change_pts || 0) >= 0.05)
-    .map((x) => `<li>${esc(x.sector || x.label)} ${bkwPct(x.before_pct)} to ${bkwPct(x.after_pct)}</li>`).join('');
-  const ltNote = lt && !Array.isArray(lt) && lt.reason ? `<p class="set-row-note">Sectors are shown for directly held stocks: ${esc(lt.reason)}</p>` : '';
-  const stress = r.stress || {};
-  return `<div class="panel span2"><h2>${hg('Before and after')}</h2>
-    <p class="sub">${esc(r.funding_rule || '')}</p>
-    <div class="ss-scroll"><table class="data bk-table"><thead><tr><th></th><th class="num">Now</th><th class="num">After</th></tr></thead><tbody>
-      ${row('Total', money((r.total || {}).before), money((r.total || {}).after))}
-      ${row('Cash', money((r.cash || {}).before), money((r.cash || {}).after))}
-      ${row('Effective number of holdings', num((conc.before || {}).effective_holdings), num((conc.after || {}).effective_holdings))}
-      ${row('Largest holding', bkwPct((conc.before || {}).top1_pct), bkwPct((conc.after || {}).top1_pct))}
-      ${row('Largest five holdings', bkwPct((conc.before || {}).top5_pct), bkwPct((conc.after || {}).top5_pct))}
-      ${row('Volatility over the past year (annualised)', histCell(hb, 'vol_pct', (v) => bkwPct(v)), histCell(ha, 'vol_pct', (v) => bkwPct(v)))}
-      ${row('Beta to the S&P 500, past year', histCell(hb, 'beta', num), histCell(ha, 'beta', num))}
-      ${row('Worst fall at these weights, past year', histCell(hb, 'max_drawdown_pct', (v) => bkwPct(v)), histCell(ha, 'max_drawdown_pct', (v) => bkwPct(v)))}
-    </tbody></table></div>
-    <p class="set-row-note">${esc(hist.label || '')}${hb.available ? '' : ` ${esc(hb.reason || '')}`}</p>
-    ${weights ? `<h3 class="bkw-h3">Weights that change</h3><div class="ss-scroll"><table class="data bk-table"><thead><tr><th>Holding</th><th class="num">Now</th><th class="num">After</th><th class="num">Change</th></tr></thead><tbody>${weights}</tbody></table></div>` : ''}
-    ${sectors ? `<h3 class="bkw-h3">Sectors that change</h3><ul class="bkw-list">${sectors}</ul>${ltNote}` : ''}
-    ${stress.before ? `<p class="set-row-note">${esc(stress.label || '')}: ${bkwPct(stress.before.pct)} now, ${bkwPct((stress.after || {}).pct)} after.</p>` : ''}
-    ${changes ? `<h3 class="bkw-h3">Not applied</h3><ul class="bkw-list">${changes}</ul>` : ''}
-    ${(r.warnings || []).length ? `<ul class="bkw-list">${r.warnings.map((w) => `<li>${esc(w)}</li>`).join('')}</ul>` : ''}
-    <details class="bkw-limits"><summary>Method</summary><p>${esc(r.method || '')}</p><p class="bkw-meta">${esc(r.version || '')}</p></details>
-    ${bkwLimits(r.limitations)}</div>`;
-}
-
-async function bkwRunScenario() {
-  const sc = BKW.scenario;
-  const changes = sc.rows.filter((r) => String(r.symbol).trim() && String(r.amount).trim() !== '')
-    .map((r) => ({ symbol: String(r.symbol).trim().toUpperCase(), action: r.action, amount_type: r.amount_type, amount: Number(r.amount) }));
-  if (!changes.length) { sc.error = 'Add at least one change with a symbol and an amount.'; bkwPaintPanel(); return; }
-  sc.error = null; sc.running = true; bkwPaintPanel();
-  const r = await brokerFetch('POST', '/api/brokerage/workspace/scenario', { changes, funding: sc.funding, accounts: bkScopeIds() });
-  sc.running = false;
-  if (r.ok) sc.result = r.data;
-  else sc.error = (r.data && r.data.detail) || 'The scenario could not be run.';
-  bkwPaintPanel();
-}
-
 // ------------------------------------------------------------------- actions
 
 function bkwToast(msg, tone) {
@@ -864,7 +782,7 @@ async function bkwSaveThesis(form) {
 async function bkwClick(evt) {
   const host = views.brokerage;
   if (!host || !host.contains(evt.target)) return;
-  const t = evt.target.closest('[data-bkw-tab], [data-bkw-go], [data-bkw-retry], [data-bkw-write], [data-bkw-sectors], [data-bkw-period], [data-bkw-scen-add], [data-bkw-scen-del], [data-bkw-scen-run], [data-bkw-thesis-edit], [data-bkw-thesis-cancel], [data-bkw-thesis-del], [data-bkw-alerts-check], [data-bkw-alerts-seen], [data-bkw-alerts-save]');
+  const t = evt.target.closest('[data-bkw-tab], [data-bkw-go], [data-bkw-retry], [data-bkw-write], [data-bkw-sectors], [data-bkw-period], [data-bkw-thesis-edit], [data-bkw-thesis-cancel], [data-bkw-thesis-del], [data-bkw-alerts-check], [data-bkw-alerts-seen], [data-bkw-alerts-save]');
   if (!t) return;
   if (t.matches('[data-bkw-tab]')) { bkSetSection(t.dataset.bkwTab); return; }
   if (t.matches('[data-bkw-go]')) { bkSetSection(t.dataset.bkwGo); return; }
@@ -880,16 +798,6 @@ async function bkwClick(evt) {
     bkwPaintPanel();
     return;
   }
-  if (t.matches('[data-bkw-scen-add]')) {
-    if (BKW.scenario.rows.length < 12) BKW.scenario.rows.push({ symbol: '', action: 'buy', amount_type: 'dollars', amount: '' });
-    bkwPaintPanel(); return;
-  }
-  if (t.matches('[data-bkw-scen-del]')) {
-    BKW.scenario.rows.splice(Number(t.dataset.bkwScenDel), 1);
-    if (!BKW.scenario.rows.length) BKW.scenario.rows.push({ symbol: '', action: 'buy', amount_type: 'dollars', amount: '' });
-    bkwPaintPanel(); return;
-  }
-  if (t.matches('[data-bkw-scen-run]')) { bkwRunScenario(); return; }
   if (t.matches('[data-bkw-thesis-edit]')) { BKW.thesisEdit = t.dataset.bkwThesisEdit; BKW.thesisArmed = null; bkwPaintPanel(); return; }
   if (t.matches('[data-bkw-thesis-cancel]')) { BKW.thesisEdit = null; bkwPaintPanel(); return; }
   if (t.matches('[data-bkw-thesis-del]')) {
@@ -935,22 +843,13 @@ function bkwChange(evt) {
   const t = evt.target;
   if (t.matches('[data-bkw-scope]')) {
     bkwStore(BKW_SCOPE_KEY, t.value ? [t.value] : []);
-    BKW.data = {}; BKW.extra = {}; BKW.error = {}; BKW.scenario.result = null;
+    BKW.data = {}; BKW.extra = {}; BKW.error = {};
     bkWorkspaceRender(host, bkFlashHtml());
     bkWorkspaceLoad(false);
     if (typeof updateChatContext === 'function') updateChatContext();
     return;
   }
   if (t.matches('[data-bkw-bench]')) { BKW.bench = t.value; delete BKW.data.performance; bkwPaintPanel(); bkWorkspaceLoad(false); return; }
-  if (t.matches('[data-bkw-scen]')) {
-    const [i, k] = t.dataset.bkwScen.split('.');
-    const row = BKW.scenario.rows[Number(i)];
-    if (!row) return;
-    row[k] = t.value;
-    if (k === 'action') { row.amount_type = t.value === 'target_weight' ? 'weight_pct' : 'dollars'; bkwPaintPanel(); }
-    return;
-  }
-  if (t.matches('[data-bkw-scen-funding]')) { BKW.scenario.funding = t.value; return; }
   if (t.matches('[data-bkw-alert]')) {
     const base = (BKW.data.events && BKW.data.events.alert_settings) || {};
     BKW.alertDraft = BKW.alertDraft || JSON.parse(JSON.stringify(base));
@@ -960,14 +859,6 @@ function bkwChange(evt) {
     BKW.alertDraft[k] = BKW.alertDraft[k] || {};
     BKW.alertDraft[k][f] = f === 'on' ? t.checked : Number(t.value);
   }
-}
-
-function bkwInput(evt) {
-  const t = evt.target;
-  if (!t.matches || !t.matches('input[data-bkw-scen]')) return;
-  const [i, k] = t.dataset.bkwScen.split('.');
-  const row = BKW.scenario.rows[Number(i)];
-  if (row) row[k] = t.value;
 }
 
 function bkwKeydown(evt) {
@@ -1005,7 +896,6 @@ if (typeof document !== 'undefined' && document.addEventListener) {
   document.addEventListener('click', bkwCapture, true);
   document.addEventListener('click', (evt) => { bkwClick(evt); });
   document.addEventListener('change', bkwChange);
-  document.addEventListener('input', bkwInput);
   document.addEventListener('keydown', bkwKeydown);
   document.addEventListener('submit', bkwSubmit);
 }
