@@ -23,6 +23,7 @@ import { toast } from '../ui/toast.js';
 import { core, header, tabs, isFund, livePrice } from './dossier-frame.js';
 import * as VS from './valuation-scenarios.js';
 import { kindOf, can } from '../core/instrument.js';
+import * as TR from '../core/track.js';
 let lp = null;   // the header's price refresh (dossier-frame livePrice), stopped in dispose()
 
 const RANGES = { '1Y': 52, '3Y': 156, '5Y': 260, '10Y': 520, All: Infinity };
@@ -73,7 +74,7 @@ function trend(sym) {
   return html`<section class="section" aria-labelledby="lt-h">
     <div class="section-head"><div><h2 class="t-h2" id="lt-h">Long-term trend score, from price history</h2><p class="section-sub">${scoreScope(h, kindOf(sym, D) === 'fund' ? 'fund' : 'stock')}</p></div>${ask(sym, 'Ask Milo about this score', `What is ${sym}'s long-term trend score built from, and what does it leave out?`)}</div>
     <div class="figure"><p class="t-display-m">${s === null ? 'n/a' : num(s, 0)} <small class="t-muted">of 100</small></p><p class="delta"><span>${capFirst(h.conviction || '')} on the trend model</span><span class="t-muted">${capFirst((h.long_trend || {}).phase || '')}</span></p></div>
-    <p><b>The model's reading:</b> ${clean(h.plan || '')}</p>
+    <p><b>The model's reading:</b> ${clean(h.plan || '')}</p>${TR.historySlot('long_term')}
     ${clash ? html`<p class="reconcile"><b>Read it beside the price.</b> The score is built from trend and the five-year record${st.available ? `, while the price earns ${st.stars} of 5 stars against its own usual valuation` : ''}${vh.available ? ` and the P/E sits at the ${ordinal(vh.percentile)} percentile of its own history` : ''}.${conv.label ? ` The business-and-price case on the Overview reads ${conv.label}.` : ''}</p>` : ''}
     ${(h.data_quality || {}).warnings && h.data_quality.warnings.length ? h.data_quality.warnings.map((w) => html`<p class="stale">${clean(w)}</p>`) : ''}
     <div class="tscroll"><table class="t"><thead><tr><th>Factor</th><th>Type</th><th>Raw points</th><th>Why</th></tr></thead>
@@ -316,7 +317,7 @@ export async function render(main, route) {
   document.title = `${sym} Investing, Optic`;
   if (lp) lp.stop();
   lp = livePrice(main, route.symbol, () => D, 'long', undefined);
-  provideContext(() => ({ view: 'long', ticker: sym, quote: D.quote, long_term: D.lt, fair_value: D.fv, valuation: D.val ? { dcf: (D.val.dcf || {}).per_share, scenarios: D.val.scenarios, reverse: D.val.reverse } : null, scenarios: D.vsBody }));
+  provideContext(() => ({ view: 'long', ticker: sym, quote: D.quote, track_record: TR.context(), long_term: D.lt, fair_value: D.fv, valuation: D.val ? { dcf: (D.val.dcf || {}).per_share, scenarios: D.val.scenarios, reverse: D.val.reverse } : null, scenarios: D.vsBody }));
   paint(); wire(main);
   // the strip, folds and Panels (Classic parity B3); the two specialist sections open from Advanced, as Classic's did
   sections(main, 'long', { levels: { 'the multiple against its own history': 2, 'valuation and accumulation levels': 2 }, norm: (t) => { const n = ((main.querySelector('.dhead .name span') || {}).textContent || '').trim(); return n ? t.split(n).join('the company') : t; } });

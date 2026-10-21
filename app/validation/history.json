@@ -1,0 +1,872 @@
+{
+ "as_of": "2026-10-14",
+ "method": "Pre-registered tests on history (docs/validation/PROTOCOL.md): development to 2012, validation 2013-2018, a final test 2019-2026 run once; entry at the next open; costs stated; Benjamini-Hochberg control across all 154 validation tests.",
+ "rules": {
+  "backtest": {
+   "counts": {
+    "no reliable effect": 4
+   },
+   "detail": [
+    {
+     "events": 268,
+     "label": "Backtest donchian_breakout entry",
+     "mean_excess_final": -0.002272710258139138,
+     "t_final": -0.6142000495886195,
+     "t_validation": -0.05658182545838088,
+     "verdict": "no reliable effect"
+    },
+    {
+     "events": 57,
+     "label": "Backtest golden_cross entry",
+     "mean_excess_final": 0.0019160263488023526,
+     "t_final": 0.3857694369071659,
+     "t_validation": -1.5512936233012293,
+     "verdict": "no reliable effect"
+    },
+    {
+     "events": 407,
+     "label": "Backtest macd_turn_below_zero entry",
+     "mean_excess_final": 0.005260413435714047,
+     "t_final": 0.8840247212059977,
+     "t_validation": 0.4546135405055831,
+     "verdict": "no reliable effect"
+    },
+    {
+     "events": 157,
+     "label": "Backtest rsi_rebound entry",
+     "mean_excess_final": 0.0020695425056119028,
+     "t_final": 0.16363311277872386,
+     "t_validation": 0.21974141665667052,
+     "verdict": "no reliable effect"
+    }
+   ],
+   "line": "4 of 4 tests showed no reliable effect in the direction claimed; 1 went the opposite way.",
+   "opposite_sign_in_validation": [
+    "Backtest golden_cross entry"
+   ],
+   "sample": "18 ETFs and 40 large stocks, entries over the next 20 sessions; strategies against buy-and-hold",
+   "strongest": {
+    "label": "Backtest macd_turn_below_zero entry",
+    "t_final": 0.8840247212059977,
+    "t_validation": 0.4546135405055831,
+    "verdict": "no reliable effect"
+   },
+   "tests": 4,
+   "what": "The Chart tab's four backtest strategies"
+  },
+  "candles": {
+   "counts": {
+    "no reliable effect": 14
+   },
+   "detail": [
+    {
+     "events": 811,
+     "label": "Candle Bearish engulfing (bearish)",
+     "mean_excess_final": 0.0034873655137851204,
+     "t_final": -3.0516896972609833,
+     "t_validation": -2.7481029071842538,
+     "verdict": "no reliable effect"
+    },
+    {
+     "events": 628,
+     "label": "Candle Bullish engulfing (bullish)",
+     "mean_excess_final": 0.000914415388114514,
+     "t_final": 0.5232291928028237,
+     "t_validation": -0.21409580811268933,
+     "verdict": "no reliable effect"
+    },
+    {
+     "events": 1043,
+     "label": "Candle Dragonfly doji (bullish)",
+     "mean_excess_final": 0.0005465982647822616,
+     "t_final": 0.48967824455106834,
+     "t_validation": 0.1348382464612691,
+     "verdict": "no reliable effect"
+    },
+    {
+     "events": 787,
+     "label": "Candle Evening star (bearish)",
+     "mean_excess_final": 0.0007660338241743806,
+     "t_final": -0.4909927428390094,
+     "t_validation": -1.3233465317001707,
+     "verdict": "no reliable effect"
+    },
+    {
+     "events": 773,
+     "label": "Candle Gravestone doji (bearish)",
+     "mean_excess_final": -0.0011295165124929388,
+     "t_final": 0.6995050079082403,
+     "t_validation": -1.079273295168534,
+     "verdict": "no reliable effect"
+    },
+    {
+     "events": 737,
+     "label": "Candle Hammer (bullish)",
+     "mean_excess_final": 0.00016793059118024652,
+     "t_final": 0.15118415761614548,
+     "t_validation": 0.9039803014600568,
+     "verdict": "no reliable effect"
+    },
+    {
+     "events": 742,
+     "label": "Candle Hanging man (bearish)",
+     "mean_excess_final": -0.000688899914614387,
+     "t_final": 0.513919073823133,
+     "t_validation": 1.0654418716477156,
+     "verdict": "no reliable effect"
+    },
+    {
+     "events": 539,
+     "label": "Candle Inverted hammer (bullish)",
+     "mean_excess_final": 0.0006144658558318055,
+     "t_final": 0.4423731007080989,
+     "t_validation": 0.33825888354778294,
+     "verdict": "no reliable effect"
+    },
+    {
+     "events": 804,
+     "label": "Candle Morning star (bullish)",
+     "mean_excess_final": -0.0028556111762139654,
+     "t_final": -1.8424833676924657,
+     "t_validation": -0.13322375783758866,
+     "verdict": "no reliable effect"
+    },
+    {
+     "events": 1172,
+     "label": "Candle Outside bar (bearish)",
+     "mean_excess_final": 0.0015467679028981155,
+     "t_final": -1.4599386983603446,
+     "t_validation": -2.3787494668793965,
+     "verdict": "no reliable effect"
+    },
+    {
+     "events": 883,
+     "label": "Candle Outside bar (bullish)",
+     "mean_excess_final": -0.0009669289826881762,
+     "t_final": -0.6594779027207389,
+     "t_validation": -1.6663590300446531,
+     "verdict": "no reliable effect"
+    },
+    {
+     "events": 538,
+     "label": "Candle Shooting star (bearish)",
+     "mean_excess_final": -0.00038382875304104425,
+     "t_final": 0.17957839282309382,
+     "t_validation": -0.3401253682432691,
+     "verdict": "no reliable effect"
+    },
+    {
+     "events": 960,
+     "label": "Candle Three black crows (bearish)",
+     "mean_excess_final": 0.0007634211251600841,
+     "t_final": -0.5050006347652245,
+     "t_validation": 0.6505275838293736,
+     "verdict": "no reliable effect"
+    },
+    {
+     "events": 1450,
+     "label": "Candle Three white soldiers (bullish)",
+     "mean_excess_final": -0.0013864952530448023,
+     "t_final": -1.2209729765425177,
+     "t_validation": -0.11617766821732113,
+     "verdict": "no reliable effect"
+    }
+   ],
+   "line": "14 of 14 tests showed no reliable effect in the direction claimed; 3 went the opposite way.",
+   "opposite_sign_in_validation": [
+    "Candle Bearish engulfing (bearish)",
+    "Candle Outside bar (bearish)",
+    "Candle Outside bar (bullish)"
+   ],
+   "sample": "18 ETFs and 40 large stocks, next 5 sessions against an average day",
+   "strongest": {
+    "label": "Candle Hanging man (bearish)",
+    "t_final": 0.513919073823133,
+    "t_validation": 1.0654418716477156,
+    "verdict": "no reliable effect"
+   },
+   "tests": 14,
+   "what": "Candlestick patterns read in their conventional direction"
+  },
+  "iv_verdict": {
+   "counts": {
+    "no reliable effect": 1,
+    "promising, not established": 3
+   },
+   "detail": [
+    {
+     "events": 36692,
+     "label": "IV verdict 'cheap' (absolute claim)",
+     "mean_excess_final": 0.01582221684090406,
+     "t_final": 0.5262104816534774,
+     "t_validation": 0.2931943650231057,
+     "verdict": "no reliable effect"
+    },
+    {
+     "events": 36692,
+     "label": "IV verdict 'cheap' (relative claim)",
+     "mean_excess_final": 0.1407885131652066,
+     "t_final": 4.68230160595544,
+     "t_validation": 4.534251707366583,
+     "verdict": "promising, not established"
+    },
+    {
+     "events": 55160,
+     "label": "IV verdict 'rich' (absolute claim)",
+     "mean_excess_final": -0.28322954124873756,
+     "t_final": 12.646817844671755,
+     "t_validation": 9.219897021325652,
+     "verdict": "promising, not established"
+    },
+    {
+     "events": 55160,
+     "label": "IV verdict 'rich' (relative claim)",
+     "mean_excess_final": -0.158263244924435,
+     "t_final": 7.066799675067168,
+     "t_validation": 4.0769707808195434,
+     "verdict": "promising, not established"
+    }
+   ],
+   "line": "After a 'rich' reading the next month moved less than implied 82-86% of the time (the clearest result in the program). After 'cheap' it moved more only about half the time (48-50%), so 'cheap' has meant less overpriced than usual, not cheap.",
+   "opposite_sign_in_validation": [],
+   "sample": "1,742 optionable stocks, 2024-10 to 2026-10 (DoltHub), the following month's realised move against implied",
+   "strongest": {
+    "label": "IV verdict 'rich' (absolute claim)",
+    "t_final": 12.646817844671755,
+    "t_validation": 9.219897021325652,
+    "verdict": "promising, not established"
+   },
+   "tests": 4,
+   "what": "The options IV verdict (cheap, rich)"
+  },
+  "long_term": {
+   "counts": {
+    "no reliable effect": 4
+   },
+   "detail": [
+    {
+     "events": 11,
+     "label": "Long-term conviction cautious (price factors)",
+     "mean_excess_final": 0.10759151011069806,
+     "t_final": -2.473410941358049,
+     "t_validation": -1.4692942914071494,
+     "verdict": "no reliable effect"
+    },
+    {
+     "events": 45,
+     "label": "Long-term conviction high (price factors)",
+     "mean_excess_final": -0.010675872504074004,
+     "t_final": -0.3821112637610786,
+     "t_validation": -0.4273985385310953,
+     "verdict": "no reliable effect"
+    },
+    {
+     "events": 20,
+     "label": "Long-term conviction low (price factors)",
+     "mean_excess_final": 0.10220275880613934,
+     "t_final": -1.4915384855814573,
+     "t_validation": -1.646085328792249,
+     "verdict": "no reliable effect"
+    },
+    {
+     "events": 72,
+     "label": "Long-term conviction moderate (price factors)",
+     "mean_excess_final": -0.010113269830460438,
+     "t_final": -0.42435134756790727,
+     "t_validation": -0.46966779443950857,
+     "verdict": "no reliable effect"
+    }
+   ],
+   "line": "'High' was not followed by better returns over the next year than average, and 'low' was followed by better ones in all three periods tested (not significant after the multiple-testing control). The score describes the past trend and record, not what comes next.",
+   "opposite_sign_in_validation": [
+    "Long-term conviction low (price factors)"
+   ],
+   "sample": "18 ETFs and 40 large stocks, monthly, next 12 months against an average month",
+   "strongest": {
+    "label": "Long-term conviction high (price factors)",
+    "t_final": -0.3821112637610786,
+    "t_validation": -0.4273985385310953,
+    "verdict": "no reliable effect"
+   },
+   "tests": 4,
+   "what": "The long-term conviction score (price factors only)"
+  },
+  "pe_history": {
+   "counts": {
+    "no reliable effect": 2
+   },
+   "detail": [
+    {
+     "events": 52,
+     "label": "P/E cheap vs own history",
+     "mean_excess_final": 0.049879351383943206,
+     "t_final": 1.2158716332958488,
+     "t_validation": 1.0507550242870058,
+     "verdict": "no reliable effect"
+    },
+    {
+     "events": 136,
+     "label": "P/E expensive vs own history",
+     "mean_excess_final": 0.01481981234031812,
+     "t_final": -0.44053896786231705,
+     "t_validation": 0.4082974591112908,
+     "verdict": "no reliable effect"
+    }
+   ],
+   "line": "2 of 2 tests showed no reliable effect in the direction claimed.",
+   "opposite_sign_in_validation": [],
+   "sample": "40 large stocks, 2012-2026, P/E from SEC filing dates, next 12 months",
+   "strongest": {
+    "label": "P/E cheap vs own history",
+    "t_final": 1.2158716332958488,
+    "t_validation": 1.0507550242870058,
+    "verdict": "no reliable effect"
+   },
+   "tests": 2,
+   "what": "Cheap or expensive against its own five-year P/E"
+  },
+  "regime": {
+   "counts": {
+    "no reliable effect": 4
+   },
+   "detail": [
+    {
+     "events": 54,
+     "label": "Regime defensive (coded breadth)",
+     "mean_excess_final": 0.0035747933100229766,
+     "t_final": -0.5535274313500794,
+     "t_validation": -0.7566947299393675,
+     "verdict": "no reliable effect"
+    },
+    {
+     "events": 14,
+     "label": "Regime defensive (labelled breadth)",
+     "mean_excess_final": 0.007039114575046158,
+     "t_final": -0.561036360779447,
+     "t_validation": -0.6746804611402816,
+     "verdict": "no reliable effect"
+    },
+    {
+     "events": 72,
+     "label": "Regime supportive (coded breadth)",
+     "mean_excess_final": 0.002279630834863574,
+     "t_final": 0.5473277085374096,
+     "t_validation": 0.4168983066606014,
+     "verdict": "no reliable effect"
+    },
+    {
+     "events": 72,
+     "label": "Regime supportive (labelled breadth)",
+     "mean_excess_final": 0.00021460718230399895,
+     "t_final": 0.05254397614611677,
+     "t_validation": 0.1811682802479313,
+     "verdict": "no reliable effect"
+    }
+   ],
+   "line": "4 of 4 tests showed no reliable effect in the direction claimed.",
+   "opposite_sign_in_validation": [],
+   "sample": "SPY 2001-2026 (9 sector funds), next 20 sessions against an average day",
+   "strongest": {
+    "label": "Regime supportive (coded breadth)",
+    "t_final": 0.5473277085374096,
+    "t_validation": 0.4168983066606014,
+    "verdict": "no reliable effect"
+   },
+   "tests": 4,
+   "what": "The index regime's supportive and defensive readings"
+  },
+  "screen_score": {
+   "counts": {
+    "no reliable effect": 2
+   },
+   "detail": [
+    {
+     "events": 261,
+     "label": "Screen score bearish (state)",
+     "mean_excess_final": 0.0056717155202552815,
+     "t_final": -0.7146893606628225,
+     "t_validation": -0.11748336141256839,
+     "verdict": "no reliable effect"
+    },
+    {
+     "events": 838,
+     "label": "Screen score bullish (state)",
+     "mean_excess_final": -0.004660397933162541,
+     "t_final": -1.3870720865249724,
+     "t_validation": -0.6956305486402685,
+     "verdict": "no reliable effect"
+    }
+   ],
+   "line": "2 of 2 tests showed no reliable effect in the direction claimed.",
+   "opposite_sign_in_validation": [],
+   "sample": "18 ETFs and 40 large stocks, next 20 sessions against an average day",
+   "strongest": {
+    "label": "Screen score bearish (state)",
+    "t_final": -0.7146893606628225,
+    "t_validation": -0.11748336141256839,
+    "verdict": "no reliable effect"
+   },
+   "tests": 2,
+   "what": "The scan's price-and-volume trend score at +/-40"
+  },
+  "setups": {
+   "counts": {
+    "no reliable effect": 34
+   },
+   "detail": [
+    {
+     "events": 702,
+     "label": "Setup avwap_reclaim bear trigger",
+     "mean_excess_final": -0.0005299078370877592,
+     "t_final": 0.09899937784731214,
+     "t_validation": -0.5820860440351031,
+     "verdict": "no reliable effect"
+    },
+    {
+     "events": 675,
+     "label": "Setup avwap_reclaim bull trigger",
+     "mean_excess_final": 6.168096022428002e-05,
+     "t_final": 0.019769698544693754,
+     "t_validation": 0.26257843347086085,
+     "verdict": "no reliable effect"
+    },
+    {
+     "events": 205,
+     "label": "Setup avwap_retest bear trigger",
+     "mean_excess_final": 0.006541230359581797,
+     "t_final": -0.7874458379221874,
+     "t_validation": -0.14642331917165385,
+     "verdict": "no reliable effect"
+    },
+    {
+     "events": 597,
+     "label": "Setup avwap_retest bull trigger",
+     "mean_excess_final": -0.0005278143286113073,
+     "t_final": -0.18207533766219647,
+     "t_validation": -0.23115693815703128,
+     "verdict": "no reliable effect"
+    },
+    {
+     "events": 140,
+     "label": "Setup donchian_20 bear trigger",
+     "mean_excess_final": 0.011570500026148062,
+     "t_final": -0.7979587426164829,
+     "t_validation": -0.46009838605347925,
+     "verdict": "no reliable effect"
+    },
+    {
+     "events": 474,
+     "label": "Setup donchian_20 bull trigger",
+     "mean_excess_final": -0.0046908943155620905,
+     "t_final": -1.4748268450845694,
+     "t_validation": -0.25943272193975325,
+     "verdict": "no reliable effect"
+    },
+    {
+     "events": 105,
+     "label": "Setup donchian_55 bear trigger",
+     "mean_excess_final": 0.02255698888456796,
+     "t_final": -1.5526244220635286,
+     "t_validation": -0.06758064496249006,
+     "verdict": "no reliable effect"
+    },
+    {
+     "events": 393,
+     "label": "Setup donchian_55 bull trigger",
+     "mean_excess_final": -0.0036972521649713008,
+     "t_final": -1.1874773731589348,
+     "t_validation": -0.5025715648294965,
+     "verdict": "no reliable effect"
+    },
+    {
+     "events": 48,
+     "label": "Setup donchian_retest bear trigger",
+     "mean_excess_final": 0.03218099030093594,
+     "t_final": -1.5492775220532171,
+     "t_validation": -1.0398236569323163,
+     "verdict": "no reliable effect"
+    },
+    {
+     "events": 176,
+     "label": "Setup donchian_retest bull trigger",
+     "mean_excess_final": -0.00550323555396118,
+     "t_final": -1.2057252893375636,
+     "t_validation": -0.14583733222678197,
+     "verdict": "no reliable effect"
+    },
+    {
+     "events": 68,
+     "label": "Setup ema_cross bear trigger",
+     "mean_excess_final": -0.0081217506186543,
+     "t_final": 0.5698157014144568,
+     "t_validation": 0.8125206910640402,
+     "verdict": "no reliable effect"
+    },
+    {
+     "events": 288,
+     "label": "Setup ema_cross bull trigger",
+     "mean_excess_final": -0.0020063816233900885,
+     "t_final": -0.4270705548397537,
+     "t_validation": 0.03287610111068795,
+     "verdict": "no reliable effect"
+    },
+    {
+     "events": 85,
+     "label": "Setup fib_zone bear trigger",
+     "mean_excess_final": 0.006485372181648825,
+     "t_final": -0.6226994821599032,
+     "t_validation": -0.7595142905874298,
+     "verdict": "no reliable effect"
+    },
+    {
+     "events": 226,
+     "label": "Setup fib_zone bull trigger",
+     "mean_excess_final": -0.002020933971564124,
+     "t_final": -0.447249920296733,
+     "t_validation": 0.6106521515095723,
+     "verdict": "no reliable effect"
+    },
+    {
+     "events": 60,
+     "label": "Setup golden_cross bear trigger",
+     "mean_excess_final": 0.044747234290302834,
+     "t_final": -1.6293015614108501,
+     "t_validation": -0.6676840446479892,
+     "verdict": "no reliable effect"
+    },
+    {
+     "events": 55,
+     "label": "Setup golden_cross bull trigger",
+     "mean_excess_final": 0.003168778105879694,
+     "t_final": 0.35599971458339785,
+     "t_validation": -1.0915797336590394,
+     "verdict": "no reliable effect"
+    },
+    {
+     "events": 140,
+     "label": "Setup macd_cross bear trigger",
+     "mean_excess_final": 0.008558912374145777,
+     "t_final": -0.793932446183073,
+     "t_validation": -0.7334574447468817,
+     "verdict": "no reliable effect"
+    },
+    {
+     "events": 455,
+     "label": "Setup macd_cross bull trigger",
+     "mean_excess_final": -0.005179456696264604,
+     "t_final": -1.2668696654012541,
+     "t_validation": -0.5290592557845978,
+     "verdict": "no reliable effect"
+    },
+    {
+     "events": 66,
+     "label": "Setup momentum_confirm bear trigger",
+     "mean_excess_final": 0.0010400416700596308,
+     "t_final": -0.06962511996654216,
+     "t_validation": 0.607275375136191,
+     "verdict": "no reliable effect"
+    },
+    {
+     "events": 243,
+     "label": "Setup momentum_confirm bull trigger",
+     "mean_excess_final": -0.005287034297261601,
+     "t_final": -0.8310030161088312,
+     "t_validation": 0.7467283741597269,
+     "verdict": "no reliable effect"
+    },
+    {
+     "events": 149,
+     "label": "Setup rsi_50 bear trigger",
+     "mean_excess_final": -0.003242444627744144,
+     "t_final": 0.34203618337278713,
+     "t_validation": -0.7568064923435311,
+     "verdict": "no reliable effect"
+    },
+    {
+     "events": 433,
+     "label": "Setup rsi_50 bull trigger",
+     "mean_excess_final": -0.0016597928168775042,
+     "t_final": -0.5619414576147173,
+     "t_validation": 0.12601423168370957,
+     "verdict": "no reliable effect"
+    },
+    {
+     "events": 263,
+     "label": "Setup rsi_oversold bear trigger",
+     "mean_excess_final": -0.0045132361039476555,
+     "t_final": 1.1720403611582542,
+     "t_validation": 1.3185688079548714,
+     "verdict": "no reliable effect"
+    },
+    {
+     "events": 158,
+     "label": "Setup rsi_oversold bull trigger",
+     "mean_excess_final": 0.0024147635869145078,
+     "t_final": 0.18909141144026861,
+     "t_validation": 0.307170302870843,
+     "verdict": "no reliable effect"
+    },
+    {
+     "events": 6,
+     "label": "Setup squeeze bear trigger",
+     "mean_excess_final": 0.012790035673945403,
+     "t_final": -0.8567093691012506,
+     "t_validation": 0.8203194547214596,
+     "verdict": "no reliable effect"
+    },
+    {
+     "events": 26,
+     "label": "Setup squeeze bull trigger",
+     "mean_excess_final": -0.009971625257841161,
+     "t_final": -1.4140056412143192,
+     "t_validation": 0.5381929765901415,
+     "verdict": "no reliable effect"
+    },
+    {
+     "events": 118,
+     "label": "Setup sr_breakout bear trigger",
+     "mean_excess_final": 0.0026667264993950578,
+     "t_final": -0.27121647436189916,
+     "t_validation": -0.4952846771821909,
+     "verdict": "no reliable effect"
+    },
+    {
+     "events": 407,
+     "label": "Setup sr_breakout bull trigger",
+     "mean_excess_final": -0.0015807453754066506,
+     "t_final": -0.37561448786748836,
+     "t_validation": -0.10716952760113735,
+     "verdict": "no reliable effect"
+    },
+    {
+     "events": 54,
+     "label": "Setup sr_retest bear trigger",
+     "mean_excess_final": 0.016591915747894394,
+     "t_final": -1.354968689226686,
+     "t_validation": -0.8379385125819185,
+     "verdict": "no reliable effect"
+    },
+    {
+     "events": 248,
+     "label": "Setup sr_retest bull trigger",
+     "mean_excess_final": -0.007384072462120605,
+     "t_final": -1.7992683864472598,
+     "t_validation": -0.9158272834123109,
+     "verdict": "no reliable effect"
+    },
+    {
+     "events": 122,
+     "label": "Setup trend_pullback bear trigger",
+     "mean_excess_final": 0.004382919642010204,
+     "t_final": -0.45189328106118304,
+     "t_validation": -1.2040514811662941,
+     "verdict": "no reliable effect"
+    },
+    {
+     "events": 429,
+     "label": "Setup trend_pullback bull trigger",
+     "mean_excess_final": -0.004597378468717555,
+     "t_final": -1.2680596609023413,
+     "t_validation": 0.4162491475863868,
+     "verdict": "no reliable effect"
+    },
+    {
+     "events": 18,
+     "label": "Setup triple_stoch bear trigger",
+     "mean_excess_final": 0.006775302904052091,
+     "t_final": -0.39043888076489897,
+     "t_validation": -0.4161741397002682,
+     "verdict": "no reliable effect"
+    },
+    {
+     "events": 52,
+     "label": "Setup triple_stoch bull trigger",
+     "mean_excess_final": -0.0009258048642024625,
+     "t_final": -0.13018776307978747,
+     "t_validation": -0.28702337695093616,
+     "verdict": "no reliable effect"
+    }
+   ],
+   "line": "34 of 34 tests showed no reliable effect in the direction claimed.",
+   "opposite_sign_in_validation": [],
+   "sample": "18 ETFs and 40 large stocks, daily bars to 2026-10-14, return over the next 20 sessions against an average day",
+   "strongest": {
+    "label": "Setup rsi_oversold bear trigger",
+    "t_final": 1.1720403611582542,
+    "t_validation": 1.3185688079548714,
+    "verdict": "no reliable effect"
+   },
+   "tests": 34,
+   "what": "The 17 swing setup presets, bullish and bearish triggers"
+  },
+  "stage": {
+   "counts": {
+    "no reliable effect": 4
+   },
+   "detail": [
+    {
+     "events": 88,
+     "label": "New Stage 2 (event, weekly)",
+     "mean_excess_final": 0.013556084772639443,
+     "t_final": 1.2275640112629191,
+     "t_validation": -0.8646120228302347,
+     "verdict": "no reliable effect"
+    },
+    {
+     "events": 281,
+     "label": "Stage 2 (state, weekly)",
+     "mean_excess_final": -0.0032721584378843796,
+     "t_final": -0.424074209682427,
+     "t_validation": 0.3382554959298994,
+     "verdict": "no reliable effect"
+    },
+    {
+     "events": 53,
+     "label": "New Stage 4 (event, weekly)",
+     "mean_excess_final": 0.018824883344404478,
+     "t_final": -0.8678226734285541,
+     "t_validation": 0.007835126458945765,
+     "verdict": "no reliable effect"
+    },
+    {
+     "events": 82,
+     "label": "Stage 4 (state, weekly)",
+     "mean_excess_final": 0.017951925055444785,
+     "t_final": -1.1273093427937912,
+     "t_validation": -0.3249709497200976,
+     "verdict": "no reliable effect"
+    }
+   ],
+   "line": "4 of 4 tests showed no reliable effect in the direction claimed.",
+   "opposite_sign_in_validation": [],
+   "sample": "18 ETFs and 40 large stocks, weekly, next 60 sessions against an average day",
+   "strongest": {
+    "label": "Stage 2 (state, weekly)",
+    "t_final": -0.424074209682427,
+    "t_validation": 0.3382554959298994,
+    "verdict": "no reliable effect"
+   },
+   "tests": 4,
+   "what": "Weinstein Stage 2 and Stage 4"
+  },
+  "swing_grade": {
+   "counts": {
+    "no reliable effect": 5,
+    "promising, not established": 1
+   },
+   "detail": [
+    {
+     "events": 244,
+     "label": "Swing grade S or A, long",
+     "mean_excess_final": -0.002058441197019588,
+     "t_final": -0.510822419604167,
+     "t_validation": 1.7466177349203582,
+     "verdict": "promising, not established"
+    },
+    {
+     "events": 100,
+     "label": "Swing grade S or A, short",
+     "mean_excess_final": 0.013988579445594807,
+     "t_final": -1.6739950610095202,
+     "t_validation": -0.5782490604167021,
+     "verdict": "no reliable effect"
+    },
+    {
+     "events": 504,
+     "label": "Swing S/A plans: mean R-multiple",
+     "mean_excess_final": 0.03454161897150372,
+     "t_final": 0.3059375992885483,
+     "t_validation": 1.1893272276661373,
+     "verdict": "no reliable effect"
+    },
+    {
+     "events": 33,
+     "label": "Swing grade S only, long (funds: no earnings)",
+     "mean_excess_final": 0.004882755149783378,
+     "t_final": 0.5082659239090233,
+     "t_validation": 1.0624801615855657,
+     "verdict": "no reliable effect"
+    },
+    {
+     "events": 21,
+     "label": "Swing grade S only, short (funds: no earnings)",
+     "mean_excess_final": 0.008064330556203895,
+     "t_final": -0.556733706387187,
+     "t_validation": -1.3178904701752447,
+     "verdict": "no reliable effect"
+    },
+    {
+     "events": 66,
+     "label": "Swing S plans only: mean R-multiple (funds: no earnings)",
+     "mean_excess_final": 0.28118410814800165,
+     "t_final": 0.9704376811810769,
+     "t_validation": -0.15719706529012265,
+     "verdict": "no reliable effect"
+    }
+   ],
+   "line": "S/A plans averaged +0.17R a trade in 2013-2018 and about zero in 2019-2026 (stop at -1R, the first target at its own R, else the close after 20 sessions). Not an established edge. S plans on their own (possible for funds since the 2026-10-15 rules) were too few to judge: 33 and 48 long plans in the two test periods, no reliable effect.",
+   "opposite_sign_in_validation": [],
+   "sample": "18 ETFs and 40 large stocks, assessed weekly, no earnings dates; next 20 sessions and the plan's own stop and target",
+   "strongest": {
+    "label": "Swing grade S or A, long",
+    "t_final": -0.510822419604167,
+    "t_validation": 1.7466177349203582,
+    "verdict": "promising, not established"
+   },
+   "tests": 6,
+   "what": "The research framework's S/A swing plans"
+  },
+  "trend_score": {
+   "counts": {
+    "no reliable effect": 4
+   },
+   "detail": [
+    {
+     "events": 253,
+     "label": "Trend score turns bearish (event)",
+     "mean_excess_final": 0.00197863349735833,
+     "t_final": -0.2774940602998187,
+     "t_validation": -0.03256239812452028,
+     "verdict": "no reliable effect"
+    },
+    {
+     "events": 383,
+     "label": "Trend score bearish (state)",
+     "mean_excess_final": 0.006061450617717427,
+     "t_final": -0.9391770130898601,
+     "t_validation": -0.3218408167350435,
+     "verdict": "no reliable effect"
+    },
+    {
+     "events": 468,
+     "label": "Trend score turns bullish (event)",
+     "mean_excess_final": -0.001016827829632665,
+     "t_final": -0.3429317158245409,
+     "t_validation": 0.49381969724294394,
+     "verdict": "no reliable effect"
+    },
+    {
+     "events": 905,
+     "label": "Trend score bullish (state)",
+     "mean_excess_final": -0.005236051692366901,
+     "t_final": -1.6165906220177746,
+     "t_validation": -0.5736474169099535,
+     "verdict": "no reliable effect"
+    }
+   ],
+   "line": "4 of 4 tests showed no reliable effect in the direction claimed.",
+   "opposite_sign_in_validation": [],
+   "sample": "18 ETFs and 40 large stocks, next 20 sessions against an average day",
+   "strongest": {
+    "label": "Trend score turns bullish (event)",
+    "t_final": -0.3429317158245409,
+    "t_validation": 0.49381969724294394,
+    "verdict": "no reliable effect"
+   },
+   "tests": 4,
+   "what": "The chart score's bullish and bearish labels (technicals, the composite's chart input)"
+  }
+ },
+ "scale": "supported / promising, not established / unstable / no reliable effect / not testable",
+ "untestable": "Dealer gamma, walls, flow and news, and so the full composite: there is no free history of open interest, trades or headlines. The forward record above is their only test."
+}

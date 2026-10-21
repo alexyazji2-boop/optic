@@ -239,11 +239,28 @@ Not tested:
 | B6b.2 | Setup detail, back-test table, contract finder | A row's Details | The rule, Alert me when this triggers (B5's alert), the chart (the close, the rule's own lines, trigger and invalidation, where it armed, triggered or ended, a legend), the conditions met, the readings and volume, the back-test (all, earlier 70%, held out 30%, in R, with its assumptions), and the contract finder (days to expiry, open interest, volume, spread; what passed and why; the tab's budget) | The detail as wide as the screen | Opened rows and the contract filters survive the group's redraws (one node for the visit) | Each part loads on its own; a failed chain says so | `/api/setups/{T}/detail`, `/api/setups/{T}/options` (free) | b6b: a row opened, chart drawn, back-test rows, contracts asked with the typed filters, the alert, a group switch | done. The chart is v2's line chart with the levels, not Classic's candles |
 | B6b.3 | Chart patterns with measured base rates | Options, "Chart patterns and seasonality" | Structure, supply and demand zones, and recent candles, each beside the hit rate of its conventional reading over 21 sessions across 43 names and ten years, and its edge over the stock's own drift; Classic's caveats; the base rates' method folded; relative performance and seasonality as before | Same; tables scroll inside their box | Nothing | Base rates loading (the server may build them for 90 s): says so; failed: says so | `/api/patterns/base-rates` (free, the same for every symbol) | b6b: rates beside patterns | done |
 
-### B6c
-| Row | Task | Status |
-|---|---|---|
-| B6c.1 | `validation` branch reviewed; only the compatible work it needs taken | open |
-| B6c.2 | Track-record slots on Options and Investing | open |
+### B6c. The track record
+**The `validation` branch, reviewed (2026-10-21).** 20 commits and 39 files (about 8,000 lines) on 76ad67d, 15 October, never pushed. What it holds:
+- **Research code and its record.** `app/validation/*.py`, the historical validation program's engines, about 2,200 lines. Its docs: `docs/validation/`, the protocol, the report and the inventories, about 4,700 lines. Its tests: five files.
+- **The program's result.** `app/validation/history.json`: 11 rules, each with a verdict line and its sample. 0 of 82 supported; the IV "rich" verdict is the one clear result.
+- **`/api/validation` gains `history`.** It reads that file in `app/main.py`, 14 lines.
+- **Product changes unrelated to the slots:**
+  - the retirement planner moves to total returns (`app/analytics/retirement.py`, 130 lines, and `retirement_history.json`), with Classic's Roth "What history did with this mix";
+  - wording edits in `regime.py`, `pulse.py`, `longterm.py` and `swing.py`, with `test_pulse.py`;
+  - Classic's own history slots and Milo context (`static/app.js`).
+
+**Taken, and verified alone:** the 14 lines in `main.py` and `history.json`, byte for byte (`tests/test_v2_parity_b6c.py` compares it with the branch). Nothing else. The research package, the docs, the retirement change, the wording edits and Classic's slots stay on the branch for the owner: each changes what readers are told or how a figure is computed, and none is needed for the slots.
+
+Evidence:
+- `b6c_check.py`: 13 of 13 in headless Chrome at 1440 and 390, a guest, on the preview's `/api/validation`.
+  - Held back once: each slot says "not yet tested" meanwhile.
+  - Refused once: the slots imply nothing and the history lines stay hidden.
+- `tests/test_v2_parity_b6c.py`: the endpoint with history, a missing or broken file, the file against the branch's own, and the words in Classic's own terms.
+
+| Row | Task | Where | Desktop | Phone | Keeps | States | Deps | Evidence | Status |
+|---|---|---|---|---|---|---|---|---|---|
+| B6c.1 | `validation` branch reviewed; only the compatible work it needs taken | `app/main.py` `_validation_history`; `app/validation/history.json` | n/a | n/a | n/a | A missing or unreadable file is `history: null`, never an error | none | b6c tests | done. The rest of the branch is listed above for the owner's decision |
+| B6c.2 | Track-record slots on Options and Investing | `core/track.js`, and each place below | Options: the composite (Swing verdict, with its chart input's history); dealer gamma and the walls (their forward record; no history of open interest exists); the swing setups (their 17 presets replayed); the IV verdict's history; the candles' history. Investing: the long-term score's history. Also: the Chart tab's back-test, the Read page's index regime, and the Overview's stage explanation. Milo is given the record on Options and Investing | Same | Nothing (the record is cached 30 minutes) | Before it answers: "not yet tested"; failed: the same, history hidden | `/api/validation` (free) | b6c: every slot, delayed and refused | done |
 
 ## B7. Valuation
 | Row | Task | Status |
