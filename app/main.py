@@ -15,6 +15,7 @@ import sqlite3
 import math
 import threading
 import time
+import urllib.request
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
@@ -52,6 +53,7 @@ from .runtime import is_hosted
 from . import snapshots
 from . import universe as universe_mod
 from . import earnings_week as earnings_week_mod
+from . import research_book as research_book_mod
 from . import priority as priority_mod
 from . import weekly as weekly_mod
 from . import weekly_store
@@ -4445,6 +4447,55 @@ async def _dolthub_loop() -> None:
         await asyncio.sleep(DOLTHUB_SYNC_SECONDS)
 
 
+# The forward research archive (app/research_book.py). Off unless
+# OPTIC_RESEARCH_BOOK is set: once a trading day after the close it reads a
+# year of daily bars for the curated list (about a hundred requests, mostly
+# from the cache the scan already filled) and takes one swing snapshot per
+# trigger, which is usually a handful. It never calls a model.
+RESEARCH_BOOK_POLL_SECONDS = 15 * 60
+
+
+def _research_book_history(symbol: str):
+    return PROVIDER.history(symbol, period="2y", interval="1d")
+
+
+def _research_book_releases(symbol: str):
+    def cik(sym):
+        blob = feeds_mod.fetch_json(catalysts_mod.TICKER_MAP_URL, catalysts_mod.TICKER_MAP_TTL, key="sec:tickers")
+        for row in (blob or {}).values():
+            if isinstance(row, dict) and str(row.get("ticker", "")).upper() == sym.upper():
+                return row.get("cik_str")
+        return None
+
+    def fetch(url):
+        req = urllib.request.Request(url, headers={"User-Agent": feeds_mod.USER_AGENT})
+        with urllib.request.urlopen(req, timeout=20) as fh:
+            return json.loads(fh.read().decode("utf-8", "replace"))
+
+    return research_book_mod.sec_releases(symbol, cik, fetch)
+
+
+async def _research_book_loop() -> None:
+    await asyncio.sleep(90)
+    while True:
+        try:
+            if await _run(research_book_mod.due):
+                res = await _run(research_book_mod.run_daily, _research_book_history,
+                                 list(paper.CURATED_UNIVERSE), list(paper.CURATED_FUNDS),
+                                 _tracker_snapshot, _research_book_releases)
+                logging.getLogger("uvicorn.error").info("research book: %s", res)
+        except Exception as exc:                                # noqa: BLE001
+            logging.getLogger("uvicorn.error").warning("research book loop: %s", exc)
+        await asyncio.sleep(RESEARCH_BOOK_POLL_SECONDS)
+
+
+@app.get("/api/research-book")
+async def research_book_state() -> Dict[str, Any]:
+    """The forward research archive: candidates recorded today, open and recent shadow trades,
+    and what the research found. Reads the archive only, so it costs no provider or model call."""
+    return await _run(research_book_mod.state)
+
+
 @app.on_event("startup")
 async def _start_tracker() -> None:
     paper.init_db()
@@ -4465,6 +4516,8 @@ async def _start_tracker() -> None:
         app.state.edition_task = asyncio.create_task(_edition_loop())
     if SHORTLIST_AUTO:
         app.state.shortlist_task = asyncio.create_task(_shortlist_loop())
+    if research_book_mod.enabled():
+        app.state.research_book_task = asyncio.create_task(_research_book_loop())
     # OPTIC_DOLTHUB_SYNC=false reads the store without filling it (a second
     # process beside one that already is).
     if dolthub_vol_mod.enabled() and os.environ.get("OPTIC_DOLTHUB_SYNC", "true").strip().lower() != "false":

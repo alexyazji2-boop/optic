@@ -8,7 +8,7 @@ import * as api from '../core/api.js';
 import * as store from '../core/store.js';
 import { num, signed, money, compact, clean, capFirst, shortDate, isNum } from '../core/format.js';
 import { stamp, advancedOn } from '../core/prefs.js';
-import { skeleton, failed } from '../ui/states.js';
+import { skeleton, failed, how } from '../ui/states.js';
 import { signedBars, hbars } from '../ui/bars.js';
 import { mountCharts } from '../ui/chart.js';
 import { button as miloButton, provideContext } from '../ui/milo.js';
@@ -84,7 +84,9 @@ const RISK_WORDS = { conservative: 'Smaller risk per trade', balanced: 'Middle r
 /** A book's instruments and limits in words, from its own settings (the 2026-10-21 rules among them). */
 export function legsText(b) {
   const iv = Array.isArray(b.option_iv_verdicts) ? b.option_iv_verdicts : null;
+  // an empty list is options paused, not "shares and options": 2026-10-21, until an option implementation is validated
   return !b.allow_options ? 'shares only'
+    : iv && !iv.length ? 'shares only until options are validated'
     : iv && iv.length ? (b.prefer_options ? `options instead of shares when implied volatility is ${iv.join(' or ')}` : `shares, options only when implied volatility is ${iv.join(' or ')}`)
       : b.prefer_options ? 'options preferred' : 'shares and options';
 }
@@ -134,7 +136,7 @@ function ledger(d) {
     : cfg.universe === 'nasdaq' ? html`Universe: <b>every NASDAQ-listed common stock</b>, about 3,000 names. A scan screens all of them on price and volume, then puts the top ${cfg.shortlist_size} through the full analysis, so it takes a few minutes.`
       : `Watchlist: ${(cfg.watchlist || []).join(', ')}. A scan puts all of them through the full analysis.`;
   return html`<section class="section" aria-labelledby="op-h"><h2 class="t-h2" id="op-h">Optic Portfolio${name ? html` <span class="pill">${name}</span>` : ''}</h2>
-    <p class="section-sub">Three simulated ledgers, one per rule set, trading Optic's own signals. Every reader sees the same books.${name ? ` You are looking at the ${name.toLowerCase()} book; the cards above switch between them.` : ''} Each idea takes one position: the shares, or the exact contract the Options tab recommended when Optic rates its implied volatility cheap.</p>
+    <p class="section-sub">Three simulated ledgers, one per rule set, trading Optic's own signals. Every reader sees the same books.${name ? ` You are looking at the ${name.toLowerCase()} book; the cards above switch between them.` : ''} Each idea takes one position, in shares until an option implementation is validated on observed quotes.</p>
     ${run ? '' : html`<details class="more-inline tk-ops"><summary>Run the shared scan or refresh prices</summary>
       <p class="asof">These act on the demonstration portfolio every reader sees. Anyone may run a scan once every half hour; it also runs on its own every few hours. Refreshing prices only re-marks the open positions.</p>
       <div class="cluster tk-bar"><button type="button" class="btn" data-v2-tk="scan">Run a scan now</button><button type="button" class="btn" data-v2-tk="mark">Refresh marks</button></div>
@@ -270,6 +272,75 @@ function rest(d) {
           <tr class="sh-notes"><td colspan="5">${capFirst((x.notes || []).join('. ')) || 'Nothing cleared the bar'}${(x.funnel || {}).screen && x.funnel.screen.ranking_reused ? html`<br>Screen ranking reused from ${num(x.funnel.screen.ranking_age_minutes, 0)} minutes earlier. Daily bars don't change intraday, and re-downloading the exchange is what earns a rate limit.` : ''}</td></tr>`)}</tbody></table></div></section>` : ''}`;
 }
 
+/* ---------------- research watch (app/research_book.py) ---------------- */
+// The forward research archive: candidate setups recorded with their evidence, never a book and never advice.
+const RB_STATE = { triggered: 'Triggered at the close', armed: 'Armed, waiting for the trigger', watching: 'Watching' };
+const yesNo = (v) => (v === true ? 'yes' : v === false ? 'no' : 'not known');
+export function rbSupport(ev) {
+  if (!ev) return { met: [], line: 'Evidence not recorded' };
+  const parts = [], met = ev.supports_met || [];
+  const c2 = ev.c2_participation, c4 = ev.c4_market, c5 = ev.c5_catalyst;
+  if (c2) parts.push(`relative volume ${isNum(c2.rvol) ? num(c2.rvol, 2) : 'not known'} (${c2.met ? 'meets' : 'below'} 1.25)`);
+  if (c4) parts.push(`market ${c4.met === null || c4.met === undefined ? 'not known' : c4.met ? 'supportive' : 'not supportive'}: SPY above its 200-day ${yesNo(c4.spy_above_200d)}, breadth ${isNum(c4.breadth_pct) ? `${num(c4.breadth_pct, 0)}%` : 'not known'}`);
+  if (c5) parts.push(`recent earnings reaction ${c5.met === true ? 'beat SPY and held' : c5.met === false ? 'none that qualifies' : 'not known'}`);
+  const n = met.length;
+  return { met, line: `${n === 0 ? 'No supporting category' : n === 1 ? 'One supporting category' : `${n} supporting categories`} of the two the rules ask for: ${parts.join('; ')}.` };
+}
+export function rbCatalyst(c) {
+  if (!c) return 'Not recorded';
+  if (c.kind === 'fund') return 'A fund: no company earnings. Macro releases are not checked by these rules.';
+  const last = c.last_release, est = c.next_window_estimate;
+  const a = last ? `Last release ${shortDate(last.date)}, ${String(last.timing || '').replace('_', ' ')} (SEC filing time)` : 'No SEC earnings release found';
+  const b = est ? `; next estimated between ${shortDate(est.window_start)} and ${shortDate(est.window_end)}, an estimate from the release cadence` : '';
+  return `${a}${b}.`;
+}
+function rbPositioning(pz) {
+  if (!pz || !pz.available) return html`<p class="t-muted">${clean((pz && pz.reason) || 'Not recorded for this candidate.')}</p>`;
+  const f = (v, d = 2) => (isNum(v) ? num(v, d) : 'n/a');
+  return html`<p>Snapshot ${pz.taken_at ? stamp(pz.taken_at) : ''}: composite ${f(pz.composite, 0)}, gamma ${clean(pz.gamma_regime || 'n/a')}, flip ${f(pz.flip)}${isNum(pz.flip_distance_pct) ? ` (${signed(pz.flip_distance_pct, 1)} from price)` : ''}, put wall ${f(pz.put_wall)}, call wall ${f(pz.call_wall)}, flow score ${f(pz.flow_score, 0)}, IV ${clean(pz.iv_verdict || 'n/a')}.</p>
+    ${(pz.flow_notes || []).length ? html`<p class="t-muted">${clean(pz.flow_notes.join('. '))}.</p>` : ''}
+    <p class="t-muted">${clean(pz.caveat || '')}. Recorded to test later; it does not decide the trade.</p>`;
+}
+function rbCard(c, S) {
+  const st = S[c.setup] || { name: c.setup, holding: '' }, sup = rbSupport(c.evidence), pl = c.plan || {};
+  const trig = c.state === 'triggered' ? `Triggered at the close on ${shortDate(c.signal_date)}: ${st.trigger}.` : `Not yet: ${st.trigger}.`;
+  return html`<article class="rb-card"><div class="rb-head"><b>${st.name}</b> <a href="#/${c.symbol}">${c.symbol}</a><span class="t-muted">${RB_STATE[c.state] || c.state}, ${st.holding}</span></div>
+    <dl class="reads-dl">
+      <div><dt>Why it is watched</dt><dd>${capFirst(st.context || '')}; ${st.location || ''}.</dd></div>
+      <div><dt>Trigger</dt><dd>${trig}</dd></div>
+      <div><dt>Support</dt><dd>${sup.line}</dd></div>
+      <div><dt>Against it</dt><dd>${(c.conflicts || []).length ? clean(c.conflicts.map(capFirst).join('. ')) + '.' : 'Nothing recorded.'}</dd></div>
+      <div><dt>Catalyst</dt><dd>${rbCatalyst(c.catalyst)}</dd></div>
+      ${pl.entry ? html`<div><dt>Plan</dt><dd>Entry at the ${clean(pl.entry)}. Stop ${isNum(pl.stop_before_floor) ? num(pl.stop_before_floor) : 'n/a'}, ${clean(pl.stop_rule || '')}. Target ${clean(pl.target || '')}; time limit ${clean(pl.time || '')}.</dd></div>` : ''}
+    </dl>
+    <details class="more-inline"><summary>Options, gamma and missing inputs</summary>${rbPositioning(c.positioning)}${(c.missing || []).length ? html`<p class="t-muted">Missing: ${clean(c.missing.join(', '))}.</p>` : ''}</details></article>`;
+}
+function research(r) {
+  if (r === undefined) return html`<section class="section" aria-labelledby="rw-h"><h2 class="t-h2" id="rw-h">Research watch</h2><p class="section-sub">Loading the research archive…</p></section>`;
+  if (!r || r.error) return html`<section class="section" aria-labelledby="rw-h"><h2 class="t-h2" id="rw-h">Research watch</h2>${failed('The research archive', (r || {}).error, { retry: 'rb' })}</section>`;
+  const S = r.setups || {}, cand = r.candidates || [], open = r.open || [], closed = r.recent_closed || [], rec = r.record || {};
+  const trig = cand.filter((c) => c.state === 'triggered'), armed = cand.filter((c) => c.state === 'armed');
+  const head = html`<h2 class="t-h2" id="rw-h">Research watch</h2>
+    <p class="section-sub">Setups Optic records forward to test them, separate from the three books. Nothing here is sized, sent anywhere or added to a book, and none of it is a recommendation.</p>
+    <p class="lead-line"><b>Research status.</b> ${clean(r.research_status || '')}</p>`;
+  if (!r.as_of_date) {
+    return html`<section class="section" aria-labelledby="rw-h">${head}<p class="quiet">${r.enabled ? 'The archive has no entries yet. It records once a trading day, after the close.' : 'The research watch is not running on this server, so there is nothing recorded yet.'}</p>${how(html`<ul class="plain">${(r.limits || []).map((x) => html`<li>${clean(x)}</li>`)}</ul>`)}</section>`;
+  }
+  const shadow = (t) => ({ stop: t.stop, target: t.target, mark_spot: t.last_close, entry_spot: t.entry });
+  return html`<section class="section" aria-labelledby="rw-h">${head}
+    <p class="asof">Recorded after the close on ${shortDate(r.as_of_date)}: ${trig.length} triggered, ${armed.length} armed, ${num(r.watching_count, 0)} more watching. ${open.length} shadow ${open.length === 1 ? 'trade' : 'trades'} open or waiting for the next open; ${num(rec.closed, 0)} closed. ${clean(rec.note || '')}</p>
+    ${trig.length ? html`<h3>Triggered</h3><div class="rb-cards">${trig.slice(0, 6).map((c) => rbCard(c, S))}</div>
+      ${trig.length > 6 ? html`<details class="more-inline"><summary>The other ${trig.length - 6} triggered</summary><div class="rb-cards">${trig.slice(6).map((c) => rbCard(c, S))}</div></details>` : ''}` : html`<p class="quiet">Nothing triggered at the last close.</p>`}
+    ${armed.length ? html`<details class="more-inline"><summary>Armed, waiting for a trigger (${armed.length})</summary><div class="rb-cards">${armed.map((c) => rbCard(c, S))}</div></details>` : ''}
+    ${open.length ? html`<h3>Shadow trades</h3><div class="tscroll"><table class="t tk-t"><thead><tr><th scope="col">Setup</th><th scope="col">Signal</th><th scope="col">Entry</th><th scope="col">Where it stands</th></tr></thead>
+      <tbody>${open.map((t) => html`<tr><td><b>${(S[t.setup] || {}).name || t.setup}</b><br><a href="#/${t.symbol}">${t.symbol}</a></td><td>${shortDate(t.signal_date)}<br><small class="t-muted">close ${num(t.signal_close)}</small></td>
+        <td>${t.status === 'intended' ? html`<span class="t-muted">Waits for the next open</span>` : html`${num(t.entry)}<br><small class="t-muted">${shortDate(t.entry_date)}</small>`}</td>
+        <td>${t.status === 'open' ? gauge(shadow(t)) : html`<span class="t-muted">Stop and target are set at the fill</span>`}</td></tr>`)}</tbody></table></div>` : ''}
+    ${closed.length ? html`<h3>Closed shadow trades</h3><div class="tscroll"><table class="t"><thead><tr><th scope="col">Setup</th><th scope="col">Entry</th><th scope="col">Exit</th><th scope="col" class="n">After costs</th><th scope="col">Why it closed</th></tr></thead>
+      <tbody>${closed.map((t) => html`<tr><td>${(S[t.setup] || {}).name || t.setup}<br><a href="#/${t.symbol}">${t.symbol}</a></td><td>${num(t.entry)}<br><small class="t-muted">${shortDate(t.entry_date)}</small></td><td>${num(t.exit)}<br><small class="t-muted">${shortDate(t.exit_date)}</small></td><td class="n ${tone(t.r_net)}">${signed(t.r_net, 2, 'R')}</td><td>${capFirst(t.reason || '')}</td></tr>`)}</tbody></table></div>` : ''}
+    ${how(html`<p>Rules version ${clean(r.rules_version || '')}, frozen: a change is a new version, never an edit. Each trading day after the close every setup on the list is checked, and anything watching, armed or triggered is stored with its evidence, conflicts, catalyst status and missing inputs. A trigger also keeps the swing snapshot's options, gamma, IV and news reads with their time, because those have no history to test on. A trigger becomes a shadow trade at the next open, with the stop, a 2R target and 45 days, costs charged.</p><ul class="plain">${(r.limits || []).map((x) => html`<li>${clean(x)}</li>`)}</ul>`)}</section>`;
+}
+
 /* ---------------- page ---------------- */
 function paint() {
   if (!live) return;
@@ -285,7 +356,7 @@ function paint() {
     ${D.err ? failed("Optic's position ledger", D.err, { retry: 'load' }) : !d ? skeleton('rows', 6, "Loading Optic's own position ledger") : html`
       ${books(d)}${ledger(d)}${openPositions(d.open || [])}${months(d)}${funnel(d)}
       ${empty ? html`<section class="section"><h2 class="t-h2">No trades yet</h2><p>The ledger is empty. It only opens a position when a name's composite score clears ${num((d.config || {}).min_composite, 0)}, and most scans find nothing. Open "Run the shared scan" above to run one, or wait for the scheduled one.</p></section>` : ''}
-      ${record(d.summary || {})}${risk(d)}${(d.open || []).length ? scenariosSection(D.scen, { id: 'bsc-h' }) : ''}${rest(d)}`}`);
+      ${record(d.summary || {})}${risk(d)}${(d.open || []).length ? scenariosSection(D.scen, { id: 'bsc-h' }) : ''}${rest(d)}${research(D.rb)}`}`);
   if (Math.abs(window.scrollY - y) > 2) window.scrollTo(0, y);
   if (fid) { const el = fid.startsWith('data-') ? mainEl.querySelector(`[${fid}]`) : mainEl.querySelector(`#${fid}`); if (el) { if (!el.hasAttribute('tabindex') && /^H\d$/.test(el.tagName)) el.setAttribute('tabindex', '-1'); el.focus({ preventScroll: true }); } }
   if (!d) return;
@@ -309,6 +380,12 @@ async function load(quiet) {
   if (live && D.d && (D.d.progress || {}).running) poll = setTimeout(() => load(true), 4000);
   if (D.d && (D.d.open || []).length && D.risk === undefined) loadRisk();
   if (D.d && (D.d.open || []).length && D.scen === undefined) loadScenarios();
+  if (D.d && D.rb === undefined) loadResearch();
+}
+async function loadResearch() {
+  try { D.rb = await api.get('/api/research-book', { ttl: 300000, timeout: 30000 }); }
+  catch (e) { D.rb = { error: e }; }
+  paint();
 }
 async function loadRisk() {
   try { D.risk = await api.get(`/api/portfolio-risk?book=${encodeURIComponent(book)}`, { ttl: 120000, timeout: 60000 }); }
@@ -352,4 +429,4 @@ export async function render(main) {
   load();
 }
 export function dispose() { live = false; clearTimeout(poll); }
-export const retry = { load: () => load(), risk: () => { D.risk = undefined; loadRisk(); }, scenarios: () => { D.scen = undefined; paint(); loadScenarios(); } };
+export const retry = { load: () => load(), risk: () => { D.risk = undefined; loadRisk(); }, scenarios: () => { D.scen = undefined; paint(); loadScenarios(); }, rb: () => { D.rb = undefined; loadResearch(); } };

@@ -10,6 +10,12 @@ record keeps running with a dated line saying the rules changed.
 
 These tests hold each of those to its decision, and hold the old positions to
 theirs.
+
+Revised the same day by the owner's research brief: "cheap IV must not
+automatically cause Optic to buy calls instead of shares", so options are paused
+until an option implementation is validated on observed quotes; every book has
+an explicit exposure ceiling; exposure counts leverage and option delta; and no
+more than two or three positions may report earnings together.
 """
 from __future__ import annotations
 
@@ -43,11 +49,11 @@ def _snapshot(score=45.0, spot=100.0, support=None, atr14=2.0, verdict="cheap",
 
 def test_every_book_carries_the_approved_settings():
     want = {
-        "conservative": (None, [], False),
-        "balanced": (2.0, ["cheap"], True),
-        "aggressive": (2.0, ["cheap"], True),
+        "conservative": (1.0, [], False, 2),
+        "balanced": (2.0, [], False, 3),
+        "aggressive": (2.0, [], False, 3),
     }
-    for book, (gross, iv, prefer) in want.items():
+    for book, (gross, iv, prefer, cluster) in want.items():
         cfg = paper.book_config(book)
         assert cfg["allow_shorts"] is False, book
         assert cfg["max_gross_exposure"] == gross, book
@@ -56,6 +62,7 @@ def test_every_book_carries_the_approved_settings():
         assert cfg["one_leg_per_idea"] is True, book
         assert cfg["charge_costs"] is True, book
         assert cfg["prefer_options"] is prefer, book
+        assert cfg["max_event_cluster"] == cluster, book
 
 
 def test_the_books_still_differ_in_what_they_were_built_to_show():
@@ -111,24 +118,26 @@ def test_a_wider_stop_means_fewer_shares_not_more_risk():
 # --------------------------------------------- one leg, options when cheap
 
 
-def test_aggressive_takes_the_option_instead_of_the_shares_when_iv_is_cheap():
+@pytest.mark.parametrize("verdict", ["cheap", "fair", "slightly rich", "rich", "unknown", None])
+def test_no_book_buys_a_call_because_iv_is_cheap(verdict):
+    """The research brief of 2026-10-21: cheap IV must not by itself turn a share
+    trade into a call. Every book takes the shares whatever the verdict."""
+    for book in paper.BOOK_IDS:
+        found, notes = paper.consider_ticker(_snapshot(score=60.0, support=90.0, verdict=verdict),
+                                             100_000.0, book)
+        assert [leg["instrument"] for leg in found] == ["shares"], (book, verdict)
+        assert not any("reads never" in n for n in notes)
+
+
+def test_options_come_back_only_by_setting_them(monkeypatch):
+    """Paused, not removed: a book given verdicts and a preference takes the call."""
+    monkeypatch.setitem(paper.BOOKS["aggressive"], "option_iv_verdicts", ["cheap"])
+    monkeypatch.setitem(paper.BOOKS["aggressive"], "prefer_options", True)
     found, _ = paper.consider_ticker(_snapshot(support=90.0, verdict="cheap"), 100_000.0, "aggressive")
     assert [leg["instrument"] for leg in found] == ["option"]
-    assert found[0]["option_type"] == "call"
-
-
-def test_balanced_does_the_same():
-    found, _ = paper.consider_ticker(_snapshot(support=90.0, verdict="cheap"), 100_000.0, "balanced")
-    assert [leg["instrument"] for leg in found] == ["option"]
-
-
-@pytest.mark.parametrize("verdict", ["fair", "slightly rich", "rich", "unknown", None])
-def test_any_other_iv_verdict_takes_the_shares_and_says_why(verdict):
-    for book in ("balanced", "aggressive"):
-        found, notes = paper.consider_ticker(_snapshot(support=90.0, verdict=verdict), 100_000.0, book)
-        assert [leg["instrument"] for leg in found] == ["shares"], (book, verdict)
-        if book == "balanced":
-            assert any("buys options only when it reads cheap" in n for n in notes), notes
+    found, notes = paper.consider_ticker(_snapshot(support=90.0, verdict="fair"), 100_000.0, "aggressive")
+    assert [leg["instrument"] for leg in found] == ["shares"]
+    assert any("buys options only when it reads cheap" in n for n in notes)
 
 
 def test_conservative_never_holds_an_option():
@@ -137,7 +146,9 @@ def test_conservative_never_holds_an_option():
     assert [leg["instrument"] for leg in found] == ["shares"]
 
 
-def test_with_no_quotable_contract_the_shares_are_taken():
+def test_with_no_quotable_contract_the_shares_are_taken(monkeypatch):
+    monkeypatch.setitem(paper.BOOKS["aggressive"], "option_iv_verdicts", ["cheap"])
+    monkeypatch.setitem(paper.BOOKS["aggressive"], "prefer_options", True)
     found, _ = paper.consider_ticker(_snapshot(support=90.0, verdict="cheap", quotable=False),
                                      100_000.0, "aggressive")
     assert [leg["instrument"] for leg in found] == ["shares"]
@@ -165,6 +176,40 @@ def test_gross_exposure_counts_shares_and_option_premium_at_their_marks():
     assert paper.gross_exposure(rows) == 100 * 60 + 2 * 3 * 100 + 10 * 20
 
 
+def test_leveraged_funds_and_options_count_at_what_they_move():
+    rows = [{"ticker": "TQQQ", "instrument": "shares", "qty": 100, "entry_price": 50.0, "mark_price": 50.0},
+            {"ticker": "CVX", "instrument": "option", "qty": 4, "entry_price": 4.7, "mark_price": 5.6,
+             "mark_spot": 226.0, "mark_delta": 0.45},
+            {"ticker": "XOM", "instrument": "option", "qty": 1, "entry_price": 3.0, "mark_price": 2.0}]
+    assert paper.gross_exposure(rows) == pytest.approx(100 * 50 * 3 + 0.45 * 226 * 100 * 4 + 2.0 * 100)
+
+
+def test_a_leveraged_candidate_is_cut_by_its_multiple():
+    cand = {"ticker": "SOXL", "instrument": "shares", "qty": 400, "entry_price": 25.0, "stop": 23.0,
+            "risk_dollars": 800.0}
+    fit = paper._fit_gross(cand, 15_000.0)
+    assert fit["qty"] == 200, "$15,000 of room is $5,000 of a 3x fund"
+
+
+def test_an_option_mark_records_its_delta(ledger, monkeypatch):
+    with paper._connect() as conn:
+        conn.execute(
+            "INSERT INTO positions (book,ticker,instrument,direction,option_type,strike,expiry,qty,entry_price,"
+            "entry_spot,entry_at,status,pnl,pnl_pct,risk_dollars,stop,target) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            ("aggressive", "CVX", "option", "long", "call", 230.0, "2099-01-16", 4, 4.7, 221.0,
+             "2026-10-14T14:00:00+00:00", "open", 0.0, 0.0, 1880.0, 206.0, 252.0))
+    monkeypatch.setattr(paper, "mark_option", lambda provider, pos, spot, rate: {
+        "price": 5.6, "source": "Live chain mid", "dte": 30, "iv": 0.25})
+
+    class P:
+        def quote(self, t):
+            return {"price": 226.0, "day_high": 227.0, "day_low": 225.0}
+    paper.mark_open_positions(P(), 0.04)
+    row = paper._rows("SELECT mark_delta FROM positions WHERE ticker='CVX'")[0]
+    assert 0.2 < row["mark_delta"] < 0.6
+
+
 def test_a_candidate_over_the_room_is_cut_to_fit():
     cand = {"instrument": "shares", "qty": 400, "entry_price": 100.0, "stop": 97.0, "risk_dollars": 1200.0}
     fit = paper._fit_gross(cand, 25_000.0)
@@ -187,7 +232,8 @@ def test_capacity_reports_gross_against_the_books_cap(ledger):
     assert cap["gross_exposure"] == round(gross, 2)
     assert cap["max_gross_exposure_x"] == 2.0
     assert cap["gross_room"] == round(200_000.0 - gross, 2)
-    assert paper._capacity(100_000.0, "conservative")["gross_room"] is None
+    assert paper._capacity(100_000.0, "conservative")["gross_room"] == 100_000.0, "1x, and empty"
+    assert all(paper.book_config(b)["max_gross_exposure"] for b in paper.BOOK_IDS), "every book has a ceiling"
 
 
 def test_the_scan_fits_each_candidate_under_the_cap_before_the_risk_check():
@@ -196,6 +242,54 @@ def test_the_scan_fits_each_candidate_under_the_cap_before_the_risk_check():
     loop = loop[:loop.index("\ndef ", 10)]
     fit = loop.index('_fit_gross(candidate, cap.get("gross_room"))')
     assert fit < loop.index('room = cap["risk_budget_left"]'), "cut first, then admit the risk"
+
+
+# --------------------------------------------------------- event clusters
+
+
+def _open_with_event(ticker, day, book="balanced"):
+    leg = dict(paper.consider_ticker(_snapshot(score=60.0, support=90.0, verdict="fair", ticker=ticker), 100_000.0, book)[0][0],
+               event_date=day)
+    return paper.open_position(leg)
+
+
+def test_the_scan_snapshot_date_rides_on_the_position(ledger):
+    snap = dict(_snapshot(support=90.0, verdict="fair"), next_earnings_date="2026-10-29")
+    leg = paper.consider_ticker(snap, 100_000.0, "balanced")[0][0]
+    assert leg["event_date"] == "2026-10-29"
+    pid = paper.open_position(leg)
+    assert paper._rows("SELECT event_date FROM positions WHERE id=?", (pid,))[0]["event_date"] == "2026-10-29"
+
+
+def test_a_fourth_report_in_the_same_week_is_blocked(ledger):
+    for t, d in (("AAA", "2026-10-28"), ("BBB", "2026-10-29"), ("CCC", "2026-10-30")):
+        _open_with_event(t, d)
+    clash = paper.event_clash("balanced", "2026-10-30", today="2026-10-21")
+    assert clash and clash["count"] == 3 and clash["tickers"] == ["AAA", "BBB", "CCC"]
+    assert paper.event_clash("balanced", "2026-11-10", today="2026-10-21") is None, "a week later is fine"
+    assert paper.event_clash("aggressive", "2026-10-30", today="2026-10-21") is None, "per book"
+    assert paper.event_clash("balanced", None, today="2026-10-21") is None, "a fund has no report"
+
+
+def test_conservative_allows_two(ledger):
+    _open_with_event("AAA", "2026-10-28", "conservative")
+    assert paper.event_clash("conservative", "2026-10-29", today="2026-10-21") is None
+    _open_with_event("BBB", "2026-10-29", "conservative")
+    assert paper.event_clash("conservative", "2026-10-30", today="2026-10-21")["count"] == 2
+
+
+def test_the_scan_checks_the_cluster_before_admitting_risk():
+    src = open("app/paper.py").read()
+    loop = src[src.index("def run_scan"):]
+    loop = loop[:loop.index("\ndef ", 10)]
+    assert loop.index('event_clash(book_id, candidate.get("event_date"))') < loop.index('room = cap["risk_budget_left"]')
+
+
+def test_over_a_limit_the_book_stops_adding_rather_than_selling(ledger):
+    state = paper.state(book="aggressive")
+    assert state["config"]["limit_policy"] == "block_new"
+    assert any("stops adding until it is back under" in c for c in state["caveats"])
+    assert state["config"]["leveraged_funds"]["TQQQ"] == 3.0
 
 
 # ------------------------------------------------------------------- costs

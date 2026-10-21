@@ -1332,6 +1332,13 @@ table.narrow { max-width: 640px; }
 .bk-since, .bk-rules { font-size: var(--t-md); color: var(--c-ink-3); } .bk-blurb { font-size: var(--t-base); color: var(--c-ink-2); }
 /* The dated rules change under the book cards: a finding, so it stays in view rather than in a fold. */
 .rules-changed { margin: 14px 0 10px; max-width: 78ch; font-size: var(--t-base); color: var(--c-ink-2); }
+/* Research watch: one card per candidate, each a short evidence list; the options and gamma reads stay folded. */
+.rb-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); gap: var(--s-4); margin-top: var(--s-3); }
+.rb-card { background: var(--c-raised); border: 1px solid var(--c-line); border-radius: var(--r-lg); padding: var(--s-4); min-width: 0; display: grid; gap: var(--s-3); }
+.rb-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--s-2) var(--s-3); }
+.rb-head .t-muted { font-size: var(--t-md); }
+.rb-card .reads-dl > div { grid-template-columns: 130px minmax(0, 1fr); padding: 8px 0; }
+@media (max-width: 860px) { .rb-card .reads-dl > div { grid-template-columns: 1fr; gap: 2px; } }
 .tk-bar { margin: 12px 0 4px; }
 .tk-progress { margin: 12px 0; }
 .tk-t td { vertical-align: top; }

@@ -36,7 +36,7 @@ import pandas as pd
 
 from . import legal, universe
 from .analytics import screen
-from .analytics.greeks import bs_price, implied_vol
+from .analytics.greeks import bs_price, greeks as bs_greeks, implied_vol
 from . import session as session_mod
 
 # --------------------------------------------------------------- configuration
@@ -176,11 +176,12 @@ MAX_NEW_PER_SCAN = int(os.environ.get("TRACKER_MAX_NEW_PER_SCAN", "6"))
 RULES_VERSION = "2026-10-21"
 RULES_CHANGE_KEY = "rules:" + RULES_VERSION
 RULES_CHANGE_SUMMARY = (
-    "Every book is long only. Positions held at market value are capped at twice the "
-    "account for the balanced and aggressive books. A stop sits at least 1.5 times the "
-    "14-day average true range from the entry. Each idea takes one position: the shares, "
-    "or the recommended option instead when Optic rates its implied volatility cheap. "
-    "Trading costs are charged.")
+    "Every book is long only. Positions held, at what they move rather than what they "
+    "cost, are capped at once the account for the conservative book and twice for the "
+    "balanced and aggressive books. A stop sits at least 1.5 times the "
+    "14-day average true range from the entry. Each idea takes one position, in shares "
+    "until an option implementation is validated. No more than two or three positions "
+    "may report earnings within the same few days. Trading costs are charged.")
 
 # Trading costs, per side, as a share of the money traded: the validation
 # program's convention (5 basis points for a fund, 10 for a stock, plus 5 of
@@ -190,6 +191,17 @@ COST_BPS_FUND = 5.0
 COST_BPS_STOCK = 10.0
 SLIPPAGE_BPS = 5.0
 FUND_SYMBOLS = frozenset(CURATED_FUNDS)
+
+
+# Daily-reset leveraged funds on the list. Their market value understates what
+# they move: $10,000 of TQQQ is about $30,000 of the Nasdaq-100 for a day, so the
+# gross cap counts them at their stated multiple (research audit, 2026-10-21).
+LEVERAGED = {"TQQQ": 3.0, "SPXL": 3.0, "TNA": 3.0, "SOXL": 3.0, "TECL": 3.0}
+
+# What happens when holdings are over a limit. Existing positions are never cut
+# to fit; the book stops adding until it is back under. Said in the payload and
+# the caveats, because "over the cap" otherwise reads like a rule being broken.
+LIMIT_POLICY = "block_new"
 
 
 def cost_bps_for(ticker: str) -> float:
@@ -215,27 +227,32 @@ BOOKS: Dict[str, Dict[str, Any]] = {
         "max_portfolio_risk": 0.06,
         "max_new_per_scan": 3,
         "max_notional_pct": 0.12,
-        # The 2026-10-21 rules. No gross cap: this book has never held more than
-        # 0.7x its equity, live or in the replay.
+        # The 2026-10-21 rules. The ceiling is 1x: this book has never held more
+        # than 0.7x its equity, live or in the replay, so it states the limit
+        # rather than changing anything.
         "allow_shorts": False,
-        "max_gross_exposure": None,
+        "max_gross_exposure": 1.0,
         "min_stop_atr": 1.5,
         "option_iv_verdicts": [],
         "one_leg_per_idea": True,
         "charge_costs": True,
+        # At most this many open positions reporting earnings within 3 days of
+        # one another. On 2026-10-21, 5 of this book's 6 open positions reported
+        # within two weeks, and trades held through a release lost more than
+        # 1.5R through a gap 3 to 5 times as often as the rest (research R2).
+        "max_event_cluster": 2,
     },
     "balanced": {
         "id": "balanced",
         "label": "Balanced",
         "tagline": "Medium risk, medium reward",
         "blurb": ("Long only, at the textbook 1% of equity per trade. One position per "
-                  "idea: the shares, or the recommended option when Optic rates implied "
-                  "volatility cheap. The middle book, and the one the terminal's existing "
-                  "record belongs to."),
+                  "idea, in shares until an option implementation is validated. The middle "
+                  "book, and the one the terminal's existing record belongs to."),
         "risk_per_trade": 0.010,
         "min_composite": 30.0,
         "allow_options": True,
-        "prefer_options": True,
+        "prefer_options": False,
         "max_atr_pct": 8.0,
         "max_positions": 20,
         "max_portfolio_risk": 0.15,
@@ -244,24 +261,26 @@ BOOKS: Dict[str, Dict[str, Any]] = {
         "allow_shorts": False,
         "max_gross_exposure": 2.0,
         "min_stop_atr": 1.5,
-        # "cheap" only: on observed option data (2024-10 to 2026-10) every other
-        # verdict was followed by a smaller move than the premium priced.
-        "option_iv_verdicts": ["cheap"],
+        # Empty: no option is bought until an option implementation is validated
+        # on observed quotes. "Cheap" IV alone does not make a call better than
+        # the shares (research brief and round of 2026-10-21); the recommended
+        # contract is kept beside each trade in the research archive instead.
+        "option_iv_verdicts": [],
         "one_leg_per_idea": True,
         "charge_costs": True,
+        "max_event_cluster": 3,
     },
     "aggressive": {
         "id": "aggressive",
         "label": "Aggressive",
         "tagline": "High risk, high reward",
         "blurb": ("Long only, at twice the risk per trade, with more volatile names "
-                  "allowed through. Options preferred, when Optic rates implied "
-                  "volatility cheap. The book most likely to post the best month and "
-                  "the worst one."),
+                  "allowed through. Shares until an option implementation is validated. "
+                  "The book most likely to post the best month and the worst one."),
         "risk_per_trade": 0.020,
         "min_composite": 30.0,
         "allow_options": True,
-        "prefer_options": True,
+        "prefer_options": False,
         "max_atr_pct": 12.0,
         "max_positions": 25,
         "max_portfolio_risk": 0.25,
@@ -270,9 +289,10 @@ BOOKS: Dict[str, Dict[str, Any]] = {
         "allow_shorts": False,
         "max_gross_exposure": 2.0,
         "min_stop_atr": 1.5,
-        "option_iv_verdicts": ["cheap"],
+        "option_iv_verdicts": [],
         "one_leg_per_idea": True,
         "charge_costs": True,
+        "max_event_cluster": 3,
     },
 }
 
@@ -388,10 +408,13 @@ CREATE TABLE IF NOT EXISTS positions (
     pnl_pct       REAL,
     book          TEXT NOT NULL DEFAULT 'balanced',
     -- The rules it opened under (NULL: before 2026-10-21), its trading cost per
-    -- side in basis points (NULL: none) and the costs charged at the latest mark.
+    -- side in basis points (NULL: none), the costs charged at the latest mark, the
+    -- next earnings date known at entry, and an option's delta at the latest mark.
     rules_version TEXT,
     cost_bps      REAL,
     costs         REAL,
+    event_date    TEXT,
+    mark_delta    REAL,
     archived_at   TEXT                    -- set when the record restarted; NULL is live
 );
 CREATE INDEX IF NOT EXISTS idx_positions_status ON positions(status);
@@ -468,7 +491,8 @@ def init_db() -> None:
             conn.execute("ALTER TABLE positions ADD COLUMN archived_at TEXT")
         # The 2026-10-21 rules. NULL on every older row, which is what keeps
         # those positions on the rules they were opened with.
-        for col, kind in (("rules_version", "TEXT"), ("cost_bps", "REAL"), ("costs", "REAL")):
+        for col, kind in (("rules_version", "TEXT"), ("cost_bps", "REAL"), ("costs", "REAL"),
+                          ("event_date", "TEXT"), ("mark_delta", "REAL")):
             if col not in have:
                 conn.execute("ALTER TABLE positions ADD COLUMN {} {}".format(col, kind))
         have_scans = {r[1] for r in conn.execute("PRAGMA table_info(scans)")}
@@ -778,7 +802,8 @@ def open_position(entry: Dict[str, Any]) -> int:
     cols = ("ticker", "instrument", "direction", "option_type", "strike", "expiry", "qty",
             "entry_price", "entry_spot", "entry_at", "stop", "target", "risk_dollars",
             "composite", "thesis", "status", "mark_price", "mark_spot", "marked_at",
-            "mark_source", "pnl", "pnl_pct", "book", "rules_version", "cost_bps", "costs")
+            "mark_source", "pnl", "pnl_pct", "book", "rules_version", "cost_bps", "costs",
+            "event_date")
     # A brand-new position is flat before costs, not unknown. Writing a figure
     # rather than NULL keeps the ledger's P&L column readable before the first
     # marking pass runs; with costs it starts at minus both sides at the entry.
@@ -885,10 +910,19 @@ def mark_open_positions(provider, rate: float = 0.0) -> Dict[str, int]:
                 continue
             bar_high, bar_low = quote.get("day_high"), quote.get("day_low")
 
+            delta = None
             if pos["instrument"] == "option":
                 mark = mark_option(provider, pos, spot, rate)
                 price = mark["price"]
                 source = mark["source"]
+                try:
+                    if mark.get("iv") and (mark.get("dte") or 0) > 0:
+                        g = bs_greeks(float(spot), np.array([float(pos["strike"])]),
+                                      np.array([max(mark["dte"], 1) / 365.0]), np.array([float(mark["iv"])]),
+                                      rate=rate, is_call=np.array([pos["option_type"] == "call"]))
+                        delta = _f(float(g["delta"][0]), 4)
+                except Exception:                               # noqa: BLE001
+                    delta = None
             else:
                 price = spot
                 source = "Last quote"
@@ -934,9 +968,9 @@ def mark_open_positions(provider, rate: float = 0.0) -> Dict[str, int]:
             with _LOCK, _connect() as conn:
                 conn.execute(
                     "UPDATE positions SET mark_price=?, mark_spot=?, marked_at=?, pnl=?,"
-                    " pnl_pct=?, mark_source=?, costs=? WHERE id=?",
+                    " pnl_pct=?, mark_source=?, costs=?, mark_delta=? WHERE id=?",
                     (_f(price, 4), _f(spot, 4), _now(), result["pnl"], result["pnl_pct"],
-                     source, result.get("costs"), pos["id"]),
+                     source, result.get("costs"), delta, pos["id"]),
                 )
         except Exception:
             # One bad ticker must not abort the whole marking pass.
@@ -1048,7 +1082,11 @@ def consider_ticker(snapshot: Dict[str, Any], equity: float,
                         ticker, 100 * risk_per_share / spot, target)]
 
     rules = {"rules_version": RULES_VERSION,
-             "cost_bps": cost_bps_for(ticker) if cfg.get("charge_costs") else None}
+             "cost_bps": cost_bps_for(ticker) if cfg.get("charge_costs") else None,
+             # Yahoo's next report date as the scan saw it: an estimate until the
+             # company confirms it, and stale if the company moves it.
+             "event_date": (str(snapshot.get("next_earnings_date"))[:10]
+                            if snapshot.get("next_earnings_date") else None)}
     share_leg = option_leg = None
     share_size = size_shares(spot, stop, equity, book)
     if share_size["qty"] <= 0:
@@ -1082,11 +1120,13 @@ def consider_ticker(snapshot: Dict[str, Any], equity: float,
     # directional signal Optic has adds an edge to pay for that.
     verdicts = cfg.get("option_iv_verdicts")
     iv_verdict = (plan.get("iv_context") or {}).get("verdict")
-    if verdicts is not None and iv_verdict not in verdicts:
+    if verdicts is not None and not verdicts:
+        pass        # options paused for this book; the research archive keeps the contract
+    elif verdicts is not None and iv_verdict not in verdicts:
         notes.append("{}: no option leg. Implied volatility reads {}, and the {} book buys "
                      "options only when it reads {}".format(
                          ticker, iv_verdict or "unknown", cfg["label"].lower(),
-                         " or ".join(verdicts) or "never"))
+                         " or ".join(verdicts)))
     elif not pick.get("strike") or not pick.get("expiry") or not pick.get("entry_mid"):
         notes.append("{}: no option leg. The entry plan had no quotable contract".format(ticker))
     else:
@@ -1207,7 +1247,7 @@ def _capacity(equity: float, book: Optional[str] = None) -> Dict[str, Any]:
     momentum bet wearing different tickers.
     """
     cfg = book_config(book)
-    cols = "instrument, qty, entry_price, mark_price"
+    cols = "ticker, instrument, qty, entry_price, mark_price, entry_spot, mark_spot, mark_delta"
     rows = _rows("SELECT " + cols + " FROM positions WHERE status='open' AND book=? AND " + LIVE,
                  (cfg["id"],))
     risk = open_risk(cfg["id"])
@@ -1238,10 +1278,55 @@ def gross_exposure(rows: List[Dict[str, Any]]) -> float:
     """
     total = 0.0
     for r in rows:
+        qty = float(r.get("qty") or 0.0)
+        if r.get("instrument") == "option":
+            # What the contract moves, not what it cost: |delta| x spot x 100 once a
+            # mark has a delta. A $2,250 call on CVX was $9,000 of CVX on 10-21.
+            spot = r.get("mark_spot") or r.get("entry_spot")
+            if r.get("mark_delta") is not None and spot:
+                total += abs(float(r["mark_delta"]) * float(spot) * 100.0 * qty)
+                continue
+            price = r.get("mark_price") if r.get("mark_price") is not None else r.get("entry_price")
+            total += abs(float(price or 0.0) * 100.0 * qty)
+            continue
         price = r.get("mark_price") if r.get("mark_price") is not None else r.get("entry_price")
-        mult = 100.0 if r.get("instrument") == "option" else 1.0
-        total += abs(float(price or 0.0) * float(r.get("qty") or 0.0) * mult)
+        total += abs(float(price or 0.0) * qty) * LEVERAGED.get(str(r.get("ticker") or "").upper(), 1.0)
     return total
+
+
+def event_clash(book: str, event_date: Optional[str], today: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    """Open positions in this book reporting within 3 days of `event_date`, when
+    there are already as many as the book allows; otherwise None.
+
+    A safeguard, not a signal. Trades held through a release lost more than 1.5R
+    through a gap 3 to 5 times as often as the others (research R2, 2026-10-21),
+    and several reports in one week turn that tail into one correlated event.
+    Positions opened before the rule carry no date and are not counted.
+    """
+    cfg = book_config(book)
+    cap = cfg.get("max_event_cluster")
+    if not cap or not event_date:
+        return None
+    try:
+        when = datetime.fromisoformat(str(event_date)[:10]).date()
+    except ValueError:
+        return None
+    now = datetime.fromisoformat(today).date() if today else datetime.now(timezone.utc).astimezone(_ET).date()
+    if when < now:
+        return None
+    rows = _rows("SELECT ticker, event_date FROM positions WHERE status='open' AND book=? AND "
+                 "event_date IS NOT NULL AND " + LIVE, (cfg["id"],))
+    near = []
+    for r in rows:
+        try:
+            d = datetime.fromisoformat(str(r["event_date"])[:10]).date()
+        except ValueError:
+            continue
+        if abs((d - when).days) <= 3:
+            near.append(r["ticker"])
+    if len(near) < cap:
+        return None
+    return {"count": len(near), "tickers": sorted(set(near)), "cap": cap}
 
 
 def _fit_gross(candidate: Dict[str, Any], room: Optional[float]) -> Optional[Dict[str, Any]]:
@@ -1253,7 +1338,8 @@ def _fit_gross(candidate: Dict[str, Any], room: Optional[float]) -> Optional[Dic
     if room is None:
         return candidate
     mult = 100.0 if candidate["instrument"] == "option" else 1.0
-    unit = float(candidate["entry_price"]) * mult
+    lev = 1.0 if candidate["instrument"] == "option" else LEVERAGED.get(str(candidate.get("ticker") or "").upper(), 1.0)
+    unit = float(candidate["entry_price"]) * mult * lev
     if unit <= 0:
         return None
     if candidate["qty"] * unit <= room:
@@ -1569,6 +1655,14 @@ def run_scan(snapshot_fn: Callable[[str], Dict[str, Any]], provider,
                                          "equity in positions".format(
                                              ticker, cfg["label"].lower(),
                                              cfg.get("max_gross_exposure") or 0))
+                        continue
+                    clash = event_clash(book_id, candidate.get("event_date"))
+                    if clash is not None:
+                        if book_id == DEFAULT_BOOK:
+                            notes.append("{}: reports on {}, and the {} book already holds {} reporting "
+                                         "within 3 days ({})".format(
+                                             ticker, candidate.get("event_date"), cfg["label"].lower(),
+                                             clash["count"], ", ".join(clash["tickers"])))
                         continue
                     room = cap["risk_budget_left"] or 0.0
                     cost = candidate.get("risk_dollars") or 0.0
@@ -1955,6 +2049,8 @@ def state(limit: int = 60, month: Optional[str] = None,
             "max_option_risk_pct": _f(MAX_OPTION_RISK * 100, 1),
             "option_single_contract_cap_pct": _f(OPTION_SINGLE_CONTRACT_CAP * 100, 1),
             "rules_version": RULES_VERSION,
+            "limit_policy": LIMIT_POLICY,
+            "leveraged_funds": LEVERAGED,
             "cost_bps_fund": COST_BPS_FUND,
             "cost_bps_stock": COST_BPS_STOCK,
             "slippage_bps": SLIPPAGE_BPS,
@@ -1968,10 +2064,16 @@ def state(limit: int = 60, month: Optional[str] = None,
             "record was not restarted, so the figures above include trades under both.".format(
                 since),
             "Simulated trades. " + execution_note(since),
-            "Since {}, each idea takes one position: the shares, or the recommended option "
-            "when Optic rates implied volatility cheap. Before then one signal could open both "
-            "a share and an option position on the same ticker, so those earlier lines are "
-            "the same bet twice, not two independent ones.".format(since),
+            "Since {}, each idea takes one position, in shares: no option is bought until an "
+            "option implementation is validated on observed quotes. Before then one signal "
+            "could open both a share and an option position on the same ticker, so those "
+            "earlier lines are the same bet twice, not two independent ones.".format(since),
+            "Exposure is counted by what a position moves, not what it cost: a 3x fund at three "
+            "times its value and an option at its delta. A book over a limit is not made to "
+            "sell; it stops adding until it is back under.",
+            "No more than two (conservative) or three positions may report earnings within 3 "
+            "days of one another. The dates are Yahoo's estimates as the scan saw them, and "
+            "positions opened before {} carry none.".format(since),
             "Share stops and targets are checked against the day's high and low, so a level "
             "touched intraday counts even if price closed back inside it.",
             "Options are marked from the live chain where a quote exists; when one doesn't, "

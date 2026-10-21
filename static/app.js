@@ -34688,6 +34688,7 @@ function bookValue(b) {
 function bookLegsText(b) {
   const iv = Array.isArray(b.option_iv_verdicts) ? b.option_iv_verdicts : null;
   if (!b.allow_options) return 'shares only';
+  if (iv && !iv.length) return 'shares only until options are validated';
   if (iv && iv.length) {
     return b.prefer_options ? `options instead of shares when implied volatility is ${iv.join(' or ')}`
       : `shares, options only when implied volatility is ${iv.join(' or ')}`;
@@ -34949,8 +34950,8 @@ function renderTracker(d) {
     <p class="sub">Three simulated ledgers, shared by everyone who opens this page, running the
       terminal's own signals under three different rule sets. ${bookName ? `You are looking at the
       ${esc(bookName.toLowerCase())} book; the cards above switch between them.` : ''} Each idea
-      takes one position: the shares, or the exact contract the Options tab recommended when
-      Optic rates its implied volatility cheap.</p>
+      takes one position, in shares until an option implementation is validated on observed
+      quotes.</p>
 
     <div class="tracker-bar">
       <button class="btn primary" type="button" id="tracker-scan" ${scanning ? 'disabled' : ''}>
