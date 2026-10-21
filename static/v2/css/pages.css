@@ -563,6 +563,7 @@ table.chw-table { font-size: var(--t-sm); } table.chw-table th { padding: 6px 4p
 .menu { position: relative; }
 .menu > summary { list-style: none; cursor: pointer; } .menu > summary::-webkit-details-marker { display: none; }
 .menu-body { position: absolute; z-index: 20; top: calc(100% + 6px); left: 0; min-width: 260px; padding: 12px 14px; border: 1px solid var(--c-line); border-radius: var(--r-3); background: var(--c-raised); box-shadow: var(--sh-pop); display: grid; gap: 2px; }
+.menu-body.menu-end { left: auto; right: 0; }   /* after .menu-body, so it wins: an end-aligned menu opens leftward and never widens the page (found by B4a's width sweep, 2026-10-21) */
 .menu-body .t-label { margin-top: 6px; }
 .textform { margin-bottom: 10px; }
 .pc { position: relative; }
@@ -669,7 +670,7 @@ table.chw-table { font-size: var(--t-sm); } table.chw-table th { padding: 6px 4p
 .pc .dr-rect { fill: var(--c-gold-wash); } .pc .dr-t { fill: var(--c-gold-ink); font: 600 var(--t-xs)/1 var(--f-label); }
 .pc .dr-text { fill: var(--c-ink); font: 600 var(--t-sm)/1 var(--f-sans); } .pc .dr-text.sel { fill: var(--c-gold-ink); text-decoration: underline; }
 .ch-foot { margin-top: 10px; align-items: center; }
-@media (max-width: 860px) { .drail { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; margin-right: -16px; padding-right: 16px; } .drail .chip { flex: none; } .menu-body { position: fixed; left: 16px; right: 16px; top: auto; bottom: 90px; } }
+@media (max-width: 860px) { .drail { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; margin-right: -16px; padding-right: 16px; } .drail .chip { flex: none; } .menu-body, .menu-body.menu-end { position: fixed; left: 16px; right: 16px; top: auto; bottom: 90px; } }
 .pc .dr-other { stroke-dasharray: 2 3; }
 /* the drawings the classic app adds (C10; ui/drawings.js): handles on the selected one, channel fill, measure,
    risk and reward boxes */
