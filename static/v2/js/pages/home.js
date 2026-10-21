@@ -123,12 +123,103 @@ export function portfolio(ov, perf) {
 }
 
 /* ---------------- what matters today ---------------- */
+// What the reader opened here is kept by each item's own key, not its place on the page, so a refresh of the board
+// (every ten minutes, or when a figure comes in) repaints it with the same rows, groups and note still open.
+const EV_OPEN = new Set(), EV_MORE = new Set();
+let csOpen = null;
+const evId = (k) => { let h = 5381; for (let i = 0; i < k.length; i += 1) h = ((h * 33) ^ k.charCodeAt(i)) >>> 0; return `ev-${h.toString(36)}`; };
+const evKey = (r) => [r.kind, r.ticker || '', r.date || r.when || '', r.kind === 'earnings' ? '' : (r.short || r.title || '')].join('|');
 function bucket(r) {
   const d = Number(r.days_away);
   if (r.kind === 'sector') return 'Now';
   if (d === 0 || r.when === 'Today') return 'Today';
   return 'This week';
 }
+/** A release that is out, or a company that has reported (the server's priority._event_result and
+ *  _earnings_result, from the home-released-results branch): what it printed, against what, and where from. */
+export function resultWords(res) {
+  if (!res) return '';
+  if (res.pending) return html`<p class="ev-res is-pending">${clean(res.text || '')}</p>`;
+  return html`<p class="ev-res"><b>${clean(res.text || '')}</b>${res.source ? html` <span class="t-muted">${clean(res.source)}.</span>` : ''}</p>
+    ${res.headline ? html`<p class="ev-res-head">${res.headline_source || 'The agency'}: "${clean(res.headline)}"${res.headline_url ? html` <a class="textlink" href="${res.headline_url}" target="_blank" rel="noopener">The release ${icon('out')}</a>` : ''}</p>` : ''}
+    ${res.forecast_note ? html`<p class="t-muted ev-res-vs">${clean(res.forecast_note)}</p>` : ''}`;
+}
+const shortResult = (r) => (r.result && !r.result.pending ? r.result.short || '' : '');
+
+/* The week as days (Classic's catalyst strip, app.js catalystStripHTML; parity B8.2). Only what the feed dates is
+ * placed, by the row's date or else its days away, and only on the days the feed looks at; anything it cannot
+ * place stays in the list below. Two a day, the larger first; the rest of a day opens under the strip. */
+const CATALYST_SHOWN = 2;
+const DAY = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const etToday = () => { try { return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()); } catch (e) { return ''; } };
+export function catalystDays(p, todayIso) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(todayIso || etToday()));
+  const base = m ? Date.UTC(+m[1], +m[2] - 1, +m[3]) : null;
+  if (base === null) return { days: [], placed: 0 };
+  const cols = {}; ((p || {}).columns || []).forEach((c) => { cols[c.id] = c; });
+  const horizon = Math.max(1, Math.min(7, Number.isFinite(p.horizon_days) ? p.horizon_days : 5));   // inclusive, as the feed's own
+  const days = [];
+  for (let k = 0; k <= horizon; k += 1) {
+    const d = new Date(base + k * 864e5);
+    if (d.getUTCDay() === 0 || d.getUTCDay() === 6) continue;   // no session
+    const iso = d.toISOString().slice(0, 10);
+    days.push({ k, iso, name: k === 0 ? 'Today' : `${DAY[d.getUTCDay()]} ${d.getUTCDate()}`, items: [], closed: ((p || {}).closed_days || {})[iso] || null });
+  }
+  const place = (row, kind) => {
+    const on = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(row.date || ''));
+    const k = on ? Math.round((Date.UTC(+on[1], +on[2] - 1, +on[3]) - base) / 864e5) : (Number.isFinite(row.days_away) ? row.days_away : null);
+    const day = days.find((x) => x.k === k); if (!day) return;
+    const res = shortResult(row);
+    // a report by its ticker (the cell is headed with its day); a release that is out says what it printed, or
+    // Out while its figures are on their way
+    day.items.push({ kind, key: evKey(row), title: row.short || (kind === 'earnings' && row.ticker) || row.title, time: res || (row.released ? 'Out' : row.time || ''), result: !!res, impact: row.impact, row });
+  };
+  ((cols.events || {}).rows || []).forEach((r) => place(r, 'event'));
+  ((cols.earnings || {}).rows || []).forEach((r) => place(r, 'earnings'));
+  const RANK = { high: 0, medium: 1, low: 2 };
+  days.forEach((x) => x.items.sort((a, b) => (RANK[a.impact] ?? 3) - (RANK[b.impact] ?? 3)));
+  return { days, placed: days.reduce((n, x) => n + x.items.length, 0) };
+}
+function csNote(days) {
+  if (!csOpen) return html`<div class="cs-note" id="cs-note" hidden></div>`;
+  const [kind, what] = [csOpen.slice(0, 4), csOpen.slice(5)];
+  if (kind === 'more') {
+    const day = days.find((x) => x.iso === what); if (!day) return html`<div class="cs-note" id="cs-note" hidden></div>`;
+    return html`<div class="cs-note" id="cs-note"><p class="cs-note-h">${day.name}, the rest</p><ul class="plain">${day.items.slice(CATALYST_SHOWN).map((it) => html`<li><b>${clean(it.row.title || it.title)}</b>${it.time ? html` <span class="t-muted">${it.time}</span>` : ''}${it.impact === 'high' ? html` <span class="t-muted">High impact</span>` : ''}</li>`)}</ul></div>`;
+  }
+  const it = days.flatMap((x) => x.items).find((x) => x.key === what);
+  if (!it) return html`<div class="cs-note" id="cs-note" hidden></div>`;
+  const r = it.row, title = String(r.title || it.title);
+  let when = String(r.when || r.time || '').trim();
+  if (when && title.toLowerCase().includes(when.toLowerCase())) when = '';   // "PEP reports Thursday" already says when
+  return html`<div class="cs-note" id="cs-note"><p class="cs-note-h">${clean(title)}${when ? html` <span class="t-muted">${when}${r.time && when !== r.time ? `, ${r.time}` : ''}</span>` : ''}</p>
+    ${resultWords(r.result)}${r.why ? html`<p class="${r.result && !r.result.pending ? 't-muted' : ''}">${clean(r.why)}</p>` : ''}
+    ${r.ticker ? html`<p><a class="textlink" href="#/${r.ticker}">Open ${r.ticker} ${icon('arrow')}</a></p>` : ''}</div>`;
+}
+export function catalystStrip(p, todayIso) {
+  const { days, placed } = catalystDays(p, todayIso);
+  if (!placed) return '';
+  if (csOpen && !days.some((x) => (csOpen === `more:${x.iso}`) || x.items.some((it) => `item:${it.key}` === csOpen))) csOpen = null;   // gone from the board
+  const item = (it) => {
+    const inner = html`<span class="cs-what">${clean(it.title)}</span>${it.time ? html`<span class="cs-time${it.result ? ' is-result' : ''}">${it.time}</span>` : ''}${it.impact === 'high' ? html`<span class="sr"> (high impact)</span>` : ''}`;
+    const cls = `cs-item is-${it.kind}${it.impact === 'high' ? ' is-high' : ''}`;
+    if (!String(it.row.why || '').trim() && !it.row.result && !it.row.ticker) return html`<li class="${cls}">${inner}</li>`;
+    const open = csOpen === `item:${it.key}`;
+    return html`<li class="${cls}"><button type="button" class="cs-btn" data-v2-cs="item:${it.key}" aria-expanded="${open}" aria-controls="cs-note">${inner}</button></li>`;
+  };
+  const anyHigh = days.some((x) => x.items.slice(0, CATALYST_SHOWN).some((it) => it.impact === 'high'));
+  const anyEarn = days.some((x) => x.items.slice(0, CATALYST_SHOWN).some((it) => it.kind === 'earnings'));
+  return html`<div class="cs-strip" role="list" aria-label="${placed} scheduled ${placed === 1 ? 'item' : 'items'} by day">${days.map((x) => {
+      const rest = x.items.length - CATALYST_SHOWN;
+      if (x.closed && !x.items.length) return html`<div class="cs-day is-closed" role="listitem"><p class="cs-date">${x.name}</p><p class="cs-none">Market closed: ${clean(x.closed)}</p></div>`;
+      return html`<div class="cs-day${x.k === 0 ? ' is-today' : ''}" role="listitem"><p class="cs-date">${x.name}</p>
+        ${x.items.length ? html`<ul class="cs-items">${x.items.slice(0, CATALYST_SHOWN).map(item)}${rest > 0 ? html`<li><button type="button" class="cs-btn cs-more" data-v2-cs="more:${x.iso}" aria-expanded="${csOpen === `more:${x.iso}`}" aria-controls="cs-note">${rest} more</button></li>` : ''}</ul>`
+          : html`<p class="cs-none">Nothing tracked</p>`}</div>`;
+    })}</div>
+    ${anyHigh || anyEarn ? html`<p class="cs-key">${anyHigh ? html`<span class="cs-key-i is-high">High impact</span>` : ''}${anyEarn ? html`<span class="cs-key-i is-earnings">Company report</span>` : ''}</p>` : ''}
+    ${csNote(days)}`;
+}
+
 export function eventsBlock(pr, followed, filter) {
   const cols = (pr.columns || []);
   const rows = [];
@@ -138,34 +229,89 @@ export function eventsBlock(pr, followed, filter) {
   if (!rows.length) return empty('Nothing scheduled that moves the market', 'No major releases, earnings or sector moves in the next few days.');
   const byDate = (a, b) => String(a.date || '').localeCompare(String(b.date || '')) || (a.impact === 'high' ? -1 : 0);
   const groups = ['Now', 'Today', 'This week'].map((b) => [b, shown.filter((r) => bucket(r) === b).sort(byDate)]).filter(([, l]) => l.length);
-  let n = 0;
-  const item = (r) => { n += 1; const id = `ev-${n}`; return html`<div class="ev">
-        <button type="button" class="ev-head" aria-expanded="false" aria-controls="${id}" data-v2-ev>
+  const item = (r) => {
+    const key = evKey(r), id = evId(key), open = EV_OPEN.has(key), res = shortResult(r);
+    const title = clean(r.title), when = r.when && title.toLowerCase().includes(String(r.when).toLowerCase()) ? '' : r.when;
+    const meta = [when, res ? '' : r.time, r.impact ? `${r.impact} impact` : '', r.ticker && followed.includes(r.ticker) ? 'on your list' : ''].filter(Boolean).join(', ');
+    return html`<div class="ev">
+        <button type="button" class="ev-head" aria-expanded="${open}" aria-controls="${id}" data-v2-ev="${key}">
           <span class="who">${r.kind === 'sector' ? 'Sector' : r.ticker || r.short || ''}</span>
-          <span class="what">${clean(r.title)}<small>${[r.when, r.time, r.impact ? `${r.impact} impact` : ''].filter(Boolean).join(', ')}</small></span>
-          <span class="ch">${r.ticker && followed.includes(r.ticker) ? html`<span class="pill">On your list</span>` : ''}</span>${icon('chev')}</button>
-        <div class="ev-body" id="${id}" hidden><p>${clean(r.why || '')}</p>${r.ticker ? html`<div class="cluster"><a class="textlink" href="#/${r.ticker}">Open ${r.ticker} ${icon('arrow')}</a></div>` : ''}</div></div>`; };
-  return html`<div class="chips" role="group" aria-label="Show">
+          <span class="what">${title}<small>${meta.charAt(0).toUpperCase() + meta.slice(1)}</small></span>
+          <span class="ch">${res}</span>${icon('chev')}</button>
+        <div class="ev-body" id="${id}" ${open ? '' : raw('hidden')}>${resultWords(r.result)}${r.why ? html`<p class="${res ? 't-muted' : ''}">${clean(r.why)}</p>` : ''}${r.ticker ? html`<div class="cluster"><a class="textlink" href="#/${r.ticker}">Open ${r.ticker} ${icon('arrow')}</a></div>` : ''}</div></div>`;
+  };
+  return html`${filter === 'mine' ? '' : catalystStrip(pr)}
+    <div class="chips" role="group" aria-label="Show">
       <button type="button" class="chip" data-v2-evfilter="all" aria-pressed="${filter !== 'mine'}">Everything</button>
       <button type="button" class="chip" data-v2-evfilter="mine" aria-pressed="${filter === 'mine'}">Your names <span class="t-muted">${mine.length}</span></button></div>
-    ${groups.length ? groups.map(([b, list], gi) => html`<p class="group-h"><b>${b}</b>${b === 'Now' ? 'Sector moves' : b === 'Today' ? 'Releases and reports' : `Through the next ${pr.horizon_days || 5} days`}</p>
+    ${groups.length ? groups.map(([b, list]) => { const more = EV_MORE.has(b); return html`<p class="group-h"><b>${b}</b>${b === 'Now' ? 'Sector moves' : b === 'Today' ? 'Releases and reports' : `Through the next ${pr.horizon_days || 5} days`}</p>
       ${list.slice(0, 3).map(item)}
-      ${list.length > 3 ? html`<div id="evmore-${gi}" hidden>${list.slice(3).map(item)}</div>
-        <button type="button" class="textlink ev-more" aria-expanded="false" aria-controls="evmore-${gi}" data-v2-evmore="${list.length - 3}">Show ${list.length - 3} more</button>` : ''}`)
+      ${list.length > 3 ? html`<div id="evmore-${b.replace(/\s/g, '')}" ${more ? '' : raw('hidden')}>${list.slice(3).map(item)}</div>
+        <button type="button" class="textlink ev-more" aria-expanded="${more}" aria-controls="evmore-${b.replace(/\s/g, '')}" data-v2-evmore="${list.length - 3}" data-v2-evgroup="${b}">${more ? 'Show fewer' : `Show ${list.length - 3} more`}</button>` : ''}`; })
       : html`<p class="quiet">None of your names has an event in the next ${pr.horizon_days || 5} days.</p>`}
     <p class="asof">Updated ${ago(pr.generated_at)}.</p>
-    <details class="method"><summary>How this is sorted</summary><p>${clean(pr.method || '')}</p></details>`;
+    <details class="method" data-v2-fold="pr-method"><summary>How this is sorted</summary><p>${clean(pr.method || '')}</p></details>`;
+}
+/** A press inside what matters today, from Home's workspace or this page; true when it was one. Toggles in place
+ *  and records it, so a later repaint draws it the same way. */
+export function evPress(t, scope) {
+  let b = t.closest('[data-v2-ev]');
+  if (b) {
+    const open = b.getAttribute('aria-expanded') === 'true', key = b.dataset.v2Ev;
+    if (open) EV_OPEN.delete(key); else EV_OPEN.add(key);
+    b.setAttribute('aria-expanded', String(!open)); const body = document.getElementById(b.getAttribute('aria-controls')); if (body) body.hidden = open; return true;
+  }
+  b = t.closest('[data-v2-evmore]');
+  if (b) {
+    const open = b.getAttribute('aria-expanded') === 'true', g = b.dataset.v2Evgroup;
+    if (open) EV_MORE.delete(g); else EV_MORE.add(g);
+    const box = document.getElementById(b.getAttribute('aria-controls')); if (box) box.hidden = open;
+    b.setAttribute('aria-expanded', String(!open)); b.textContent = open ? `Show ${b.dataset.v2Evmore} more` : 'Show fewer'; return true;
+  }
+  b = t.closest('[data-v2-cs]');
+  if (b) {
+    const key = b.dataset.v2Cs; csOpen = csOpen === key ? null : key;
+    return { repaint: true, focus: key };
+  }
+  void scope; return false;
 }
 
 /* ---------------- the Desk ---------------- */
+// Classic's Desk (app.js morningDesk; parity B8.1): the edition when one is kept, the bottom line first, then the
+// lead; the rest of it (the branches, the note, today's reports) one press away, and what it does not tell you
+// folded with its count. Which voice wrote it is said, and when the written one is not showing, why.
+const voiceWords = (md) => (md.voice !== 'mechanical' ? `Written for today by an AI model${md.written_by ? ` (${md.written_by})` : ''} from the day's figures and nothing else.` : 'Compiled by fixed rules from the day\'s figures; no model wrote it.');
+// why the written version is not the one showing, said at the Desk's foot (Classic's deskVoiceReason)
+function voiceWhy(md) {
+  if (md.voice !== 'mechanical') return '';
+  if (md.voice_reason === 'moved') return `The written version${md.written_at ? ` from ${etTime(md.written_at)}` : ''} is not shown, because the market has moved since it was written and its figures no longer match.${md.rewriting ? ' A new one is being written against today\'s figures.' : ''}`;
+  if (md.voice_reason === 'unwritten') return 'Today\'s written version could not be produced.';
+  return '';
+}
+export function deskBody(md) {
+  const lead = (md.lead || []).map(clean), ed = md.edition;
+  const scen = md.scenarios || [], cal = md.calendar || [], limits = md.limits || [];
+  const rest = lead.length > 1 || scen.length || md.note || cal.length;
+  return html`<p class="ws-sub">${md.date ? `For ${shortDate(md.date)}. ` : ''}${voiceWords(md)}</p>
+    ${ed && ed.headline ? html`<div class="desk-ed"><p class="t-label">${ed.is_today ? 'Today\'s edition' : `Latest edition, ${shortDate(ed.date)}`}${ed.slot_label ? `, ${ed.slot_label}` : ''}${ed.test_edition ? ', a test edition' : ''}</p>
+      <p class="desk-ed-h">${clean(ed.headline)}</p>${ed.summary ? html`<p>${clean(ed.summary)}</p>` : ''}<p><a class="textlink" href="#/read">The full edition ${icon('arrow')}</a></p></div>` : ''}
+    ${md.overall ? html`<p class="desk-bottom"><b>Bottom line.</b> ${clean(md.overall)}</p>` : ''}
+    ${lead.length ? html`<p>${lead[0]}</p>` : ''}
+    ${rest ? html`<details class="more desk-more" data-v2-fold="desk-more"><summary>The whole desk ${icon('chev')}</summary><div class="inner">
+      ${lead.slice(1).map((l) => html`<p>${l}</p>`)}
+      ${scen.length ? html`<h3 class="t-h3">What could happen next</h3><dl class="desk-branches">${scen.map((x) => html`<div><dt>${clean(x.label)}</dt><dd>${clean(x.text)}</dd></div>`)}</dl>` : ''}
+      ${md.note ? html`<p><b>Note.</b> ${clean(md.note)}</p>` : ''}
+      ${cal.length ? html`<h3 class="t-h3">Today's reports</h3><ul class="plain desk-cal">${cal.map((r) => html`<li><p><b>${clean(r.title)}</b>${[r.time, r.impact ? `${r.impact} impact` : ''].filter(Boolean).length ? html` <span class="t-muted">${[r.time, r.impact ? `${r.impact} impact` : ''].filter(Boolean).join(', ')}</span>` : ''}</p>${r.detail ? html`<p class="t-muted">${clean(r.detail)}</p>` : ''}</li>`)}</ul>` : ''}
+    </div></details>` : ''}
+    ${limits.length ? html`<details class="more-inline desk-limits" data-v2-fold="desk-limits"><summary>What this does not tell you (${limits.length})</summary><ul>${limits.map((l) => html`<li>${clean(l)}</li>`)}</ul></details>` : ''}
+    ${voiceWhy(md) ? html`<p class="asof desk-why">${voiceWhy(md)}</p>` : ''}`;
+}
 export function desk(md) {
   if (!md || !md.available) return '';
-  const lead = (md.lead || []).map(clean);
   return html`<section class="section" aria-labelledby="desk-h">
-    <div class="section-head"><div><h2 class="t-h2" id="desk-h">${md.title || 'Optic Desk'}</h2><p class="section-sub">${md.date ? `For ${shortDate(md.date)}. ` : ''}${md.voice === 'mechanical' ? 'Compiled by fixed rules from the day\'s figures; no model wrote it.' : 'Written by an AI model from the day\'s figures.'}</p></div>
+    <div class="section-head"><div><h2 class="t-h2" id="desk-h">${md.title || 'Optic Desk'}</h2></div>
       ${miloButton('Ask Milo about the Desk', { ask: 'Walk me through today\'s Desk.', context: 'Home, Optic Desk' })}</div>
-    <ul class="desk-lead">${lead.map((l) => html`<li>${l}</li>`)}</ul>
-    ${md.overall ? html`<details class="more"><summary>The full read ${icon('chev')}</summary><div class="inner"><p>${clean(md.overall)}</p>${md.note ? html`<p class="t-muted">${clean(md.note)}</p>` : ''}</div></details>` : ''}
+    ${deskBody(md)}
   </section>`;
 }
 
@@ -403,21 +549,9 @@ function wireForms(main) {
 
 function wire(main) {
   main.addEventListener('click', (e) => {
-    const evb = e.target.closest('[data-v2-ev]');
-    if (evb) {
-      const open = evb.getAttribute('aria-expanded') === 'true';
-      evb.setAttribute('aria-expanded', String(!open));
-      const body = document.getElementById(evb.getAttribute('aria-controls'));
-      if (body) body.hidden = open;
-      return;
-    }
-    const more = e.target.closest('[data-v2-evmore]');
-    if (more) {
-      const open = more.getAttribute('aria-expanded') === 'true';
-      const box = document.getElementById(more.getAttribute('aria-controls'));
-      if (box) box.hidden = open;
-      more.setAttribute('aria-expanded', String(!open));
-      more.textContent = open ? `Show ${more.dataset.v2Evmore} more` : 'Show fewer';
+    const ev = evPress(e.target);
+    if (ev) {
+      if (ev.repaint && ctx.priority) { draw($('#hm-priority', main), eventsBlock(ctx.priority, store.allSymbols(), ctx.evFilter)); const again = $(`[data-v2-cs="${ev.focus}"]`, main); if (again) again.focus(); }
       return;
     }
     const f = e.target.closest('[data-v2-evfilter]');

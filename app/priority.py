@@ -57,6 +57,116 @@ def _et_date(stamp: Any) -> Optional[str]:
     return when.date().isoformat()
 
 
+# How far before a release its FRED observation may sit and still be the
+# figure that release printed. A monthly series covers the month before (CPI,
+# PPI) or two before (job openings, 67 days); a quarterly one, the quarter
+# before. Older means FRED has not loaded the new print yet, and its newest
+# figure is last period's: shown as the new result, it would be wrong.
+FRED_FRESH_DAYS = {"monthly": 70, "quarterly": 150}
+QUARTERLY_SERIES = {"GDPC1", "ECIALLCIV", "OPHNFB"}
+MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September",
+          "October", "November", "December"]
+
+
+def _period_words(as_of: str, series: str) -> str:
+    try:
+        d = datetime.fromisoformat(str(as_of)[:10])
+    except ValueError:
+        return str(as_of)
+    if series in QUARTERLY_SERIES:
+        return "Q{} {}".format((d.month - 1) // 3 + 1, d.year)
+    return "{} {}".format(MONTHS[d.month - 1], d.year)
+
+
+def _signed(v: Any, unit: str) -> str:
+    try:
+        x = float(v)
+    except (TypeError, ValueError):
+        return "n/a"
+    if unit == "k":
+        return "{:+,.0f}k".format(x)
+    if unit == "m":
+        return "{:.2f}m".format(x)
+    return "{:+.1f}%".format(x)
+
+
+def _event_result(e: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """What a release that is already out printed, from FRED's figure and the
+    agency's own headline, when either is in hand and is this release's.
+
+    Asked for on 2026-10-15 with a screenshot of the Today band: "PPI Out" sat
+    over a paragraph explaining what the producer price index is. The figures
+    were already fetched for each release (`readings`, `previous`) and dropped
+    on the way to the page."""
+    if not e.get("released"):
+        return None
+    try:
+        at = datetime.fromisoformat(e["at"])
+    except (KeyError, TypeError, ValueError):
+        return None
+    out: Dict[str, Any] = {}
+    rd = e.get("readings") or {}
+    if rd.get("available") and rd.get("actual") is not None and rd.get("as_of"):
+        try:
+            obs = datetime.fromisoformat(str(rd["as_of"])[:10]).date()
+        except ValueError:
+            obs = None
+        kind = "quarterly" if rd.get("series") in QUARTERLY_SERIES else "monthly"
+        if obs is not None and (at.date() - obs).days <= FRED_FRESH_DAYS[kind]:
+            unit = rd.get("unit") or ""
+            out.update({
+                "short": _signed(rd["actual"], unit),
+                "label": rd.get("series_label"), "actual": rd["actual"], "previous": rd.get("previous"),
+                "unit": unit, "period": _period_words(rd["as_of"], rd.get("series") or ""),
+                "source": "FRED ({})".format(rd.get("series")),
+                "text": "{} {} for {}, after {} the month before.".format(
+                    rd.get("series_label") or "The reading", _signed(rd["actual"], unit),
+                    _period_words(rd["as_of"], rd.get("series") or ""), _signed(rd.get("previous"), unit))
+                if kind == "monthly" else "{} {} for {}, after {} the quarter before.".format(
+                    rd.get("series_label") or "The reading", _signed(rd["actual"], unit),
+                    _period_words(rd["as_of"], rd.get("series") or ""), _signed(rd.get("previous"), unit)),
+            })
+        else:
+            out["fred_pending"] = ("FRED still shows {} as its newest figure, so the new print has not reached "
+                                   "it yet.".format(_period_words(rd["as_of"], rd.get("series") or "")))
+    prev = e.get("previous") or {}
+    if prev.get("headline") and prev.get("published"):
+        try:
+            pub = datetime.fromisoformat(prev["published"])
+            if pub.tzinfo is None:
+                pub = pub.replace(tzinfo=timezone.utc)
+            same_day = pub.astimezone(at.tzinfo).date() == at.date() if at.tzinfo else False
+        except (TypeError, ValueError):
+            same_day = False
+        if same_day:
+            out["headline"] = prev["headline"]
+            out["headline_url"] = prev.get("url")
+            out["headline_source"] = e.get("agency_short") or "the agency"
+    if not out.get("text") and not out.get("headline"):
+        # Minutes, auctions and expiries print no figure Optic reads, so there
+        # is nothing to be waiting for: "Out" says it all.
+        if not _prints_figures(e.get("title") or ""):
+            return None
+        out["pending"] = True
+        out["text"] = ("Released{}; the figures have not reached Optic's feeds yet.".format(
+            " at " + e["time_label"] if e.get("time_label") else ""))
+    if out.get("actual") is not None:
+        out["forecast_note"] = rd.get("forecast_note") or (
+            "Consensus forecasts are licensed data, so the result is shown against the previous "
+            "print, not against expectations.")
+    return out
+
+
+def _prints_figures(title: str) -> bool:
+    """Whether a release is one Optic has a FRED series for."""
+    try:
+        from . import fred
+    except Exception:                                                      # noqa: BLE001
+        return False
+    low = title.lower()
+    return any(k in low for k in fred.SERIES_MAP)
+
+
 def _events(now: Optional[datetime] = None) -> List[Dict[str, Any]]:
     """Scheduled releases and expiries inside the horizon."""
     try:
@@ -84,10 +194,42 @@ def _events(now: Optional[datetime] = None) -> List[Dict[str, Any]]:
             "date": _et_date(e.get("at")),
             "why": e.get("why"),
             "agency": e.get("agency_short"),
+            "result": _event_result(e),
         })
     # Impact band first, then soonest. Both published facts, no judgement.
     rows.sort(key=lambda r: (IMPACT_RANK.get(r["impact"], 3), r["days_away"]))
     return rows[:MAX_PER_COLUMN]
+
+
+def _earnings_result(provider, symbol: str, day: Optional[str], now: Optional[datetime]) -> Optional[Dict[str, Any]]:
+    """Reported EPS against the estimate for a report already out this week,
+    from the same surprise table the Earnings tab reads."""
+    today = (now or datetime.now(timezone.utc)).astimezone(session_mod.ET).date().isoformat()
+    if not day or day > today:
+        return None
+    try:
+        rows = provider.earnings_history(symbol, limit=6) or []
+    except Exception:                                                      # noqa: BLE001
+        return None
+    row = next((r for r in rows if str(r.get("date")) == day), None)
+    if not row or row.get("eps_reported") is None:
+        # Today with no figures may simply be an after-close report still to
+        # come, so it stays "reports"; an earlier day is out, and says so.
+        if day == today:
+            return None
+        return {"pending": True, "text": "Reported; the figures have not reached Optic's feed yet."}
+    est = row.get("eps_estimate")
+    eps = row["eps_reported"]
+    sur = row.get("surprise_pct")
+    if sur is None and est:
+        sur = (eps - est) / abs(est) * 100.0
+    verdict = ("in line" if sur is not None and abs(sur) <= 1.0 else "beat" if (sur or 0) > 0 else "missed")
+    return {"short": {"beat": "Beat", "missed": "Missed", "in line": "In line"}[verdict],
+            "eps": eps, "estimate": est, "surprise_pct": round(sur, 1) if sur is not None else None,
+            "verdict": verdict, "source": "Yahoo Finance surprise table (adjusted EPS)",
+            "text": "EPS {:.2f} against {} expected: {}{}.".format(
+                eps, "{:.2f}".format(est) if est is not None else "no estimate",
+                verdict, " by {:.1f}%".format(abs(sur)) if sur is not None and verdict != "in line" else "")}
 
 
 def _earnings(provider, now: Optional[datetime] = None) -> List[Dict[str, Any]]:
@@ -100,6 +242,8 @@ def _earnings(provider, now: Optional[datetime] = None) -> List[Dict[str, Any]]:
     rows = []
     for day in block.get("days", []):
         for symbol in day.get("symbols", []):
+            result = _earnings_result(provider, symbol, day.get("date"), now)
+            done = bool(result) and not result.get("pending")
             rows.append({
                 "kind": "earnings",
                 # High for a report that moves the index, medium for the rest.
@@ -108,9 +252,12 @@ def _earnings(provider, now: Optional[datetime] = None) -> List[Dict[str, Any]]:
                 # release, and a mid-cap's report took CPI's place.
                 "impact": "high" if symbol in MAJORS else "medium",
                 "ticker": symbol,
-                "title": "{} reports {}".format(symbol, day["day"]),
+                # Past tense once the figures are in: "GS reports Tuesday" on a
+                # Thursday read as a report still to come.
+                "title": "{} {} {}".format(symbol, "reported" if done else "reports", day["day"]),
                 "when": day["day"],
                 "date": day.get("date"),
+                "result": result,
                 "why": ("An earnings report resets the estimate the price is built "
                         "on, which is why the option market charges more into it."),
             })
