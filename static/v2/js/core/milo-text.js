@@ -6,6 +6,7 @@
 // miloParseAction, splitFollowUps); the tags and their meaning are the
 // server's contract, so they must stay the same.
 import { esc } from './format.js';
+import { FIELDS, proposedValue } from './dcf-fields.js';
 
 export const SRC_RE = /\s?\[\[src ([a-z_]{2,20})\]\]/g;
 export const CHART_RE = /\[\[chart ([A-Z0-9.^=-]{1,12}) (1m|3m|6m|1y|2y|5y)\]\]/g;
@@ -123,13 +124,37 @@ export function parseAction(kind, args) {
   if (kind === 'indicator') { const id = String(args[0] || '').toLowerCase(); if (!STUDIES[id]) return { bad: `Optic has no "${id}" study` }; return { kind, id, label: `Show ${STUDIES[id][0]}` }; }
   if (kind === 'screen') { const words = String(args.join(' ') || '').trim().slice(0, 300); if (words.length < 3) return { bad: 'there were no criteria to screen on' }; return { kind, words, label: `Find stocks: “${words}”` }; }
   if (kind === 'save') { const q = String(args.join(' ') || '').trim().slice(0, 500); if (q.length < 8) return { bad: 'there was no question to save' }; return { kind, question: q, label: 'Save this question to Research' }; }
-  if (kind === 'valuation') return { kind, label: 'Open the valuation model', args };
+  if (kind === 'valuation') return valuationAction(args);
   if (kind === 'level') { const price = Number(String(args[0] || '').replace(/[$,]/g, '')); const note = String(args[1] || 'Level').trim().slice(0, 40); if (!(price > 0) || !Number.isFinite(price)) return { bad: 'that is not a price' }; return { kind, price, note, label: `Mark ${price.toFixed(2)} on the chart (${note})` }; }
   return { bad: `Optic cannot "${kind}" from here` };
+}
+/** Milo proposes a change to the fair-value model on screen as KEY=VALUE pairs and a quoted reason (Classic parity B7d;
+ *  Classic valuation.js parseAction). Only a key the model has is accepted; with no pair at all it opens the model. */
+export function valuationAction(args) {
+  const changes = [], words = [];
+  (args || []).forEach((x) => { const m = /^([a-z_]+(?:\.[a-z_0-9]+)?)=(-?[0-9.]+)(%|x)?$/i.exec(String(x)); if (m) changes.push({ key: m[1], value: Number(m[2]), unit: m[3] || '' }); else words.push(x); });
+  if (!changes.length) return { kind: 'valuation', label: 'Open the valuation model', args };
+  const out = [];
+  for (const c of changes) {
+    const f = FIELDS.find((x) => x.key === c.key);
+    if (!f) return { bad: `the model has no "${c.key}" assumption` };
+    if (!Number.isFinite(c.value)) return { bad: `${c.key} is not a number` };
+    out.push({ key: c.key, label: f.label, value: proposedValue(f, c.value, c.unit), unit: f.unit });
+  }
+  const why = words.join(' ').trim().slice(0, 240);
+  if (why.length < 4) return { bad: 'a proposed change needs its reason' };
+  const shown = (c) => (c.unit === '%' ? `${(c.value * 100).toFixed(1)}%` : String(Number(Number(c.value).toFixed(2))));
+  return { kind: 'valuation', propose: true, changes: out, why, label: `Try on the model on screen: ${out.map((c) => `${c.label} ${shown(c)}`).join(', ')}` };
 }
 const PERSISTS = new Set(['watch', 'save', 'level']);
 function actionCard(a) {
   if (a.bad) return `<div class="milo-act milo-act-off" role="note">Not available: ${esc(a.bad)}.</div>`;
+  if (a.kind === 'valuation' && a.propose) {
+    return `<div class="milo-act milo-val" data-v2-milo-val="${esc(JSON.stringify(a))}"><p class="milo-act-what">${esc(a.label)}</p>
+      <p class="milo-act-sub">Milo's reason: ${esc(a.why.replace(/\.$/, ''))}. Nothing changes until you press Apply, and saved models are never changed.</p>
+      <p class="milo-act-result" role="status" aria-live="polite"></p>
+      <div class="cluster"><button type="button" class="btn btn-sm" data-v2-milo-val-preview>Show the effect</button><button type="button" class="btn btn-sm btn-primary" data-v2-milo-val-apply disabled>Apply to my working model</button></div></div>`;
+  }
   const persists = PERSISTS.has(a.kind);
   const sub = a.kind === 'watch' ? 'Changes your watchlist. Nothing changes until you confirm.' : a.kind === 'save' ? 'Keeps the question in Research. Nothing is saved until you confirm.'
     : a.kind === 'level' ? 'Draws a dashed level labelled Milo on your chart. You can remove it.' : a.kind === 'screen' ? 'Opens Scan with these words. Words the free reader cannot read use one Milo question when you run it.' : 'Opens it in Optic. Nothing is saved.';

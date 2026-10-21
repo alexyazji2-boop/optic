@@ -905,6 +905,43 @@ export async function send(text, { deep = false } = {}) {
 // the answer it had started ("Stopped before Milo answered": audit 2026-10-22). Stop listens from 600 ms after Send.
 export function stop() { if (S.abort && performance.now() - (S.sentAt || 0) > 600) S.abort.abort(); }
 
+/* ---------------- the fair-value model's proposal card (Classic parity B7d; Classic valuation.js miloCardPress) ----------------
+ * Milo proposes a change; the card runs Optic's engine to show the effect before anything changes, and Apply changes
+ * only the reader's working assumptions on screen, never a saved model, with Undo after. The open model registers its
+ * preview, apply and undo here (pages/dcf.js), so this module does not import the page. */
+let VALUATION = null;
+export function registerValuation(v) { VALUATION = v; }
+export function unregisterValuation(v) { if (VALUATION === v) VALUATION = null; }
+async function valuationPress(btn) {
+  const card = btn.closest('.milo-val'); if (!card) return;
+  let a = null; try { a = JSON.parse(card.dataset.v2MiloVal); } catch (e) { return; }
+  const out = $('.milo-act-result', card), say = (text, ok) => { if (out) { out.textContent = text; out.className = `milo-act-result${ok === false ? ' down' : ''}`; } };
+  const msg = btn.closest('[data-v2-milo-i]'), asked = ((msg && meta.get(Number(msg.dataset.v2MiloI))) || {}).symbol || null;
+  if (!VALUATION || !VALUATION.ready()) { say(`Open ${asked ? `${asked}'s` : 'the company\'s'} Investing tab first: the card works on the fair-value model on screen.`, false); return; }
+  if (asked && VALUATION.sym() !== asked) { say(`This was proposed for ${asked}'s model, and ${VALUATION.sym()}'s is on screen. Open ${asked}'s Investing tab to try it.`, false); return; }
+  if (btn.hasAttribute('data-v2-milo-val-undo')) {
+    let prev = null; try { prev = JSON.parse(card.dataset.prev || 'null'); } catch (e) { prev = null; }
+    btn.disabled = true; await VALUATION.undo(prev); say('Put back as it was.'); btn.remove();
+    const ap = $('[data-v2-milo-val-apply]', card); if (ap) { ap.textContent = 'Apply to my working model'; ap.disabled = false; ap.focus(); }
+    return;
+  }
+  if (btn.hasAttribute('data-v2-milo-val-preview')) {
+    say('Running the model…');
+    try { const r = await VALUATION.preview(a.changes); say(r.text, r.ok); const ap = $('[data-v2-milo-val-apply]', card); if (ap) ap.disabled = !r.ok; }
+    catch (err) { say(`It did not run: ${err.message || 'try again'}.`, false); }
+    return;
+  }
+  if (btn.hasAttribute('data-v2-milo-val-apply')) {
+    btn.disabled = true;
+    try {
+      card.dataset.prev = JSON.stringify(await VALUATION.apply(a.changes));
+      say('Applied to your working assumptions. Saved models are unchanged.'); btn.textContent = 'Applied';   // a dimmed gold still reads as pressable
+      if (!$('[data-v2-milo-val-undo]', card)) btn.insertAdjacentHTML('afterend', '<button type="button" class="btn btn-sm" data-v2-milo-val-undo>Undo</button>');
+      const u = $('[data-v2-milo-val-undo]', card); if (u) u.focus();
+    } catch (err) { btn.disabled = false; say(`It was not applied: ${err.message || 'try again'}.`, false); }
+  }
+}
+
 /* ---------------- actions in answers ---------------- */
 const chartRange = { '1m': '1M', '3m': '3M', '6m': '6M', '1y': '1Y', all: 'All' };
 function levelGrounded(price, ctx) {
@@ -1276,6 +1313,8 @@ function wire(root) {
     }
     if (t('[data-v2-milo-srclist]')) { const msg = e.target.closest('.milo-msg'); const d = msg && $('.milo-src-all', msg); if (d) { d.open = true; d.scrollIntoView({ block: 'nearest' }); } return; }
     if (t('[data-v2-milo-act-skip]')) { const card = e.target.closest('.milo-act'); const r = $('.milo-act-result', card); if (r) r.textContent = 'Left as it was.'; card.querySelectorAll('button').forEach((x) => { x.disabled = true; }); return; }
+    const vb = t('[data-v2-milo-val-preview], [data-v2-milo-val-apply], [data-v2-milo-val-undo]');
+    if (vb) { valuationPress(vb); return; }
     if (t('[data-v2-milo-act-go]')) {
       const card = e.target.closest('.milo-act'), msg = e.target.closest('[data-v2-milo-i]');
       let a = null; try { a = JSON.parse(card.dataset.v2MiloAct); } catch (err) { return; }

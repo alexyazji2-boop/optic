@@ -18,7 +18,8 @@ import { html, render as draw } from '../core/dom.js';
 import * as api from '../core/api.js';
 import * as store from '../core/store.js';
 import { num, compact, clean } from '../core/format.js';
-import { button as miloButton } from '../ui/milo.js';
+import { FIELDS, GROUPS } from '../core/dcf-fields.js';
+import { registerValuation, unregisterValuation } from '../ui/milo.js';
 
 export const STORE_KEY = 'optic.dcf.v1';
 export const MAX_LOCAL_MODELS = 40;
@@ -74,35 +75,8 @@ export const priceWhen = (m) => (m && m.market_time ? `last trade ${when(m.marke
 const KIND_LABEL = { reported: 'Reported', history: 'From history', external_estimate: 'Analyst estimate', market: 'Market', assumption: 'Assumption', derived: 'Derived', not_reported: 'Not reported', included_elsewhere: 'Included in debt', external: 'Quote feed' };
 const kindTag = (k) => (k ? html`<span class="dcf-kind">${KIND_LABEL[k] || k}</span>` : '');
 
-/* ---------------- the form's fields: Classic's, word for word ---------------- */
-export const FIELDS = [
-  { group: 'Growth', key: 'growth.y1', label: 'Revenue growth, first year', unit: '%', why: 'growth.y1' },
-  { group: 'Growth', key: 'growth.y2', label: 'Revenue growth, second year', unit: '%', why: 'growth.y2', blank: 'fades from year 1' },
-  { group: 'Growth', key: 'growth.fade_years', label: 'Years for growth to fade to the long run', unit: 'yrs', step: 1, why: 'growth.fade_years', blank: 'the whole forecast' },
-  { group: 'Growth', key: 'terminal.growth', label: 'Growth after the forecast, forever', unit: '%', why: 'terminal.growth' },
-  { group: 'Growth', key: 'horizon', label: 'Forecast years', unit: 'yrs', step: 1 },
-  { group: 'Profitability', key: 'margin.start', label: 'Operating margin, first year', unit: '%', why: 'margin.start' },
-  { group: 'Profitability', key: 'margin.target', label: 'Operating margin it settles at', unit: '%', why: 'margin.target' },
-  { group: 'Profitability', key: 'margin.years', label: 'Years to get there', unit: 'yrs', step: 1 },
-  { group: 'Reinvestment', key: 'capex_pct.start', label: 'Capex, first year (share of revenue)', unit: '%', why: 'capex.start' },
-  { group: 'Reinvestment', key: 'capex_pct.target', label: 'Capex it settles at', unit: '%', why: 'capex.target' },
-  { group: 'Reinvestment', key: 'capex_pct.years', label: 'Years to get there', unit: 'yrs', step: 1 },
-  { group: 'Reinvestment', key: 'dep_rate', label: 'Depreciation (share of last year’s net PP&E)', unit: '%', why: 'dep_rate' },
-  { group: 'Reinvestment', key: 'nwc_pct', label: 'Working capital (share of revenue)', unit: '%', why: 'nwc_pct' },
-  { group: 'Reinvestment', key: 'terminal.ronic', label: 'Return on new capital after the forecast', unit: '%', why: 'terminal.ronic' },
-  { group: 'Taxes', key: 'tax.start', label: 'Tax rate on operating profit, first year', unit: '%', why: 'tax.start' },
-  { group: 'Taxes', key: 'tax.terminal', label: 'Long-run tax rate', unit: '%', why: 'tax.terminal' },
-  { group: 'Discount rate', key: 'wacc.risk_free', label: 'Risk-free rate (10-year Treasury)', unit: '%', wacc: true },
-  { group: 'Discount rate', key: 'wacc.beta_raw', label: 'Beta (raw, before adjustment)', unit: 'x', wacc: true, step: 0.01 },
-  { group: 'Discount rate', key: 'wacc.erp', label: 'Equity risk premium', unit: '%', wacc: true },
-  { group: 'Discount rate', key: 'wacc.extra_premium', label: 'Extra premium (size, country, your own)', unit: '%', wacc: true },
-  { group: 'Discount rate', key: 'wacc.pre_tax_cost_debt', label: 'Pre-tax cost of debt', unit: '%', wacc: true },
-  { group: 'Discount rate', key: 'wacc.marginal_tax', label: 'Tax rate for the interest shield', unit: '%', wacc: true },
-  { group: 'Discount rate', key: 'wacc.debt_weight', label: 'Debt weight (blank: today’s market weights)', unit: '%', wacc: true, blank: 'market weights' },
-  { group: 'Discount rate', key: 'wacc.override', label: 'Or set the discount rate directly', unit: '%', wacc: true, blank: 'built from the parts above' },
-  { group: 'Cross-check', key: 'exit_multiple', label: 'Exit EV/EBITDA (cross-check only)', unit: 'x', why: 'exit_multiple', step: 0.1 },
-];
-export const GROUPS = ['Growth', 'Profitability', 'Reinvestment', 'Taxes', 'Discount rate', 'Cross-check'];
+/* ---------------- the form's fields: Classic's, word for word, in core/dcf-fields.js (Milo checks a proposal against them) ---------------- */
+export { FIELDS, GROUPS };
 /** The equity-side models' assumptions (B7c): residual income for banks and insurers, the dividend model, and a REIT's
  *  price-to-FFO. Same mechanics as the DCF form; kept in edits.equity. */
 export const EQ_FIELDS = [
@@ -827,6 +801,7 @@ export function mountDcf(root, sym) {
     n.className = 'section dcf'; n.id = 'dcf'; n.setAttribute('aria-labelledby', 'dcf-h');
     n.innerHTML = '<div class="section-head"><div><h2 class="t-h2" id="dcf-h">Fair-value model, discounted cash flow</h2></div></div><div class="dcf-body"></div>';
     V.node = n; wire(n); paint(); load(false);
+    registerValuation(VAL_API);
   }
   if (!slot) { if (V.node.isConnected) V.node.remove(); return; }
   if (slot !== V.node) {
@@ -835,13 +810,75 @@ export function mountDcf(root, sym) {
     if (f && V.node.contains(f) && (!a || a === document.body)) { f.focus({ preventScroll: true }); if (V.sel) try { f.setSelectionRange(V.sel[0], V.sel[1]); } catch (e) { /* not a text box */ } }
   }
 }
-export function disposeDcf() { clearTimeout(V.timer); V.sym = null; V.node = null; }
-/** What Milo is told about the model on screen (B7d gives it the whole model). */
-export function dcfContext() {
-  const d = V.data;
+export function disposeDcf() { clearTimeout(V.timer); unregisterValuation(VAL_API); V.sym = null; V.node = null; }
+/** Milo's proposal applied to a copy of the edits (Classic's miloCardPress), as the model takes it. */
+export function withChanges(edits, changes) {
+  const e = JSON.parse(JSON.stringify(edits || blankEdits()));
+  ['drivers', 'wacc', 'base', 'equity'].forEach((k) => { e[k] = e[k] || {}; });
+  (changes || []).forEach((c) => {
+    const f = fieldOf(c.key); if (!f || f.model) return;
+    if (f.wacc) e.wacc[c.key.slice(5)] = c.value;
+    else { const [head, tail] = c.key.split('.'); if (tail) { e.drivers[head] = e.drivers[head] || {}; e.drivers[head][tail] = c.value; } else e.drivers[head] = c.value; }
+  });
+  return e;
+}
+/** The proposal card's three presses, registered with Milo while this model is on screen. */
+const VAL_API = {
+  ready: () => !!(V.node && V.data && V.data.dcf && V.data.dcf.available),
+  sym: () => V.sym,
+  async preview(changes) {
+    const cur = V.data, res = await runNow(withChanges(editsFor(), changes));
+    const before = cur.dcf.per_share, after = res && res.dcf && res.dcf.available ? res.dcf.per_share : null;
+    if (after === null) return { ok: false, text: `The model cannot run with this change: ${clean(((res || {}).dcf || {}).reason || '')}` };
+    return { ok: true, text: `Base value ${money(before)} to ${money(after)} (${signedPct(after / before - 1, 1)}); terminal share ${pct(cur.dcf.terminal_share, 0)} to ${pct(res.dcf.terminal_share, 0)}. Computed by Optic's engine.` };
+  },
+  async apply(changes) { const prev = JSON.parse(JSON.stringify(editsFor())); V.edits = withChanges(prev, changes); await runNow(); paint(); return prev; },
+  async undo(prev) { V.edits = prev ? Object.assign(blankEdits(), prev) : blankEdits(); await runNow(); paint(); },
+};
+
+/** What Milo is told about the model on screen (Classic's context): the inputs with their kinds and sources, the
+ *  result, what moves it, what the price implies and the checks. Only the server's numbers; nothing recomputed. */
+export const dcfContext = () => contextOf(V.data, V.sym, V.comps, V.sotp);
+export function contextOf(d, sym, comps, sotp) {
   if (!d) return null;
-  if (!d.available) return { ticker: V.sym, available: false, reason: d.reason };
-  return { ticker: V.sym, per_share: (d.dcf || {}).per_share, scenarios: d.scenarios, reverse: d.reverse, changed: (d.assumptions || {}).changed || [] };
+  if (!d.available) return d.reason ? { ticker: sym, available: false, reason: d.reason } : null;
+  const dcf = d.dcf || {}, r4 = (x) => (has(x) ? Math.round(x * 10000) / 10000 : x), r2 = (x) => (has(x) ? Math.round(x * 100) / 100 : x);
+  const why = {}; ((d.defaults || {}).rationale || []).forEach((r) => { why[r.key] = r; });
+  const changed = new Set((d.assumptions || {}).changed || []);
+  const assumptions = FIELDS.map((f) => {
+    const v = fieldValue(d, f, 'current'), def = fieldValue(d, f, 'default'), w = f.why ? why[f.why] : null;
+    return { key: f.key, label: f.label, value: f.unit === '%' ? r4(v) : r2(v), default: f.unit === '%' ? r4(def) : r2(def), unit: f.unit === '%' ? 'fraction' : f.unit, kind: w ? w.kind : (f.wacc ? 'assumption' : null), why: w ? w.why : null, edited_by_reader: changed.has(f.key) };
+  }).filter((a) => has(a.value) || has(a.default));
+  const cls = d.classification || {}, m = d.market || {};
+  const out = { what: 'Optic fair-value model on the Investing tab. Deterministic: computed by Optic’s engine, not by Milo.', model_version: d.model_version, ticker: d.ticker, name: d.name,
+    price: m.price, price_as_of: m.as_of, inputs_as_of: d.inputs_digest,
+    classification: { type: cls.label, confidence: cls.confidence, reasons: cls.confidence_reasons, models: Object.fromEntries(Object.entries(cls.models || {}).map(([k, v]) => [k, { fit: v.fit, why: v.why }])) },
+    assumptions, warnings: d.warnings };
+  if (dcf.available) {
+    const w = dcf.wacc || {}, tv = dcf.terminal || {}, rows = dcf.rows || [];
+    out.base_case = { value_per_share: r2(dcf.per_share), enterprise_value: dcf.enterprise_value, equity_value: dcf.equity_value, upside_vs_price: r4(dcf.upside), margin_of_safety: r4(dcf.margin_of_safety),
+      price_vs_value: has(dcf.per_share) && dcf.per_share > 0 && has(m.price) ? r4(m.price / dcf.per_share - 1) : null, terminal_value_share_of_ev: r4(dcf.terminal_share), pv_forecast_years: dcf.pv_forecast, pv_terminal: tv.pv,
+      incremental_return_on_forecast_investment: r4(dcf.incremental_return), terminal: { method: tv.method, growth: r4(tv.growth), ronic: r4(tv.ronic), implied_exit_ev_ebitda: r2(tv.implied_exit_ev_ebitda) },
+      exit_multiple_check: dcf.exit_check ? { multiple: r2(dcf.exit_check.multiple), value_per_share: r2(dcf.exit_check.per_share), implied_perpetual_growth: r4(dcf.exit_check.implied_growth) } : null,
+      discount_rate: { wacc: r4(w.wacc), cost_equity: r4(w.cost_equity), risk_free: r4(w.risk_free), beta: r2(w.beta), beta_raw: r2(w.beta_raw), erp: r4(w.erp), pre_tax_cost_debt: r4(w.pre_tax_cost_debt), weight_debt: r4(w.weight_debt) },
+      checks: dcf.checks };
+    out.forecast = rows.filter((x, i) => i < 3 || i === rows.length - 1).map((y) => ({ fiscal_year_end: y.fiscal_year_end, revenue: y.revenue, growth: r4(y.revenue_growth), ebit_margin: r4(y.ebit_margin), capex: y.capex, da: y.da, fcff: y.fcff, roic: r4(y.roic) }));
+    out.bridge = (dcf.bridge || {}).lines;
+    out.shares = { diluted: dcf.shares, method: ((d.inputs || {}).shares || {}).method };
+    out.scenarios = Object.fromEntries(Object.entries(d.scenarios || {}).map(([k, v]) => [k, { value_per_share: r2(v.per_share), upside_vs_price: r4(v.upside), deltas_from_base: v.deltas, growth_y1: r4(((v.drivers || {}).growth || {}).y1), margin_target: r4(((v.drivers || {}).margin || {}).target), capex_target: r4(((v.drivers || {}).capex_pct || {}).target) }]));
+    out.most_sensitive = (d.tornado || []).slice(0, 6).map((b) => ({ assumption: b.label, step_down: b.step_low, value_down: r2(b.value_low), step_up: b.step_high, value_up: r2(b.value_high) }));
+    out.what_ifs = (d.what_ifs || []).map((x) => ({ change: x.label, value_per_share: r2(x.per_share), vs_base: r4(x.change) }));
+    out.reverse_dcf = ((d.reverse || {}).solves || []).map((x) => ({ solved_for: x.label, value: r4(x.value), text: x.text, held_fixed: x.held }));
+  } else out.dcf_not_run = dcf.reason;
+  ['fcfe', 'ddm', 'residual_income'].forEach((k) => { const x = d[k]; if (x) out[k] = x.available ? { value_per_share: r2(x.per_share), fit: (x.fit || {}).fit } : { available: false, reason: x.reason }; });
+  if (d.reit) out.reit = d.reit.available ? { ffo_per_share: r2(d.reit.ffo_per_share), price_to_ffo: r2(d.reit.price_to_ffo), ffo_payout: r4(d.reit.ffo_payout), own_history: d.reit.own_history } : { available: false, reason: d.reit.reason };
+  if (d.residual_income && d.residual_income.available) Object.assign(out.residual_income, { implied_roe: r4(d.residual_income.implied_roe), roe_start: r4(d.residual_income.roe_start), price_to_book: r2(d.residual_income.price_to_book) });
+  const tt = (d.inputs || {}).trailing || {};
+  if (tt.available) out.trailing_twelve_months = { period_end: tt.period_end, revenue: ((tt.values || {}).revenue || {}).value, revenue_change_vs_fiscal_year: r4(tt.revenue_change_vs_fy0), operating_margin: r4(tt.ebit_margin), how: 'fiscal year + this year to date - same months a year earlier, from the filings' };
+  out.history = ((d.inputs || {}).history || []).slice(0, 3).map((y) => ({ fiscal_year_end: y.fy_end, revenue_growth: r4((y.derived || {}).revenue_growth), operating_margin: r4((y.derived || {}).ebit_margin), operating_margin_excluding_tagged_charges: r4((y.derived || {}).ebit_margin_normalized), capex_share: r4((y.derived || {}).capex_pct), roic: r4((y.derived || {}).roic), acquisitions_share: r4((y.derived || {}).acquisitions_pct) }));
+  out.sources = `Statements: SEC EDGAR XBRL (us-gaap), fiscal years ${((d.inputs || {}).fy_ends || []).slice(0, 3).join(', ')}; balance sheet ${(d.inputs || {}).balance_date || ''}. Price and beta: Yahoo Finance quote. Risk-free: FRED DGS10. ERP and credit spreads: Damodaran, January 2026.`;
+  if (comps && comps.available) out.peers = { implied: (comps.implied || []).map((i) => ({ multiple: i.label, own: r2(i.own_multiple), implied_per_share: i.implied ? { low: r2(i.implied.low.per_share), mid: r2(i.implied.mid.per_share), high: r2(i.implied.high.per_share) } : null })), peers: (comps.peers || []).map((x) => x.symbol) };
+  if (sotp && sotp.available) out.sum_of_the_parts = { value_per_share: r2(sotp.per_share), segments: (sotp.segments || []).map((g) => ({ name: g.name, operating_income: g.operating_income, multiple: r2(g.multiple), value: g.value })) };
+  return out;
 }
 export const dcfData = () => V.data;
-void miloButton;
