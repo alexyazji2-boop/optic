@@ -19,6 +19,36 @@
 .desk-lead { margin: 0; padding: 0; list-style: none; display: grid; gap: 12px; max-width: 74ch; font-size: var(--t-xl); line-height: 1.5; }
 .desk-lead li { padding-left: 18px; position: relative; }
 .desk-lead li::before { content: ""; position: absolute; left: 0; top: .62em; width: 7px; height: 7px; border-radius: 50%; background: var(--c-gold); }
+.desk-ed { display: grid; gap: 6px; padding: 4px 0 14px; border-bottom: 1px solid var(--c-line-2); margin: 6px 0 12px; max-width: 74ch; }
+.desk-ed p { margin: 0; } .desk-ed-h { font-size: var(--t-xl); font-weight: 600; line-height: 1.35; }
+.desk-bottom { font-size: var(--t-lg); line-height: 1.5; max-width: 66ch; margin: 8px 0 10px; color: var(--c-ink); }
+.desk-why { margin: 10px 0 0; }
+.desk-branches { display: grid; gap: 10px; margin: 6px 0 14px; } .desk-branches div { display: grid; grid-template-columns: minmax(120px, 180px) minmax(0, 1fr); gap: 12px; }
+.desk-branches dt { font: 600 var(--t-md)/1.4 var(--f-label); color: var(--c-ink); } .desk-branches dd { margin: 0; }
+.desk-cal { display: grid; gap: 10px; } .desk-cal p { margin: 0; }
+.desk-limits { margin-top: 12px; } .desk-limits ul { margin: 6px 0 0; padding-left: 18px; display: grid; gap: 6px; color: var(--c-ink-2); }
+@media (max-width: 560px) { .desk-branches div { grid-template-columns: minmax(0, 1fr); gap: 2px; } }
+/* the week as days on What matters today (Classic parity B8.2): a sideways strip (ui/strips.js) of the trading days
+   the board looks at; a high-impact item has a warm left edge and a company's report a dashed one, said in the key */
+.cs-strip { display: flex; overflow-x: auto; scrollbar-width: none; margin: 4px 0 6px; border-block: 1px solid var(--c-line-2); }
+.cs-strip::-webkit-scrollbar { display: none; }
+.cs-day { flex: 1 0 128px; min-width: 128px; display: grid; align-content: start; gap: 6px; padding: 10px; }
+.cs-day + .cs-day { border-left: 1px solid var(--c-line-2); } .cs-day.is-today { background: var(--c-sunk); }
+.cs-date { margin: 0; font: 600 var(--t-sm)/1 var(--f-label); color: var(--c-ink-3); } .cs-day.is-today .cs-date { color: var(--c-ink); }
+.cs-items { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.cs-item { border-left: 2px solid var(--c-line); padding-left: 8px; font-size: var(--t-sm); line-height: 1.3; }
+.cs-item.is-high { border-left-color: var(--c-warn); } .cs-item.is-earnings { border-left-style: dashed; }
+.cs-item > span, .cs-btn { display: grid; gap: 2px; }
+.cs-btn { width: 100%; min-height: 36px; padding: 4px 6px 4px 0; border: 0; border-radius: var(--r-sm); background: none; color: var(--c-ink); text-align: left; cursor: pointer; font: inherit; }
+.cs-btn:hover { background: var(--c-sunk); } .cs-btn[aria-expanded="true"] .cs-what { text-decoration: underline; text-underline-offset: 3px; }
+.cs-what { font-weight: 500; overflow-wrap: anywhere; } .cs-time { color: var(--c-ink-3); font-size: var(--t-xs); } .cs-time.is-result { color: var(--c-ink); font-weight: 600; font-size: var(--t-sm); }
+.cs-more { color: var(--c-ink-2); min-height: 32px; } .cs-none { margin: 0; color: var(--c-ink-3); font-size: var(--t-sm); }
+.cs-key { display: flex; flex-wrap: wrap; gap: 14px; margin: 0 0 8px; color: var(--c-ink-3); font-size: var(--t-xs); }
+.cs-key-i { border-left: 2px solid var(--c-warn); padding-left: 6px; } .cs-key-i.is-earnings { border-left: 2px dashed var(--c-line); }
+.cs-note { display: grid; gap: 6px; padding: 4px 0 14px; margin: 0 0 12px; border-bottom: 1px solid var(--c-line-2); color: var(--c-ink-2); max-width: 74ch; }
+.cs-note p, .cs-note ul { margin: 0; } .cs-note-h { color: var(--c-ink); font-weight: 600; } .cs-note ul { display: grid; gap: 4px; }
+@media (pointer: coarse) { .cs-btn { min-height: var(--tap); } }
+.cs-note .textlink { font-size: inherit; }
 .movers { margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border-top: 1px solid var(--c-line); }
 .movers a { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; min-height: var(--tap); padding: 14px 16px 14px 0; border-bottom: 1px solid var(--c-line-2); text-decoration: none; font-weight: 600; }
 .movers a:hover { background: var(--c-plane-2); }

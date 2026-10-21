@@ -328,30 +328,39 @@ Evidence (stand-in verification; the real model's proposals are not exercised):
 ## B8. Home, Desk and Markets extras
 | Row | Task | Status |
 |---|---|---|
-| B8.1 | Desk: bottom line, scenarios, calendar, limits | open |
-| B8.2 | Catalyst day strip | open |
+| B8.1 | Desk: bottom line, scenarios, calendar, limits | done (see B8a below) |
+| B8.2 | Catalyst day strip | done (see B8a below) |
 | B8.3 | What changed since yesterday | open |
 | B8.4 | Index and sector trends board on Home | open |
 | B8.5 | Questions worth asking | open |
-| B8.6 | `home-released-results` reviewed; released results in What Matters Today | open |
+| B8.6 | `home-released-results` reviewed; released results in What Matters Today | done (see B8a below) |
 | B8.7 | Today's Read built on request ($, labelled) | open |
-| B8.8 | Earnings this week page (dates; timing only when sourced) | open |
-| B8.9 | Markets opens on its last page | open |
+| B8.8 | Earnings this week page (dates; timing only when sourced) | done in B1 (row B1.1) |
+| B8.9 | Markets opens on its last page | done in B1 (row B1.4: Markets returns to Macro) |
 | B8.10 | Ticker suggestions on Analysts and Compare | open |
 
-## B9. Glossary and the rest
-| Row | Task | Status |
-|---|---|---|
-| B9.1 | Glossary marking on eligible text, with hover, tap and keys; "Explain this with Milo" | open |
-| B9.2 | Optic Portfolio header definitions; collapsible panels | open |
-| B9.3 | Financials flow-ratio chart, dividend columns, excess-return bars | open |
-| B9.4 | Bars inside Scan's table cells | open |
+### B8a. What matters today and the Desk
+The `home-released-results` branch, reviewed (2026-10-21). It holds two commits on a base from 2026-10-15 (bf8d0bf):
+- f888236, released results: `app/priority.py` (`_event_result`, `_earnings_result`, past-tense titles), Classic's display in `static/app.js` and `styles.css`, and `tests/test_home_results.py`, with assertions in two other tests about Classic's display.
+- d90bbd3, unrelated: Classic's "what Milo reads" menu made opaque, with its test.
 
-## Not ported
-| Row | What | Why |
-|---|---|---|
-| N.1 | Classic's section fade-in on load | The owner's motion rule: motion only in answer to an action |
-| N.2 | Before-open and after-close earnings timing as a feature | Neither app has a data source (yfinance gives dates). A new source is a separate decision |
-| N.3 | Pulsing live point | Replaced by a static freshness label (owner's amendment) |
-| N.4 | Tab takes the placeholder question | Replaced by a "Use this example" button (keeps Tab navigation) |
-| N.5 | Things Classic doesn't have: swipe between tabs, pull-to-refresh, column resize, CSV, print | Nothing to port |
+Taken: `app/priority.py` exactly as the branch has it (main had not changed the file since the base), and the server half of `tests/test_home_results.py`. Left on the branch for the owner:
+- Classic's display of the results: Classic's `app.js` and `styles.css` have changed by about 1,950 lines since the base, so it would need a hand merge, and v2 does not need it;
+- the branch's Classic page tests and its two edits to other tests;
+- d90bbd3.
+
+Since the results come from the server, Classic keeps showing "Out" until that display is merged.
+
+A cost: each board build now also reads the surprise table for this week's reported names. It is free (Yahoo) and cached for six hours with the Earnings tab's own read, so an earlier day's report can say its figures are late for up to six hours after Yahoo has them.
+
+Evidence:
+- `b8a_check.py`: 15 of 15 in headless Chrome, signed in as the local owner, at 1440 and on phones at 390 and 360 (touch emulated). Two passes:
+  - the preview's own board, rebuilt with the new server code: ABT this morning "In line", GM, ISRG, NOC and RTX yesterday "Beat", IBM after today's close still "reports";
+  - a FIXTURE board and Desk: a released PPI with its BLS headline, a release still waiting, scenarios, an edition, a written version set aside because the market moved.
+- `tests/test_v2_parity_b8a.py`: placement, result words, a row's key across "reports" to "reported", the Desk. `tests/test_home_results.py`: the server rules.
+
+| Row | Task | Where | Desktop | Phone | Keeps | States | Deps | Evidence | Status |
+|---|---|---|---|---|---|---|---|---|---|
+| B8.1 | The Desk in full | Home's Optic Desk panel (`home.js` `deskBody`) | The edition when one is kept (today's, or the latest with its date), with a link to it on the Read; the bottom line first, then the first lead line; folded under The whole desk: the rest of the lead, What could happen next, the note, Today's reports; What this does not tell you, folded with its count; which voice wrote it, and at the foot why the written version is not showing (the market moved since, with a new one being written; or it could not be produced) | Same; the branches stack | The folds stay open across the panel's refresh | The panel's own reason when there is no Desk | `/api/home` (already loaded; its prose already paid for) | b8a, both passes | done. Differs: no glossary marks yet (B9) |
+| B8.2 | The week as days | What matters today, above its list (`home.js` `catalystStrip`) | The trading days the board looks at, from Today, a market holiday drawn as closed; two items a day, high impact first, the rest as "N more"; an item opens its note under the strip, one at a time (its result, its description, Open the company); a warm left edge for high impact and a dashed one for a company's report, said in a key; reports by ticker; nothing placed that the feed does not date; no time invented | A sideways strip with its arrows (ui/strips.js); a swipe moves it, not the page; 44 px | The open note, the open rows and the open groups survive the panel's repaint, by each item's key | Nothing placed: no strip | `/api/priority` (free) | b8a: placement, a note, the repaint, the phone swipe | done. Differs: "N more" opens the day's rest under the strip, where Classic jumped to the columns; the strip is hidden under Your names |
+| B8.6 | Released results | The strip, the list's rows and their notes | A release that is out shows what it printed where Out was (FRED's figure only when it is this release's), with the agency's headline and link when published that day, and what it is measured against (the previous print); one still waiting says Out and that its figures are on their way; a company that has reported reads in the past tense with Beat, Missed or In line (within 1%), its EPS against the estimate and the source | Same | as B8.2 | as B8.2 | `/api/priority`, `app/priority.py` from the branch | b8a; the server's rules in test_home_results | done |

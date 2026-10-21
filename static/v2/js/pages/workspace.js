@@ -24,7 +24,7 @@ import { provideContext } from '../ui/milo.js';
 import { toast } from '../ui/toast.js';
 import { icon } from '../ui/icons.js';
 import { go } from '../core/router.js';
-import { hello, etDate, portfolio, eventsBlock, STARTERS, STARTER_NAMES, STARTER_ABOUT, portfolioSeries } from './home.js';
+import { hello, etDate, portfolio, eventsBlock, STARTERS, STARTER_NAMES, STARTER_ABOUT, portfolioSeries, deskBody, evPress } from './home.js';
 import { term } from '../ui/term.js';
 import * as FV from '../core/finviz.js';
 import { poll } from '../core/poll.js';
@@ -270,14 +270,12 @@ export const PANELS = {
   },
   desk: {
     title: 'Optic Desk', span: 6,
-    how: 'The day\'s edition: the lead lines first, the full read one step away. On a day with no written edition it is built from the numbers by fixed rules, and says so.',
+    how: 'The day\'s edition: its bottom line first, then the lead; what could happen next, the note and today\'s reports one step away, and what it does not tell you folded with its count. On a day with no written version it is built from the numbers by fixed rules, and says why.',
     load: () => get('/api/home'),
     body: (d) => {
       const md = (d || {}).morning_desk;
       if (!md || !md.available) return html`<p class="ws-note">${clean((md && md.reason) || 'No Desk edition is available right now.')}</p>`;
-      return html`<p class="ws-sub">${md.date ? `For ${shortDate(md.date)}. ` : ''}${md.voice === 'mechanical' ? 'Compiled by fixed rules from the day\'s figures; no model wrote it.' : 'Written by an AI model from the day\'s figures.'}</p>
-        <ul class="desk-lead">${(md.lead || []).map((l) => html`<li>${clean(l)}</li>`)}</ul>
-        ${md.overall ? html`<details class="more"><summary>The full read ${icon('chev')}</summary><div class="inner"><p>${clean(md.overall)}</p>${md.note ? html`<p class="t-muted">${clean(md.note)}</p>` : ''}</div></details>` : ''}`;
+      return deskBody(md);   // Classic's Desk in full (parity B8.1), in pages/home.js
     },
     foot: (d) => ({ source: 'Optic Desk', at: (d || {}).generated_at }),
     milo: 'Walk me through today\'s Desk.',
@@ -826,7 +824,11 @@ function paintBody(id) {
   const d = DATA[id]; if (d === undefined) return;
   if (p.linked && DLINK[id] !== symOf(id)) { draw(body, skeleton('rows', 4, `Loading ${p.title} for ${symOf(id)}`)); draw(foot, ''); return; }
   const forLink = p.linked ? DLINK[id] : S.link;
+  // a repaint keeps what the reader opened in it and where they were in it (a fold by its name, the panel's own scroll)
+  const opened = [...body.querySelectorAll('details[data-v2-fold]')].filter((x) => x.open).map((x) => x.dataset.v2Fold), top = body.scrollTop;
   draw(body, p.body(d, P, forLink));
+  opened.forEach((k) => { const x = body.querySelector(`details[data-v2-fold="${k}"]`); if (x) x.open = true; });
+  if (top) body.scrollTop = top;
   if (p.charts) mountCharts(body, p.charts(d, P, forLink));
   // a list panel holding only a sentence (an empty list, a source that answered nothing) shrinks to it
   // instead of keeping its list height as a blank box
@@ -968,8 +970,7 @@ function wire() {
       paintBody('earnings'); return;
     }
     // Home's own blocks (pages/home.js): what matters today, the welcome
-    if ((b = t('[data-v2-ev]'))) { const open = b.getAttribute('aria-expanded') === 'true'; b.setAttribute('aria-expanded', String(!open)); const body = document.getElementById(b.getAttribute('aria-controls')); if (body) body.hidden = open; return; }
-    if ((b = t('[data-v2-evmore]'))) { const open = b.getAttribute('aria-expanded') === 'true'; const box = document.getElementById(b.getAttribute('aria-controls')); if (box) box.hidden = open; b.setAttribute('aria-expanded', String(!open)); b.textContent = open ? `Show ${b.dataset.v2Evmore} more` : 'Show fewer'; return; }
+    { const ev = evPress(e.target); if (ev) { if (ev.repaint) { paintBody('priority'); const again = $(`[data-v2-cs="${ev.focus}"]`, root); if (again) again.focus(); } return; } }
     if ((b = t('[data-v2-evfilter]'))) { ps('priority').filter = b.dataset.v2Evfilter; save(); paintBody('priority'); const again = $(`[data-v2-evfilter="${ps('priority').filter}"]`, root); if (again) again.focus(); return; }
     if (t('[data-v2-home-ready]')) { paintAll(); window.scrollTo(0, 0); return; }
     if ((b = t('[data-v2-mode]'))) {
