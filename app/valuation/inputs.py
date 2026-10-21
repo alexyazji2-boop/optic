@@ -824,7 +824,8 @@ def risk_free(provider) -> Dict[str, Any]:
     from .. import fred
     try:
         obs = fred.observations("DGS10")
-        if obs:
+        # a 10-year Treasury yield outside 0 to 25% is a misread, not a reading
+        if obs and 0.0 < float(obs[-1][1]) < 25.0:
             day, value = obs[-1]
             return {"value": float(value) / 100.0, "as_of": str(day), "kind": "reported",
                     "source": "FRED DGS10, 10-year Treasury constant-maturity yield",
@@ -837,6 +838,7 @@ def risk_free(provider) -> Dict[str, Any]:
         v = _num(q.get("price"))
         if v:
             v = v / 10.0 if v > 20 else v
+        if v and 0.0 < v < 25.0:
             return {"value": v / 100.0, "as_of": q.get("as_of"), "kind": "reported",
                     "source": "Yahoo Finance ^TNX (10-year Treasury yield index)",
                     "note": "FRED did not answer; the exchange index is used instead."}

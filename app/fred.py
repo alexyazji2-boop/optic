@@ -24,6 +24,8 @@ no value, which is the correct answer.
 
 from __future__ import annotations
 
+import re
+
 import logging
 from datetime import date
 from typing import Any, Dict, List, Optional, Tuple
@@ -110,6 +112,9 @@ def _num(value: Any) -> Optional[float]:
     return None if out != out else out
 
 
+_DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
+
 def observations(series: str, timeout: Optional[float] = None) -> List[Tuple[str, float]]:
     """(date, value) pairs for a FRED series, oldest first.
 
@@ -127,10 +132,23 @@ def observations(series: str, timeout: Optional[float] = None) -> List[Tuple[str
         log.warning("FRED series %s unavailable: %s", series, exc)
         return []
 
+    lines = (raw or "").splitlines()
+    head = lines[0].strip().lower() if lines else ""
+    # FRED answered with a web page instead of its CSV (2026-10-21: an error page whose first stylesheet line,
+    # split on commas, read as a 10-year yield of 400, so every fair-value model ran on a 400% risk-free rate). Only
+    # a CSV whose header names the series, and rows that start with a date, are read; anything else is a failed
+    # answer, dropped from the cache so the next request asks FRED again.
+    if not head or head.startswith("<") or series.lower() not in head:
+        log.warning("FRED series %s answered with something other than its CSV; not read", series)
+        try:
+            feeds.forget_prefix("fred:" + series)
+        except Exception:                                                  # noqa: BLE001
+            pass
+        return []
     out: List[Tuple[str, float]] = []
-    for line in (raw or "").splitlines()[1:]:
+    for line in lines[1:]:
         parts = line.split(",")
-        if len(parts) < 2:
+        if len(parts) < 2 or not _DATE.match(parts[0].strip()):
             continue
         value = _num(parts[1].strip())
         if value is None:
