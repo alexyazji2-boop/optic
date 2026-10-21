@@ -20,11 +20,12 @@ import { kindOf, kindWord, learn, onLearn } from '../core/instrument.js';
 import { row30, skewWords } from './options-panels.js';
 import { skeleton, failed } from '../ui/states.js';
 import { lineChart, spark, mountCharts, meter } from '../ui/chart.js';
-import { provideContext } from '../ui/milo.js';
+import { provideContext, button as miloButton } from '../ui/milo.js';
+import { marketQuestions } from '../core/market-questions.js';
 import { toast } from '../ui/toast.js';
 import { icon } from '../ui/icons.js';
 import { go } from '../core/router.js';
-import { hello, etDate, portfolio, eventsBlock, STARTERS, STARTER_NAMES, STARTER_ABOUT, portfolioSeries, deskBody, evPress } from './home.js';
+import { hello, etDate, portfolio, eventsBlock, STARTERS, STARTER_NAMES, STARTER_ABOUT, portfolioSeries, deskBody, evPress, changesBlock, trendsBlock, briefingHoldings } from './home.js';
 import { term } from '../ui/term.js';
 import * as FV from '../core/finviz.js';
 import { poll } from '../core/poll.js';
@@ -83,15 +84,19 @@ const FRESH = {
   biz: 'From the latest annual and quarterly filings; re-read at most every 5 minutes, changing when a new filing lands.',
   fin: 'Reported statements; they change when the company files.',
   own: 'Insider filings arrive within days; 13F holdings about 45 days after each quarter.',
+  changes: 'The latest completed session against the one before; it changes once a session closes.',
+  trends: 'Fund prices delayed about 15 minutes, re-read at most once a minute; the levels are the prior completed session\'s.',
+  questions: 'Built from the market figures above as they refresh; the pool rotates each market day.',
 };
 // The footer's one line: a short source and a status in a word or two. The full source, FRESH and
 // any calculation note are in the panel's "About this panel" explanation (owner, 2026-10-18).
 const SRC = { indices: 'Yahoo Finance', portfolio: 'Your brokerage', priority: 'Optic', watch: 'Yahoo Finance', quote: 'Yahoo Finance', cnews: 'Publisher feeds',
   contracts: 'Yahoo Finance chain', regime: 'Optic rules', expected: 'Yahoo Finance', sectors: 'Yahoo Finance', calendar: 'Agency schedules', desk: 'Optic Desk',
   earnings: 'Yahoo Finance', movers: 'Optic scan', news: 'Wire feeds', alerts: 'Optic scan', economy: 'FRED', value: 'Yahoo Finance, SEC',
-  vol: 'Yahoo Finance chain', gex: 'Optic estimate', tearn: 'Yahoo Finance', biz: 'SEC filings', fin: 'Company statements', own: 'SEC filings' };
-const QUOTED = new Set(['indices', 'portfolio', 'watch', 'quote', 'contracts', 'regime', 'expected', 'sectors', 'value', 'vol', 'gex']);
-const CADENCE = { priority: 'Every 10 min', cnews: 'Every 10 min', calendar: 'Every 20 min', news: 'Every 20 min', desk: 'Latest edition', earnings: 'Hourly', movers: 'Nightly scan', alerts: 'Scheduled scan', economy: 'Every 6 h', tearn: 'Every 10 min', biz: 'As filed', fin: 'As filed', own: 'As filed' };
+  vol: 'Yahoo Finance chain', gex: 'Optic estimate', tearn: 'Yahoo Finance', biz: 'SEC filings', fin: 'Company statements', own: 'SEC filings',
+  changes: 'Optic rules', trends: 'Yahoo Finance', questions: 'Optic' };
+const QUOTED = new Set(['indices', 'portfolio', 'watch', 'quote', 'contracts', 'regime', 'expected', 'sectors', 'value', 'vol', 'gex', 'trends']);
+const CADENCE = { priority: 'Every 10 min', cnews: 'Every 10 min', calendar: 'Every 20 min', news: 'Every 20 min', desk: 'Latest edition', earnings: 'Hourly', movers: 'Nightly scan', alerts: 'Scheduled scan', economy: 'Every 6 h', tearn: 'Every 10 min', biz: 'As filed', fin: 'As filed', own: 'As filed', changes: 'Each session', questions: 'Each market day' };
 // How often each cadence panel's source is rebuilt; data older than three of these says its age instead.
 const CADENCE_MS = { priority: 6e5, cnews: 6e5, calendar: 12e5, news: 12e5, earnings: 36e5, economy: 216e5 };
 // The session from the Indices panel, or from the top bar's clock when the layout has no Indices panel:
@@ -104,12 +109,13 @@ const lastClose = () => (sessionNow().last_close || {}).date;
 const statusOf = (id) => (QUOTED.has(id) ? (marketOpen() ? 'Delayed 15 min' : (lastClose() ? `${etDay(lastClose()).replace(/^\w+ /, '')} close` : 'Last close')) : (CADENCE[id] || ''));
 // Lists and tables take a default height for their kind and fill the rest of their row; the other
 // panels size to their content.
-const LIST = new Set(['watch', 'cnews', 'contracts', 'calendar', 'earnings', 'movers', 'news', 'alerts']);
+const LIST = new Set(['watch', 'cnews', 'contracts', 'calendar', 'earnings', 'movers', 'news', 'alerts', 'changes', 'questions']);
 // The instrument or universe behind each market panel, named in its header so no figure is anonymous
 // (owner, 2026-10-19). Linked panels name their ticker in the gold chip instead.
 const SCOPE = { indices: 'US indices and cross-asset', regime: 'US market', expected: 'S&P 500', sectors: '11 SPDR sector funds', calendar: 'US releases',
   earnings: 'Widely followed US companies', priority: 'US market and your names', news: 'Market wires', desk: 'US market', movers: 'Optic\'s scanned universe',
-  economy: 'US economy, FRED', alerts: 'Optic\'s scheduled scan', portfolio: 'Your linked accounts', watch: 'Your open list' };
+  economy: 'US economy, FRED', alerts: 'Optic\'s scheduled scan', portfolio: 'Your linked accounts', watch: 'Your open list',
+  changes: 'Your names and holdings', trends: '3 index and 11 sector funds', questions: 'For Milo, from today\'s market' };
 // Chart heights by the panel's height choice, desktop and phone.
 const CH = { portfolio: { s: 150, m: 200, l: 280, phone: 150 }, quote: { s: 170, m: 230, l: 340, phone: 170 }, economy: { s: 160, m: 220, l: 300, phone: 150 } };
 const portfolioMarks = () => ((((DATA.portfolio || {}).perf || {}).sources || {}).switches || []).map((x) => ({ d: String(x.date).slice(0, 10), label: 'Source changes', detail: 'estimated balances before, Optic\'s own snapshots after; the step is not a gain or loss' }));
@@ -124,6 +130,7 @@ const BLURB = {
   news: 'The day\'s wire headlines.', alerts: 'The scheduled scan\'s latest alerts.', economy: 'U.S. indicators with their history.', value: 'The linked ticker against its own valuation history.',
   vol: 'What the linked ticker\'s options price.', gex: 'Dealer gamma walls and flip for the linked ticker.', tearn: 'The linked ticker\'s next report and its history.',
   biz: 'The linked company\'s business, graded.', fin: 'Four years of revenue, profit and cash flow.', own: 'Insider and institutional activity.',
+  changes: 'What changed on your names since the session before.', trends: 'Index and sector funds against the prior session\'s range.', questions: 'Questions from today\'s market, to draft into Milo.',
 };
 
 /* ---------------- state, persisted ---------------- */
@@ -276,6 +283,34 @@ export const PANELS = {
     },
     foot: (d) => ({ source: 'Optic Desk', at: (d || {}).generated_at }),
     milo: 'Walk me through today\'s Desk.',
+  },
+  changes: {
+    title: 'What changed since yesterday', span: 8, state: { all: false },
+    how: 'Your watchlist and holdings, the latest completed session against the one before, item by item: a price past a level, a setup on the close, an earnings date that moved, a new filing. Each says why it may matter and opens where it shows. The sentences come from fixed rules; no model writes them. Holdings are the open paper trades, the retirement planner\'s holdings and a linked brokerage\'s, sent as symbols only.',
+    load: async (link, P) => {
+      const d = await api.post('/api/briefing', { symbols: store.allSymbols(), holdings: briefingHoldings((((DATA.portfolio || {}).ov || {}).today || {}).rows) }, { timeout: 60000 });
+      // names with no saved reading are read now, off the request: one more ask shortly shows them without a reload
+      if (d && (d.unread || []).length && !P.retried) { P.retried = true; setTimeout(() => { if (live && !folded('changes')) loadPanel('changes', { quiet: true }); }, 25000); }
+      return d;
+    },
+    body: (d, P) => changesBlock(d, P.all),
+    foot: (d) => ({ source: 'Optic rules, from Yahoo Finance and SEC filings', at: (d || {}).generated_at }),
+    milo: 'Of what changed on my names since yesterday, what matters most?',
+  },
+  questions: {
+    title: 'Questions worth asking', span: 4,
+    how: 'Questions from today\'s market: the day\'s biggest move against its own typical day, the session, the top story and a release due, then questions that rotate each market day. Each names a real figure from the panels here. A press puts the question in Milo for you to send; nothing is sent until you do.',
+    load: () => get('/api/home'),
+    body: (d) => { const qs = marketQuestions(d); return qs.length ? html`<ul class="ws-qs">${qs.map((q) => html`<li>${miloButton(q, { ask: q, context: 'Home, Questions worth asking', cls: 'btn-quiet ws-q' })}</li>`)}</ul>` : html`<p class="ws-note">No questions until the market figures load.</p>`; },
+    foot: (d) => ({ source: 'Optic, from the market figures', at: (d || {}).generated_at }),
+  },
+  trends: {
+    title: 'Index and sector trends', span: 12,
+    how: 'SPY, QQQ, IWM and the eleven SPDR sector funds, each against the prior completed session\'s high and low: above the high is an uptrend, below the low a downtrend, between them neutral. Each says how far it is from the level that matters and what would change its state. Choose one to open it.',
+    load: () => get('/api/trends/board', { ttl: 60000 }),
+    body: (d) => trendsBlock(d),
+    foot: (d) => ({ source: 'Yahoo Finance, Optic rules', at: (d || {}).generated_at }),
+    milo: 'Which index and sector funds are breaking out of yesterday\'s range, and does it hang together?',
   },
   alerts: {
     title: 'Latest scan alerts', span: 4,
@@ -918,6 +953,34 @@ function miloContext() {
 }
 
 /* ---------------- events ---------------- */
+/** Open a changed name on the tab its item points at, and the section when it names one, unfolded (Classic's
+ *  openDailyChange: the setups section can start folded, so landing on its tab alone left the reader looking). */
+async function openChange(sym, view, panel) {
+  if (view === 'options' && panel) { const O = await import('./options.js'), g = O.groupFor(panel); if (g) try { localStorage.setItem('optic.options.group.v1', g); } catch (e) { /* private mode: the section is opened if it is on the first group */ } }
+  location.hash = `#/${encodeURIComponent(sym)}${view && view !== 'overview' ? `/${view}` : ''}`;
+  if (!panel) return;
+  const id = `sec-${String(panel).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}`;
+  for (let i = 0; i < 40; i += 1) {
+    await new Promise((r) => setTimeout(r, 250));
+    if (!location.hash.startsWith(`#/${encodeURIComponent(sym)}`)) return;   // the reader went elsewhere
+    const host = document.getElementById(id);
+    if (host) { const { openSectionById } = await import('../ui/sections.js'); if (openSectionById(id)) { holdInView(id, sym); return; } }
+  }
+}
+// The page above it is still filling in (regions redraw as their data lands), so the section is kept in view for a
+// few seconds, and let go the moment the reader scrolls, presses or types.
+function holdInView(id, sym) {
+  let moved = false; const stop = () => { moved = true; };
+  const evs = ['wheel', 'touchstart', 'keydown', 'pointerdown'];
+  evs.forEach((n) => window.addEventListener(n, stop, { once: true, passive: true, capture: true }));
+  let n = 0;
+  const t = setInterval(() => {
+    const el = document.getElementById(id); n += 1;
+    if (moved || n > 16 || !el || !location.hash.startsWith(`#/${encodeURIComponent(sym)}`)) { clearInterval(t); evs.forEach((x) => window.removeEventListener(x, stop, { capture: true })); return; }
+    const top = el.getBoundingClientRect().top, head = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--dstick-h')) || 0;
+    if (top < head - 8 || top > head + 160) el.scrollIntoView({ block: 'start' });
+  }, 250);
+}
 function wire() {
   root.addEventListener('click', async (e) => {
     const t = (s2) => e.target.closest(s2); let b;
@@ -944,6 +1007,8 @@ function wire() {
       paintBody('earnings'); return;
     }
     // Home's own blocks (pages/home.js): what matters today, the welcome
+    if ((b = t('[data-v2-dc-all]'))) { const P = ps('changes'); P.all = !P.all; paintBody('changes'); const again = $('[data-v2-dc-all]', root); if (again) again.focus(); return; }
+    if ((b = t('[data-v2-dc]'))) { openChange(b.dataset.v2Dc, b.dataset.v2DcView, b.dataset.v2DcPanel); return; }
     { const ev = evPress(e.target); if (ev) { if (ev.repaint) { paintBody('priority'); const again = $(`[data-v2-cs="${ev.focus}"]`, root); if (again) again.focus(); } return; } }
     if ((b = t('[data-v2-evfilter]'))) { ps('priority').filter = b.dataset.v2Evfilter; save(); paintBody('priority'); const again = $(`[data-v2-evfilter="${ps('priority').filter}"]`, root); if (again) again.focus(); return; }
     if (t('[data-v2-home-ready]')) { paintAll(); window.scrollTo(0, 0); return; }
@@ -1036,7 +1101,7 @@ function wire() {
 }
 
 /* ---------------- page ---------------- */
-const MARKET_PANELS = ['indices', 'regime', 'expected', 'sectors', 'watch', 'quote', 'contracts', 'portfolio'];
+const MARKET_PANELS = ['indices', 'regime', 'expected', 'sectors', 'watch', 'quote', 'contracts', 'portfolio', 'trends'];
 // Quoted footers follow the top bar's session when it arrives or changes phase (the layout may have no
 // Indices panel to carry it).
 let sessionHooked = false;
