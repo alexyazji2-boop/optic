@@ -62,8 +62,10 @@ function trackHeights() {
   let stick = null;
   const ro = new ResizeObserver(() => { set('--topbar-h', bar); set('--dstick-h', stick && stick.isConnected ? stick : null); });
   if (bar) ro.observe(bar);
-  const find = () => { const s2 = main && main.querySelector(':scope > .dstick'); if (s2 === stick) return; if (stick) ro.unobserve(stick); stick = s2; if (stick) ro.observe(stick); else set('--dstick-h', null); };
-  if (main) new MutationObserver(find).observe(main, { childList: true });
+  // the header is the page view's own child (#main > .page-view > .dstick), drawn as the page paints: watched through
+  // the subtree, as `:scope > .dstick` on #main never matched and the height stayed 0 (found by B3, 2026-10-21)
+  const find = () => { const s2 = main && main.querySelector(':scope > .page-view > .dstick'); if (s2 === stick) return; if (stick) ro.unobserve(stick); stick = s2; if (stick) ro.observe(stick); else set('--dstick-h', null); };
+  if (main) new MutationObserver(find).observe(main, { childList: true, subtree: true });
 }
 export function mount(app) {
   render(app, html`<a class="skip" href="#main">Skip to content</a>

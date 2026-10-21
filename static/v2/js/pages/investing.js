@@ -11,6 +11,7 @@ import { $, html, render as draw, raw } from '../core/dom.js';
 import { CLASSIC } from '../core/classic.js';
 import * as api from '../core/api.js';
 import * as store from '../core/store.js';
+import { sections } from '../ui/sections.js';
 import { num, signed, money, compact, clean, capFirst, shortDate, fullDate, isNum, score100, ordinal, dir } from '../core/format.js';
 import { lineChart, meter, mountCharts } from '../ui/chart.js';
 import { createPriceChart } from '../ui/pricechart.js';
@@ -310,6 +311,8 @@ export async function render(main, route) {
   lp = livePrice(main, route.symbol, () => D, 'long', undefined);
   provideContext(() => ({ view: 'long', ticker: sym, quote: D.quote, long_term: D.lt, fair_value: D.fv, valuation: D.val ? { dcf: (D.val.dcf || {}).per_share, scenarios: D.val.scenarios, reverse: D.val.reverse } : null, scenarios: D.vsBody }));
   paint(); wire(main);
+  // the strip, folds and Panels (Classic parity B3); the two specialist sections open from Advanced, as Classic's did
+  sections(main, 'long', { levels: { 'the multiple against its own history': 2, 'valuation and accumulation levels': 2 }, norm: (t) => { const n = ((main.querySelector('.dhead .name span') || {}).textContent || '').trim(); return n ? t.split(n).join('the company') : t; } });
   const step = (p, ok, bad) => p.then((d) => { if (D.sym === sym) ok(d); }, (e) => { if (D.sym === sym) bad(e); }).finally(() => { if (D.sym === sym) paint(); });
   step(core(sym), (c) => { D.quote = c.quote; D.session = c.session; D.quoteError = c.quoteError; }, () => {});
   step(api.get(`/api/longterm/${enc}?indices=false`, { ttl: 600000, timeout: 60000 }), (d) => { D.lt = d; }, (e) => { D.ltErr = e; });

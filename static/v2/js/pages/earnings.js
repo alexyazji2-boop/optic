@@ -8,6 +8,7 @@
 import { html, raw, render as draw } from '../core/dom.js';
 import * as api from '../core/api.js';
 import * as store from '../core/store.js';
+import { sections } from '../ui/sections.js';
 import { num, signed, dir, compact, clean, bolded, capFirst, longDate, fullDate, shortDate, isNum, ago } from '../core/format.js';
 import * as RP from '../core/reports.js';
 import { mountCharts } from '../ui/chart.js';
@@ -222,6 +223,8 @@ export async function render(main, route) {
   lp = livePrice(main, route.symbol, () => D, 'earnings', undefined);
   provideContext(() => ({ view: 'earnings', ticker: sym, quote: D.quote, earnings: D.e }));
   paint();
+  // the strip, folds and Panels (Classic parity B3); the implied move opens from Advanced, as Classic's event pricing did
+  sections(main, 'earnings', { levels: { 'what options price for the report': 2 }, norm: (t) => { const n = ((main.querySelector('.dhead .name span') || {}).textContent || '').trim(); return n ? t.split(n).join('the company') : t; } });
   main.addEventListener('click', (e) => { if (e.target.closest('[data-v2-brief]')) loadBrief(); });
   core(sym).then((c) => { if (D.sym !== sym) return; D.quote = c.quote; D.session = c.session; D.quoteError = c.quoteError; paint(); });
   // the options term structure, for the move priced for the report day itself (one session, as the reactions are);

@@ -845,7 +845,7 @@ table.st td a { text-decoration: none; font-weight: 600; } table.st td a:hover {
 
 /* ---------- the Dossier header stays in view (the classic app's sticky .sec-head): ticker, price and tabs under the
    top bar while a long tab scrolls; jumps to a section land below both (scroll padding from measured heights) ---------- */
-html { scroll-padding-top: calc(var(--topbar-h, 72px) + var(--dstick-h, 0px) + 8px); }
+html { scroll-padding-top: calc(var(--topbar-h, 72px) + var(--dstick-h, 0px) + var(--secidx-h, 0px) + 8px); }
 @media (min-width: 641px) and (min-height: 561px) {
   .dstick { position: sticky; top: var(--topbar-h, 72px); z-index: 20; background: var(--c-plane); box-shadow: 0 1px 0 var(--c-line-2); }
   .dstick .dhead { padding-top: 14px; }
@@ -890,3 +890,43 @@ html.pc-touching, html.pc-touching * { -webkit-user-select: none; user-select: n
 .chart-measure[aria-pressed="true"] { background: var(--c-active); color: var(--c-ink); }
 .chart-measure:focus-visible { outline: 2px solid var(--c-focus); outline-offset: 2px; }
 @media (hover: none) { .chart-measure { opacity: 1; } }
+
+/* ---------------- long pages (ui/sections.js; Classic parity B3, 2026-10-21) ---------------- */
+/* a folded section is its heading line alone: its summary and its actions come back when it opens */
+.section.is-folded > :not(h2):not(.section-head) { display: none !important; }
+.section.is-folded > .section-head > :not(h2):not(div:has(> h2)) { display: none !important; }
+.section.is-folded .section-sub { display: none; }
+.section.is-folded > h2, .section.is-folded > .section-head { margin-bottom: 0; }
+h2.sec-head { cursor: pointer; }
+.sec-fold { float: right; width: var(--ctl-sm); height: var(--ctl-sm); margin: -7px -8px -7px 8px; display: grid; place-items: center; padding: 0; border: 0; border-radius: var(--r-ctl); background: none; color: var(--c-ink-3); cursor: pointer; }
+.sec-fold svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; }
+.sec-fold:hover { background: var(--c-sunk); color: var(--c-ink); }
+.sec-fold:focus-visible { outline: 2px solid var(--c-focus); outline-offset: 2px; }
+.section.is-folded .sec-fold svg { transform: rotate(-90deg); }
+@media (pointer: coarse) { .sec-fold { width: var(--tap); height: var(--tap); margin: -11px -10px -11px 8px; } }
+.sec-tag { color: var(--c-ink-3); font: 500 var(--t-sm)/1 var(--f-label); vertical-align: middle; }
+/* the strip: section names to jump to, then Expand all, Collapse all and Panels */
+.sec-index { display: flex; align-items: center; gap: 8px; margin: 12px 0 4px; padding: 4px 0; background: var(--c-plane); border-bottom: 1px solid var(--c-line-2); }
+.sec-index.sec-only-bulk { justify-content: flex-end; border-bottom: 0; }
+@media (min-width: 641px) and (min-height: 561px) { .sec-index:not(.sec-only-bulk) { position: sticky; top: calc(var(--topbar-h, 72px) + var(--dstick-h, 0px)); z-index: 5; } }
+.sec-list { display: flex; gap: 2px; flex: 1 1 auto; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+.sec-list::-webkit-scrollbar { display: none; }
+.sec-chip { flex: none; min-height: var(--ctl-sm); padding: 0 10px; border: 0; border-bottom: 2px solid transparent; border-radius: var(--r-sm) var(--r-sm) 0 0; background: none; color: var(--c-ink-3); font: 500 var(--t-md)/1 var(--f-sans); white-space: nowrap; cursor: pointer; }
+.sec-chip:hover { color: var(--c-ink); }
+.sec-chip[aria-current="location"] { color: var(--c-ink); border-bottom-color: var(--c-gold); }
+.sec-chip:focus-visible { outline: 2px solid var(--c-focus); outline-offset: -2px; }
+.sec-bulk { display: flex; gap: 4px; flex: none; align-items: center; }
+@media (pointer: coarse) { .sec-chip { min-height: var(--tap); } }
+@media (max-width: 640px) { .sec-index { flex-wrap: wrap; } .sec-bulk { width: 100%; justify-content: flex-end; } }
+/* sideways strips (ui/strips.js): an arrow at an edge while there is more that way, taking no room */
+.strip-edge { position: sticky; z-index: 2; flex: none; align-self: stretch; width: 32px; min-height: 32px; display: grid; place-items: center; padding: 0; border: 0; background: var(--strip-bg, var(--c-plane)); color: var(--c-ink-2); cursor: pointer; }
+.strip-edge.strip-start { left: calc(0px - var(--strip-pl, 0px)); margin-right: -32px; }
+.strip-edge.strip-end { right: calc(0px - var(--strip-pr, 0px)); margin-left: -32px; }
+.strip-edge svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; }
+.strip-edge:hover { color: var(--c-ink); }
+.strip-edge, .sec-fold, .sec-chip { -webkit-tap-highlight-color: transparent; }
+[data-strip="1"].is-dragging { cursor: grabbing; user-select: none; }
+/* insider and Congress tables: capped in height, their header kept in view as the rows scroll (B3.8) */
+#fin-ownership .tscroll, #fin-congress .tscroll, .ins-page .tscroll { max-height: min(62vh, 560px); overflow: auto; }
+#fin-ownership .tscroll thead th, #fin-congress .tscroll thead th, .ins-page .tscroll thead th { position: sticky; top: 0; z-index: 1; background: var(--c-raised); }
+

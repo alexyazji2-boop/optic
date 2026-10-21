@@ -105,16 +105,24 @@ Not tested:
 | B2b.13 | Hover and focus on the sector rotation chart | Macro, Rotation (`rrgChart` in `pages/macro.js`) | Hover a sector: its path lights and a box gives its quadrant, where it came from, strength, momentum and the change; each sector is a Tab stop with the same words for screen readers; Escape or leaving closes | A tap reads; a second tap or a tap elsewhere closes; labels never print over each other | none | n/a | `/api/rotation` (as before) | b2b2 desk (hover, leave, focus, Escape, 11 stops) and 390 (tap, tap elsewhere, no label overlap, fits); iOS Safari: labels apart | done; the iOS tap is emulated only (the simulator's Safari interface got in the way) |
 
 ## B3. Long-page navigation
-| Row | Task | Status |
-|---|---|---|
-| B3.1 | A sticky "Jump to a section" strip on long pages | open |
-| B3.2 | The strip scrolls sideways by wheel and drag, with edge fades | open |
-| B3.3 | It highlights the section on screen; a jump opens a folded section | open |
-| B3.4 | Fold sections, remembered (`optic.panels.open`); Expand all and Collapse all | open |
-| B3.5 | A Panels chooser per tab | open |
-| B3.6 | The knowledge level folds the specialist panels | open |
-| B3.7 | Edge fades on sideways strips (Home, phone) | open |
-| B3.8 | Insider tables capped in height, with sticky headers | open |
+`ui/sections.js` (folds, the strip, Expand and Collapse all, Panels, the knowledge level) and `ui/strips.js` (every sideways strip). Pages, under Classic's view names so its saved choices carry over: Overview (`overview`), Investing (`long`), Earnings (`earnings`), Financials (`financials`, its own strip kept) and the Options groups (`swing`).
+Evidence:
+- `b3_check.py`: 24 of 24 in headless Chrome at 1440, 390 and 360, with touch emulated; six phone pages swept for sideways rows.
+- Mobile Safari on the iPhone 17 simulator: the strip's end arrow scrolls it, a tapped jump lands under the top bar, and a tap on a folded heading opens it.
+- The B1, B2a, B2b and B2b-2 checks rerun with B3 in place: 78, 46, 55 and 17, all passing.
+- `tests/test_v2_parity_b3.py`.
+Not tested on a physical phone.
+
+| Row | Task | Where | Desktop | Phone | Keeps | States | Deps | Evidence | Status |
+|---|---|---|---|---|---|---|---|---|---|
+| B3.1 | A sticky "Jump to a section" strip on long pages | `.sec-index` on pages with 6 or more sections (Investing, Earnings) | Sticky under the header; jumps land below it (`--secidx-h` in the scroll padding) | Scrolls with the page, as the header does (B1.8) | none | Fewer than 6 sections: the bulk row only | none | b3 desk and phones | done |
+| B3.2 | The strip scrolls sideways by wheel and drag, with edge fades | `ui/strips.js` | A wheel moves it sideways while it can move that way, then the page's; a mouse drag scrolls it and never clicks the chip it ends on | Native swipe | none | n/a | none | b3 desk (wheel 300 px, page still; drag 200 px; arrow 630 px) | differs: an arrow button at each edge instead of a fade, since the design standard allows only two gradients; the arrow also gives a reader without a wheel a way to the far end |
+| B3.3 | It highlights the section on screen; a jump opens a folded section | `current()`, `openSection()` | The lit chip is underlined in gold like the tabs and kept in view; a jump opens, scrolls (smooth for a short hop, instant for a long one or reduced motion) and focuses the heading | A tap does the same | The opened state is saved | n/a | none | b3: the jump opened "The multiple against its own history" 8 px under the strip, focus on it; phones 8 px under the top bar; iOS Safari jump | done |
+| B3.4 | Fold sections, remembered (`optic.panels.open`); Expand all and Collapse all | Every top-level section with a heading | The heading or its button folds it; a folded section is its heading line alone | 44 px button; the heading is a target too | `optic.panels.open` `{"view|title": bool}`, Classic's key, format and ids (`panelId`), read and written as Classic does; company names and fiscal years taken out of the ids | Applied again after every redraw, before paint | none | b3: fold, label, reload kept, Collapse and Expand all; Financials read a Classic-format record; Options' fold kept across groups; iOS tap | done |
+| B3.5 | A Panels chooser per tab | Panels in the bulk row | Untick to take a section off the page and the strip; Show every section | Same menu | `optic.panels.hidden.v1` `{"view|title": true}`, deleted on show, as Classic | "N off" on the button | none | b3: off, kept through a reload, restored | done |
+| B3.6 | The knowledge level folds the specialist sections | `levels` per page; `prefs.knowledge()` | Above the reader's rung a section starts folded and says "Advanced"; a choice the reader made wins; changing the level re-applies at once | Same | The level is Classic's `optic.knowledge.v1` | n/a | none | b3: folded at Literate (the default), open at Advanced | done (Investing's two and Earnings' implied move, as Classic's tables; Options keeps its group tabs, where choosing a group is the request) |
+| B3.7 | Edge fades on sideways strips (Home, phone) | `ui/strips.js` on `.tabs`, `.tabset`, `.mstrip`, `.drail`, `.bk-tabs`, `.chw-rail`, `.ch-draw`, `.ws-presets`, `.chips-scroll` and the section strip | Arrows show only while there is more | Same; six phone pages swept: every row that scrolls sideways shows its arrow | none | n/a | none | b3 phone sweep; Chart rail arrow (0 to 264 px, back arrow shown); iOS Safari | differs: arrows instead of fades (as B3.2) |
+| B3.8 | Insider tables capped in height, with sticky headers | Financials' insider and Congress tables; the Insiders page | Capped at the smaller of 62% of the window and 560 px; the header stays as the rows scroll | Same | none | n/a | none | b3: 558 px cap, 969 px of rows, header at the top after scrolling | done |
 
 ## B4. Milo
 | Row | Task | Status |

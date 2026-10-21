@@ -7,6 +7,7 @@
 import { html, raw, render as draw } from '../core/dom.js';
 import * as api from '../core/api.js';
 import * as store from '../core/store.js';
+import { sections, openSection } from '../ui/sections.js';
 import { num, signed, dir, money, compact, clean, capFirst, fullDate, shortDate, isNum } from '../core/format.js';
 import { lineChart, mountCharts } from '../ui/chart.js';
 import { signedBars, hbars, groupedBars, periodLines, bridgeBars, stackedBars } from '../ui/bars.js';
@@ -382,9 +383,12 @@ export async function render(main, route) {
   if (lp) lp.stop();
   lp = livePrice(main, route.symbol, () => D, 'financials', undefined);
   provideContext(() => ({ view: 'financials', ticker: sym, quote: D.quote, company: (D.t || {}).company, filings: (D.t || {}).filings, extras: D.x }));
+  // folds and Panels (Classic parity B3); Financials keeps its own jump strip
+  sections(main, 'financials', { strip: false, norm: (t) => t.replace(/,\s*FY\d+$/i, '') });
   if (!main.dataset.finWired) {
     main.dataset.finWired = '1';
-    const jump = (id) => { const sec = document.getElementById(id); if (!sec) return; sec.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' }); const h = sec.querySelector('h2'); if (h) { h.tabIndex = -1; h.focus({ preventScroll: true }); } };
+    // a jump opens a folded (or hidden) section first (Classic parity B3.3)
+    const jump = (id) => { const sec = document.getElementById(id); if (!sec) return; openSection(main, id, { scroll: false }); sec.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' }); const h = sec.querySelector('h2'); if (h) { h.tabIndex = -1; h.focus({ preventScroll: true }); } };
     main.addEventListener('click', (e) => {
       const b = e.target.closest('[data-fin-jump]'); if (b) { jump(b.dataset.finJump); return; }
       const p = e.target.closest('[data-fin-period]');

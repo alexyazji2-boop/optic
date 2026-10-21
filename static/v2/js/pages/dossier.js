@@ -13,6 +13,7 @@ import { $, $$, html, render as draw, raw } from '../core/dom.js';
 import { CLASSIC } from '../core/classic.js';
 import * as api from '../core/api.js';
 import * as store from '../core/store.js';
+import { sections } from '../ui/sections.js';
 import { num, signed, dir, money, compact, clean, capFirst, longDate, fullDate, shortDate, isNum, score100 } from '../core/format.js';
 import * as RP from '../core/reports.js';
 import { lineChart, meter, mountCharts } from '../ui/chart.js';
@@ -436,6 +437,7 @@ export async function render(main, route) {
   lp = livePrice(main, route.symbol, () => D, 'overview', undefined);
   paint(main, sym);
   wire(main, sym);
+  sections(main, 'overview', { norm: (t) => { const n = ((main.querySelector('.dhead .name span') || {}).textContent || '').trim(); return n ? t.split(n).join('the company') : t; } });   // folds, Expand all, Panels (Classic parity B3)
   const enc = encodeURIComponent(sym);
   const step = (p, ok, bad) => { p.then((d) => { if (D.sym === sym) ok(d); }, (e) => { if (D.sym === sym) bad(e); }).finally(() => { if (D.sym === sym) paint(main, sym); }); };
   step(api.get(`/api/quote/${enc}`, { ttl: 20000, timeout: 15000 }), (d) => { if (d && d.available !== false) D.quote = fresher(D.quote, d.quote || d); else { D.quoteError = new api.ApiError('notfound', 404, `No quote for ${sym}`); store.forgetRecent(sym); } }, (e) => { D.quoteError = e; });
