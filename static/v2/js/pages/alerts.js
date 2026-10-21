@@ -1,6 +1,8 @@
 // Alerts. Three kinds, kept apart because they answer to different people:
-//   your alerts     conditions you set on a symbol (watches: /api/watches, or this browser's optic.watches.v1)
-//   Optic's book    trade ideas and closes from the paper book Optic keeps for its scans (/api/alerts), the same for everyone
+//   your alerts     conditions you set on a symbol (watches: /api/watches, or this browser's optic.watches.v1),
+//                   and the signal history of the swing-setup ones that fired (pages/signals.js)
+//   Optic's book    trade ideas and closes from the paper book Optic keeps for its scans (/api/alerts), the same for
+//                   everyone, grouped by urgency as Classic does (Classic parity B5); its read state is the owner's
 //   your portfolio  situations in a linked brokerage account, kept on Brokerage
 //
 // An alert fires when its condition changes from not met to met (analytics/watches.py fires), once,
@@ -10,7 +12,7 @@ import { $, html, render as draw } from '../core/dom.js';
 import * as api from '../core/api.js';
 import * as store from '../core/store.js';
 import { holds } from '../core/device.js';
-import { num, clean, ago, shortDate, signed, plural } from '../core/format.js';
+import { num, clean, ago, shortDate, signed, plural, capFirst } from '../core/format.js';
 import { skeleton, empty, failed } from '../ui/states.js';
 import { toast } from '../ui/toast.js';
 import * as drawer from '../ui/drawer.js';
@@ -20,31 +22,18 @@ import { provideContext } from '../ui/milo.js';
 import { hrefFor } from '../nav.js';
 import { sectionHead } from './tabs.js';
 import { refreshUnread } from '../core/unread.js';
+import { localDefs, saveLocal } from '../core/watches.js';
+import * as SIG from './signals.js';
 
-const LOCAL_KEY = 'optic.watches.v1';
 let S = {};
 let live = true;
 
 // What a check leaves behind, exactly as the classic app's checkWatchSymbol
 // does, so either app's next check knows what is news: signed in, the server
-// records it (/api/watches/seen, which also keeps a hit when it is news);
-// signed out, the watch keeps its state and when it last fired, and a
-// swing-setup alert that fired is kept in the browser's signal history
-// (optic.signals.v1, as keepLocalSignal).
-const SIGNALS_KEY = 'optic.signals.v1', SIGNALS_MAX = 200;
-function keepSignal(rec) {
-  if (!rec || !rec.signal_key || !holds(store.state.user)) return;
-  let st = { signals: [], events: {} };
-  try { const raw = JSON.parse(localStorage.getItem(SIGNALS_KEY) || 'null'); if (raw && Array.isArray(raw.signals) && raw.events && typeof raw.events === 'object') st = raw; } catch (e) { /* unreadable: start again */ }
-  if (st.signals.some((x) => x.signal_key === rec.signal_key)) return;
-  st.signals.push(Object.assign({}, rec, { recorded_at: new Date().toISOString(), origin: 'alert check on the page' }));
-  if (st.signals.length > SIGNALS_MAX) {
-    st.signals.sort((a, b) => String(b.trigger_at).localeCompare(String(a.trigger_at)));
-    st.signals.slice(SIGNALS_MAX).forEach((x) => { delete st.events[x.signal_key]; });
-    st.signals = st.signals.slice(0, SIGNALS_MAX);
-  }
-  try { localStorage.setItem(SIGNALS_KEY, JSON.stringify(st)); } catch (e) { /* private */ }
-}
+// records it (/api/watches/seen, which also keeps a hit when it is news, and the
+// signal history of a swing-setup alert); signed out, the watch keeps its state
+// and when it last fired, and a swing-setup alert that fired is kept in the
+// browser's signal history (optic.signals.v1, as keepLocalSignal: SIG.keepSignal).
 
 // The same rule as the server (analytics/watches.py fires): a crossing needs a state to change from.
 const CROSSINGS = new Set(['price_above', 'price_below', 'rsi_above', 'rsi_below', 'macd_cross', 'breakout', 'signal_flip', 'analyst_revisions', 'insider_activity']);
@@ -69,7 +58,7 @@ async function record(results) {
       return (r && r.fired) || 0;
     } catch (e) { return 0; /* the check itself worked; recording is best effort */ }
   }
-  results.filter((x) => x.met && x.signal_record).forEach((x) => keepSignal(x.signal_record));
+  results.filter((x) => x.met && x.signal_record).forEach((x) => SIG.keepSignal(x.signal_record));
   const by = new Map(results.map((x) => [x.id, x]));
   let fired = 0;
   saveLocal(localDefs().map((d) => {
@@ -83,15 +72,6 @@ async function record(results) {
   }));
   S.watches = localDefs();
   return fired;
-}
-
-function localDefs() {
-  if (!holds(store.state.user)) return [];
-  try { const r = JSON.parse(localStorage.getItem(LOCAL_KEY) || '[]'); return Array.isArray(r) ? r.filter((w) => !w.deleted_at) : []; } catch (e) { return []; }
-}
-function saveLocal(list) {
-  if (!holds(store.state.user)) return false;
-  try { localStorage.setItem(LOCAL_KEY, JSON.stringify(list.slice(0, 40))); return true; } catch (e) { return false; }
 }
 
 /* ---------------- words ---------------- */
@@ -217,22 +197,84 @@ function hitsBlock() {
     ${unseen ? html`<button type="button" class="btn btn-sm" data-v2-hits-seen>Mark all as seen</button>` : ''}`;
 }
 
+/* ---------------- Optic's book: the scheduled scan's alerts ----------------
+ * One inbox for the deployment, so its read state and clearing are the owner's (both routes are behind the write
+ * guard): a reader sees every alert, without marks that would only be the owner's. Grouped by urgency, in the order
+ * it should be read (Classic's ALERT_URGENCY), time ordering each group. "Why this fired" is the rule's class (the
+ * kind's own why, published by /api/alerts) and the numbers it fired on (the alert's payload): neither is written
+ * by a model, so they can be checked rather than believed. */
+export const URGENCY = [['high', 'Needs attention'], ['normal', 'Worth knowing'], ['low', 'For the record']];
+const isOwner = () => !!(store.state.me && store.state.me.admin);
+const PAYLOAD_SKIP = new Set(['id', 'ticker', 'symbol', 'book', 'entry_at', 'exit_at', 'created_at', 'ran_at', 'dedupe_key']);
+/** An alert's payload as readings: scalars only, eight at most, label-cased, numbers to two places. */
+export function readings(payload) {
+  return Object.entries(payload || {}).filter(([k, v]) => !PAYLOAD_SKIP.has(k) && (typeof v === 'number' || typeof v === 'string' || typeof v === 'boolean') && v !== '' && v !== null)
+    .slice(0, 8).map(([k, v]) => [capFirst(k.replace(/_/g, ' ')), typeof v === 'number' ? num(v, 2) : String(v)]);
+}
+/** Which alerts show: the kind chosen, unread only when asked, then grouped by urgency (empty groups dropped). */
+export function bookGroups(all, kind = 'all', unreadOnly = false) {
+  const rows = (all || []).filter((x) => (kind === 'all' || x.kind === kind) && (!unreadOnly || !x.seen));
+  return URGENCY.map(([id, label]) => ({ id, label, rows: rows.filter((x) => (x.urgency || 'normal') === id) })).filter((g) => g.rows.length);
+}
+/** Whether email delivers the book, for the owner only: what it is set to do, then what it last did. */
+export function deliveryNote(d, owner) {
+  if (!d || !owner) return '';
+  if (d.enabled) {
+    const last = d.last_attempt, at = last && last.at ? etTime(last.at) : '';
+    const rec = !last ? 'No email has been attempted since this server started.'
+      : last.sent ? `The last email went out ${at}, carrying ${last.sent} alert${last.sent === 1 ? '' : 's'}.`
+        : last.reason ? `The last attempt, ${at}, sent nothing: ${clean(last.reason)}` : '';
+    const n = d.undelivered_recent, waiting = n ? ` ${n} alert${n === 1 ? '' : 's'} from the last day ${n === 1 ? 'has' : 'have'} not been emailed yet.` : '';
+    return html`<p class="asof al-mail"><b>Set up to email you.</b> Each scan's new alerts go out as one email, and stay here as well. ${rec}${waiting}</p>`;
+  }
+  const bl = d.blockers || [];
+  if (!bl.length) return '';
+  return html`<details class="more-inline al-mail"><summary>These stay in this inbox: nothing here is emailed yet</summary><div class="how-body"><p>Shown to you only, as the owner. What email delivery still needs:</p><ul class="plain">${bl.map((b) => html`<li>${clean(b)}</li>`)}</ul></div></details>`;
+}
+function bookRow(x, kinds, owner) {
+  const meta = kinds[x.kind] || {}, rd = readings(x.payload), open = S.bookOpen.has(x.id), fresh = owner && !x.seen;
+  const can = !!(meta.why || rd.length);
+  return html`<li class="${fresh ? 'is-new' : ''}">
+    <p class="hit-head">${x.ticker ? html`<a href="${hrefFor('overview', x.ticker)}"><b class="tick">${x.ticker}</b></a> ` : ''}${clean(x.title)}${fresh ? html` <span class="hit-new">Unread</span>` : ''}</p>
+    ${x.body ? html`<p>${clean(x.body)}</p>` : ''}
+    <div class="al-tags"><small class="t-muted">${clean(x.kind_label || meta.label || x.kind || '')}, ${etTime(x.created_at)}</small>
+      ${can ? html`<button type="button" class="btn btn-sm btn-quiet" data-v2-book-why="${x.id}" aria-expanded="${open}" aria-controls="bk-why-${x.id}">${open ? 'Hide why' : 'Why this fired'}</button>` : ''}
+      ${fresh ? html`<button type="button" class="btn btn-sm btn-quiet" data-v2-book-seen="${x.id}" aria-label="Mark read: ${clean(x.title).slice(0, 80)}">Mark read</button>` : ''}</div>
+    ${open ? html`<div class="al-explain" id="bk-why-${x.id}">${meta.why ? html`<p>${clean(meta.why)}</p>` : ''}${rd.length ? html`<dl class="sg-dl">${rd.map(([k, v]) => html`<div><dt>${k}</dt><dd>${v}</dd></div>`)}</dl>` : ''}</div>` : ''}</li>`;
+}
 function ledger() {
   if (S.alertsErr) return failed('Optic\'s book', S.alertsErr, { retry: 'alerts' });
   if (!S.alerts) return skeleton('rows', 3, 'Loading Optic\'s book');
-  const a = S.alerts.alerts || [], kinds = S.alerts.kinds || {};
-  if (!a.length) return empty('Nothing from the book yet', 'A new paper trade idea or a closed position appears here when Optic\'s scheduled scan records one.');
-  return html`<ul class="hit-list">${a.slice(0, 20).map((x) => html`<li><p class="hit-head"><a href="${x.ticker ? hrefFor('overview', x.ticker) : '#/'}"><b class="tick">${x.ticker || ''}</b></a> ${clean(x.title)}</p><p>${clean(x.body || '')}</p><small class="t-muted">${clean((kinds[x.kind] || {}).label || x.kind || '')}, ${etTime(x.created_at)}</small></li>`)}</ul>`;
+  const all = S.alerts.alerts || [], kinds = S.alerts.kinds || {}, owner = isOwner();
+  const note = deliveryNote(S.alerts.delivery, owner);
+  if (!all.length) return html`${note}${empty('Nothing from the book yet', 'A new paper trade idea, a closed position, a confirmed pattern or a risk cap appears here when Optic\'s scheduled scan records one. An empty list means nothing crossed a threshold, which is the common case.')}`;
+  const counts = {}; all.forEach((x) => { counts[x.kind] = (counts[x.kind] || 0) + 1; });
+  const kindIds = Object.keys(counts), kind = counts[S.bookKind] ? S.bookKind : 'all';
+  const unread = all.filter((x) => !x.seen).length;
+  const groups = bookGroups(all, kind, owner && S.bookUnread);
+  const confirm = S.confirmClear ? html`<div class="al-confirm" role="group" aria-label="Clear the inbox"><p>Remove all ${all.length} alert${all.length === 1 ? '' : 's'} from the inbox? This clears them for every reader and cannot be undone.</p>
+      <div class="cluster"><button type="button" class="btn btn-sm" data-v2-book-clear-yes>Clear all</button><button type="button" class="btn btn-sm btn-quiet" data-v2-book-clear-no>Keep them</button></div></div>` : '';
+  return html`${note}
+    ${kindIds.length > 1 || owner ? html`<div class="al-filters">${kindIds.length > 1 ? html`<div class="chips chips-scroll" role="group" aria-label="Show">${[['all', 'All'], ...kindIds.map((k) => [k, (kinds[k] || {}).label || k])].map(([k, l]) => html`<button type="button" class="chip" data-v2-book-kind="${k}" aria-pressed="${kind === k}">${l} <span class="t-muted">${k === 'all' ? all.length : counts[k]}</span></button>`)}</div>` : ''}
+      ${owner ? html`<label class="check"><input type="checkbox" data-v2-book-unread ${S.bookUnread ? 'checked' : ''}> <span>Unread only (${unread})</span></label>` : ''}</div>` : ''}
+    ${groups.length ? groups.map((g) => html`<div class="al-group"><h3 class="t-h3">${g.label} <span class="t-muted">${g.rows.length}</span></h3><ul class="hit-list">${g.rows.map((x) => bookRow(x, kinds, owner))}</ul></div>`)
+      : empty(`None of these ${all.length} alerts matches this view`, '', html`<button type="button" class="btn btn-sm" data-v2-book-kind="all" data-v2-book-all>Show all</button>`)}
+    ${owner ? html`<div class="cluster al-owner">${unread ? html`<button type="button" class="btn btn-sm" data-v2-book-seen-all>Mark all read</button>` : ''}<button type="button" class="btn btn-sm btn-quiet" data-v2-book-clear ${S.confirmClear ? 'disabled' : ''}>Clear all</button></div>${confirm}` : ''}`;
 }
+const bookSub = () => {
+  const n = S.alerts && S.alerts.unseen, owner = isOwner();
+  return html`Not yours: these fire on the paper book Optic keeps for its scans and on the ranked universe, the same for every reader. Each names the rule that tripped it and the readings it tripped on.${owner && n ? html` <b>${n} unread.</b>` : ''}`;
+};
 
 function paint(main) {
   const bk = !!getFlags().brokerage;
-  const f = document.activeElement, keep = f && main.contains(f) ? [...f.attributes].map((a) => a.name).find((n) => n.startsWith('data-v2-al-') || n === 'data-v2-check') : null, kv = keep ? f.getAttribute(keep) : null;
+  const f = document.activeElement, keep = f && main.contains(f) ? [...f.attributes].map((a) => a.name).find((n) => n.startsWith('data-v2-al-') || n.startsWith('data-v2-book-') || n.startsWith('data-sg-') || n === 'data-v2-check') : null, kv = keep ? f.getAttribute(keep) : null;
   draw($('#al-body', main), html`
     <section class="section first" aria-labelledby="h-w"><div class="section-head"><div><h2 class="t-h2" id="h-w">Your alerts</h2><p class="section-sub">${scheduleLine()}</p></div>
       <button type="button" class="btn btn-primary" data-v2-al-new="">New alert</button></div>${watchesBlock()}</section>
     <section class="section" aria-labelledby="h-hits"><div class="section-head"><div><h2 class="t-h2" id="h-hits">What fired</h2><p class="section-sub">One entry per crossing: an alert fires again only after its condition has stopped being met.</p></div></div>${hitsBlock()}</section>
-    <section class="section" aria-labelledby="h-l"><div class="section-head"><div><h2 class="t-h2" id="h-l">From Optic's paper book</h2><p class="section-sub">Trade ideas and closed positions from the paper book Optic keeps for its scans. The same for every reader: not your trades, and not your alerts.</p></div></div>${ledger()}</section>
+    <section class="section" aria-labelledby="h-sg"><div class="section-head"><div><h2 class="t-h2" id="h-sg">Signal history</h2><p class="section-sub">Every swing-setup alert of yours that fired, recorded when it fired and never edited. What the stock did next is added beside it as each completed candle prints. ${SIG.whereLine()}</p></div></div><div id="al-sg">${SIG.block()}</div></section>
+    <section class="section" aria-labelledby="h-l"><div class="section-head"><div><h2 class="t-h2" id="h-l">From Optic's paper book</h2><p class="section-sub">${bookSub()}</p></div></div>${ledger()}</section>
     ${bk ? html`<p class="asof">Alerts about your linked brokerage holdings (earnings, concentration, drift) are on <a class="textlink" href="#/brokerage/overview">Brokerage</a>.</p>` : ''}`);
   if (keep) { const el = $(`[${keep}="${CSS.escape(kv || '')}"]`, main); if (el) el.focus({ preventScroll: true }); }
 }
@@ -342,11 +384,28 @@ async function submit(main, form) {
 }
 
 /* ---------------- loading ---------------- */
+function loadBook(force) {
+  return api.get('/api/alerts?limit=50', { ttl: force ? 0 : 60000, force: !!force }).then((r) => { S.alerts = r; S.alertsErr = null; }, (e) => { S.alertsErr = e; });
+}
+/** Signal history alone, repainted in its own box so the rest of the page (a form, a filter, focus) is left alone. */
+async function reloadSignals(main) {
+  const box = () => $('#al-sg', main);
+  const p = SIG.load();
+  if (box()) draw(box(), SIG.block());
+  await p;
+  if (live && box()) draw(box(), SIG.block());
+}
 async function loadAll(main) {
   const signed = store.signedIn();
   const jobs = [
-    api.get('/api/watches/catalogue', { ttl: 3600000 }).then((r) => { S.catalogue = r.conditions || []; S.schedule = r.schedule; }, (e) => { S.catErr = e; }),
-    api.get('/api/alerts?limit=40', { ttl: 60000 }).then((r) => { S.alerts = r; }, (e) => { S.alertsErr = e; }),
+    api.get('/api/watches/catalogue', { ttl: 3600000 }).then((r) => {
+      S.catalogue = r.conditions || []; S.schedule = r.schedule;
+      const ss = S.catalogue.find((c) => c.id === 'swing_setup'), ch = (ss && ss.param && ss.param.choices) || [];
+      SIG.SG.labels = Object.fromEntries(ch.filter((x) => x.value !== 'any').map((x) => [x.value, x.label]));
+      if (SIG.SG.data && SIG.SG.data.where === 'browser') SIG.SG.options = SIG.optionsOf(SIG.SG.data.signals, SIG.SG.labels);
+    }, (e) => { S.catErr = e; }),
+    loadBook(),
+    SIG.load(),
   ];
   if (signed) {
     jobs.push(api.get('/api/watches', { ttl: 0, force: true }).then((r) => { S.watches = r.watches || []; }, (e) => { S.watchErr = e; }));
@@ -358,7 +417,8 @@ async function loadAll(main) {
 export async function render(main, route) {
   live = true;
   (S.stops || []).forEach((s) => s());
-  S = { checks: {}, fam: 'all', unseenOnly: false, undo: null, stops: [] };
+  S = { checks: {}, fam: 'all', unseenOnly: false, undo: null, stops: [], bookOpen: new Set(), bookKind: 'all', bookUnread: false, confirmClear: false };
+  SIG.fresh();
   provideContext(() => ({ view: 'alerts', alerts: (S.watches || []).map((w) => ({ symbol: w.symbol, condition: sentence(w), active: w.active !== false, last_met_at: w.last_met_at })) }));
   document.title = 'Alerts, Optic';
   draw(main, html`<header class="page-head">${sectionHead('follow', 'alerts')}</header><div id="al-body"></div>`);
@@ -373,6 +433,7 @@ export function dispose() { live = false; (S.stops || []).forEach((s) => s()); S
 export const retry = {
   hits: (m) => { S.hitsErr = null; loadAll(m); }, catalogue: (m) => { S.catErr = null; loadAll(m); },
   watches: (m) => { S.watchErr = null; loadAll(m); }, alerts: (m) => { S.alertsErr = null; loadAll(m); },
+  signals: (m) => { SIG.SG.error = null; reloadSignals(m); },
 };
 
 async function setActive(main, w, on) {
@@ -437,7 +498,7 @@ function wire(main) {
   main.addEventListener('click', async (e) => {
     const t = (sel) => e.target.closest(sel);
     let b;
-    if ((b = t('[data-v2-al-new]'))) { openForm(main, { symbol: b.dataset.v2AlNew || '', kind: 'price_above' }, b); return; }
+    if ((b = t('[data-v2-al-new]'))) { openForm(main, { symbol: b.dataset.v2AlNew || '', kind: (cond(b.dataset.kind) && b.dataset.kind) || 'price_above' }, b); return; }
     if ((b = t('[data-v2-al-edit]'))) {
       const w = (S.watches || []).find((x) => String(x.id) === b.dataset.v2AlEdit); if (!w) return;
       const c = cond(w.kind); openForm(main, { id: w.id, symbol: w.symbol, kind: w.kind, param: c && c.param ? (w.params || {})[c.param.key] : undefined }, b); return;
@@ -455,17 +516,47 @@ function wire(main) {
         const r = await api.post('/api/watches/check', { ticker: sym, watches: defs.map((w) => ({ id: w.id, kind: w.kind, params: w.params })) }, { timeout: 60000 });
         const fired = await record(r.results || []);
         S.checks[sym] = { at: r.checked_at || new Date().toISOString(), results: r.results || [], price: r.price, fired };
+        if ((r.results || []).some((x) => x.met && x.signal_record)) { SIG.SG.followedAt = null; SIG.load().then(() => { if (live) paint(main); }); }
       } catch (err) { S.checks[sym] = null; toast(api.explain(err, 'The check'), { kind: 'bad' }); }
       paint(main);
       const again = $(`[data-v2-check="${sym}"]`, main); if (again) again.focus();
       return;
     }
+    if ((b = t('[data-v2-book-kind]'))) { S.bookKind = b.dataset.v2BookKind; if (b.hasAttribute('data-v2-book-all')) S.bookUnread = false; paint(main); return; }
+    if ((b = t('[data-v2-book-why]'))) { const id = Number(b.dataset.v2BookWhy); if (S.bookOpen.has(id)) S.bookOpen.delete(id); else S.bookOpen.add(id); paint(main); return; }
+    if ((b = t('[data-v2-book-seen]')) || t('[data-v2-book-seen-all]')) {
+      const ids = b ? [Number(b.dataset.v2BookSeen)] : null;
+      try {
+        const r = await api.post('/api/alerts/seen', ids ? { ids } : {});
+        if (r && r.shared === false) { toast(clean(r.detail || 'Nothing was marked.')); return; }
+        (S.alerts.alerts || []).forEach((x) => { if (!ids || ids.includes(x.id)) x.seen = 1; });
+        S.alerts.unseen = Math.max(0, (S.alerts.unseen || 0) - ((r && r.marked) || 0));
+        paint(main);
+        const next = $('[data-v2-book-seen]', main) || $('[data-v2-book-clear]', main); if (next) next.focus();
+      } catch (err) { toast(api.explain(err, 'That'), { kind: 'bad' }); }
+      return;
+    }
+    if (t('[data-v2-book-clear]')) { S.confirmClear = true; paint(main); const y = $('[data-v2-book-clear-yes]', main); if (y) y.focus(); return; }
+    if (t('[data-v2-book-clear-no]')) { S.confirmClear = false; paint(main); const c = $('[data-v2-book-clear]', main); if (c) c.focus(); return; }
+    if (t('[data-v2-book-clear-yes]')) {
+      try { const r = await api.post('/api/alerts/clear', {}); S.confirmClear = false; S.bookOpen.clear(); toast(`Cleared ${(r && r.removed) || 0} alert${(r && r.removed) === 1 ? '' : 's'} from the inbox.`); await loadBook(true); }
+      catch (err) { toast(api.explain(err, 'Clearing'), { kind: 'bad' }); }
+      if (live) { paint(main); const h = $('#h-l', main); if (h) { h.tabIndex = -1; h.focus(); } }
+      return;
+    }
+    if (t('[data-sg-reset]')) { SIG.SG.f = { status: 'all', direction: 'all', symbol: '', strategy: '' }; await reloadSignals(main); const f = $('[data-sg-status]', main); if (f) f.focus(); return; }
     if (t('[data-v2-hits-seen]')) {
       try { await api.post('/api/watches/hits/seen', {}); S.hits = S.hits.map((h) => Object.assign(h, { seen: true })); paint(main); refreshUnread(); }
       catch (err) { toast(api.explain(err, 'That'), { kind: 'bad' }); }
     }
   });
   main.addEventListener('change', (e) => {
-    if (e.target.matches('[data-v2-al-unseen]')) { S.unseenOnly = e.target.checked; paint(main); const c = $('[data-v2-al-unseen]', main); if (c) c.focus(); }
+    if (e.target.matches('[data-v2-al-unseen]')) { S.unseenOnly = e.target.checked; paint(main); const c = $('[data-v2-al-unseen]', main); if (c) c.focus(); return; }
+    if (e.target.matches('[data-v2-book-unread]')) { S.bookUnread = e.target.checked; paint(main); const c = $('[data-v2-book-unread]', main); if (c) c.focus(); return; }
+    const k = { 'data-sg-status': 'status', 'data-sg-dir': 'direction', 'data-sg-symbol': 'symbol', 'data-sg-strategy': 'strategy' };
+    const attr = Object.keys(k).find((a) => e.target.hasAttribute(a));
+    if (attr) { SIG.SG.f[k[attr]] = e.target.value; reloadSignals(main).then(() => { const c = $(`[${attr}]`, main); if (c) c.focus(); }); }
   });
+  // an open record stays open across repaints; toggle does not bubble, so this listens in the capture phase
+  main.addEventListener('toggle', (e) => { const d = e.target; if (d && d.matches && d.matches('details[data-sg-key]')) SIG.SG.open[d.getAttribute('data-sg-key')] = d.open; }, true);
 }

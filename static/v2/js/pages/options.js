@@ -26,6 +26,7 @@ import { poll } from '../core/poll.js';
 import { createPriceChart } from '../ui/pricechart.js';
 import { sections } from '../ui/sections.js';
 import { insiderMarks, barKey, barTime } from './chart-widgets.js';
+import { addAlert } from '../core/watches.js';
 let PK = null;
 let lp = null;   // the header's price refresh (dossier-frame livePrice), stopped in dispose()
 
@@ -546,6 +547,19 @@ function wire(main) {
     if ((b = t('[data-v2-leg-step]'))) { const [i, d] = b.dataset.v2LegStep.split(':').map(Number); const l = B.legs[i]; const max = l.type === 'stock' ? 100000 : 100; const q = Math.max(1, Math.min(max, l.qty + d * (l.type === 'stock' ? 100 : 1))); if (q !== l.qty) { l.qty = q; await analyze(); const again = $(`[data-v2-leg-step="${i}:${d}"]`, main); if (again && !again.disabled) again.focus(); } return; }
     if ((b = t('[data-v2-op-row]'))) { const r = document.getElementById(b.getAttribute('aria-controls')); const open = b.getAttribute('aria-expanded') !== 'true'; if (r) r.hidden = !open; b.setAttribute('aria-expanded', String(open)); return; }
     if (t('[data-v2-op-sum]')) { toBuilder(); return; }
+    if ((b = t('[data-v2-setup-alert]'))) {
+      // Classic's setup alert (app.js:6471): a swing_setup alert naming the preset, set in one press, nothing traded
+      if (b.getAttribute('aria-disabled') === 'true') return;
+      const sym = store.canon(D.sym || ''), label = String(b.dataset.label || 'setup');
+      b.setAttribute('aria-disabled', 'true');
+      try {
+        await addAlert({ symbol: sym, kind: 'swing_setup', params: { preset: b.dataset.v2SetupAlert } });
+        b.textContent = 'Alert set'; b.removeAttribute('aria-label');
+        (D.extra.alerted = D.extra.alerted || new Set()).add(b.dataset.v2SetupAlert);   // kept across the panel's repaints this visit
+        toast(`Alert set: ${sym}, the ${label.toLowerCase()}. A trigger on a completed daily candle lands in Alerts.`, { action: 'Open Alerts', run: () => { location.hash = '#/alerts'; } });
+      } catch (err) { b.removeAttribute('aria-disabled'); toast(err.kind ? api.explain(err, 'The alert') : err.message, { kind: 'bad' }); }
+      return;
+    }
     if ((b = t('[data-v2-when]'))) { B.when = b.dataset.v2When; paintResult(); const again = $(`[data-v2-when="${B.when}"]`, main); if (again) again.focus(); return; }
     if ((b = t('[data-v2-op-side]'))) { R.side = b.dataset.v2OpSide; saveFilters(); loadResearch(); return; }
     if (t('[data-v2-op-all]')) { R.allStrikes = !R.allStrikes; R.allByUnq = false; paintResearch(); const again = $('[data-v2-op-all]', main); if (again) again.focus(); return; }
