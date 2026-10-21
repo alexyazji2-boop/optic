@@ -124,6 +124,13 @@ export function openSection(root, id, { scroll = true } = {}) {
   if (h) { if (!h.hasAttribute('tabindex')) h.setAttribute('tabindex', '-1'); h.focus({ preventScroll: true }); }
   return true;
 }
+/** Open a section by its id from outside its page (Home's What changed opens Options at Swing setups): the
+ *  nearest host that sections() was set up on. */
+export function openSectionById(id, opts) {
+  const s = document.getElementById(id);
+  for (let el = s && s.parentElement; el; el = el.parentElement) if (CONF.has(el)) return openSection(el, id, opts);
+  return false;
+}
 function onClick(e) {
   const root = e.currentTarget, t = (q) => e.target.closest(q);
   let b;

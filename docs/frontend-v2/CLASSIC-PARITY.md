@@ -330,9 +330,9 @@ Evidence (stand-in verification; the real model's proposals are not exercised):
 |---|---|---|
 | B8.1 | Desk: bottom line, scenarios, calendar, limits | done (see B8a below) |
 | B8.2 | Catalyst day strip | done (see B8a below) |
-| B8.3 | What changed since yesterday | open |
-| B8.4 | Index and sector trends board on Home | open |
-| B8.5 | Questions worth asking | open |
+| B8.3 | What changed since yesterday | done (see B8b below) |
+| B8.4 | Index and sector trends board on Home | done (see B8b below) |
+| B8.5 | Questions worth asking | done (see B8b below) |
 | B8.6 | `home-released-results` reviewed; released results in What Matters Today | done (see B8a below) |
 | B8.7 | Today's Read built on request ($, labelled) | open |
 | B8.8 | Earnings this week page (dates; timing only when sourced) | done in B1 (row B1.1) |
@@ -364,3 +364,19 @@ Evidence:
 | B8.1 | The Desk in full | Home's Optic Desk panel (`home.js` `deskBody`) | The edition when one is kept (today's, or the latest with its date), with a link to it on the Read; the bottom line first, then the first lead line; folded under The whole desk: the rest of the lead, What could happen next, the note, Today's reports; What this does not tell you, folded with its count; which voice wrote it, and at the foot why the written version is not showing (the market moved since, with a new one being written; or it could not be produced) | Same; the branches stack | The folds stay open across the panel's refresh | The panel's own reason when there is no Desk | `/api/home` (already loaded; its prose already paid for) | b8a, both passes | done. Differs: no glossary marks yet (B9) |
 | B8.2 | The week as days | What matters today, above its list (`home.js` `catalystStrip`) | The trading days the board looks at, from Today, a market holiday drawn as closed; two items a day, high impact first, the rest as "N more"; an item opens its note under the strip, one at a time (its result, its description, Open the company); a warm left edge for high impact and a dashed one for a company's report, said in a key; reports by ticker; nothing placed that the feed does not date; no time invented | A sideways strip with its arrows (ui/strips.js); a swipe moves it, not the page; 44 px | The open note, the open rows and the open groups survive the panel's repaint, by each item's key | Nothing placed: no strip | `/api/priority` (free) | b8a: placement, a note, the repaint, the phone swipe | done. Differs: "N more" opens the day's rest under the strip, where Classic jumped to the columns; the strip is hidden under Your names |
 | B8.6 | Released results | The strip, the list's rows and their notes | A release that is out shows what it printed where Out was (FRED's figure only when it is this release's), with the agency's headline and link when published that day, and what it is measured against (the previous print); one still waiting says Out and that its figures are on their way; a company that has reported reads in the past tense with Beat, Missed or In line (within 1%), its EPS against the estimate and the source | Same | as B8.2 | as B8.2 | `/api/priority`, `app/priority.py` from the branch | b8a; the server's rules in test_home_results | done |
+
+### B8b. What changed, questions worth asking, the trends board
+All three are new Home panels, each one Add panel away in Customize. Market Overview keeps the owner's order (2026-10-19, pinned by `tests/test_v2_navigation_layout.py`); putting any of them on it by default waits for the owner's yes.
+
+Evidence:
+- `b8b_check.py`: 12 of 12 in headless Chrome, signed in as the local owner, at 1440 and on phones at 390 and 360. Covered:
+  - the preview's own briefing (free, fixed rules) and trend board, the board added through Add panel;
+  - a FIXTURE briefing: five items, a held name, a link to Options' Swing setups, names still being read;
+  - a question press: it drafts into Milo and nothing is sent (no `/api/chat` request).
+- `tests/test_v2_parity_b8b.py`: the questions, the holdings, the briefing's rows, the board's basis line, where the panels sit.
+
+| Row | Task | Where | Desktop | Phone | Keeps | States | Deps | Evidence | Status |
+|---|---|---|---|---|---|---|---|---|---|
+| B8.3 | What changed since yesterday | Home, "What changed since yesterday" (`home.js` `changesBlock`) | The two sessions compared, the summary; four changes and All N changes; each with its symbol once, Held when it is a holding, the detail, why it may matter (once per kind) and a button to where it shows (Chart, Earnings, Financials, Investing, or Swing setups, which opens Options at that group with the section unfolded and held in view until the reader moves); the names with no meaningful change and their moves, what could not be checked, a name with no candles, names still being read (asked once more 25 s later) | Same, 44 px | All N changes and the method fold survive the panel's repaint | No names: the server's reason | POST `/api/briefing` with the reader's names and, as symbols only, the open paper trades, the planner's holdings and a linked brokerage's (Classic sent the first two) (free; the server keeps the names asked about, with no owner) | b8b, both passes | done. Differs: one Add panel away, where Classic had it on Home |
+| B8.4 | Index and sector trends | Home, "Index and sector trends" (`home.js` `trendsBlock`) | SPY, QQQ, IWM and the 11 sector funds against the prior session's range: price, Uptrend, Downtrend or Neutral (v2's words, as on Macro's board), how far from the level that matters, what would change it; the basis line (which session's levels, which print, when, who is delayed); each opens its fund; the full board on Markets | Two columns, 44 px | Refreshed with the market panels in session, repainting only when it changed | The board's reason | `/api/trends/board` (free) | b8b | done. Differs: one Add panel away; Classic's "Overnight Uptrend" is v2's "Uptrend" |
+| B8.5 | Questions worth asking | Home, "Questions worth asking" (`core/market-questions.js`) | Up to five, Classic's questions word for word: the day's biggest move against its own typical day, the session when shut, the top story, a release due today or tomorrow, other moves past their typical range, then the pool rotated by the market day; each names a real figure; each a quiet button that drafts into Milo | Same, 44 px | n/a | No figures: says so | `/api/home` (already loaded; free) | b8b: drafted, nothing sent | done. Differs: one Add panel away |

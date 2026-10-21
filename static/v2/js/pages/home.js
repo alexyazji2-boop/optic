@@ -326,6 +326,104 @@ export function desk(md) {
   </section>`;
 }
 
+/* ---------------- what changed since yesterday ---------------- */
+// The briefing for the reader's own names (app/briefing.py; Classic app.js dailyChangesHTML, parity B8.3): the latest
+// completed session against the one before, item by item, each with why it may matter and where it shows. The
+// sentences are the server's, from fixed rules; no model writes them. Four, and the rest one press away.
+export const CHANGES_SHOWN = 4;
+const CHANGE_LINK = { chart: ['chart', 'Chart'], swing: ['options', 'Options'], earnings: ['earnings', 'Earnings'], financials: ['financials', 'Financials'], long: ['investing', 'Investing'] };
+/** Holdings where the page already keeps them, symbols only: open paper positions, the retirement planner's
+ *  holdings box (Classic's two), and a linked brokerage's holdings when Home has them. Quantities stay here. */
+export function briefingHoldings(brokerageRows) {
+  const out = [];
+  try { (((JSON.parse(localStorage.getItem('optic.paper.v1') || 'null')) || {}).open || []).forEach((x) => { if (x && x.ticker) out.push(String(x.ticker).toUpperCase()); }); } catch (e) { /* none, or unreadable */ }
+  try {
+    const r = JSON.parse(localStorage.getItem('optic.roth.inputs') || 'null') || {};
+    String(r.holdings || '').split(/[\n,]/).forEach((line) => { const m = /^\s*([A-Za-z][A-Za-z0-9.\-]{0,9})\b/.exec(line); if (m) out.push(m[1].toUpperCase()); });
+  } catch (e) { /* none, or unreadable */ }
+  (brokerageRows || []).forEach((x) => { if (x && x.symbol) out.push(String(x.symbol).toUpperCase()); });
+  return [...new Set(out)].slice(0, 40);
+}
+function changeRow(it, repeatWhy) {
+  const sym = String(it.symbol || ''), link = it.link || {}, [route, label] = CHANGE_LINK[link.view] || ['chart', 'Chart'];
+  const head = String(it.headline || '').indexOf(`${sym} `) === 0 ? it.headline.slice(sym.length + 1) : String(it.headline || '');
+  return html`<li class="dc-item"><div class="dc-line"><b class="tick">${sym}</b>${it.holding ? html`<span class="t-muted dc-held">Held</span>` : ''}<span class="dc-head">${clean(head.charAt(0).toUpperCase() + head.slice(1))}</span>
+      <button type="button" class="btn btn-sm btn-quiet dc-open" data-v2-dc="${sym}" data-v2-dc-view="${route}" data-v2-dc-panel="${link.panel || ''}">${link.panel || label} ${icon('arrow')}</button></div>
+    ${it.detail ? html`<p class="dc-detail">${clean(it.detail)}</p>` : ''}${it.why && !repeatWhy ? html`<p class="t-muted dc-why">${clean(it.why)}</p>` : ''}</li>`;
+}
+export function changesBlock(d, all) {
+  if (!d) return skeleton('rows', 3, 'Comparing your names');
+  const per = d.period || {};
+  if (!d.available) return html`<p class="ws-note">${clean(d.reason || 'Nothing to compare yet.')}</p>`;
+  const items = d.items || [], shown = all ? items : items.slice(0, CHANGES_SHOWN), names = d.names || [];
+  const quiet = names.filter((n) => n.state === 'unchanged'), lost = names.filter((n) => n.state === 'stale' || n.state === 'missing'), unread = d.unread || [];
+  // a kind of change says what it means once; four setups triggering said the same sentence four times
+  const seen = new Set();
+  const rows = shown.map((it) => { const why = String(it.why || '').trim(), rep = !!why && seen.has(why); if (why) seen.add(why); return changeRow(it, rep); });
+  // "unchanged" covers only the checks that ran, so the ones that could not are named beside it
+  const by = {}; quiet.forEach((n) => (n.not_checked || []).forEach((w) => { (by[w] = by[w] || []).push(n.symbol); }));
+  const notChecked = Object.keys(by).map((w) => `${w} for ${by[w].join(', ')}`);
+  return html`${per.label ? html`<p class="ws-sub">${clean(per.label)}.${(per.notes || []).length ? ` ${clean(per.notes.join(' '))}` : ''}</p>` : ''}
+    <p class="dc-summary">${clean(d.summary || '')}</p>
+    ${rows.length ? html`<ul class="dc-list">${rows}</ul>` : ''}
+    ${items.length > CHANGES_SHOWN ? html`<button type="button" class="textlink" data-v2-dc-all aria-expanded="${!!all}">${all ? 'Show fewer' : `All ${items.length} changes`}</button>` : ''}
+    ${quiet.length ? html`<p class="dc-quiet"><b>No meaningful change:</b> ${quiet.map((n, i) => html`${i ? ', ' : ''}${n.symbol} <span class="${dir(n.change_pct)}">${isNum(n.change_pct) ? signed(n.change_pct, 1) : 'n/a'}</span>`)}.</p>` : ''}
+    ${notChecked.length ? html`<p class="t-muted">Not checked: ${notChecked.join('; ')}.</p>` : ''}
+    ${lost.map((n) => html`<p class="dc-stale"><b>${n.symbol}</b>: ${clean(n.summary || '')}</p>`)}
+    ${unread.length ? html`<p class="t-muted">Earnings dates and filings are being read for the first time for ${unread.length === names.length ? 'these names' : unread.join(', ')}. They compare from the next session; until then those checks are not counted.</p>` : ''}
+    ${d.method ? html`<details class="more-inline" data-v2-fold="dc-method"><summary>How this is compared</summary><p>${clean(d.method)}</p></details>` : ''}`;
+}
+
+/* ---------------- index and sector trends ---------------- */
+// The board Macro and Indices draw, on Home (Classic app.js homeTrendsInner, parity B8.4): SPY, QQQ, IWM and the
+// eleven SPDR sectors against the prior completed session's high and low. The state's words are v2's own, as on
+// Macro's board, so one row never reads two ways; the distance and the action are the server's sentences.
+const TREND_WORD = { uptrend: 'Uptrend', downtrend: 'Downtrend', neutral: 'Neutral' };
+const TREND_DIR = { uptrend: 'up', downtrend: 'down', neutral: 'flat' };
+/** Which range and which print each card compares, said once above them (Classic's trendBasisLine). */
+export function trendBasis(basis, today = new Date()) {
+  const s = basis || null;
+  if (!s || !s.levels_label) return '';
+  const dayOf = (d) => d.toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+  const at = (iso) => { const t = Date.parse(iso || ''); if (!Number.isFinite(t)) return ''; const d = new Date(t); const clock = etTime(iso); return dayOf(d) === dayOf(today) ? clock : `${d.toLocaleDateString('en-US', { weekday: 'short', timeZone: 'America/New_York' })} ${clock}`; };
+  const kinds = s.price_kinds || {}, total = Object.values(kinds).reduce((n, v) => n + (Number(v) || 0), 0);
+  let price;
+  if (s.price_kind === 'last close') price = 'the last close, as nothing has printed since it. A close sits inside its own session\'s range, so those cards read neutral';
+  else {
+    const to = at(s.price_as_of), from = at(s.price_as_of_from), span = Date.parse(s.price_as_of) - Date.parse(s.price_as_of_from);
+    const when = !to ? (s.price_kind === 'regular session' ? ', from today\'s daily bar' : '') : (from && from !== to && span > 5 * 60 * 1000 ? `, struck between ${from} and ${to}` : `, as of ${to}`);
+    price = `${s.price_kind}${when}`;
+  }
+  const parts = [`Levels: ${s.levels_label}.`, `Price: ${price}.`];
+  const closes = s.price_kind === 'last close' ? 0 : (Number(kinds['last close']) || 0);
+  if (closes) parts.push(`${closes} of ${total} have not traded since that close, so they show it and read neutral.`);
+  if (total - (Number(kinds[s.price_kind]) || 0) - closes > 0) parts.push('A card priced from another session says which.');
+  const late = (s.delayed || []).map((x) => `${x.symbol} ${x.minutes} minutes`);
+  if (late.length) parts.push(`Delayed by the feed: ${late.join(', ')}.`);
+  return parts.join(' ');
+}
+function trendCell(r, mainKind) {
+  if (!r) return '';
+  if (!r.available) return html`<li class="tr-cell is-missing"><p class="tr-top"><b class="tick">${r.symbol}</b></p><p class="tr-name">${r.name || ''}</p><p class="t-muted">${clean(r.reason || 'Unavailable')}</p></li>`;
+  const d = TREND_DIR[r.trend] || 'flat', kind = r.price_kind && r.price_kind !== mainKind ? r.price_kind : '';
+  return html`<li class="tr-cell is-${d}"><a href="#/${r.symbol}" class="tr-link">
+    <span class="tr-top"><b class="tick">${r.symbol}</b><span class="tr-price">${num(r.price)}</span></span>
+    <span class="tr-name">${r.name || ''}</span>
+    <span class="tr-state">${TREND_WORD[r.trend] || clean(r.trend || '')}</span>
+    ${kind ? html`<span class="t-muted">Price: ${kind}${r.price_venue ? `, on ${r.price_venue}` : ''}</span>` : ''}
+    <span class="tr-vs ${d === 'flat' ? '' : d}">${clean(r.vs_level_text || '')}</span>
+    <span class="tr-act">${clean((r.action || {}).text || r.summary || '')}</span></a></li>`;
+}
+export function trendsBlock(d) {
+  if (!d) return skeleton('rows', 3, 'Loading the board');
+  if (!d.available) return html`<p class="ws-note">The trend board is unavailable right now${d.reason ? ` (${clean(d.reason)})` : ''}.</p>`;
+  const main = (d.basis || {}).price_kind, line = trendBasis(d.basis);
+  const group = (name, rows) => (rows && rows.length ? html`<h3 class="t-label tr-group">${name}</h3><ul class="tr-grid">${rows.map((r) => trendCell(r, main))}</ul>` : '');
+  return html`${line ? html`<p class="ws-sub">${line}</p>` : ''}${group('Indices', d.indices)}${group('Sectors', d.sectors)}
+    <p><a class="textlink" href="#/market">The full sector board ${icon('arrow')}</a></p>
+    ${d.method ? html`<details class="more-inline" data-v2-fold="tr-method"><summary>How the levels are set</summary><p>${clean(d.method)}</p></details>` : ''}`;
+}
+
 /* ---------------- movers ---------------- */
 function movers(m) {
   const rows = (m && (m.rows || m.results || m.movers)) || [];

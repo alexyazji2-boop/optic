@@ -49,6 +49,28 @@
 .cs-note p, .cs-note ul { margin: 0; } .cs-note-h { color: var(--c-ink); font-weight: 600; } .cs-note ul { display: grid; gap: 4px; }
 @media (pointer: coarse) { .cs-btn { min-height: var(--tap); } }
 .cs-note .textlink { font-size: inherit; }
+/* What changed since yesterday (Classic parity B8.3) */
+.dc-summary { margin: 4px 0 10px; max-width: 74ch; }
+.dc-list { list-style: none; margin: 0 0 8px; padding: 0; }
+.dc-item { padding: 10px 0; border-top: 1px solid var(--c-line-2); display: grid; gap: 4px; } .dc-item p { margin: 0; max-width: 74ch; }
+.dc-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; } .dc-head { flex: 1 1 220px; min-width: 0; font-weight: 500; }
+.dc-held { font-size: var(--t-sm); } .dc-open { margin-left: auto; } .dc-detail { color: var(--c-ink-2); } .dc-why { font-size: var(--t-md); }
+.dc-quiet, .dc-stale { margin: 8px 0 0; max-width: 74ch; }
+[data-v2-dc-all] { font-size: var(--t-md); min-height: var(--tap); }
+/* Questions worth asking (B8.5): quiet buttons that draft into Milo */
+.ws-qs { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.ws-q { width: 100%; justify-content: flex-start; text-align: left; white-space: normal; height: auto; min-height: var(--tap); padding-block: 8px; line-height: 1.35; }
+/* Index and sector trends (B8.4): one container of cells with dividers; the state on the cell's edge */
+.tr-group { margin: 14px 0 6px; }
+.tr-grid { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(168px, 1fr)); border-top: 1px solid var(--c-line-2); }
+.tr-cell { border-bottom: 1px solid var(--c-line-2); border-left: 2px solid var(--c-line); }
+.tr-cell.is-up { border-left-color: var(--c-pos); } .tr-cell.is-down { border-left-color: var(--c-neg); }
+.tr-link, .tr-cell.is-missing { display: grid; gap: 3px; padding: 10px 12px; color: var(--c-ink); text-decoration: none; height: 100%; } .tr-cell p { margin: 0; }
+.tr-link:hover { background: var(--c-sunk); }
+.tr-top { display: flex; justify-content: space-between; gap: 8px; } .tr-price { font-variant-numeric: tabular-nums; }
+.tr-name { color: var(--c-ink-3); font-size: var(--t-sm); } .tr-state { font-weight: 600; font-size: var(--t-md); }
+.tr-vs, .tr-act { font-size: var(--t-sm); } .tr-vs { font-variant-numeric: tabular-nums; } .tr-act { color: var(--c-ink-2); }
+@media (max-width: 560px) { .tr-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .movers { margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border-top: 1px solid var(--c-line); }
 .movers a { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; min-height: var(--tap); padding: 14px 16px 14px 0; border-bottom: 1px solid var(--c-line-2); text-decoration: none; font-weight: 600; }
 .movers a:hover { background: var(--c-plane-2); }

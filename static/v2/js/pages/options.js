@@ -398,6 +398,8 @@ const OPT_GROUPS = [
   ] },
 ];
 const GROUP_KEY = 'optic.options.group.v1';   // a tool setting
+/** The group that holds a section, by its title (Home's What changed opens Swing setups: the group is chosen first). */
+export const groupFor = (title) => (OPT_GROUPS.find((g) => g.panels.some((x) => x[0] === title)) || {}).id || null;
 const readGroup = () => { try { const i = OPT_GROUPS.findIndex((x) => x.id === localStorage.getItem(GROUP_KEY)); return i < 0 ? 0 : i; } catch (e) { return 0; } };
 
 function groupBar() {
