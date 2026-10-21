@@ -173,7 +173,7 @@ function themes() {
 const TABS = [
   ['Breadth', breadth, () => { const evc = ((((D.m || {}).sectors || {}).breadth || {}).equal_vs_cap) || {}; return evc.series ? { rsp: (w) => lineChart((evc.dates || []).map((d, i) => ({ d: String(d).slice(0, 10), c: evc.series[i] })), { w, h: 190, dp: 3, label: 'RSP against SPY' }) } : {}; }],
   ['Yield curve', curve], ['Rotation', rotation, () => (D.rot && D.rot.sectors ? { rrg: rrgChart(D.rot) } : {})],
-  ['Economic data', econ, () => (D.econ && D.econ.values ? { econ: (w) => lineChart(D.econ.dates.map((d, i) => ({ d, c: D.econ.values[i] })), { w, h: 240, dp: 2, label: D.econ.label, monthStep: 12 }) } : {})],
+  ['Economic data', econ, () => (D.econ && D.econ.values ? { econ: (w) => lineChart(D.econ.dates.map((d, i) => ({ d, c: D.econ.values[i] })), { w, h: 240, dp: 2, label: D.econ.label, monthStep: 12, measure: D.econ.unit === '%' ? 'points' : 'change', msUnit: D.econ.unit === '%' ? ' pts' : '' }) } : {})],
   ['Stock maps', stockmap, () => (D.map && D.map.template ? { map: mapChart(D.map) } : {})],
   ['Currencies', forex], ['Cross-asset', crossAsset], ['Ratios', ratios], ['Correlation and dispersion', corrDisp],
   ['Sector board', () => html`${sectorBoard(D.board, 'Sector Read')}${sectorReadBlock(D.sread)}`], ['Sector strength', strength], ['Themes and pairs', themes],

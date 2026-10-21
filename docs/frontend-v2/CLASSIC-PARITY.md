@@ -25,7 +25,8 @@ A row is **done** only when a browser check exercised the interaction. A matchin
 - Deps: data and model dependencies; $ marks a paid call.
 - Evidence: what proved it works.
 
-## B1. Shell, quick fixes and claim audit (shipped with the commit that adds this section)
+## B1. Shell, quick fixes and claim audit
+Shipped 2026-10-21 as db6702c. The rollback point is f939ddc. Live v2 build e661fedfbe4b matches the candidate. The live read-only check (`b1_live.py`, as a guest) passed 6 of 6, and the owner's signed-in bell was checked in the browser pane (0 unread, hidden).
 Evidence: `b1_check.py`, 78 of 78 at 1440, 1024, 430, 390 and 360 in headless Chrome, with touch emulated; `tests/test_v2_parity_b1.py`. Not tested on a physical phone.
 
 | Row | Task | Where | Desktop | Phone | Keeps | States | Deps | Evidence | Status |
@@ -41,13 +42,26 @@ Evidence: `b1_check.py`, 78 of 78 at 1440, 1024, 430, 390 and 360 in headless Ch
 | B1.9 | Earnings timing and "confirmed" only where the source supports them | `core/reports.js` on Overview, Earnings, Home and Brokerage; server `_next_report`, `earnings_calendar`, `_ws_earnings_calendar` | "date confirmed by Yahoo Finance" (Yahoo's `isEarningsDateEstimate`), "date listed by Yahoo Finance" (only one date, no flag), or "date not confirmed"; the habit "Its last 4 reports came after the close." from reported quarters; no session for a report not yet made | Same | none | No date: "No date yet" | Yahoo quote flag; earnings history | b1 B1.9 (NVDA); a live probe on 2026-10-21 found Yahoo's upcoming-row time wrong for AAPL and NVDA ("before the open"; both report after the close); past rows correct (AAPL, NVDA, HOOD after; JPM, WMT before) | done; the implied move now always uses the expiry after the report date |
 
 ## B2a. Shared chart (`ui/chart.js`)
-| Row | Task | Status |
-|---|---|---|
-| B2a.1 | Measure between two dates on any chart (an explicit Measure toggle; drag) | open |
-| B2a.2 | Two fingers measure on touch | open |
-| B2a.3 | The readout sits above the finger | open |
-| B2a.4 | An insider marker opens Insiders for that stock | open |
-| B2a.5 | A freshness label from the feed's own times | open |
+The precedence was written first, in `docs/frontend-v2/CHART-GESTURES.md`, and the checks assert it. It covers about 20 charts: Overview's year chart, RSI and MACD, drawdown and P/E, short volume, Macro, Indices, Compare, Brokerage, Retirement, Home's panels and Milo's price chart.
+Evidence:
+- `b2a_check.py`: 46 of 46 at 1440, 430, 390 and 360 in headless Chrome, with touch emulated.
+- Mobile Safari on the iPhone 17 simulator (iOS 27), real WebKit touch:
+  - a vertical swipe on the chart scrolls the page and leaves no reading;
+  - a tap reads;
+  - hold then slide reads without selecting text;
+  - the Measure button then a drag measures ("+74.04 (+28.58%) Jan 8, 2026 to Sep 14, 2026");
+  - two fingers measure ("+39.16 (+14.41%) Dec 17, 2025 to Aug 5, 2026");
+  - the pressed button covers no price label.
+- `tests/test_v2_parity_b2a.py`.
+Not tested on a physical phone.
+
+| Row | Task | Where | Desktop | Phone | Keeps | States | Deps | Evidence | Status |
+|---|---|---|---|---|---|---|---|---|---|
+| B2a.1 | Measure between two dates on any shared chart | `ui/chart.js` `measured()`, the Measure button, `[data-ms-say]` | Shift-drag, or the Measure button then a drag; M then the arrows from the keys; Escape clears; a plain drag and the wheel do what they did | The Measure button (always shown on touch screens), then a drag; hold then slide outside iOS Safari | Nothing: a measurement is a reading, not saved (Classic kept none) | A one-bar measurement says "Drag to the other date"; the result is announced once it ends | none | b2a desk: plain drag, Shift-drag, button on and off, wheel, keys, Tab, no click ring; phones: hold, quick slide, the button's place; RSI reads in points; iOS: the button and a drag | differs: in iOS and iPadOS Safari a long press is the system's text selection, so hold-to-measure is off there and the Measure button or two fingers measure |
+| B2a.2 | Two fingers measure on touch | Same | n/a | Two fingers on the chart measure between them; pinch-zoom is off over a chart only | none | Lifting announces it | none | b2a phones at 360, 390 and 430; iOS Safari two fingers | done |
+| B2a.3 | The readout sits above the finger and on the screen | `place()` in `ui/chart.js` | The tip centres on the point and stays inside the chart | Above the finger; one wider than the chart stacks its dates on a second line | none | n/a | none | b2a phones: tip above the finger, measurement inside the chart and the screen at 360; screenshots in `out-b2a/` | done |
+| B2a.4 | An insider marker opens Insiders | Moved to B2b: insider markers live on the price charts (`ui/pricechart.js`) | | | | | | | moved to B2b.11 |
+| B2a.5 | A freshness label from the feed's own times | Moved to B2b: it belongs with the Chart tab's live ticks | | | | | | | moved to B2b.7 |
 
 ## B2b. Chart tab (`ui/pricechart.js`) and other price charts
 | Row | Task | Status |
@@ -58,11 +72,11 @@ Evidence: `b1_check.py`, 78 of 78 at 1440, 1024, 430, 390 and 360 in headless Ch
 | B2b.4 | Measure by Shift-drag, by hold, or with the Measure button | open |
 | B2b.5 | Stretch the price scale; double-click or Fit to reset | open |
 | B2b.6 | − and + on touch screens | open |
-| B2b.7 | Live ticks every 15 s, the price in the tab title, never moving the view | open |
+| B2b.7 | Live ticks every 15 s, the price in the tab title, never moving the view; a freshness label from the feed's own times (was B2a.5) | open |
 | B2b.8 | Draw a two-point shape in one drag; Escape cancels a drag | open |
 | B2b.9 | Undo, redo and Delete page-wide, never in fields | open |
 | B2b.10 | Indicator search; × on each pane; a grabbing cursor | open |
-| B2b.11 | A price chart on Options (pan, zoom, measure, insider markers) | open |
+| B2b.11 | A price chart on Options (pan, zoom, measure, insider markers); an insider marker opens Insiders (was B2a.4) | open |
 | B2b.12 | Measure on Investing's weekly chart | open |
 | B2b.13 | Hover and focus on the sector rotation chart | open |
 

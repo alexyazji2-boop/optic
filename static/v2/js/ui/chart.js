@@ -3,10 +3,15 @@
 // meter. Drawn as SVG at the container's real width so text stays at its
 // specified size. Every chart has a text summary for screen readers and a
 // keyboard-readable crosshair.
-import { num, shortDate, fullDate, esc, monthName } from '../core/format.js';
+import { num, signed, shortDate, fullDate, esc, monthName } from '../core/format.js';
 import { drawOn } from './drawon.js';
+import { icon } from './icons.js';
+import { toString as markup } from '../core/dom.js';
 
 let seq = 0;
+// iOS and iPadOS WebKit: a held finger opens the system's text selection and loupe, whatever the page does, and
+// moved the page under the finger (iOS simulator, 2026-10-21); hold-to-measure is left to other browsers there
+const IOS_TOUCH = typeof window !== 'undefined' && typeof window.GestureEvent !== 'undefined' && (navigator.maxTouchPoints || 0) > 0;
 
 /**
  * series: [{d: 'YYYY-MM-DD', c: number}]
@@ -15,7 +20,11 @@ let seq = 0;
  *         tags:[{i?, text, dir}], focusEnd, noTicks, pad,
  *         oscillators (RSI, MACD): domain:[lo, hi] a fixed range, ticksAt:[v] the axis values, refs:[{v, cls}]
  *         level lines, bars:[v] a histogram from zero aligned by index, pins:[{i, v, text, dir}] a marked point,
- *         tipMore(i) a second line in the reading }
+ *         tipMore(i) a second line in the reading,
+ *         measure: 'change' (a level: the change and the percent change) | 'points' (already in percent or points:
+ *         the change only) | false; default 'points' for a fixed-range oscillator, else 'change'; unit: the points'
+ *         word, as ' pts' }
+ * Measuring follows docs/frontend-v2/CHART-GESTURES.md: Shift-drag, the Measure button, a held touch, two fingers or M.
  * Returns { html, wire(root) }.
  */
 export function lineChart(series, opts = {}) {
@@ -35,6 +44,8 @@ export function lineChart(series, opts = {}) {
   const span = hi - lo || 1; lo -= span * 0.06; hi += span * 0.06;
   if (opts.domain) [lo, hi] = opts.domain;
   const slots = pts.length - 1 + (opts.future || 0);
+  const mode = opts.measure === false ? null : (opts.measure || (opts.domain ? 'points' : 'change'));
+  const levels = pts.every((p) => p.c > 0);   // a percent change only for a series of levels that stay positive
   const X = (i) => pad.l + (i / slots) * (W - pad.l - pad.r);
   const Y = (v) => pad.t + (1 - (v - lo) / (hi - lo)) * (H - pad.t - pad.b);
   // The figure's own decimals: the caller's, or enough for the series' range (a ratio near 0.26 needs four).
@@ -124,6 +135,7 @@ export function lineChart(series, opts = {}) {
     ${refSvg}${months.join('')}${area}${barSvg}${overlays.map((o) => { let d = '', pen = false; o.values.forEach((v, i) => { if (Number.isFinite(v)) { d += `${pen ? 'L' : 'M'}${X(i).toFixed(1)} ${Y(v).toFixed(1)}`; pen = true; } else pen = false; }); return d ? `<path class="ov ${o.cls || ''}" d="${d}"/>` : ''; }).join('')}${lineSvg}${markSvg}${coneSvg}${events}${tags}${pinSvg}
     ${opts.focusEnd ? `<circle class="focus-ring" cx="${X(pts.length - 1)}" cy="${Y(last.c)}" r="10"/>` : ''}
     <circle class="end" cx="${X(pts.length - 1)}" cy="${Y(last.c)}" r="3.5"/>
+    ${mode ? `<g class="ms" style="display:none"><rect class="ms-band" y="${pad.t}" height="${H - pad.t - pad.b}"/><line class="ms-edge ms-a" y1="${pad.t}" y2="${H - pad.b}"/><line class="ms-edge ms-b" y1="${pad.t}" y2="${H - pad.b}"/><circle class="ms-dot ms-da" r="4.5"/><circle class="ms-dot ms-db" r="4.5"/></g>` : ''}
     <g class="xh" style="display:none"><line class="xh-v" y1="${pad.t}" y2="${H - pad.b}"/><circle class="xh-dot" r="4"/></g>
   </svg><div class="chart-tip" aria-hidden="true" style="display:none"></div>`;
 
@@ -140,10 +152,80 @@ export function lineChart(series, opts = {}) {
       const ev = (opts.events || []).find((e) => at(e.d) === i) || (() => { const m = marks.find((x) => x.i === i); return m ? { label: m.label, detail: m.detail } : null; })();
       tip.style.display = '';
       tip.innerHTML = `<b>${num(p.c, dp)}</b> <span>${fullDate(p.d)}</span>${ev ? `<em>${esc(ev.label)}${ev.detail ? ', ' + esc(ev.detail) : ''}</em>` : ''}${opts.tipMore ? `<em>${esc(opts.tipMore(i) || '')}</em>` : ''}`;
-      const box = el.getBoundingClientRect();
-      tip.style.left = Math.min(box.width - 170, Math.max(0, (x / W) * box.width - 70)) + 'px';
+      place(x / W);
     };
-    const hide = () => { xh.style.display = 'none'; tip.style.display = 'none'; };
+    // the tip centred on a point of the chart (a fraction of its width) and kept inside it, measured at its real width
+    // (a phone's text is larger); one wider than the chart stacks its dates and wraps instead of running off the screen
+    function place(f) {
+      const box = el.getBoundingClientRect();
+      tip.classList.remove('is-narrow');
+      let tw = tip.offsetWidth || 170;
+      if (tw > box.width) { tip.classList.add('is-narrow'); tw = tip.offsetWidth || box.width; }
+      tip.style.left = Math.max(0, Math.min(box.width - tw, f * box.width - tw / 2)) + 'px';
+    }
+    const hide = () => { if (measuring()) return; xh.style.display = 'none'; tip.style.display = 'none'; tip.style.top = ''; };
+    // ---- measuring (docs/frontend-v2/CHART-GESTURES.md): explicit only, never a plain drag or a scroll
+    const wrap = el.parentElement, ms = el.querySelector('.ms'), btn = wrap.querySelector('[data-chart-measure]'), say = wrap.querySelector('[data-ms-say]');
+    let mOn = false, anchor = null, end = null, drag = null, hold = null, keyM = false, hx = 0, hy = 0;
+    const touches = new Map();
+    const measuring = () => anchor !== null || drag !== null;
+    const idxAt = (clientX) => { const box = el.getBoundingClientRect(); const fx = ((clientX - box.left) / box.width) * W; return Math.min(pts.length - 1, Math.max(0, Math.round(((fx - pad.l) / (W - pad.l - pad.r)) * slots))); };
+    // the measurement's own unit (msUnit: ' pts' for a series in percent); the axis keeps opts.unit
+    const reading = (a, b) => measured(pts, a, b, { mode, levels, dp, unit: opts.msUnit == null ? opts.unit : opts.msUnit });
+    function drawMs(a, b) {
+      if (!ms) return;
+      const r = reading(a, b), xa = X(r.i), xb = X(r.j);
+      ms.style.display = '';
+      const band = ms.querySelector('.ms-band'); band.setAttribute('x', xa); band.setAttribute('width', Math.max(1, xb - xa));
+      [['.ms-a', xa], ['.ms-b', xb]].forEach(([q, x]) => { const l = ms.querySelector(q); l.setAttribute('x1', x); l.setAttribute('x2', x); });
+      [['.ms-da', r.i], ['.ms-db', r.j]].forEach(([q, i]) => { const c = ms.querySelector(q); c.setAttribute('cx', X(i)); c.setAttribute('cy', Y(pts[i].c)); });
+      xh.style.display = 'none';
+      tip.style.display = '';
+      tip.innerHTML = r.i === r.j ? `<b>${num(pts[r.i].c, dp)}</b> <span>${fullDate(pts[r.i].d)}</span><em>Drag to the other date</em>` : `<b>${r.head}</b> <span>${r.span}</span>`;
+      place(((xa + xb) / 2) / W);
+      return r;
+    }
+    function clearMs() { anchor = null; end = null; drag = null; keyM = false; if (ms) ms.style.display = 'none'; tip.style.display = 'none'; xh.style.display = 'none'; }
+    const announce = (r) => { if (say && r && r.i !== r.j) say.textContent = `Measured ${r.span}: ${r.head}.`; };
+    const setMode = (on) => { mOn = on; if (btn) btn.setAttribute('aria-pressed', String(on)); wrap.classList.toggle('is-measuring', on); if (!on) clearMs(); };
+    if (btn) btn.addEventListener('click', () => setMode(!mOn));
+    el.addEventListener('pointerdown', (e) => {
+      if (!mode || e.target.closest('.ev-mark')) return;
+      if (e.pointerType === 'touch') {
+        touches.set(e.pointerId, e.clientX);
+        if (touches.size === 2) { clearTimeout(hold); const [x1, x2] = [...touches.values()]; drag = 'two'; anchor = idxAt(x1); end = idxAt(x2); drawMs(anchor, end); return; }
+        if (mOn) { drag = 'one'; anchor = end = idxAt(e.clientX); drawMs(anchor, end); return; }
+        if (IOS_TOUCH) return;   // Safari's long press is the system's text selection: there, the Measure button or two fingers
+        hx = e.clientX; hy = e.clientY; clearTimeout(hold);
+        hold = setTimeout(() => { hold = null; drag = 'one'; anchor = end = idxAt(hx); drawMs(anchor, end); }, 400);
+        return;
+      }
+      if (e.button !== 0 || !(e.shiftKey || mOn)) { if (anchor !== null && !drag) clearMs(); return; }
+      e.preventDefault();
+      try { el.setPointerCapture(e.pointerId); } catch (x) { /* capture is a nicety */ }
+      drag = 'one'; anchor = end = idxAt(e.clientX); drawMs(anchor, end);
+    });
+    el.addEventListener('pointermove', (e) => {
+      if (e.pointerType === 'touch' && touches.has(e.pointerId)) {
+        touches.set(e.pointerId, e.clientX);
+        if (hold && Math.hypot(e.clientX - hx, e.clientY - hy) > 8) { clearTimeout(hold); hold = null; }
+        if (drag === 'two' && touches.size === 2) { const [x1, x2] = [...touches.values()]; anchor = idxAt(x1); end = idxAt(x2); drawMs(anchor, end); return; }
+      }
+      if (drag === 'one') { end = idxAt(e.clientX); drawMs(anchor, end); }
+    });
+    const lift = (e) => {
+      touches.delete(e.pointerId); clearTimeout(hold); hold = null;
+      if (drag) { const r = anchor !== null && end !== null ? reading(anchor, end) : null; drag = null; announce(r); }
+    };
+    el.addEventListener('pointerup', lift);
+    // once a held finger or two fingers are measuring, the touch is the chart's: iOS would otherwise scroll, select
+    // text near the finger and show its loupe (seen in Mobile Safari on the iOS simulator, 2026-10-21)
+    el.addEventListener('touchmove', (e) => { if (drag) e.preventDefault(); }, { passive: false });
+    el.addEventListener('touchstart', (e) => { if (e.touches.length > 1 && mode) e.preventDefault(); }, { passive: false });
+    ['contextmenu', 'selectstart'].forEach((t) => el.addEventListener(t, (e) => { if (drag || hold) e.preventDefault(); }));
+    // a cancelled touch is the page's scroll taking the finger: the reading it started is not the reader's, so it goes
+    el.addEventListener('pointercancel', (e) => { const was = drag; lift(e); if (e.pointerType === 'touch' && !was) hide(); });
+    el.addEventListener('pointerleave', (e) => { if (e.pointerType !== 'touch' && !drag && !mOn) clearMs(); });
     // Over the cone (past the last close): its outlook, the range options price through the expiry, instead of a
     // bar's close. Reached by the pointer or by the right arrow from the last close (owner, 2026-10-20).
     let onCone = false;
@@ -155,22 +237,51 @@ export function lineChart(series, opts = {}) {
       tip.style.display = '';
       tip.innerHTML = `<b>${num(cone.lo, 0)} to ${num(cone.hi, 0)}</b> <span>${cone.expiry ? `through ${shortDate(cone.expiry)}` : 'the range options price'}</span>`
         + `<em>${Number.isFinite(cone.pct) ? `Options price ±${num(cone.pct)}%` : 'The options market\'s range'}${Number.isFinite(cone.from) ? ` from ${num(cone.from, dp)}` : ''}${cone.event ? `, ${esc(cone.event)}` : ''}. What the market charges for, not a forecast.</em>`;
-      const box = el.getBoundingClientRect();
-      tip.style.left = Math.min(box.width - 220, Math.max(0, (((x0 + x1) / 2) / W) * box.width - 110)) + 'px';
+      place(((x0 + x1) / 2) / W);
     };
-    el.addEventListener('pointermove', (e) => {
+    function readAt(e) {
       const box = el.getBoundingClientRect();
       const fx = ((e.clientX - box.left) / box.width) * W;
       if (cone && fx > X(pts.length - 1) + 4) { showCone(); return; }
       onCone = false;
       const i = Math.min(pts.length - 1, Math.max(0, Math.round(((fx - pad.l) / (W - pad.l - pad.r)) * slots)));
       show(i);
-    });
-    el.addEventListener('pointerleave', hide);
-    el.addEventListener('blur', hide);
+      // on a touch screen the reading goes above the finger, which would cover it at the top of the chart
+      if (e.pointerType === 'touch') { const th = tip.offsetHeight || 48, fy = e.clientY - box.top; tip.style.top = `${Math.max(-th - 8, fy - th - 28)}px`; } else tip.style.top = '';
+    }
+    el.addEventListener('pointermove', (e) => { if (!measuring() && !hold) readAt(e); });
+    // a tap reads the bar under the finger at once (a slide keeps reading; a hold starts a measurement)
+    el.addEventListener('pointerdown', (e) => { if (e.pointerType === 'touch' && !mOn && touches.size <= 1 && !e.target.closest('.ev-mark')) readAt(e); });
+    el.addEventListener('pointerleave', (e) => { if (e.pointerType !== 'touch') hide(); });
+    // a keyboard reading goes when focus leaves; a touch reading stays until a tap elsewhere (a phone's focus
+    // moves on its own after a tap, and the reading would vanish under the finger)
+    let lastInput = 'key';
+    el.addEventListener('pointerdown', (e) => {
+      lastInput = e.pointerType || 'mouse';
+      // a touch must not focus the chart: Safari scrolls a focused element fully into view, and a chart half under
+      // the phone bar jumped about 200 px under the finger (iOS simulator, 2026-10-21). Keyboard focus is kept.
+      if (lastInput === 'touch' && el.hasAttribute('tabindex')) el.removeAttribute('tabindex');
+    }, true);
+    const refocusable = () => setTimeout(() => { if (!el.hasAttribute('tabindex')) el.setAttribute('tabindex', '0'); }, 400);   // after the tap's own click
+    el.addEventListener('pointerup', refocusable); el.addEventListener('pointercancel', refocusable);
+    el.addEventListener('blur', () => { if (lastInput !== 'touch') hide(); });
+    const outside = (e) => {
+      if (!el.isConnected) { document.removeEventListener('pointerdown', outside, true); return; }
+      if (lastInput === 'touch' && !wrap.contains(e.target)) { clearMs(); hide(); }
+    };
+    document.addEventListener('pointerdown', outside, true);
     el.addEventListener('keydown', (e) => {
       if (e.target !== el) return;
       const jump = e.shiftKey ? 20 : 1;
+      if (mode && (e.key === 'm' || e.key === 'M') && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        if (keyM) { announce(reading(anchor, end)); clearMs(); } else { keyM = true; anchor = end = k; drawMs(anchor, end); }
+        e.preventDefault(); return;
+      }
+      if (e.key === 'Escape' && measuring()) { clearMs(); e.preventDefault(); return; }
+      if (keyM && (e.key === 'ArrowLeft' || e.key === 'ArrowRight' || e.key === 'Home' || e.key === 'End')) {
+        end = e.key === 'Home' ? 0 : e.key === 'End' ? pts.length - 1 : Math.min(pts.length - 1, Math.max(0, end + (e.key === 'ArrowLeft' ? -jump : jump)));
+        const r = drawMs(anchor, end); if (say && r) say.textContent = r.i === r.j ? '' : `${r.span}: ${r.head}`; e.preventDefault(); return;
+      }
       const shown = tip.style.display !== 'none';
       if (e.key === 'ArrowLeft') { if (onCone) { onCone = false; show(pts.length - 1); } else show(Math.max(0, k - jump)); e.preventDefault(); }
       // past the last close, the right arrow steps onto the cone's outlook
@@ -185,7 +296,16 @@ export function lineChart(series, opts = {}) {
       });
     }
   }
-  return { html: `<div class="chart-wrap">${svg}</div>`, wire };
+  const tools = mode ? `<button type="button" class="chart-measure" data-chart-measure aria-pressed="false" aria-label="Measure between two dates" title="Measure: drag between two dates (or Shift-drag, or M)">${markup(icon('ruler'))}</button><p class="sr" aria-live="polite" data-ms-say></p>` : '';
+  return { html: `<div class="chart-wrap${mode ? ' can-measure' : ''}">${svg}${tools}</div>`, wire };
+}
+
+/** What a measurement between bars a and b says: the change, a percent change only for a series of levels in
+ *  'change' mode (a percent of a percent misleads), and the two dates, earlier first. */
+export function measured(pts, a, b, { mode = 'change', levels = true, dp = 2, unit = '' } = {}) {
+  const i = Math.min(a, b), j = Math.max(a, b), va = pts[i].c, vb = pts[j].c, ch = vb - va;
+  const pct = mode === 'change' && levels && va > 0 ? (ch / va) * 100 : null;
+  return { i, j, head: `${signed(ch, dp, unit || '')}${pct !== null ? ` (${signed(pct)})` : ''}`, span: `${fullDate(pts[i].d)} to ${fullDate(pts[j].d)}` };
 }
 
 export function spark(values, label = '') {

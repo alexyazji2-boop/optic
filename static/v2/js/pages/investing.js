@@ -192,7 +192,7 @@ function drawdown() {
 function ddMaker() {
   const dd = (((D.lt || {}).holding) || {}).drawdown; if (!dd) return {};
   const pts = (dd.dates || []).map((d, i) => ({ d: String(d).slice(0, 10), c: Number(dd.series[i]) })).filter((p) => isNum(p.c));
-  return { dd: (w) => lineChart(pts, { w, h: 170, area: false, dp: 1, label: 'Drawdown from the running high, percent', pad: { t: 12, r: 52, b: 24, l: 0 } }) };
+  return { dd: (w) => lineChart(pts, { measure: 'points', msUnit: ' pts', w, h: 170, area: false, dp: 1, label: 'Drawdown from the running high, percent', pad: { t: 12, r: 52, b: 24, l: 0 } }) };
 }
 
 function multiple(sym) {

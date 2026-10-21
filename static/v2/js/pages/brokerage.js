@@ -326,7 +326,7 @@ function performance(d) {
 function perfCharts(d) {
   const ser = (d.series || []).filter((p) => isNum(p.cum_twr_pct)), out = {};
   if (ser.length >= 2) {
-    out.cum = (w) => lineChart(ser.map((p) => ({ d: p.date, c: p.cum_twr_pct })), { w, h: 220, dp: 1, label: 'Your time-weighted return, %', overlays: [{ values: ser.map((p) => (isNum(p.cum_benchmark_pct) ? p.cum_benchmark_pct : NaN)), cls: 'c2' }, { values: ser.map(() => 0), cls: 'c0' }],
+    out.cum = (w) => lineChart(ser.map((p) => ({ d: p.date, c: p.cum_twr_pct })), { measure: 'points', msUnit: ' pts', w, h: 220, dp: 1, label: 'Your time-weighted return, %', overlays: [{ values: ser.map((p) => (isNum(p.cum_benchmark_pct) ? p.cum_benchmark_pct : NaN)), cls: 'c2' }, { values: ser.map(() => 0), cls: 'c0' }],
       summary: `Cumulative time-weighted return ${pct(ser[ser.length - 1].cum_twr_pct, 1, true)} against the benchmark's ${pct(ser[ser.length - 1].cum_benchmark_pct, 1, true)}, ${day(ser[0].date)} to ${day(ser[ser.length - 1].date)}.` });
   }
   const vals = (d.series || []).filter((p) => isNum(p.value));

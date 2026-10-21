@@ -247,7 +247,7 @@ function extras() {
 function extraCharts() {
   const sv = ((D.x || {}).short_volume || {}).rows || [];
   const pts = sv.slice().reverse().map((r) => ({ d: r.date, c: r.short_pct }));
-  return pts.length > 2 ? { sv: (w) => lineChart(pts, { w, h: 150, dp: 1, label: 'Off-exchange short volume, share of the day', pad: { t: 12, r: 46, b: 24, l: 0 } }) } : {};
+  return pts.length > 2 ? { sv: (w) => lineChart(pts, { measure: 'points', msUnit: ' pts', w, h: 150, dp: 1, label: 'Off-exchange short volume, share of the day', pad: { t: 12, r: 46, b: 24, l: 0 } }) } : {};
 }
 
 function congress() {

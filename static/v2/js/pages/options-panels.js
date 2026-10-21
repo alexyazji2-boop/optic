@@ -324,11 +324,11 @@ export function levelCharts(t) {
     return out;
   };
   const out = {};
-  if (m.rsi) out.rsi = (w) => lineChart(ser(m.rsi.v), { w, h: 200, label: 'RSI (14)', dp: 1, domain: [10, 90], ticksAt: [30, 50, 70],
+  if (m.rsi) out.rsi = (w) => lineChart(ser(m.rsi.v), { measure: 'points', msUnit: ' pts', w, h: 200, label: 'RSI (14)', dp: 1, domain: [10, 90], ticksAt: [30, 50, 70],
     refs: [{ v: 70, cls: 'band' }, { v: 50, cls: 'mid' }, { v: 30, cls: 'band' }], overlays: [{ values: m.rsi.sig, cls: 'o2' }], pins: pin(m.rsi.cross, m.rsi.v, 'day'),
     tipMore: (i) => (Number.isFinite(m.rsi.sig[i]) ? `Signal ${num(m.rsi.sig[i], 1)}` : ''),
     summary: `RSI (14) over the last ${m.n} days, from ${num(m.rsi.v[0], 1)} on ${fullDate(m.dates[0])} to ${num(last(m.rsi.v), 1)} on ${fullDate(last(m.dates))}, against its signal at ${num(last(m.rsi.sig), 1)}. ${crossLine(m.rsi.cross, m.rsi.v, m.rsi.sig, m.dates, 'RSI')}` });
-  if (m.macd) out.macd = (w) => lineChart(ser(m.macd.v), { w, h: 200, label: 'MACD (12, 26, 9)', dp: 2, ticksAt: roundTicks([...m.macd.v, ...m.macd.sig, ...m.macd.hist]), refs: [{ v: 0, cls: 'mid' }], bars: m.macd.hist,
+  if (m.macd) out.macd = (w) => lineChart(ser(m.macd.v), { measure: 'points', w, h: 200, label: 'MACD (12, 26, 9)', dp: 2, ticksAt: roundTicks([...m.macd.v, ...m.macd.sig, ...m.macd.hist]), refs: [{ v: 0, cls: 'mid' }], bars: m.macd.hist,
     overlays: [{ values: m.macd.sig, cls: 'o2' }], pins: pin(m.macd.cross, m.macd.v, 'day'),
     tipMore: (i) => `Signal ${num(m.macd.sig[i], 2)}, histogram ${signed(m.macd.hist[i], 2, '')}`,
     summary: `MACD over the last ${m.n} days, ${num(last(m.macd.v), 2)} against a signal of ${num(last(m.macd.sig), 2)} on ${fullDate(last(m.dates))}. ${crossLine(m.macd.cross, m.macd.v, m.macd.sig, m.dates, 'MACD')}` });
