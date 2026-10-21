@@ -282,7 +282,7 @@ Not tested:
 | B7a.2 | Sensitivity, forecast, bridge, statements and formulas | The same section | The sentence and the four figures that frame it, the terminal share, the checks; what moves the value most (each assumption stepped down and up); the methods side by side on one axis, never averaged; what today's price implies; three sensitivity tables (a pressed choice of pair, shaded against the price with the number always printed); bear, base and bull; then folded: the forecast year by year with the terminal value and the exit-multiple cross-check, the discount rate, the bridge (a line can be left out), the linked statements, the sources and the formulas; Classic's questions as quiet buttons that draft into Milo | One column | Folds opened stay open across reruns | A method that does not suit says why and what leads instead | as above | b7a: the summary, each part, a sensitivity pair, the forecast staying open, the bridge sent | done |
 | B7b.1 | Saved models: list, save, compare, replay, use | done (see B7b below) |
 | B7c.1, B7c.2 | See B7c below | done |
-| B7d.1 | Valuation Milo card: Preview, Apply, Undo | open |
+| B7d.1 | Valuation Milo card: Preview, Apply, Undo | done, stand-in verification (see B7d below) |
 
 ### B7b. Saved models
 Evidence:
@@ -305,6 +305,25 @@ Evidence:
 |---|---|---|---|---|---|---|---|---|---|
 | B7c.1 | RI, FFO, DDM, FCFE | The fair-value model, "Other valuation methods and when each fits" (`methodsHTML`), and "Assumptions for the dividend model" (`equityForm`) | Each method with its fit and why, and what it gives: the equity DCF at its cost of equity, the dividend model's path, residual income's book and return on equity against its cost (and the return the price implies), a REIT's FFO and its own past multiples; the equity models' own assumptions, with the cost of equity when the cash-flow model does not suit | Same; one column | `optic.dcf.v1` `edits.equity`, Classic's format | When the cash-flow model does not suit, the methods and the equity form open, and the sentence leads with what does | `/api/valuation/{T}`, POST `/run` | b7c: the methods, the dividend model's edit sent, a bank, a REIT | done |
 | B7c.2 | Comps and SOTP | The same fold | Compare with peers (Optic's, or the reader's comma-separated list, said to be theirs): each multiple against the peers' quartiles and what it implies a share, the peers and those set aside; Value the segments: each segment's operating income at a multiple (starting at the DCF's own, which reproduces the whole), reconciled with the company's, a value a share; Recalculate with the reader's multiples. Peers' readable multiples and the parts join the methods side by side | Tables scroll inside their boxes | Typed peers and multiples survive a rerun | Reading; failed: says so, with Try again for the segments | `/api/valuation/{T}/comps`, POST `/api/valuation/{T}/sotp` (free) | b7c | done |
+
+### B7d. Milo's proposal card
+Evidence (stand-in verification; the real model's proposals are not exercised):
+- `b7d_check.py`: 10 of 10 in headless Chrome, signed in as the local owner, with Milo docked beside Investing at 1440 and overlaid at 360 and 430. The STAND-IN model (:8098) wrote the proposals; the engine runs behind Show the effect and Apply are Optic's own and free. Covered:
+  - the whole model sent to Milo as context;
+  - the card's label and reason;
+  - Show the effect runs on a copy, so the screen and the store are unchanged;
+  - Apply changes the working assumptions only, reads "Applied", focuses Undo, and leaves the saved models alone;
+  - Undo puts it back;
+  - a key the model lacks is not offered;
+  - a proposal for AAPL is refused while MSFT's model is on screen (reached by in-app navigation, Milo staying docked);
+  - away from Investing it says where the card works;
+  - on phones the card fits the overlay with 44 px buttons.
+- `tests/test_v2_parity_b7d.py`: Classic's parseAction rules, the shared field list, how a change lands in the edits, the context.
+- Not verified: a proposal written by the production model. That needs an authorized real-model run.
+
+| Row | Task | Where | Desktop | Phone | Keeps | States | Deps | Evidence | Status |
+|---|---|---|---|---|---|---|---|---|---|
+| B7d.1 | Valuation Milo card: Preview, Apply, Undo | Milo's answer, when it proposes `[[action valuation KEY=VALUE ... "reason"]]` (`core/milo-text.js` `valuationAction`, `ui/milo.js` `valuationPress`); the model on Investing registers itself while on screen (`dcf.js` `VAL_API`) | What it would change and Milo's reason; Show the effect gives the base value before and after and the terminal share, computed by Optic's engine; Apply waits for that, then changes the working assumptions (the form, the store), reads Applied, and offers Undo with focus; Undo restores the edits as they were. Milo is given the whole model: each assumption by key with its source and reason, the base case, what moves it, the reverse DCF, the other methods | Milo overlays the page; the card fits, 44 px | `optic.dcf.v1` edits only, Classic's format; saved models are never changed | No model on screen: says to open the company's Investing tab; another company's model: says whose it was for; a key the model lacks or a missing reason: not offered, says why; a failed run: says so | Milo (paid, only on Send); `/api/valuation/{T}/run` (free) | b7d (stand-in) | done, stand-in verification. Differs: Classic named the symbol in the label ("Try on the AAPL model"); v2 says "the model on screen" and checks the symbol on press. With no pair at all v2 keeps its earlier "Open the valuation model" link, where Classic said the proposal named nothing |
 
 ## B8. Home, Desk and Markets extras
 | Row | Task | Status |
