@@ -91,5 +91,5 @@ def test_the_shell_routes_and_names_from_b1():
     assert "['ov:stages']" not in (JS / "core/milo-text.js").read_text() and "null]" not in (JS / "core/milo-text.js").read_text()
     assert "${CLASSIC}#/scan\">Saved research, in the classic app" in (JS / "app.js").read_text()
     css = (V2 / "css/components.css").read_text()
-    assert "html { scroll-padding-top: calc(var(--topbar-h, 72px) + var(--dstick-h, 0px) + 8px); }" in css
+    assert "html { scroll-padding-top: calc(var(--topbar-h, 72px) + var(--dstick-h, 0px) + var(--secidx-h, 0px) + 8px); }" in css   # B3 adds the section strip
     assert ".dstick { position: sticky; top: var(--topbar-h, 72px);" in css

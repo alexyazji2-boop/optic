@@ -117,6 +117,7 @@ function count(v) {
 function paint() {
   if (!live) return;
   const y = window.scrollY;
+  mainEl.classList.add('ins-page');   // its long tables are capped in height, the header kept in view (Classic parity B3.8)
   draw(mainEl, html`<header class="page-head">${sectionHead('discover', 'insiders')}
       <p class="section-sub">Who is trading what, and who the government is paying, from three filing regimes that all have to be public. A record of what was filed, not a signal: nothing here is ranked by how profitable it looked.</p></header>
     <form class="op-filters" data-v2-ins-form role="search" style="margin-top:18px"><label class="field field-sm"><span class="sr">Symbol</span><input name="t" value="${Q.ticker}" placeholder="NVDA, or blank for everything" maxlength="10" autocomplete="off"></label><button type="submit" class="btn btn-sm">Show filings</button>${Q.ticker ? html`<button type="button" class="btn btn-sm" data-v2-ins-reset>Clear</button>` : ''}</form>

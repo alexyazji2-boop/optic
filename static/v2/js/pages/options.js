@@ -24,6 +24,7 @@ import * as P from './options-panels.js';
 import { mountPicker } from './options-picker.js';
 import { poll } from '../core/poll.js';
 import { createPriceChart } from '../ui/pricechart.js';
+import { sections } from '../ui/sections.js';
 import { insiderMarks, barKey, barTime } from './chart-widgets.js';
 let PK = null;
 let lp = null;   // the header's price refresh (dossier-frame livePrice), stopped in dispose()
@@ -415,6 +416,9 @@ function paintMore() {
     const m = b && [...b.children].reverse().find((x) => x.matches('.btn-milo')), slot = $(`[data-opg-milo="${k}"]`, h);
     if (m && slot) { m.dataset.v2MiloCtx = `${D.sym} Dossier, Options: ${label}`; slot.appendChild(m); }
   });
+  // each group's sections fold, remembered as Classic's Options panels were (Classic parity B3); choosing a group is
+  // already the reader asking for it, so no level folds them and the group needs no strip
+  sections(h, 'swing', { strip: false });
 }
 function showGroup(i, focus) {
   panelState = i;

@@ -19,6 +19,7 @@ const P = {
   search: '<circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5"/>',
   close: '<path d="M6 6l12 12M18 6 6 18"/>',
   chev: '<path d="m9 6 6 6-6 6"/>',
+  chevL: '<path d="m15 6-6 6 6 6"/>',
   arrow: '<path d="M5 12h14M13 6l6 6-6 6"/>',
   out: '<path d="M14 4h6v6M20 4l-9 9M18 14v6H4V6h6"/>',
   up: '<path d="m6 15 6-6 6 6"/>',

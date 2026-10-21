@@ -29,6 +29,7 @@ import { openReport } from './pages/settings.js';
 import * as bridge from './pages/bridge.js';
 import { watchTables } from './ui/align.js';
 import { startUnread } from './core/unread.js';
+import { startStrips } from './ui/strips.js';
 
 // Home is the research workspace (Market Overview by default); pages/home.js supplies its blocks
 // Each page's module is fetched the first time it is opened, not with the shell: a first visit on a phone
@@ -329,7 +330,8 @@ async function boot() {
   if (store.state.auth === 'unknown') toast('Optic could not check your sign-in. Showing this browser\'s lists for now.');
   await afterAuth();
   checkAvailability();
-  startUnread(shell.setUnread);   // the bell and the phone bar's Watchlist count (signed in only)
+  startUnread(shell.setUnread);
+  startStrips();   // sideways strips: edge arrows, the wheel and a mouse drag (Classic parity B3)   // the bell and the phone bar's Watchlist count (signed in only)
   scrollmem.start();
   router.onRoute(show);
   if (link && link.reset) { startReset(link.reset); history.replaceState(history.state, '', `${location.pathname}${location.search}#/signin?mode=reset`); }

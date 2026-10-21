@@ -111,6 +111,11 @@ The owner's mapping (2026-10-24): VWAP the one cool hue (the indicator exception
 - **Folded:** methods, formulas, conventions and caveats go behind one shared fold, "How this works" (`ui/states.js` `how()`), under those words everywhere.
 - **Where it's applied:** the Options contracts table and the dealer gamma panel. The table's report-inside-the-expiry note stays in view, because it is a finding.
 
+### Long pages and sideways strips (Classic parity B3, 2026-10-21)
+- **Sections fold.** Every top-level section with a heading folds by its heading or its chevron button (`ui/sections.js`). A folded section is its heading line alone. Sections above the reader's knowledge level start folded and say "Advanced".
+- **The section strip.** A page with six or more sections gets a strip of their names with Expand all, Collapse all and Panels. It is sticky under the header on a desktop and scrolls away on a phone, like the header. The section on screen is lit like a tab: ink with the gold bar.
+- **Sideways strips say there is more with an arrow, not a fade.** A fade would be a third gradient. The arrow sits over the strip's edge, in the colour behind it, only while there is more that way, and it scrolls the strip (`ui/strips.js`).
+
 ### Headers
 Every dossier tab uses the Chart page's one-line header (`dossier-frame.js` `header()` now defaults to `bar`):
 - the ticker and name;
