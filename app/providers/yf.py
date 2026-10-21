@@ -631,6 +631,16 @@ def _iso_from_epoch(value: Any) -> Optional[str]:
         return None
 
 
+def _epoch_iso(value: Any) -> Optional[str]:
+    """Epoch seconds (an int or float, as Yahoo's regularMarketTime is now) as an ISO UTC instant, else None."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or value <= 0:
+        return None
+    try:
+        return datetime.fromtimestamp(float(value), tz=timezone.utc).isoformat()
+    except (OverflowError, OSError, ValueError):
+        return None
+
+
 def _f(value: Any) -> Optional[float]:
     try:
         out = float(value)
@@ -884,6 +894,12 @@ class YFinanceProvider(MarketDataProvider):
                 # is fifteen minutes or a whole weekend later.
                 "market_time": (info.get("regularMarketTime")
                                 if isinstance(info.get("regularMarketTime"), str) else None),
+                # The trade's own moment as an ISO instant (Yahoo now sends epoch seconds, which `market_time`
+                # above, kept for the classic app's wording, never took), and the delay the feed states for its
+                # exchange (exchangeDataDelayedBy: AAPL 15, SPY 0 on 2026-10-21). v2's freshness words come
+                # from these two and the session, never from how often a page asks.
+                "trade_time": _epoch_iso(info.get("regularMarketTime")),
+                "delayed_minutes": _f(info.get("exchangeDataDelayedBy")),
                 "as_of": datetime.now(timezone.utc).isoformat(),
             }
 

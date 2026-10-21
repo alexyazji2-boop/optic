@@ -823,6 +823,13 @@ html.ch-max .ch-side, html.ch-max .ch-wrail { max-height: min(calc(100vh - 16px)
 .rrg .rr-dot { fill: var(--c-gold); stroke: var(--c-plane); stroke-width: 2; }
 .rrg .rr-t { fill: var(--c-ink); font: 600 var(--t-xs)/1 var(--f-label); paint-order: stroke; stroke: var(--c-plane); stroke-width: 3px; }
 .rrg .ax-l { stroke: var(--c-ink-3); stroke-dasharray: 3 3; }
+/* B2b: a sector reads on hover, focus or a tap; its path stands out and a box says where it is */
+.rr-wrap { position: relative; }
+.rrg .rr-hit { fill: transparent; } .rrg .rr-s { cursor: pointer; } .rrg .rr-s:focus { outline: none; }
+.rrg .rr-s.is-on .rr-tail { opacity: 1; stroke: var(--c-gold); stroke-width: 1.8; } .rrg .rr-s.is-on .rr-dot { stroke: var(--c-ink); }
+.rrg .rr-s:focus-visible .rr-dot { stroke: var(--c-focus); stroke-width: 3; }
+.rr-tip { position: absolute; z-index: 3; max-width: min(260px, calc(100% - 8px)); padding: 8px 10px; display: grid; gap: 2px; border-radius: var(--r-md); background: var(--c-tip-bg); color: var(--c-tip-ink); box-shadow: var(--sh-pop); font: 500 var(--t-sm)/1.35 var(--f-sans); font-variant-numeric: tabular-nums; pointer-events: none; }
+.rr-tip em { font-style: normal; }
 /* Macro: stock map */
 .smap { width: 100%; height: auto; display: block; }
 .smap .tile-t { fill: var(--c-ink); font: 600 var(--t-sm)/1 var(--f-label); pointer-events: none; }

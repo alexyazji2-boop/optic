@@ -17,7 +17,7 @@ import * as api from '../core/api.js';
 import * as store from '../core/store.js';
 import { holds } from '../core/device.js';
 import { marketSession } from '../core/status.js';
-import { num, clean, isNum } from '../core/format.js';
+import { num, clean, isNum, signed } from '../core/format.js';
 import { skeleton, failed } from '../ui/states.js';
 import { icon } from '../ui/icons.js';
 import { chartReadCard } from '../ui/chartread.js';
@@ -108,7 +108,7 @@ async function loadBars() {
       let d = null;
       try { d = await api.get(`/api/intraday/${enc}?range=${iv.key}&window=${iv.history}&session=${V.session}`, { ttl: 60000, timeout: 45000 }); } catch (e) { if (e.kind !== 'notfound') throw e; }
       if (d && d.available) {
-        bars = d.times.map((t, i) => ({ t: Date.parse(t), o: d.opens[i], h: d.highs[i], l: d.lows[i], c: d.closes[i], v: d.volumes[i] }));
+        bars = intradayBars(d);
         // the intraday answer's own Fibonacci, levels and patterns, read from these bars, and which bars are pre- or post-market
         D.intra = { fib: d.fibonacci, sr: d.support_resistance, patterns: d.patterns, extended: Array.isArray(d.extended) && d.extended.some(Boolean) ? d.extended : null };
         note = d.session_note;
@@ -135,7 +135,7 @@ async function loadBars() {
       bars = (ps.dates || []).map((x, i) => ({ t: Date.parse(x), o: ps.open[i], h: ps.high[i], l: ps.low[i], c: ps.close[i], v: ps.volume[i] }));
       note = 'Daily bars, split-adjusted.';
     }
-    bars = bars.filter((b) => isNum(b.c) && isNum(b.t) && b.c > 0).map((b) => ({ t: b.t, o: isNum(b.o) ? b.o : b.c, h: isNum(b.h) ? b.h : b.c, l: isNum(b.l) ? b.l : b.c, c: b.c, v: b.v || 0 }));
+    bars = clip(bars);
     if (bars.length < 5) throw new api.ApiError('notfound', 404, 'Not enough bars to draw.');
     if (!current()) return;
     if (!iv.intraday) D.intra = null;
@@ -143,6 +143,49 @@ async function loadBars() {
   } catch (e) { if (!current()) return; D.barsErr = e; }
   paintChart();
 }
+const intradayBars = (d) => d.times.map((t, i) => ({ t: Date.parse(t), o: d.opens[i], h: d.highs[i], l: d.lows[i], c: d.closes[i], v: d.volumes[i] }));
+const clip = (bars) => bars.filter((b) => isNum(b.c) && isNum(b.t) && b.c > 0).map((b) => ({ t: b.t, o: isNum(b.o) ? b.o : b.c, h: isNum(b.h) ? b.h : b.c, l: isNum(b.l) ? b.l : b.c, c: b.c, v: b.v || 0 }));
+
+/* ---------------- live ticks (Classic's chartLiveTick, app.js:47773-47945) ----------------
+ * Every 15 s in the trading day the header's quote (livePrice) also goes into the tab's title and, while the newest
+ * bar is still forming in the regular session, into that bar. A bar whose time is over brings the next in with a
+ * quiet refetch, no loading state. The view the reader set never moves (one at the live edge follows the new bar),
+ * and nothing is drawn under a drag: the chart declines and the next tick tries again. The freshness the header
+ * shows comes from the quote's own time and the feed's stated delay (sessionFreshness), not from this rate. */
+const ET_DAY = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' });
+function titleFor(q) {
+  const p = Number(q.price); if (!live || !Number.isFinite(p)) return;
+  document.title = `${D.sym} ${num(p)}${isNum(q.change_pct) ? ` (${signed(q.change_pct)})` : ''}, Chart, Optic`;
+}
+let refetching = false;
+function onQuote(Dq) {
+  const q = Dq.quote || {}, price = Number(q.price);
+  if (!live || !(price > 0)) return;
+  titleFor(q);
+  if (!chart || !D.bars || !D.bars.length) return;
+  const sp = (D.session || {}).prices || {}, phase = sp.phase || ((D.session || {}).session || {}).phase;
+  if (!/-USD$|=F$/.test(D.sym) && phase !== 'regular') return;   // regular-hours bars take no extended print
+  const iv = INTERVALS.find((x) => x.key === V.interval), last = D.bars[D.bars.length - 1], now = Date.now();
+  if (iv.intraday) {
+    if (now >= last.t + Number(iv.key) * 60000) { refetchQuiet(); return; }
+    chart.tick(price);
+  } else if (V.interval === 'daily' && new Date(last.t).toISOString().slice(0, 10) === ET_DAY.format(new Date(now))) chart.tick(price);
+}
+async function refetchQuiet() {
+  if (refetching || !chart || chart.busy()) return;
+  const sym = D.sym, iv = INTERVALS.find((x) => x.key === V.interval), seq = D.barSeq, ses = V.session;
+  refetching = true;
+  try {
+    const d = await api.get(`/api/intraday/${encodeURIComponent(sym)}?range=${iv.key}&window=${iv.history}&session=${ses}`, { ttl: 0, force: true, timeout: 45000 });
+    if (!live || D.sym !== sym || D.barSeq !== seq || V.session !== ses || !d || !d.available || !chart || chart.busy()) return;
+    const bars = clip(intradayBars(d)), was = D.bars;
+    if (bars.length < 5 || bars[bars.length - 1].t <= was[was.length - 1].t) return;   // nothing new yet
+    const k = chart.keep(), v = k.view, grow = bars.length - was.length, edge = v.to >= was.length - 1;
+    D.bars = bars; D.intra = Object.assign({}, D.intra, { fib: d.fibonacci, sr: d.support_resistance, patterns: d.patterns, extended: Array.isArray(d.extended) && d.extended.some(Boolean) ? d.extended : null });
+    paintChart({ history: k.history, yZoom: k.yZoom, view: edge ? { from: Math.max(0, v.from + grow), to: bars.length - 1 } : v });
+  } catch (e) { /* a dropped request: the next tick asks again */ } finally { refetching = false; }
+}
+
 async function tickerData() {
   // the state it was asked for: a late answer for the previous ticker must not land on the next one's page
   const box = D;
@@ -270,7 +313,7 @@ function drawbar() {
 
 // what the plot's header line names: the symbol, the bar size and the style, as the classic chart's does
 const titleOf = () => ({ sym: D.sym, what: `${INTERVALS.find((x) => x.key === V.interval).label} · ${{ candles: 'Candles', line: 'Line', area: 'Area' }[V.style]}` });
-function paintChart() {
+function paintChart(over) {
   const host = $('#ch-body', mainEl); if (!host) return;
   if (D.barsErr) { if (chart) { chart.destroy(); chart = null; } draw(host, failed('The bars', D.barsErr, { retry: 'bars' })); return; }
   if (!D.bars) { if (chart) { chart.destroy(); chart = null; } draw(host, skeleton('chart', 1, 'Loading bars')); return; }
@@ -278,7 +321,8 @@ function paintChart() {
   // the plot's own header controls, at its top right as in the classic chart: Explain (Milo) and full screen
   host.innerHTML = '<div class="ch-pacts"></div><div class="pc-host"></div>';
   draw(host.firstChild, isPhone() ? '' : html`${miloButton('Explain', { ask: `Explain the ${D.sym} chart: the trend, support, resistance, momentum, volume and risk, and what would invalidate the read.`, context: `${D.sym} Dossier, Chart`, symbol: D.sym, cls: 'btn-sm' })}${C.maxButton()}`);
-  const kept = chart && D.chartBars === D.bars ? chart.keep() : {};
+  // a rebuild on the same bars keeps the zoom and the undo history; the live refetch hands over its own (`over`)
+  const kept = over || (chart && D.chartBars === D.bars ? chart.keep() : {});
   if (chart) chart.destroy();
   D.chartBars = D.bars;
   chart = createPriceChart(host.lastChild, {
@@ -286,6 +330,8 @@ function paintChart() {
     bars: D.bars, intraday: !!iv.intraday, msbK: V.msbK || 5, style: V.style, snap: V.snap, title: titleOf(),
     onView: (v) => { D.zoomed = v.zoomed; const z = $('[data-v2-ch-home]', mainEl); if (z) z.hidden = !v.zoomed; }, overlays: V.overlays, panes: V.panes, levels: levels(), events: events(),
     drawings: D.drawings, tool: V.tool, window: windowBars(), label: `${D.sym}, ${iv.label} bars`, ...extras(), ...studies(), pageKeys: mainEl,
+    // an insider arrow opens the stock's insider filings, as Classic's markers did (openInsidersFor)
+    onInsider: () => { location.hash = `#/insiders?symbol=${encodeURIComponent(D.sym)}&view=insiders`; },
     height: plotHeight(host),
     onDrawings: (list) => { D.drawings = list; saveDrawings(D.sym, list); paintTools(); },
     askText: (dr, done) => { D.textFor = done; paintTools(); const i = $('[data-v2-ch-text] input', mainEl); if (i) i.focus(); },
@@ -529,7 +575,7 @@ export async function render(main, route) {
   store.pushRecent(sym);
   document.title = `${sym} Chart, Optic`;
   if (lp) lp.stop();
-  lp = livePrice(main, route.symbol, () => D, 'chart', { bar: true });
+  lp = livePrice(main, route.symbol, () => D, 'chart', { bar: true, every: 15000, onQuote });
   provideContext(() => ({ view: 'chart', ticker: sym, chart: { symbol: sym, interval: V.interval, range: V.range, studies_on: OVERLAYS.filter(([k]) => V.overlays[k]).map(([, l]) => l).concat(PANES.filter(([k]) => V.panes[k] && k !== 'volume').map(([, l]) => l)), drawings: D.drawings.length, bars: (D.bars || []).length, market_structure_breaks: V.overlays.msb && chart ? { method: `Swing high or low with ${V.msbK || 5} bars either side. The swing forms at its own bar but is only known once the ${V.msbK || 5} bars after it have closed; a close beyond the latest known, unbroken swing is a break. Earlier breaks never change as new bars arrive.`, in_view: chart.structure().slice(-6) } : undefined }, technicals: D.t ? { bias: D.t.technicals.bias, rsi: D.t.technicals.rsi, macd: D.t.technicals.macd, support_resistance: D.t.technicals.support_resistance, moving_averages: D.t.technicals.moving_averages } : null, widgets: W.context(shown()) }));
   paint(); wire(main);
   core(sym).then((c) => { if (D.sym !== sym || !live) return; Object.assign(D, { quote: c.quote, session: c.session, quoteError: c.quoteError }); const h = $('.dhead', mainEl); if (h) { const tmp = document.createElement('div'); draw(tmp, header(sym, D, 'chart', { bar: true })); h.replaceWith(tmp.firstElementChild); } repaintWidget('stats'); });

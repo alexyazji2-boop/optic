@@ -1,6 +1,8 @@
 // One way to say when a price is from (owner, 2026-10-19: AAPL's header showed an overnight print while
 // Earnings showed a different after-hours one, and nothing said which was which or when each was struck).
 // A price names its session and the New York time it was struck; when Optic fetched it is a separate fact.
+import { num, isNum, capFirst } from './format.js';
+
 const ET = 'America/New_York';
 const fmt = (o) => { try { return new Intl.DateTimeFormat('en-US', Object.assign({ timeZone: ET }, o)); } catch (e) { return null; } };
 const DAY = fmt({ year: 'numeric', month: '2-digit', day: '2-digit' });
@@ -27,3 +29,19 @@ export function etDay(iso) {
 }
 /** An extended-hours print: "Overnight 344.96, at 12:28 AM ET". */
 export const printWhen = (kind, at) => `${sessionWord(kind)}${at ? `, struck ${etStamp(at)}` : ''}`;
+
+/** The trade's own moment: `trade_time` (an ISO instant, from 2026-10-21), else the older `market_time`. */
+export const tradeTime = (q) => (q && (q.trade_time || q.market_time)) || null;
+/**
+ * How fresh a session price is, in words, from the feed and nothing else (owner's safeguard, 2026-10-21): "Live" only
+ * when the feed states no delay for the exchange and the trade is under two minutes old; a delay the feed states, by
+ * its number; without one, the site's standing "about 15 minutes". Refreshing often never earns "Live".
+ */
+export function sessionFreshness(q, now = Date.now()) {
+  const t = tradeTime(q), at = t ? Date.parse(t) : NaN, delay = q && isNum(q.delayed_minutes) ? Number(q.delayed_minutes) : null;
+  const last = t ? `last trade ${etStamp(t)}` : '';
+  if (delay === 0 && Number.isFinite(at) && now - at >= -60000 && now - at <= 120000) return { word: 'live', text: `Live, ${last}` };
+  if (delay === 0) return { word: 'quiet', text: last ? capFirst(last) : 'No delay stated by the feed' };
+  const lead = delay !== null ? `Delayed ${num(delay, 0)} minutes` : 'Delayed about 15 minutes';
+  return { word: 'delayed', text: last ? `${lead}, ${last}` : lead };
+}

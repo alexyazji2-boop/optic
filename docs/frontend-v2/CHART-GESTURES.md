@@ -42,4 +42,13 @@ These are zoomable: the Chart tab, Investing's weekly chart, and the price chart
 | Keyboard, page-wide (the Chart tab) | Cmd or Ctrl + Z undoes a drawing change, with Shift or Y redoes, Delete removes the selected drawing, from the page or a toolbar button | Acting while a field, an open menu, a dialog or another widget has focus |
 | Drawing tools | A press places a point; a drag from it places the next where it lifts, so a two-point shape takes one drag (or two presses); Escape mid-drag puts a moved drawing back | n/a |
 
-Live ticks never move the view the reader set, and wait while a drag is in progress.
+Live ticks never move the view the reader set, and wait while a drag or a touch is in progress; a view at the live edge follows a new bar. The freshness the header shows is worked out from the quote's own trade time and the feed's stated delay, never from how often the page asks.
+
+## Insider arrows (the Chart tab, Options)
+| Input | Result | Never |
+|---|---|---|
+| Hover, or the keyboard's bar | The box with the trades and how to open them | n/a |
+| Press without moving (mouse), a tap (touch), or Enter on the bar | Opens the stock's insider filings | Opening after a pan or a measure |
+
+## The rotation map (Macro)
+Hover, focus (each sector is a Tab stop) or a tap reads a sector; leaving, Escape, a second tap or a tap elsewhere closes. The map never takes the page's scroll.

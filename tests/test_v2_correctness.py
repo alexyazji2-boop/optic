@@ -164,7 +164,8 @@ def test_an_unknown_session_is_never_called_closed():
     frame = _src("pages/dossier-frame.js")
     fn = frame[frame.index("export function stateLine"):frame.index("\n}\n", frame.index("export function stateLine"))]
     assert "QUOTE_PHASE[String(q.market_state" in fn, "the quote's own market state is used when the session has not answered"
-    assert "else if (!phase) base = `Delayed about 15 minutes${last}.`;" in fn
+    # B2b (2026-10-21): the words come from the feed (core/marketTime.js sessionFreshness), with the same fallback
+    assert "else if (!phase) base = `${sessionFreshness(q).text}.`;" in fn
     assert "|| 'Closed'" not in fn
 
 

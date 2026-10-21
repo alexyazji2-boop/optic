@@ -12,7 +12,7 @@ import { button as miloButton } from '../ui/milo.js';
 import { GROUPS, pageOf } from '../nav.js';
 import { tabSelect, tabLinks } from './tabs.js';
 import { learn, kindOf, can, onLearn } from '../core/instrument.js';
-import { etStamp, etDay, sessionWord } from '../core/marketTime.js';
+import { etStamp, etDay, sessionWord, tradeTime, sessionFreshness } from '../core/marketTime.js';
 import { poll } from '../core/poll.js';
 
 // The price's session and time in words: the close it is, or the trade time when the session is open, and any
@@ -23,12 +23,11 @@ export function stateLine(D) {
   const q = D.quote || {}, sess = (D.session || {}).session || {}, s = (D.session || {}).prices || {};
   const ext = s.extended && isNum(s.extended.price) ? s.extended : null;
   const phase = s.phase || sess.phase || QUOTE_PHASE[String(q.market_state || '').toUpperCase()] || null;
-  const last = q.market_time ? `; last trade ${etStamp(q.market_time)}` : '';
   let base;
-  if (phase === 'regular' || sess.is_regular) base = `Regular session, delayed about 15 minutes${last}.`;
+  if (phase === 'regular' || sess.is_regular) base = `Regular session. ${sessionFreshness(q).text}.`;
   // In real Safari a cold server answered the session read after the client's 20 s limit, and the header
   // said "Closed" at 9:58 AM on a trading day (2026-10-19). Not knowing the session, it claims none.
-  else if (!phase) base = `Delayed about 15 minutes${last}.`;
+  else if (!phase) base = `${sessionFreshness(q).text}.`;
   else base = `${sessionWord(s.phase_label || sess.label || phase)}. Price is the close of ${etDay((sess.last_close || {}).date) || 'the last session'}.`;
   return { base, ext };
 }
@@ -40,9 +39,7 @@ export function stateLine(D) {
 export function priceWhen(D) {
   const q = D.quote || {}, sess = (D.session || {}).session || {}, s = (D.session || {}).prices || {};
   const phase = s.phase || sess.phase || QUOTE_PHASE[String(q.market_state || '').toUpperCase()] || null;
-  const last = q.market_time ? `, last trade ${etStamp(q.market_time)}` : '';
-  if (phase === 'regular' || sess.is_regular) return `Delayed about 15 minutes${last}`;
-  if (!phase) return `Delayed about 15 minutes${last}`;
+  if (phase === 'regular' || sess.is_regular || !phase) return sessionFreshness(q).text;
   const day = etDay((sess.last_close || {}).date);
   return day ? `Close of ${day}` : 'Last close';
 }
@@ -54,7 +51,7 @@ export function priceWhen(D) {
  */
 export function fresher(a, b) {
   if (!a) return b || null; if (!b) return a;
-  const ta = Date.parse(a.market_time || '') || 0, tb = Date.parse(b.market_time || '') || 0;
+  const ta = Date.parse(tradeTime(a) || '') || 0, tb = Date.parse(tradeTime(b) || '') || 0;
   return tb >= ta ? Object.assign({}, a, b) : Object.assign({}, b, a);
 }
 
@@ -78,8 +75,10 @@ export async function core(sym) {
  *  how fresh it is from the quote's own time (priceWhen), never from how often this asks. Stop it in dispose(). */
 export function livePrice(root, sym, getD, view, opts) {
   const enc = encodeURIComponent(sym);
-  const key = (D) => JSON.stringify([D.quote && D.quote.price, D.quote && D.quote.change_pct, D.quote && D.quote.market_time,
+  const key = (D) => JSON.stringify([D.quote && D.quote.price, D.quote && D.quote.change_pct, tradeTime(D.quote), D.quote && D.quote.delayed_minutes, D.quote ? sessionFreshness(D.quote).word : '',
     ((D.session || {}).prices || {}).extended]);
+  // the Chart tab asks every 15 s (`every`) and takes each new quote for its last bar and the tab's title (`onQuote`)
+  const { every = 20000, onQuote = null } = opts || {};
   return poll(async (current) => {
     const [q, s] = await Promise.allSettled([api.get(`/api/quote/${enc}`, { ttl: 0, force: true, timeout: 15000 }), api.get(`/api/session/${enc}`, { ttl: 60000 })]);
     const D = getD();
@@ -87,11 +86,12 @@ export function livePrice(root, sym, getD, view, opts) {
     const was = key(D);
     if (q.status === 'fulfilled' && q.value && q.value.available !== false) D.quote = fresher(D.quote, q.value.quote || q.value);
     if (s.status === 'fulfilled' && s.value) D.session = s.value;
+    if (onQuote) onQuote(D);
     if (key(D) === was) return;
     const h = root.querySelector('.dhead'); if (!h) return;
     const tmp = document.createElement('div'); draw(tmp, header(sym, D, view, opts));
     ['.dh-price', '.dh-state'].forEach((sel) => { const a = h.querySelector(sel), b = tmp.querySelector(sel); if (a && b && a.innerHTML !== b.innerHTML) a.innerHTML = b.innerHTML; });
-  });
+  }, { every });
 }
 
 // The ticker's actions, grouped at the right of its header (owner, 2026-10-19). Alert and Compare are

@@ -179,7 +179,7 @@ export function createPriceChart(host, opts) {
   const bars = S.bars;
   const N = bars.length;
   const closes = bars.map((b) => b.c);
-  const ind = {
+  const indicators = () => ({
     sma20: sma(closes, 20), sma50: sma(closes, 50), sma200: sma(closes, 200),
     ema9: ema(closes, 9), ema21: ema(closes, 21), ema50: ema(closes, 50),
     bb: bollinger(closes), rsi: rsi(closes), macd: macd(closes),
@@ -187,7 +187,8 @@ export function createPriceChart(host, opts) {
     // the classic studies (ui/studies.js): TSO's pane, MA Trend's candle colours, session dividers on intraday bars
     tso: tsoSeries(bars.map((b) => b.h), bars.map((b) => b.l), closes), mat: maTrendSeries(bars.map((b) => b.o), closes),
     sess: S.intraday ? sessionStarts(bars) : [],
-  };
+  });
+  const ind = indicators();
   let from = Math.max(0, N - (S.window || 126)), to = N - 1;
   const home0 = { from, to };   // the view the chart opened on, which Reset zoom goes back to
   // a chart rebuilt on the same bars (a pane added, the chart read opened) keeps where the reader had zoomed
@@ -567,17 +568,27 @@ export function createPriceChart(host, opts) {
   }
 
 
+  // The arrow nearest a point of the plot, within a bar and 22 px, or null.
+  function flagAt(p) {
+    if (!p || !layout) return null;
+    let f = null, best = 22;
+    flags.forEach((g) => { const dx = Math.abs(g.x - p.x), dy = Math.abs(g.y - p.y); if (dx <= Math.max(9, layout.bw / 2 + 3) && dy < best) { best = dy; f = g; } });
+    return f;
+  }
+  // A press on an arrow (or Enter on its bar) opens the page's insider view for the stock, as Classic's markers did
+  // (openInsidersFor, app.js:40316), where the page asks for it (`onInsider`)
+  const openInsider = (f) => { if (f && S.onInsider) { S.onInsider({ side: f.side, items: f.items }); return true; } return false; };
   // The hover box: the arrow nearest the pointer, or with the keyboard the arrow on the crosshair's bar.
   function insiderTip() {
     let f = null;
-    if (hoverP && !(drag && drag.moved)) { let best = 22; flags.forEach((g) => { const dx = Math.abs(g.x - hoverP.x), dy = Math.abs(g.y - hoverP.y); if (dx <= Math.max(9, layout.bw / 2 + 3) && dy < best) { best = dy; f = g; } }); }
+    if (hoverP && !(drag && drag.moved)) f = flagAt(hoverP);
     else if (document.activeElement === svg && cross >= 0) f = flags.find((g) => g.i === cross) || null;
     if (!f) { tipEl.hidden = true; return; }
     const buy = f.side === 'buy', n = f.items.length, total = f.items.reduce((a, it) => a + (Number(it.value) || 0), 0);
     const day = f.items.every((it) => it.date === f.items[0].date) ? f.items[0].date : '';   // a weekly bar can hold several days
     const head = `<p class="pc-tip-h"><b class="${buy ? 'up' : 'down'}">${n === 1 ? `Insider ${buy ? 'purchase' : 'sale'}` : `${n} insider ${buy ? 'purchases' : 'sales'}`}</b>${day ? ` ${esc(day)}` : ''}</p>${n > 1 && total ? `<p class="t-muted">$${esc(compact(total))} in all</p>` : ''}`;
     const rows = f.items.slice(0, 4).map((it) => `<div class="pc-tip-r"><p><b>${esc(it.who)}</b>${it.role ? `, ${esc(it.role)}` : ''}</p><p>${esc([day ? '' : it.date, it.amount].filter(Boolean).join(', '))}</p>${it.note ? `<p class="t-muted">${esc(it.note)}</p>` : ''}</div>`).join('');
-    tipEl.innerHTML = head + rows + (n > 4 ? `<p class="t-muted">And ${n - 4} more on this bar.</p>` : '');
+    tipEl.innerHTML = head + rows + (n > 4 ? `<p class="t-muted">And ${n - 4} more on this bar.</p>` : '') + (S.onInsider ? `<p class="t-muted">${touchy ? 'Tap the arrow' : 'Press it, or Enter'} to open the insider filings.</p>` : '');
     tipEl.hidden = false;
     // an <svg> has no offsetTop: its place in the host comes from the two boxes
     const r = svg.getBoundingClientRect(), hr = host.getBoundingClientRect(), k = r.width / (W || 1), top0 = r.top - hr.top, hw = host.clientWidth;
@@ -852,6 +863,7 @@ export function createPriceChart(host, opts) {
     if (pointers.has(e.pointerId)) { pointers.set(e.pointerId, p); if (!svg.hasPointerCapture(e.pointerId)) { try { svg.setPointerCapture(e.pointerId); } catch (err) { /* no longer active */ } } }
     hoverP = p;
     if (e.pointerType !== 'mouse' && tg && pointers.has(e.pointerId)) { touchMove(e, p); return; }
+    if (!drag && S.onInsider) svg.style.cursor = flagAt(p) ? 'pointer' : '';
     dragMove(e, p);
     // the crosshair follows the pointer, except while it stretches the scale or measures (the band is the reading)
     if (drag && (drag.mode === 'scale' || drag.mode === 'measure')) { cross = -1; crossY = null; } else readAt(p);
@@ -869,6 +881,8 @@ export function createPriceChart(host, opts) {
       }
       if (pointers.size) return;
     }
+    if (touch && tg && !tg.locked && !tg.held && (tg.mode === 'wait' || tg.mode === 'scrub') && openInsider(flagAt(tg.p0))) { drag = null; endTouch(false); return; }
+    if (!touch && drag && drag.mode === 'pan' && !drag.moved && layout && openInsider(flagAt(pt(e)))) { drag = null; return; }
     if (drag) {
       // a drawing moved is one change to undo, kept when the pointer lifts
       if ((drag.mode === 'handle' || drag.mode === 'body') && drag.moved) { undo.push(drag.before); if (undo.length > 40) undo.shift(); redo.length = 0; if (S.onDrawings) S.onDrawings(S.drawings); }
@@ -1052,6 +1066,7 @@ export function createPriceChart(host, opts) {
     const k = e.key;
     if (k === 'ArrowLeft' || k === 'ArrowRight') { const d = k === 'ArrowLeft' ? -1 : 1; if (e.shiftKey) pan(d * Math.max(1, Math.round((to - from) / 10))); else { cross = Math.max(0, Math.min(N - 1, cross + d)); if (cross < from) pan(cross - from); if (cross > to) pan(cross - to); } crossY = bars[cross].c; if (ms && ms.key) ms.b = cross; announce(); e.preventDefault(); }
     else if (k === 'ArrowUp' || k === 'ArrowDown') { yZoom = Math.max(0.25, Math.min(8, yZoom * (k === 'ArrowUp' ? 1.12 : 1 / 1.12))); e.preventDefault(); }
+    else if ((k === 'Enter' || k === ' ') && S.onInsider && flags.some((g) => g.i === cross)) { e.preventDefault(); openInsider(flags.find((g) => g.i === cross)); return; }
     else if ((k === 'm' || k === 'M') && !e.metaKey && !e.ctrlKey && !e.altKey) { ms = ms && ms.key ? null : { a: cross, b: cross, key: true }; announce(); e.preventDefault(); }
     else if (k === '+' || k === '=') { zoom(1 / 1.25, cross); e.preventDefault(); } else if (k === '-' || k === '_') { zoom(1.25, cross); e.preventDefault(); }
     else if (k === 'Home') { cross = from; crossY = bars[cross].c; announce(); e.preventDefault(); } else if (k === 'End') { cross = to; crossY = bars[cross].c; announce(); e.preventDefault(); }
@@ -1073,6 +1088,19 @@ export function createPriceChart(host, opts) {
     set(next) { Object.assign(S, next); if (next.tool) pending = null; if ('drawings' in next && sel >= S.drawings.length) sel = -1; syncTouch(); redraw(); },
     zoom: (f) => zoom(f, cross >= 0 ? cross : to), fit, pan, home() { from = home0.from; to = home0.to; yZoom = 1; redraw(); },
     measure: (on) => setMeasure(on), measuring: () => mOn,
+    /** Something has the chart under the reader's hand: a drag, a touch or a pointer held. */
+    busy: () => !!(drag || tg || pointers.size),
+    /** A live price into the newest bar, still forming (the page knows when it is): its close, and its high or low
+     *  when the price passes them, with the indicators read again. The view is not touched. Declines (false) while
+     *  the chart is under the reader's hand; the next tick tries again. */
+    tick(price) {
+      if (!(Number(price) > 0) || drag || tg || pointers.size) return false;
+      const b = bars[N - 1]; if (!b) return false;
+      if (b.c === price) return true;
+      b.c = price; if (price > b.h) b.h = price; if (price < b.l) b.l = price;
+      closes[N - 1] = price; Object.assign(ind, indicators());
+      redraw(); return true;
+    },
     view: () => ({ from, to }),
     height: () => S.height, navH: () => S.navH || 40,
     /** The market structure breaks in view, newest last, for Milo and the page. */

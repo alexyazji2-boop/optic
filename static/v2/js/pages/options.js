@@ -22,6 +22,8 @@ import { toast } from '../ui/toast.js';
 import { core, header, tabs, isFund, fresher, livePrice } from './dossier-frame.js';
 import * as P from './options-panels.js';
 import { poll } from '../core/poll.js';
+import { createPriceChart } from '../ui/pricechart.js';
+import { insiderMarks, barKey, barTime } from './chart-widgets.js';
 let lp = null;   // the header's price refresh (dossier-frame livePrice), stopped in dispose()
 
 const FILTER_KEY = 'optic.options.filters.v1';   // a tool setting, as in the classic app
@@ -383,6 +385,7 @@ const OPT_GROUPS = [
     ['Swing verdict', (t, s) => P.verdict(t, s)],
     ['Strike and entry', (t, s) => P.entry(t, s)],
     ['Ideas', (t, s) => P.ideas(t, s, D.budget), (t) => P.ideaCharts(t, (t.quote || {}).price)],
+    ['Price', (t, s) => priceBody(t, s), null, () => mountPrice()],
     ['Levels and momentum', (t, s) => P.levels(t, s), (t) => P.levelCharts(t)],
     ['Setups and patterns', (t, s) => P.setups(t, s, D.extra), null, () => loadExtra()],
   ] },
@@ -488,7 +491,40 @@ export async function render(main, route) {
   }, { every: 60000, closed: 600000 });
 }
 
-export function dispose() { if (lp) { lp.stop(); lp = null; } live = false; if (refresh) { refresh.stop(); refresh = null; } }
+export function dispose() { if (lp) { lp.stop(); lp = null; } live = false; if (refresh) { refresh.stop(); refresh = null; } if (pc) { pc.destroy(); pc = null; } }
+
+/* ---------------- the price chart (Classic's Options price chart, app.js:12383, 12786-12865) ----------------
+ * The daily bars of the ticker payload on the shared price chart: pan, zoom, measure and the price scale as on the
+ * Chart tab (docs/frontend-v2/CHART-GESTURES.md), the 20, 50 and 200-day averages, earnings, and the insider trades
+ * as arrows; pressing an arrow opens the stock's insider filings. A refresh of the payload keeps the zoom. */
+let pc = null, pcBars = null;
+const dailyBars = (t) => {
+  const ps = ((t || {}).technicals || {}).price_series || {};
+  return (ps.dates || []).map((x, i) => ({ t: Date.parse(x), o: ps.open[i], h: ps.high[i], l: ps.low[i], c: ps.close[i], v: (ps.volume || [])[i] || 0 }))
+    .filter((b) => isNum(b.c) && isNum(b.t) && b.c > 0).map((b) => ({ t: b.t, o: isNum(b.o) ? b.o : b.c, h: isNum(b.h) ? b.h : b.c, l: isNum(b.l) ? b.l : b.c, c: b.c, v: b.v }));
+};
+function priceBody(t, sym) {
+  if (dailyBars(t).length < 5) return empty('No daily bars', `The price history for ${sym} did not load.`);
+  return html`<p class="t-muted">Daily bars, split-adjusted, with the 20, 50 and 200-day averages. Drag to pan; wheel, pinch or the zoom buttons to zoom; Shift-drag or Measure to measure. An arrow is an insider trade: press it to open ${sym}'s insider filings.</p><div class="op-pc" id="op-pc"></div>`;
+}
+function mountPrice() {
+  const host = $('#op-pc', mainEl); if (!host || !D.t) return;
+  const bars = dailyBars(D.t); if (bars.length < 5) return;
+  const kept = pc && pcBars && pcBars.length === bars.length && pcBars[0].t === bars[0].t ? pc.keep() : {};
+  if (pc) pc.destroy();
+  pcBars = bars;
+  const keys = bars.map((b) => barKey(b.t, false)), sym = D.sym;
+  const insiders = insiderMarks(D.t).map((m) => Object.assign({}, m, { t: barTime(bars, keys, m.at, { within: 4 }) })).filter((m) => m.t !== null);
+  // the Chart tab's earnings marks: reported quarters with their EPS against the estimate, and the next report's date
+  const eh = (D.t.company || {}).earnings_history || {};
+  const er = [...(eh.quarters || []).map((q) => ({ t: Date.parse(q.date), kind: 'E', label: `Earnings ${q.date}: EPS ${num(q.eps_reported)} against ${num(q.eps_estimate)}` })),
+    ...(eh.upcoming || []).map((q) => ({ t: Date.parse(q.date), kind: 'E', label: `Next report ${q.date}` }))].filter((e) => isNum(e.t));
+  pc = createPriceChart(host, Object.assign(kept, {
+    bars, style: 'candles', overlays: { ma: true, events: true, ins: true }, panes: { volume: true, rsi: false, macd: false },
+    insiders, events: er, window: 126, label: `${sym}, daily bars`, height: Math.max(280, Math.min(420, Math.round(window.innerHeight * 0.5))),
+    onInsider: () => { location.hash = `#/insiders?symbol=${encodeURIComponent(sym)}&view=insiders`; },
+  }));
+}
 
 export const retry = { ticker: () => loadTicker(), research: () => loadResearch() };
 

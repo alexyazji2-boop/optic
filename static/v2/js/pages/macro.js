@@ -73,6 +73,13 @@ function rotation() {
     <div class="tscroll"><table class="t"><thead><tr><th>Sector</th><th>Quadrant</th><th>Strength</th><th>Momentum</th><th>Change in strength</th></tr></thead><tbody>${r.sectors.map((s) => html`<tr><td><a href="#/${s.symbol}">${s.symbol}</a> ${s.name}</td><td>${capFirst(s.quadrant)}${s.previous_quadrant !== s.quadrant ? html` <small class="t-muted">from ${s.previous_quadrant}</small>` : ''}</td><td>${num(s.strength, 1)}</td><td>${num(s.momentum, 1)}</td><td>${signed(s.d_strength, 2, '')}</td></tr>`)}</tbody></table></div>
     ${how(html`<p>Strength is the sector against ${r.benchmark}, normalised so 100 is in line; momentum is the change in that strength. Leading: both above 100. Improving: momentum above, strength below. Weakening: the reverse. Lagging: both below.</p>`)}`;
 }
+// The rotation map (Classic's charts.js:3641, focusMark 3777): each sector's path over the last weeks to its dot.
+// A sector reads on hover, on focus (each is a stop for Tab) and on a tap: its path stands out and a box says its
+// quadrant, where it came from, its strength and momentum. Escape, a tap elsewhere or leaving puts it away.
+// one listener for the page, not one a redraw: a tap outside the open map's box puts it away
+let rrOpen = null;   // {wrap, hide}
+document.addEventListener('pointerdown', (e) => { if (rrOpen && !rrOpen.wrap.contains(e.target)) rrOpen.hide(); }, true);
+const rrWords = (s) => `${s.symbol}${s.name ? ` ${s.name}` : ''}: ${s.quadrant}${s.previous_quadrant && s.previous_quadrant !== s.quadrant ? `, from ${s.previous_quadrant}` : ''}; strength ${num(s.strength, 1)}, momentum ${num(s.momentum, 1)}, change in strength ${signed(s.d_strength, 2, '')}`;
 function rrgChart(r) {
   return (w) => {
     const W = Math.max(300, w), H = Math.min(420, Math.round(W * 0.7)), p = 30;
@@ -84,11 +91,46 @@ function rrgChart(r) {
     const lab = (x, y, t, end) => `<text class="rq-t" x="${x}" y="${y}"${end ? ' text-anchor="end"' : ''}>${t}</text>`;
     let o = rect(cx, p, W - p - cx, cy - p, 'lead') + rect(p, p, cx - p, cy - p, 'imp') + rect(p, cy, cx - p, H - p - cy, 'lag') + rect(cx, cy, W - p - cx, H - p - cy, 'weak')
       + lab(W - p - 6, p + 14, 'Leading', true) + lab(p + 6, p + 14, 'Improving') + lab(p + 6, H - p - 6, 'Lagging') + lab(W - p - 6, H - p - 6, 'Weakening', true);
-    r.sectors.forEach((s) => {
-      const pts = [...(s.path || []).map((z) => [z.strength ?? z[0], z.momentum ?? z[1]]), [s.strength, s.momentum]];
-      o += `<path class="rr-tail" d="${pts.map(([a, b], i) => `${i ? 'L' : 'M'}${X(a).toFixed(1)} ${Y(b).toFixed(1)}`).join('')}"/><circle class="rr-dot" cx="${X(s.strength).toFixed(1)}" cy="${Y(s.momentum).toFixed(1)}" r="4"/><text class="rr-t" x="${(X(s.strength) + 6).toFixed(1)}" y="${(Y(s.momentum) - 6).toFixed(1)}">${s.symbol}</text>`;
+    // each label takes the first of four places round its dot that no label already drawn covers (on a phone XLY
+    // and XLP, XLB and XLF were printed over each other)
+    const taken = [], boxes = (x, y, wd, end) => ({ x0: end ? x - wd : x, x1: end ? x : x + wd, y0: y - 11, y1: y + 2 });
+    const hits = (a) => taken.some((b) => a.x0 < b.x1 + 2 && a.x1 > b.x0 - 2 && a.y0 < b.y1 + 1 && a.y1 > b.y0 - 1);
+    const spot = (cx2, cy2, sym) => {
+      const wd = sym.length * 7.4 + 2;
+      const tries = [[cx2 + 6, cy2 - 6, false], [cx2 - 6, cy2 - 6, true], [cx2 + 6, cy2 + 15, false], [cx2 - 6, cy2 + 15, true]];
+      const pick = tries.find(([x, y, end]) => !hits(boxes(x, y, wd, end))) || tries[0];
+      taken.push(boxes(pick[0], pick[1], wd, pick[2])); return pick;
+    };
+    r.sectors.forEach((s, k) => {
+      const pts = [...(s.path || []).map((z) => [z.strength ?? z[0], z.momentum ?? z[1]]), [s.strength, s.momentum]], x = X(s.strength).toFixed(1), y = Y(s.momentum).toFixed(1);
+      const [lx, ly, end] = spot(X(s.strength), Y(s.momentum), String(s.symbol));
+      o += `<g class="rr-s" data-rr="${k}" tabindex="0" role="img" aria-label="${esc(rrWords(s))}"><path class="rr-tail" d="${pts.map(([a, b], i) => `${i ? 'L' : 'M'}${X(a).toFixed(1)} ${Y(b).toFixed(1)}`).join('')}"/><circle class="rr-hit" cx="${x}" cy="${y}" r="14"/><circle class="rr-dot" cx="${x}" cy="${y}" r="4"/><text class="rr-t" x="${lx.toFixed(1)}" y="${ly.toFixed(1)}"${end ? ' text-anchor="end"' : ''}>${esc(s.symbol)}</text></g>`;
     });
-    return `<svg class="rrg" viewBox="0 0 ${W} ${H}" role="img" aria-label="Sector rotation map: ${r.sectors.map((s) => `${s.symbol} ${s.quadrant}`).join(', ')}">${o}</svg>`;
+    const svg = `<svg class="rrg" viewBox="0 0 ${W} ${H}" role="group" aria-label="Sector rotation map. Each sector is a stop: hover, focus or tap one to read it.">${o}</svg>`;
+    return {
+      html: `<div class="rr-wrap">${svg}<div class="rr-tip" role="status" hidden></div></div>`,
+      wire(el) {
+        const wrap = el.querySelector('.rr-wrap'), tip = wrap.querySelector('.rr-tip');
+        let on = null;
+        const hide = () => { if (on) on.classList.remove('is-on'); on = null; tip.hidden = true; if (rrOpen && rrOpen.wrap === wrap) rrOpen = null; };
+        const show = (g) => {
+          if (on && on !== g) on.classList.remove('is-on');
+          on = g; g.classList.add('is-on'); rrOpen = { wrap, hide };
+          const s = r.sectors[Number(g.dataset.rr)];
+          tip.innerHTML = `<b>${esc(s.symbol)}</b> ${esc(s.name || '')}<em>${esc(capFirst(s.quadrant))}${s.previous_quadrant && s.previous_quadrant !== s.quadrant ? `, from ${esc(s.previous_quadrant)}` : ''}</em><span>Strength ${num(s.strength, 1)}, momentum ${num(s.momentum, 1)}</span><span>Change in strength ${signed(s.d_strength, 2, '')}</span>`;
+          tip.hidden = false;
+          const d = g.querySelector('.rr-dot').getBoundingClientRect(), b = wrap.getBoundingClientRect(), tw = tip.offsetWidth, th = tip.offsetHeight;
+          let left = d.left - b.left + 14; if (left + tw > b.width - 4) left = Math.max(4, d.left - b.left - tw - 10);
+          tip.style.left = `${Math.round(left)}px`; tip.style.top = `${Math.round(Math.max(4, Math.min(b.height - th - 4, d.top - b.top - th / 2)))}px`;
+        };
+        wrap.addEventListener('pointerover', (e) => { const g = e.target.closest('.rr-s'); if (g && e.pointerType === 'mouse') show(g); });
+        wrap.addEventListener('pointerleave', (e) => { if (e.pointerType === 'mouse' && !wrap.contains(document.activeElement)) hide(); });
+        wrap.addEventListener('pointerdown', (e) => { if (e.pointerType === 'mouse') return; const g = e.target.closest('.rr-s'); if (g) { if (g === on) hide(); else show(g); } else hide(); });
+        wrap.addEventListener('focusin', (e) => { const g = e.target.closest('.rr-s'); if (g) show(g); });
+        wrap.addEventListener('focusout', (e) => { if (!wrap.contains(e.relatedTarget)) hide(); });
+        wrap.addEventListener('keydown', (e) => { if (e.key === 'Escape' && on) { hide(); e.stopPropagation(); } });
+      },
+    };
   };
 }
 function econ() {
