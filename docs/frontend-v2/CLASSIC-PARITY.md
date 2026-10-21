@@ -265,8 +265,21 @@ Evidence:
 ## B7. Valuation
 | Row | Task | Status |
 |---|---|---|
-| B7a.1 | DCF editor: inputs and per-year overrides, recomputed as you type (`optic.dcf.v1`) | open |
-| B7a.2 | Sensitivity, forecast, bridge, statements and formulas | open |
+| B7a.1, B7a.2 | See B7a below | done |
+
+### B7a. The fair-value model's editor
+Evidence:
+- `b7a_check.py`: 18 of 18 in headless Chrome at 1440, 390 and 360, a guest, on the preview's own model. Every run is POST `/run` (free), whose bodies the check read.
+- `tests/test_v2_parity_b7a.py`: Classic's store with bad copies, a box's text to an edit, the formats, the methods side by side.
+
+Not tested:
+- A bank, insurer or REIT, where the cash-flow model does not suit and residual income or FFO leads; their sentences are ported, and B7c brings their forms.
+- Real Safari and a physical phone.
+
+| Row | Task | Where | Desktop | Phone | Keeps | States | Deps | Evidence | Status |
+|---|---|---|---|---|---|---|---|---|---|
+| B7a.1 | DCF editor: inputs and per-year overrides, recomputed as you type (`optic.dcf.v1`) | Investing, "Fair-value model, discounted cash flow" (`pages/dcf.js`), in place of the summary and its link to Classic | The assumptions form, folded: Classic's 25 fields in six groups, each with its default and why, edited ones marked; the method choices; set individual years; Reset to the defaults. Typing recalculates after 350 ms and repaints only the results, so the box and its caret are untouched; a bad number is marked and said and runs nothing; a missing reported line can be typed in from the filing (B, M, K), with the filing's own candidates offered | Fields stack, 44 px, 16 px type | `optic.dcf.v1` edits per symbol in Classic's format, the other symbols and the saved models left as they are; read back and run on the next visit | Loading; failed: Try again; the last good figures stay while a run fails, and say so | `/api/valuation/{T}`, POST `/run` (free) | b7a: one run per edit with the value sent, the caret kept, Classic's store, a bad number, an override, a method switch, a page redraw while typing, a reload, reset | done |
+| B7a.2 | Sensitivity, forecast, bridge, statements and formulas | The same section | The sentence and the four figures that frame it, the terminal share, the checks; what moves the value most (each assumption stepped down and up); the methods side by side on one axis, never averaged; what today's price implies; three sensitivity tables (a pressed choice of pair, shaded against the price with the number always printed); bear, base and bull; then folded: the forecast year by year with the terminal value and the exit-multiple cross-check, the discount rate, the bridge (a line can be left out), the linked statements, the sources and the formulas; Classic's questions as quiet buttons that draft into Milo | One column | Folds opened stay open across reruns | A method that does not suit says why and what leads instead | as above | b7a: the summary, each part, a sensitivity pair, the forecast staying open, the bridge sent | done |
 | B7b.1 | Saved models: list, save, compare, replay, use | open |
 | B7c.1 | RI, FFO, DDM, FCFE | open |
 | B7c.2 | Comps and SOTP | open |
