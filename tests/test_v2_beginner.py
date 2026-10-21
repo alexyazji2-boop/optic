@@ -45,7 +45,9 @@ def test_linked_panels_say_what_they_follow_and_sit_under_it():
 
 def test_the_market_strip_and_conditions_are_plain():
     assert "title: 'Markets at a glance'" in WS and "'WTI Crude': 'Dollars a barrel'" in WS and "VIX: 'Volatility index'" in WS
-    assert "const NEUTRAL_MOVE = new Set(['volatility', 'rates']);" in WS and "NEUTRAL_MOVE.has(i.group) ? 'flat'" in WS, "a falling VIX is not red, a rising yield not green"
+    # every move by its direction only, the VIX and the 10-year included, as Classic's strip (owner, 2026-10-21,
+    # pointing at the VIX's uncoloured -4.04%); before that, the beginner brief left those two uncoloured
+    assert "NEUTRAL_MOVE" not in WS and '<span class="d ${dir(i.chg_1d)}">' in WS
     assert "title: 'Market conditions'" in WS
     body = WS[WS.index("title: 'Market conditions'"):WS.index("  expected: {")]
     assert body.index('<p class="ws-lead">') < body.index('<details class="ws-more"><summary>How these readings are built</summary>'), "the finding before the arithmetic"

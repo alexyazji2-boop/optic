@@ -20,7 +20,8 @@ export function setRailTight(on) { try { localStorage.setItem(RAIL_KEY, on ? '1'
 const NAV_LAST = {};
 function groupHref(g, symbol) {
   const page = g.pages.find((p) => p.view === NAV_LAST[g.id]) || g.pages[0];
-  if (g.symbol) return symbol ? (page === g.pages[0] ? `#/${encodeURIComponent(symbol)}` : hrefFor(page.view, symbol)) : null;
+  // with no company open, Dossier's own start page rather than the search (owner, 2026-10-21)
+  if (g.symbol) return symbol ? (page === g.pages[0] ? `#/${encodeURIComponent(symbol)}` : hrefFor(page.view, symbol)) : '#/dossier';
   return hrefFor(page.view, symbol);
 }
 // What each page is for, in the More sheet (the classic app's SUB_TITLES, said plainly)
