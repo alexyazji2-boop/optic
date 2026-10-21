@@ -138,3 +138,32 @@ export const GLOSSARY = {
   'balance sheet': "The snapshot of what a company owns, what it owes and what is left for shareholders, at one moment. The other two statements cover a period; this one covers an instant.",
   'net sentiment': "The average tone of the headlines listed, each scored by a fixed word list in which bullish terms add and bearish terms subtract, weighted so a fresh story counts more than a week-old one. It has no fixed range: past 0.5 either way the page calls it mildly bullish or bearish, and past 2 bullish or bearish.",
 };
+
+// Whole column-header labels, explained where a table shows one (Classic static/app.js TH_HINTS and LABEL_DEFS, word
+// for word; Classic parity B9.1). Reached as "head:<label>", so only a header that is exactly the label is marked.
+export const TH_HINTS = {
+  'spread': 'The gap between the best bid and the best ask, as a percentage of the mid price. Wider spreads cost more to get in and out of.',
+};
+const RS_DEF = (span) => `How much the sector has gained or lost against the benchmark over the past ${span}, as the change in the ratio of its price to the benchmark's, in percent. Positive means it has outpaced the index, whatever either did on its own.`;
+const CAGR_DEF = (years) => `The compound annual growth rate over ${years} years: the steady yearly return that would turn the starting value into the ending one. It smooths the path, so two series with the same figure can have had very different rides.`;
+const MA200_DEF = 'Where the price sits against its 200-day moving average, in percent. The 200-day is the most watched long-term trend line, and trading above it is how a long-term uptrend usually looks.';
+export const LABEL_DEFS = {
+  'rs 1w': RS_DEF('week'),
+  'rs 1m': RS_DEF('month'),
+  'rs 3m': RS_DEF('three months'),
+  'rs 6m': RS_DEF('six months'),
+  'vs 50d': 'Where the price sits against its 50-day moving average, in percent. Positive means it trades above the average, which is how a medium-term uptrend usually looks.',
+  'vs 200d': MA200_DEF,
+  'vs 200-day': MA200_DEF,
+  'vs 40w': 'Where the price sits against its 40-week moving average, in percent. Forty weeks is close to the 200-day average, measured on weekly closes, which smooths out single-day noise.',
+  'vs 200w': 'Where the price sits against its 200-week moving average, about four years of weekly closes, in percent. It is the slowest trend line in common use, so a price far above it has run well ahead of its long-run trend.',
+  'wk rsi': 'The 14-period RSI computed on weekly closes, from 0 to 100. Above 70 means weeks of hard buying and below 30 weeks of hard selling, on a slower clock than the daily reading.',
+  'z (60d)': 'How far the ratio sits from its own 60-session average, measured in standard deviations. Beyond plus or minus 2 is unusually stretched for that pair, the zone a mean-reversion trade looks for.',
+  'implied vol': "The volatility the option's price implies, annualised and in percent: how much movement the market is paying for. Higher implied volatility makes options dearer for buyers and pays sellers more.",
+  'open int.': 'Open interest: how many contracts at this strike and expiry are still open, counted after the previous session. It shows where positions sit, not how much traded today.',
+  'drawdown': 'How far the price stands below its highest close so far, in percent. Zero means it is at a high, and minus 30 means it would need to rise about 43 percent to get back.',
+  'worst drawdown': 'The deepest fall from a high to a later low over the history measured, in percent. It is the loss someone who bought at the worst moment would have sat through before any recovery.',
+  '3y cagr': CAGR_DEF('three'),
+  '5y cagr': CAGR_DEF('five'),
+  '10y cagr': CAGR_DEF('ten'),
+};

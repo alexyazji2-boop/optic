@@ -259,7 +259,7 @@ Evidence:
 
 | Row | Task | Where | Desktop | Phone | Keeps | States | Deps | Evidence | Status |
 |---|---|---|---|---|---|---|---|---|---|
-| B6c.1 | `validation` branch reviewed; only the compatible work it needs taken | `app/main.py` `_validation_history`; `app/validation/history.json` | n/a | n/a | n/a | A missing or unreadable file is `history: null`, never an error | none | b6c tests | done. The rest of the branch is listed above for the owner's decision |
+| B6c.1 | `validation` branch reviewed; only the compatible work it needs taken | `app/main.py` `_validation_history`; `app/validation/history.json` | n/a | n/a | n/a | A missing or unreadable file is `history: null`, never an error | none | `b6c_check.py` (the history read on screen through the track-record lines) and `tests/test_v2_parity_b6c.py` | done. The rest of the branch is listed above for the owner's decision |
 | B6c.2 | Track-record slots on Options and Investing | `core/track.js`, and each place below | Options: the composite (Swing verdict, with its chart input's history); dealer gamma and the walls (their forward record; no history of open interest exists); the swing setups (their 17 presets replayed); the IV verdict's history; the candles' history. Investing: the long-term score's history. Also: the Chart tab's back-test, the Read page's index regime, and the Overview's stage explanation. Milo is given the record on Options and Investing | Same | Nothing (the record is cached 30 minutes) | Before it answers: "not yet tested"; failed: the same, history hidden | `/api/validation` (free) | b6c: every slot, delayed and refused | done |
 
 ## B7. Valuation
@@ -361,7 +361,7 @@ Evidence:
 
 | Row | Task | Where | Desktop | Phone | Keeps | States | Deps | Evidence | Status |
 |---|---|---|---|---|---|---|---|---|---|
-| B8.1 | The Desk in full | Home's Optic Desk panel (`home.js` `deskBody`) | The edition when one is kept (today's, or the latest with its date), with a link to it on the Read; the bottom line first, then the first lead line; folded under The whole desk: the rest of the lead, What could happen next, the note, Today's reports; What this does not tell you, folded with its count; which voice wrote it, and at the foot why the written version is not showing (the market moved since, with a new one being written; or it could not be produced) | Same; the branches stack | The folds stay open across the panel's refresh | The panel's own reason when there is no Desk | `/api/home` (already loaded; its prose already paid for) | b8a, both passes | done. Differs: no glossary marks yet (B9) |
+| B8.1 | The Desk in full | Home's Optic Desk panel (`home.js` `deskBody`) | The edition when one is kept (today's, or the latest with its date), with a link to it on the Read; the bottom line first, then the first lead line; folded under The whole desk: the rest of the lead, What could happen next, the note, Today's reports; What this does not tell you, folded with its count; which voice wrote it, and at the foot why the written version is not showing (the market moved since, with a new one being written; or it could not be produced) | Same; the branches stack | The folds stay open across the panel's refresh | The panel's own reason when there is no Desk | `/api/home` (already loaded; its prose already paid for) | b8a, both passes; glossary marks on it since B9b (b9b ran on Home) | done |
 | B8.2 | The week as days | What matters today, above its list (`home.js` `catalystStrip`) | The trading days the board looks at, from Today, a market holiday drawn as closed; two items a day, high impact first, the rest as "N more"; an item opens its note under the strip, one at a time (its result, its description, Open the company); a warm left edge for high impact and a dashed one for a company's report, said in a key; reports by ticker; nothing placed that the feed does not date; no time invented | A sideways strip with its arrows (ui/strips.js); a swipe moves it, not the page; 44 px | The open note, the open rows and the open groups survive the panel's repaint, by each item's key | Nothing placed: no strip | `/api/priority` (free) | b8a: placement, a note, the repaint, the phone swipe | done. Differs: "N more" opens the day's rest under the strip, where Classic jumped to the columns; the strip is hidden under Your names |
 | B8.6 | Released results | The strip, the list's rows and their notes | A release that is out shows what it printed where Out was (FRED's figure only when it is this release's), with the agency's headline and link when published that day, and what it is measured against (the previous print); one still waiting says Out and that its figures are on their way; a company that has reported reads in the past tense with Beat, Missed or In line (within 1%), its EPS against the estimate and the source | Same | as B8.2 | as B8.2 | `/api/priority`, `app/priority.py` from the branch | b8a; the server's rules in test_home_results | done |
 
@@ -395,8 +395,8 @@ Evidence:
 ## B9. Glossary and the rest
 | Row | Task | Status |
 |---|---|---|
-| B9.1 | Glossary marking on eligible text, with hover, tap and keys; "Explain this with Milo" | open |
-| B9.2 | Optic Portfolio header definitions; collapsible panels | folds done (see B9a below); header definitions with B9.1 |
+| B9.1 | Glossary marking on eligible text, with hover, tap and keys; "Explain this with Milo" | done (see B9b below) |
+| B9.2 | Optic Portfolio header definitions; collapsible panels | done (folds in B9a, header definitions in B9b) |
 | B9.3 | Financials flow-ratio chart, dividend columns, excess-return bars | done (see B9a below) |
 | B9.4 | Bars inside Scan's table cells | done (see B9a below) |
 
@@ -410,6 +410,23 @@ Evidence:
 | B9.2 (folds) | The Optic Portfolio page's sections fold | `tracker.js` with `ui/sections.js`, which gains `open` (Classic's PANELS_OPEN_BY_DEFAULT) | Every section folds by its heading; Classic's four open at first (Optic Portfolio, Open positions, the three accounts, No trades yet), the record's detail folded; Expand all, Collapse all and Panels as on the other long pages | 44 px fold buttons | `optic.panels.open` `{"tracker\|<heading>": bool}`, Classic's key; kept across a reload | n/a | none | b9a | done. Differs: Classic's "three books" is v2's "Three simulated accounts", so a choice saved for it in Classic does not carry over |
 | B9.3 | The stock against the index; dividends as columns | Financials, Corporate actions and flow (`financials.js` `extraCharts`) | The stock divided by SPY as one line from 100, the line at 100 drawn and named as even; a year's dividends a share as columns, the table folded under them; the five excess returns stay as figures | Same, fits | n/a | No dividends: says so; too little history: no line | `/api/extras/{T}?benchmark=SPY` (already loaded; free) | b9a (AAPL) | done. Differs: the excess returns are not drawn as bars; bars without their values would repeat the five figures beside them |
 | B9.4 | Bars in Scan's ranked column | Scan's results (`scan.js` `rankBars`, `cellBar`) | A bar beside the figure in the ranked column, only when the rows spread by a third or more (the month's movers yes, momentum scores of 74 to 82 no): from zero either way for a signed measure, from the left for one that only runs up, a share against its whole and a percentile against 100; hidden from a screen reader, since the figure says it | The table scrolls inside its box | n/a | A missing value has no bar | none | b9a: movers, momentum, volume leaders | done |
+
+### B9b. Glossary terms on eligible text
+Evidence:
+- `b9b_check.py`: 11 of 11 in headless Chrome, as a guest, on the preview's own feeds, at 1440 and 390 (touch emulated). It ran across Overview, Options, Financials, Investing, Optic Portfolio and Home. Covered:
+  - where marks go, and once per section;
+  - the press, Enter and Space, a second press, a press elsewhere and Escape (focus back on the word);
+  - the hover tip, and "Explain this with Milo" (drafted, nothing sent);
+  - a tile's figure going with its label;
+  - Professional;
+  - a redraw (the same terms after each).
+- `tests/test_v2_parity_b9b.py`.
+- Every earlier batch's check was rerun with marking on; see the release sweep.
+
+| Row | Task | Where | Desktop | Phone | Keeps | States | Deps | Evidence | Status |
+|---|---|---|---|---|---|---|---|---|---|
+| B9.1 | Glossary terms marked where they appear | Every page's main area (`ui/glossmark.js`, started in `app.js`), with the popover of `ui/term.js` | The first mention of a glossary term in each section (a fold or a tab panel is a section of its own) is the same control `term()` makes by hand: a press, Enter or Space opens the definition with "Explain this with Milo" (Classic's question, word for word: the term, a tile's own figure, the company and the page; drafted only); a hover or keyboard focus shows it as a tip, hidden from a screen reader; Escape, a second press or a press elsewhere closes it, focus back on the word. Never inside a link, button, field, editable text, code, a chart, a heading that already holds a term, the Dossier header, tabs, strips, menus or Milo; "screen", "universe" and "surprise" are left plain (their everyday sense is the common one here) | A tap opens it inside the screen with 44 px controls; no hover tip | Applied again after every redraw | Professional: nothing marked (Classic's "off"); every other level marks | none | b9b | done. Differs: one popover at every level, where Classic's Simple opened the definition inline in the text; panel headings take no whole-heading definition (Classic's HEADER_DEFS), since v2 headings carry their own line and How this works |
+| B9.2 (headers) | Column headers explained | Any table (`glossmark.js` with `core/glossary.js` LABEL_DEFS and TH_HINTS, Classic's word for word) | A header that is exactly a label Classic defines (Drawdown, Worst drawdown, 3Y, 5Y and 10Y CAGR, RS 1M, vs 200d, Implied vol, Open int., Spread and the like) is explained whole; otherwise a glossary term in it is marked (the Optic Portfolio's Win rate and Expectancy) | Same | n/a | A generic label (Value, Change) takes no definition | none | b9b | done. Differs: Classic's per-table definitions (TABLE_DEFS, chosen by a table's data-defs) are not carried, since no v2 table names one |
 
 ## Not ported
 | Row | What | Why |
