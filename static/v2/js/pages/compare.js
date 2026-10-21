@@ -11,6 +11,7 @@ import { lineChart, mountCharts } from '../ui/chart.js';
 import { hbars } from '../ui/bars.js';
 import { button as miloButton, provideContext } from '../ui/milo.js';
 import { icon } from '../ui/icons.js';
+import { wire as typeahead } from '../ui/typeahead.js';
 
 const MAX = 4, TIE = 5;
 export const GROUPS = [
@@ -96,7 +97,7 @@ export function rankRead(ranks) {
 }
 
 // kept for the session, as the classic page keeps STATE.compare
-let inputs = ['', ''], result = null, running = false, seq = 0, live = true, mainEl = null, sugg = [], suggT = null, showMeans = false;
+let inputs = ['', ''], result = null, running = false, seq = 0, live = true, mainEl = null, showMeans = false;
 const wanted = () => [...new Set(inputs.map((x) => x.trim().toUpperCase()).filter(Boolean))];
 // the result on screen is for other names than the boxes now hold (one removed, added or changed)
 const stale = () => !!(result && result.available && result.tickers && result.tickers.join(',') !== wanted().join(','));
@@ -104,9 +105,8 @@ const stale = () => !!(result && result.available && result.tickers && result.ti
 function controls() {
   const recent = store.recent().filter((s) => !inputs.map((x) => x.toUpperCase()).includes(s)).slice(0, 6);
   return html`<form class="cmp-form" data-v2-cmp-form aria-label="Tickers to compare">
-      <div class="cmp-inputs">${inputs.map((v, i) => html`<div class="cmp-in"><label class="field field-sm"><span class="sr">Ticker ${i + 1}</span><input id="cmp-${i}" data-v2-cmp-input="${i}" value="${v}" placeholder="Ticker ${i + 1}" title="A ticker, or a company name" maxlength="24" autocomplete="off" list="cmp-sugg" autocapitalize="characters" spellcheck="false"></label>
+      <div class="cmp-inputs">${inputs.map((v, i) => html`<div class="cmp-in" data-v2-ta-host><label class="field field-sm"><span class="sr">Ticker ${i + 1}</span><input id="cmp-${i}" data-v2-cmp-input="${i}" data-v2-ta value="${v}" placeholder="Ticker ${i + 1}" title="A ticker, or a company name" maxlength="24" autocomplete="off" autocapitalize="characters" spellcheck="false"></label>
         ${inputs.length > 2 ? html`<button type="button" class="icon-btn" data-v2-cmp-drop="${i}" aria-label="Remove ticker ${i + 1}${v ? ` (${v.toUpperCase()})` : ''}">${icon('close')}</button>` : ''}</div>`)}</div>
-      <datalist id="cmp-sugg">${sugg.map((s) => html`<option value="${s.symbol}">${s.name || ''}</option>`)}</datalist>
       <div class="cluster"><button type="submit" class="btn btn-primary" ${running ? 'disabled' : ''}>${running ? 'Comparing…' : 'Compare'}</button>${inputs.length < MAX ? html`<button type="button" class="btn" data-v2-cmp-add>Add ticker</button>` : ''}</div>
     </form>
     ${recent.length ? html`<div class="cmp-recent" role="group" aria-labelledby="cmp-recent-h"><p class="t-label" id="cmp-recent-h">Recently viewed</p><div class="chips">${recent.map((s) => html`<button type="button" class="chip" data-v2-cmp-pick="${s}">${s}</button>`)}</div></div>` : result ? '' : html`<p class="asof">Nothing is fetched until you press Compare.</p>`}`;
@@ -222,11 +222,12 @@ export async function render(main, route) {
     const was = stale();
     inputs[i] = e.target.value;
     if (stale() !== was) { const at = e.target.selectionStart; paint(); const el = mainEl.querySelector(`#cmp-${i}`); if (el) { el.focus(); try { el.setSelectionRange(at, at); } catch (err) { /* number input */ } } }
-    clearTimeout(suggT); const q = e.target.value.trim();
-    if (q.length < 1) return;
-    suggT = setTimeout(async () => {
-      try { const r = await api.get(`/api/search?q=${encodeURIComponent(q)}&limit=10`, { ttl: 60000 }); sugg = (r.results || r || []).slice(0, 10); const dl = mainEl.querySelector('#cmp-sugg'); if (dl) dl.innerHTML = sugg.map((s) => `<option value="${String(s.symbol).replace(/"/g, '')}">${String(s.name || '').replace(/[<&]/g, '')}</option>`).join(''); } catch (err) { /* suggestions are optional */ }
-    }, 160);
+  });
+  // suggestions under each box (Classic parity B8.10): a pick fills the box and moves on to the next empty one
+  typeahead(main, (pick, input) => {
+    const i = Number(input.dataset.v2CmpInput); if (!Number.isInteger(i)) return;
+    inputs[i] = String(pick.symbol).toUpperCase(); paint();
+    const next = inputs.findIndex((x) => !x.trim()); const f = mainEl.querySelector(`#cmp-${next >= 0 ? next : i}`); if (f) f.focus();
   });
   main.addEventListener('click', (e) => {
     const t = (s) => e.target.closest(s); let b;
@@ -243,4 +244,4 @@ export async function render(main, route) {
   paint();
   if (pre.length >= 2) run();
 }
-export function dispose() { live = false; clearTimeout(suggT); }
+export function dispose() { live = false; }
