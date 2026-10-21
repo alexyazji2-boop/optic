@@ -391,3 +391,20 @@ Evidence:
 |---|---|---|---|---|---|---|---|---|---|
 | B8.7 | Today's Read built on request | The Read (`read.js` `buildRead`) | Loading the page never builds (it asks for the cached Read only). With none ready, "Build today's Read", with its cost said first: the day's moves, the calendar and the wires are gathered and an AI model writes the summary, one model call for this edition, kept and shared by every reader. With yesterday's or an aged Read on show, a quiet "Build today's Read now" or "Update it now" beside its line, with the same cost. On the press: "Building", one request, then the Read with its heading focused; when the server is still building behind an aged Read, asked again every 8 s for about two minutes, then "still being built" | Same, 44 px | n/a | A failure says so in a toast; the page keeps what it had | GET `/api/brief` without `cached` ($: one write per edition, shared) | b8c (stand-in) | done, stand-in verification. Differs: Classic built on opening the tab; v2 only on the press, and replaces its link to Classic |
 | B8.10 | Ticker suggestions | Analysts' symbol box, each of Compare's boxes (`ui/typeahead.js`, a combobox) | Optic's search as the reader types, the typed text in bold; arrow keys move the highlight (said to a screen reader), Enter takes it; Enter with nothing highlighted takes a company whose name was typed, and takes a symbol as typed; Escape closes and leaves the box as typed; a click takes a row without leaving the box; Compare moves on to the next empty box; funds say so | The list stays on screen (a box at the right of the row opens it leftward); a tap takes a row; 44 px rows | n/a | Search failing: no list; the box still takes what is typed | `/api/search` (free) | b8c | done. Differs: no logos (Classic's came from two outside services keyed by each symbol typed; v2 shows no outside logos anywhere); Compare's native suggestions replaced |
+
+## B9. Glossary and the rest
+| Row | Task | Status |
+|---|---|---|
+| B9.1 | Glossary marking on eligible text, with hover, tap and keys; "Explain this with Milo" | open |
+| B9.2 | Optic Portfolio header definitions; collapsible panels | open |
+| B9.3 | Financials flow-ratio chart, dividend columns, excess-return bars | open |
+| B9.4 | Bars inside Scan's table cells | open |
+
+## Not ported
+| Row | What | Why |
+|---|---|---|
+| N.1 | Classic's section fade-in on load | The owner's motion rule: motion only in answer to an action |
+| N.2 | Before-open and after-close earnings timing as a feature | Neither app has a data source (yfinance gives dates). A new source is a separate decision |
+| N.3 | Pulsing live point | Replaced by a static freshness label (owner's amendment) |
+| N.4 | Tab takes the placeholder question | Replaced by a "Use this example" button (keeps Tab navigation) |
+| N.5 | Things Classic doesn't have: swipe between tabs, pull-to-refresh, column resize, CSV, print | Nothing to port |
