@@ -184,12 +184,23 @@ Evidence:
 
 
 ## B5. Alerts and signals
-| Row | Task | Status |
-|---|---|---|
-| B5.1 | Inbox: kind filters, unread only, urgency groups | open |
-| B5.2 | "Why this fired"; mark read; Clear all; the e-mail delivery note | open |
-| B5.3 | Setup alerts | open |
-| B5.4 | Signal history and follow-up | open |
+Evidence:
+- `b5_check.py`: 38 of 38 in headless Chrome at 1440, 1024, 430, 390 and 360 (touch emulated at the phone sizes; light at 430), signed in as the local owner and as a guest.
+  - Every inbox and signal-history answer is a fixture served in the browser, so nothing was marked read, cleared or emailed on any server, and no notification was sent.
+  - The one real write was a swing-setup alert on the local test account, deleted at the end of the run.
+- `tests/test_v2_parity_b5.py`: the urgency groups, readings, filters and query; the browser store in Classic's format, with old, partial and malformed records.
+
+Not tested:
+- A real scheduled check that fires a swing-setup alert and records it on the server (`watch_runner`). The page's own check was driven against a fixture.
+- The follow-up endpoint's own candle reading; it was answered by a fixture.
+- Real Safari and a physical phone.
+
+| Row | Task | Where | Desktop | Phone | Keeps | States | Deps | Evidence | Status |
+|---|---|---|---|---|---|---|---|---|---|
+| B5.1 | Inbox: kind filters, unread only, urgency groups | Alerts, "From Optic's paper book" (`ledger`, `bookGroups` in `pages/alerts.js`) | Grouped as Classic's `ALERT_URGENCY`: Needs attention, Worth knowing, For the record, each with its count, time ordering each group; a filter per kind present (squared toggles, counts), focus kept; Unread only for the owner | Same; 44 px toggles, nothing off the page at 360 | Nothing (Classic kept the filters in memory too) | Empty: what fills it and that empty is the common case; no match: Show all; a failed load: Retry | `/api/alerts?limit=50` (free) | b5: groups, kind filter, Unread only | done. Differs: unread marks and Unread only are shown to the owner alone. The read state is the deployment's, which is the owner's, so to a reader the marks would only say what the owner has read (Classic showed them to everyone) |
+| B5.2 | "Why this fired"; mark read; Clear all; the e-mail delivery note | Same (`bookRow`, `readings`, `deliveryNote`) | Why this fired opens the kind's rule and the alert's own readings, ids left out (`aria-expanded`); the owner: Mark read on a row (`{ids}`), Mark all read (`{}`), Clear all after an in-page confirmation that says it clears for every reader, focus to the heading after; the delivery note: what email is set to do and what it last did, or the missing settings folded | Same | Nothing | Refused by the server: says nothing was marked | `/api/alerts/seen`, `/api/alerts/clear` (owner only, behind the write guard) | b5: why open and closed, mark read, mark all read, confirm then keep, clear, both delivery notes; a reader sees none of the owner's controls | done. Differs: Clear all asks first (Classic cleared at once) |
+| B5.3 | Setup alerts | Options, Setups and strategy, "Setups and patterns" (`options-panels.js` `setups`); `addAlert` in `core/watches.js`; the Alerts form's "A swing setup triggers" | Alert me on each armed, triggered or watched setup sets a `swing_setup` alert naming its preset, as Classic's `addWatchDef`; says where a trigger lands; Alert set after, kept across the panel's repaints, pressed again sends nothing; a duplicate is refused | Same; 44 px | Signed in: `/api/watches`; a guest: `optic.watches.v1` in Classic's format and key, 40 at most | Refused (duplicate, 40, another account's browser): says why | `/api/setups` (free) | b5: account (real, then deleted) and browser; duplicate after a reload; the form opened at the swing-setup condition | done. The full Swing setups tool (scope, filters, rules, back-tests) is B6b |
+| B5.4 | Signal history and follow-up | Alerts, "Signal history" (`pages/signals.js`) | One folded record per trigger: date, symbol, setup, side, status, and the close after 1, 5, 10 and 20 candles (not yet or unknown in words, never a number); open: the record as it fired, what followed, its conditions, and readings, parameters and assumptions folded; filters for status, side, symbol and setup (the account's asked of the server); an open record stays open across repaints | Same; filters two to a row with labels above | Signed in: the account's (`/api/signals`); a guest: `optic.signals.v1` `{signals: [<=200], events}` in Classic's format: records kept as built, what followed appended once each, the first reading never replaced, another browser's keys ignored | Empty: how to set a swing setup alert (opens the form there); no match: Show all; unreadable store: an empty history; a failed follow-up: says the horizons show as unknown | `/api/signals`, `/api/signals/followup` (free, stores nothing) | b5: the account's list, a record opened, a status filter on the server, the open record kept; a guest's Classic records followed up and merged; a malformed store; a page check that fires one | done. Differs: an old record without a label is named from the condition list rather than by its rule id |
 
 ## B6. Research tools
 | Row | Task | Status |

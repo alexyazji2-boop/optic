@@ -156,6 +156,47 @@
 .al-mine ul { margin: 6px 0 0; } .al-form .form-error:empty { display: none; }
 .hit-list a { text-decoration: none; font-weight: 600; }
 .hit-list p { color: var(--c-ink-2); font-size: var(--t-base); }
+/* Optic's book (Classic parity B5): urgency groups, why it fired, the owner's controls */
+.al-group { margin-top: 18px; } .al-group > h3 { margin: 0 0 8px; } .al-group > h3 .t-muted { font-weight: 500; margin-left: 4px; }
+.al-tags { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; }
+.al-tags .btn { min-height: var(--ctl-sm); }
+@media (pointer: coarse) { .al-tags .btn { min-height: var(--tap); } }
+.al-explain { display: grid; gap: 8px; margin-top: 4px; padding: 10px 14px; border-left: 2px solid var(--c-line); }
+.al-explain p { margin: 0; }
+.al-owner { margin-top: 14px; } .al-mail { margin: 0 0 12px; }
+.al-confirm { margin-top: 10px; padding: 12px 14px; border: 1px solid var(--c-line); border-radius: var(--r-md); background: var(--c-sunk); display: grid; gap: 10px; max-width: 60ch; }
+.al-confirm p { margin: 0; color: var(--c-ink); }
+/* signal history: a record per trigger, folded; the horizons read across */
+.sg-filters { display: flex; flex-wrap: wrap; gap: 8px 14px; margin: 4px 0 12px; }
+.sg-list { margin: 0; padding: 0; list-style: none; border-top: 1px solid var(--c-line); }
+.sg-row { border-bottom: 1px solid var(--c-line-2); }
+.sg-sum { display: grid; grid-template-columns: minmax(96px, auto) minmax(0, 1.4fr) auto auto minmax(0, 2fr) auto; grid-template-areas: "when title side state hz chev"; gap: 6px 16px; align-items: center; padding: 12px 4px; cursor: pointer; list-style: none; min-height: var(--tap); }
+.sg-sum > .sg-when { grid-area: when; } .sg-sum > .sg-title { grid-area: title; } .sg-sum > .sg-side { grid-area: side; } .sg-sum > .sg-state { grid-area: state; } .sg-sum > .sg-hz { grid-area: hz; } .sg-sum > .sg-chev { grid-area: chev; }
+.sg-chev { display: inline-grid; place-items: center; width: 28px; height: 28px; color: var(--c-ink-3); }
+.sg-chev svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.8; transform: rotate(90deg); transition: transform var(--d); }
+details[open] > .sg-sum .sg-chev svg { transform: rotate(-90deg); }
+.sg-sum:hover .sg-chev { color: var(--c-ink); }
+.sg-sum::-webkit-details-marker { display: none; }
+.sg-when { color: var(--c-ink-3); font-size: var(--t-sm); font-variant-numeric: tabular-nums; }
+.sg-title { min-width: 0; color: var(--c-ink-2); } .sg-title .tick { color: var(--c-ink); margin-right: 4px; }
+.sg-side, .sg-state { font: 500 var(--t-md)/1.2 var(--f-label); } .sg-state { color: var(--c-ink-2); }
+.sg-hz { display: flex; flex-wrap: wrap; gap: 4px 14px; font-variant-numeric: tabular-nums; font-size: var(--t-md); }
+.sg-hc { white-space: nowrap; } .sg-hk { color: var(--c-ink-3); font: 500 var(--t-xs)/1 var(--f-label); margin-right: 2px; }
+.sg-body { display: grid; gap: 12px; padding: 4px 4px 18px; color: var(--c-ink-2); }
+.sg-body p { margin: 0; } .sg-body h4 { margin: 4px 0 6px; }
+.sg-cols { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 28px; }
+.sg-dl { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px 16px; margin: 0; }
+.sg-dl dt { font: 500 var(--t-xs)/1.2 var(--f-label); color: var(--c-ink-3); }
+.sg-dl dd { margin: 2px 0 0; color: var(--c-ink); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.sg-tl { margin: 0; padding-left: 18px; display: grid; gap: 6px; } .sg-tl .sg-when { margin-right: 6px; }
+table.t.sg-checks tr.is-info td { color: var(--c-ink-3); }
+@media (max-width: 860px) {
+  .sg-sum { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "when chev" "title side" "hz state"; }
+  .sg-sum > .sg-side, .sg-sum > .sg-state, .sg-sum > .sg-chev { justify-self: end; }
+  .sg-cols { grid-template-columns: minmax(0, 1fr); }
+  .sg-filters { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 12px; }
+  .sg-filters > .select { display: grid; gap: 4px; min-width: 0; } .sg-filters > .select select { width: 100%; min-width: 0; }
+}
 .watch-form { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; padding: 18px; border: 1px solid var(--c-line); border-radius: var(--r-3); background: var(--c-raised); }
 .watch-form .field { flex: 0 1 220px; }
 .watch-why { flex-basis: 100%; }
