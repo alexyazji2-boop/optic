@@ -217,6 +217,14 @@ table.t.dcf-wacc td.l, table.t.dcf-bridge td.l { white-space: normal; min-width:
 .dcf-status { color: var(--c-ink-2); display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .dcf-asks { margin-top: 18px; } .dcf-asks .cluster { gap: 6px; } .dcf-asks .btn { white-space: normal; text-align: left; height: auto; min-height: var(--ctl-sm); padding-top: 6px; padding-bottom: 6px; max-width: 100%; } .dcf-foot { margin-top: 16px; }
 .dcf-missing .dcf-field { grid-template-columns: minmax(0, 1fr) 14em; }
+.dcf-save-row { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: end; }
+.dcf-save-name { display: grid; gap: 4px; flex: 1 1 260px; max-width: 420px; }
+.dcf-save-name input { min-height: var(--tap); padding: 0 12px; border: 1px solid var(--c-line); border-radius: var(--r-ctl); background: var(--c-raised); color: var(--c-ink); }
+.dcf-saved { list-style: none; margin: 10px 0 0; padding: 0; border-top: 1px solid var(--c-line-2); }
+.dcf-saved > li { display: grid; gap: 4px; padding: 12px 0; border-bottom: 1px solid var(--c-line-2); }
+.dcf-saved p { margin: 0; } .dcf-saved-h b { color: var(--c-ink); }
+.dcf-compare { display: grid; gap: 6px; margin-top: 6px; padding-left: 12px; border-left: 2px solid var(--c-line); }
+@media (max-width: 860px) { .dcf-save-name input { font-size: var(--t-lg); } }
 @media (max-width: 860px) {
   .dcf-cols { grid-template-columns: minmax(0, 1fr); }
   .dcf-tiles { --kv: 2; }
