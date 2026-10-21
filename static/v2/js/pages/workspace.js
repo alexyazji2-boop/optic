@@ -840,8 +840,17 @@ async function loadPanel(id, { force = false, quiet = false } = {}) {
     if (quiet && was !== undefined && wasLink === linkAt && JSON.stringify(was) === JSON.stringify(d)) return;
   } catch (e) {
     if (!live || (p.linked && linkAt !== S.link)) return;   // an error for a ticker no longer linked
-    if (quiet && DATA[id] !== undefined) return; ERR[id] = e; DATA[id] = undefined;
-    // the provider sometimes has nothing for a ticker for a moment: one quiet retry before the reader has to
+    if (quiet && DATA[id] !== undefined) return;
+    // A slow or empty answer from the data provider is usually brief: one quiet retry before the reader is told. A
+    // timeout keeps the panel loading while it asks again (2026-10-21: the provider was slow, /api/home took over
+    // 30 s and every Home panel said "did not load" at once); a linked panel's not-found is shown, then retried.
+    if (e.kind === 'timeout' && !RETRIED[id]) {
+      RETRIED[id] = true;
+      const b = $(`#wsb-${id}`, root); if (b) draw(b, skeleton('rows', 4, `Still loading ${p.title}`));
+      setTimeout(() => { if (live) loadPanel(id, { force: true }); }, 3000);
+      return;
+    }
+    ERR[id] = e; DATA[id] = undefined;
     if (p.linked && e.kind === 'notfound' && !RETRIED[id]) { RETRIED[id] = true; setTimeout(() => { if (live && ERR[id] === e) loadPanel(id, { force: true }); }, 5000); }
   }
   if (!ERR[id]) delete RETRIED[id];
