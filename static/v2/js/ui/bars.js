@@ -165,6 +165,7 @@ function wireGroups(id, n, gw, padL, W, tipHTML) {
     el.addEventListener('pointermove', (e) => { if (e.pointerType !== 'touch') show(at(e)); });
     el.addEventListener('pointerdown', (e) => { if (e.pointerType === 'touch') show(at(e)); });   // a tap reads a period
     el.addEventListener('pointerleave', (e) => { if (e.pointerType !== 'touch') hide(); });
+    el.addEventListener('focus', () => { if (el.matches(':focus-visible')) show(k); });
     el.addEventListener('blur', hide);
     el.addEventListener('keydown', (e) => {
       const to = { ArrowLeft: k - 1, ArrowRight: k + 1, Home: 0, End: n - 1 }[e.key];
@@ -186,7 +187,8 @@ function trimEnds(groups, series) {
 /**
  * Several measures across the same periods, side by side, from zero.
  * groups: [{x, sub?, subCls?}] oldest first; series: [{name, cls, values, hollow?}] values aligned to groups
- * opts: {w, h, label, fmt(v), axisFmt(v), refs: [{v, text}], valueLabels: 'last' | 'all' | 'none', summary, note(i)}
+ * opts: {w, h, label, fmt(v), axisFmt(v), refs: [{v, text}], valueLabels: 'none' (default) | 'last' | 'all', summary, note(i)}
+ * The figures are read on hover, tap or the arrow keys and in the chart's data table, not printed on the bars (owner, 2026-10-20).
  */
 export function groupedBars(groupsIn, seriesIn, opts = {}) {
   const id = 'gb' + (++seq);
@@ -197,7 +199,7 @@ export function groupedBars(groupsIn, seriesIn, opts = {}) {
   const pad = Object.assign({ t: 18, r: 10, b: groups.some((g) => g.sub) ? 40 : 26, l: 54 }, opts.pad || {});
   const fmt = opts.fmt || ((v) => compact(v));
   const all = S.flatMap((s) => s.values.filter(fin)).concat((opts.refs || []).map((r) => r.v).filter(fin));
-  const lab = opts.valueLabels || (groups.length * S.length <= 8 ? 'all' : 'last');
+  const lab = opts.valueLabels || 'none';
   let lo = Math.min(0, ...all), hi = Math.max(0, ...all);
   // room past the longest bars for their labels, so a label never sits on the axis's numbers or the period names
   if (lab !== 'none') { const span = (hi - lo) || 1; if (lo < 0) lo -= span * 0.1; if (hi > 0) hi += span * 0.06; }
@@ -238,20 +240,15 @@ export function periodLines(groupsIn, seriesIn, opts = {}) {
   if (opts.zero === false) { const need = Math.abs(hi) * (opts.minSpan || 0.05); if (hi - lo < need) { const mid = (hi + lo) / 2; lo = mid - need / 2; hi = mid + need / 2; } }
   const { Y, gw, grid, xl } = frame(groups, opts, lo, hi, H, W, pad);
   const X = (i) => pad.l + gw * (i + 0.5);
-  let paths = '', dots = '', ends = '';
+  let paths = '', dots = '';
   S.forEach((s) => {
     let d = '', pen = false;
     s.values.forEach((v, i) => { if (!fin(v)) { pen = false; return; } d += `${pen ? 'L' : 'M'}${X(i).toFixed(1)} ${Y(v).toFixed(1)}`; pen = true; dots += `<circle class="pdot ${s.cls || 's1'}" data-g="${i}" cx="${X(i).toFixed(1)}" cy="${Y(v).toFixed(1)}" r="4"/>`; });
     paths += `<path class="pline ${s.cls || 's1'}" d="${d}"/>`;
   });
-  // the newest value of each line, named at its end when there is room (direct labels; the key carries the rest)
-  const lastVals = S.map((s) => ({ s, i: s.values.map(fin).lastIndexOf(true) })).filter((o) => o.i >= 0);
-  const ys = lastVals.map(({ s, i }) => ({ s, i, y: Y(s.values[i]) - 9 })).sort((a, b) => a.y - b.y);
-  for (let k = 1; k < ys.length; k++) if (ys[k].y - ys[k - 1].y < 13) ys[k].y = ys[k - 1].y + 13;
-  ys.forEach(({ s, i, y }) => { ends += `<text class="vlab ${s.cls || 's1'}-t" x="${(X(i) - 8).toFixed(1)}" y="${y.toFixed(1)}" text-anchor="end">${esc(fmt(s.values[i]))}</text>`; });
   const n = groups.length, last = n - 1;
   const summary = opts.summary || `${opts.label || 'Lines'}, ${groups[0].x} to ${groups[last].x}. ${groups[last].x}: ${S.map((s) => `${s.name} ${fin(s.values[last]) ? fmt(s.values[last]) : 'not reported'}`).join(', ')}.`;
-  const svg = `<svg class="bars plines" id="${id}" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="${esc(summary)}" tabindex="0">${grid}${paths}${dots}${ends}${xl}</svg><div class="chart-tip" aria-hidden="true" style="display:none"></div>`;
+  const svg = `<svg class="bars plines" id="${id}" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="${esc(summary)}" tabindex="0">${grid}${paths}${dots}${xl}</svg><div class="chart-tip" aria-hidden="true" style="display:none"></div>`;
   const tip = (i) => `<b>${esc(groups[i].x)}</b>${S.map((s) => `<span class="tip-row"><i class="sw ${s.cls || 's1'}"></i>${esc(s.name)} <b>${fin(s.values[i]) ? esc(fmt(s.values[i])) : 'Not reported'}</b></span>`).join('')}`;
   return { html: `<div class="chart-wrap">${svg}</div>`, wire: wireGroups(id, n, gw, pad.l, W, tip) };
 }
@@ -269,16 +266,15 @@ export function bridgeBars(steps, opts = {}) {
   const vals = spans.flat();
   const { Y, gw, grid, xl } = frame(data, opts, Math.min(0, ...vals), Math.max(0, ...vals), H, W, pad);
   const bw = Math.min(gw * 0.56, 64);
-  let bars = '', labels = '', joins = '';
+  let bars = '', joins = '';
   spans.forEach(([a, b], i) => {
     const x = pad.l + gw * i + (gw - bw) / 2, s = data[i];
     bars += `<rect class="gbar ${s.kind === 'total' ? (s.cls || 's1') : (s.v < 0 ? 'step-out' : 'step-in')}" data-g="${i}" x="${x.toFixed(1)}" y="${Math.min(Y(a), Y(b)).toFixed(1)}" width="${bw.toFixed(1)}" height="${Math.max(1, Math.abs(Y(a) - Y(b))).toFixed(1)}" rx="1.5"/>`;
-    labels += `<text class="vlab" x="${(x + bw / 2).toFixed(1)}" y="${(Math.min(Y(a), Y(b)) - 5).toFixed(1)}" text-anchor="middle">${esc(s.kind === 'total' ? fmt(s.v) : `${s.v < 0 ? '−' : '+'}${fmt(Math.abs(s.v))}`)}</text>`;
     if (i < spans.length - 1) joins += `<line class="join" x1="${(x + bw).toFixed(1)}" x2="${(x + gw).toFixed(1)}" y1="${Y(b).toFixed(1)}" y2="${Y(b).toFixed(1)}"/>`;
   });
   const summary = opts.summary || `${opts.label || 'Bridge'}: ${data.map((s) => `${s.x} ${fmt(s.v)}`).join(', ')}.`;
-  const svg = `<svg class="bars bbars" id="${id}" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="${esc(summary)}" tabindex="0">${grid}${joins}${bars}${labels}${xl}</svg><div class="chart-tip" aria-hidden="true" style="display:none"></div>`;
-  const tip = (i) => `<b>${esc(data[i].x)}</b> <span>${esc(fmt(data[i].v))}</span>${opts.note ? `<em>${esc(opts.note(i) || '')}</em>` : ''}`;
+  const svg = `<svg class="bars bbars" id="${id}" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="${esc(summary)}" tabindex="0">${grid}${joins}${bars}${xl}</svg><div class="chart-tip" aria-hidden="true" style="display:none"></div>`;
+  const tip = (i) => `<b>${esc(data[i].x)}</b> <span>${esc(data[i].kind === 'total' ? fmt(data[i].v) : `${data[i].v < 0 ? '−' : '+'}${fmt(Math.abs(data[i].v))}`)}</span>${opts.note ? `<em>${esc(opts.note(i) || '')}</em>` : ''}`;
   return { html: `<div class="chart-wrap">${svg}</div>`, wire: wireGroups(id, data.length, gw, pad.l, W, tip) };
 }
 
@@ -295,15 +291,14 @@ export function stackedBars(groupsIn, partsIn, opts = {}) {
   const totals = groups.map((_, i) => P.reduce((a, p) => a + (fin(p.values[i]) ? p.values[i] : 0), 0));
   const { Y, gw, grid, xl } = frame(groups, opts, 0, Math.max(...totals), H, W, pad);
   const bw = Math.min(gw * 0.6, 56);
-  let bars = '', labels = '';
+  let bars = '';
   groups.forEach((g, i) => {
     let base = 0; const x = pad.l + gw * i + (gw - bw) / 2;
     P.forEach((p) => { const v = p.values[i]; if (!fin(v) || v <= 0) return; bars += `<rect class="gbar ${p.cls || 's1'}" data-g="${i}" x="${x.toFixed(1)}" y="${Y(base + v).toFixed(1)}" width="${bw.toFixed(1)}" height="${Math.max(1, Y(base) - Y(base + v) - 1).toFixed(1)}"/>`; base += v; });
-    if (totals[i] > 0 && (groups.length <= 6 || i === groups.length - 1)) labels += `<text class="vlab" x="${(x + bw / 2).toFixed(1)}" y="${(Y(totals[i]) - 5).toFixed(1)}" text-anchor="middle">${esc(fmt(totals[i]))}</text>`;
   });
   const last = groups.length - 1;
   const summary = opts.summary || `${opts.label || 'Composition'}, ${groups[0].x} to ${groups[last].x}. ${groups[last].x}: ${P.map((p) => `${p.name} ${fin(p.values[last]) ? fmt(p.values[last]) : 'not reported'}`).join(', ')}; total ${fmt(totals[last])}.`;
-  const svg = `<svg class="bars sbars" id="${id}" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="${esc(summary)}" tabindex="0">${grid}${bars}${labels}${xl}</svg><div class="chart-tip" aria-hidden="true" style="display:none"></div>`;
-  const tip = (i) => `<b>${esc(groups[i].x)}</b>${P.map((p) => `<span class="tip-row"><i class="sw ${p.cls || 's1'}"></i>${esc(p.name)} <b>${fin(p.values[i]) ? esc(fmt(p.values[i])) : 'Not reported'}</b>${fin(p.values[i]) && totals[i] > 0 ? ` <small>${num((p.values[i] / totals[i]) * 100, 0)}%</small>` : ''}</span>`).join('')}<span class="tip-row">Total <b>${esc(fmt(totals[i]))}</b></span>`;
+  const svg = `<svg class="bars sbars" id="${id}" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="${esc(summary)}" tabindex="0">${grid}${bars}${xl}</svg><div class="chart-tip" aria-hidden="true" style="display:none"></div>`;
+  const tip = (i) => `<b>${esc(groups[i].x)}</b>${totals[i] > 0 ? `<span class="tip-row">Total <b>${esc(fmt(totals[i]))}</b></span>` : ''}${P.map((p) => `<span class="tip-row"><i class="sw ${p.cls || 's1'}"></i>${esc(p.name)} <b>${fin(p.values[i]) ? esc(fmt(p.values[i])) : 'Not reported'}</b>${fin(p.values[i]) && totals[i] > 0 ? ` <small>${num((p.values[i] / totals[i]) * 100, 0)}%</small>` : ''}</span>`).join('')}<span class="tip-row">Total <b>${esc(fmt(totals[i]))}</b></span>`;
   return { html: `<div class="chart-wrap">${svg}</div>`, wire: wireGroups(id, groups.length, gw, pad.l, W, tip) };
 }

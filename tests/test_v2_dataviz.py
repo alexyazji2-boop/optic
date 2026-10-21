@@ -127,6 +127,30 @@ def test_bars_stand_on_zero_leave_gaps_and_keep_labels_apart(tmp_path):
     assert len(set(got["flatTicks"])) == len(got["flatTicks"]) > 1, "a count that barely moved gets a scale it can be read on"
 
 
+def test_the_charts_print_no_numbers_the_readout_carries_them(tmp_path):
+    # the owner (2026-10-20): "hide the numbers, i can see when hovering over it"
+    got = fv(tmp_path, """
+      const g = [{ x: '2024' }, { x: '2025' }];
+      const gb = B.groupedBars(g, [{ name: 'Revenue', cls: 's1', values: [3e9, 4.5e9] }], { w: 400 });
+      const pl = B.periodLines(g, [{ name: 'Margin', cls: 's2', values: [35.7, 46.8] }], { w: 400 });
+      const br = B.bridgeBars([{ x: 'Operations', v: 1.6e9, kind: 'total' }, { x: 'Capital spending', v: -54e6 }, { x: 'Free cash flow', v: 1.55e9, kind: 'total' }], { w: 400 });
+      const st = B.stackedBars(g, [{ name: 'A', cls: 's1', values: [2, 3] }, { name: 'B', cls: 's2', values: [1, 1] }], { w: 400, fmt: String });
+      // a caller that asks for labels still gets them
+      const asked = B.groupedBars(g, [{ name: 'Revenue', cls: 's1', values: [3e9, 4.5e9] }], { w: 400, valueLabels: 'all' }).html;
+      const tips = (m, k) => { const out = []; const el = { querySelector: () => el, nextElementSibling: { style: {}, set innerHTML(v) { out.push(v); }, offsetWidth: 100 }, querySelectorAll: () => [], getBoundingClientRect: () => ({ width: 400, left: 0 }), matches: () => true,
+        addEventListener: (t, f) => { if (t === 'keydown') el.key = f; if (t === 'focus') el.focus = f; } }; m.wire({ querySelector: () => el }); el.focus(); el.key({ key: k, preventDefault() {} }); return out; };
+      print(JSON.stringify({ labels: [gb, pl, br, st].map((c) => (c.html.match(/class="vlab/g) || []).length), asked: (asked.match(/class="vlab/g) || []).length,
+        bridgeTip: tips(br, 'ArrowLeft'), stackTip: tips(st, 'End') }));
+    """)
+    assert got["labels"] == [0, 0, 0, 0], "no figures printed on grouped bars, lines, the bridge or stacked bars"
+    assert got["asked"] == 2
+    assert got["bridgeTip"][0].startswith("<b>Free cash flow</b>"), "focus from the keyboard opens the readout on the newest period"
+    assert got["bridgeTip"][1].startswith("<b>Capital spending</b> <span>−") and "54" in got["bridgeTip"][1], "a step keeps its sign in the readout"
+    assert any("Total <b>4</b>" in t for t in got["stackTip"]), "the readout names the total a stacked bar no longer prints"
+    for f in ("pages/earnings.js", "ui/finfigs.js"):
+        assert "valueLabels: 'all'" not in (JS / f).read_text(), f
+
+
 def test_the_series_colours_are_validated_and_kept_per_metric():
     assert "--c-s1: #5b7fbf; --c-s2: #c27a2c; --c-s3: #c75b88;" in TOKENS and "dataviz validator" in TOKENS
     assert "{ name: 'Revenue', cls: 's1'" in FIN and "{ name: 'Net income', cls: 's3'" in FIN and "{ name: 'Free cash flow', cls: 's3'" in FIN

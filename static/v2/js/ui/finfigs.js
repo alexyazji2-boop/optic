@@ -82,7 +82,7 @@ export async function build(kind, sym) {
     const mv = R.filter((r) => isNum(r.next_day_move_pct)), up = mv.filter((r) => r.next_day_move_pct > 0).length;
     return { title: `${sym}: the share price after each report`, take: `The price rose after ${up} of ${mv.length} reports and fell after ${mv.length - up}. A beat is not a rise: the reaction depends on what investors expected and the rest of the report.`,
       unit: `The move in the session that traded on each report; ${mv.length} reports`, source: 'Yahoo Finance prices and report dates',
-      chart: (w) => groupedBars(G, [{ name: 'Price move', cls: 's2', values: R.map((r) => r.next_day_move_pct) }], { w, h: 210, fmt: (v) => signed(v), axisFmt: (v) => `${num(v, 0)}%`, valueLabels: 'all', label: `${sym} share price move after each report` }),
+      chart: (w) => groupedBars(G, [{ name: 'Price move', cls: 's2', values: R.map((r) => r.next_day_move_pct) }], { w, h: 210, fmt: (v) => signed(v), axisFmt: (v) => `${num(v, 0)}%`, label: `${sym} share price move after each report` }),
       table: table(['Quarter', 'Result', 'Move'], R.slice().reverse().map((r) => [r.fiscal || fullDate(r.date), FV.CLASS_WORD[r.cls], isNum(r.next_day_move_pct) ? signed(r.next_day_move_pct) : 'Not reported'])) };
   }
   return missing('Optic draws no such figure.');
