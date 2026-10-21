@@ -246,8 +246,18 @@ def support_resistance_levels(
     if not np.isfinite(tol) or tol <= 0:
         tol = spot * 0.012
 
-    high_idx = argrelextrema(highs, np.greater_equal, order=order)[0]
-    low_idx = argrelextrema(lows, np.less_equal, order=order)[0]
+    # Confirmed pivots only: `order` bars on each side. argrelextrema's default
+    # mode='clip' compares an edge bar with copies of itself, so any of the last
+    # `order` bars could be a "swing high" with nothing yet to its right, and
+    # five sessions later the level it made was gone (measured on 2026-10-21:
+    # in 223 of 240 sampled windows a level had vanished five sessions on). The
+    # first `order` bars of the window have the same problem on the left, with
+    # the window's start rather than price deciding them.
+    def confirmed(idx: np.ndarray) -> np.ndarray:
+        return idx[(idx >= order) & (idx < bars - order)]
+
+    high_idx = confirmed(argrelextrema(highs, np.greater_equal, order=order)[0])
+    low_idx = confirmed(argrelextrema(lows, np.less_equal, order=order)[0])
 
     pivots: List[Dict[str, Any]] = []
     for i in high_idx:
