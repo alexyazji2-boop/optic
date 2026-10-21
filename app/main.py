@@ -6729,6 +6729,7 @@ def _market_block(brief: Any) -> Optional[Dict[str, Any]]:
         "sectors": (overview.get("groups") or {}).get("sectors"),
         "mag7": (overview.get("groups") or {}).get("mag7"),
         "sector_breadth_pct": overview.get("sector_breadth_pct"),
+        "sectors_above_200d_pct": overview.get("sectors_above_200d_pct"),
         "leaders": overview.get("leaders"),
         "laggards": overview.get("laggards"),
         "written_summary": brief.get("summary"),
@@ -6743,7 +6744,9 @@ def _market_block(brief: Any) -> Optional[Dict[str, Any]]:
         pass
     out["note"] = (
         "Index and sector levels, breadth, the index regime score and the macro "
-        "calendar, from the terminal's daily brief. This is the whole-market view; "
+        "calendar, from the terminal's daily brief. sector_breadth_pct is the share "
+        "of sector ETFs up today; sectors_above_200d_pct the share above their own "
+        "200-day average. This is the whole-market view; "
         "there is no single-name option chain, gamma or flow here unless a ticker "
         "block also appears in CONTEXT."
     )

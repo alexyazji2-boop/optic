@@ -108,15 +108,25 @@ def score(overview: Dict[str, Any]) -> Dict[str, Any]:
             spy_month if spy_month is not None else 0.0,
             spy_week if spy_week is not None else 0.0))
 
-    # -- breadth: how many sectors are participating --------------------------
-    breadth = _num((overview or {}).get("sector_breadth_pct"))
+    # -- breadth: how many sectors are above their own 200-day ----------------
+    # `sectors_above_200d_pct`, not `sector_breadth_pct`: that one is the share
+    # of sectors up today, which is the leadership input below. Reading it here
+    # counted one quantity twice under two labels (fixed 2026-10-21). A brief
+    # without the 200-day share (one archived before then) has no breadth input,
+    # and the weights renormalise over the rest.
+    breadth = _num((overview or {}).get("sectors_above_200d_pct"))
     if breadth is not None:
         # Map the healthy/weak band onto the score linearly around the midpoint.
         mid = (BREADTH_HEALTHY + BREADTH_WEAK) / 2.0
         span = (BREADTH_HEALTHY - BREADTH_WEAK) / 2.0
         unclipped["breadth"] = (breadth - mid) / span * 100.0
         components["breadth"] = _clip((breadth - mid) / span * 100.0)
-        notes.append("{:.0f}% of sectors above their 200-day".format(breadth))
+        above = _num((overview or {}).get("sectors_above_200d"))
+        measured = _num((overview or {}).get("sectors_measured_200d"))
+        if above is not None and measured:
+            notes.append("{:.0f} of {:.0f} sectors above their 200-day".format(above, measured))
+        else:
+            notes.append("{:.0f}% of sectors above their 200-day".format(breadth))
 
     # -- volatility: level, and which way it moved today ----------------------
     vix_last, vix_day = _num(vix.get("last")), _num(vix.get("day"))

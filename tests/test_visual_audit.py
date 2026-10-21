@@ -277,7 +277,7 @@ def test_the_regime_says_each_inputs_scale_and_does_not_overstate_agreement():
         "indices": [{"symbol": "SPY", "week": 3.0, "month": 11.0}, {"symbol": "IWM", "month": 1.0},
                     {"symbol": "^VIX", "last": 22.0, "day": 0.0}],
         "sectors": [{"day": 0.5}, {"day": -0.4}, {"day": 0.2}, {"day": -0.1}, {"day": 0.3}]},
-        "sector_breadth_pct": 50.0})
+        "sectors_above_200d_pct": 50.0})
     assert got["clipped"] == ["participation", "trend"], "a 7% average is past the 5% limit; small caps 10 points behind past 4"
     assert set(got["scales"]) == set(got["components"])
     out = _app("""

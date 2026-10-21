@@ -277,6 +277,18 @@ def _pct(frame, bars: int = 1) -> Optional[float]:
     return (last / prev - 1.0) * 100.0
 
 
+def _above_sma200(frame) -> Optional[bool]:
+    """Whether the latest close is above the average of the last 200 closes.
+    None under 200 closes: a shorter average is a different line."""
+    try:
+        closes = frame["Close"].dropna()
+    except (KeyError, TypeError, AttributeError):
+        return None
+    if len(closes) < 200:
+        return None
+    return bool(float(closes.iloc[-1]) > float(closes.tail(200).mean()))
+
+
 def _overview(yf_provider) -> Dict[str, Any]:
     """Index, mega-cap and sector moves. Computed here, from bars, not reported."""
     universe = INDICES + MAG7 + SECTORS + THEMES
@@ -284,7 +296,9 @@ def _overview(yf_provider) -> Dict[str, Any]:
     error = None
     frames: Dict[str, Any] = {}
     try:
-        frames = yf_provider.batch_history(symbols, period="3mo", interval="1d") or {}
+        # A year, not three months: the regime's breadth input is each sector's
+        # close against its own 200-session average, which needs 200 closes.
+        frames = yf_provider.batch_history(symbols, period="1y", interval="1d") or {}
     except Exception as exc:                     # noqa: BLE001 - provider-agnostic
         error = f"{type(exc).__name__}: {str(exc)[:120]}"
 
@@ -301,7 +315,8 @@ def _overview(yf_provider) -> Dict[str, Any]:
                     last = float(frame["Close"].dropna().iloc[-1])
                 except (KeyError, IndexError, TypeError, ValueError):
                     last = None
-            out.append({**row, "last": last, "day": day, "week": week, "month": month})
+            out.append({**row, "last": last, "day": day, "week": week, "month": month,
+                        "above_200d": _above_sma200(frame) if frame is not None else None})
         return out
 
     groups = {
@@ -316,16 +331,31 @@ def _overview(yf_provider) -> Dict[str, Any]:
     movers = [r for r in groups["sectors"] + groups["themes"] if r["day"] is not None]
     movers.sort(key=lambda r: r["day"], reverse=True)
 
+    # The share of sectors up today, which the written read quotes ("64% of the
+    # eleven closed up"). Not the regime's breadth: that is the next block.
     breadth = None
     scored = [r for r in groups["sectors"] if r["day"] is not None]
     if scored:
         breadth = round(100.0 * sum(1 for r in scored if r["day"] > 0) / len(scored), 1)
+
+    # The share of sectors above their own 200-day average, the regime score's
+    # breadth input. It was handed `sector_breadth_pct` above, the share up
+    # today, under the label "% of sectors above their 200-day", so it counted
+    # the same thing as the leadership input twice (found 2026-10-21). Five
+    # sectors measured at least, the floor the leadership input uses.
+    trended = [r for r in groups["sectors"] if r["above_200d"] is not None]
+    above_200d = None
+    if len(trended) >= 5:
+        above_200d = round(100.0 * sum(1 for r in trended if r["above_200d"]) / len(trended), 1)
 
     return {
         "groups": groups,
         "leaders": movers[:3],
         "laggards": movers[-3:][::-1] if len(movers) > 3 else [],
         "sector_breadth_pct": breadth,
+        "sectors_above_200d_pct": above_200d,
+        "sectors_above_200d": sum(1 for r in trended if r["above_200d"]) if above_200d is not None else None,
+        "sectors_measured_200d": len(trended) if above_200d is not None else None,
         "error": error,
         "note": ("Percentage changes are close-to-close from daily bars, so during "
                  "an open session the latest bar is still forming."),
@@ -750,7 +780,9 @@ def _morning_read(overview: Dict[str, Any], macro: Dict[str, Any],
         "sectors": (overview.get("groups") or {}).get("sectors"),
         "themes": (overview.get("groups") or {}).get("themes"),
         "megacaps": (overview.get("groups") or {}).get("mag7"),
+        # Up today, and above the 200-day: two different breadths, named apart.
         "sector_breadth_pct": overview.get("sector_breadth_pct"),
+        "sectors_above_200d_pct": overview.get("sectors_above_200d_pct"),
         "leaders": overview.get("leaders"),
         "laggards": overview.get("laggards"),
         "official_releases": (macro or {}).get("entries"),
