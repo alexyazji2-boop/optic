@@ -126,7 +126,7 @@ function persist() {
 
 /* ---------------- state ---------------- */
 const blankConv = () => ({ id: newId(), messages: [], lastTicker: null });
-const S = { files: [], conv: blankConv(), items: [], busy: false, abort: null, scope: 'auto', showHistory: false, showSettings: false, showInfo: false, allowance: null, personas: null, modes: null, draft: '', live: null, mounted: null, panel: null, toEnd: false, symbolAtAsk: null };
+const S = { files: [], web: false, deepHint: false, conv: blankConv(), items: [], busy: false, abort: null, scope: 'auto', showHistory: false, showSettings: false, showInfo: false, allowance: null, personas: null, modes: null, draft: '', live: null, mounted: null, panel: null, toEnd: false, symbolAtAsk: null };
 // items: what the log shows this session: {kind:'msg', i} for conv.messages[i], or {kind:'note', text}; meta per message index
 const meta = new Map();
 /* ---------------- attachments (Classic parity B4b; Classic's app.js:46216-46345) ----------------
@@ -373,6 +373,7 @@ function msgHTML(it) {
   return html`<article class="milo-msg milo-bot" data-v2-milo-i="${it.i}" aria-label="Milo's answer"><p class="milo-who">Milo</p>
     ${aboutLine(info)}
     ${info.assumed ? html`<p class="milo-assumed">${info.assumed}</p>` : ''}
+    ${info.deep ? html`<p class="milo-assumed">Deep research: read from live web sources.</p>` : info.web ? html`<p class="milo-assumed">Web search was on for this answer.</p>` : ''}
     ${info.notSent && info.notSent.length ? html`<p class="milo-not-sent" role="note"><b>Not sent with this question:</b> ${info.notSent.join('; ')}.</p>` : ''}
     <div class="milo-bubble">${raw(body)}</div>
     ${info.ended || /\[(Stopped by the reader|Cut off): incomplete\]$/.test(m.content || '') ? html`<p class="milo-ended" role="note">${(info.ended || (/Stopped by the reader/.test(m.content) ? 'stopped' : 'cut')) === 'stopped' ? 'Stopped by you. This answer is incomplete.' : 'The connection ended before Milo finished. This answer is incomplete.'}</p>` : ''}
@@ -464,6 +465,63 @@ function suggestHTML(empty) {
   return html`${follow.length ? html`<div class="milo-suggest" role="group" aria-label="Follow-up questions">${follow.map((q) => html`<button type="button" class="btn btn-quiet btn-sm" data-v2-milo-follow="${q}">${q}</button>`)}</div>` : ''}
     <p class="milo-eg"><span><span class="t-muted">For example:</span> ${eg}</span><button type="button" class="btn btn-quiet btn-sm" data-v2-milo-follow="${eg}">Use this example</button></p>`;
 }
+/* ---------------- web search, Deep research and the modes (Classic parity B4c; Classic's app.js:44066, 46425) -------
+ * Both cost money and run only when the reader presses Send or Deep research, each saying so on the control. Web
+ * search is off until the reader turns it on for this panel (Classic had it on: v2's Milo looks Optic's own data
+ * up with its tools, so the web is the reader's choice, never the default spend), and it is not remembered. The
+ * modes are Classic's, word for word: each only writes a question into the box. */
+export function researchModes(r = route) {
+  const t = onSymbol(r);
+  if (t && r.view !== 'chart') return [
+    { id: 'quick', label: 'Quick read', text: `In three sentences: what matters for ${t} right now, and what would change that view?` },
+    { id: 'catalyst', label: 'Catalysts', text: `What are the next catalysts for ${t} (earnings, macro releases, company events)? How has it reacted to similar events before, and what looks priced in?` },
+    { id: 'thesis', label: 'Thesis check', text: `Test the thesis on ${t}: give the strongest bull case and the strongest bear case from the loaded data, and the evidence that would prove each one wrong.` },
+    { id: 'risk', label: 'Risk review', text: `If I held ${t}, what are the main risks over the next month: event risk, volatility, positioning, and how it moves with the market?` },
+    { id: 'deep', label: 'Deep research', deep: true, text: `Deep research on ${t}: what has changed in the last two weeks, with sources, and does it change the thesis?` },
+  ];
+  if (t) return [
+    { id: 'chart', label: 'Read this chart', text: `Read the ${t} chart: the trend, the levels that matter, and what the most recent bars say about momentum.` },
+    { id: 'levels', label: 'Key levels', text: `Which support and resistance levels on ${t} matter most, and what happens on a break of each?` },
+    { id: 'catalyst', label: 'Catalysts', text: `What upcoming events could move ${t} through those levels?` },
+  ];
+  if (r.view === 'brokerage') return [
+    { id: 'attention', label: 'What needs attention', text: 'What deserves my attention in my linked portfolio this week: concentration, upcoming events and anything that changed?' },
+    { id: 'moved', label: 'Why it moved', text: 'Why did my portfolio move today? Separate what you measured from headlines that only match the timing.' },
+    { id: 'earnings', label: 'My earnings', text: 'Which earnings affect me this week, and how much of my portfolio do they cover?' },
+    { id: 'exposure', label: 'Exposure', text: 'How exposed am I to technology, counting what my ETFs hold, and how complete is that look-through?' },
+    { id: 'research', label: 'Research next', text: 'Which of my holdings or risks deserve more research, and why?' },
+  ];
+  if (r.view === 'tracker' || r.view === 'paper' || r.view === 'watchlist') {
+    const what = r.view === 'watchlist' ? 'my watchlist' : 'these positions';
+    return [
+      { id: 'risk', label: 'Portfolio risk', text: `Review the risk in ${what}: concentration, shared sector and factor exposure, and anything that would hit several names at once.` },
+      { id: 'events', label: 'Event risk', text: `Which earnings, dividends or macro releases in the next two weeks affect ${what}, and which matter most?` },
+      { id: 'review', label: 'What needs review', text: `Which names in ${what} have changed the most since last week, and which deserve a closer look?` },
+    ];
+  }
+  if (r.view === 'scan') return [
+    { id: 'screen', label: 'Explain these results', text: 'What do the names on this screen have in common, and which stand out from the rest?' },
+    { id: 'pick', label: 'Compare the leaders', text: 'Compare the top few names here on momentum, valuation and event risk. Which are worth a closer look?' },
+  ];
+  return [
+    { id: 'quick', label: 'Market read', text: 'What is driving the market today, and what would change the picture this week?' },
+    { id: 'catalyst', label: 'This week’s catalysts', text: 'Which economic releases and earnings this week matter most, and what outcome is the market positioned for?' },
+    { id: 'deep', label: 'Deep research', deep: true, text: 'Give me a sourced brief on the market right now: direction, drivers, notable movers, and what traders are watching.' },
+  ];
+}
+const MARKET_BRIEF = 'Give me a live sourced brief on the overall market right now: index direction, what is driving it, notable movers, and the macro releases or events traders are positioned around.';
+function toolsHTML() {
+  if (blocked() && (blocked() || {}).kind !== 'spent') return '';
+  const sym = onSymbol(), busy = S.busy;
+  return html`<div class="milo-tools" role="group" aria-label="How Milo answers">
+    <details class="menu milo-modes"><summary class="btn btn-sm btn-quiet" ${busy ? html`aria-disabled="true"` : ''}>Modes${icon('down')}</summary><div class="menu-body" role="group" aria-label="Research modes">
+      <p class="menu-help">Each writes a question into the box. Nothing is sent until you press Send.</p>
+      ${researchModes().map((m) => html`<button type="button" class="milo-mode" data-v2-milo-mode="${m.id}" data-v2-milo-follow="${m.text}" ${m.deep ? html`data-deep="1"` : ''}><b>${m.label}</b><span>${m.text}</span></button>`)}</div></details>
+    <button type="button" class="btn btn-sm btn-quiet milo-web" data-v2-milo-web aria-pressed="${S.web ? 'true' : 'false'}" ${busy ? 'disabled' : ''} title="Milo also searches the web for your next questions. Each search adds to what a question costs. Off again when this panel closes.">${icon(S.web ? 'check' : 'search')}<span>Search the web</span></button>
+    <button type="button" class="btn btn-sm btn-quiet milo-deep ${S.deepHint ? 'is-suggested' : ''}" data-v2-milo-deep ${busy ? 'disabled' : ''} title="Researches the question in the box${sym ? `, or ${sym}` : ', or the market'}, with live web sources. Uses one Milo question and several web searches.">Deep research</button>
+  </div>`;
+}
+function paintTools() { const h = host(); if (!h) return; const slot = $('[data-v2-milo-tools]', h); if (!slot) return; const open = slot.querySelector('details.milo-modes[open]'); draw(slot, toolsHTML()); if (open) { const d = slot.querySelector('details.milo-modes'); if (d) d.open = true; } }
 function filesHTML() {
   if (!S.files.length) return '';
   return html`<ul class="milo-files" aria-label="Files to send with your question">${S.files.map((f, i) => html`<li class="milo-file ${f.error ? 'is-bad' : ''}">
@@ -584,6 +642,7 @@ function paintForm() {
   paintHead();
   paintSuggest();
   paintFiles();
+  paintTools();
 }
 const draw = (el, tpl) => { if (el) render(el, tpl); };
 
@@ -643,9 +702,13 @@ function offlineOr(status) {
   if (navigator.onLine === false) return 'You appear to be offline. The question is still in the box: send it again once you are back on.';
   return `Milo did not respond${status ? ` (HTTP ${status})` : ''}. Wait a moment and send it again; your question is still in the box.`;
 }
-export async function send(text) {
+export async function send(text, { deep = false } = {}) {
   text = String(text || '').trim();
+  const sym0 = onSymbol();
+  // Deep research may run on an empty box: on the symbol open, or the market (Classic's runResearch)
+  if (deep && !text) text = sym0 ? `Deep research: ${sym0}` : 'Deep research: the market';
   if (!text || S.busy || blocked()) return;
+  S.deepHint = false;
   const h = host(), ta = h && $('#milo-q', h);
   const context = buildContext(S.scope, S.conv.lastTicker);
   const focusTicker = context.focus.ticker;
@@ -657,7 +720,7 @@ export async function send(text) {
   if (focusTicker) S.conv.lastTicker = focusTicker;
   const ai = S.conv.messages.length; // index the answer will take
   S.conv.messages.push({ role: 'assistant', content: '' }); S.items.push({ kind: 'msg', i: ai });
-  meta.set(ai, { question: text, symbol: focusTicker || route.symbol || null, context });
+  meta.set(ai, { question: text, symbol: focusTicker || route.symbol || null, context, deep, web: !deep && !!S.web });
   S.busy = true; S.live = { i: ai, text: '', status: 'Reading what is on your screen', symbol: focusTicker || route.symbol || null };
   if (ta) { ta.value = ''; grow(ta); } S.draft = ''; S.showHistory = false; S.showSettings = false; S.toEnd = true;
   paintChrome(); paintLog(); paintForm(); paintLive();
@@ -665,10 +728,13 @@ export async function send(text) {
   const ctl = new AbortController(); S.abort = ctl;
   let finished = false, ended = '', failed = null;
   try {
-    const res = await fetch('/api/chat', {
+    const askedText = /^Deep research: /.test(text) && deep ? null : text;
+    const res = await fetch(deep ? '/api/research' : '/api/chat', {
       method: 'POST', credentials: 'same-origin', signal: ctl.signal,
       headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream', 'X-Optic-CSRF': (document.cookie.match(/(?:^|; )optic_csrf=([^;]*)/) || [])[1] || '' },
-      body: JSON.stringify({ messages: S.conv.messages.slice(0, ai).map((m) => ({ role: m.role, content: m.content })), context, web: false, attachments, persona: persona(), mode: prefs.knowledge(), horizon: horizon() }),
+      body: JSON.stringify(deep
+        ? { ticker: focusTicker || sym0 || null, question: askedText || (focusTicker || sym0 ? null : MARKET_BRIEF), context }
+        : { messages: S.conv.messages.slice(0, ai).map((m) => ({ role: m.role, content: m.content })), context, web: !!S.web, attachments, persona: persona(), mode: prefs.knowledge(), horizon: horizon() }),
     });
     if (!res.ok || !res.body) {
       let d = null; try { d = await res.json(); } catch (e) { /* not json */ }
@@ -858,7 +924,7 @@ export async function openMilo({ question = '', opener, send: sendNow = false, a
     body: html`<div class="milo"><div class="milo-chrome">${chromeHTML()}</div>
       <div class="milo-log-wrap"><div class="milo-log" role="log" aria-live="polite" aria-label="Conversation with Milo">${logHTML()}</div>
         <button type="button" class="milo-latest" data-v2-milo-latest hidden>${icon('arrowDown')}<span>Latest</span></button></div>
-      <form class="milo-form" data-v2-milo-form data-state="idle"><div class="milo-suggest-slot" data-v2-milo-suggest></div><div data-v2-milo-files>${filesHTML()}</div><div class="milo-compose">
+      <form class="milo-form" data-v2-milo-form data-state="idle"><div class="milo-suggest-slot" data-v2-milo-suggest></div><div data-v2-milo-tools>${toolsHTML()}</div><div data-v2-milo-files>${filesHTML()}</div><div class="milo-compose">
         <button type="button" class="milo-attach" data-v2-milo-attach aria-label="Attach an image or PDF" title="Attach an image or PDF: PNG, JPEG, GIF, WebP or PDF, up to 4 files of 5 MB each. You can also drop them here.">${icon('clip')}</button>
         <input type="file" hidden multiple accept="${Object.keys(ATTACH_TYPES).join(',')}" data-v2-milo-file tabindex="-1"><label class="sr" for="milo-q">Your question to Milo</label>
         <textarea id="milo-q" rows="1" maxlength="4000" placeholder="${placeholder()}" aria-describedby="milo-attached milo-allow">${S.draft}</textarea>
@@ -887,7 +953,7 @@ export async function openMilo({ question = '', opener, send: sendNow = false, a
       api.get('/api/health', { ttl: 60000 }).then((hh) => { S.health = hh; paintChrome(); }, () => {});
       if (sendNow && S.draft) send(S.draft);
     },
-    closed: () => { if (vvOff) vvOff(); if (gripOff) { gripOff(); gripOff = null; } S.panel = null; layout(); const ta = S.mounted && $('#milo-q', S.mounted); if (ta) S.draft = ta.value; SC.menu = false; S.showSettings = false; S.mounted = null; S.panel = null; },
+    closed: () => { if (vvOff) vvOff(); if (gripOff) { gripOff(); gripOff = null; } S.panel = null; S.web = false; S.deepHint = false; layout(); const ta = S.mounted && $('#milo-q', S.mounted); if (ta) S.draft = ta.value; SC.menu = false; S.showSettings = false; S.mounted = null; S.panel = null; },
   });
 }
 // Milo's panel is as wide as the reader drags it, as in the classic app: a grip on its left edge, the arrow
@@ -1053,9 +1119,12 @@ function wire(root) {
       S.showHistory = false; S.toEnd = true; paintChrome(); paintLog(); const ta = $('#milo-q', root); if (ta) ta.focus(); return;
     }
     if ((b = t('[data-v2-milo-del]'))) { const id = b.dataset.v2MiloDel; saveHistory(loadHistory().filter((c) => c.id !== id)); if (S.conv.id === id && !S.busy) { S.conv = blankConv(); S.items = []; meta.clear(); } paintChrome(); paintLog(false); const hd = $('#milo-hist-h', root); if (hd) { hd.setAttribute('tabindex', '-1'); hd.focus({ preventScroll: true }); } return; }
+    if (t('[data-v2-milo-web]')) { S.web = !S.web; paintTools(); const w = $('[data-v2-milo-web]', root); if (w) w.focus(); announce(S.web ? 'Milo will also search the web. Searches add to the cost.' : 'Web search off.'); return; }
+    if (t('[data-v2-milo-deep]')) { const ta = $('#milo-q', root); send(ta ? ta.value : '', { deep: true }); return; }
+    if ((b = t('[data-v2-milo-mode]'))) { const d = b.closest('details'); if (d) d.open = false; S.deepHint = b.dataset.deep === '1'; }
     if (t('[data-v2-milo-attach]')) { const inp = $('[data-v2-milo-file]', root); if (inp) inp.click(); return; }
     if ((b = t('[data-v2-milo-unattach]'))) { const i = Number(b.dataset.v2MiloUnattach), gone = S.files[i]; S.files.splice(i, 1); paintFiles(); const nb = $('[data-v2-milo-unattach]', root) || $('[data-v2-milo-attach]', root); if (nb) nb.focus(); if (gone) announce(`${gone.name} removed.`); return; }
-    if ((b = t('[data-v2-milo-follow]'))) { const ta = $('#milo-q', root); if (ta) { ta.value = b.dataset.v2MiloFollow; S.draft = ta.value; grow(ta); ta.focus(); scoutListen(ta.value); paintSuggest(); } return; }
+    if ((b = t('[data-v2-milo-follow]'))) { const ta = $('#milo-q', root); if (ta) { ta.value = b.dataset.v2MiloFollow; S.draft = ta.value; grow(ta); ta.focus(); scoutListen(ta.value); paintSuggest(); paintTools(); } return; }
     if ((b = t('[data-v2-milo-again]'))) { const q = (meta.get(Number(b.dataset.v2MiloAgain)) || {}).question; const ta = $('#milo-q', root); if (q && ta) { ta.value = q; S.draft = q; grow(ta); ta.focus(); } return; }
     if ((b = t('[data-v2-milo-copy]'))) {
       const m = S.conv.messages[Number(b.dataset.v2MiloCopy)] || {}; const txt = sourcesAsText(String(m.content || '').split(/\n(?:→|->) /)[0]);
