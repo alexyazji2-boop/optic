@@ -442,7 +442,7 @@ export function welcome(data) {
       <h1 id="wel-h">See what moves a stock, and why.</h1>
       <p>Prices, options, financials and filings for US stocks and funds, each figure with its source.</p>
       <form class="wel-form" role="search" data-v2-search-form>
-        <label class="field">${icon('search')}<span class="sr">Company or ticker</span><input name="q" placeholder="Try AAPL or Nvidia" autocomplete="off" spellcheck="false"></label>
+        <label class="field">${icon('search')}<span class="sr">Company or ticker</span><input name="q" placeholder="Try AAPL or Nvidia" data-v2-ta="submit" autocomplete="off" spellcheck="false"></label>
         <button type="submit" class="btn btn-light">Open</button>
       </form>
     </div>

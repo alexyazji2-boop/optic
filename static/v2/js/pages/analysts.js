@@ -8,7 +8,6 @@ import { skeleton, failed } from '../ui/states.js';
 import { table, nextSort } from '../ui/table.js';
 import { provideContext } from '../ui/milo.js';
 import { sectionHead } from './tabs.js';
-import { wire as typeahead } from '../ui/typeahead.js';
 
 const SHOWS = [['', 'All'], ['upgrades', 'Upgrades'], ['downgrades', 'Downgrades'], ['initiations', 'Initiations'], ['raised', 'Target raised'], ['lowered', 'Target lowered']];
 const RATINGS = [['', 'Any'], ['buy', 'Buy'], ['hold', 'Hold'], ['sell', 'Sell']];
@@ -73,7 +72,7 @@ export async function render(main) {
     if (t('[data-v2-an-clear]')) { Q.ticker = ''; if (Q.days === 365) Q.days = 30; load(); return; }
     if ((b = t('[data-v2-sort]'))) { const [, k] = b.dataset.v2Sort.split(':'); sort = nextSort(sort, k, COLS); paint(); const again = mainEl.querySelector(`[data-v2-sort="an:${k}"]`); if (again) again.focus(); }
   });
-  typeahead(main, (pick) => { Q.ticker = String(pick.symbol).toUpperCase(); load(); });   // suggestions under the box (Classic parity B8.10)
+  main.addEventListener('v2:ta-pick', (e) => { Q.ticker = String(e.detail.symbol).toUpperCase(); load(); });   // a suggestion taken (ui/typeahead.js, wired for the app)
   main.addEventListener('submit', (e) => { const f = e.target.closest('[data-v2-an-form]'); if (!f) return; e.preventDefault(); Q.ticker = String(f.t.value || '').trim().toUpperCase(); load(); });
   load();
 }

@@ -727,7 +727,7 @@ function bar() {
 function linkRow() {
   const recent = [...new Set([...(store.recent() || []), ...((store.activeList() || {}).symbols || [])])].filter((x) => x !== S.link).slice(0, 5);
   return html`<div class="ws-linkrow">
-      <form class="ws-linkform" data-ws-linkform><label for="ws-link">Company or fund shown in linked panels</label><input id="ws-link" name="link" value="${S.link}" autocomplete="off" spellcheck="false" maxlength="12" aria-describedby="ws-link-help"><button type="submit" class="btn btn-sm">Update panels</button><span id="ws-link-help" class="sr">Panels showing the ticker chip follow it</span></form>
+      <form class="ws-linkform" data-ws-linkform><label for="ws-link">Company or fund shown in linked panels</label><input id="ws-link" name="link" value="${S.link}" data-v2-ta="submit" autocomplete="off" spellcheck="false" maxlength="12" aria-describedby="ws-link-help"><button type="submit" class="btn btn-sm">Update panels</button><span id="ws-link-help" class="sr">Panels showing the ticker chip follow it</span></form>
       ${recent.length ? html`<div class="ws-recent" role="group" aria-label="Show a recent company in the linked panels">${recent.map((sym) => tickBtn(sym))}</div>` : ''}
       <p class="ws-sub ws-linkhint">Panels marked <span class="ws-linkchip is-hint">${icon('link')}<span>Follows</span></span> show this company or fund; the others show the whole market. Press a panel's marker to keep its ticker when this one changes.</p>
     </div>`;

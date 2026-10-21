@@ -31,6 +31,7 @@ import { watchTables } from './ui/align.js';
 import { startUnread } from './core/unread.js';
 import { startStrips } from './ui/strips.js';
 import { watch as watchGlossary } from './ui/glossmark.js';
+import { wire as wireTypeahead } from './ui/typeahead.js';
 
 // Home is the research workspace (Market Overview by default); pages/home.js supplies its blocks
 // Each page's module is fetched the first time it is opened, not with the shell: a first visit on a phone
@@ -334,6 +335,7 @@ async function boot() {
   await afterAuth();
   checkAvailability();
   startUnread(shell.setUnread);
+  wireTypeahead(document);   // suggestions under every symbol box that opts in with data-v2-ta (ui/typeahead.js)
   watchGlossary($('#main'));   // glossary terms marked on eligible text, once per section (Classic parity B9.1)
   startStrips();   // sideways strips: edge arrows, the wheel and a mouse drag (Classic parity B3)   // the bell and the phone bar's Watchlist count (signed in only)
   scrollmem.start();

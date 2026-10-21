@@ -98,7 +98,8 @@ def test_the_long_term_views_are_told_apart_and_summed_up(tmp_path):
 
 
 def test_search_can_be_dismissed_on_a_phone_and_leads_with_companies():
-    assert 'placeholder="Search a company"' in PAL and '<button type="button" class="palette-x" data-pal-close>Cancel</button>' in PAL
+    # a visible way out on a phone (no Escape key): since 2026-10-21 TradingView's close button, labelled
+    assert 'placeholder="Search a company, fund or ticker"' in PAL and '<button type="button" class="palette-x" data-pal-close aria-label="Close search" title="Close">${icon(\'close\').s}</button>' in PAL
     assert "e.target.closest('[data-pal-close]')) { close(); return; }" in PAL
     empty = PAL[PAL.index("  if (!q) {"):PAL.index("  const upper = q.toUpperCase()")]
     assert empty.index("group: 'Companies'") < empty.index("group: 'Actions'") < empty.index("group: 'Go to'")

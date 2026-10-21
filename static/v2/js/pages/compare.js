@@ -11,7 +11,6 @@ import { lineChart, mountCharts } from '../ui/chart.js';
 import { hbars } from '../ui/bars.js';
 import { button as miloButton, provideContext } from '../ui/milo.js';
 import { icon } from '../ui/icons.js';
-import { wire as typeahead } from '../ui/typeahead.js';
 import { scoreLine, tone100 } from '../ui/score.js';
 
 const MAX = 4, TIE = 5;
@@ -225,8 +224,8 @@ export async function render(main, route) {
     if (stale() !== was) { const at = e.target.selectionStart; paint(); const el = mainEl.querySelector(`#cmp-${i}`); if (el) { el.focus(); try { el.setSelectionRange(at, at); } catch (err) { /* number input */ } } }
   });
   // suggestions under each box (Classic parity B8.10): a pick fills the box and moves on to the next empty one
-  typeahead(main, (pick, input) => {
-    const i = Number(input.dataset.v2CmpInput); if (!Number.isInteger(i)) return;
+  main.addEventListener('v2:ta-pick', (e) => {
+    const pick = e.detail, input = e.target, i = Number(input.dataset.v2CmpInput); if (!Number.isInteger(i)) return;
     inputs[i] = String(pick.symbol).toUpperCase(); paint();
     const next = inputs.findIndex((x) => !x.trim()); const f = mainEl.querySelector(`#cmp-${next >= 0 ? next : i}`); if (f) f.focus();
   });

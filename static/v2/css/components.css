@@ -893,6 +893,31 @@ table.st td a { text-decoration: none; font-weight: 600; } table.st td a:hover {
 .palette-top { display: flex; align-items: center; gap: 8px; padding-right: 10px; border-bottom: 1px solid var(--c-line-2); } .palette-panel .palette-top input { flex: 1; min-width: 0; border-bottom: 0; }
 .palette-x { flex: none; min-height: var(--tap); padding: 0 12px; border: 0; border-radius: var(--r-ctl); background: none; color: var(--c-ink); font: 600 var(--t-md)/1 var(--f-sans); cursor: pointer; }
 .palette-x:hover { background: var(--c-sunk); } .palette-x:focus-visible { outline: 2px solid var(--c-focus); outline-offset: 1px; }
+/* search as TradingView lays it out (owner, 2026-10-21), squared: a large box with Clear and close, the filter row,
+   then symbol rows with the logo, the symbol, the name and the kind of listing; the typed letters in gold */
+.palette-panel { width: min(760px, calc(100vw - 32px)); }
+.palette-top { gap: 6px; padding: 0 8px 0 18px; } .palette-panel .palette-top input { height: 64px; padding: 0 4px; }
+.pal-glass { display: inline-grid; place-items: center; color: var(--c-ink-2); } .pal-glass svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.7; }
+.palette-clear { flex: none; min-height: var(--tap); padding: 0 10px; border: 0; border-radius: var(--r-ctl); background: none; color: var(--c-ink-3); font: 500 var(--t-md)/1 var(--f-sans); cursor: pointer; }
+.palette-clear:hover { color: var(--c-ink); background: var(--c-sunk); } .palette-clear:focus-visible { outline: 2px solid var(--c-focus); outline-offset: 1px; }
+.pal-div { flex: none; width: 1px; height: 24px; background: var(--c-line); }
+.palette-top input::-webkit-search-cancel-button { -webkit-appearance: none; appearance: none; display: none; }   /* Clear is the one way to empty it */
+.palette-x { display: inline-grid; place-items: center; width: var(--tap); padding: 0; } .palette-x svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.7; }
+.palette-filters { display: flex; flex-wrap: wrap; gap: 8px; padding: 12px 16px; border-bottom: 1px solid var(--c-line-2); }
+.sym-row { display: grid; grid-template-columns: 30px minmax(64px, max-content) minmax(0, 1fr) auto; align-items: center; gap: 14px; }
+.palette-item.sym-row { grid-template-columns: 30px minmax(64px, max-content) minmax(0, 1fr) auto auto; min-height: 54px; padding: 0 14px; border-radius: 0; border-bottom: 1px solid var(--c-line-2); }
+.sym-logo { position: relative; display: inline-grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; overflow: hidden; background: var(--c-sunk); color: var(--c-ink-3); font: 600 var(--t-sm)/1 var(--f-label); }
+.sym-logo::before { content: attr(data-l); } .sym-logo.has-img { background: var(--c-logo-bg); } .sym-logo.has-img::before { content: none; }
+.sym-logo img { position: absolute; inset: 3px; width: calc(100% - 6px); height: calc(100% - 6px); object-fit: contain; }
+.sym-sym { font: 600 var(--t-lg)/1.2 var(--f-label); color: var(--c-ink); white-space: nowrap; }
+.sym-name { color: var(--c-ink-2); font-size: var(--t-lg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sym-kind { color: var(--c-ink-3); font-size: var(--t-md); white-space: nowrap; }
+.sym-row b { color: var(--c-gold); font-weight: inherit; }
+@media (max-width: 560px) {
+  .palette-item.sym-row, .sym-row { grid-template-columns: 28px minmax(52px, max-content) minmax(0, 1fr) auto; gap: 10px; }
+  .palette-item.sym-row .pal-tag { display: none; } .sym-name, .sym-sym { font-size: var(--t-base); } .sym-kind { font-size: var(--t-sm); }
+  .palette-filters { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; } .palette-filters::-webkit-scrollbar { display: none; }
+}
 .milo-guest { display: grid; gap: var(--s-2); margin: 0; padding: 12px 20px 14px; border-bottom: 1px solid var(--c-line-2); background: var(--c-sunk); }
 .milo .milo-guest p { margin: 0; color: var(--c-ink-2); font-size: var(--t-md); line-height: 1.45; } .milo .milo-guest b { color: var(--c-ink); }
 .milo .milo-guest-sub { font-size: var(--t-sm); color: var(--c-ink-3); }

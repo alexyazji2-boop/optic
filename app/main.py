@@ -1718,6 +1718,74 @@ async def indices_panel() -> Dict[str, Any]:
     return await _run(longterm.analyse_indices, YF_PROVIDER)
 
 
+# Company logos for the search rows (owner, 2026-10-21: "include the logo as well, make it similar to the
+# tradingview screenshots"). Fetched by Optic, not by the reader's browser, so the two logo services never learn which
+# reader looked at which symbol, and kept on disk: a logo is asked for once a fortnight, and a symbol with none once
+# every two days. Only images are kept; an SVG is served under a sandboxing policy, so one opened on its own cannot
+# run anything on Optic's address. A reader's browser draws the symbol's initial when there is no logo.
+_LOGO_DIR = os.path.join(os.path.dirname(screen_mod.CACHE_PATH), "logos")
+_LOGO_SOURCES = ("https://assets.parqet.com/logos/symbol/{sym}", "https://financialmodelingprep.com/image-stock/{sym}.png")
+_LOGO_OK = {"image/png", "image/jpeg", "image/webp", "image/gif", "image/svg+xml"}
+_LOGO_KEEP, _LOGO_MISS_KEEP, _LOGO_MAX_BYTES = 14 * 86400, 2 * 86400, 200_000
+_LOGO_SYM = re.compile(r"^[A-Z][A-Z0-9.\-]{0,9}$")   # listed stocks and funds; indices, futures and pairs have none
+_LOGO_LOCK = threading.BoundedSemaphore(4)
+
+
+def _logo_fetch(sym: str) -> Optional[Tuple[bytes, str]]:
+    import urllib.request
+    for tpl in _LOGO_SOURCES:
+        try:
+            req = urllib.request.Request(tpl.format(sym=sym), headers={"User-Agent": "Mozilla/5.0 (Optic Terminal)"})
+            with urllib.request.urlopen(req, timeout=6) as r:
+                kind = (r.headers.get("Content-Type") or "").split(";")[0].strip().lower()
+                body = r.read(_LOGO_MAX_BYTES + 1)
+            if kind in _LOGO_OK and 0 < len(body) <= _LOGO_MAX_BYTES and not body.lstrip()[:15].lower().startswith((b"<!doctype html", b"<html")):
+                return body, kind
+        except Exception:                                                   # noqa: BLE001
+            continue
+    return None
+
+
+def _logo(sym: str) -> Optional[Tuple[bytes, str]]:
+    os.makedirs(_LOGO_DIR, exist_ok=True)
+    base = os.path.join(_LOGO_DIR, sym.replace(".", "_"))
+    now = time.time()
+    for kind_file in (base + ".type",):
+        if os.path.exists(kind_file) and now - os.path.getmtime(kind_file) < _LOGO_KEEP:
+            with open(kind_file) as fh:
+                kind = fh.read().strip()
+            with open(base + ".img", "rb") as fh:
+                return fh.read(), kind
+    if os.path.exists(base + ".none") and now - os.path.getmtime(base + ".none") < _LOGO_MISS_KEEP:
+        return None
+    with _LOGO_LOCK:
+        got = _logo_fetch(sym)
+    if got is None:
+        with open(base + ".none", "w") as fh:
+            fh.write("")
+        return None
+    with open(base + ".img", "wb") as fh:
+        fh.write(got[0])
+    with open(base + ".type", "w") as fh:
+        fh.write(got[1])
+    return got
+
+
+@app.get("/api/logo/{symbol}")
+async def company_logo(symbol: str) -> Response:
+    sym = str(symbol or "").upper()
+    if not _LOGO_SYM.match(sym):
+        return Response(status_code=404, headers={"Cache-Control": "public, max-age=86400"})
+    got = await _run(_logo, sym)
+    if got is None:
+        return Response(status_code=404, headers={"Cache-Control": "public, max-age=86400"})
+    body, kind = got
+    return Response(content=body, media_type=kind, headers={
+        "Cache-Control": "public, max-age=604800",
+        "X-Content-Type-Options": "nosniff",
+        "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; img-src data:; sandbox"})
+
+
 @app.get("/api/search")
 async def symbol_search(
     q: str = Query("", max_length=40, description="Partial symbol or company name"),

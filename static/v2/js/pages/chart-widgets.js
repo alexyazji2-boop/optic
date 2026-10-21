@@ -157,7 +157,7 @@ const BODY = {
     const L = store.activeList(), syms = L ? L.symbols : [], name = L ? L.name : 'your watchlist';
     return html`${lists.length > 1 ? html`<label class="select chw-sel"><span class="sr">Watchlist</span><select data-chw-list>${lists.map((l) => html`<option value="${l.id}" ${l.id === store.state.activeId ? 'selected' : ''}>${l.name}</option>`)}</select></label>` : ''}
       ${syms.length ? html`<ul class="chw-list chw-watch">${syms.map((s) => html`<li><a class="tick" href="#/${encodeURIComponent(s)}/chart" ${s === sym ? raw('aria-current="page"') : ''}>${s}</a><button type="button" class="ch-tool chw-x" data-chw-unwatch="${s}" aria-label="Remove ${s} from ${name}" title="Remove ${s}">${icon('close')}</button></li>`)}</ul>` : none(`Nothing in ${name} yet.`)}
-      <form class="chw-add" data-chw-watchform><label class="field field-sm"><span class="sr">Add a symbol to ${name}</span><input name="s" placeholder="Add ticker" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="12"></label><button type="submit" class="btn btn-sm">Add</button></form>
+      <form class="chw-add" data-chw-watchform><label class="field field-sm"><span class="sr">Add a symbol to ${name}</span><input name="s" placeholder="Add ticker" data-v2-ta="submit" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="12"></label><button type="submit" class="btn btn-sm">Add</button></form>
       ${sym && !syms.includes(sym) ? html`<button type="button" class="btn btn-sm chw-wide" data-chw-watchadd="${sym}">Add ${sym}</button>` : ''}
       ${fine(store.signedIn() ? 'The lists on your account, the same as the Watchlist page.' : 'Kept in this browser until you sign in.')}`;
   },
@@ -367,7 +367,7 @@ const BODY = {
   pairs() {
     const sym = C.sym(), b = PR.peer[sym] || '', pe = S.peers;
     const sugg = pe && pe.available ? (pe.peers || []).slice(0, 6) : [];
-    const controls = html`<form class="chw-add chw-pairform" data-chw-pairform><label class="chw-field"><span>Pair ${sym} with</span><input name="b" value="${b}" placeholder="Symbol" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="12"></label><button type="submit" class="btn btn-sm">Test</button></form>
+    const controls = html`<form class="chw-add chw-pairform" data-chw-pairform><label class="chw-field"><span>Pair ${sym} with</span><input name="b" value="${b}" placeholder="Symbol" data-v2-ta="submit" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="12"></label><button type="submit" class="btn btn-sm">Test</button></form>
       ${sugg.length ? html`<div class="chw-sugg"><span class="chw-fine">Moved most alike:</span> ${sugg.map((x) => html`<button type="button" class="chip" data-chw-pick="${x.symbol}" aria-pressed="${x.symbol === b}" title="${x.name || x.symbol}: correlation ${num(x.corr, 2)}">${x.symbol}</button>`)}</div>` : ''}`;
     if (!b) return html`${controls}${none('Pick a second stock: one with the same products, customers or market.')}`;
     if (S.prErr) return html`${controls}${failed('The pairs test', S.prErr, { retry: 'w-pairs' })}`;
