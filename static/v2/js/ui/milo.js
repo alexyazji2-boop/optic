@@ -12,7 +12,7 @@
 //
 // Nothing is sent until the reader presses Send. Every entry point drafts.
 import { html, render, $, raw, announce } from '../core/dom.js';
-import * as drawer from './drawer.js';
+import { makeDrawer } from './drawer.js';
 import * as api from '../core/api.js';
 import * as store from '../core/store.js';
 import * as prefs from '../core/prefs.js';
@@ -39,11 +39,32 @@ let provider = null, route = { view: 'home' };
 // symbol it is about when the page itself has none: the classic app's
 // per-panel ask chips said where a question came from. Cleared on navigation.
 let asked = null;
+/**
+ * The figures of the panel an Ask Milo button sits in, as the reader sees them (Classic parity B4a.3): its heading,
+ * its value tiles (dt and dd), its finding line, and the first rows of its first table. Only what is on screen
+ * (not a folded section's insides, not a closed fold), capped, so Milo answers about the numbers the reader is
+ * looking at. Read at the press, so a panel that refreshed sends what it shows now.
+ */
+export function panelFigures(el) {
+  const box = el && el.closest && el.closest('section.section, .answer, .ws-panel, .op-sec, .chw, article.card');
+  if (!box) return null;
+  const shown = (n) => n && n.getClientRects().length > 0 && !n.closest('details:not([open]) > :not(summary)');
+  const text = (n, max = 160) => { if (!n) return ''; const c = n.cloneNode(true); c.querySelectorAll('button, .sec-fold, .sec-tag, .sr, svg, script, style').forEach((x) => x.remove()); return c.textContent.replace(/\s+/g, ' ').trim().slice(0, max); };
+  const h = [...box.querySelectorAll('h2, h3')].find(shown);
+  const figures = [...box.querySelectorAll('dt')].filter(shown).slice(0, 30).map((dt) => [text(dt, 80), text(dt.nextElementSibling, 120)]).filter(([k, v]) => k && v);
+  const notes = [...box.querySelectorAll('.section-sub, .lead, .answer-lead, .t-lead, .finding')].filter(shown).slice(0, 2).map((n) => text(n, 300)).filter(Boolean);
+  const tb = [...box.querySelectorAll('table')].find(shown);
+  const table = tb ? { head: [...tb.querySelectorAll('thead th')].map((x) => text(x, 40)), rows: [...tb.querySelectorAll('tbody tr')].filter(shown).slice(0, 8).map((tr) => [...tr.children].map((x) => text(x, 60))) } : null;
+  const out = { name: text(h, 100) || null, figures, notes };
+  if (table && table.rows.length) out.table = table;
+  return figures.length || notes.length || out.table ? out : null;
+}
 /** Pages register what Milo may see from them, as they render. */
 export function provideContext(fn) { provider = typeof fn === 'function' ? fn : null; }
 /** Called by the app on every navigation, before the new page renders. */
 export function resetContext(r) {
   provider = null; route = r || { view: 'home' }; asked = null;
+  if (drawer.isOpen() && !drawer.isDocked()) drawer.close({ silent: true });
   // an open panel redraws its answers' "About" lines against the page now open (not while one streams)
   if (typeof paintLog === 'function' && host() && !S.live) { try { paintLog(false); paintChrome(); } catch (e) { /* drawn on next open */ } }
 }
@@ -65,6 +86,7 @@ export function contextLabel(scope = S.scope) {
 const safeCall = (fn) => { try { return fn() || {}; } catch (e) { console.error(e); return {}; } };
 /** The context sent with a question, checked against the route on screen. */
 export function buildContext(scope, prevTicker, now = new Date()) {
+  const panel = scope === 'auto' && asked && asked.panel ? asked.panel : null;
   const r = route, ctx = scope === 'auto' && provider ? { ...safeCall(provider) } : {};
   // a Dossier page's data must be about the symbol on screen; anything naming another is dropped
   if (DOSSIER.has(r.view) && r.symbol) {
@@ -81,7 +103,7 @@ export function buildContext(scope, prevTicker, now = new Date()) {
   delete ctx.focus_label; delete ctx.focus;
   if (scope === 'none') return { focus };
   if (scope === 'market') { const out = { focus }; ['macro', 'sectors', 'indices', 'read'].forEach((k) => { if (ctx[k]) out[k] = ctx[k]; }); return out; }
-  return { ...ctx, focus };
+  return panel ? { ...ctx, panel, focus } : { ...ctx, focus };
 }
 
 /* ---------------- history (the classic format) ---------------- */
@@ -395,9 +417,33 @@ const freshness = () => ((S.health && S.health.realtime_chain) ? 'Option chains 
 function attachedLine() {
   if (S.scope === 'none') return 'No page context attached';
   if (S.scope === 'market') return 'The market only attached';
-  return `${contextLabel('auto')} attached`;
+  return `${contextLabel('auto')} attached${asked && asked.panel && asked.panel.figures && asked.panel.figures.length ? `, with its ${asked.panel.figures.length} figures` : ''}`;
 }
 const placeholder = () => { const sym = S.scope === 'auto' ? onSymbol() : null; return sym ? `Ask about ${sym}` : 'Ask Milo'; };
+/* The example question for the page open: Classic put it in the placeholder and Tab drafted it (app.js:44053, 49845).
+ * Here a visible "Use this example" button drafts it, so Tab keeps moving focus (owner's amendment 7). Its words
+ * are Classic's. */
+const EXAMPLE_FOR = { brokerage: 'Where am I concentrated?', paper: 'How concentrated am I?', tracker: 'How concentrated am I?', watchlist: 'What changed this week?', scan: 'What do they have in common?' };
+export function exampleAsk(r = route, scope = S.scope) {
+  const sym = scope === 'auto' ? onSymbol(r) : null;
+  if (sym) return `What would change the picture for ${sym}?`;
+  return (scope === 'auto' && EXAMPLE_FOR[r.view]) || 'What is moving the market today?';
+}
+/* Follow-ups above the box once a symbol's options read is on screen, word for word Classic's (app.js:44016); quiet
+ * buttons, not chips (owner's amendment 3), and each only drafts, never sends. */
+export const OPTIONS_FOLLOWUPS = ['Why did the ranker pick that strike over a cheaper OTM one?', 'What does the gamma profile imply for a swing long here?', 'Is the flow confirming or fighting the chart?', 'Walk me through the entry zone and what invalidates it.', 'Does the short interest or insider activity change the read?', 'How does the earnings record affect holding through the print?'];
+function suggestHTML(empty) {
+  if (!empty || S.busy || blocked() || !(S.conv.messages || []).length) return '';
+  const follow = route.view === 'swing' && onSymbol() && S.scope === 'auto' ? OPTIONS_FOLLOWUPS : [];
+  const eg = exampleAsk();
+  return html`${follow.length ? html`<div class="milo-suggest" role="group" aria-label="Follow-up questions">${follow.map((q) => html`<button type="button" class="btn btn-quiet btn-sm" data-v2-milo-follow="${q}">${q}</button>`)}</div>` : ''}
+    <p class="milo-eg"><span><span class="t-muted">For example:</span> ${eg}</span><button type="button" class="btn btn-quiet btn-sm" data-v2-milo-follow="${eg}">Use this example</button></p>`;
+}
+function paintSuggest() {
+  const h = host(); if (!h) return;
+  const slot = $('[data-v2-milo-suggest]', h), ta = $('#milo-q', h); if (!slot) return;
+  draw(slot, suggestHTML(!ta || !ta.value.trim()));
+}
 function ctxHTML() {
   const opts = [['auto', `This page: ${contextLabel('auto')}`, 'The figures on the page you have open.'], ['market', SCOPES.market, "The market's state: indices, sectors and the macro read. No company."], ['none', SCOPES.none, 'Your question and this conversation only.']];
   return html`<div class="milo-ctx"><div class="milo-ctx-l">
@@ -480,6 +526,7 @@ function paintForm() {
   const f = $('.milo-form', h); if (f) f.dataset.state = !S.busy ? 'idle' : S.live && S.live.text ? 'streaming' : 'sending';
   const al = $('#milo-allow', h); if (al) al.textContent = !S.busy ? allowanceLine() : S.live && S.live.text ? 'Milo is answering' : 'Sending';
   paintHead();
+  paintSuggest();
 }
 const draw = (el, tpl) => { if (el) render(el, tpl); };
 
@@ -676,22 +723,80 @@ async function runAction(a, card, i) {
 }
 
 /* ---------------- the panel ---------------- */
-export async function openMilo({ question = '', opener, send: sendNow = false, about, symbol } = {}) {
+// A drawer of its own (ui/drawer.js makeDrawer), so another one (an answer's evidence, the account sheet) opens over
+// it rather than in its place.
+const drawer = makeDrawer({ cls: 'drawer-milo', titleId: 'milo-title' });
+export const isOpen = () => drawer.isOpen();
+export const isDocked = () => drawer.isDocked();
+/* Docked beside the page, as in Classic (styles.css:6973), only while the research beside it keeps its usable width
+ * (owner's amendment 8, 2026-10-21): CONTENT_MIN, measured. Every desktop page was laid out at narrower and narrower
+ * content widths with the window at 1600 (~/Optic/work/classic-parity/b4a_widths.py): the Dossier tabs, Chart,
+ * Options, Financials, Investing, Home, Macro, Brokerage, Compare and Scan held down to 640; the Watchlist's rows
+ * needed their narrower columns, which the page now takes from the docked width too (the eff-* classes). 760 keeps
+ * a margin over that and is the plan's starting point. Below it, and on a phone, Milo opens over the page as before.
+ * The panel narrows to fit (never under W_MIN) before it gives up docking. */
+export const CONTENT_MIN = 760;
+/** The docked width for a window `vw` wide with a rail `rail` wide, the reader's chosen width `want`: 0 when Milo
+ *  must open over the page instead. */
+export function dockFit(vw, rail, want, phone = false) {
+  if (phone) return 0;
+  const w = Math.min(want, vw - rail - CONTENT_MIN);
+  return w >= W_MIN ? Math.round(w) : 0;
+}
+const railW = () => { const r = document.querySelector('.shell > .rail'); return r && getComputedStyle(r).display !== 'none' ? r.getBoundingClientRect().width : 0; };
+const isPhoneNow = () => matchMedia('(max-width: 860px)').matches;
+let laid = '';
+/** Beside the page or over it, at the width that fits: on opening, on a resize, when the grip moves or the rail folds. */
+function layout(chosen = storedWidth() || W_DEFAULT) {
+  const root = document.documentElement, open = drawer.isOpen() && S.panel;
+  const w = open ? dockFit(window.innerWidth, railW(), chosen, isPhoneNow()) : 0;
+  if (open) drawer.setDocked(!!w);
+  if (w) {
+    const eff = window.innerWidth - w;   // the width the page lays out against: a window this wide without Milo
+    root.classList.add('milo-docked'); root.style.setProperty('--milo-dock-w', `${w}px`); S.panel.style.setProperty('--milo-w', `${w}px`);
+    root.classList.toggle('eff-1240', eff <= 1240); root.classList.toggle('eff-1100', eff <= 1100);
+  } else {
+    root.classList.remove('milo-docked', 'eff-1240', 'eff-1100'); root.style.removeProperty('--milo-dock-w');
+  }
+  // the page changed width without the window doing so: charts that redraw on a resize are told
+  const sig = `${w}|${open ? 1 : 0}`;
+  if (sig !== laid) { laid = sig; resizedPage(); }
+  return w;
+}
+let relaying = false;
+function resizedPage() { if (relaying) return; relaying = true; try { window.dispatchEvent(new Event('resize')); } finally { relaying = false; } }
+// the rail folding or unfolding changes the room beside Milo
+if (typeof MutationObserver !== 'undefined') {
+  const watchRail = () => { const sh = document.querySelector('.shell'); if (!sh) { setTimeout(watchRail, 500); return; } new MutationObserver(() => { if (drawer.isOpen()) layout(); }).observe(sh, { attributes: true, attributeFilter: ['class'] }); };
+  if (typeof document !== 'undefined') setTimeout(watchRail, 0);
+}
+
+export async function openMilo({ question = '', opener, send: sendNow = false, about, symbol, figures = null } = {}) {
   if (question) S.draft = question;
-  // every opening says where it came from; one with no block is the whole page
-  asked = about || symbol ? { about: about || null, symbol: symbol ? String(symbol).toUpperCase() : null } : null;
+  // every opening says where it came from, with the figures of the panel it was asked from; one with no block is the
+  // whole page
+  asked = about || symbol || figures ? { about: about || (figures && figures.name) || null, symbol: symbol ? String(symbol).toUpperCase() : null, panel: figures || null } : null;
+  // already open beside the page: the new question goes into the box, nothing is redrawn and the conversation stays
+  if (drawer.isOpen() && host()) {
+    const ta = $('#milo-q', host());
+    if (ta && question) { ta.value = question; grow(ta); }
+    paintChrome();
+    if (ta) { ta.focus({ preventScroll: true }); ta.setSelectionRange(ta.value.length, ta.value.length); }
+    if (sendNow && S.draft) send(S.draft);
+    return;
+  }
   S.showSettings = false; S.showInfo = false;
   let vvOff = null, gripOff = null;
   drawer.open({
-    title: 'Milo', opener,
+    title: 'Milo', opener, dock: dockFit(window.innerWidth, railW(), storedWidth() || W_DEFAULT, isPhoneNow()) > 0,
     // the redesign's compact header: Milo beside his name, and history, a new conversation and close as icons
-    head: html`<div class="milo-id">${figure('compact')}<div><h2 id="drawer-title" tabindex="-1">Milo</h2><p class="milo-sub">Research assistant</p></div></div>`,
+    head: html`<div class="milo-id">${figure('compact')}<div><h2 id="milo-title" tabindex="-1">Milo</h2><p class="milo-sub">Research assistant</p></div></div>`,
     actions: html`<button type="button" class="icon-btn" data-v2-milo-history aria-expanded="false" aria-controls="milo-history" aria-label="Conversation history" title="Conversation history">${icon('history')}</button>
       <button type="button" class="icon-btn" data-v2-milo-new aria-label="New conversation" title="New conversation">${icon('compose')}</button>`,
     body: html`<div class="milo"><div class="milo-chrome">${chromeHTML()}</div>
       <div class="milo-log-wrap"><div class="milo-log" role="log" aria-live="polite" aria-label="Conversation with Milo">${logHTML()}</div>
         <button type="button" class="milo-latest" data-v2-milo-latest hidden>${icon('arrowDown')}<span>Latest</span></button></div>
-      <form class="milo-form" data-v2-milo-form data-state="idle"><div class="milo-compose"><label class="sr" for="milo-q">Your question to Milo</label>
+      <form class="milo-form" data-v2-milo-form data-state="idle"><div class="milo-suggest-slot" data-v2-milo-suggest></div><div class="milo-compose"><label class="sr" for="milo-q">Your question to Milo</label>
         <textarea id="milo-q" rows="1" maxlength="4000" placeholder="${placeholder()}" aria-describedby="milo-attached milo-allow">${S.draft}</textarea>
         <button type="submit" class="milo-send" data-v2-milo-send aria-label="Send" title="Send (Enter). Shift and Enter for a new line">${icon('send')}</button>
         <button type="button" class="milo-stop" data-v2-milo-stop aria-label="Stop the answer" title="Stop the answer" hidden>${icon('stop')}</button></div>
@@ -699,7 +804,7 @@ export async function openMilo({ question = '', opener, send: sendNow = false, a
     mount: (b) => {
       S.mounted = $('.milo', b) || b;
       const panel = S.mounted.closest('.drawer-panel'); S.panel = panel;
-      if (panel) { panel.classList.add('milo-panel'); gripOff = resizable(panel); }
+      if (panel) { panel.classList.add('milo-panel'); gripOff = resizable(panel); layout(); }
       // the phone keyboard: the panel is the part of the screen the keyboard leaves, so the composer stays above it
       const vv = window.visualViewport;
       if (vv && panel) {
@@ -718,14 +823,14 @@ export async function openMilo({ question = '', opener, send: sendNow = false, a
       api.get('/api/health', { ttl: 60000 }).then((hh) => { S.health = hh; paintChrome(); }, () => {});
       if (sendNow && S.draft) send(S.draft);
     },
-    closed: () => { if (vvOff) vvOff(); if (gripOff) { gripOff(); gripOff = null; } const ta = S.mounted && $('#milo-q', S.mounted); if (ta) S.draft = ta.value; SC.menu = false; S.showSettings = false; S.mounted = null; S.panel = null; },
+    closed: () => { if (vvOff) vvOff(); if (gripOff) { gripOff(); gripOff = null; } S.panel = null; layout(); const ta = S.mounted && $('#milo-q', S.mounted); if (ta) S.draft = ta.value; SC.menu = false; S.showSettings = false; S.mounted = null; S.panel = null; },
   });
 }
 // Milo's panel is as wide as the reader drags it, as in the classic app: a grip on its left edge, the arrow
 // keys on the grip, a double click for the default. The classic key and its rules: a width is saved only once
 // chosen, never on opening; the page keeps at least 240 px (owner, 2026-10-20).
 const W_KEY = 'optic.chat.width.v2', W_OLD = 'optic.chat.width.v1', W_OLD_DEFAULT = 382, W_MIN = 320, W_DEFAULT = 560, PAGE_MIN = 240;
-const wMax = () => Math.max(W_MIN, window.innerWidth - PAGE_MIN);
+const wMax = () => Math.max(W_MIN, drawer.isDocked() ? window.innerWidth - railW() - CONTENT_MIN : window.innerWidth - PAGE_MIN);
 function storedWidth() {
   try {
     const n = parseInt(localStorage.getItem(W_KEY) || '', 10); if (Number.isFinite(n) && n >= W_MIN) return n;
@@ -743,6 +848,7 @@ function resizable(panel) {
   const apply = (px, save) => {
     w = Math.round(Math.min(Math.max(px, W_MIN), wMax()));
     panel.style.setProperty('--milo-w', `${w}px`);
+    if (drawer.isDocked()) { document.documentElement.style.setProperty('--milo-dock-w', `${w}px`); layout(w); }
     grip.setAttribute('aria-valuenow', String(w)); grip.setAttribute('aria-valuemin', String(W_MIN)); grip.setAttribute('aria-valuemax', String(wMax()));
     if (save) { try { localStorage.setItem(W_KEY, String(w)); } catch (e) { /* private mode */ } }
   };
@@ -772,7 +878,7 @@ function resizable(panel) {
   });
   grip.addEventListener('dblclick', () => { try { localStorage.removeItem(W_KEY); } catch (e) { /* private mode */ } apply(W_DEFAULT, false); });
   // a narrower window re-clamps the panel, without overwriting the width the reader chose
-  const onResize = () => apply(storedWidth() || W_DEFAULT, false);
+  const onResize = () => { if (relaying) return; const w2 = layout(); apply(w2 || storedWidth() || W_DEFAULT, false); };
   window.addEventListener('resize', onResize);
   return () => { window.removeEventListener('resize', onResize); grip.remove(); panel.style.removeProperty('--milo-w'); panel.classList.remove('milo-panel'); };
 }
@@ -835,7 +941,7 @@ function wire(root) {
     else if (e.key === 'End') { e.preventDefault(); items[items.length - 1].focus(); }
     else if (e.key === 'Tab') setMenu(false);
   });
-  root.addEventListener('input', (e) => { if (e.target.id === 'milo-q') { S.draft = e.target.value; grow(e.target); scoutListen(e.target.value); } });
+  root.addEventListener('input', (e) => { if (e.target.id === 'milo-q') { const was = !S.draft.trim(), now = !e.target.value.trim(); S.draft = e.target.value; grow(e.target); scoutListen(e.target.value); if (was !== now) paintSuggest(); } });
   root.addEventListener('scroll', (e) => { if (e.target.classList && e.target.classList.contains('milo-log')) syncLatest(); }, true);
   root.addEventListener('change', (e) => {
     const t = e.target;
@@ -878,7 +984,7 @@ function wire(root) {
       S.showHistory = false; S.toEnd = true; paintChrome(); paintLog(); const ta = $('#milo-q', root); if (ta) ta.focus(); return;
     }
     if ((b = t('[data-v2-milo-del]'))) { const id = b.dataset.v2MiloDel; saveHistory(loadHistory().filter((c) => c.id !== id)); if (S.conv.id === id && !S.busy) { S.conv = blankConv(); S.items = []; meta.clear(); } paintChrome(); paintLog(false); const hd = $('#milo-hist-h', root); if (hd) { hd.setAttribute('tabindex', '-1'); hd.focus({ preventScroll: true }); } return; }
-    if ((b = t('[data-v2-milo-follow]'))) { const ta = $('#milo-q', root); if (ta) { ta.value = b.dataset.v2MiloFollow; S.draft = ta.value; grow(ta); ta.focus(); scoutListen(ta.value); } return; }
+    if ((b = t('[data-v2-milo-follow]'))) { const ta = $('#milo-q', root); if (ta) { ta.value = b.dataset.v2MiloFollow; S.draft = ta.value; grow(ta); ta.focus(); scoutListen(ta.value); paintSuggest(); } return; }
     if ((b = t('[data-v2-milo-again]'))) { const q = (meta.get(Number(b.dataset.v2MiloAgain)) || {}).question; const ta = $('#milo-q', root); if (q && ta) { ta.value = q; S.draft = q; grow(ta); ta.focus(); } return; }
     if ((b = t('[data-v2-milo-copy]'))) {
       const m = S.conv.messages[Number(b.dataset.v2MiloCopy)] || {}; const txt = sourcesAsText(String(m.content || '').split(/\n(?:→|->) /)[0]);

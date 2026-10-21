@@ -46,7 +46,7 @@ kbd { font: 500 var(--t-xs)/1 var(--f-sans); padding: 4px 7px; border-radius: va
 .btn-milo { border-color: var(--c-line); background: transparent; color: var(--c-ink-2); }
 .btn-milo:hover { background: var(--c-sunk); border-color: var(--c-ink-3); color: var(--c-ink); }
 .btn-milo .ic { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.6; flex: none; }
-.topbar-milo { border-color: var(--c-gold-light); color: var(--c-ink); }
+.topbar-milo { border-color: var(--c-gold-light); color: var(--c-ink); white-space: nowrap; flex: none; }
 .topbar-milo:hover { background: var(--c-sunk); border-color: var(--c-gold-light); }
 /* Milo switched off on this deployment (ui/milo.js checkAvailability): the buttons still open the drawer,
    which says why, but no longer look ready to answer */
@@ -929,4 +929,26 @@ h2.sec-head { cursor: pointer; }
 /* insider and Congress tables: capped in height, their header kept in view as the rows scroll (B3.8) */
 #fin-ownership .tscroll, #fin-congress .tscroll, .ins-page .tscroll { max-height: min(62vh, 560px); overflow: auto; }
 #fin-ownership .tscroll thead th, #fin-congress .tscroll thead th, .ins-page .tscroll thead th { position: sticky; top: 0; z-index: 1; background: var(--c-raised); }
+
+/* ---------------- Milo docked beside the page (ui/milo.js layout; Classic parity B4a, 2026-10-21) ---------------- */
+.drawer.drawer-milo { z-index: 59; }   /* another drawer (evidence, the account sheet) opens over Milo */
+.drawer.is-docked .drawer-scrim { display: none; }
+.drawer.is-docked .drawer-panel { box-shadow: none; }
+html.milo-docked .stage { margin-right: var(--milo-dock-w, 0px); }
+@media (prefers-reduced-motion: no-preference) { html.milo-docked .stage { transition: margin-right var(--d) var(--ease); } }
+/* docked, the page is narrower than the window: the window-width rules for 1240 and 1100 px are taken from the width
+   the page has (html.eff-1240, html.eff-1100, set by ui/milo.js), so it lays out as a window that wide would */
+html.eff-1100 .session-chip .sc-next { display: none; }
+html.eff-1100 .mstrip { --n: 4; }
+html.eff-1100 .row-head, html.eff-1100 .row { --cols: minmax(150px, 1.4fr) 110px 120px 90px 20px; }
+html.eff-1100 .row .spark-cell, html.eff-1100 .row-head .spark-cell { display: none; }
+html.eff-1100 .qs { grid-template-columns: repeat(2, minmax(0, 1fr)); } html.eff-1100 .qcard:nth-child(2) { border-right: 0; } html.eff-1100 .qcard:nth-child(3) { padding-left: 0; } html.eff-1100 .qcard:nth-child(n+3) { border-top: 1px solid var(--c-line-2); }
+html.eff-1100 .answers { grid-template-columns: 1fr 1fr; } html.eff-1100 .answer:nth-child(2) { border-right: 0; } html.eff-1100 .answer:nth-child(3) .answer-in { padding-left: 0; } html.eff-1100 .answer:nth-child(n+3) { border-top: 1px solid var(--c-line-2); }
+/* above Milo's box: the Options follow-ups and the example, each a quiet button that drafts (B4a.4) */
+.milo-suggest-slot:empty { display: none; }
+.milo-suggest { display: flex; flex-wrap: wrap; gap: 4px; padding: 0 0 6px; }
+.milo-suggest .btn { white-space: normal; text-align: left; justify-content: flex-start; height: auto; min-height: var(--ctl-sm); padding: 6px 10px; }
+.milo-eg { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 0 0 6px; font-size: var(--t-sm); color: var(--c-ink-2); }
+.milo-eg > span { min-width: 0; }
+.milo-eg .btn { flex: none; }
 
