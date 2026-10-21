@@ -14,6 +14,7 @@ import { tabSelect, tabLinks } from './tabs.js';
 import { learn, kindOf, can, onLearn } from '../core/instrument.js';
 import { etStamp, etDay, sessionWord, tradeTime, sessionFreshness } from '../core/marketTime.js';
 import { poll } from '../core/poll.js';
+import { term } from '../ui/term.js';
 
 // The price's session and time in words: the close it is, or the trade time when the session is open, and any
 // extended print with the moment it was struck (core/marketTime.js).
@@ -109,12 +110,13 @@ function actions(sym, label, sm) {
   </div>`;
 }
 
-export function header(sym, D, view = 'overview', { compact = false, bar = true } = {}) {
+export function header(sym, D, view = 'overview', { compact = false, bar = true, stage = '' } = {}) {
   const q = D.quote || {};
   const s = (D.session && D.session.prices) || {};
   const name = q.name || (D.session && D.session.name) || '';
   const ext = s.extended && isNum(s.extended.price) ? s.extended : null;
   const label = (pageOf(view) || {}).label || 'Overview';
+  stage = typeof stage === 'function' ? stage() : stage;   // a function for livePrice's redraws, which pass these options on
   // One line, so the research gets the screen: the Chart page's header (owner, 2026-10-18 second review), on every
   // dossier tab since the design standard of 2026-10-19. The tall header below is kept for a caller that asks.
   if (bar) {
@@ -122,7 +124,7 @@ export function header(sym, D, view = 'overview', { compact = false, bar = true 
       <h1 class="name"><b class="tick">${sym}</b>${name && name !== sym ? html`<span>${name}</span>` : ''}<span class="sr">, ${label}</span></h1>
       <p class="dh-price">${isNum(q.price) ? html`<span class="dh-px">${num(q.price)}</span>` : D.quoteError ? '' : html`<span class="sk dh-sk dh-sk-sm" role="status" aria-label="Loading the price"></span>`}
         <span class="dh-chg ${dir(q.change_pct)}">${isNum(q.change_pct) ? html`${signed(q.change, 2, '')} (${signed(q.change_pct)})` : ''}</span>
-        ${isNum(q.price) ? html`<span class="dh-ext">${priceWhen(D)}</span>` : ''}${ext ? html`<span class="dh-ext">${capFirst(ext.kind)} ${num(ext.price)} <span class="${dir(ext.change_pct)}">${signed(ext.change_pct)}</span>${ext.as_of ? ` at ${etStamp(ext.as_of)}` : ''}</span>` : ''}</p>
+        ${isNum(q.price) ? html`<span class="dh-ext">${priceWhen(D)}</span>` : ''}${ext ? html`<span class="dh-ext">${capFirst(ext.kind)} ${num(ext.price)} <span class="${dir(ext.change_pct)}">${signed(ext.change_pct)}</span>${ext.as_of ? ` at ${etStamp(ext.as_of)}` : ''}</span>` : ''}${stage ? html`<span class="dh-ext dh-stage">${term(`stage:${sym}`, stage)}</span>` : ''}</p>
       ${actions(sym, label, true)}
     </header>`;
   }

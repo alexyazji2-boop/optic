@@ -203,15 +203,29 @@ Not tested:
 | B5.4 | Signal history and follow-up | Alerts, "Signal history" (`pages/signals.js`) | One folded record per trigger: date, symbol, setup, side, status, and the close after 1, 5, 10 and 20 candles (not yet or unknown in words, never a number); open: the record as it fired, what followed, its conditions, and readings, parameters and assumptions folded; filters for status, side, symbol and setup (the account's asked of the server); an open record stays open across repaints | Same; filters two to a row with labels above | Signed in: the account's (`/api/signals`); a guest: `optic.signals.v1` `{signals: [<=200], events}` in Classic's format: records kept as built, what followed appended once each, the first reading never replaced, another browser's keys ignored | Empty: how to set a swing setup alert (opens the form there); no match: Show all; unreadable store: an empty history; a failed follow-up: says the horizons show as unknown | `/api/signals`, `/api/signals/followup` (free, stores nothing) | b5: the account's list, a record opened, a status filter on the server, the open record kept; a guest's Classic records followed up and merged; a malformed store; a page check that fires one | done. Differs: an old record without a label is named from the condition list rather than by its rule id |
 
 ## B6. Research tools
+### B6a. The thesis check and the Overview's advanced research
+Evidence:
+- `b6a_thesis_check.py`: 19 of 19 in headless Chrome at 1440 (a guest, with Classic's records seeded) and 390 (the local owner account; real writes to the local test database, deleted at the end). A source held back in the browser makes the page redraw while a note is typed.
+- `b6a_research_check.py`: 21 of 21 at 1440, 1024, 390 and 360, a guest, on the preview's own data, with one fixture: a later quote, to make the header redraw.
+- `tests/test_v2_parity_b6a.py`: the seven conditions, the stored record against Classic's shapes (old, partial and Brokerage-written ones), the factor rules, the Pulse read, the scores and the statistics.
+
+Not tested:
+- Real Safari and a physical phone.
+- The live site's data for these sections (they read the same payloads as the preview).
+
+| Row | Task | Where | Desktop | Phone | Keeps | States | Deps | Evidence | Status |
+|---|---|---|---|---|---|---|---|---|---|
+| B6a.1 | Thesis check (`optic.thesis.v1`) | Overview, "Your thesis check" (`pages/thesis.js`), in place of the link to Classic | Start, then Classic's seven conditions with how each reads today; a level in dollars ("$1,200" read as 1200); a note; Save. Then: a headline ("2 of your 3 conditions hold"), each condition now, what flipped since it was written, the note, the next report's date; Edit, Ask Milo to stress-test it (Classic's question, drafted only), Delete with Undo | Same; 44 px rows, 16 px fields | `optic.thesis.v1` in Classic's format as a backing copy on both paths; signed in, `/api/theses` (authoritative once loaded); a save keeps what Brokerage's form wrote in the same record (risks, watching, the reader's own reassess line, horizon, assumptions) | Waiting for data: says so; a figure missing: "could not check this just now"; an unknown rule: not invented; a failed account save: kept here and said so | `/api/ticker`, `/api/longterm` (free) | b6a_thesis: the form, a redraw while typing (note, ticks, focus and caret kept), refusals, Classic's format, the view, Milo's draft, Delete and Undo, a flipped Classic record, prose kept, account save, failed save, fund | done. Differs, to protect data: the note starts from the record's own words, and an existing reassess line is kept (Classic started empty and overwrote both); a ticked level with no level is refused (Classic dropped it); "its sector" said once (Classic printed "its its") |
+| B6a.2 | Pulse score | Overview, Advanced research, "Optic's short-term read" (`pages/overview-research.js`) | The lede, the catalyst lines, the five inputs as diverging bars with their weights, the scale and skill notes, conviction and agreement, the lead story; "Why it reads this way" folded: what carries it (score times weight), the other side, what conviction means, the limits and the sources | Same; bars narrower | Nothing | No inputs: the block is left out | `/api/ticker` `pulse`, `digest` (free) | b6a_research: five rows with weights, the fold's content | done |
+| B6a.3 | All statistics and the method note | Advanced research, "All key statistics", "The rest of this ticker", How this works | Classic's eighteen figures, the feed's missing ones left out, each label opening Classic's definition (`stat:` terms in `ui/term.js`); one reading from each tab, each a link; the method folded | Two cards to a row | Nothing | A missing figure is left out, not dashed | `/api/ticker`, `/api/fair-value` (free) | b6a_research: 17 shown with definitions, six tab cards, the fold | done |
+| B6a.4 | Short-term Optic Score | Advanced research, "Optic Score, both horizons" | Short term (the swing composite) beside long term on one 0 to 100 scale, their words and bases, the disagreement note, and the price note when a high long-term score sits beside a stretched P/E | One column | Nothing | Long term still loading: says so | `/api/ticker`, `/api/longterm` | b6a_research: both tiles | done |
+| B6a.5 | Factors and "What to look at next" | Overview, "What to look at next"; `factors()` in `overview-research.js` | Coming up: the report by its date and days only (no time of day: B1), the week's releases (positioning reports at Advanced); research steps to each tab and Compare; Ask Milo drafts a question; "What has been moving it recently" folded. Classic's rule-based factors drive the steps and the fund's risk | One column | Nothing | No dates: says so | `/api/ticker` | b6a_research: events, steps, the fold, Milo's draft, no timing words | done. Differs: the company's bull and bear lists stay the server's `cases` under More (already in v2), so Classic's client-side lists are not shown a second time |
+| B6a.6 | Fund takeaways and the risk card | Overview, under a fund's four answers (`fundRisk`) | "A risk to weigh", the first point against it, with its evidence's tab; a fund has no Financials card or step and no thesis check | Same | Nothing | No point against: nothing shown | `/api/ticker` | b6a_research: SPY | done |
+| B6a.7 | Stage label in the header | The Overview's header line (`dossier-frame.js` `header({stage})`) | "Stage 2, advancing" as text, opening what it means for the symbol and its limits; kept when the live price redraws the line | Same | Nothing | Unavailable: no label | `/api/stage` (free) | b6a_research: the label, its explanation, after a redraw, at every width | done |
+
+### B6b and B6c
 | Row | Task | Status |
 |---|---|---|
-| B6a.1 | Thesis check (`optic.thesis.v1`) | open |
-| B6a.2 | Pulse score | open |
-| B6a.3 | All statistics and the method note | open |
-| B6a.4 | Short-term Optic Score | open |
-| B6a.5 | Factors and "What to look at next" | open |
-| B6a.6 | Fund takeaways and the risk card | open |
-| B6a.7 | Stage label in the header | open |
 | B6b.1 | Swing setups: scope, filters, rules form (`optic.setups.*`) | open |
 | B6b.2 | Setup detail, back-test table, contract finder | open |
 | B6b.3 | Chart patterns with measured base rates | open |

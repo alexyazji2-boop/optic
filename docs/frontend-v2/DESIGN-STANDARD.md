@@ -121,6 +121,7 @@ Every dossier tab uses the Chart page's one-line header (`dossier-frame.js` `hea
 - the ticker and name;
 - the price and the day's move;
 - the extended-hours price;
+- on the Overview only, the Weinstein stage as a text label in the same line ("Stage 2, advancing"), never a chip; what it means for the symbol opens from the label (Classic parity B6a);
 - Alert, Compare, Watch and Ask about at the right.
 
 The account button never wraps (`white-space: nowrap; flex: none`).

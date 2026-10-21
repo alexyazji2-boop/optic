@@ -24,6 +24,9 @@ import * as drawer from '../ui/drawer.js';
 import { hrefFor } from '../nav.js';
 import { kindOf, learn } from '../core/instrument.js';
 import { mountThesis, disposeThesis, thesisContext } from './thesis.js';
+import * as OR from './overview-research.js';
+import { knowledge } from '../core/prefs.js';
+import { defineLive } from '../ui/term.js';
 let lp = null;   // the header's price refresh (dossier-frame livePrice), stopped in dispose()
 
 let live = true;
@@ -418,6 +421,24 @@ function more(sym) {
     <div class="more">${items.map(([t1, b, hint]) => html`<details><summary>${t1}<span>${hint ? html`<small>${hint}</small>` : ''}${icon('chev')}</span></summary><div class="inner">${b}</div></details>`)}</div></section>`;
 }
 
+/* ---------------- the deeper research (Classic parity B6a) ---------------- */
+const RUNG = { simple: 0, literate: 1, advanced: 2, professional: 3, adaptive: 1 };
+function researchCtx(sym) {
+  const t = D.ticker || null, fund = isFundHere(sym), lt = D.longterm || null;
+  const ms = String((D.quote || {}).market_state || '').toUpperCase();
+  const pr = t ? OR.priceRead(series()) : null;
+  return { t, lt, D, fund, advanced: (RUNG[knowledge()] ?? 1) >= 2, session: ms === 'REGULAR' ? 'regular' : /POST/.test(ms) ? 'after' : 'closed',
+    f: t ? OR.factors(t, { lt, stars: (D.fairValue || {}).stars, price: pr, fund }) : { pos: [], neg: [] } };
+}
+/** The Weinstein stage as a text label in the header line (owner's amendment: no chip), on the Overview alone as
+ *  in Classic; what it means for this symbol opens from the label. */
+function stageLabel(sym) {
+  const r = D.stage;
+  if (!r || r.available !== true) return '';
+  defineLive(`stage:${sym}`, [r.explain, r.transition, r.limits].filter(Boolean).join(' '));
+  return `Stage ${r.stage}, ${String(r.name || '').toLowerCase()}${r.transition_short ? `, ${String(r.transition_short).toLowerCase()}` : ''}`;
+}
+
 /* ---------------- page ---------------- */
 function paint(main, sym) {
   if (!live) return;
@@ -427,13 +448,14 @@ function paint(main, sym) {
   const openDetails = $$('details[open] summary', main).map((x) => x.textContent.trim());
   const openEvs = $$('[data-v2-ev][aria-expanded="true"]', main).map((x) => x.getAttribute('aria-controls'));
   const scrollY = window.scrollY;
-  draw(main, html`<div class="dstick">${frameHeader(sym, D, 'overview')}${frameTabs(sym, 'overview', { fund: isFund(D) })}</div>
+  const rc = researchCtx(sym);
+  draw(main, html`<div class="dstick">${frameHeader(sym, D, 'overview', { stage: stageLabel(sym) })}${frameTabs(sym, 'overview', { fund: isFund(D) })}</div>
     ${D.quoteError && !D.quote ? (D.quoteError.kind === 'notfound' ? empty(`Optic has no listing for ${sym}`, 'No quote came back for this symbol. It may be misspelled, delisted, or listed outside the US under another form.', html`<button type="button" class="btn btn-sm" data-v2-open-palette>Search for the company</button>`) : failed(`${sym}'s quote`, D.quoteError, { retry: 'dossier' })) : ''}
     ${((D.framework || {}).freshness || {}).state === 'stale' ? staleLine({ text: clean(D.framework.freshness.text) }) : ''}
     ${about(sym)}
     <section class="section dchart" aria-label="Price chart">${D.tickerError ? failed('The price history', D.tickerError, { retry: 'dossier' }) : chartBlock(sym)}</section>
-    ${D.fwError && D.fvError && D.earnError ? failed('The four answers', D.fwError, { retry: 'dossier' }) : answers(sym)}
-    ${longViews(sym)}${combined()}${digest(sym)}${isFundHere(sym) ? '' : html`<div data-tc-slot></div>`}${D.ticker ? more(sym) : ''}
+    ${D.fwError && D.fvError && D.earnError ? failed('The four answers', D.fwError, { retry: 'dossier' }) : answers(sym)}${rc.fund ? OR.fundRisk(sym, rc.f) : ''}
+    ${longViews(sym)}${combined()}${digest(sym)}${isFundHere(sym) ? '' : html`<div data-tc-slot></div>`}${OR.nextSection(sym, rc)}${D.ticker ? more(sym) : ''}${OR.advancedSection(sym, rc)}
     <p class="asof disclaimer">${clean((D.ticker || {}).disclaimer || 'Not financial advice. For research and education only.')}</p>`);
   mountThesis(main, sym, () => D);   // the thesis check: one node for the visit, so a half-typed note survives this redraw
   if (D.ticker) mountChart(main, sym);
@@ -451,10 +473,10 @@ export async function render(main, route) {
   provideContext(() => ({ view: 'overview', ticker: sym, quote: D.quote, verdict: (D.ticker || {}).verdict, company: (D.ticker || {}).company, news: (D.ticker || {}).news, framework: D.framework, fair_value: D.fairValue, earnings: D.earnings, digest: D.digest, thesis_check: thesisContext() }));
   document.title = `${sym} Dossier, Optic`;
   if (lp) lp.stop();
-  lp = livePrice(main, route.symbol, () => D, 'overview', undefined);
+  lp = livePrice(main, route.symbol, () => D, 'overview', { stage: () => stageLabel(sym) });
   paint(main, sym);
   wire(main, sym);
-  sections(main, 'overview', { norm: (t) => { const n = ((main.querySelector('.dhead .name span') || {}).textContent || '').trim(); return n ? t.split(n).join('the company') : t; } });   // folds, Expand all, Panels (Classic parity B3)
+  sections(main, 'overview', { levels: { 'advanced research': 2 }, norm: (t) => { const n = ((main.querySelector('.dhead .name span') || {}).textContent || '').trim(); return n ? t.split(n).join('the company') : t; } });   // folds, Expand all, Panels (Classic parity B3)
   const enc = encodeURIComponent(sym);
   const step = (p, ok, bad) => { p.then((d) => { if (D.sym === sym) ok(d); }, (e) => { if (D.sym === sym) bad(e); }).finally(() => { if (D.sym === sym) paint(main, sym); }); };
   step(api.get(`/api/quote/${enc}`, { ttl: 20000, timeout: 15000 }), (d) => { if (d && d.available !== false) D.quote = fresher(D.quote, d.quote || d); else { D.quoteError = new api.ApiError('notfound', 404, `No quote for ${sym}`); store.forgetRecent(sym); } }, (e) => { D.quoteError = e; });
@@ -469,6 +491,7 @@ export async function render(main, route) {
   step(api.get(`/api/earnings/${enc}`, { ttl: 600000, timeout: 45000 }), (d) => { D.earnings = d; }, (e) => { D.earnError = e; D.earnings = {}; });
   step(api.get(`/api/digest/${enc}`, { ttl: 300000, timeout: 30000 }), (d) => { D.digest = d; }, () => { D.digest = null; });
   step(api.get(`/api/segments/${enc}`, { ttl: 600000, timeout: 60000 }), (d) => { D.segments = d; }, () => { D.segments = null; });
+  step(api.get(`/api/stage?symbol=${enc}`, { ttl: 3600000, timeout: 45000 }), (d) => { D.stage = d; }, () => { D.stage = null; });
 }
 
 export function dispose() { if (lp) { lp.stop(); lp = null; } live = false; disposeThesis(); drawer.close({ silent: true }); }
