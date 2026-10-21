@@ -9,16 +9,19 @@
 // recalculates as the reader types and keeps the caret where it was.
 //
 // The reader's edits are kept in Classic's key and format, optic.dcf.v1 {edits: {SYM: {drivers, wacc, base, equity}},
-// models: [...]}, so either app reads the other's; `models` is left as it is (saved models are B7b).
+// models: [...]}, so either app reads the other's. Saved models (B7b) are the account's (/api/valuation-models) when
+// signed in and this browser's `models` otherwise, 40 at most, each a snapshot that can be rerun exactly.
 //
 // The section is one node for the visit, put back after each of the page's redraws, so a box being typed in keeps its
 // value, focus and caret (owner's amendment 6). No model is called.
 import { html, render as draw } from '../core/dom.js';
 import * as api from '../core/api.js';
+import * as store from '../core/store.js';
 import { num, compact, clean } from '../core/format.js';
 import { button as miloButton } from '../ui/milo.js';
 
 export const STORE_KEY = 'optic.dcf.v1';
+export const MAX_LOCAL_MODELS = 40;
 
 /* ---------------- storage, Classic's ---------------- */
 export function readStore() {
@@ -140,7 +143,7 @@ export function parseAmount(text) {
 }
 
 /* ---------------- state ---------------- */
-const V = { sym: null, node: null, data: null, defaults: null, edits: null, loading: false, error: '', seq: 0, timer: null, open: {}, tab: 'wacc_growth', focus: null, sel: null, extra: {} };
+const V = { sym: null, node: null, data: null, defaults: null, edits: null, loading: false, error: '', seq: 0, timer: null, open: {}, tab: 'wacc_growth', focus: null, sel: null, extra: {}, saved: null, status: '', replays: {}, compares: {}, armed: null };
 const editsFor = () => { if (!V.edits) V.edits = Object.assign(blankEdits(), readStore().edits[V.sym] || {}); ['drivers', 'wacc', 'base', 'equity'].forEach((k) => { V.edits[k] = V.edits[k] || {}; }); return V.edits; };
 
 async function load(force) {
@@ -154,7 +157,7 @@ async function load(force) {
     if (anyEdits(e) && fresh.available) await runNow();
   } catch (err) { if (V.sym !== sym) return; V.data = { available: false, failed: true, reason: api.explain(err, 'The fair-value model') }; }
   V.loading = false;
-  if (V.sym === sym) paint();
+  if (V.sym === sym) { paint(); loadSaved(); }
 }
 function schedule() { clearTimeout(V.timer); V.timer = setTimeout(() => { runNow().then(() => paintResults()); }, 350); }
 /** Recompute with the reader's edits (free; nothing is kept on the server). Only the newest answer is shown. */
@@ -452,6 +455,127 @@ function form(d) {
     ${overrides(d)}</div></details>`;
 }
 
+/* ---------------- saved models (B7b; Classic valuation.js:1194-1364) ---------------- */
+async function loadSaved() {
+  const sym = V.sym;
+  if (store.signedIn()) {
+    try { const b = await api.get(`/api/valuation-models?symbol=${encodeURIComponent(sym)}`, { ttl: 0, force: true }); if (V.sym === sym) V.saved = { where: 'account', models: (b && b.models) || [], limit: b && b.limit }; }
+    catch (e) { if (V.sym === sym) V.saved = { where: 'account', models: [], error: api.explain(e, 'Saved models') }; }
+  } else V.saved = { where: 'browser', models: readStore().models.filter((m) => m && m.symbol === sym) };
+  if (V.sym === sym) paintSaved();
+}
+/** What a snapshot keeps: the reported figures, the assumptions and the result together, so it can be rerun exactly. */
+export function snapshotOf(sym, d, name, supplied) {
+  return { symbol: sym, name, base: d.base, assumptions: d.assumptions, model_version: d.model_version,
+    inputs: Object.assign({}, d.inputs_digest || {}, { supplied: supplied || {} }),
+    result: { per_share: d.dcf.per_share, wacc: d.dcf.wacc.wacc, terminal_share: d.dcf.terminal_share, bear: ((d.scenarios || {}).bear || {}).per_share, bull: ((d.scenarios || {}).bull || {}).per_share } };
+}
+/** A guest's saved model, as Classic keeps it in optic.dcf.v1.models, newest first, 40 at most. */
+export function keepLocalModel(snap, now = new Date()) {
+  const s = readStore();
+  s.models.unshift(Object.assign({}, snap, { id: `local-${now.getTime()}`, created_at: now.toISOString(), changed: (snap.assumptions || {}).changed || [], snapshot: snap }));
+  s.models = s.models.slice(0, MAX_LOCAL_MODELS);
+  writeStore(s);
+  return s.models[0];
+}
+const fmtField = (f, v) => (!has(v) ? (f.blank || 'none') : f.unit === '%' ? pct(v, 2) : f.unit === 'x' ? `${num(v, 2)} times` : num(v, f.step === 1 ? 0 : 2));
+/** A saved model's assumptions against the ones on screen, field by field; both sides are the server's numbers. */
+export function compareModel(m, d) {
+  const a = (m.snapshot || {}).assumptions || {}, rows = [];
+  FIELDS.forEach((f) => {
+    const was = f.wacc ? getPath(a.wacc || {}, f.key.slice(5)) : getPath(a.drivers || {}, f.key), now = fieldValue(d, f, 'current');
+    const same = (!has(was) && !has(now)) || (has(was) && has(now) && Math.abs(was - now) < 1e-9);
+    if (!same) rows.push({ label: f.label, saved: fmtField(f, was), now: fmtField(f, now) });
+  });
+  const inp = (m.snapshot || {}).inputs || {}, cur = d.inputs_digest || {}, notes = [];
+  if (inp.balance_date && cur.balance_date && inp.balance_date !== cur.balance_date) notes.push(`Newer filings since then: balance sheet ${day(inp.balance_date)} then, ${day(cur.balance_date)} now.`);
+  if (has(inp.price) && has(cur.price) && Math.abs(inp.price - cur.price) > 0.005) {
+    const same = money(inp.price) === money(cur.price), pr = (v) => (same ? `$${num(v, 2)}` : money(v));   // cents when the two would round alike
+    notes.push(`Price ${pr(inp.price)} then, ${pr(cur.price)} now.`);
+  }
+  return { rows, notes, savedValue: ((m.snapshot || {}).result || {}).per_share, nowValue: (d.dcf || {}).per_share };
+}
+async function modelById(id) {
+  if (String(id).startsWith('local-')) return readStore().models.find((m) => m && m.id === id) || null;
+  try { return await api.get(`/api/valuation-models/${encodeURIComponent(id)}`, { ttl: 0, force: true }); } catch (e) { return null; }
+}
+async function save(n) {
+  const d = V.data;
+  if (!d || !d.dcf || !d.dcf.available) { V.status = 'Nothing to save: the model has no result.'; paintSaved(); return; }
+  const name = ((n.querySelector('[data-dcf-save-name]') || {}).value || '').trim(), snap = snapshotOf(V.sym, d, name, editsFor().base);
+  try {
+    if (store.signedIn()) await api.post('/api/valuation-models', snap);
+    else keepLocalModel(snap);
+    V.status = `Saved ${new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}.`;
+    const box = n.querySelector('[data-dcf-save-name]'); if (box) box.value = '';
+  } catch (err) { V.status = `Not saved: ${err.message && err.kind !== 'server' ? err.message : api.explain(err, 'The save')}`; }
+  V.open.saved = true;
+  await loadSaved();
+  const b = n.querySelector('[data-dcf-save]'); if (b) b.focus({ preventScroll: true });
+}
+async function replay(id) {
+  const m = await modelById(id);
+  if (!m) { V.replays[id] = { error: 'That model could not be read.' }; paintSaved(); return; }
+  try { V.replays[id] = m.replay || await api.post('/api/valuation-models/replay', m.snapshot); } catch (err) { V.replays[id] = { error: api.explain(err, 'The rerun') }; }
+  paintSaved(`[data-dcf-replay="${CSS.escape(id)}"]`);
+}
+async function compare(id) {
+  const m = await modelById(id), d = V.data;
+  V.compares[id] = !m || !m.snapshot || !d || !d.available ? { error: 'That model could not be read.' } : compareModel(m, d);
+  paintSaved(`[data-dcf-compare="${CSS.escape(id)}"]`);
+}
+async function useModel(id) {
+  const m = await modelById(id);
+  if (!m || !m.snapshot) { V.status = 'That model could not be read.'; paintSaved(); return; }
+  const a = m.snapshot.assumptions || {};
+  V.edits = { drivers: JSON.parse(JSON.stringify(a.drivers || {})), wacc: JSON.parse(JSON.stringify(a.wacc || {})), base: JSON.parse(JSON.stringify(((m.snapshot.inputs || {}).supplied) || {})), equity: {} };
+  delete V.edits.drivers._deltas;
+  await runNow(); paint();
+  V.status = `Using the assumptions of ${m.name ? `"${m.name}"` : 'the model saved'} ${when(m.created_at)}, on today's figures.`; paintSaved();
+}
+async function remove(id) {
+  try {
+    if (String(id).startsWith('local-')) { const s = readStore(); s.models = s.models.filter((m) => m && m.id !== id); writeStore(s); }
+    else await api.del(`/api/valuation-models/${encodeURIComponent(id)}`);
+    V.status = 'Deleted.';
+  } catch (err) { V.status = `Not deleted: ${api.explain(err, 'The delete')}`; }
+  V.armed = null; delete V.replays[id]; delete V.compares[id];
+  await loadSaved();
+  const b = V.node && V.node.querySelector('[data-dcf-save]'); if (b) b.focus({ preventScroll: true });
+}
+function compareHTML(c) {
+  if (c.error) return html`<p class="t-muted">${c.error}</p>`;
+  return html`<div class="dcf-compare"><p><b>Then ${money(c.savedValue)}, now ${money(c.nowValue)}.</b></p>${c.rows.length ? html`<div class="tscroll"><table class="t"><thead><tr><th class="l">Assumption</th><th>Saved</th><th>Now</th></tr></thead><tbody>${c.rows.map((r) => html`<tr><th scope="row" class="l">${r.label}</th><td>${r.saved}</td><td>${r.now}</td></tr>`)}</tbody></table></div>` : html`<p class="t-muted">Every assumption is the same.</p>`}${c.notes.map((x) => html`<p class="t-muted">${x}</p>`)}</div>`;
+}
+function savedHTML(d) {
+  if (!d || !d.available || !(d.dcf || {}).available) return '';
+  const sv = V.saved, ms = (sv && sv.models) || [];
+  return fold('saved', `Saved models for ${V.sym}${ms.length ? ` (${ms.length})` : ''}`, html`<div data-dcf-saved>
+    <div class="dcf-save-row"><label class="dcf-save-name"><span class="t-label">Name this model (optional)</span><input type="text" data-dcf-save-name maxlength="80" autocomplete="off"></label>
+      <button type="button" class="btn btn-primary" data-dcf-save>Save a snapshot</button></div>
+    <p class="dcf-status" role="status">${V.status}</p>
+    <p class="asof">A snapshot keeps the reported figures, your assumptions and the result together, so it can be rerun exactly later. Saving again makes a new snapshot; an earlier one is never changed. ${store.signedIn() ? 'Saved to your account.' : 'Signed out, so snapshots are kept in this browser.'}</p>
+    ${sv && sv.error ? html`<p class="dcf-flag">Saved models could not be loaded: ${sv.error}</p>` : ''}
+    ${ms.length ? html`<ul class="dcf-saved">${ms.map((m) => { const rp = V.replays[m.id], cp = V.compares[m.id]; return html`<li>
+      <p class="dcf-saved-h"><b>${m.name || 'Unnamed model'}</b> <span class="t-muted">saved ${when(m.created_at)}</span></p>
+      <p class="t-muted">${money((m.result || {}).per_share)} a share then; ${day((m.inputs || {}).balance_date)} balance sheet, price ${money((m.inputs || {}).price)}; ${(m.changed || []).length ? `changed: ${m.changed.join(', ')}` : 'on the defaults'}.</p>
+      <div class="cluster"><button type="button" class="btn btn-sm btn-quiet" data-dcf-replay="${m.id}">Rerun exactly</button><button type="button" class="btn btn-sm btn-quiet" data-dcf-compare="${m.id}">Compare with now</button><button type="button" class="btn btn-sm btn-quiet" data-dcf-use="${m.id}">Use these assumptions</button>
+        ${V.armed === m.id ? html`<button type="button" class="btn btn-sm" data-dcf-del-yes="${m.id}">Delete it</button><button type="button" class="btn btn-sm btn-quiet" data-dcf-del-no>Keep it</button>` : html`<button type="button" class="btn btn-sm btn-quiet" data-dcf-del="${m.id}" aria-label="Delete ${m.name || 'the model'} saved ${when(m.created_at)}">Delete</button>`}</div>
+      ${V.armed === m.id ? html`<p class="dcf-flag" role="status">Delete this saved model? This cannot be undone.</p>` : ''}
+      ${rp ? html`<p class="${rp.error ? 'dcf-flag' : 't-muted'}" role="status">${rp.error ? rp.error : html`Rerun: ${money(rp.per_share)} ${rp.matches ? 'the same as when saved' : '(differs from the saved result)'}${rp.version_changed ? `; the engine has moved from ${rp.saved_version} to ${rp.engine_version}` : ''}.`}</p>` : ''}
+      ${cp ? compareHTML(cp) : ''}</li>`; })}</ul>
+      <p class="asof">"Rerun exactly" uses the reported figures stored with the snapshot. "Use these assumptions" applies them to today's figures.</p>` : sv ? html`<p class="t-muted">No saved models for ${V.sym} yet.</p>` : html`<p class="t-muted" role="status">Loading saved models…</p>`}</div>`);
+}
+/** Only the saved-models fold, so the rest of the section (and a box being typed in) is left alone. */
+function paintSaved(focusSel) {
+  const n = V.node; if (!n) return;
+  const host = n.querySelector('[data-dcf-saved-host]'); if (!host) return;
+  const a = document.activeElement, keepName = a && host.contains(a) && a.matches('[data-dcf-save-name]') ? a.value : null;
+  draw(host, savedHTML(V.data));
+  if (keepName !== null) { const b = host.querySelector('[data-dcf-save-name]'); if (b) { b.value = keepName; b.focus({ preventScroll: true }); } }
+  if (focusSel) { const f = host.querySelector(focusSel); if (f) f.focus({ preventScroll: true }); }
+}
+
 /* ---------------- the whole ---------------- */
 function results(d) {
   const dcf = d.dcf || {}, m = d.market || {}, ri = d.residual_income;
@@ -474,7 +598,7 @@ function bodyHTML() {
   if (!d) return html`<p class="t-muted" role="status">Loading the fair-value model…</p>`;
   if (!d.available) return html`<p class="${d.failed ? 'dcf-flag' : 't-muted'}">${clean(d.reason || 'A model cannot be built for this symbol.')}</p>${d.failed ? html`<button type="button" class="btn btn-sm" data-dcf-retry>Try again</button>` : ''}`;
   const dg = d.inputs_digest || {};
-  return html`<div data-dcf-results>${results(d)}</div>${form(d)}${(V.extraForms || []).map((x) => x(d))}
+  return html`<div data-dcf-results>${results(d)}</div>${form(d)}${(V.extraForms || []).map((x) => x(d))}<div data-dcf-saved-host>${savedHTML(d)}</div>
     <p class="asof dcf-foot">Model ${d.model_version || ''}, filings retrieved ${day(dg.filings_retrieved)}, balance sheet ${day(dg.balance_date)}, ${priceWhen(d.market || {})}. A model-implied value under stated assumptions. It is not a price target, a forecast Optic stands behind, or a signal to buy or sell.</p>`;
 }
 /** The whole section: on load, reset and a method change. Focus and the caret are put back. */
@@ -535,6 +659,13 @@ function wire(n) {
     if ((b = t('[data-dcf-tab]'))) { V.tab = b.dataset.dcfTab; paintResults(); const again = n.querySelector(`[data-dcf-tab="${V.tab}"]`); if (again) again.focus({ preventScroll: true }); return; }
     if (t('[data-dcf-reset]')) { V.edits = blankEdits(); rememberEdits(V.sym, V.edits); V.data = V.defaults || V.data; V.error = ''; paint(); const s = n.querySelector('[data-dcf-status]'); if (s) { s.tabIndex = -1; s.focus({ preventScroll: true }); } return; }
     if (t('[data-dcf-retry]')) { load(true); return; }
+    if (t('[data-dcf-save]')) { save(n); return; }
+    if ((b = t('[data-dcf-replay]'))) { replay(b.dataset.dcfReplay); return; }
+    if ((b = t('[data-dcf-compare]'))) { compare(b.dataset.dcfCompare); return; }
+    if ((b = t('[data-dcf-use]'))) { useModel(b.dataset.dcfUse); return; }
+    if ((b = t('[data-dcf-del]'))) { V.armed = b.dataset.dcfDel; paintSaved(`[data-dcf-del-yes="${CSS.escape(V.armed)}"]`); return; }
+    if (t('[data-dcf-del-no]')) { const id = V.armed; V.armed = null; paintSaved(id ? `[data-dcf-del="${CSS.escape(id)}"]` : null); return; }
+    if ((b = t('[data-dcf-del-yes]'))) { remove(b.dataset.dcfDelYes); return; }
     if ((b = t('[data-dcf-suggest]'))) { const box = n.querySelector(`[data-dcf-base="${CSS.escape(b.dataset.dcfSuggest)}"]`); if (box) { box.value = b.dataset.value; box.focus(); } return; }
     if (t('[data-dcf-base-run]')) {
       const ed = editsFor(); ed.base = {}; let bad = '';
@@ -555,7 +686,7 @@ export function mountDcf(root, sym) {
   const slot = root.querySelector('[data-dcf-slot]');
   if (V.sym !== sym || !V.node) {
     clearTimeout(V.timer);
-    Object.assign(V, { sym, data: null, defaults: null, edits: null, loading: false, error: '', open: {}, tab: 'wacc_growth', focus: null, sel: null, extra: {} });
+    Object.assign(V, { sym, data: null, defaults: null, edits: null, loading: false, error: '', open: {}, tab: 'wacc_growth', focus: null, sel: null, extra: {}, saved: null, status: '', replays: {}, compares: {}, armed: null });
     const n = document.createElement('section');
     n.className = 'section dcf'; n.id = 'dcf'; n.setAttribute('aria-labelledby', 'dcf-h');
     n.innerHTML = '<div class="section-head"><div><h2 class="t-h2" id="dcf-h">Fair-value model, discounted cash flow</h2></div></div><div class="dcf-body"></div>';

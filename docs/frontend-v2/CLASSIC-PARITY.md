@@ -280,10 +280,19 @@ Not tested:
 |---|---|---|---|---|---|---|---|---|---|
 | B7a.1 | DCF editor: inputs and per-year overrides, recomputed as you type (`optic.dcf.v1`) | Investing, "Fair-value model, discounted cash flow" (`pages/dcf.js`), in place of the summary and its link to Classic | The assumptions form, folded: Classic's 25 fields in six groups, each with its default and why, edited ones marked; the method choices; set individual years; Reset to the defaults. Typing recalculates after 350 ms and repaints only the results, so the box and its caret are untouched; a bad number is marked and said and runs nothing; a missing reported line can be typed in from the filing (B, M, K), with the filing's own candidates offered | Fields stack, 44 px, 16 px type | `optic.dcf.v1` edits per symbol in Classic's format, the other symbols and the saved models left as they are; read back and run on the next visit | Loading; failed: Try again; the last good figures stay while a run fails, and say so | `/api/valuation/{T}`, POST `/run` (free) | b7a: one run per edit with the value sent, the caret kept, Classic's store, a bad number, an override, a method switch, a page redraw while typing, a reload, reset | done |
 | B7a.2 | Sensitivity, forecast, bridge, statements and formulas | The same section | The sentence and the four figures that frame it, the terminal share, the checks; what moves the value most (each assumption stepped down and up); the methods side by side on one axis, never averaged; what today's price implies; three sensitivity tables (a pressed choice of pair, shaded against the price with the number always printed); bear, base and bull; then folded: the forecast year by year with the terminal value and the exit-multiple cross-check, the discount rate, the bridge (a line can be left out), the linked statements, the sources and the formulas; Classic's questions as quiet buttons that draft into Milo | One column | Folds opened stay open across reruns | A method that does not suit says why and what leads instead | as above | b7a: the summary, each part, a sensitivity pair, the forecast staying open, the bridge sent | done |
-| B7b.1 | Saved models: list, save, compare, replay, use | open |
+| B7b.1 | Saved models: list, save, compare, replay, use | done (see B7b below) |
 | B7c.1 | RI, FFO, DDM, FCFE | open |
 | B7c.2 | Comps and SOTP | open |
 | B7d.1 | Valuation Milo card: Preview, Apply, Undo | open |
+
+### B7b. Saved models
+Evidence:
+- `b7b_check.py`: 13 of 13 in headless Chrome, as a guest at 1440 and on the local account at 390 (real writes to the local test database, deleted at the end). Covered: save, list, rerun exactly, compare with now, use these assumptions, and delete with its confirmation.
+- `tests/test_v2_parity_b7b.py`: the snapshot, a guest's models in Classic's format, the compare.
+
+| Row | Task | Where | Desktop | Phone | Keeps | States | Deps | Evidence | Status |
+|---|---|---|---|---|---|---|---|---|---|
+| B7b.1 | Saved models: list, save, compare, replay, use | The fair-value model, "Saved models for {T}" (`dcf.js` `savedHTML`) | Name and Save a snapshot (the reported figures, the assumptions and the result together); each saved model with its value then, its inputs' date and what it changed; Rerun exactly (the same as when saved, or how it differs and whether the engine moved); Compare with now (the assumptions that differ, newer filings, the price); Use these assumptions on today's figures; Delete, confirmed in the page | Same; 44 px | Signed in: `/api/valuation-models`; a guest: `optic.dcf.v1` `models`, Classic's format, newest first, 40 at most | Nothing to save without a result; a failed load or save says so | `/api/valuation-models*` (free) | b7b, both paths | done. Differs: Delete asks in the page, as v2's other deletes do (Classic used the browser's confirm dialog); a price that rounds alike is shown in cents |
 
 ## B8. Home, Desk and Markets extras
 | Row | Task | Status |
