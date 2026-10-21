@@ -119,8 +119,9 @@ def test_time_stop():
 
 def test_share_size_risks_the_budget_not_the_notional():
     out = paper.size_shares(entry=100.0, stop=95.0, equity=100_000)
-    assert out["qty"] == 200                      # $1,000 risk / $5 per share
-    assert out["risk_dollars"] == 1000.0
+    # $500 risk / $5 per share: the default (balanced) book risks 0.5% since 2026-10-21
+    assert out["qty"] == 100
+    assert out["risk_dollars"] == 500.0
 
 
 def test_wider_stop_buys_fewer_shares():
@@ -137,8 +138,9 @@ def test_share_notional_is_capped():
 
 def test_option_size_budgets_the_whole_premium():
     out = paper.size_option(premium=5.0, equity=100_000)
-    assert out["qty"] == 4                        # $2,000 budget / $500 a contract
-    assert out["risk_dollars"] == 2000.0
+    # $1,000 budget (twice the 0.5% risk) / $500 a contract
+    assert out["qty"] == 2
+    assert out["risk_dollars"] == 1000.0
 
 
 def test_expensive_contract_still_gets_one_and_says_so():

@@ -50,8 +50,8 @@ def _snapshot(score=45.0, spot=100.0, support=None, atr14=2.0, verdict="cheap",
 def test_every_book_carries_the_approved_settings():
     want = {
         "conservative": (1.0, [], False, 2),
-        "balanced": (2.0, [], False, 3),
-        "aggressive": (2.0, [], False, 3),
+        "balanced": (1.0, [], False, 3),
+        "aggressive": (1.0, [], False, 3),
     }
     for book, (gross, iv, prefer, cluster) in want.items():
         cfg = paper.book_config(book)
@@ -63,6 +63,29 @@ def test_every_book_carries_the_approved_settings():
         assert cfg["charge_costs"] is True, book
         assert cfg["prefer_options"] is prefer, book
         assert cfg["max_event_cluster"] == cluster, book
+
+
+def test_the_owner_approved_lower_risk_and_no_leverage():
+    """Approved 2026-10-21: "build the recommended lower risk: 0.25%, 0.5% and 1% per
+    trade, every book at most 1x". On the replay this roughly halved the worst
+    drawdowns for similar return-to-drawdown while no entry signal is shown to work."""
+    assert [paper.book_config(b)["risk_per_trade"] for b in paper.BOOK_IDS] == [0.0025, 0.005, 0.01]
+    assert all(paper.book_config(b)["max_gross_exposure"] == 1.0 for b in paper.BOOK_IDS)
+    assert not hasattr(paper, "RISK_PER_TRADE"), "the old global said 1% for every book"
+
+
+def test_the_payload_reports_the_shown_books_own_risk(ledger):
+    for book, pct in (("conservative", 0.25), ("balanced", 0.5), ("aggressive", 1.0)):
+        assert paper.state(book=book)["config"]["risk_per_trade_pct"] == pct
+
+
+def test_the_pages_print_a_quarter_percent_as_a_quarter_percent():
+    v2 = open("static/v2/js/pages/tracker.js").read()
+    assert "export const riskPct = (r) => `${Number((Number(r) * 100).toFixed(2))}%`;" in v2
+    assert "${riskPct(b.risk_per_trade)} per trade" in v2
+    classic = open("static/app.js").read()
+    assert "${Number((b.risk_per_trade * 100).toFixed(2))}% per trade" in classic
+    assert "fmt(cfg.risk_per_trade_pct, 1) + '% of equity'" not in classic
 
 
 def test_the_books_still_differ_in_what_they_were_built_to_show():
@@ -112,7 +135,7 @@ def test_a_wider_stop_means_fewer_shares_not_more_risk():
     tight = paper.size_shares(100.0, 99.0, 100_000.0, "aggressive")
     floored = paper.size_shares(100.0, 97.0, 100_000.0, "aggressive")
     assert floored["qty"] <= tight["qty"]
-    assert floored["risk_dollars"] <= 100_000.0 * 0.02 + 1e-6
+    assert floored["risk_dollars"] <= 100_000.0 * 0.01 + 1e-6
 
 
 # --------------------------------------------- one leg, options when cheap
@@ -230,8 +253,8 @@ def test_capacity_reports_gross_against_the_books_cap(ledger):
     cap = paper._capacity(100_000.0, "aggressive")
     gross = pos["qty"] * pos["entry_price"]
     assert cap["gross_exposure"] == round(gross, 2)
-    assert cap["max_gross_exposure_x"] == 2.0
-    assert cap["gross_room"] == round(200_000.0 - gross, 2)
+    assert cap["max_gross_exposure_x"] == 1.0
+    assert cap["gross_room"] == round(max(100_000.0 - gross, 0.0), 2)
     assert paper._capacity(100_000.0, "conservative")["gross_room"] == 100_000.0, "1x, and empty"
     assert all(paper.book_config(b)["max_gross_exposure"] for b in paper.BOOK_IDS), "every book has a ceiling"
 
@@ -397,7 +420,7 @@ def test_the_page_payload_carries_the_change_and_dated_caveats(ledger):
     cfg = state["config"]
     assert (cfg["cost_bps_fund"], cfg["cost_bps_stock"], cfg["slippage_bps"]) == (5.0, 10.0, 5.0)
     book = next(b for b in state["books"] if b["id"] == "aggressive")
-    assert book["max_gross_exposure"] == 2.0 and book["capacity"]["max_gross_exposure_x"] == 2.0
+    assert book["max_gross_exposure"] == 1.0 and book["capacity"]["max_gross_exposure_x"] == 1.0
 
 
 def test_no_copy_reads_with_an_em_dash():

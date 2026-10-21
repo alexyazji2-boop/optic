@@ -45,9 +45,9 @@ from . import session as session_mod
 # sizing meaningful and P&L comparable across trades.
 START_EQUITY = float(os.environ.get("TRACKER_EQUITY", "100000"))
 
-# Fraction of equity risked per trade. 1% is the textbook figure and keeps a
-# losing streak survivable — 20 consecutive losers costs about 18% of capital.
-RISK_PER_TRADE = float(os.environ.get("TRACKER_RISK_PCT", "1.0")) / 100.0
+# Risk per trade is set per book (BOOKS below). The single TRACKER_RISK_PCT knob
+# that preceded the books was read by nothing but the payload, and it still said
+# 1% after the books moved to 0.25%, 0.5% and 1% on 2026-10-21, so it is gone.
 
 # A single option position can't risk more than this share of equity even if the
 # stop maths says otherwise: long premium can go to zero, so "risk" is the whole
@@ -176,9 +176,9 @@ MAX_NEW_PER_SCAN = int(os.environ.get("TRACKER_MAX_NEW_PER_SCAN", "6"))
 RULES_VERSION = "2026-10-21"
 RULES_CHANGE_KEY = "rules:" + RULES_VERSION
 RULES_CHANGE_SUMMARY = (
-    "Every book is long only. Positions held, at what they move rather than what they "
-    "cost, are capped at once the account for the conservative book and twice for the "
-    "balanced and aggressive books. A stop sits at least 1.5 times the "
+    "Every book is long only and risks less per trade: 0.25%, 0.5% and 1% of equity. "
+    "Positions held, at what they move rather than what they cost, never add up to more "
+    "than the account. A stop sits at least 1.5 times the "
     "14-day average true range from the entry. Each idea takes one position, in shares "
     "until an option implementation is validated. No more than two or three positions "
     "may report earnings within the same few days. Trading costs are charged.")
@@ -218,7 +218,10 @@ BOOKS: Dict[str, Dict[str, Any]] = {
         "blurb": ("Long only, shares only, and only the setups that clear a high bar. "
                   "Half the risk per trade, a smaller book, and no option premium "
                   "that can expire worthless."),
-        "risk_per_trade": 0.005,
+        # Lowered 2026-10-21 with the other two, on the owner's approval: while no
+        # entry signal is shown to work, less risk per trade cut the replay's
+        # worst drawdowns by about half for similar return-to-drawdown (PT-1 D).
+        "risk_per_trade": 0.0025,
         "min_composite": 55.0,
         "allow_options": False,
         "prefer_options": False,
@@ -227,9 +230,9 @@ BOOKS: Dict[str, Dict[str, Any]] = {
         "max_portfolio_risk": 0.06,
         "max_new_per_scan": 3,
         "max_notional_pct": 0.12,
-        # The 2026-10-21 rules. The ceiling is 1x: this book has never held more
-        # than 0.7x its equity, live or in the replay, so it states the limit
-        # rather than changing anything.
+        # The 2026-10-21 rules. Every book's ceiling is 1x, so none is leveraged
+        # while its entry is unproven; this one has never held more than 0.7x
+        # its equity, live or in the replay.
         "allow_shorts": False,
         "max_gross_exposure": 1.0,
         "min_stop_atr": 1.5,
@@ -246,10 +249,11 @@ BOOKS: Dict[str, Dict[str, Any]] = {
         "id": "balanced",
         "label": "Balanced",
         "tagline": "Medium risk, medium reward",
-        "blurb": ("Long only, at the textbook 1% of equity per trade. One position per "
-                  "idea, in shares until an option implementation is validated. The middle "
-                  "book, and the one the terminal's existing record belongs to."),
-        "risk_per_trade": 0.010,
+        "blurb": ("Long only, at half a percent of equity per trade and never more in "
+                  "positions than the account. One position per idea, in shares until an "
+                  "option implementation is validated. The middle book, and the one the "
+                  "terminal's existing record belongs to."),
+        "risk_per_trade": 0.005,
         "min_composite": 30.0,
         "allow_options": True,
         "prefer_options": False,
@@ -259,7 +263,7 @@ BOOKS: Dict[str, Dict[str, Any]] = {
         "max_new_per_scan": 6,
         "max_notional_pct": 0.25,
         "allow_shorts": False,
-        "max_gross_exposure": 2.0,
+        "max_gross_exposure": 1.0,
         "min_stop_atr": 1.5,
         # Empty: no option is bought until an option implementation is validated
         # on observed quotes. "Cheap" IV alone does not make a call better than
@@ -274,10 +278,11 @@ BOOKS: Dict[str, Dict[str, Any]] = {
         "id": "aggressive",
         "label": "Aggressive",
         "tagline": "High risk, high reward",
-        "blurb": ("Long only, at twice the risk per trade, with more volatile names "
-                  "allowed through. Shares until an option implementation is validated. "
-                  "The book most likely to post the best month and the worst one."),
-        "risk_per_trade": 0.020,
+        "blurb": ("Long only, at twice the balanced book's risk per trade, with more "
+                  "volatile names allowed through, and never more in positions than the "
+                  "account. Shares until an option implementation is validated. The book "
+                  "most likely to post the best month and the worst one."),
+        "risk_per_trade": 0.010,
         "min_composite": 30.0,
         "allow_options": True,
         "prefer_options": False,
@@ -287,7 +292,7 @@ BOOKS: Dict[str, Dict[str, Any]] = {
         "max_new_per_scan": 8,
         "max_notional_pct": 0.4,
         "allow_shorts": False,
-        "max_gross_exposure": 2.0,
+        "max_gross_exposure": 1.0,
         "min_stop_atr": 1.5,
         "option_iv_verdicts": [],
         "one_leg_per_idea": True,
@@ -2043,7 +2048,7 @@ def state(limit: int = 60, month: Optional[str] = None,
             "max_portfolio_risk_pct": _f(MAX_PORTFOLIO_RISK * 100, 1),
             "max_new_per_scan": MAX_NEW_PER_SCAN,
             "watchlist": DEFAULT_WATCHLIST,
-            "risk_per_trade_pct": _f(RISK_PER_TRADE * 100, 2),
+            "risk_per_trade_pct": _f(book_config(book or DEFAULT_BOOK)["risk_per_trade"] * 100, 2),
             "min_composite": MIN_COMPOSITE,
             "max_hold_days": MAX_HOLD_DAYS,
             "max_option_risk_pct": _f(MAX_OPTION_RISK * 100, 1),

@@ -22,7 +22,7 @@ meet the multiple-confluence standard and is not promoted.
 
 The safeguards in the approved book rules held up: long only, a gross cap, a stop floor, one position per idea, and
 costs. Three more are now on the branch: options paused, exposure counted by what it moves, and an event-cluster
-cap. Two more are recommended for your decision: lower risk per trade and an unleveraged ceiling.
+cap. Lower risk per trade and an unleveraged ceiling were then approved and built.
 
 ## 1. Audit of the current logic
 
@@ -101,7 +101,7 @@ losing streaks, MFE, MAE and giveback, is in `results/` (`comparison-table.csv`,
 | Repair | Evidence | Status |
 |---|---|---|
 | Long only | PT-1 registered: helped every book; held on funds alone | kept (2750801) |
-| Gross cap | Cut the worst drawdown in every period | kept; **1x recommended** (below) |
+| Gross cap | Cut the worst drawdown in every period | kept; **1x for every book**, approved and built |
 | Stop at least 1.5 ATR | PT-1 registered: helped Aggressive and Balanced; mixed on funds alone | kept |
 | One position per idea | the record's doubled legs | kept |
 | Options when IV is cheap | Not validated; "cheap" alone is no reason to prefer a call | **paused** (d5235c9): shares only until an option implementation is validated |
@@ -111,7 +111,7 @@ losing streaks, MFE, MAE and giveback, is in `results/` (`comparison-table.csv`,
 | Event clusters | 5 of Conservative's 6 open positions report by 2026-11-04 (Balanced 8 of 14, Aggressive 6 of 12); trades held through a release lost more than 1.5R through a gap 3 to 5 times as often | cap of 2 or 3 positions reporting within 3 days of one another (d5235c9) |
 | Over a limit | | the book stops adding, it never sells to fit (stated in the payload and caveats) |
 
-**Recommended, not built (your decision): lower risk per trade and an unleveraged ceiling.** On the approved rule
+**Lower risk per trade and an unleveraged ceiling (approved and built after this report, see Decisions).** On the approved rule
 set, Aggressive at 0.5% risk and 1x gross had worst drawdowns of -12.6% (2013-2018) and -20.6% (2019-2026). At 2%
 and 2x the figures were -25.7% and -45.4%, with similar or better return-to-drawdown. On funds alone the 0.5%/1x
 drawdowns were -15.9% and -17.1%, against -41.2% and -38.7%. Suggested: Conservative 0.25%, Balanced 0.5%,
@@ -196,10 +196,15 @@ The trailing exit is a candidate for the next round, not a change now: in PT-1 i
 | E positioning-conditioned, F flow-confirmed | **Forward only:** test once the research watch holds at least 300 triggers with snapshots, against the same setups without them |
 | Advance to forward paper testing | **None qualifies.** The research watch records shadow trades for every setup (frozen rules) so a forward test exists, but nothing is promoted to a portfolio |
 
-## Decisions for you
+## Decisions
 
-1. Approve d5235c9's changes to the approved rules: options paused, Conservative's 1x ceiling, exposure counted by
-   leverage and delta, and the event-cluster cap.
-2. Lower risk per trade to 0.25/0.5/1% and every book's ceiling to 1x (recommended, not built).
-3. Turn on the research watch (`OPTIC_RESEARCH_BOOK=true`) when the branch is deployed.
-4. Push, when Railway builds are back.
+Recorded 2026-10-21, the owner's words: "Approve d5235c9 and also build the recommended lower risk: 0.25%, 0.5%
+and 1% per trade, every book at most 1x. Don't push yet."
+
+1. d5235c9 approved: options paused, Conservative's 1x ceiling, exposure counted by leverage and delta, the
+   earnings-cluster cap.
+2. Lower risk built (next commit on the branch): 0.25%, 0.5% and 1% per trade, every book at most 1x.
+3. Still open: switch on the research watch (`OPTIC_RESEARCH_BOOK=true`) when the branch is deployed.
+4. Still open: push, on the owner's word, when Railway builds are back.
+5. Started as their own sessions: round R3 on the earnings-reaction lead, and the fixes for three input defects
+   found in the audit (repainting levels, the regime's breadth label, the earnings move's timing).

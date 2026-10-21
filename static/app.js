@@ -34755,10 +34755,11 @@ function renderBookSelector(d) {
            is the only backtest this app has. So the start date is printed
            instead of erased. */''}
       ${b.since ? `<span class="bk-since">Record from ${esc(b.since)}</span>` : ''}
-      <span class="bk-rules">${fmt(b.risk_per_trade * 100, 1)}% per trade ·
+      <span class="bk-rules">${Number((b.risk_per_trade * 100).toFixed(2))}% per trade ·
         score bar ${fmt(b.min_composite, 0)} ·
         ${b.allow_shorts === false ? 'long only · ' : ''}${esc(bookLegsText(b))} ·
-        ${b.max_gross_exposure ? `positions at most ${fmt(b.max_gross_exposure, 0)} times the account · ` : ''}max daily range ${fmt(b.max_atr_pct, 0)}%</span>
+        ${b.max_gross_exposure ? (b.max_gross_exposure === 1 ? 'positions at most the account · '
+    : `positions at most ${fmt(b.max_gross_exposure, 0)} times the account · `) : ''}max daily range ${fmt(b.max_atr_pct, 0)}%</span>
       <span class="bk-blurb">${esc(b.blurb)}</span>
     </button>`;
   }).join('');
@@ -35153,7 +35154,8 @@ function renderTracker(d) {
         <h3>${hg('Position sizing')}</h3>
         ${kv([
     ['Account', money(s.start_equity) + ' notional'],
-    ['Risk per share trade', fmt(cfg.risk_per_trade_pct, 1) + '% of equity'],
+    ['Risk per share trade', (bk.risk_per_trade ? Number((bk.risk_per_trade * 100).toFixed(2))
+      : cfg.risk_per_trade_pct) + '% of equity'],
     ['Max risk per option trade', fmt(cfg.max_option_risk_pct, 1) + '% of equity'],
     ['Single-contract exception', 'up to ' + fmt(cfg.option_single_contract_cap_pct, 0) + '% of equity'],
     ['Share position cap', fmt(((((t.books || []).find((b) => b.id === (t.book || 'balanced'))
@@ -35179,7 +35181,9 @@ function renderTracker(d) {
     ['Stop', 'Just beyond the nearest real support or resistance level, or twice the average daily range if none is close'
       + (bk.min_stop_atr ? ', and never closer than ' + fmt(bk.min_stop_atr, 1) + ' times the average daily range' : '')],
     ['Instruments', bookLegsText(bk)],
-    ['All positions together', bk.max_gross_exposure ? 'at most ' + fmt(bk.max_gross_exposure, 0) + ' times equity at market value' : 'no cap'],
+    ['All positions together', bk.max_gross_exposure ? (bk.max_gross_exposure === 1
+      ? "at most the account's value, counted by what they move"
+      : 'at most ' + fmt(bk.max_gross_exposure, 0) + ' times equity, counted by what they move') : 'no cap'],
     ['Trading costs', bk.charge_costs ? fmt(cfg.cost_bps_fund, 0) + ' basis points a side for a fund, '
       + fmt(cfg.cost_bps_stock, 0) + ' for a stock, plus ' + fmt(cfg.slippage_bps, 0) + ' of slippage' : 'none charged'],
     ['Target', 'twice the risk distance. Fixed, not fitted'],
