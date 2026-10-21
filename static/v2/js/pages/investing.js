@@ -8,7 +8,6 @@
 // model. The trend score is labelled as in the Overview, beside the
 // business-and-price case, so the two long-term readings never blur.
 import { $, html, render as draw, raw } from '../core/dom.js';
-import { CLASSIC } from '../core/classic.js';
 import * as api from '../core/api.js';
 import * as store from '../core/store.js';
 import { sections } from '../ui/sections.js';
@@ -24,6 +23,7 @@ import { core, header, tabs, isFund, livePrice } from './dossier-frame.js';
 import * as VS from './valuation-scenarios.js';
 import { kindOf, can } from '../core/instrument.js';
 import * as TR from '../core/track.js';
+import { mountDcf, disposeDcf, dcfContext } from './dcf.js';
 let lp = null;   // the header's price refresh (dossier-frame livePrice), stopped in dispose()
 
 const RANGES = { '1Y': 52, '3Y': 156, '5Y': 260, '10Y': 520, All: Infinity };
@@ -246,24 +246,6 @@ function fundValuation(sym) {
     <p class="asof">${clean(v.caveat || '')} Source: Yahoo Finance's fund figures.</p></section>`;
 }
 
-function dcf(sym) {
-  const v = D.val;
-  if (v === undefined) return html`<section class="section">${skeleton('lines', 3, 'Loading the cash flow model')}</section>`;
-  if (!v || !v.available) return '';
-  const d = v.dcf || {}, sc = v.scenarios || {}, rv = v.reverse || {}, tor = (v.tornado || []).slice(0, 4);
-  const price = (v.market || {}).price;
-  return html`<section class="section" aria-labelledby="dcf-h"><div class="section-head"><div><h2 class="t-h2" id="dcf-h">Fair-value model, discounted cash flow</h2><p class="section-sub">${clean((((v.classification || {}).models || {}).dcf || {}).name || '')}. ${clean((((v.classification || {}).models || {}).dcf || {}).why || '')}</p></div>
-      <a class="btn" href="${CLASSIC}#/${sym}/investing">Edit the model in the classic app</a></div>
-    ${kv([['Base case, a share', html`${money(d.per_share)} <span class="t-muted">${isNum(d.upside) ? signed(d.upside * 100, 0) : 'n/a'} against ${num(price)}</span>`], ['Discount rate', isNum(d.discount_rate) ? pct(d.discount_rate * 100, 2) : 'n/a'], ['Share of value after the forecast', isNum(d.terminal_share) ? pct(d.terminal_share * 100, 0) : 'n/a']], 3)}
-    <div class="tscroll"><table class="t"><thead><tr><th>Case</th><th>A share</th><th>Against the price</th><th>What it assumes</th></tr></thead>
-      <tbody>${['bear', 'base', 'bull'].filter((k) => sc[k]).map((k) => html`<tr><td>${capFirst(k)}</td><td>${money(sc[k].per_share)}</td><td>${isNum(sc[k].upside) ? signed(sc[k].upside * 100, 0) : 'n/a'}</td><td class="l">${clean((v.scenario_text || {})[k] || '')}</td></tr>`)}</tbody></table></div>
-    ${(rv.solves || []).length ? html`<h3>What today's price implies</h3><ul class="plain">${rv.solves.map((s) => html`<li>${clean(s.text)} <span class="t-muted">Holding ${clean(s.held)}.</span></li>`)}</ul>` : ''}
-    ${tor.length ? html`<h3>What moves the value most</h3><div class="tscroll"><table class="t"><thead><tr><th>Input</th><th>Lower</th><th>Higher</th><th>Swing</th></tr></thead><tbody>${tor.map((t) => html`<tr><td>${t.label}</td><td>${money(t.value_low)}</td><td>${money(t.value_high)}</td><td>${money(t.swing)}</td></tr>`)}</tbody></table></div>` : ''}
-    ${(v.warnings || []).map((w) => html`<p class="stale">${clean(w.text || w)}</p>`)}
-    <p class="asof">Model output from the company's filings, with stated defaults. The full workspace (assumptions, sensitivity tables, statements, other methods, peers, saved models) is in the classic app.</p>
-  </section>`;
-}
-
 function scenarios(sym) {
   if (D.vin === undefined) return html`<section class="section">${skeleton('lines', 3, 'Loading valuation inputs')}</section>`;
   if (!D.vin || !D.vin.available) return '';
@@ -291,7 +273,8 @@ function paint() {
   const y = window.scrollY;
   const company = can(kindOf(sym, D)).valuation;
   draw(mainEl, html`<div class="dstick">${header(sym, D, 'long')}${tabs(sym, 'long', { fund: isFund(D) })}</div>
-    ${trend(sym)}${returnsRisk()}${weekly(sym)}${drawdown()}${company ? html`${multiple(sym)}${fairValue(sym)}${dcf(sym)}${scenarios(sym)}` : fundValuation(sym)}${accumulation()}`);
+    ${trend(sym)}${returnsRisk()}${weekly(sym)}${drawdown()}${company ? html`${multiple(sym)}${fairValue(sym)}<div data-dcf-slot></div>${scenarios(sym)}` : fundValuation(sym)}${accumulation()}`);
+  mountDcf(mainEl, sym);   // the fair-value model: one node for the visit, so a box being typed in survives this redraw
   mountCharts(mainEl, Object.assign({}, ddMaker(), peMaker()));
   mountWeekly();
   if (keepKey) {
@@ -310,7 +293,7 @@ export async function render(main, route) {
   document.title = `${sym} Investing, Optic`;
   if (lp) lp.stop();
   lp = livePrice(main, route.symbol, () => D, 'long', undefined);
-  provideContext(() => ({ view: 'long', ticker: sym, quote: D.quote, track_record: TR.context(), long_term: D.lt, fair_value: D.fv, valuation: D.val ? { dcf: (D.val.dcf || {}).per_share, scenarios: D.val.scenarios, reverse: D.val.reverse } : null, scenarios: D.vsBody }));
+  provideContext(() => ({ view: 'long', ticker: sym, quote: D.quote, track_record: TR.context(), long_term: D.lt, fair_value: D.fv, valuation: dcfContext(), scenarios: D.vsBody }));
   paint(); wire(main);
   // the strip, folds and Panels (Classic parity B3); the two specialist sections open from Advanced, as Classic's did
   sections(main, 'long', { levels: { 'the multiple against its own history': 2, 'valuation and accumulation levels': 2 }, norm: (t) => { const n = ((main.querySelector('.dhead .name span') || {}).textContent || '').trim(); return n ? t.split(n).join('the company') : t; } });
@@ -321,7 +304,6 @@ export async function render(main, route) {
   if (kindOf(sym) !== 'fund') {
     step(api.get(`/api/pe-history/${enc}?years=10`, { ttl: 3600000, timeout: 45000 }), (d) => { D.pe = d; }, () => { D.pe = null; });
     step(api.get(`/api/fair-value/${enc}`, { ttl: 600000, timeout: 30000 }), (d) => { D.fv = d; }, () => { D.fv = null; });
-    step(api.get(`/api/valuation/${enc}`, { ttl: 600000, timeout: 45000 }), (d) => { D.val = d; }, () => { D.val = null; });
     step(api.get(`/api/valuation-inputs/${enc}`, { ttl: 600000, timeout: 30000 }), (d) => { D.vin = d; }, () => { D.vin = null; });
     step(VS.load(sym), (b) => { D.vsBody = b || null; }, () => {});
   }
@@ -333,7 +315,7 @@ async function loadAll() {
   try { D.allWeeks = await api.get(`/api/weekly-bars/${encodeURIComponent(D.sym)}?span=max`, { ttl: 3600000, timeout: 45000 }); } catch (e) { toast('The full weekly history did not load.'); }
   paint();
 }
-export function dispose() { if (lp) { lp.stop(); lp = null; } live = false; if (WK.chart) WK.chart.destroy(); WK = { chart: null, host: null, key: '' }; }
+export function dispose() { if (lp) { lp.stop(); lp = null; } live = false; if (WK.chart) WK.chart.destroy(); WK = { chart: null, host: null, key: '' }; disposeDcf(); }
 export const retry = { lt: (m, r) => { api.invalidate('/api/longterm'); render(m, r); } };
 
 function wire(main) {

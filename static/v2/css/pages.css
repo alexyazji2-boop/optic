@@ -173,6 +173,57 @@ table.t.ss-checks tr.is-info td { color: var(--c-ink-3); } .ss-pass { color: var
 .ss-legend i { display: inline-block; width: 16px; height: 0; border-top: 2px solid var(--c-ink-3); vertical-align: middle; margin-right: 6px; }
 .ss-legend i.o1 { border-color: var(--c-gold); } .ss-legend i.o2 { border-top-style: dashed; } .ss-legend i.o3 { opacity: .6; } .ss-legend i.o4 { border-color: var(--c-cat-1); }
 .ss-legend i.trig { border-top: 2px dashed var(--c-pos); } .ss-legend i.inval { border-top: 2px dashed var(--c-neg); }
+/* the fair-value model on Investing (Classic parity B7a) */
+.dcf-lede { font-size: var(--t-lead); color: var(--c-ink); max-width: 72ch; margin: 0 0 10px; }
+.dcf-flag { color: var(--c-ink); padding-left: 10px; border-left: 2px solid var(--c-warn); max-width: 80ch; }
+.dcf-tiles { --kv: 4; } .dcf-tiles dd.note { font-size: var(--t-sm); }
+.dcf-tv { color: var(--c-ink-2); max-width: 80ch; }
+.dcf h3 { margin: 22px 0 6px; } .dcf h4 { margin: 12px 0 6px; }
+.dcf-cols { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 32px; }
+.dcf-legend { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: var(--t-sm); color: var(--c-ink-2); margin: 4px 0 8px; }
+.dcf-legend i { display: inline-block; width: 12px; height: 10px; margin-right: 6px; vertical-align: -1px; border-radius: 2px; background: var(--c-ink-3); }
+.dcf-legend i.is-down { background: var(--c-neg); } .dcf-legend i.is-up { background: var(--c-pos); } .dcf-legend i.is-center, .dcf-legend i.is-price { width: 2px; height: 14px; background: var(--c-ink); }
+.dcf-legend i.is-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--c-gold); } .dcf-legend i.is-bar { background: color-mix(in srgb, var(--c-gold) 35%, transparent); }
+.dcf-tornado, .dcf-range { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.dcf-tornado li { display: grid; grid-template-columns: minmax(0, 11em) minmax(0, 1fr); gap: 2px 12px; align-items: center; }
+.dcf-tlabel { font-size: var(--t-md); color: var(--c-ink-2); } .dcf-tvals { grid-column: 2; display: flex; justify-content: space-between; gap: 8px; font-size: var(--t-sm); color: var(--c-ink-2); font-variant-numeric: tabular-nums; }
+.dcf-ttrack, .dcf-rtrack { position: relative; height: 14px; background: var(--c-sunk); border-radius: 2px; }
+.dcf-tbar { position: absolute; top: 2px; height: 10px; border-radius: 2px; } .dcf-tbar.is-down { background: var(--c-neg); } .dcf-tbar.is-up { background: var(--c-pos); }
+.dcf-tcenter, .dcf-rprice { position: absolute; top: -3px; width: 2px; height: 20px; background: var(--c-ink); }
+.dcf-range li { display: grid; grid-template-columns: minmax(0, 13em) minmax(0, 1fr); gap: 2px 12px; align-items: center; }
+.dcf-rlabel { font-size: var(--t-md); color: var(--c-ink-2); } .dcf-rval { grid-column: 2; font-size: var(--t-sm); color: var(--c-ink-2); font-variant-numeric: tabular-nums; }
+.dcf-rbar { position: absolute; top: 3px; height: 8px; border-radius: 2px; background: color-mix(in srgb, var(--c-gold) 35%, transparent); }
+.dcf-rdot { position: absolute; top: 2px; width: 10px; height: 10px; margin-left: -5px; border-radius: 50%; background: var(--c-gold); }
+.dcf-tabs { margin: 4px 0 8px; flex-wrap: wrap; }
+table.t.dcf-heat td[data-side="above"] { background: color-mix(in srgb, var(--c-pos) calc(var(--dcf-heat, 0) * 38%), transparent); }
+table.t.dcf-heat td[data-side="below"] { background: color-mix(in srgb, var(--c-neg) calc(var(--dcf-heat, 0) * 38%), transparent); }
+table.t.dcf-heat td.is-centre { outline: 2px solid var(--c-ink); outline-offset: -2px; font-weight: 600; } table.t.dcf-heat th.is-base { color: var(--c-ink); }
+.dcf-swatch { display: inline-block; width: 12px; height: 10px; border-radius: 2px; vertical-align: -1px; } .dcf-swatch[data-side="above"] { background: color-mix(in srgb, var(--c-pos) 38%, transparent); } .dcf-swatch[data-side="below"] { background: color-mix(in srgb, var(--c-neg) 38%, transparent); }
+table.t.dcf-fc tr.is-total td, table.t.dcf-fc tr.is-total th, table.t.dcf-wacc tr.is-total td, table.t.dcf-bridge tr.is-total td, table.t.dcf-bridge tr.is-total th { color: var(--c-ink); font-weight: 600; }
+table.t tr.dcf-sub th { color: var(--c-ink-3); font: 500 var(--t-sm)/1.3 var(--f-label); padding-top: 14px; }
+table.t.dcf-wacc td.l, table.t.dcf-bridge td.l { white-space: normal; min-width: 18em; color: var(--c-ink-2); } table.t.dcf-bridge tr.is-off td, table.t.dcf-bridge tr.is-off th { color: var(--c-ink-3); text-decoration: line-through; }
+.dcf-inc { display: inline-flex; min-height: 32px; margin-left: 8px; } @media (pointer: coarse) { .dcf-inc { min-height: var(--tap); } }
+.dcf-kind { display: inline-block; padding: 1px 6px; border: 1px solid var(--c-line); border-radius: var(--r-xs); font: 500 var(--t-xs)/1.4 var(--f-label); color: var(--c-ink-3); vertical-align: 1px; }
+.dcf-fold { margin-top: 10px; }
+.dcf-group { border: 0; margin: 10px 0 0; padding: 0; display: grid; gap: 0; } .dcf-group legend { margin-bottom: 4px; }
+.dcf-field { display: grid; grid-template-columns: minmax(0, 1.2fr) 10em minmax(0, 1.6fr); gap: 4px 14px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--c-line-2); }
+.dcf-field.is-edited .dcf-flabel { color: var(--c-ink); font-weight: 600; } .dcf-field.is-edited .dcf-finput input { border-color: var(--c-ink-3); }
+.dcf-flabel { color: var(--c-ink-2); font-size: var(--t-base); } .dcf-fwhy { color: var(--c-ink-3); font-size: var(--t-sm); }
+.dcf-finput { display: flex; align-items: center; gap: 6px; } .dcf-unit { color: var(--c-ink-3); font-size: var(--t-sm); min-width: 1.6em; }
+.dcf-finput input, .dcf-finput + select, .dcf-field select, .dcf-ovin { min-height: var(--tap); width: 100%; min-width: 0; padding: 0 10px; border: 1px solid var(--c-line); border-radius: var(--r-ctl); background: var(--c-raised); color: var(--c-ink); font-variant-numeric: tabular-nums; }
+.dcf-field select { grid-column: 2 / -1; }
+.dcf-finput input[aria-invalid="true"], .dcf-ovin[aria-invalid="true"] { border-color: var(--c-neg); }
+.dcf-ovin { width: 5.5em; } table.t.dcf-ov td { padding: 6px 4px; }
+.dcf-status { color: var(--c-ink-2); display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.dcf-asks { margin-top: 18px; } .dcf-asks .cluster { gap: 6px; } .dcf-asks .btn { white-space: normal; text-align: left; height: auto; min-height: var(--ctl-sm); padding-top: 6px; padding-bottom: 6px; max-width: 100%; } .dcf-foot { margin-top: 16px; }
+.dcf-missing .dcf-field { grid-template-columns: minmax(0, 1fr) 14em; }
+@media (max-width: 860px) {
+  .dcf-cols { grid-template-columns: minmax(0, 1fr); }
+  .dcf-tiles { --kv: 2; }
+  .dcf-field { grid-template-columns: minmax(0, 1fr) 8.5em; } .dcf-fwhy { grid-column: 1 / -1; } .dcf-field select { grid-column: 1 / -1; }
+  .dcf-tornado li, .dcf-range li { grid-template-columns: minmax(0, 1fr); } .dcf-tvals, .dcf-rval { grid-column: 1; }
+  .dcf-finput input, .dcf-field select, .dcf-ovin { font-size: var(--t-lg); }
+}
 /* chart patterns beside what followed them */
 .pat-t td { vertical-align: top; } .pat-t td:first-child { white-space: normal; min-width: 14em; } .pat-sub { display: block; font-size: var(--t-sm); }
 .pat-rate { font-weight: 600; font-variant-numeric: tabular-nums; } .pat-rate .t-muted { display: block; font-weight: 400; font-size: var(--t-sm); }
