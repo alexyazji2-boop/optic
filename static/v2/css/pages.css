@@ -1330,6 +1330,8 @@ table.narrow { max-width: 640px; }
 .bk-figs { display: grid; grid-template-columns: repeat(4, auto); justify-content: start; gap: 4px 18px; font: 600 var(--t-base)/1.3 var(--f-label); }
 .bk-figs i { display: block; font: 500 var(--t-sm)/1.3 var(--f-label); font-style: normal; color: var(--c-ink-3); }
 .bk-since, .bk-rules { font-size: var(--t-md); color: var(--c-ink-3); } .bk-blurb { font-size: var(--t-base); color: var(--c-ink-2); }
+/* The dated rules change under the book cards: a finding, so it stays in view rather than in a fold. */
+.rules-changed { margin: 14px 0 10px; max-width: 78ch; font-size: var(--t-base); color: var(--c-ink-2); }
 .tk-bar { margin: 12px 0 4px; }
 .tk-progress { margin: 12px 0; }
 .tk-t td { vertical-align: top; }

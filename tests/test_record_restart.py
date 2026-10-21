@@ -119,7 +119,9 @@ def test_a_fresh_ledger_records_the_restart_without_archiving_anything(tmp_path,
     monkeypatch.setattr(paper, "DB_PATH", str(tmp_path / "fresh.db"))
     paper.init_db()
     keys = [r["key"] for r in paper._rows("SELECT key FROM ledger_meta")]
-    assert keys == ["restart:" + paper.RESTARTS[-1]["id"]]
+    # The table also dates the 2026-10-21 rules change, which is not a restart.
+    assert [k for k in keys if k.startswith("restart:")] == ["restart:" + paper.RESTARTS[-1]["id"]]
+    assert paper.RULES_CHANGE_KEY in keys
     assert paper.archived_records()[0]["trades"] == 0
 
 

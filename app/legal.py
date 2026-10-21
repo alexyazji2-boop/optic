@@ -55,6 +55,22 @@ SIMULATED = (
     "resembling these, and simulated performance is not indicative of future results."
 )
 
+# Optic Portfolio's own version. Under the 2026-10-21 rules its new trades carry
+# a modelled allowance for commission and slippage (app/paper.py), so the generic
+# sentence above would be false there. The earlier trades carry none, and it says
+# so. The rules took effect when a build with them first opened the ledger, not on
+# the day they were approved, so the page dates the change ("Rules changed on")
+# and this text points to that line rather than naming a date.
+TRACKER_SIMULATED = (
+    "Hypothetical performance. These positions were never placed with real money. "
+    "Simulated results have inherent limitations: they are prepared with the benefit "
+    "of hindsight and assume fills at the mid price. Since the rules change dated on "
+    "this page, new trades carry a modelled allowance for commission and slippage; "
+    "earlier trades carry none, and none carries financing cost, borrow cost or tax. "
+    "No account will necessarily achieve results resembling these, and simulated "
+    "performance is not indicative of future results."
+)
+
 # Per-area notices, each naming the specific way that area's output could be
 # mistaken for advice.
 AREAS: Dict[str, str] = {
@@ -79,7 +95,7 @@ AREAS: Dict[str, str] = {
         "what you should do about it. Holding an option through an earnings report can "
         "lose money even when the direction is right."
     ),
-    "tracker": SIMULATED,
+    "tracker": TRACKER_SIMULATED,
     "brief": (
         "A summary of published news and filings, not analysis of it and not a "
         "recommendation about any security mentioned. Headlines belong to their "
@@ -108,7 +124,9 @@ AREAS: Dict[str, str] = {
 # a feed. Short on purpose: one line beside the content it qualifies, with the
 # full disclaimer and the Terms one press away, rather than legal text repeated
 # on every screen.
-REGISTRY_VERSION = "disclosures-2026-10-29"
+# 2026-11-02: the Optic Portfolio notice says which trades carry costs (the
+# 2026-10-21 book rules).
+REGISTRY_VERSION = "disclosures-2026-11-02"
 
 PAGE_AREAS: Dict[str, str] = {
     "pulse": "<strong>Not financial advice.</strong> Milo states which way the <em>data</em> leans and how strongly. That is a reading of numbers on this screen, not a recommendation for you: it does not know your horizon, capital or tax position, and even with a linked brokerage it describes your holdings rather than judging whether any of this suits you. It can be confidently wrong. The inputs are delayed, several are labelled proxies, and a lean is not a forecast.",
@@ -118,7 +136,7 @@ PAGE_AREAS: Dict[str, str] = {
     "long": "<strong>Not a recommendation.</strong> A conviction score summarises historical data. It says nothing about whether this holding suits your horizon, taxes or existing exposure.",
     "roth": "<strong>Not retirement or tax advice.</strong> A rules-based illustration to compare against your own plan. It is not tailored to your income, tax situation, other accounts or goals, and contribution limits and eligibility change. Confirm current rules with the IRS and a licensed professional.",
     "earnings": "<strong>Not a recommendation.</strong> Event pricing describes what the market is charging, not what you should do about it. Holding an option through a report can lose money even when the direction is right.",
-    "tracker": "<strong>Hypothetical performance.</strong> These positions were never placed with real money. Simulated results are prepared with the benefit of hindsight, assume fills at the mid price, and bear no commission, slippage, financing, borrow cost or tax. No real account would necessarily achieve results resembling these, and simulated performance does not indicate future results.",
+    "tracker": "<strong>Hypothetical performance.</strong> These positions were never placed with real money. Simulated results are prepared with the benefit of hindsight and assume fills at the mid price. Since the rules change dated on this page, new trades carry a modelled allowance for commission and slippage; earlier trades carry none, and none carries financing, borrow cost or tax. No real account would necessarily achieve results resembling these, and simulated performance does not indicate future results.",
     "paper": "<strong>Hypothetical performance.</strong> Positions you enter here were never placed with real money. Marks assume you could trade at the last price or the chain mid, and bear no commission, slippage, financing, borrow cost, assignment risk or tax. A short position here cannot fail to borrow and an option here is never exercised early. No real account would necessarily achieve results resembling these.",
     "market": "<strong>Not a recommendation.</strong> A regime read on the market as a whole, not a view on any individual security, and not advice to change your positioning.",
     "indices": "<strong>Not a recommendation.</strong> Long-run index context, not advice to buy, sell or hold any index fund.",

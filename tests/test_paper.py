@@ -325,6 +325,14 @@ def test_scan_reports_positions_opened_across_all_books():
 # counted them as 2:1 reward-to-risk setups and the risk column implied a reward
 # on the other side of it that was not there.
 
+@pytest.fixture()
+def shorts_allowed(monkeypatch):
+    """Every book long only is the 2026-10-21 rule, but the short-side guards stay
+    in the code for any book that turns shorts back on, so they are tested on one."""
+    for book in paper.BOOK_IDS:
+        monkeypatch.setitem(paper.BOOKS[book], "allow_shorts", True)
+
+
 def _short_with_a_wide_stop(spot=42.60, resistance=70.70, score=-40.0):
     """The LMB setup: a short whose nearest resistance is 66% above the price."""
     return {"ticker": "LMB", "verdict": {"composite_score": score},
@@ -332,20 +340,20 @@ def _short_with_a_wide_stop(spot=42.60, resistance=70.70, score=-40.0):
             "technicals": {"support_resistance": [{"price": resistance}]}}
 
 
-def test_a_short_target_below_zero_is_declined():
+def test_a_short_target_below_zero_is_declined(shorts_allowed):
     found, notes = paper.consider_ticker(_short_with_a_wide_stop(), 100_000.0, "balanced")
     assert found == [], "opened a short whose target sits below zero"
     assert notes and "unreachable" in notes[0], notes
 
 
-def test_the_declined_note_names_the_stop_width_and_the_target():
+def test_the_declined_note_names_the_stop_width_and_the_target(shorts_allowed):
     """A note saying only "declined" is why the original bug went unnoticed."""
     _, notes = paper.consider_ticker(_short_with_a_wide_stop(), 100_000.0, "aggressive")
     assert "68%" in notes[0], notes          # (71.41 - 42.60) / 42.60
     assert "-15.02" in notes[0], notes
 
 
-def test_a_short_with_a_normal_stop_still_trades():
+def test_a_short_with_a_normal_stop_still_trades(shorts_allowed):
     """The guard has to be narrow. A short with a 10% stop targets 20% lower,
     which is reachable, and declining it would quietly halve the strategy."""
     found, _ = paper.consider_ticker(
@@ -356,7 +364,7 @@ def test_a_short_with_a_normal_stop_still_trades():
         assert leg["direction"] in ("short", "long")   # a long put is stored long
 
 
-def test_no_open_position_can_carry_a_target_at_or_below_zero():
+def test_no_open_position_can_carry_a_target_at_or_below_zero(shorts_allowed):
     """The invariant the gauge depends on, stated once for every future entry."""
     for book in paper.BOOK_IDS:
         found, _ = paper.consider_ticker(_short_with_a_wide_stop(), 100_000.0, book)

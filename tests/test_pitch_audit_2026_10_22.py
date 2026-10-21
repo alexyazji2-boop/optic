@@ -425,7 +425,11 @@ def test_a_day_touching_both_levels_counts_the_stop():
 
 
 def test_the_execution_note_is_beside_the_record():
-    assert "the stop counts" in paper_mod.EXECUTION_NOTE and "No commission or slippage" in paper_mod.EXECUTION_NOTE
+    assert "the stop counts" in paper_mod.EXECUTION_NOTE
+    # Since the 2026-10-21 book rules new trades are charged costs, dated by the rules change.
+    note = paper_mod.execution_note("2026-11-03")
+    assert note.startswith(paper_mod.EXECUTION_NOTE) and "Since 2026-11-03, each new trade is charged" in note
+    assert "Trades opened before then carry no commission or slippage." in note
     src = open("app/paper.py").read()
     assert "fill = min(pos[\"stop\"], price) if long_pos else max(pos[\"stop\"], price)" in src, "a gap through a long's stop fills below it"
     assert "How fills are modelled." in (JS / "pages/tracker.js").read_text()

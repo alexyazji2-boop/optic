@@ -81,6 +81,27 @@ const pnlCell = (p) => html`<b class="${tone(p.pnl)}">${$0(p.pnl)}</b><br><small
 /* ---------------- sections ---------------- */
 // "High risk, high reward" read as a promise: higher risk means wider swings both ways, never a better return
 const RISK_WORDS = { conservative: 'Smaller risk per trade', balanced: 'Middle risk per trade', aggressive: 'Higher risk: bigger gains and bigger losses' };
+/** A book's instruments and limits in words, from its own settings (the 2026-10-21 rules among them). */
+export function legsText(b) {
+  const iv = Array.isArray(b.option_iv_verdicts) ? b.option_iv_verdicts : null;
+  return !b.allow_options ? 'shares only'
+    : iv && iv.length ? (b.prefer_options ? `options instead of shares when implied volatility is ${iv.join(' or ')}` : `shares, options only when implied volatility is ${iv.join(' or ')}`)
+      : b.prefer_options ? 'options preferred' : 'shares and options';
+}
+export function bookRules(b) {
+  const legs = legsText(b);
+  const parts = [`${num(b.risk_per_trade * 100, 1)}% per trade`, `score bar ${num(b.min_composite, 0)}`];
+  if (b.allow_shorts === false) parts.push('long only');
+  parts.push(legs);
+  if (isNum(b.max_gross_exposure)) parts.push(`positions worth at most ${num(b.max_gross_exposure, 0)} times the account`);
+  parts.push(`max daily range ${num(b.max_atr_pct, 0)}%`);
+  return parts.join(', ');
+}
+/** The dated rules change, or nothing before one is recorded. */
+export function rulesChangedLine(rc) {
+  if (!rc || !rc.date) return '';
+  return html`<p class="rules-changed"><b>Rules changed on ${rc.date}.</b> ${clean(rc.summary || '')} Positions opened before then keep the rules they were opened with, and the record was not restarted, so the figures here include trades under both.</p>`;
+}
 function books(d) {
   const bs = d.books || [];
   if (bs.length < 2) return '';
@@ -93,10 +114,11 @@ function books(d) {
         <span class="bk-top"><b>${b.label}</b><span class="pill">${RISK_WORDS[b.id] || b.tagline}</span></span>
         <span class="bk-figs"><span><i>Value</i>$${compact(val)}</span>${traded ? html`<span><i>Return</i><b class="${tone(su.return_pct)}">${signed(su.return_pct, 2)}</b></span><span><i>Open</i>${num(su.open_count, 0)}</span><span><i>Closed</i>${num(su.closed_count, 0)}</span>` : html`<span><i>Record</i>No trades yet</span>`}</span>
         ${b.since ? html`<span class="bk-since">Record from ${b.since}</span>` : ''}
-        <span class="bk-rules">${num(b.risk_per_trade * 100, 1)}% per trade, score bar ${num(b.min_composite, 0)}, ${b.allow_options ? (b.prefer_options ? 'options preferred' : 'shares and options') : 'shares only'}, max daily range ${num(b.max_atr_pct, 0)}%</span>
+        <span class="bk-rules">${bookRules(b)}</span>
         <span class="bk-blurb">${b.blurb}</span></button>`; })}</div>
     ${dated.length > 1 && dated[0] !== dated[dated.length - 1] ? html`<p class="asof">Their records do not begin on the same day, so the returns above are only like for like from ${dated[dated.length - 1]} onward. Before that a scan could fill one book's risk budget and stop before the others were offered the same candidate, which is fixed but not retrospective.</p>` : ''}
-    <p class="asof">They differ in the four things that actually change a risk profile: how selective the entry bar is, how much is risked per trade, which instruments are allowed, and how volatile a name may be. Nothing changes the analysis. A setup is a setup, and these decide what to do about it.</p></section>`;
+    ${rulesChangedLine(d.rules_change)}
+    <p class="asof">They differ in what changes a risk profile: how selective the entry bar is, how much is risked per trade, how much the book may hold in all, which instruments are allowed, and how volatile a name may be. Nothing changes the analysis. A setup is a setup, and these decide what to do about it.</p></section>`;
 }
 
 // The figures above are as of the open positions' last marks: they carried no time (BUG-073, Phase 10)
@@ -107,12 +129,12 @@ function markedLine(d) {
 
 function ledger(d) {
   const s = d.summary || {}, cfg = d.config || {}, cap = d.capacity || {}, prog = d.progress || {}, run = scanning || !!prog.running;
-  const name = ((d.books || []).find((b) => b.id === (d.book || book)) || {}).label || '';
+  const bk = (d.books || []).find((b) => b.id === (d.book || book)) || {}, name = bk.label || '';
   const hint = cfg.universe === 'curated' ? html`Universe: <b>${(cfg.universe_symbols || []).length} large names and index funds</b>, leveraged ones included, listed under How these positions are taken. A scan screens all of them on price and volume, then puts the top ${cfg.shortlist_size} through the full analysis. It also runs on its own every few hours while the server is up.`
     : cfg.universe === 'nasdaq' ? html`Universe: <b>every NASDAQ-listed common stock</b>, about 3,000 names. A scan screens all of them on price and volume, then puts the top ${cfg.shortlist_size} through the full analysis, so it takes a few minutes.`
       : `Watchlist: ${(cfg.watchlist || []).join(', ')}. A scan puts all of them through the full analysis.`;
   return html`<section class="section" aria-labelledby="op-h"><h2 class="t-h2" id="op-h">Optic Portfolio${name ? html` <span class="pill">${name}</span>` : ''}</h2>
-    <p class="section-sub">Three simulated ledgers, one per rule set, trading Optic's own signals. Every reader sees the same books.${name ? ` You are looking at the ${name.toLowerCase()} book; the cards above switch between them.` : ''} Each trades both instruments the Options tab produces: the shares, and the exact contract it recommended.</p>
+    <p class="section-sub">Three simulated ledgers, one per rule set, trading Optic's own signals. Every reader sees the same books.${name ? ` You are looking at the ${name.toLowerCase()} book; the cards above switch between them.` : ''} Each idea takes one position: the shares, or the exact contract the Options tab recommended when Optic rates its implied volatility cheap.</p>
     ${run ? '' : html`<details class="more-inline tk-ops"><summary>Run the shared scan or refresh prices</summary>
       <p class="asof">These act on the demonstration portfolio every reader sees. Anyone may run a scan once every half hour; it also runs on its own every few hours. Refreshing prices only re-marks the open positions.</p>
       <div class="cluster tk-bar"><button type="button" class="btn" data-v2-tk="scan">Run a scan now</button><button type="button" class="btn" data-v2-tk="mark">Refresh marks</button></div>
@@ -123,11 +145,12 @@ function ledger(d) {
     ${run ? html`<div class="tk-progress" role="status"><p><b>${prog.stage || 'Working'}</b>${prog.note ? ` ${prog.note}` : ''}${prog.total ? ` ${prog.done} of ${prog.total}` : ''}${prog.trigger === 'scheduled' ? ' (scheduled)' : ''}</p>${prog.total ? html`<div class="build-bar"><span style="width:${Math.min(100, Math.round((prog.done / prog.total) * 100))}%"></span></div>` : ''}</div>` : ''}
     ${(d.feed || {}).throttled ? html`<p class="stale"><b>The price feed is rate-limiting right now.</b> A scan during a block takes fewer positions, not wrong ones: a blocked options request looks like a stock with no options, so Optic skips those names rather than recording a shares-only trade. Clears in about ${num(d.feed.seconds_remaining, 0)}s.</p>` : ''}
     <dl class="kv" style="--kv:4">${tile('Account value', $0(s.start_equity + s.total_pnl), `started at ${$0(s.start_equity)}`, tone(s.total_pnl))}${tile('Realised P&L', $0(s.realised_pnl), `${s.closed_count || 0} closed ${s.closed_count === 1 ? 'trade' : 'trades'}`, tone(s.realised_pnl))}
-      ${tile('Unrealised P&L', $0(s.unrealised_pnl), `${s.open_count || 0} open now`, tone(s.unrealised_pnl))}${tile('Total return', signed(s.return_pct, 2), 'realised plus open marks', tone(s.return_pct))}</dl>
+      ${tile('Unrealised P&L', $0(s.unrealised_pnl), `${s.open_count || 0} open now`, tone(s.unrealised_pnl))}${tile('Total return', signed(s.return_pct, 2), s.costs_charged ? `realised plus open marks, after ${$0(s.costs_charged)} of trading costs` : 'realised plus open marks', tone(s.return_pct))}</dl>
     ${markedLine(d)}
     <details class="more-inline" ${advancedOn() ? 'open' : ''}><summary>How the book limits its risk</summary>
-      <dl class="kv" style="--kv:5">${tile('Position slots', `${cap.open_positions || 0} / ${cfg.max_open_positions || 'n/a'}`, `${cap.position_slots_left || 0} left`)}${tile('Risk deployed', $0(cap.open_risk), `${num(cap.open_risk_pct, 1)}% of a ${num(cfg.max_portfolio_risk_pct, 0)}% budget`)}
-        ${tile('Risk budget left', $0(cap.risk_budget_left), 'before the book stops adding')}${tile('Sizing base', $0(s.equity), 'closed trades only, so an open run-up cannot raise the next bet')}${tile('New per scan', num(cfg.max_new_per_scan, 0), 'so the book fills over days')}</dl>
+      <dl class="kv" style="--kv:3">${tile('Position slots', `${cap.open_positions || 0} / ${bk.max_positions || cfg.max_open_positions || 'n/a'}`, `${cap.position_slots_left || 0} left`)}${tile('Risk deployed', $0(cap.open_risk), `${num(cap.open_risk_pct, 1)}% of a ${num(isNum(bk.max_portfolio_risk) ? bk.max_portfolio_risk * 100 : cfg.max_portfolio_risk_pct, 0)}% budget`)}
+        ${tile('Risk budget left', $0(cap.risk_budget_left), 'before the book stops adding')}${tile('Held in positions', isNum(cap.gross_exposure_x) ? `${num(cap.gross_exposure_x, 2)} times equity` : 'n/a', isNum(cap.max_gross_exposure_x) ? `${$0(cap.gross_exposure)} at market value, capped at ${num(cap.max_gross_exposure_x, 0)} times` : `${$0(cap.gross_exposure)} at market value, no cap`)}
+        ${tile('Sizing base', $0(s.equity), 'closed trades only, so an open run-up cannot raise the next bet')}${tile('New per scan', num(bk.max_new_per_scan || cfg.max_new_per_scan, 0), 'so the book fills over days')}</dl>
       <p class="asof">The caps exist because one scan can find many qualifying setups at once. Without them it could put a third of the account at risk in an afternoon, on names that are often the same bet under different tickers: TQQQ, QQQ and NVIDIA move together.</p></details></section>`;
 }
 
@@ -235,9 +258,9 @@ function rest(d) {
         ${(r.books || []).length ? html`<div class="tscroll"><table class="t narrow"><thead><tr><th scope="col">Book</th><th scope="col" class="n">Trades</th><th scope="col" class="n">Result</th></tr></thead><tbody>${r.books.map((b) => html`<tr><td>${capFirst(b.id)}</td><td class="n">${num(b.trades, 0)}</td><td class="n ${tone(b.pnl)}">${$0(b.pnl)}${isNum(b.return_pct) ? ` (${signed(b.return_pct, 2)})` : ''}</td></tr>`)}</tbody></table></div>` : ''}`)}</section>` : ''}
     <section class="section" aria-labelledby="hw-h"><h2 class="t-h2" id="hw-h">How these positions are taken</h2>
       <p class="section-sub">Fixed rules, set in advance and applied identically to every ticker. Written down here so the record can't be improved after the fact by changing its mind.</p>
-      <div class="grid2"><div><h3>Position sizing</h3>${kvl([['Account', `${$0(s.start_equity)} notional`], ['Risk per share trade', `${num(cfg.risk_per_trade_pct, 1)}% of equity`], ['Max risk per option trade', `${num(cfg.max_option_risk_pct, 1)}% of equity`], ['Single-contract exception', `up to ${num(cfg.option_single_contract_cap_pct, 0)}% of equity`], ['Share position cap', `${num((bk.max_notional_pct || 0.25) * 100, 0)}% of equity in notional`], ['Open positions', `at most ${num(cfg.max_open_positions, 0)}`], ['Total risk deployed', `at most ${num(cfg.max_portfolio_risk_pct, 0)}% of equity`], ['New positions per scan', `at most ${num(cfg.max_new_per_scan, 0)}`]])}
+      <div class="grid2"><div><h3>Position sizing</h3>${kvl([['Account', `${$0(s.start_equity)} notional`], ['Risk per share trade', `${num(isNum(bk.risk_per_trade) ? bk.risk_per_trade * 100 : cfg.risk_per_trade_pct, 1)}% of equity`], ['Max risk per option trade', `${num(cfg.max_option_risk_pct, 1)}% of equity`], ['Single-contract exception', `up to ${num(cfg.option_single_contract_cap_pct, 0)}% of equity`], ['Share position cap', `${num((bk.max_notional_pct || 0.25) * 100, 0)}% of equity in notional`], ['All positions together', isNum(bk.max_gross_exposure) ? `at most ${num(bk.max_gross_exposure, 0)} times equity at market value` : 'no cap'], ['Open positions', `at most ${num(bk.max_positions || cfg.max_open_positions, 0)}`], ['Total risk deployed', `at most ${num(isNum(bk.max_portfolio_risk) ? bk.max_portfolio_risk * 100 : cfg.max_portfolio_risk_pct, 0)}% of equity`], ['New positions per scan', `at most ${num(bk.max_new_per_scan || cfg.max_new_per_scan, 0)}`], ['Trading costs', bk.charge_costs ? `${num(cfg.cost_bps_fund, 0)} basis points a side for a fund, ${num(cfg.cost_bps_stock, 0)} for a stock, plus ${num(cfg.slippage_bps, 0)} of slippage` : 'none charged']])}
           <p class="asof">Shares are sized so that being stopped out costs exactly the risk budget. A wide stop therefore buys fewer shares, not more risk. Options are sized on the whole premium, because a long option can genuinely go to zero and a stop cannot prevent it.</p></div>
-        <div><h3>Entries and exits</h3>${kvl([['Universe', cfg.universe === 'nasdaq' ? 'every NASDAQ common stock (about 3,000)' : cfg.universe === 'curated' ? `${(cfg.universe_symbols || []).length} large names and index funds, below` : 'fixed watchlist'], ['Screened down to', `${num(cfg.shortlist_size, 0)} names per scan`], ['Takes a trade when', `composite score ≥ ${num(cfg.min_composite, 0)} (either direction), at the scan's price`], ['Does not wait for', "the Options tab's pullback or breakout triggers, their confirmations, or its event warnings"], ['Stop', 'Just beyond the nearest real support or resistance level, or twice the average daily range if none is close'], ['Target', 'twice the risk distance. Fixed, not fitted'], ['Option exits', '−50% / +100% premium, underlying stop, or expiry'], ['Time stop', `${num(cfg.max_hold_days, 0)} days`], ['Per ticker', 'one idea at a time'], ['Trades only', 'during the regular session, 9:30 to 4:00 ET']])}</div></div>
+        <div><h3>Entries and exits</h3>${kvl([['Universe', cfg.universe === 'nasdaq' ? 'every NASDAQ common stock (about 3,000)' : cfg.universe === 'curated' ? `${(cfg.universe_symbols || []).length} large names and index funds, below` : 'fixed watchlist'], ['Screened down to', `${num(cfg.shortlist_size, 0)} names per scan`], ['Takes a trade when', bk.allow_shorts === false ? `composite score ≥ ${num(bk.min_composite ?? cfg.min_composite, 0)}, bullish only, at the scan's price` : `composite score ≥ ${num(bk.min_composite ?? cfg.min_composite, 0)} (either direction), at the scan's price`], ['Does not wait for', "the Options tab's pullback or breakout triggers, their confirmations, or its event warnings"], ['Stop', `Just beyond the nearest real support or resistance level, or twice the average daily range if none is close${isNum(bk.min_stop_atr) ? `, and never closer than ${num(bk.min_stop_atr, 1)} times the average daily range` : ''}`], ['Instruments', capFirst(legsText(bk))], ['Target', 'twice the risk distance. Fixed, not fitted'], ['Option exits', '−50% / +100% premium, underlying stop, or expiry'], ['Time stop', `${num(cfg.max_hold_days, 0)} days`], ['Per ticker', 'one idea at a time'], ['Trades only', 'during the regular session, 9:30 to 4:00 ET']])}</div></div>
       ${cfg.universe === 'curated' && (cfg.universe_symbols || []).length ? html`<p class="asof">The list: ${cfg.universe_symbols.join(', ')}. Fixed, so the record cannot drift toward whatever happened to work.</p>` : ''}
       <div class="state" role="note"><p class="t-h3">What these numbers are not</p><ul class="plain">${(d.caveats || []).map((c) => html`<li>${clean(c)}</li>`)}</ul></div>
       ${d.disclaimer_area ? html`<p class="asof">${clean(d.disclaimer_area)}</p>` : ''}</section>

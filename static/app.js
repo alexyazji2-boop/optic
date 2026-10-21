@@ -2561,7 +2561,7 @@ const LEGAL = {
     long: '<strong>Not a recommendation.</strong> A conviction score summarises historical data. It says nothing about whether this holding suits your horizon, taxes or existing exposure.',
     roth: '<strong>Not retirement or tax advice.</strong> A rules-based illustration to compare against your own plan. It is not tailored to your income, tax situation, other accounts or goals, and contribution limits and eligibility change. Confirm current rules with the IRS and a licensed professional.',
     earnings: '<strong>Not a recommendation.</strong> Event pricing describes what the market is charging, not what you should do about it. Holding an option through a report can lose money even when the direction is right.',
-    tracker: '<strong>Hypothetical performance.</strong> These positions were never placed with real money. Simulated results are prepared with the benefit of hindsight, assume fills at the mid price, and bear no commission, slippage, financing, borrow cost or tax. No real account would necessarily achieve results resembling these, and simulated performance does not indicate future results.',
+    tracker: '<strong>Hypothetical performance.</strong> These positions were never placed with real money. Simulated results are prepared with the benefit of hindsight and assume fills at the mid price. Since the rules change dated on this page, new trades carry a modelled allowance for commission and slippage; earlier trades carry none, and none carries financing, borrow cost or tax. No real account would necessarily achieve results resembling these, and simulated performance does not indicate future results.',
     paper: '<strong>Hypothetical performance.</strong> Positions you enter here were never placed with real money. Marks assume you could trade at the last price or the chain mid, and bear no commission, slippage, financing, borrow cost, assignment risk or tax. A short position here cannot fail to borrow and an option here is never exercised early. No real account would necessarily achieve results resembling these.',
     market: '<strong>Not a recommendation.</strong> A regime read on the market as a whole, not a view on any individual security, and not advice to change your positioning.',
     indices: '<strong>Not a recommendation.</strong> Long-run index context, not advice to buy, sell or hold any index fund.',
@@ -34682,6 +34682,28 @@ function bookValue(b) {
   return start + (su.total_pnl || 0);
 }
 
+/* A book's instruments in words, from its own settings. Since the 2026-10-21
+ * rules a book with an IV list buys an option only on those verdicts, and then
+ * in place of the shares, so "shares + options" no longer describes it. */
+function bookLegsText(b) {
+  const iv = Array.isArray(b.option_iv_verdicts) ? b.option_iv_verdicts : null;
+  if (!b.allow_options) return 'shares only';
+  if (iv && iv.length) {
+    return b.prefer_options ? `options instead of shares when implied volatility is ${iv.join(' or ')}`
+      : `shares, options only when implied volatility is ${iv.join(' or ')}`;
+  }
+  return b.prefer_options ? 'options preferred' : 'shares + options';
+}
+
+/* The dated rules change. Not a restart: the record runs on, so the figures
+ * from before stay on the page and this line says when the rules changed. */
+function rulesChangedHTML(rc) {
+  if (!rc || !rc.date) return '';
+  return `<p class="caveat"><b>Rules changed on ${esc(rc.date)}.</b> ${esc(rc.summary || '')}
+    Positions opened before then keep the rules they were opened with, and the record was not
+    restarted, so the figures here include trades under both.</p>`;
+}
+
 function renderBookSelector(d) {
   const books = d.books || [];
   if (books.length < 2) return '';
@@ -34734,8 +34756,8 @@ function renderBookSelector(d) {
       ${b.since ? `<span class="bk-since">Record from ${esc(b.since)}</span>` : ''}
       <span class="bk-rules">${fmt(b.risk_per_trade * 100, 1)}% per trade ·
         score bar ${fmt(b.min_composite, 0)} ·
-        ${b.allow_options ? (b.prefer_options ? 'options preferred' : 'shares + options')
-    : 'shares only'} · max daily range ${fmt(b.max_atr_pct, 0)}%</span>
+        ${b.allow_shorts === false ? 'long only · ' : ''}${esc(bookLegsText(b))} ·
+        ${b.max_gross_exposure ? `positions at most ${fmt(b.max_gross_exposure, 0)} times the account · ` : ''}max daily range ${fmt(b.max_atr_pct, 0)}%</span>
       <span class="bk-blurb">${esc(b.blurb)}</span>
     </button>`;
   }).join('');
@@ -34766,8 +34788,9 @@ function renderBookSelector(d) {
       that a scan could fill one book's risk budget and stop before the others
       were offered the same candidate, which is fixed but not retrospective.</p>`;
   })()}
-    <p class="caveat">${gloss('They differ in the four things that actually change a risk '
-    + 'profile: how selective the entry bar is, how much is risked per trade, which '
+    ${rulesChangedHTML(d.rules_change)}
+    <p class="caveat">${gloss('They differ in what changes a risk profile: how selective the '
+    + 'entry bar is, how much is risked per trade, how much the book may hold in all, which '
     + 'instruments are allowed, and how volatile a name may be. Nothing changes the '
     + 'analysis. A setup is a setup, and these decide what to do about it.')}</p>
   </div>`;
@@ -34801,6 +34824,9 @@ function renderTracker(d) {
    * server answered for; the label comes from the book list so the heading and
    * the selected card cannot disagree about its name. */
   const bookName = ((d.books || []).find((b) => b.id === (d.book || 'balanced')) || {}).label || '';
+  // The selected book's own settings, for the rules table: since 2026-10-21 the
+  // books differ in direction, exposure and option rules as well as size.
+  const bk = (d.books || []).find((b) => b.id === (d.book || 'balanced')) || {};
   hideTip();
   const t = d || {};
   if (t.error) { views.tracker.innerHTML = errorHTML(t.error); return; }
@@ -34922,9 +34948,9 @@ function renderTracker(d) {
     <h2>${hg("Optic Portfolio")}${bookName ? ` <span class="bk-active">${esc(bookName)}</span>` : ''}</h2>
     <p class="sub">Three simulated ledgers, shared by everyone who opens this page, running the
       terminal's own signals under three different rule sets. ${bookName ? `You are looking at the
-      ${esc(bookName.toLowerCase())} book; the cards above switch between them.` : ''} Each trades
-      both instruments the Options tab produces: the shares, and the exact contract it
-      recommended.</p>
+      ${esc(bookName.toLowerCase())} book; the cards above switch between them.` : ''} Each idea
+      takes one position: the shares, or the exact contract the Options tab recommended when
+      Optic rates its implied volatility cheap.</p>
 
     <div class="tracker-bar">
       <button class="btn primary" type="button" id="tracker-scan" ${scanning ? 'disabled' : ''}>
@@ -35147,8 +35173,14 @@ function renderTracker(d) {
         ? fmt((cfg.universe_symbols || []).length, 0) + ' large names and index funds, below'
         : 'fixed watchlist'],
     ['Screened down to', fmt(cfg.shortlist_size, 0) + ' names per scan'],
-    ['Takes a trade when', 'composite score ≥ ' + fmt(cfg.min_composite, 0) + ' (either direction)'],
-    ['Stop', 'Just beyond the nearest real support or resistance level, or twice the average daily range if none is close'],
+    ['Takes a trade when', 'composite score ≥ ' + fmt(bk.min_composite ?? cfg.min_composite, 0)
+      + (bk.allow_shorts === false ? ', bullish only' : ' (either direction)')],
+    ['Stop', 'Just beyond the nearest real support or resistance level, or twice the average daily range if none is close'
+      + (bk.min_stop_atr ? ', and never closer than ' + fmt(bk.min_stop_atr, 1) + ' times the average daily range' : '')],
+    ['Instruments', bookLegsText(bk)],
+    ['All positions together', bk.max_gross_exposure ? 'at most ' + fmt(bk.max_gross_exposure, 0) + ' times equity at market value' : 'no cap'],
+    ['Trading costs', bk.charge_costs ? fmt(cfg.cost_bps_fund, 0) + ' basis points a side for a fund, '
+      + fmt(cfg.cost_bps_stock, 0) + ' for a stock, plus ' + fmt(cfg.slippage_bps, 0) + ' of slippage' : 'none charged'],
     ['Target', 'twice the risk distance. Fixed, not fitted'],
     ['Option exits', '−50% / +100% premium, underlying stop, or expiry'],
     ['Time stop', fmt(cfg.max_hold_days, 0) + ' days'],
