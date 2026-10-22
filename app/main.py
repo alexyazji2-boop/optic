@@ -111,6 +111,7 @@ from .analytics import liquidity as liquidity_mod
 # 500 on every call from 2026-10-13 (32a8f6b) until 2026-10-16.
 from .analytics import contracts as option_contracts_mod
 from .analytics import contract_picker as contract_picker_mod
+from . import shortlist as shortlist_mod
 from .analytics import position as position_mod
 from . import watch_runner
 from . import signal_history
@@ -2224,6 +2225,67 @@ def _setup_scan(symbols: List[str], timeframe: str, preset_ids, directions,
     }
 
 
+# ---------------------------------------------------------------- the nightly shortlist (roadmap stage 5)
+SHORTLIST_AUTO = os.environ.get("SHORTLIST_AUTO", "true").strip().lower() != "false"
+SHORTLIST_POLL_SECONDS = 30 * 60
+_SHORTLIST_BUILDING = threading.Lock()
+
+
+def _shortlist_news(sym: str) -> Dict[str, Any]:
+    from . import news as _news
+    return _news.analyse(YF_PROVIDER, sym, limit=12)
+
+
+def _build_shortlist() -> Dict[str, Any]:
+    """Build, store and record outcomes; one at a time."""
+    if not _SHORTLIST_BUILDING.acquire(blocking=False):
+        return shortlist_mod.latest() or {"available": False, "reason": "Being built now."}
+    try:
+        sl = shortlist_mod.build(YF_PROVIDER, news_for=_shortlist_news)
+        shortlist_mod.save(sl)
+        shortlist_mod.record_outcomes(YF_PROVIDER)
+        return sl
+    finally:
+        _SHORTLIST_BUILDING.release()
+
+
+def _last_completed_session() -> Optional[str]:
+    now = datetime.now(timezone.utc).astimezone(session_mod.ET)
+    d = now.date()
+    for _ in range(10):
+        close = session_mod.regular_close(d)
+        if close and close <= now:
+            return d.isoformat()
+        d = d - timedelta(days=1)
+        now = datetime.combine(d, datetime.max.time(), tzinfo=session_mod.ET)
+    return None
+
+
+async def _shortlist_loop() -> None:
+    await asyncio.sleep(120)
+    while True:
+        try:
+            have = shortlist_mod.latest()
+            want = _last_completed_session()
+            if want and (not have or (have.get("as_of") or "") < want):
+                await _run(_build_shortlist)
+        except Exception as exc:                                # noqa: BLE001
+            logging.getLogger("uvicorn.error").warning("shortlist loop: %s", exc)
+        await asyncio.sleep(SHORTLIST_POLL_SECONDS)
+
+
+@app.get("/api/shortlist")
+async def shortlist_view() -> Dict[str, Any]:
+    """The latest stored shortlist and the forward record of past ones. Built in the
+    background once per completed session; built here only when none is stored yet."""
+    def build() -> Dict[str, Any]:
+        sl = shortlist_mod.latest() or _build_shortlist()
+        return {**sl, "record": shortlist_mod.record_summary(),
+                "past": [{"as_of": x["as_of"], "n": len(x.get("items") or []), "version": x.get("version")}
+                         for x in shortlist_mod.history(20)]}
+    return await _run(build)
+
+
 @app.get("/api/setups/catalogue")
 async def setups_catalogue() -> Dict[str, Any]:
     """Every preset, its rules for both directions, and its parameters."""
@@ -3915,6 +3977,8 @@ async def _start_tracker() -> None:
         app.state.tracker_task = asyncio.create_task(_tracker_loop())
     if DESK_EDITION_AUTO:
         app.state.edition_task = asyncio.create_task(_edition_loop())
+    if SHORTLIST_AUTO:
+        app.state.shortlist_task = asyncio.create_task(_shortlist_loop())
     # OPTIC_DOLTHUB_SYNC=false reads the store without filling it (a second
     # process beside one that already is).
     if dolthub_vol_mod.enabled() and os.environ.get("OPTIC_DOLTHUB_SYNC", "true").strip().lower() != "false":
@@ -3928,7 +3992,8 @@ async def _stop_tracker() -> None:
     # "task was destroyed but it is pending" on the way out, and the feedback
     # flush sleeps fifteen times longer than that.
     for name in ("tracker_task", "warm_task", "feedback_task", "catalyst_task",
-                 "keepwarm_task", "edition_task", "congress_task", "analysts_task", "dolthub_task"):
+                 "keepwarm_task", "edition_task", "congress_task", "analysts_task", "dolthub_task",
+                 "shortlist_task"):
         task = getattr(app.state, name, None)
         if task:
             task.cancel()

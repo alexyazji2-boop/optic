@@ -17,6 +17,7 @@ import { watchButton } from '../ui/company.js';
 import { hrefFor } from '../nav.js';
 import { button as miloButton, provideContext } from '../ui/milo.js';
 import { toast } from '../ui/toast.js';
+import { shortlistBody } from './scan-shortlist.js';
 import { sectionHead } from './tabs.js';
 
 const RECENT_KEY = 'optic.scan.recent.v1', SCREEN_KEY = 'optic.screener.v1';
@@ -161,9 +162,9 @@ function paint() {
   const y = window.scrollY;
   draw(mainEl, html`<header class="page-head">${sectionHead('discover', 'scan')}</header>
     ${ask()}
-    <section class="section" aria-labelledby="sc-h"><div class="section-head"><h2 class="t-h2" id="sc-h">${S.mode === 'build' ? 'Build a screen' : 'Scanners'}</h2>
-      <div class="seg" role="group" aria-label="Mode"><button type="button" data-v2-scan-mode="named" aria-pressed="${S.mode !== 'build'}">Named scans</button><button type="button" data-v2-scan-mode="build" aria-pressed="${S.mode === 'build'}">Build a screen</button></div></div>
-      ${S.mode === 'build' ? builder() : S.scans === undefined ? skeleton('rows', 4, 'Loading the scanner catalogue') : S.scansErr ? failed('The scanner catalogue', S.scansErr, { retry: 'catalogue' }) : named()}</section>
+    <section class="section" aria-labelledby="sc-h"><div class="section-head"><h2 class="t-h2" id="sc-h">${S.mode === 'build' ? 'Build a screen' : S.mode === 'shortlist' ? 'Nightly shortlist' : 'Scanners'}</h2>
+      <div class="seg sc-modes" role="group" aria-label="Mode"><button type="button" data-v2-scan-mode="named" aria-pressed="${S.mode === 'named'}">Named scans</button><button type="button" data-v2-scan-mode="shortlist" aria-pressed="${S.mode === 'shortlist'}">Shortlist</button><button type="button" data-v2-scan-mode="build" aria-pressed="${S.mode === 'build'}">Build a screen</button></div></div>
+      ${S.mode === 'build' ? builder() : S.mode === 'shortlist' ? shortlistBody(S) : S.scans === undefined ? skeleton('rows', 4, 'Loading the scanner catalogue') : S.scansErr ? failed('The scanner catalogue', S.scansErr, { retry: 'catalogue' }) : named()}</section>
     ${evaluation()}`);
   if (Math.abs(window.scrollY - y) > 2) window.scrollTo(0, y);
 }
@@ -199,11 +200,12 @@ async function runAsk(text) {
 export async function render(main, route) {
   live = true; mainEl = main;
   const prm = route.params || {};
-  S = { mode: prm.mode === 'build' ? 'build' : 'named', scanId: prm.id || 'momentum', spec: Object.assign(blankSpec(), readKey(SCREEN_KEY, {})) };
+  S = { mode: prm.mode === 'build' ? 'build' : prm.mode === 'shortlist' ? 'shortlist' : 'named', scanId: prm.id || 'momentum', spec: Object.assign(blankSpec(), readKey(SCREEN_KEY, {})) };
   if (S.mode === 'build') { loadFields(); const kept = SCREENED.get(specKey(S.spec)); if (kept) S.screen = kept; }
   document.title = 'Scan, Optic';
   provideContext(() => ({ view: 'scan', scan: S.result && S.result.rows ? { id: S.scanId, name: S.result.name, rows: S.result.rows.slice(0, 15) } : null }));
   paint(); wire(main);
+  if (S.mode === 'shortlist') loadShortlist();
   // #/scan?q=… (from Milo's "Find stocks" card, which said it may use a question) runs that request, once:
   // back on this page from a result, the answer already given is shown again
   const q = String(prm.q || '').trim().slice(0, 300);
@@ -211,10 +213,15 @@ export async function render(main, route) {
   try { [S.scans, S.groups] = await Promise.all([api.get('/api/scanners', { ttl: 120000 }), api.get('/api/scanners/groups', { ttl: 600000 }).catch(() => null)]); if (!S.groups && S.scans) S.groups = { groups: [{ id: 'all', name: 'Screens', count: S.scans.scans.length, scans: S.scans.scans }] }; }
   catch (e) { S.scansErr = e; S.scans = null; }
   paint();
-  if (S.scans && S.mode !== 'build') runScan(S.scanId);
+  if (S.scans && S.mode === 'named') runScan(S.scanId);
 }
 export function dispose() { live = false; clearTimeout(poll); }
-export const retry = { scan: () => runScan(S.scanId), catalogue: (m, r) => render(m, r) };
+export const retry = { scan: () => runScan(S.scanId), catalogue: (m, r) => render(m, r), shortlist: () => loadShortlist() };
+async function loadShortlist() {
+  S.shortlist = undefined; paint(); remember('mode=shortlist');
+  try { S.shortlist = await api.get('/api/shortlist', { ttl: 300000, timeout: 120000 }); } catch (e) { S.shortlist = { error: e }; }
+  paint();
+}
 
 function saveSpec() {
   writeKey(SCREEN_KEY, S.spec);
@@ -249,7 +256,7 @@ function wire(main) {
     if (t('[data-v2-ask-edit]')) { const sp = S.ask.spec; S.spec = Object.assign(blankSpec(), sp); saveSpec(); S.screen = S.ask.result; S.mode = 'build'; if (S.fields === undefined) loadFields(); paint(); return; }
     if ((b = t('[data-v2-scan-mode]'))) {
       S.mode = b.dataset.v2ScanMode;
-      if (S.mode === 'build') { if (S.fields === undefined) loadFields(); remember('mode=build'); } else { remember(`id=${encodeURIComponent(S.scanId)}`); if (!S.result) runScan(S.scanId); }
+      if (S.mode === 'build') { if (S.fields === undefined) loadFields(); remember('mode=build'); } else if (S.mode === 'shortlist') { if (S.shortlist === undefined || (S.shortlist && S.shortlist.error)) { loadShortlist(); return; } remember('mode=shortlist'); } else { remember(`id=${encodeURIComponent(S.scanId)}`); if (!S.result) runScan(S.scanId); }
       paint(); return;
     }
     if ((b = t('[data-v2-scan-group]'))) { const g = S.groups.groups.find((x) => x.id === b.dataset.v2ScanGroup); if (g && g.scans[0]) runScan(g.scans[0].id); return; }
