@@ -285,3 +285,68 @@ def test_roth_language_is_qualified():
     notes = " ".join(n["body"] for n in ret._roth_notes({"bond_pct": 20}, "balanced", 30))
     assert "never taxed" not in notes and "five years" in notes and "59½" in notes
     assert "belongs in the Roth" not in notes
+
+
+# ---------------------------------------------------------------- 7. an option is not one share
+
+from app.analytics import portfolio_risk as prisk
+_TODAY = _dt.date(2026, 10, 22)
+
+
+class _RiskProvider:
+    def batch_history(self, symbols, period="6mo", interval="1d"):
+        idx = _pd.bdate_range(end="2026-10-21", periods=130)
+        out = {}
+        for i, s in enumerate(symbols):
+            rng = _np.random.default_rng(10 + i)
+            out[s] = _pd.DataFrame({"Close": 100 * _np.cumprod(1 + rng.normal(0, 0.01, 130))}, index=idx)
+            out[s].iloc[-1, 0] = 100.0
+        return out
+
+    def profile(self, sym):
+        return {"sector": "Technology"}
+
+
+def _opt(sym="AAA", typ="call", direction="long", qty=2, strike=100.0, mark=4.0, **kw):
+    return {"ticker": sym, "instrument": "option", "direction": direction, "option_type": typ, "strike": strike,
+            "expiry": "2026-12-18", "qty": qty, "entry_price": mark, "mark_price": mark, "entry_spot": 100.0, **kw}
+
+
+def test_an_at_the_money_call_weighs_about_half_its_hundred_shares():
+    ex = prisk.option_exposure(_opt(), 100.0, _TODAY)
+    assert ex["multiplier"] == 100 and ex["multiplier_basis"] == "standard contract assumed"
+    assert 0.5 < ex["delta"] < 0.6
+    assert ex["notional"] == 20000.0 and ex["premium_at_risk"] == 800.0
+    assert abs(ex["delta_exposure"] - ex["delta"] * 100 * 2 * 100) < 1
+
+
+def test_puts_and_shorts_carry_their_sign_and_shorts_no_premium_cap():
+    lp = prisk.option_exposure(_opt(typ="put"), 100.0, _TODAY)
+    sc = prisk.option_exposure(_opt(direction="short"), 100.0, _TODAY)
+    assert lp["delta"] < 0 and lp["delta_exposure"] < 0
+    assert sc["delta_exposure"] < 0 and sc["premium_at_risk"] is None
+
+
+def test_an_adjusted_contract_uses_its_own_multiplier_and_a_given_delta():
+    ex = prisk.option_exposure(_opt(multiplier=150, delta=0.4), 100.0, _TODAY)
+    assert ex["multiplier_basis"] == "position" and ex["delta_basis"] == "position"
+    assert ex["delta_exposure"] == 0.4 * 100 * 2 * 150
+
+
+def test_missing_greeks_are_reported_not_guessed():
+    expired = prisk.option_exposure(_opt(expiry="2026-10-01"), 100.0, _TODAY)
+    unsolvable = prisk.option_exposure(_opt(mark=0.0, entry_price=0.0), 100.0, _TODAY)
+    assert expired["delta_exposure"] is None and expired["uncovered_reason"] == "at or past expiry"
+    assert unsolvable["delta_exposure"] is None
+
+
+def test_shares_and_options_reconcile_in_one_unit():
+    shares = {"ticker": "BBB", "instrument": "shares", "direction": "long", "qty": 100, "entry_price": 100.0}
+    book = prisk.build(_RiskProvider(), [shares, _opt(), _opt(sym="CCC", expiry="2026-10-01")], today=_TODAY)
+    aaa = next(p for p in book["positions"] if p["symbol"] == "AAA")
+    bbb = next(p for p in book["positions"] if p["symbol"] == "BBB")
+    assert abs(bbb["signed_value"] - 10000.0) < 1
+    ex = next(o for o in book["options"] if o["symbol"] == "AAA")
+    assert abs(aaa["signed_value"] - ex["delta_exposure"]) < 1 and aaa["signed_value"] > 5000, "two contracts, not two shares"
+    assert book["options_uncovered"] == 1 and "left out" in book["option_note"] and "CCC" not in [p["symbol"] for p in book["positions"]]
+    assert "understated" not in (JS / "pages/tracker.js").read_text()

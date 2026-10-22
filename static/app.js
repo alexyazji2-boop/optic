@@ -21924,7 +21924,7 @@ function renderPortfolioRisk(r) {
         ${vizBlock('viz-risk-split', moneyRiskTitle(r), `Each name's share of the book's money beside its share of the book's swings, from ${
   fmt(r.window_sessions, 0)} sessions of daily returns.${unmeasured
     ? ` ${fmt(unmeasured, 0)} name${unmeasured === 1 ? '' : 's'} without enough history ${unmeasured === 1 ? 'is' : 'are'} left out.` : ''}${
-  r.option_positions ? ' An option counts as one share of its stock per contract, not by premium or delta, so its share here is understated.' : ''}`)}
+  r.option_positions ? ` ${r.option_note || ''} Long options' premium at risk ${money(r.option_premium_at_risk || 0)}; notional ${money(r.option_notional || 0)}.` : ''}`)}
         ${exactFigures(`<table class="data">
           <thead><tr><th>Name</th><th>Sector</th><th class="num">Weight</th>
             <th class="num">Risk share</th></tr></thead>

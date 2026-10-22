@@ -194,16 +194,17 @@ function risk(d) {
   const pos = (r.positions || []).slice().sort((a, b) => Math.abs(b.weight_pct) - Math.abs(a.weight_pct));
   const sectors = (r.sectors || []).filter((x) => isNum(x.weight_pct)).sort((a, b) => b.weight_pct - a.weight_pct);
   return html`<section class="section" aria-labelledby="br-h"><div class="section-head"><div><h2 class="t-h2" id="br-h">Book-level risk</h2>
-      <p class="section-sub">${num(r.names, 0)} names, ${money(r.gross_exposure, 0)} gross. The ledger above reports each trade on its own; this asks whether they are separate bets.</p></div>
+      <p class="section-sub">${num(r.names, 0)} names, ${money(r.gross_exposure, 0)} gross${(r.options || []).length ? ', options at their delta exposure' : ''}. The ledger above reports each trade on its own; this asks whether they are separate bets.</p></div>
       ${miloButton('Ask Milo about gross exposure', { ask: 'What is gross exposure, and how should I read the diversification ratio and effective positions for this book?', context: 'Optic Portfolio, book-level risk' })}</div>
     <dl class="kv" style="--kv:4">${tile('Diversification ratio', dr === null ? 'n/a' : num(dr, 2), '1.0 means nothing is cancelling', drc)}${tile('Book volatility', isNum(r.portfolio_vol_pct) ? `${num(r.portfolio_vol_pct, 0)}%` : 'n/a', `vs ${num(r.weighted_avg_vol_pct, 0)}% average of the parts`)}
       ${tile('Effective positions', isNum(r.effective_positions) ? num(r.effective_positions, 1) : 'n/a', `of ${num(r.names, 0)} held`)}${tile('Largest / top 3', `${num(r.largest_weight_pct, 0)}% / ${num(r.top3_weight_pct, 0)}%`, 'of gross exposure')}</dl>
     <p class="${r.concentrated ? 'stale' : ''}"><b>${r.concentrated ? 'This is one bet.' : 'Correlation read.'}</b> ${clean(r.verdict || '')}</p>
     ${r.sector_warning ? html`<p class="stale"><b>Shared exposure.</b> ${clean(r.sector_warning)}</p>` : ''}
     <div class="grid2"><div><h3>Where the money and the risk sit</h3>
-      <div class="tscroll"><table class="t"><thead><tr><th scope="col">Name</th><th scope="col">Sector</th><th scope="col" class="n">Money</th><th scope="col" class="n">Risk</th></tr></thead>
+      <div class="tscroll"><table class="t"><thead><tr><th scope="col">Name</th><th scope="col">Sector</th><th scope="col" class="n">Exposure</th><th scope="col" class="n">Risk</th></tr></thead>
         <tbody>${pos.map((p) => html`<tr><td><a href="#/${p.symbol}">${p.symbol}</a></td><td class="t-muted">${p.sector || ''}</td><td class="n">${num(p.weight_pct, 1)}%</td><td class="n ${isNum(p.risk_contribution_pct) && p.risk_contribution_pct - Math.abs(p.weight_pct) >= 5 ? 'down' : ''}">${isNum(p.risk_contribution_pct) ? `${num(p.risk_contribution_pct, 1)}%` : 'n/a'}</td></tr>`)}</tbody></table></div>
-      <p class="asof">Each name's share of the book's money beside its share of the book's swings, from ${num(r.window_sessions, 0)} sessions of daily returns.${r.option_positions ? ' An option counts as one share of its stock per contract, so its share here is understated.' : ''}</p></div>
+      <p class="asof">Each name's share of the book's exposure beside its share of the book's swings, from ${num(r.window_sessions, 0)} sessions of daily returns. ${clean(r.exposure_basis || '')}</p>
+      ${(r.options || []).length ? html`<p class="asof">${clean(r.option_note || '')} Long options' premium at risk ${money(r.option_premium_at_risk, 0)}; notional ${money(r.option_notional, 0)}.</p>` : ''}</div>
       <div><h3>Most correlated pairs</h3><div class="tscroll"><table class="t"><thead><tr><th scope="col">Pair</th><th scope="col" class="n">${num(r.window_sessions, 0)}-day correlation</th></tr></thead>
         <tbody>${(r.top_pairs || []).slice(0, 6).length ? r.top_pairs.slice(0, 6).map((p) => html`<tr><td>${p.a} / ${p.b}</td><td class="n ${Math.abs(p.correlation) >= 0.7 ? 'down' : ''}">${p.correlation > 0 ? '+' : ''}${num(p.correlation, 2)}</td></tr>`) : html`<tr><td colspan="2">Not enough overlapping history.</td></tr>`}</tbody></table></div>
         <p class="asof">From −1, moving opposite, to +1, moving together. At 0.7 or more two names behave much like one.</p>

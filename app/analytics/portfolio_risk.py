@@ -29,9 +29,12 @@ recent past.
 from __future__ import annotations
 
 import logging
+from datetime import date, datetime
 from typing import Any, Dict, List, Optional
 
 import numpy as np
+
+from .greeks import greeks as _greeks, implied_vol as _implied_vol
 
 log = logging.getLogger(__name__)
 
@@ -68,7 +71,83 @@ def _num(value: Any) -> Optional[float]:
     return None if out != out or out in (float("inf"), float("-inf")) else out
 
 
-def build(provider, positions: List[Dict[str, Any]]) -> Dict[str, Any]:
+# ------------------------------------------------------------ option exposure
+#
+# An option contract was weighted as one share of its stock (pitch audit,
+# 2026-10-22): a standard contract covers 100 shares, and how much of them it
+# moves like is its delta. Three figures are kept apart, because each answers a
+# different question: premium at risk (the most a long option can lose),
+# notional (multiplier x contracts x the stock's price, the size of what it
+# controls) and delta exposure (the stock-equivalent dollars it moves like
+# today, which is what the covariance below can use). The last is a linear
+# snapshot of something that is not linear: it changes as the stock moves and
+# as expiry nears, and it says nothing about a gap through the strike.
+
+STANDARD_MULTIPLIER = 100.0
+
+
+def _today() -> date:
+    try:
+        from zoneinfo import ZoneInfo
+        return datetime.now(ZoneInfo("America/New_York")).date()
+    except Exception:
+        return date.today()
+
+
+def option_exposure(p: Dict[str, Any], spot: Optional[float], today: Optional[date] = None) -> Dict[str, Any]:
+    """Premium at risk, notional and delta exposure for one option position.
+
+    `multiplier` (shares per contract) comes from the position when it carries
+    one, as an adjusted contract after a split or merger does; otherwise the
+    standard 100 is assumed and said. Delta comes from the position when it
+    carries one, otherwise from Black-Scholes at the implied volatility its own
+    mark solves to. With neither, delta is None and the position is reported as
+    not covered rather than guessed.
+    """
+    today = today or _today()
+    qty = _num(p.get("qty")) or 0.0
+    mult = _num(p.get("multiplier"))
+    mult_basis = "position" if mult else "standard contract assumed"
+    mult = mult or STANDARD_MULTIPLIER
+    sign = -1.0 if str(p.get("direction") or "long").lower() in ("short", "sell") else 1.0
+    is_call = str(p.get("option_type") or "").lower() == "call"
+    strike = _num(p.get("strike"))
+    premium = _num(p.get("mark_price")) or _num(p.get("entry_price"))
+    spot = _num(spot) or _num(p.get("mark_spot")) or _num(p.get("entry_spot"))
+    out: Dict[str, Any] = {
+        "multiplier": mult, "multiplier_basis": mult_basis,
+        "premium_per_share": premium,
+        # A short option can lose far more than the premium it took in
+        "premium_at_risk": round(premium * qty * mult, 2) if premium and sign > 0 else None,
+        "notional": round(spot * qty * mult, 2) if spot else None,
+        "delta": None, "delta_basis": None, "delta_exposure": None, "uncovered_reason": None,
+    }
+    delta = _num(p.get("delta"))
+    if delta is not None:
+        out["delta_basis"] = "position"
+    else:
+        try:
+            expiry = datetime.fromisoformat(str(p.get("expiry"))[:10]).date()
+        except (TypeError, ValueError):
+            expiry = None
+        tau = ((expiry - today).days / 365.0) if expiry else None
+        if not (spot and strike and premium and tau and tau > 0):
+            out["uncovered_reason"] = ("at or past expiry" if tau is not None and tau <= 0
+                                       else "missing strike, expiry, price or mark")
+            return out
+        iv = _implied_vol(premium, spot, strike, tau, 0.0, 0.0, is_call)
+        if not np.isfinite(iv):
+            out["uncovered_reason"] = "no implied volatility solves to its mark"
+            return out
+        delta = float(_greeks(spot, np.array([strike]), np.array([tau]), np.array([iv]),
+                              0.0, 0.0, np.array([is_call]))["delta"][0])
+        out["delta_basis"] = "Black-Scholes at the mark's implied volatility ({:.0f}%), zero rate".format(iv * 100)
+    out["delta"] = round(delta, 3)
+    out["delta_exposure"] = round(sign * delta * spot * qty * mult, 2) if spot else None
+    return out
+
+
+def build(provider, positions: List[Dict[str, Any]], today: Optional[date] = None) -> Dict[str, Any]:
     """Concentration and correlation across the open book."""
     rows = []
     for p in (positions or []):
@@ -79,7 +158,7 @@ def build(provider, positions: List[Dict[str, Any]]) -> Dict[str, Any]:
         rows.append({"symbol": sym, "qty": qty, "entry_price": price,
                      "direction": (p.get("direction") or "long").lower(),
                      "instrument": p.get("instrument") or "shares",
-                     "risk_dollars": _num(p.get("risk_dollars")) or 0.0})
+                     "risk_dollars": _num(p.get("risk_dollars")) or 0.0, "raw": p})
     if not rows:
         return {"available": False, "reason": "No open positions to analyse."}
 
@@ -97,13 +176,24 @@ def build(provider, positions: List[Dict[str, Any]]) -> Dict[str, Any]:
             closes[sym] = f["Close"].dropna()
 
     by_symbol: Dict[str, Dict[str, Any]] = {}
+    options_out: List[Dict[str, Any]] = []
     for r in rows:
         last = _num(closes[r["symbol"]].iloc[-1]) if r["symbol"] in closes else None
-        value = (last or r["entry_price"]) * r["qty"]
-        # A short position carries the opposite exposure, so its weight is
-        # signed — netting a long and a short in the same name to zero is the
-        # correct answer, and summing their absolute values is not.
-        signed = -value if r["direction"] in ("short", "sell") else value
+        if r["instrument"] == "option":
+            ex = option_exposure(r["raw"], last, today)
+            p = r["raw"]
+            options_out.append({"symbol": r["symbol"], "option_type": p.get("option_type"), "strike": _num(p.get("strike")),
+                                "expiry": p.get("expiry"), "contracts": r["qty"], "direction": r["direction"], **ex})
+            if ex["delta_exposure"] is None:
+                continue                           # reported as not covered, never guessed
+            value = abs(ex["delta_exposure"])
+            signed = ex["delta_exposure"]          # a long put is negative, a short call negative
+        else:
+            value = (last or r["entry_price"]) * r["qty"]
+            # A short position carries the opposite exposure, so its weight is
+            # signed — netting a long and a short in the same name to zero is the
+            # correct answer, and summing their absolute values is not.
+            signed = -value if r["direction"] in ("short", "sell") else value
         slot = by_symbol.setdefault(r["symbol"], {
             "symbol": r["symbol"], "value": 0.0, "signed_value": 0.0,
             "risk_dollars": 0.0, "positions": 0})
@@ -111,6 +201,10 @@ def build(provider, positions: List[Dict[str, Any]]) -> Dict[str, Any]:
         slot["signed_value"] += signed
         slot["risk_dollars"] += r["risk_dollars"]
         slot["positions"] += 1
+    uncovered = [o for o in options_out if o["delta_exposure"] is None]
+    if not by_symbol:
+        return {"available": False, "reason": "No position has a measurable exposure.",
+                "options": options_out}
 
     gross = sum(abs(s["signed_value"]) for s in by_symbol.values())
     if gross <= 0:
@@ -230,9 +324,24 @@ def build(provider, positions: List[Dict[str, Any]]) -> Dict[str, Any]:
         "available": True,
         "positions": positions_out,
         "names": len(positions_out),
-        # Weighted as one share of the underlying per contract (value above), so
-        # the page can say an option's share is understated rather than imply it.
-        "option_positions": sum(1 for r in rows if r["instrument"] == "option"),
+        "option_positions": len(options_out),
+        "exposure_basis": ("Shares at market value. Each option at its delta exposure: delta x the "
+                           "stock's price x contracts x shares per contract."),
+        "options": options_out,
+        "options_uncovered": len(uncovered),
+        "option_premium_at_risk": round(sum(o["premium_at_risk"] or 0.0 for o in options_out), 2),
+        "option_notional": round(sum(o["notional"] or 0.0 for o in options_out), 2),
+        "option_note": (
+            "{} option position{} weighted by delta exposure, the stock-equivalent dollars {} moves "
+            "like today. Delta changes as the stock moves and as expiry nears, so these weights "
+            "and the volatility above are a snapshot of a nonlinear position, and say nothing about "
+            "a gap through a strike.{}".format(
+                len(options_out) - len(uncovered), "" if len(options_out) - len(uncovered) == 1 else "s",
+                "it" if len(options_out) - len(uncovered) == 1 else "each",
+                " {} left out: no delta could be found ({}).".format(
+                    len(uncovered), "; ".join(sorted({o["uncovered_reason"] for o in uncovered})))
+                if uncovered else "")
+        ) if options_out else None,
         "gross_exposure": round(gross, 2),
         "net_exposure": round(sum(s["signed_value"] for s in by_symbol.values()), 2),
         "sectors": sector_rows,
