@@ -142,10 +142,10 @@ def test_a_phone_gets_the_whole_screen_and_full_size_targets():
     assert ".drawer-panel.milo-panel { top: var(--vvt, 0px); bottom: auto; left: 0; width: 100%; height: var(--vvh, 100dvh);" in phone
     assert "env(safe-area-inset-top, 0px)" in phone and "env(safe-area-inset-bottom, 0px)" in phone
     assert ".milo-settings { position: fixed; z-index: 8; top: auto; left: 0; right: 0; bottom: 0;" in phone, "Response settings rise as a sheet"
-    assert ".milo-pp-row[style*=\"--n: 5\"] .milo-pp-opt:nth-child(n+4) { grid-column: span 3; }" in phone, "three above, two below"
+    assert ".menu-body.milo-pp-menu { top: auto; left: max(16px, env(safe-area-inset-left, 0px)); right: max(16px, env(safe-area-inset-right, 0px)); max-width: none;" in phone, "the persona menu low on the screen, as the context menu is"
     assert ".milo-compose textarea { font-size: var(--t-lg); }" in phone, "16 px, so iOS does not zoom into the field"
     assert "panel.style.setProperty('--vvt', `${Math.round(vv.offsetTop)}px`)" in MILO, "the keyboard: the panel is what it leaves"
     coarse = CSS[CSS.index("@media (pointer: coarse) {\n  .milo-send"):CSS.index("/* a phone: the whole screen")]
     assert "min-height: var(--tap)" in coarse and ".milo-info-btn::after { content: \"\"; position: absolute; inset: -8px; }" in CSS
     short = CSS[CSS.index("/* a short screen"):CSS.index("/* ---------- states")]
-    assert ".milo-pp-row, .milo-pp-row:not([style*=\"--n: 5\"]) { grid-template-columns: repeat(var(--n, 5), minmax(0, 1fr)); }" in short, "on its side: the personas stay, in one row"
+    assert ".milo-persona { padding-top: 0; padding-bottom: 0; }" in short and ".milo-ctx-meta { grid-column: 2; grid-row: 1; }" in short, "on its side: one line each, the info button beside the picker"

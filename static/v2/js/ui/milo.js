@@ -411,19 +411,22 @@ function historyHTML() {
     ${list.length ? html`<ul class="plain">${list.map((c) => html`<li class="${c.id === S.conv.id ? 'is-now' : ''}"><button type="button" class="milo-hist-open" data-v2-milo-open="${c.id}" ${c.id === S.conv.id ? html`aria-current="true"` : ''}><span>${c.title}</span><small class="t-muted">${prefs.dayTime(c.at)}, ${(c.messages || []).length} messages${c.ticker ? `, ${c.ticker}` : ''}${c.id === S.conv.id ? ', open now' : ''}</small></button><button type="button" class="icon-btn" data-v2-milo-del="${c.id}" aria-label="Delete ${c.title}" title="Delete">${icon('trash')}</button></li>`)}</ul>` : html`<p class="t-muted">Nothing saved yet.</p>`}
     <p class="asof">Saved in this browser only, never uploaded, and kept apart for each account. The last ${MAX_CONVERSATIONS} conversations are kept.</p></section>`;
 }
-// The answer settings since the 2026-10-20 redesign (owner's brief, from an approved sketch): the Optic Persona
-// always on show as a row of its five personalities under the context bar; the Level and the Timeframe in
-// Response settings, every option kept, each control's own line under it. The persona was a menu before, and the
-// three were on show above the conversation (2026-10-19); the classic keys and their values are unchanged.
+// The answer settings since the 2026-10-20 redesign (owner's brief, from an approved sketch): the Optic Persona under
+// the context bar; the Level and the Timeframe in Response settings, every option kept, each control's own line under
+// it. The classic keys and their values are unchanged.
+//
+// The persona is a menu, like the context bar's (owner, 2026-10-22: "the personalities are very cluttered, fix it",
+// choosing the menu over keeping the five on show): one line naming the persona in use; pressed, it lists the five,
+// each with what it does, the chosen one ticked. As a row of five (2026-10-20) its names did not fit the panel.
 const HZ_SHORT = { auto: 'Auto', day: 'Day', swing: 'Swing', long: 'Long term' };
 const curPersona = () => { const ps = (S.personas || {}).personas || []; return ps.find((x) => x.id === persona()) || ps[0] || { id: 'neutral', label: 'Neutral analyst', blurb: '' }; };
 function personaHTML() {
   const ps = (S.personas || {}).personas || [], cur = curPersona();
   if (!ps.length) return html`<div class="milo-persona is-loading" aria-hidden="true"></div>`;
-  // a radio group: the arrows move the choice; the chosen one is marked by its check and weight as well as its fill
+  // inside the menu, a radio group: the arrows move the choice; the chosen one is marked by its check
   return html`<div class="milo-persona"><p class="t-label milo-pp-lab" id="milo-pp-lab">Optic Persona</p>
-    <div class="milo-pp-row" role="radiogroup" aria-labelledby="milo-pp-lab" style="--n: ${ps.length}">${ps.map((x) => html`<button type="button" role="radio" class="milo-pp-opt" aria-checked="${x.id === cur.id ? 'true' : 'false'}" tabindex="${x.id === cur.id ? '0' : '-1'}" data-v2-milo-pp="${x.id}" title="${x.blurb || ''}">${x.id === cur.id ? icon('check') : ''}<span>${x.label}</span></button>`)}</div>
-    ${cur.blurb ? html`<p class="milo-lens-blurb">${cur.blurb}</p>` : ''}</div>`;
+    <details class="menu milo-pp-pick"><summary class="milo-ctx-btn milo-pp-btn" title="How Milo approaches your questions"><span class="sr">Optic Persona: </span><span class="milo-ctx-now">${cur.label}</span>${icon('chev')}</summary>
+      <div class="menu-body milo-pp-menu" role="radiogroup" aria-labelledby="milo-pp-lab">${ps.map((x) => html`<button type="button" role="radio" class="milo-ctx-opt milo-pp-opt" aria-checked="${x.id === cur.id ? 'true' : 'false'}" tabindex="${x.id === cur.id ? '0' : '-1'}" data-v2-milo-pp="${x.id}">${x.id === cur.id ? icon('check') : html`<span class="milo-ctx-gap"></span>`}<span><b>${x.label}</b>${x.blurb ? html`<small>${x.blurb}</small>` : ''}</span></button>`)}</div></details></div>`;
 }
 function settingsHTML() {
   if (!S.showSettings) return '';
@@ -1136,9 +1139,9 @@ function wire(root) {
       S.scope = b.dataset.v2MiloScope;
       const d = b.closest('details'); if (d) d.open = false;
       paintChrome(); if (!S.items.length) paintLog(false);
-      const sm = $('.milo-ctx-btn', root); if (sm) sm.focus(); return;
+      const sm = $('.milo-ctx-pick > .milo-ctx-btn', root); if (sm) sm.focus(); return;
     }
-    if ((b = t('[data-v2-milo-pp]'))) { pickPersona(b.dataset.v2MiloPp, root); return; }
+    if ((b = t('[data-v2-milo-pp]'))) { pickPersona(b.dataset.v2MiloPp, root, true); return; }
     if ((b = t('[data-v2-milo-hz]'))) { setPref(HORIZON_KEY, b.dataset.v2MiloHz); paintChrome(); const hb = $(`[data-v2-milo-hz="${b.dataset.v2MiloHz}"]`, root); if (hb) hb.focus(); return; }
     if ((b = t('[data-v2-milo-start]'))) { send(b.dataset.v2MiloStart); return; }
     if (t('[data-v2-milo-latest]')) { const log = $('.milo-log', root); if (log) log.scrollTo({ top: log.scrollHeight, behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' }); return; }
@@ -1191,9 +1194,13 @@ function wire(root) {
   });
 }
 // a persona applies from the next question on; the answers already given are not touched
-function pickPersona(id, root) {
+function pickPersona(id, root, close = false) {
   setPref(PERSONA_KEY, id); paintChrome();
-  const nb = $(`[data-v2-milo-pp="${id}"]`, root); if (nb) nb.focus();
+  // a press closes the menu and goes back to its button; the arrows keep the menu open on the new choice (the redraw
+  // cannot reopen it itself: its button now names another persona)
+  const menu = $('.milo-pp-pick', root);
+  if (close && menu) { menu.open = false; const sm = $('.milo-pp-btn', root); if (sm) sm.focus(); }
+  else { if (menu) menu.open = true; const nb = $(`[data-v2-milo-pp="${id}"]`, root); if (nb) nb.focus(); }
   const cur = curPersona(); announce(`${cur.label}. Applies from your next question.`);
 }
 void compact; void ACT_SECTIONS;
