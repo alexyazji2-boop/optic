@@ -515,3 +515,18 @@ def test_an_enabled_assistant_is_not_described_as_unconfigured(monkeypatch):
     monkeypatch.setattr(ai, "_client", lambda: None)
     off = ai.available()
     assert off["enabled"] is False and ("not configured" in off["hint"] or "ANTHROPIC_API_KEY" in off["hint"])
+
+
+# ---------------------------------------------------------------- 22. response headers
+
+def test_every_answer_carries_the_protections_and_hsts_only_over_https():
+    from fastapi.testclient import TestClient
+    import app.main as m
+    c = TestClient(m.app)
+    for path in ("/", "/api/health", "/v2/"):
+        r = c.get(path)
+        assert r.headers["x-content-type-options"] == "nosniff", path
+        assert r.headers["x-frame-options"] == "DENY" and "frame-ancestors 'none'" in r.headers["content-security-policy"]
+        assert "cdn.jsdelivr.net" in r.headers["content-security-policy-report-only"]
+        assert "strict-transport-security" not in r.headers
+    assert c.get("/api/health", headers={"x-forwarded-proto": "https"}).headers["strict-transport-security"] == "max-age=15552000"

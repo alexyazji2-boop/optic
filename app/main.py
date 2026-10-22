@@ -7779,3 +7779,47 @@ if STATIC_DIR.exists():
         return resp
 
     app.mount("/", _NoCacheHTML(directory=str(STATIC_DIR), html=True), name="static")
+
+
+# ------------------------------------------------------- response headers
+#
+# The pitch audit (2026-10-22) found no CSP, frame protection, HSTS or
+# nosniff on the live site: Railway's edge and Cloudflare in front of it add
+# none. Added here, outermost (the last middleware registered wraps the rest,
+# so v2_gate's early answers carry them too), and deliberately:
+#
+# - Enforced now, because nothing legitimate needs the opposite: nosniff; no
+#   framing anywhere (X-Frame-Options and frame-ancestors, as no page of Optic
+#   is embedded and a framed sign-in page is how clickjacking works); no
+#   plugins; <base> fixed; a referrer that names the site, not the page.
+# - HSTS only on a request that arrived over HTTPS, at six months and without
+#   includeSubDomains or preload, which are harder to undo than to add.
+# - The full content policy as Report-Only first. Every script, stylesheet and
+#   font comes from this origin or cdn.jsdelivr.net, with inline scripts (the
+#   import map, the theme boot) and inline styles that a strict policy would
+#   block; the browser reports what it would have blocked and blocks nothing,
+#   so charts, sources and the brokerage and checkout redirects keep working
+#   while it is checked on real pages.
+CSP_ENFORCED = "frame-ancestors 'none'; object-src 'none'; base-uri 'self'"
+CSP_REPORT_ONLY = (
+    "default-src 'self'; script-src 'self' 'unsafe-inline'; "
+    "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+    "font-src 'self' https://cdn.jsdelivr.net data:; img-src 'self' data: blob: https:; "
+    "connect-src 'self'; frame-src 'none'; form-action 'self'; "
+    "frame-ancestors 'none'; object-src 'none'; base-uri 'self'"
+)
+
+
+@app.middleware("http")
+async def security_headers(request: Request, call_next: Any) -> Any:
+    resp = await call_next(request)
+    h = resp.headers
+    h.setdefault("X-Content-Type-Options", "nosniff")
+    h.setdefault("X-Frame-Options", "DENY")
+    h.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    h.setdefault("Content-Security-Policy", CSP_ENFORCED)
+    h.setdefault("Content-Security-Policy-Report-Only", CSP_REPORT_ONLY)
+    proto = (request.headers.get("x-forwarded-proto") or request.url.scheme or "").split(",")[0].strip()
+    if proto == "https":
+        h.setdefault("Strict-Transport-Security", "max-age=15552000")
+    return resp
