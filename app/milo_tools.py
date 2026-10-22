@@ -32,6 +32,7 @@ import asyncio
 import json
 import re
 import time
+from datetime import datetime, timezone
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
@@ -530,22 +531,33 @@ class Record:
     source: Optional[str] = None
     as_of: Optional[str] = None
     error: Optional[str] = None
+    retrieved_at: Optional[str] = None
 
-    def label(self) -> str:
-        t = self.args.get("ticker") or ", ".join(self.args.get("tickers") or []) or ""
-        name = {"get_quote": "quote", "get_options": "options analytics", "get_chart_levels": "chart levels",
+    def symbols(self) -> List[str]:
+        one = self.args.get("ticker")
+        return [str(s).upper() for s in ([one] if one else (self.args.get("tickers") or []))]
+
+    def data_type(self) -> str:
+        return {"get_quote": "quote", "get_options": "options analytics", "get_chart_levels": "chart levels",
                 "get_fundamentals": "long-term model", "get_valuation": "fair-value model",
                 "get_earnings": "earnings panel", "get_news": "news", "get_market": "market read",
                 "compare": "comparison", "get_assessment": "research framework",
                 "screen_stocks": "screener", "get_my_watchlists": "your watchlists",
                 "get_my_portfolio": "your portfolio ({})".format(self.args.get("part") or "summary")
                 }.get(self.tool, self.tool)
-        return "{} {}".format(t, name).strip()
+
+    def label(self) -> str:
+        return "{} {}".format(", ".join(self.symbols()), self.data_type()).strip()
 
     def public(self) -> Dict[str, Any]:
-        """What the reader is shown under the answer: no inputs beyond the symbol, no internals."""
-        return {"label": self.label(), "source": self.source, "as_of": self.as_of, "ok": self.ok,
-                "status": self.status}
+        """What the reader is shown under the answer: no inputs beyond the symbol, no internals.
+
+        Each record names its instrument, its kind of data, when the data was observed (`as_of`, the
+        quote's own time where the result carries one) and when Milo fetched it (`retrieved_at`): an
+        NVDA answer asked from AAPL's page was labelled only "About AAPL" (pitch audit, 2026-10-22)."""
+        return {"label": self.label(), "symbols": self.symbols(), "data_type": self.data_type(),
+                "source": self.source, "as_of": self.as_of, "retrieved_at": self.retrieved_at,
+                "ok": self.ok, "status": self.status}
 
 
 @dataclass
@@ -612,6 +624,7 @@ class Toolbox:
                 "figures.".format(type(exc).__name__))}), True
             rec = Record(name, args, False, "error", time.monotonic() - t0, error=type(exc).__name__)
         self._spent += rec.seconds
+        rec.retrieved_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
         self.records.append(rec)
         self._memo[key] = (content, is_error)
         return content, is_error, args

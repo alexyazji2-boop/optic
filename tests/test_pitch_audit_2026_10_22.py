@@ -473,3 +473,32 @@ def test_two_books_closing_one_name_are_two_identified_alerts(monkeypatch):
     assert titles == ["NOW long shares closed in the Balanced book: Stop hit", "NOW long shares closed in the Aggressive book: Stop hit"]
     assert len({kw["dedupe_key"] for _, kw in raised}) == 2, "kept apart by trade id, not merged on matching text"
     assert "Trade #11, entered at 950.0." in raised[0][1]["body"]
+
+
+# ---------------------------------------------------------------- 17. Milo: page context apart from what the answer concerns
+
+def test_an_nvda_answer_asked_from_aapl_is_labelled_nvda(tmp_path):
+    got = _run(tmp_path, f"""
+      const M = await import('{(JS / "ui/milo.js").as_posix()}');
+      const D = await import('{(JS / "core/dom.js").as_posix()}');
+      const ctx = {{ focus: {{ ticker: 'AAPL', view_label: 'AAPL Dossier, Investing' }} }};
+      const strip = (h) => D.toString(h).replace(/<[^>]+>/g, '');
+      print(JSON.stringify({{
+        nvda: strip(M.aboutLine({{ symbol: 'AAPL', context: ctx, retrieved: [{{ symbols: ['NVDA'], ok: true }}] }}, {{ symbol: 'AAPL' }})),
+        both: strip(M.aboutLine({{ symbol: 'AAPL', context: ctx, loaded: [{{ symbols: ['NVDA'] }}], retrieved: [{{ symbols: ['AAPL'], ok: true }}] }}, {{ symbol: 'AAPL' }})),
+        plain: strip(M.aboutLine({{ symbol: 'AAPL', context: ctx }}, {{ symbol: 'AAPL' }})),
+        failed: strip(M.aboutLine({{ symbol: 'AAPL', context: ctx, retrieved: [{{ symbols: ['XYZQ'], ok: false }}] }}, {{ symbol: 'AAPL' }})),
+      }}));
+    """)
+    assert got["nvda"] == "About NVDA; AAPL Dossier, Investing attached as context. Not about AAPL, the page now open."
+    assert got["both"].startswith("About NVDA and AAPL; asked from AAPL Dossier, Investing")
+    assert got["plain"].startswith("About AAPL; asked from AAPL Dossier, Investing")
+    assert got["failed"].startswith("About AAPL"), "a lookup that failed is not what the answer concerns"
+
+
+def test_the_done_event_carries_what_was_loaded():
+    from app import ai
+    rows = ai.auto_loaded_sources({"auto_loaded": {"nvda": {"quote": {"source": "Yahoo Finance quote (delayed)", "as_of_utc": "2026-10-22T15:00:00Z"}}}})
+    assert rows == [{"symbols": ["NVDA"], "label": "NVDA quote, chart and options summary", "data_type": "quote, chart and options summary",
+                     "source": "Yahoo Finance quote (delayed)", "as_of": "2026-10-22T15:00:00Z", "ok": True}]
+    assert ai.auto_loaded_sources({}) == [] and ai.auto_loaded_sources(None) == []

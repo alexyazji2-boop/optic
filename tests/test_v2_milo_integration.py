@@ -16,8 +16,9 @@ OPT = (V2 / "js/pages/options.js").read_text()
 
 def test_each_answer_says_what_it_was_about():
     about = MILO[MILO.index("export function aboutLine"):MILO.index("function sourceLists")]
-    assert "About ${sym}" in about and "asked from ${where}" in about
-    assert "now.symbol !== sym" in about and "Not about ${now.symbol}, the page now open." in about
+    # behaviour in tests/test_pitch_audit_2026_10_22.py (page context and answer concerns told apart)
+    assert "About ${join(about)}" in about and "asked from ${where}" in about and "attached as context" in about
+    assert "!about.includes(now.symbol)" in about and "Not about ${now.symbol}, the page now open." in about
     assert "${aboutLine(info)}" in MILO.split("function msgHTML")[1].split("function sourceLists")[0]
 
 

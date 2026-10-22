@@ -102,8 +102,10 @@ def test_a_result_carries_status_source_and_freshness_and_a_repeat_is_not_refetc
     run(box.run("get_options", {"ticker": "AMD"}))
     assert calls == ["AMD"], "the same call in one answer is answered once"
     got = box.retrieved()
-    assert got == [{"label": "AMD options analytics", "source": body["source"], "as_of": "2026-10-15T19:15:37+00:00",
-                    "ok": True, "status": "ok"}]
+    # instrument, data type, observation time and retrieval time on every record (pitch audit, 2026-10-22)
+    assert got[0].pop("retrieved_at").endswith("+00:00")
+    assert got == [{"label": "AMD options analytics", "symbols": ["AMD"], "data_type": "options analytics",
+                    "source": body["source"], "as_of": "2026-10-15T19:15:37+00:00", "ok": True, "status": "ok"}]
 
 
 def test_failures_are_reported_as_failures_never_as_data():

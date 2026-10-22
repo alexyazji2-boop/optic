@@ -3165,6 +3165,18 @@ def build_chat_request(
 _SENT_JSON = re.compile(r"```json\n(.*)\n```", re.S)
 
 
+def auto_loaded_sources(context: Optional[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """The symbols main._augment_chat_context_lookups fetched for this question, with the quote's
+    own time, for the line under an answer that says what it concerns."""
+    out = []
+    for sym, snap in (((context or {}).get("auto_loaded") or {}) if isinstance((context or {}).get("auto_loaded"), dict) else {}).items():
+        q = (snap or {}).get("quote") if isinstance(snap, dict) else None
+        out.append({"symbols": [str(sym).upper()], "label": "{} quote, chart and options summary".format(str(sym).upper()),
+                    "data_type": "quote, chart and options summary", "source": (q or {}).get("source"),
+                    "as_of": (q or {}).get("as_of_utc"), "ok": True})
+    return out
+
+
 def sources_read(kwargs: Optional[Dict[str, Any]], limit: int = 12) -> List[Dict[str, str]]:
     """The research pack's sources as Milo was sent them, for the "Sources Milo read" list under an answer.
 
@@ -3359,6 +3371,9 @@ async def stream_chat(
                 "citations": citations,
                 "read": sources_read({"messages": first_messages}),
                 "retrieved": toolbox.retrieved() if toolbox is not None else [],
+                # Symbols the server loaded because the question named them: what
+                # the answer concerns, apart from the page it was asked from
+                "loaded": auto_loaded_sources(context),
                 "usage": usage_sum,
             },
         )
