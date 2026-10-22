@@ -60,7 +60,8 @@ function pickRow(c, i, d) {
     <div class="tscroll"><table class="t pk-sc"><caption class="sr">What one contract would be worth</caption>
       <thead><tr><th scope="col">If</th><th scope="col">Stock</th><th scope="col">Worth at your exit, model</th><th scope="col">Gain or loss</th></tr></thead>
       <tbody>${(sc.before_expiry || []).map((s) => html`<tr><th scope="row">${s.label}<small>${clean(s.why || '')}</small></th><td>${num(s.underlying)}</td><td>${usd(s.value)}</td><td class="${dir(s.pnl)}">${pl(s.pnl)}</td></tr>`)}</tbody></table></div>
-    <p class="pk-exp"><b>At expiry</b>, its value is only what it is in the money: ${(sc.at_expiry || []).map((s) => `${s.label.toLowerCase()} (${num(s.underlying)}) ${usd(s.value)}, ${pl(s.pnl)}`).join('; ')}.</p></li>`;
+    <p class="pk-exp"><b>At expiry</b>, its value is only what it is in the money: ${(sc.at_expiry || []).map((s) => `${s.label.toLowerCase()} (${num(s.underlying)}) ${usd(s.value)}, ${pl(s.pnl)}`).join('; ')}.</p>
+    <div class="cluster"><button type="button" class="btn btn-sm" data-pk-practice="${i}">Practice this trade</button><span class="t-muted">Opens the Paper Desk with this contract and your plan filled in. Nothing is bought.</span></div></li>`;
 }
 
 function results(S) {
@@ -76,6 +77,29 @@ function results(S) {
   if (!picks.length) return html`${d.earnings_note ? html`<p class="stale">${clean(d.earnings_note)}</p>` : ''}${d.conflict ? html`<p class="pk-lead">${clean(d.conflict)}</p>` : ''}${empty('No contract fits this plan', clean(d.why_none || ''))}${meta}${method}`;
   return html`${d.earnings_note ? html`<p class="stale">${clean(d.earnings_note)}</p>` : ''}<p class="pk-lead">${picks.length === 1 ? 'One contract fits' : `${picks.length} contracts fit`} your plan${d.event_in_hold ? `, held through the ${shortDate(d.earnings)} report` : ''}.${picks.length < 3 ? ' Nothing else qualified, so no more are shown.' : ''}</p>
     <ol class="pk-list">${picks.map((c, i) => pickRow(c, i, d))}</ol>${meta}${method}`;
+}
+
+/** The draft the Paper Desk reads (pages/paper.js DRAFT_KEY): the pick and the plan that chose it. */
+export function draftFrom(d, c, sym) {
+  const p = d.plan || {};
+  return { ticker: sym, instrument: 'option', direction: 'long', option_type: c.type, expiry: c.expiry, strike: c.strike, qty: 1, entry: c.ask,
+    // the Paper Desk prices an option's risk from a premium stop: the model's value of this contract at the plan's
+    // exit if the stock reaches the invalidation (or a one-standard-deviation move against it), per share
+    stop: premiumStop(c), target: '', hold_days: p.hold_days,
+    invalidation: p.invalidation ? `The stock through ${p.invalidation}` : 'A one-standard-deviation move against the view over the hold',
+    thesis: `${p.thesis === 'bear' ? 'Expect a fall' : 'Expect a rise'} in ${sym}${p.target ? ` toward ${p.target}` : ''} within ${p.hold_days} days.`,
+    catalyst: d.event_in_hold ? 'Earnings report' : '', catalyst_date: d.event_in_hold ? d.earnings : '', hold_through: !!p.through_event,
+    source: 'the contract picker' };
+}
+export function premiumStop(c) {
+  const against = (((c.scenarios || {}).before_expiry) || []).find((s) => s.label === 'Stock moves against you');
+  const per = against && isNum(against.value) ? against.value / 100 : null;
+  return per && per > 0.01 && per < c.ask ? Math.round(per * 100) / 100 : '';
+}
+function practice(S, sym, i) {
+  const d = S.data, c = d && (d.picks || [])[i]; if (!c) return;
+  try { localStorage.setItem('optic.v2.paper.draft.v1', JSON.stringify(draftFrom(d, c, sym))); } catch (e) { /* private mode: the desk opens empty */ }
+  location.hash = '#/paper';
 }
 
 /** Mounts the picker into `host` for `sym`; `ctx()` gives the spot and the next report date when known. */
@@ -94,6 +118,8 @@ export function mountPicker(host, sym, ctx) {
     if (my === S.seq) { S.loading = false; paint(); }
   };
   host.addEventListener('click', (e) => {
+    const pr = e.target.closest('[data-pk-practice]');
+    if (pr) { practice(S, sym, Number(pr.dataset.pkPractice)); return; }
     const t = e.target.closest('[data-pk-thesis],[data-pk-hold],[data-v2-retry="picker"]'); if (!t) return;
     e.stopPropagation();   // the page's own retry handler does not know this one
     read();

@@ -14,7 +14,12 @@ import { mountCharts } from '../ui/chart.js';
 import { provideContext } from '../ui/milo.js';
 import { sectionHead } from './tabs.js';
 import { etStamp } from '../core/marketTime.js';
+import * as J from '../core/journal.js';
+import { hrefFor } from '../nav.js';
+import { button as miloButton } from '../ui/milo.js';
 
+// A plan handed over from research (the contract picker): read once, then removed, so a reload does not refill it
+export const DRAFT_KEY = 'optic.v2.paper.draft.v1';
 const KEY = 'optic.paper.v1', MAX = 50, KEEP_CLOSED = 200, R_SHOWN = 30, EXPIRY_DAYS = 7, CONCENTRATED = 0.4;
 
 /* ---------------- the classic arithmetic ---------------- */
@@ -54,8 +59,19 @@ export function health(open, marks, today = etToday()) {
 
 /* ---------------- state ---------------- */
 let book = { open: [], closed: [] }, ticket = blankTicket(), chain = null, chainFor = '', chainState = 'idle', chainErr = '';
-let markedAt = null, marks = {}, marking = false, markFailed = false, armed = false, note = '', reads = {}, live = true, mainEl = null, health0 = null;
-function blankTicket() { return { ticker: '', instrument: 'shares', direction: 'long', qty: '', entry: '', stop: '', target: '', thesis: '', expiry: '', strike: '', optionType: 'call' }; }
+let markedAt = null, marks = {}, marking = false, markFailed = false, armed = false, note = '', reads = {}, live = true, mainEl = null, health0 = null, fromDraft = '';
+function blankTicket() { return { ticker: '', instrument: 'shares', direction: 'long', qty: '', entry: '', stop: '', target: '', thesis: '', expiry: '', strike: '', optionType: 'call',
+  // the journal's plan (core/journal.js): frozen on the trade when it opens
+  setup: 'other', evidence: [{ text: '', family: 'trend' }, { text: '', family: 'momentum' }], against: '', catalyst: '', catalyst_date: '', hold_through: false, trigger: '', invalidation: '', hold_days: '', entry_note: '', source: '' }; }
+/** A draft from research becomes the ticket, without re-typing it. */
+export function ticketFromDraft(d, base = blankTicket()) {
+  if (!d || !d.ticker) return base;
+  return { ...base, ticker: String(d.ticker).toUpperCase(), instrument: d.instrument === 'option' ? 'option' : 'shares', direction: d.direction === 'short' ? 'short' : 'long',
+    optionType: d.option_type === 'put' ? 'put' : 'call', expiry: d.expiry || '', strike: d.strike != null ? String(d.strike) : '', qty: d.qty ? String(d.qty) : '',
+    entry: d.entry ? String(d.entry) : '', stop: d.stop ? String(d.stop) : '', target: d.target ? String(d.target) : '', thesis: d.thesis || '',
+    hold_days: d.hold_days ? String(d.hold_days) : '', catalyst: d.catalyst || '', catalyst_date: d.catalyst_date || '', hold_through: !!d.hold_through,
+    invalidation: d.invalidation || '', trigger: d.trigger || '', setup: d.setup || 'other', source: d.source || '' };
+}
 function loadBook() {
   book = { open: [], closed: [] };
   if (!holds(store.state.user)) return;
@@ -95,6 +111,34 @@ function healthBlock() {
     <p class="asof">Computed from this book alone. It does not see sectors, upcoming earnings or how these names move together, and it does not know about anything you hold elsewhere.</p></section>`;
 }
 
+/* ---------------- the journal's plan (roadmap stage 3) ---------------- */
+function planFold() {
+  const t = ticket, ind = J.independence(t.evidence.filter((e) => e.text.trim()));
+  return html`<details class="pt-plan more-inline" ${fromDraft || t.trigger || t.catalyst ? 'open' : ''}><summary>The plan</summary><p class="asof">Kept with the trade as it was when you opened it; a later change is recorded beside it.</p>
+    <div class="pt-row"><label class="select pt-f"><span class="t-label">Setup</span><select name="setup" data-v2-pt-plan>${J.SETUPS.map(([k, l]) => html`<option value="${k}" ${t.setup === k ? 'selected' : ''}>${l}</option>`)}</select></label>
+      <label class="pt-f"><span class="t-label">Planned hold, days</span><span class="field"><input name="hold_days" type="number" min="1" step="1" inputmode="numeric" value="${t.hold_days}" data-v2-pt-plan></span></label></div>
+    <fieldset class="pt-ev"><legend class="t-label">What supports it</legend>
+      ${t.evidence.map((e, i) => html`<div class="pt-row"><label class="select pt-f"><span class="sr">Kind of evidence ${i + 1}</span><select data-v2-pt-ev-fam="${i}">${Object.entries(J.FAMILIES).map(([k, f]) => html`<option value="${k}" ${e.family === k ? 'selected' : ''}>${f.label}</option>`)}</select></label>
+        <label class="pt-f pt-grow"><span class="sr">Evidence ${i + 1}</span><span class="field"><input data-v2-pt-ev-text="${i}" maxlength="160" value="${e.text}" placeholder="${i ? 'RSI back above 50' : 'Held the 50-day average'}"></span></label></div>`)}
+      ${t.evidence.length < 6 ? html`<button type="button" class="textlink" data-v2-pt-ev-add>Add evidence</button>` : ''}
+      <p class="asof">${ind.note}</p></fieldset>
+    <label class="pt-f"><span class="t-label">What argues against it</span><span class="field"><input name="against" maxlength="320" value="${t.against}" data-v2-pt-plan placeholder="Below its 200-day; sector lagging"></span></label>
+    <div class="pt-row"><label class="pt-f pt-grow"><span class="t-label">Catalyst</span><span class="field"><input name="catalyst" maxlength="120" value="${t.catalyst}" data-v2-pt-plan placeholder="Earnings"></span></label>
+      <label class="pt-f"><span class="t-label">Its date</span><span class="field"><input name="catalyst_date" type="date" value="${t.catalyst_date}" data-v2-pt-plan></span></label></div>
+    <label class="check"><input type="checkbox" name="hold_through" ${t.hold_through ? 'checked' : ''} data-v2-pt-plan> <span>I mean to hold through it</span></label>
+    <label class="pt-f"><span class="t-label">Entry trigger, if it is conditional</span><span class="field"><input name="trigger" maxlength="200" value="${t.trigger}" data-v2-pt-plan placeholder="A daily close above 352"></span></label>
+    <label class="pt-f"><span class="t-label">What would make it wrong</span><span class="field"><input name="invalidation" maxlength="200" value="${t.invalidation}" data-v2-pt-plan placeholder="A close below the 50-day"></span></label>
+    <label class="pt-f"><span class="t-label">What you saw when you entered</span><span class="field"><input name="entry_note" maxlength="200" value="${t.entry_note}" data-v2-pt-plan placeholder="Opened strong, volume above average"></span></label>
+  </details>`;
+}
+const PLAN_KEYS = ['setup', 'hold_days', 'against', 'catalyst', 'catalyst_date', 'trigger', 'invalidation', 'entry_note'];
+function planOf(t, entry, qty, m) {
+  const stop = Number(t.stop), risk = stop > 0 ? Math.abs(entry - stop) * qty * m : null;
+  return J.freezePlan({ thesis: t.thesis, setup: t.setup, evidence: t.evidence, against: String(t.against || '').split(/;|\n/).map((x) => x.trim()),
+    catalyst: t.catalyst, catalyst_date: t.catalyst_date, hold_through_catalyst: t.hold_through, trigger: t.trigger, invalidation: t.invalidation,
+    hold_days: t.hold_days, stop, target: Number(t.target) || null, risk, source: t.source });
+}
+
 function ticketForm() {
   const t = ticket, isOpt = t.instrument === 'option', s = sym();
   const c = chain && chain.ticker === s ? chain : null;
@@ -116,7 +160,8 @@ function ticketForm() {
         <label class="pt-f"><span class="t-label">Entry ${isOpt ? 'premium' : 'price'}</span><span class="field"><input name="entry" type="number" min="0" step="any" inputmode="decimal" value="${t.entry}" placeholder="${pk ? num(pk.mid) : 'Last price'}"></span></label>
         <label class="pt-f"><span class="t-label">Stop</span><span class="field"><input name="stop" type="number" min="0" step="any" inputmode="decimal" value="${t.stop}" aria-required="true"></span></label>
         <label class="pt-f"><span class="t-label">Target <span class="t-muted">(optional)</span></span><span class="field"><input name="target" type="number" min="0" step="any" inputmode="decimal" value="${t.target}"></span></label></div>
-      <label class="pt-f"><span class="t-label">Why, and what would prove you wrong</span><span class="field"><input name="thesis" maxlength="200" value="${t.thesis}" placeholder="Held the 200-day and volume came in"></span></label>
+      <label class="pt-f"><span class="t-label">Why, and what would prove you wrong</span><span class="field"><input name="thesis" maxlength="600" value="${t.thesis}" placeholder="Held the 200-day and volume came in"></span></label>
+      ${planFold()}
       ${s ? (read ? html`<p class="pt-read">Optic reads ${s} as <b class="${read.stance === 'bullish' ? 'up' : read.stance === 'bearish' ? 'down' : ''}">${read.stance}</b>${read.conviction ? `, ${read.conviction} conviction` : ''}. ${ag === null ? 'Neither with nor against you.' : ag ? 'That agrees with this trade.' : 'That is against this trade.'} <span class="t-muted">Recorded on the trade, and scored separately below.</span></p>`
         : html`<p class="pt-read">Optic has no read on ${s} loaded. <button type="button" class="textlink" data-v2-pt-read="${s}">Load it</button> and this trade will record what the terminal thought at the moment you opened it.</p>`) : ''}
       <div aria-live="polite" data-v2-pt-preview>${preview()}</div>
@@ -131,6 +176,16 @@ function preview() {
   return html`<p class="pt-preview"><span><span class="t-muted">Costs</span> $${compact(entry * qty * m)}</span><span><span class="t-muted">Risks</span> ${r === null ? html`<span class="down">no stop set</span>` : `$${compact(r)}`}</span>${reward !== null && r ? html`<span><span class="t-muted">Reward:risk</span> ${num(reward / r, 2)} to 1</span>` : ''}${wrong ? html`<span class="down">Stop is on the wrong side of entry for a ${t.direction}.</span>` : ''}</p>`;
 }
 
+/** An open trade's plan can change; each change is a dated revision beside the original (core/journal.js revise). */
+function planEditRow(tr) {
+  const cur = J.currentPlan(tr);
+  if (!tr.plan) return '';
+  const f = (k, label, type = 'text') => html`<label class="pt-f"><span class="t-label">${label}</span><span class="field"><input data-v2-pt-rev="${tr.id}" name="${k}" type="${type}" value="${cur[k] ?? ''}" maxlength="200"></span></label>`;
+  return html`<details class="pt-rev" data-rev-id="o-${tr.id}"><summary>Plan for ${posLabel(tr)} <span class="t-muted">${(tr.revisions || []).length ? `changed ${plural(tr.revisions.length, 'time')}` : 'as opened'}</span></summary>
+    <div class="pt-row">${f('target', 'Target', 'number')}${f('hold_days', 'Planned hold, days', 'number')}</div>${f('invalidation', 'What would make it wrong')}
+    <p class="asof">Opened ${shortDate(tr.plan.at)} with: ${tr.plan.invalidation || 'no invalidation written'}${tr.plan.target ? `, target ${num(tr.plan.target)}` : ''}${isNum(tr.plan.hold_days) ? `, ${plural(tr.plan.hold_days, 'day')}` : ''}. A change here is kept beside that, never over it.</p></details>`;
+}
+
 function openTable() {
   const o = book.open;
   return html`<section class="section" aria-labelledby="po-h"><h2 class="t-h2" id="po-h">Open, ${o.length}</h2>
@@ -141,7 +196,40 @@ function openTable() {
           <td>${p.read ? html`<span class="${ag === null ? 't-muted' : ag ? 'up' : 'down'}" title="${p.read.summary || ''}">${p.read.stance}${ag === null ? '' : ag ? ', with' : ', against'}</span>` : html`<span class="t-muted">n/a</span>`}</td>
           <td><button type="button" class="btn btn-sm" data-v2-pt-close="${p.id}" ${isNum(m.mark_price) ? '' : 'disabled'} title="Close at the current mark" aria-label="Close ${posLabel(p)} at the current mark">Close</button></td></tr>`; })}</tbody></table></div>
       <p class="asof">${markedAt ? `Marks taken ${etStamp(markedAt)}; a mark is a quote, delayed about 15 minutes in session and the last close outside it. ` : ''}Closing takes the current mark: the last trade for shares, the chain's mid for an option, or a model's estimate when the contract has no quote. A real fill would be at the bid or the ask.</p>`
-      : html`<p class="quiet">No open positions. The ticket above opens one.</p>`}</section>`;
+      : html`<p class="quiet">No open positions. The ticket above opens one.</p>`}${o.length ? html`<div class="pt-revs">${o.map(planEditRow)}</div>` : ''}</section>`;
+}
+
+/** One closed trade's plan beside what happened, its adherence and the reflection: kept on the trade. */
+function reviewRow(tr) {
+  const p = tr.plan, a = tr.adherence || {}, days = tr.entry_at && tr.closed_at ? Math.max(0, Math.round((Date.parse(tr.closed_at) - Date.parse(tr.entry_at)) / 86400000)) : null;
+  const sel = (k, q) => html`<label class="select pt-f"><span class="t-label">${q}</span><select data-v2-pt-adh="${tr.id}" data-k="${k}">${[['', 'Not recorded'], ['yes', 'Yes'], ['no', 'No']].map(([v, l]) => html`<option value="${v}" ${(a[k] || '') === v ? 'selected' : ''}>${l}</option>`)}</select></label>`;
+  return html`<details class="pt-rev" data-rev-id="c-${tr.id}"><summary>${posLabel(tr)} <span class="t-muted">${p ? (J.SETUPS.find(([k]) => k === p.setup) || ['', ''])[1] : 'no plan recorded'}</span></summary>
+    ${p ? html`<dl class="kv" style="--kv:3"><div><dt>Planned</dt><dd>${isNum(p.hold_days) ? plural(p.hold_days, 'day') : 'no hold set'}</dd><p class="kv-note">risk ${isNum(p.risk) ? `$${compact(p.risk)}` : 'not set'}, stop ${num(p.stop)}${p.target ? `, target ${num(p.target)}` : ''}</p></div>
+      <div><dt>Actual</dt><dd class="${dir(tr.pnl)}">${money2(tr.pnl)}</dd><p class="kv-note">${isNum(days) ? `held ${plural(days, 'day')}` : ''}, ${rText(tr.r)}, out at ${num(tr.exit_price)}</p></div>
+      <div><dt>Evidence</dt><dd>${J.independence(p.evidence).families}</dd><p class="kv-note">independent ${J.independence(p.evidence).families === 1 ? 'kind' : 'kinds'} recorded</p></div></dl>
+      ${p.thesis ? html`<p><b>Thesis then.</b> ${p.thesis}</p>` : ''}${p.trigger ? html`<p><b>Trigger.</b> ${p.trigger}</p>` : ''}${p.invalidation ? html`<p><b>Wrong if.</b> ${p.invalidation}</p>` : ''}
+      ${p.catalyst ? html`<p><b>Catalyst.</b> ${p.catalyst}${p.catalyst_date ? `, ${shortDate(p.catalyst_date)}` : ''}${p.hold_through_catalyst ? ', planned to hold through it' : ''}</p>` : ''}
+      ${(tr.revisions || []).length ? html`<p class="asof">Plan changed ${plural(tr.revisions.length, 'time')} after opening: ${tr.revisions.map((r) => `${r.field} from ${r.from === null ? 'blank' : r.from} to ${r.to}`).join('; ')}. The record above is the original.</p>` : ''}` : html`<p class="t-muted">Opened before the journal existed, or without a plan.</p>`}
+    <div class="pt-row">${sel('entry', 'Entered as planned?')}${sel('exit', 'Exited as planned?')}${sel('size', 'Sized to the planned risk?')}</div>
+    <label class="pt-f"><span class="t-label">Reflection</span><span class="field"><input data-v2-pt-refl="${tr.id}" maxlength="400" value="${tr.reflection || ''}" placeholder="What you would do the same, or differently"></span></label>
+    <p class="asof">Saved in this browser with the trade.</p></details>`;
+}
+
+/** The journal's review of the closed record (core/journal.js review), each figure with its count. */
+function journalBlock() {
+  const rv = J.review(book.closed);
+  if (!rv.all.n) return '';
+  const row = (x) => html`<tr><th scope="row">${x.label}</th><td>${x.n}</td><td>${isNum(x.win_rate) ? `${Math.round(x.win_rate * 100)}%` : 'n/a'}</td><td class="${dir(x.expectancy)}">${isNum(x.expectancy) ? money2(x.expectancy) : 'n/a'}</td><td>${x.n_r ? rText(x.expectancy_r) : 'n/a'}</td></tr>`;
+  const table = (title, rows) => html`<h3>${title}</h3><div class="tscroll"><table class="t"><thead><tr><th scope="col">Group</th><th scope="col">Trades</th><th scope="col">Won</th><th scope="col">Average result</th><th scope="col">Average R</th></tr></thead><tbody>${rows.map(row)}</tbody></table></div>`;
+  const m = rv.missing, gaps = [m.no_plan ? `${m.no_plan} without a plan` : '', m.no_adherence ? `${m.no_adherence} without adherence answers` : '', m.no_reflection ? `${m.no_reflection} without a reflection` : ''].filter(Boolean);
+  return html`<section class="section" aria-labelledby="pj-h"><div class="section-head"><div><h2 class="t-h2" id="pj-h">Journal review</h2><p class="section-sub">${rv.note || `From ${rv.all.n} closed trades.`}</p></div>
+      ${miloButton('Ask Milo to review my process', { ask: 'Review the process in my recorded paper trades: where did I follow my plans, where did I depart from them, and what do the outcomes and my reflections suggest? Use only what is recorded.', context: 'Paper Desk, journal review' })}</div>
+    <dl class="kv" style="--kv:4"><div><dt>Average win</dt><dd class="up">${isNum(rv.all.avg_win) ? money2(rv.all.avg_win) : 'n/a'}</dd><p class="kv-note">${rv.all.wins} won</p></div><div><dt>Average loss</dt><dd class="down">${isNum(rv.all.avg_loss) ? money2(rv.all.avg_loss) : 'n/a'}</dd><p class="kv-note">${rv.all.losses} lost</p></div>
+      <div><dt>Expectancy</dt><dd class="${dir(rv.all.expectancy)}">${money2(rv.all.expectancy)}</dd><p class="kv-note">average per trade${rv.all.n_r ? `, ${rText(rv.all.expectancy_r)}` : ''}</p></div>
+      <div><dt>Worst run</dt><dd class="down">${isNum(rv.max_drawdown) ? money2(rv.max_drawdown) : 'n/a'}</dd><p class="kv-note">largest fall in realised results, peak to trough</p></div></dl>
+    ${table('By setup', rv.by_setup)}${table('By time held', rv.by_hold)}${table('Catalysts', rv.by_catalyst)}${table('Following the plan', rv.by_adherence)}
+    <p class="asof">${gaps.length ? `Missing records: ${gaps.join(', ')}. ` : ''}Grouped by what was recorded at the time. Kept in this browser; nothing here reaches Optic Portfolio, whose shared record is separate.</p>
+    <div class="pt-revs">${book.closed.slice(0, 30).map(reviewRow)}</div></section>`;
 }
 
 function recordBlock() {
@@ -169,9 +257,13 @@ function recordBlock() {
 function paint() {
   if (!live) return;
   const a = document.activeElement, keep = a && mainEl.contains(a) ? (a.name ? `[name="${a.name}"]` : a.id ? `#${a.id}` : null) : null, caret = a && 'selectionStart' in a ? a.selectionStart : null;
+  // a review or plan the reader has open stays open through a redraw: answering one question closed it
+  const openRevs = [...mainEl.querySelectorAll('details[data-rev-id][open]')].map((d) => d.dataset.revId), planOpen = !!mainEl.querySelector('details.pt-plan[open]');
   draw(mainEl, html`<header class="page-head">${sectionHead('portfolio', 'paper')}
       <p class="section-sub">Practice trades you enter yourself, priced by Optic. They are saved in this browser only${store.signedIn() ? ', under your account, and hidden when you sign out' : ''}. Nothing reaches a broker or Optic Portfolio.</p></header>
-    ${healthBlock()}${ticketForm()}${openTable()}${recordBlock()}`);
+    ${healthBlock()}${fromDraft ? html`<p class="pt-note" role="status">${fromDraft}</p>` : ''}${ticketForm()}${openTable()}${recordBlock()}${journalBlock()}`);
+  openRevs.forEach((id) => { const d = mainEl.querySelector(`details[data-rev-id="${id}"]`); if (d) d.open = true; });
+  if (planOpen) { const d = mainEl.querySelector('details.pt-plan'); if (d) d.open = true; }
   if (keep) { const el = mainEl.querySelector(keep); if (el) { el.focus({ preventScroll: true }); if (caret !== null && 'setSelectionRange' in el) { try { el.setSelectionRange(caret, caret); } catch (e) { /* number inputs */ } } } }
   const rs = book.closed.filter((t) => isNum(t.r)).slice(0, R_SHOWN).reverse();
   mountCharts(mainEl, { r: rs.length >= 2 ? (w) => signedBars(rs.map((t, i) => ({ x: `${t.ticker} ${i + 1}`, label: t.ticker, v: t.r })), { w, h: 150, label: 'Each closed trade in multiples of what it risked', fmt: rText, xfmt: (x) => String(x).split(' ')[0] }) : null });
@@ -209,9 +301,10 @@ function openTrade() {
   if ((t.direction === 'long' && stop >= entry) || (t.direction === 'short' && stop <= entry)) return `A ${t.direction} stops out ${t.direction === 'long' ? 'below' : 'above'} entry. That stop is on the wrong side and would close the trade immediately.`;
   const read = readFor(s);
   book.open.unshift({ id: pid(), ticker: s, instrument: t.instrument, direction: t.direction, option_type: isOpt ? t.optionType : null, strike: isOpt ? Number(t.strike) : null, expiry: isOpt ? t.expiry : null,
-    qty, entry_price: entry, entry_spot: (c && c.spot) || entry, entry_at: new Date().toISOString(), stop, target: Number(t.target) || null, thesis: (t.thesis || '').slice(0, 200),
+    qty, entry_price: entry, entry_spot: (c && c.spot) || entry, entry_at: new Date().toISOString(), stop, target: Number(t.target) || null, thesis: (t.thesis || '').slice(0, 600),
+    plan: planOf(t, entry, qty, isOpt ? 100 : 1), entry_note: (t.entry_note || '').slice(0, 200) || null, revisions: [],
     read: read ? { stance: read.stance, conviction: read.conviction, score: read.score, summary: read.summary } : null });
-  save(); ticket = Object.assign({}, ticket, { qty: '', entry: '', stop: '', target: '', thesis: '' });
+  save(); ticket = blankTicket(); fromDraft = '';
   note = `Opened ${t.direction} ${qty} ${s}.`;
   return null;
 }
@@ -229,16 +322,31 @@ export async function render(main) {
   live = true; mainEl = main; armed = false; note = ''; marks = {};
   document.title = 'Paper Desk, Optic';
   loadBook();
-  provideContext(() => ({ view: 'paper', reader_holdings: book.open.slice(0, 30).map((p) => ({ ticker: p.ticker, instrument: p.instrument, direction: p.direction, qty: p.qty, entry_price: p.entry_price, stop: p.stop, pnl: (marks[p.id] || {}).pnl })) }));
+  fromDraft = '';
+  try { const d = JSON.parse(localStorage.getItem(DRAFT_KEY) || 'null'); if (d && d.ticker) { ticket = ticketFromDraft(d); fromDraft = `Filled from ${d.source || 'your research'}: check the price and the plan, then open it.`; } localStorage.removeItem(DRAFT_KEY); } catch (e) { /* no draft */ }
+  provideContext(() => ({ view: 'paper', reader_holdings: book.open.slice(0, 30).map((p) => ({ ticker: p.ticker, instrument: p.instrument, direction: p.direction, qty: p.qty, entry_price: p.entry_price, stop: p.stop, pnl: (marks[p.id] || {}).pnl })), journal: J.forMilo(book.closed) }));
+  if (fromDraft && ticket.instrument === 'option' && ticket.ticker) loadChain(ticket.ticker);
   api.get('/api/health', { ttl: 60000 }).then((h) => { health0 = h; paint(); }, () => {});
   main.addEventListener('input', (e) => {
+    const ev = e.target.dataset.v2PtEvText;
+    if (ev !== undefined) { ticket.evidence[Number(ev)].text = e.target.value; return; }
+    const rf = e.target.dataset.v2PtRefl;
+    if (rf) { const tr = book.closed.find((x) => x.id === rf); if (tr) { tr.reflection = e.target.value.slice(0, 400); save(); } return; }
     const f = e.target.closest('[data-v2-pt-form]'); if (!f || !e.target.name || e.target.tagName === 'SELECT') return;
-    ticket[e.target.name] = e.target.value;
+    ticket[e.target.name] = e.target.type === 'checkbox' ? e.target.checked : e.target.value;
     if (e.target.name === 'ticker') return;
     const pv = mainEl.querySelector('[data-v2-pt-preview]'); if (pv) draw(pv, preview());
   });
   main.addEventListener('change', (e) => {
     const t = e.target;
+    if (t.dataset.v2PtRev) {
+      const i = book.open.findIndex((x) => x.id === t.dataset.v2PtRev); if (i < 0) return;
+      const v = t.type === 'number' ? (t.value === '' ? null : Number(t.value)) : t.value.slice(0, 200);
+      book.open[i] = J.revise(book.open[i], { [t.name]: v }); save(); paint(); return;
+    }
+    if (t.dataset.v2PtEvFam !== undefined) { ticket.evidence[Number(t.dataset.v2PtEvFam)].family = t.value; paint(); return; }
+    if (t.dataset.v2PtAdh) { const tr = book.closed.find((x) => x.id === t.dataset.v2PtAdh); if (tr) { tr.adherence = { ...(tr.adherence || {}), [t.dataset.k]: t.value || null }; save(); paint(); } return; }
+    if (t.matches('[data-v2-pt-plan]')) { ticket[t.name] = t.type === 'checkbox' ? t.checked : t.value; if (t.tagName === 'SELECT' || t.type === 'checkbox') paint(); return; }
     if (t.name === 'ticker') { ticket.ticker = t.value.toUpperCase().trim(); ticket.expiry = ''; ticket.strike = ''; if (ticket.instrument === 'option') loadChain(sym()); else paint(); return; }
     if (t.matches('[data-v2-pt-expiry]')) { ticket.expiry = t.value; ticket.strike = ''; paint(); return; }
     if (t.matches('[data-v2-pt-strike]')) { ticket.strike = t.value; paint(); }
@@ -250,7 +358,8 @@ export async function render(main) {
     if ((b = t('[data-v2-pt-ot]'))) { ticket.optionType = b.dataset.v2PtOt; ticket.strike = ''; paint(); return; }
     if (t('[data-v2-pt-chain]')) { chainFor = ''; loadChain(sym()); return; }
     if ((b = t('[data-v2-pt-read]'))) { loadRead(b.dataset.v2PtRead); return; }
-    if (t('[data-v2-pt-clear]')) { ticket = Object.assign({}, ticket, { qty: '', entry: '', stop: '', target: '', thesis: '' }); note = ''; paint(); return; }
+    if (t('[data-v2-pt-ev-add]')) { ticket.evidence.push({ text: '', family: 'volume' }); paint(); return; }
+    if (t('[data-v2-pt-clear]')) { ticket = Object.assign(blankTicket(), { ticker: ticket.ticker, instrument: ticket.instrument, direction: ticket.direction }); fromDraft = ''; note = ''; paint(); return; }
     if (t('[data-v2-pt-remark]')) { note = ''; mark(); return; }
     if ((b = t('[data-v2-pt-close]'))) { close(b.dataset.v2PtClose); return; }
     if ((b = t('[data-v2-pt-reset]'))) {
@@ -263,7 +372,8 @@ export async function render(main) {
   main.addEventListener('submit', (e) => {
     if (!e.target.closest('[data-v2-pt-form]')) return;
     e.preventDefault();
-    const f = e.target; ['qty', 'entry', 'stop', 'target', 'thesis'].forEach((k) => { ticket[k] = f[k].value; }); ticket.ticker = f.ticker.value.toUpperCase().trim();
+    const f = e.target; ['qty', 'entry', 'stop', 'target', 'thesis', ...PLAN_KEYS].forEach((k) => { if (f[k]) ticket[k] = f[k].value; }); ticket.ticker = f.ticker.value.toUpperCase().trim();
+    if (f.hold_through) ticket.hold_through = f.hold_through.checked;
     const err = openTrade();
     if (err) { note = err; markFailed = false; paint(); return; }
     paint(); mark();

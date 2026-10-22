@@ -152,6 +152,7 @@ const PERSONAL_KEYS = [
   'optic.snapshots.v1',          // how a symbol's read has changed
   'optic.entry.budget.v1',
   'optic.v2.picker.v1',
+  'optic.v2.paper.draft.v1',
   'optic.writeToken',            // the owner's token for writes to the record
   'optic.auth.passkeyOffered',   // so the next account is offered one as well
 ];
