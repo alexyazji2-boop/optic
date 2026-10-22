@@ -4472,7 +4472,12 @@ def _research_book_releases(symbol: str):
         with urllib.request.urlopen(req, timeout=20) as fh:
             return json.loads(fh.read().decode("utf-8", "replace"))
 
-    return research_book_mod.sec_releases(symbol, cik, fetch)
+    # A filing's index page, for its acceptance time in Eastern time. The polite fetch spaces requests
+    # to sec.gov; nothing is kept here, because research_book keeps the time it reads.
+    def fetch_text(url):
+        return feeds_mod.fetch_text(url, 0, timeout=20, store=False)
+
+    return research_book_mod.sec_releases(symbol, cik, fetch, fetch_text)
 
 
 async def _research_book_loop() -> None:

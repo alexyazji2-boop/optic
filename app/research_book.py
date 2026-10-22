@@ -25,6 +25,7 @@ import json
 import logging
 import math
 import os
+import re
 import sqlite3
 import threading
 import urllib.request
@@ -89,8 +90,9 @@ SETUPS: Dict[str, Dict[str, str]] = {
 RESEARCH_STATUS = (
     "No validated strategy. On 1993-2026 history none of these setups, with or without supporting "
     "evidence, beat random entries under the same stops and exits after costs. A strong positive "
-    "earnings reaction was the one consistent lead, on survivor-biased stocks. These candidates are "
-    "recorded to test them forward, with the options and news inputs that have no history.")
+    "earnings reaction looked like a lead on 40 of today's large caps, but on every S&P 500 member of "
+    "2019-2026, delisted names included, it did no better than random entries (round R3, 2026-10-22). "
+    "These candidates are recorded to test them forward, with the options and news inputs that have no history.")
 LIMITS = [
     "Shadow trades: simulated on daily bars, never sized against an account or sent anywhere.",
     "Flow, gamma and news are recorded only for triggers, from the swing snapshot taken after the close.",
@@ -160,6 +162,7 @@ CREATE TABLE IF NOT EXISTS rb_trades (
 );
 CREATE TABLE IF NOT EXISTS rb_meta (key TEXT PRIMARY KEY, value TEXT);
 CREATE TABLE IF NOT EXISTS rb_sec (symbol TEXT PRIMARY KEY, fetched_at TEXT, releases TEXT);
+CREATE TABLE IF NOT EXISTS rb_sec_accepted (accession TEXT PRIMARY KEY, cik INTEGER, accepted_et TEXT, fetched_at TEXT);
 """
 
 
@@ -405,10 +408,32 @@ def advance(trade: Dict[str, Any], a: Dict[str, Any]) -> Dict[str, Any]:
 
 # ------------------------------------------------------------------ catalysts
 
+# When a release reached the market. data.sec.gov's acceptanceDateTime carries a 'Z' but is not one
+# format. Most filings store the true UTC time plus the Eastern offset (JPM, WMT, MSFT and AAPL read
+# right only that way); others store true UTC (Home Depot 2019-02-26 is stored 11:14Z and was accepted
+# at 06:14 ET; Mondelez 2024-04-30 is stored 20:07Z and was accepted at 16:07 ET). Read the first way,
+# those land four or five hours early and an after-close release reads as mid-session, which puts its
+# reaction session a day early: research round R3 found 18.5% of S&P 500 releases of 2018-2026 mis-timed
+# that way. The filing's EDGAR index page states the acceptance time in Eastern time, so that is what is
+# used for every release the bars can reach; the JSON value is the fallback when the page can't be read.
+CLOCK_VERSION = "index-page-2026-10-22"
+INDEX_PAGE_DAYS = 800        # the daily run reads two years of bars; older releases keep the JSON reading
+# CIKs a symbol's releases also come from: a new holding company files under a new CIK, and SEC's ticker
+# map gives only the current one (ExxonMobil Holdings from 2026-07; Exxon Mobil Corp before it). Without
+# them R2 had one XOM release, 30 for DIS and 44 for GOOGL.
+EXTRA_CIKS: Dict[str, List[int]] = {
+    "XOM": [34088],          # Exxon Mobil Corp, to 2026-05; ExxonMobil Holdings Corp (2115436) after
+    "DIS": [1001039],        # the Walt Disney Co before its 2019 holding company (now TWDC Enterprises 18)
+    "GOOGL": [1288776],      # Google Inc., before Alphabet (2015)
+}
+_ACCEPTED = re.compile(r"Accepted</div>\s*<div class=\"info\">\s*(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})")
+
+
 def _et_from_acceptance(stored: str) -> Optional[datetime]:
-    """EDGAR acceptance time. data.sec.gov labels it UTC but it reads as the true UTC time plus
-    the Eastern offset (measured 2026-10-21: JPM, WMT, MSFT, AAPL all match their known release
-    times only under that reading)."""
+    """The JSON value, when the index page can't be read: the true UTC time plus the Eastern offset,
+    unless that lands before 06:00 ET, when EDGAR accepts no filings, so the value can only be true
+    UTC. An after-close filing stored as true UTC still reads four or five hours early this way,
+    which is why the index page comes first."""
     try:
         naive = datetime.strptime(stored[:19], "%Y-%m-%dT%H:%M:%S")
     except (TypeError, ValueError):
@@ -416,33 +441,89 @@ def _et_from_acceptance(stored: str) -> Optional[datetime]:
     for hours in (4, 5):
         et = (naive - timedelta(hours=hours)).replace(tzinfo=timezone.utc).astimezone(_ET)
         if -et.utcoffset().total_seconds() / 3600 == hours:
-            return et
-    return None
+            if et.hour >= 6:
+                return et
+            break
+    return naive.replace(tzinfo=timezone.utc).astimezone(_ET)
 
 
-def releases_from_submissions(blob: Dict[str, Any]) -> List[Dict[str, Any]]:
-    """Earnings releases (8-K item 2.02) from an EDGAR submissions document, oldest first, with
-    the first session that can react to each."""
-    recent = ((blob or {}).get("filings") or {}).get("recent") or {}
-    out, last = [], None
-    for i, form in enumerate(recent.get("form") or []):
-        items = ((recent.get("items") or [""] * (i + 1))[i] or "").split(",")
-        if form != "8-K" or "2.02" not in items:
-            continue
-        et = _et_from_acceptance((recent.get("acceptanceDateTime") or [""] * (i + 1))[i])
-        if et is None:
-            continue
-        minutes = et.hour * 60 + et.minute
-        timing = "before_open" if minutes < 570 else ("during_session" if minutes < 960 else "after_close")
-        out.append({"release_et": et.isoformat(), "date": et.date().isoformat(), "timing": timing})
-    out.sort(key=lambda r: r["release_et"])
-    kept = []
-    for r in out:
+def index_url(cik: Any, accession: str) -> str:
+    return "https://www.sec.gov/Archives/edgar/data/{}/{}/{}-index.htm".format(
+        int(cik), accession.replace("-", ""), accession)
+
+
+def accepted_from_index(html: str) -> Optional[datetime]:
+    """The 'Accepted' time on a filing's EDGAR index page, which is Eastern time."""
+    m = _ACCEPTED.search(html or "")
+    if not m:
+        return None
+    return datetime.strptime(m.group(1), "%Y-%m-%d %H:%M:%S").replace(tzinfo=_ET)
+
+
+def accepted_time(cik: Any, accession: str, fetch_text: Callable[[str], str]) -> Optional[datetime]:
+    """A filing's acceptance time from its index page, read once and kept: a filing never changes
+    after EDGAR accepts it. A page that fails is not kept, so the next run asks again."""
+    rows = _rows("SELECT accepted_et FROM rb_sec_accepted WHERE accession=?", (accession,))
+    if rows:
+        return datetime.fromisoformat(rows[0]["accepted_et"])
+    try:
+        et = accepted_from_index(fetch_text(index_url(cik, accession)))
+    except Exception as exc:                                         # noqa: BLE001
+        log.info("research book: no index page for %s: %s", accession, exc)
+        return None
+    if et is None:
+        return None
+    with _LOCK, _connect() as conn:
+        conn.execute("INSERT OR REPLACE INTO rb_sec_accepted (accession, cik, accepted_et, fetched_at) VALUES (?,?,?,?)",
+                     (accession, int(cik), et.isoformat(), _now()))
+    return et
+
+
+def _one_per_release(rels: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Two 2.02 filings within five days are one release (a restated table, a second exhibit, or the
+    same release filed by two CIKs): the first is kept, the one the market saw first."""
+    kept, last = [], None
+    for r in sorted(rels, key=lambda r: r["release_et"]):
         d = date.fromisoformat(r["date"])
         if last is None or (d - last).days > 5:
             kept.append(r)
             last = d
     return kept
+
+
+def releases_from_submissions(blob: Dict[str, Any], accepted: Optional[Callable[[str], Optional[datetime]]] = None,
+                              today: Optional[date] = None) -> List[Dict[str, Any]]:
+    """Earnings releases (8-K item 2.02) from an EDGAR submissions document, oldest first, with
+    the first session that can react to each. `accepted(accession)` gives the index page's time;
+    it is asked only for filings of the last INDEX_PAGE_DAYS."""
+    recent = ((blob or {}).get("filings") or {}).get("recent") or {}
+    forms = recent.get("form") or []
+    col = lambda name, i: ((recent.get(name) or [None] * len(forms))[i])  # noqa: E731
+    today = today or datetime.now(timezone.utc).astimezone(_ET).date()
+    out = []
+    for i, form in enumerate(forms):
+        items = (col("items", i) or "").split(",")
+        if form != "8-K" or "2.02" not in items:
+            continue
+        accession, filed = col("accessionNumber", i), col("filingDate", i)
+        et, clock = None, "json"
+        if accepted is not None and accession and filed:
+            try:
+                recent_enough = (today - date.fromisoformat(filed)).days <= INDEX_PAGE_DAYS
+            except ValueError:
+                recent_enough = False
+            if recent_enough:
+                et = accepted(accession)
+                clock = "index page" if et is not None else "json"
+        if et is None:
+            et = _et_from_acceptance(col("acceptanceDateTime", i) or "")
+        if et is None:
+            continue
+        minutes = et.hour * 60 + et.minute
+        timing = "before_open" if minutes < 570 else ("during_session" if minutes < 960 else "after_close")
+        out.append({"release_et": et.isoformat(), "date": et.date().isoformat(), "timing": timing,
+                    "accession": accession, "clock": clock})
+    return _one_per_release(out)
 
 
 def reaction_index(dates: List[date], release: Dict[str, Any]) -> Optional[int]:
@@ -455,22 +536,39 @@ def reaction_index(dates: List[date], release: Dict[str, Any]) -> Optional[int]:
     return pos if pos < len(dates) else None
 
 
-def sec_releases(symbol: str, cik_lookup: Callable[[str], Optional[int]], fetch: Callable[[str], Dict]) -> List[Dict]:
-    """Releases for a symbol, refreshed at most once a day and kept in the archive."""
+def sec_releases(symbol: str, cik_lookup: Callable[[str], Optional[int]], fetch: Callable[[str], Dict],
+                 fetch_text: Optional[Callable[[str], str]] = None, today: Optional[date] = None) -> List[Dict]:
+    """Releases for a symbol from its current CIK and any EXTRA_CIKS, refreshed at most once a day
+    and kept in the archive. `fetch_text` reads EDGAR index pages; without it every time is the
+    JSON's. A copy kept under an older clock is read again."""
     rows = _rows("SELECT fetched_at, releases FROM rb_sec WHERE symbol=?", (symbol,))
     if rows:
         try:
-            if datetime.fromisoformat(rows[0]["fetched_at"]) > datetime.now(timezone.utc) - timedelta(hours=20):
-                return json.loads(rows[0]["releases"])
+            kept = json.loads(rows[0]["releases"])
+            fresh = datetime.fromisoformat(rows[0]["fetched_at"]) > datetime.now(timezone.utc) - timedelta(hours=20)
+            if fresh and isinstance(kept, dict) and kept.get("clock") == CLOCK_VERSION:
+                return kept["releases"]
         except (TypeError, ValueError):
             pass
-    cik = cik_lookup(symbol)
-    if not cik:
+    primary = cik_lookup(symbol)
+    ciks = [int(c) for c in dict.fromkeys([primary] + EXTRA_CIKS.get(symbol.upper(), [])) if c]
+    if not ciks:
         return []
-    rels = releases_from_submissions(fetch("https://data.sec.gov/submissions/CIK%s.json" % str(cik).zfill(10)))
+    found = []
+    for cik in ciks:
+        try:
+            blob = fetch("https://data.sec.gov/submissions/CIK%s.json" % str(cik).zfill(10))
+        except Exception:                                            # noqa: BLE001
+            if primary and cik == int(primary):
+                raise                       # the caller logs it, as before; an extra CIK only loses its part
+            log.info("research book: no submissions for %s's extra CIK %s", symbol, cik)
+            continue
+        acc = (lambda a, c=cik: accepted_time(c, a, fetch_text)) if fetch_text is not None else None
+        found.extend(releases_from_submissions(blob, acc, today))
+    rels = _one_per_release(found)
     with _LOCK, _connect() as conn:
         conn.execute("INSERT OR REPLACE INTO rb_sec (symbol, fetched_at, releases) VALUES (?,?,?)",
-                     (symbol, _now(), json.dumps(rels)))
+                     (symbol, _now(), json.dumps({"clock": CLOCK_VERSION, "releases": rels})))
     return rels
 
 

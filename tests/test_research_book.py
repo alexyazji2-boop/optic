@@ -163,6 +163,123 @@ def test_sec_acceptance_times_read_as_eastern_after_the_offset():
     assert jpm[0]["timing"] == "before_open" and jpm[0]["release_et"].startswith("2026-10-13T06:30")
 
 
+# EDGAR's index page for Mondelez's 8-K of 2024-04-30, the part that matters, as fetched for round R3.
+MDLZ_INDEX = """<div class="formGrouping">
+         <div class="infoHead">Filing Date</div>
+         <div class="info">2024-04-30</div>
+         <div class="infoHead">Accepted</div>
+         <div class="info">2024-04-30 16:07:24</div>
+         <div class="infoHead">Documents</div>"""
+
+
+def _blob(cik, rows):
+    """A submissions document: rows of (accession, filingDate, acceptanceDateTime, form, items)."""
+    return {"cik": str(cik), "filings": {"recent": {
+        "accessionNumber": [r[0] for r in rows], "filingDate": [r[1] for r in rows],
+        "acceptanceDateTime": [r[2] for r in rows], "form": [r[3] for r in rows], "items": [r[4] for r in rows]}}}
+
+
+def test_a_json_time_before_edgar_opens_is_read_as_true_utc():
+    """Sealed Air 2021-11-02 is stored 11:02Z and was accepted at 07:02 ET. Read as UTC plus the offset
+    it would be 03:02 ET, when EDGAR accepts nothing."""
+    rels = RB.releases_from_submissions(_blob(1012100, [("0001012100-21-000045", "2021-11-02",
+                                                         "2021-11-02T11:02:38.000Z", "8-K", "2.02,9.01")]))
+    assert rels[0]["release_et"].startswith("2021-11-02T07:02:38") and rels[0]["timing"] == "before_open"
+    assert rels[0]["clock"] == "json"
+
+
+def test_the_index_page_time_wins_over_the_json():
+    """Mondelez 2024-04-30 is stored 20:07Z, which the JSON reading takes for 12:07 ET (mid-session,
+    reacting the same day). Its index page says 16:07 ET: after the close, reacting the next day."""
+    blob = _blob(1103982, [("0001103982-24-000052", "2024-04-30", "2024-04-30T20:07:24.000Z", "8-K", "2.02,9.01")])
+    json_only = RB.releases_from_submissions(blob)
+    assert (json_only[0]["timing"], json_only[0]["clock"]) == ("during_session", "json")
+    asked = []
+    rels = RB.releases_from_submissions(blob, lambda acc: asked.append(acc) or RB.accepted_from_index(MDLZ_INDEX),
+                                        today=date(2024, 5, 10))
+    assert asked == ["0001103982-24-000052"]
+    assert rels[0]["release_et"].startswith("2024-04-30T16:07:24") and rels[0]["timing"] == "after_close"
+    assert rels[0]["clock"] == "index page"
+    days = [date(2024, 4, 29) + timedelta(days=i) for i in range(4)]
+    assert RB.reaction_index(days, json_only[0]) == 1 and RB.reaction_index(days, rels[0]) == 2
+
+
+def test_index_pages_are_read_only_for_releases_the_bars_can_reach():
+    blob = _blob(1103982, [("0001103982-21-000001", "2021-02-02", "2021-02-02T21:05:00.000Z", "8-K", "2.02"),
+                           ("0001103982-24-000052", "2024-04-30", "2024-04-30T20:07:24.000Z", "8-K", "2.02")])
+    asked = []
+    RB.releases_from_submissions(blob, lambda acc: asked.append(acc) or None, today=date(2024, 5, 10))
+    assert asked == ["0001103982-24-000052"]          # the 2021 release is older than INDEX_PAGE_DAYS
+
+
+def test_an_index_page_is_read_once_and_a_failed_one_is_asked_again(archive):
+    calls = []
+
+    def page(url):
+        calls.append(url)
+        return MDLZ_INDEX
+    et = archive.accepted_time(1103982, "0001103982-24-000052", page)
+    assert et.isoformat().startswith("2024-04-30T16:07:24") and et.utcoffset() == timedelta(hours=-4)
+    assert calls == ["https://www.sec.gov/Archives/edgar/data/1103982/000110398224000052/0001103982-24-000052-index.htm"]
+    assert archive.accepted_time(1103982, "0001103982-24-000052", page) == et and len(calls) == 1
+
+    def down(url):
+        raise OSError("403")
+    assert archive.accepted_time(1103982, "0001103982-24-000099", down) is None
+    assert archive._rows("SELECT * FROM rb_sec_accepted WHERE accession='0001103982-24-000099'") == []
+
+
+def test_a_symbol_takes_releases_from_every_cik_it_filed_under(archive):
+    """ExxonMobil Holdings (2115436) files from 2026-07; Exxon Mobil Corp (34088) filed before it. The
+    July release filed under both counts once."""
+    blobs = {2115436: _blob(2115436, [("0002115436-26-000002", "2026-07-31", "2026-07-31T10:30:00.000Z", "8-K", "2.02")]),
+             34088: _blob(34088, [("0000034088-26-000020", "2026-05-01", "2026-05-01T10:30:00.000Z", "8-K", "2.02"),
+                                  ("0000034088-26-000031", "2026-07-31", "2026-07-31T10:29:00.000Z", "8-K", "2.02"),
+                                  ("0000034088-26-000012", "2026-01-30", "2026-01-30T11:30:00.000Z", "8-K", "2.02")])}
+    fetched = []
+
+    def fetch(url):
+        cik = int(url.rsplit("CIK", 1)[1].split(".")[0])
+        fetched.append(cik)
+        return blobs[cik]
+    rels = archive.sec_releases("XOM", lambda s: 2115436, fetch, None, today=date(2026, 8, 3))
+    assert fetched == [2115436, 34088]
+    assert [r["date"] for r in rels] == ["2026-01-30", "2026-05-01", "2026-07-31"]
+    assert rels[-1]["accession"] == "0000034088-26-000031"     # the first one accepted, by a minute
+    assert archive.sec_releases("XOM", lambda s: 2115436, fetch, None) == rels and len(fetched) == 2   # kept a day
+
+
+def test_a_kept_copy_from_the_old_clock_is_read_again(archive):
+    with archive._LOCK, archive._connect() as conn:
+        conn.execute("INSERT INTO rb_sec (symbol, fetched_at, releases) VALUES (?,?,?)",
+                     ("MDLZ", archive._now(), json.dumps([{"release_et": "2024-04-30T12:07:24-04:00",
+                                                          "date": "2024-04-30", "timing": "during_session"}])))
+    blob = _blob(1103982, [("0001103982-24-000052", "2024-04-30", "2024-04-30T20:07:24.000Z", "8-K", "2.02,9.01")])
+    rels = archive.sec_releases("MDLZ", lambda s: 1103982, lambda url: blob, lambda url: MDLZ_INDEX,
+                                today=date(2024, 5, 10))
+    assert (rels[0]["timing"], rels[0]["clock"]) == ("after_close", "index page")
+    kept = json.loads(archive._rows("SELECT releases FROM rb_sec WHERE symbol='MDLZ'")[0]["releases"])
+    assert kept["clock"] == RB.CLOCK_VERSION
+
+
+def test_a_missing_extra_cik_loses_only_its_part(archive):
+    blob = _blob(2115436, [("0002115436-26-000002", "2026-07-31", "2026-07-31T10:30:00.000Z", "8-K", "2.02")])
+
+    def fetch(url):
+        if "CIK0000034088" in url:
+            raise OSError("timed out")
+        return blob
+    rels = archive.sec_releases("XOM", lambda s: 2115436, fetch, None, today=date(2026, 8, 3))
+    assert [r["date"] for r in rels] == ["2026-07-31"]
+
+
+def test_the_server_reads_index_pages_through_the_polite_fetch():
+    fn = MAIN[MAIN.index("def _research_book_releases"):]
+    fn = fn[:fn.index("\n\n\n")]
+    assert "feeds_mod.fetch_text(" in fn and "store=False" in fn
+    assert "sec_releases(symbol, cik, fetch, fetch_text)" in fn
+
+
 def test_the_reaction_session_follows_the_release_timing():
     days = [date(2026, 10, 12) + timedelta(days=i) for i in range(5)]
     assert RB.reaction_index(days, {"date": "2026-10-13", "timing": "before_open"}) == 1
