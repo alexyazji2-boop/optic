@@ -1,7 +1,9 @@
 """Composite swing verdict and concrete option structures.
 
-Nothing here invents new information — it weighs the four independent reads
-(trend/momentum, dealer gamma regime, options flow, news) into one stance, then
+Nothing here invents new information: it weighs the separate reads
+(trend/momentum, dealer gamma regime, options flow, news, macro) into one
+stance. Two of them are not independent: dealer gamma and the flow proxy are
+both read from the same option chain's open interest and volume. Then it
 picks actual strikes and expiries from the live chain so the output is a trade,
 not an adjective.
 """
@@ -997,7 +999,8 @@ def verdict(
     if pending.get("pending") and conviction == "high":
         conviction = "moderate"
 
-    # Disagreement between independent reads is itself information.
+    # Disagreement between the reads is itself information. Agreement is not
+    # independent confirmation: gamma and flow come from one option chain.
     signs = [np.sign(v) for v in used.values() if abs(v) > 8]
     agreement = None
     if signs:
@@ -1100,9 +1103,14 @@ def verdict(
         "scale_note": (
             "Each input is scored -100 to +100, then averaged using the weights below. "
             "Weights are renormalised over whatever data is available, so a missing input "
-            "redistributes rather than counting as zero."
+            "redistributes rather than counting as zero. The score and its conviction word are "
+            "rules applied to today's readings, not a probability: Optic's own evaluation has not found "
+            "that the composite beats a single momentum reading, and no win rate is implied."
         ),
         "signal_agreement_pct": agreement,
+        "agreement_note": ("The share of inputs with a clear lean that point the same way. Dealer gamma "
+                           "and the flow proxy are both read from the same option chain, so their "
+                           "agreement is one source, not two."),
         "catalyst": catalyst,
         "pending_catalyst": pending,
         "effective_weights": weights,

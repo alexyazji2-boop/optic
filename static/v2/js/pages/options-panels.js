@@ -205,7 +205,7 @@ export function entry(t, sym) {
   const r = ep.recommended || {}, og = ep.order_guidance || {}, tg = ep.target || {}, rk = ep.risk || {};
   return html`<p><b>${clean(ep.headline || '')}</b></p>
     ${kv([['Contract', `${num(r.strike, 0)} ${ep.direction === 'short' ? 'put' : 'call'}, ${shortDate(r.expiry)} (${dayCount(r.dte)})`], ['Limit price', html`${num(og.limit_price ?? r.entry_mid)}${og.never_pay_more_than ? html` <span class="t-muted">never above ${num(og.never_pay_more_than)}</span>` : ''}`], ['Cost per contract', usd(r.capital_per_contract)], ['Breakeven', num(r.breakeven)], ['If the target is hit', signed(r.return_at_target_pct, 0)], ['If IV drops 20%', signed(r.return_if_iv_drops_20pct, 0)]], 3)}
-    ${(ep.entry_options || []).length ? html`<h3>Where to enter</h3><ul class="plain">${ep.entry_options.map((o) => html`<li><b>${capFirst(o.style || '')}.</b> ${clean(o.detail || '')} ${clean(o.confirmation || '')}</li>`)}</ul>` : ''}
+    ${(ep.entry_options || []).length ? html`<h3>Setups and where each stands</h3><ul class="plain">${ep.entry_options.map((o) => html`<li><b>${capFirst(o.style || '')}${o.state ? html` <span class="chip-tag">${capFirst(o.state)}</span>` : ''}.</b> ${clean(o.state_detail || '')} ${clean(o.detail || '')} ${clean(o.confirmation || '')}</li>`)}</ul>${note(ep.ledger_note)}` : ''}
     <h3>Target and risk</h3>${kv([['Target', html`${num(tg.target_price)} <span class="t-muted">(${signed(tg.move_required_pct)}, ${clean(tg.target_source || '')})</span>`], ['Stock stop', html`${num(rk.underlying_stop)} <span class="t-muted">${clean(rk.stop_basis || '')}</span>`], ['Typical time', isNum(tg.estimated_trading_days) ? `${tg.estimated_trading_days} sessions` : 'n/a']], 3)}
     <p>${clean(rk.invalidation || '')}</p>
     ${(ep.candidates || []).length ? html`<details class="more-inline"><summary>Candidate strikes, ranked</summary><div class="tscroll"><table class="t"><thead><tr><th>Rank</th><th>Strike</th><th>Expiry</th><th>Mid</th><th>Cost</th><th>Spread</th><th>Delta</th><th>Breakeven</th><th>At target</th><th>Flat</th></tr></thead>
@@ -219,7 +219,7 @@ export function verdict(t, sym) {
   const v = t.verdict || {}, c = t.cases || {};
   const s = score100(v.composite_score);
   return html`<p><b>${capFirst(v.stance || '')}, ${v.conviction || ''} conviction.</b> ${clean(v.summary || '')}</p>
-    ${kv([['Composite', isNum(s) ? `${num(s, 0)} of 100` : 'n/a'], ['Signal agreement', pct(v.signal_agreement_pct, 0)]], 2)}
+    ${kv([['Composite', isNum(s) ? `${num(s, 0)} of 100` : 'n/a'], ['Signal agreement', pct(v.signal_agreement_pct, 0)]], 2)}${note(v.agreement_note)}
     <div class="tscroll"><table class="t"><thead><tr><th>Input</th><th>Score</th><th>Weight</th><th>Adds</th><th>Status</th></tr></thead>
       <tbody>${(v.breakdown || []).map((b) => html`<tr><td>${capFirst(b.component)}</td><td>${signed(b.score, 0, '')}</td><td>${num(b.weight_pct, 0)}%${Math.abs((b.nominal_weight_pct || 0) - (b.weight_pct || 0)) >= 1 ? html` <span class="t-muted">(of ${num(b.nominal_weight_pct, 0)}%)</span>` : ''}</td><td>${signed(b.contribution, 1, '')}</td><td>${b.unavailable ? clean(b.status_reason || 'Excluded') : 'Included'}</td></tr>`)}</tbody></table></div>
     <p class="asof">50 is no edge either way. Bullish at +30, leaning at +10 on the composite's own scale. ${clean(v.scale_note || '')}</p>

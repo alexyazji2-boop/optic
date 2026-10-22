@@ -350,3 +350,62 @@ def test_shares_and_options_reconcile_in_one_unit():
     assert abs(aaa["signed_value"] - ex["delta_exposure"]) < 1 and aaa["signed_value"] > 5000, "two contracts, not two shares"
     assert book["options_uncovered"] == 1 and "left out" in book["option_note"] and "CCC" not in [p["symbol"] for p in book["positions"]]
     assert "understated" not in (JS / "pages/tracker.js").read_text()
+
+
+# ---------------------------------------------------------------- 8. setups say where they stand; the ledger says what it waits for
+
+from app.analytics import entry as entry_mod
+
+
+@pytest.mark.parametrize("close,want", [(110.0, "armed"), (101.0, "triggered"), (95.0, "invalidated")])
+def test_a_long_pullback_setup_is_armed_triggered_or_invalidated(close, want):
+    out = entry_mod.setup_state({"style": "Pullback setup", "zone": [100.0, 102.0]}, close, True)
+    assert out["state"] == want
+    if want == "triggered":
+        assert "confirmation is not checked" in out["state_detail"]
+
+
+def test_a_breakout_needs_the_close_and_the_volume():
+    e = {"style": "Breakout setup", "zone": [120.0, 121.0]}
+    assert entry_mod.setup_state(e, 119.0, True)["state"] == "armed"
+    assert entry_mod.setup_state(e, 122.0, True, volume=2e6, avg_volume=1e6)["state"] == "triggered"
+    light = entry_mod.setup_state(e, 122.0, True, volume=5e5, avg_volume=1e6)
+    assert light["state"] == "armed" and "lighter volume" in light["state_detail"]
+    short = entry_mod.setup_state({"style": "Pullback setup", "zone": [100.0, 102.0]}, 104.0, False)
+    assert short["state"] == "invalidated"
+
+
+def test_the_plan_and_the_tracker_say_the_ledger_does_not_wait_for_triggers():
+    from tests.test_catalyst_verdict import _plan
+    plan = _plan([])
+    assert "do not wait for these setups" in plan["ledger_note"]
+    assert all("state" in e for e in plan["entry_options"])
+    tr = (JS / "pages/tracker.js").read_text()
+    assert "['Does not wait for', \"the Options tab's pullback or breakout triggers" in tr
+    v = open("app/analytics/swing.py").read()
+    assert "four independent reads" not in v and "agreement is one source, not two" in v
+
+
+# ---------------------------------------------------------------- 9 / 22. how the simulated ledger fills
+
+from app import paper as paper_mod
+
+
+def _share_pos(**kw):
+    p = {"instrument": "shares", "direction": "long", "stop": 95.0, "target": 110.0,
+         "entry_at": "2026-10-20T15:00:00+00:00", "entry_price": 100.0}
+    p.update(kw)
+    return p
+
+
+def test_a_day_touching_both_levels_counts_the_stop():
+    assert paper_mod._exit_check(_share_pos(), 100.0, 100.0, bar_high=111.0, bar_low=94.0) == "Stop hit"
+    short = _share_pos(direction="short", stop=105.0, target=90.0)
+    assert paper_mod._exit_check(short, 100.0, 100.0, bar_high=106.0, bar_low=89.0) == "Stop hit"
+
+
+def test_the_execution_note_is_beside_the_record():
+    assert "the stop counts" in paper_mod.EXECUTION_NOTE and "No commission or slippage" in paper_mod.EXECUTION_NOTE
+    src = open("app/paper.py").read()
+    assert "fill = min(pos[\"stop\"], price) if long_pos else max(pos[\"stop\"], price)" in src, "a gap through a long's stop fills below it"
+    assert "How fills are modelled." in (JS / "pages/tracker.js").read_text()

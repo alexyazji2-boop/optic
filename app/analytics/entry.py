@@ -748,6 +748,53 @@ def _cluster_zone(levels: List[Dict[str, Any]], spot: float, atr: float):
     return lo, hi, used, dropped
 
 
+SETUP_STATES = {
+    "armed": "Armed: the condition it waits for has not happened.",
+    "triggered": "Triggered: the price condition is met at the last close.",
+    "invalidated": "Invalidated: the last close is through the far side of the setup.",
+}
+
+
+def setup_state(entry: Dict[str, Any], close: float, bullish: bool,
+                volume: Optional[float] = None, avg_volume: Optional[float] = None) -> Dict[str, Any]:
+    """armed / triggered / invalidated for one entry setup, at the last close.
+
+    Price conditions only. The pullback's confirmation (a reversal candle, the
+    9-day EMA reclaimed, RSI back over 50) is a chart read this does not
+    automate, so a pullback in its zone is "triggered, confirmation not
+    checked" rather than a signal; a breakout's volume condition is checked
+    against the 20-session average when the bars carry volume.
+    """
+    lo, hi = sorted(entry.get("zone") or [None, None])
+    if lo is None or close is None:
+        return {"state": None}
+    if entry.get("style") == "Pullback setup":
+        if lo <= close <= hi:
+            state, why = "triggered", "The last close ({}) is inside the zone. Its confirmation is not checked here.".format(_usd(close))
+        elif (close < lo) if bullish else (close > hi):
+            state, why = "invalidated", "The last close ({}) is through the zone, so the pullback did not hold there.".format(_usd(close))
+        else:
+            state, why = "armed", "The last close ({}) has not pulled back to the zone.".format(_usd(close))
+    else:
+        level = lo if bullish else hi
+        beyond = close > level if bullish else close < level
+        heavy = volume is not None and avg_volume and volume > avg_volume
+        if beyond and (heavy or volume is None):
+            state, why = "triggered", "The last close ({}) is beyond {}{}.".format(
+                _usd(close), _usd(level), " on volume above its 20-session average" if heavy else "; volume not checked")
+        elif beyond:
+            state, why = "armed", "The last close ({}) is beyond {}, but on lighter volume than its 20-session average.".format(_usd(close), _usd(level))
+        else:
+            state, why = "armed", "No daily close beyond {} yet.".format(_usd(level))
+    return {"state": state, "state_detail": why}
+
+
+LEDGER_NOTE = ("Optic Portfolio's simulated books do not wait for these setups: a book opens at the scan's "
+               "price when the composite score clears its bar, with a stop from support or the daily range "
+               "and a fixed 2:1 target. The triggers, confirmations and event warnings here are research "
+               "descriptions, not the ledger's entry rule.")
+
+
 def _byline(ev: Dict[str, Any]) -> str:
     """ (Reuters, published Oct 20): who said it and when it was published,
     which is not when the event happened."""
@@ -932,6 +979,22 @@ def build_plan(
     # sizing instructions, which this tool does not give (Options audit,
     # 2026-10-13).
 
+    # Where each setup stands at the last close. The plan described triggers
+    # and confirmations, and nothing said whether any had happened, so a
+    # pullback setup with the stock nowhere near its zone read like an entry
+    # (pitch audit, 2026-10-22).
+    last_close, last_vol, avg_vol = spot, None, None
+    if history is not None and not getattr(history, "empty", True) and "Close" in history:
+        try:
+            last_close = float(history["Close"].dropna().iloc[-1])
+            if "Volume" in history and len(history) >= 21:
+                last_vol = float(history["Volume"].iloc[-1])
+                avg_vol = float(history["Volume"].iloc[-21:-1].mean())
+        except (IndexError, ValueError, TypeError):
+            pass
+    for e in entries:
+        e.update(setup_state(e, last_close, bullish, last_vol, avg_vol))
+
     # ------------------------------------------------------ order guidance
     order: Dict[str, Any] = {}
     if best:
@@ -1115,6 +1178,8 @@ def build_plan(
         "liquidity_notes": liquidity.get("notes") or [quotes.NOT_A_FILL, quotes.OI_CAVEAT],
         "target": target,
         "entry_options": entries,
+        "setup_states": SETUP_STATES,
+        "ledger_note": LEDGER_NOTE,
         "affordability": affordability,
         "entry_zone": {
             "low": zone_lo,

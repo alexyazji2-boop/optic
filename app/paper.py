@@ -697,6 +697,15 @@ def close_position(pos_id: int, price: float, spot: float, reason: str,
         )
 
 
+# How a simulated fill is priced, said beside the results (pitch audit,
+# 2026-10-22). Same-bar ordering: the stop is checked first, so a day whose range
+# touches both counts as a loss, the conservative reading of an unknown order.
+EXECUTION_NOTE = ("Shares fill at the last quote and options at the chain's mid, which is optimistic on "
+                  "a wide spread. A stop fills at the worse of the stop and the last price, so a gap "
+                  "through it fills below it; a target fills at the target. When one day's range "
+                  "touches both, the stop counts. No commission or slippage is charged.")
+
+
 def _exit_check(pos: Dict[str, Any], price: float, spot: float,
                 bar_high: Optional[float], bar_low: Optional[float]) -> Optional[str]:
     """Whether this position should close, and why.
@@ -1723,9 +1732,9 @@ def state(limit: int = 60, month: Optional[str] = None,
         },
         "disclaimer": legal.SHORT,
         "disclaimer_area": legal.SIMULATED,
+        "execution_note": EXECUTION_NOTE,
         "caveats": [
-            "Simulated trades. Fills assume the mid price, which is optimistic on a wide "
-            "spread, and no commission or slippage is charged.",
+            "Simulated trades. " + EXECUTION_NOTE,
             "One signal can open both a share and an option position on the same ticker. That "
             "is deliberate. It shows how the same idea performed in each instrument, but it "
             "means the two lines are the same bet, not two independent ones.",
