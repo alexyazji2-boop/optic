@@ -122,7 +122,11 @@ export function explain(err, what = 'This') {
     case 'timeout': return `${what} took too long to load. The data provider may be slow right now.`;
     case 'auth': return `Sign in to see ${what.toLowerCase()}.`;
     case 'forbidden': return `${what} is not available on this account.`;
-    case 'notfound': return `${what} was not found.`;
+    // the server's own sentence when it sent one ("No listed options for 'AAPL'."); "The contracts was not
+    // found" read as broken grammar and as a missing page when Yahoo briefly listed no expiries (2026-10-22)
+    case 'notfound': return err.message && err.message !== 'Request failed' && !/^not found$/i.test(err.message)
+      ? `${err.message.replace(/\.$/, '')}. If the data source is refusing requests, it shows here as soon as it answers.`
+      : `Nothing came back for ${what.toLowerCase().replace(/^the /, 'the ')}.`;
     case 'limit': return 'Too many requests in a short time. Wait a moment and try again.';
     default: return `${what} did not load. ${err.message && err.message !== 'Request failed' ? err.message + '.' : 'The server answered with an error.'}`;
   }

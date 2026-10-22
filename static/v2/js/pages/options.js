@@ -21,9 +21,11 @@ import { button as miloButton, provideContext } from '../ui/milo.js';
 import { toast } from '../ui/toast.js';
 import { core, header, tabs, isFund, fresher, livePrice } from './dossier-frame.js';
 import * as P from './options-panels.js';
+import { mountPicker } from './options-picker.js';
 import { poll } from '../core/poll.js';
 import { createPriceChart } from '../ui/pricechart.js';
 import { insiderMarks, barKey, barTime } from './chart-widgets.js';
+let PK = null;
 let lp = null;   // the header's price refresh (dossier-frame livePrice), stopped in dispose()
 
 const FILTER_KEY = 'optic.options.filters.v1';   // a tool setting, as in the classic app
@@ -463,11 +465,13 @@ export async function render(main, route) {
       quotes_read_at: R.data.fetched_at || null, quotes_unusable: noQuotes() || null, position: B.analysis ? { legs: B.legs, analysis: { entry: B.analysis.entry, max_profit: B.analysis.max_profit, max_loss: B.analysis.max_loss, breakevens: B.analysis.breakevens_at_expiry, greeks: B.analysis.greeks, scenarios: B.analysis.scenarios, flags: B.analysis.flags } } : null } : null }));
   draw(main, html`<div class="dstick" id="op-head"></div><div id="op-top"></div>${groupBar()}
     ${OPT_GROUPS.map((x, i) => html`<div class="op-gpanel" id="opg-p${i}" role="tabpanel" aria-labelledby="opg-t${i}" ${i === panelState ? '' : 'hidden'}>${x.sub ? html`<p class="section-sub op-gsub">${x.sub}</p>` : ''}
-      ${i === 0 ? html`<section class="section" id="op-research" aria-labelledby="rc-h"></section><div id="op-builder"></div>` : ''}<div id="opg-x${i}"></div></div>`)}`);
+      ${i === 0 ? html`<section class="section" id="op-picker" aria-labelledby="pk-h"></section><section class="section" id="op-research" aria-labelledby="rc-h"></section><div id="op-builder"></div>` : ''}<div id="opg-x${i}"></div></div>`)}`);
   paintTop(); paintBuilder(); paintResearch(); paintMore();
+  // the plan-first picker leads Contracts and pricing (roadmap stage 2); its own listeners, on its own section
+  PK = mountPicker($('#op-picker', main), sym, () => ({ spot: (D.quote || {}).price, nextReport: (((D.earn || {}).next_report) || {}).date }));
   wire(main);
-  core(sym).then((c) => { if (!stillHere(g)) return; D.quote = fresher(D.quote, c.quote); D.session = c.session; D.quoteError = c.quoteError; paintTop(); });
-  api.get(`/api/earnings/${encodeURIComponent(sym)}`, { ttl: 600000, timeout: 45000 }).then((e) => { if (stillHere(g)) { D.earn = e; paintTop(); } }).catch(() => {});
+  core(sym).then((c) => { if (!stillHere(g)) return; D.quote = fresher(D.quote, c.quote); D.session = c.session; D.quoteError = c.quoteError; paintTop(); if (PK) PK.refresh(); });
+  api.get(`/api/earnings/${encodeURIComponent(sym)}`, { ttl: 600000, timeout: 45000 }).then((e) => { if (stillHere(g)) { D.earn = e; paintTop(); if (PK) PK.refresh(); } }).catch(() => {});
   loadTicker();
   loadResearch().then(() => {
     // a position kept from earlier in the visit is priced again, if its expiry is still listed

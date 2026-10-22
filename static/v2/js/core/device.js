@@ -38,6 +38,7 @@ export const PERSONAL_KEYS = [
   'optic.roth.inputs',
   'optic.snapshots.v1',
   'optic.entry.budget.v1',
+  'optic.v2.picker.v1',
   'optic.writeToken',
   'optic.auth.passkeyOffered',
 ];

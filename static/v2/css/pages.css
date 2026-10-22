@@ -1531,3 +1531,25 @@ ul.cal-react { display: flex; flex-wrap: wrap; gap: 4px 18px; padding-left: 0; l
 .fin-say > summary::-webkit-details-marker { display: none; }
 .fin-say > summary h3 { margin: 0; } .fin-say > summary .ic { width: 16px; height: 16px; color: var(--c-ink-3); transition: transform var(--d-fast) var(--ease); }
 .fin-say[open] > summary .ic { transform: rotate(90deg); }   /* the More folds' turn: right when shut, down when open */
+
+/* ---------- Options: the contract picker (roadmap stage 2, 2026-10-22) ----------
+   One list with dividers, not a card per pick: the picks are rows of one answer. */
+.pk-kv { --kv: 4; }
+.pk-form { display: grid; gap: var(--s-3); margin-bottom: var(--s-4); }
+.pk-row { display: flex; flex-wrap: wrap; gap: var(--s-3); align-items: end; }
+.pk-in { display: grid; gap: 4px; min-width: 0; } .pk-in small { color: var(--c-ink-3); font-weight: 400; }
+.pk-field { min-height: var(--tap); width: 10rem; max-width: 100%; }
+.pk-lead { margin: 0 0 var(--s-2); font: 500 var(--t-lg)/1.4 var(--f-sans); color: var(--c-ink); }
+.pk-list { margin: 0; padding: 0; list-style: none; border-top: 1px solid var(--c-line-2); }
+.pk-pick { padding: var(--s-4) 0; border-bottom: 1px solid var(--c-line-2); display: grid; gap: var(--s-2); }
+.pk-pick p { margin: 0; }
+.pk-h { display: flex; align-items: baseline; justify-content: space-between; gap: var(--s-3); }
+.pk-h h3 { margin: 0; font: 600 var(--t-xl)/1.25 var(--f-sans); } .pk-h h3 small { font-weight: 400; font-size: var(--t-base); }
+.pk-fit { flex: none; font: 600 var(--t-md)/1 var(--f-label); color: var(--c-ink); font-variant-numeric: tabular-nums; } .pk-fit small { color: var(--c-ink-3); font-weight: 500; }
+.pk-cost b { font-size: var(--t-xl); font-variant-numeric: tabular-nums; }
+.pk-sc th[scope="row"] { text-align: left; font: 500 var(--t-md)/1.3 var(--f-sans); color: var(--c-ink); } .pk-sc th[scope="row"] small { display: block; color: var(--c-ink-3); font-weight: 400; }
+.pk-exp { color: var(--c-ink-2); font-size: var(--t-base); }
+@media (max-width: 640px) {
+  .pk-row { display: grid; grid-template-columns: minmax(0, 1fr); } .pk-row .seg { width: 100%; } .pk-row .seg button { flex: 1; }
+  .pk-field { width: 100%; } .pk-kv { --kv: 2; }
+}

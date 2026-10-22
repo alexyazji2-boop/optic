@@ -110,6 +110,7 @@ from .analytics import liquidity as liquidity_mod
 # imported above): sharing that name shadowed it, and /api/contracts answered
 # 500 on every call from 2026-10-13 (32a8f6b) until 2026-10-16.
 from .analytics import contracts as option_contracts_mod
+from .analytics import contract_picker as contract_picker_mod
 from .analytics import position as position_mod
 from . import watch_runner
 from . import signal_history
@@ -1359,6 +1360,57 @@ def _default_expiry(listed: List[str], target_days: int = 30) -> Optional[str]:
     dated = [(e, vol_surface_mod.expiry_dte(e)) for e in listed]
     usable = [x for x in dated if x[1] >= 7] or dated
     return min(usable, key=lambda x: abs(x[1] - target_days))[0]
+
+
+@app.get("/api/options/{ticker}/picker")
+async def options_picker(
+    ticker: str,
+    thesis: str = Query("bull", pattern="^(bull|bear)$"),
+    hold_days: int = Query(30, ge=1, le=365),
+    max_premium: float = Query(500.0, gt=0, le=1_000_000),
+    target: Optional[float] = Query(None, gt=0),
+    invalidation: Optional[float] = Query(None, gt=0),
+    through_event: bool = Query(False),
+) -> Dict[str, Any]:
+    """Up to three contracts that fit a stated plan, or none, with why
+    (app/analytics/contract_picker.py). Reads the same chain as the research
+    table; nothing is sent anywhere and nothing is saved."""
+    sym = ticker.upper().strip()
+
+    def build() -> Dict[str, Any]:
+        listed = _listed_expiries(sym)
+        if not listed:
+            raise HTTPException(status_code=404, detail="No listed options for '{}'.".format(sym))
+        usable = [e for e in listed if vol_surface_mod.expiry_dte(e) >= hold_days + contract_picker_mod.EXPIRY_BUFFER_DAYS][:3]
+        plan = {"thesis": thesis, "hold_days": hold_days, "max_premium": max_premium, "target": target,
+                "invalidation": invalidation, "through_event": through_event}
+        today = datetime.now(timezone.utc).astimezone(session_mod.ET).date()
+        if not usable:
+            return {"available": True, "picks": [], "plan": plan, "considered": 0,
+                    "why_none": "No listed expiry is at least {} days after a {}-day hold.".format(
+                        contract_picker_mod.EXPIRY_BUFFER_DAYS, hold_days)}
+        quote, spot, div, rate_info, frame = _options_frame(sym, usable, len(usable))
+        frames = {e: frame[frame["expiry"] == e] for e in usable}
+        earn, timing = None, None
+        try:
+            earn = YF_PROVIDER.earnings_date(sym)
+        except Exception:                                         # noqa: BLE001
+            earn = None
+        if not earn:
+            # the calendar call answers when the short date lookup does not (and is cached apart)
+            try:
+                dates = (YF_PROVIDER.earnings_calendar(sym) or {}).get("dates") or []
+                earn = str(dates[0])[:10] if dates else None
+            except Exception:                                     # noqa: BLE001
+                earn = None
+        out = contract_picker_mod.pick(frames, spot, rate_info["rate"], div, plan, today, earn, timing, sym,
+                                       american=vol_surface_mod.is_american(sym), ex_dividend=_ex_dividend(sym))
+        out.update({"ticker": sym, "expiries": usable, "rate": rate_info,
+                    "fetched_at": str(frame["fetched_at"].iloc[0]) if "fetched_at" in frame and len(frame) else None,
+                    "quote_note": "Option quotes are delayed about 15 minutes on this feed."})
+        return out
+
+    return await _run(build)
 
 
 @app.get("/api/options/{ticker}/research")
