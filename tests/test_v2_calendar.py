@@ -48,9 +48,9 @@ def test_items_take_their_day_and_status_from_now(tmp_path):
     assert rows["Out at 8:30"] == ["2026-10-20", 0, True, "macro"], "a Read built yesterday called it tomorrow and due"
     assert rows["Due at noon"] == ["2026-10-20", 0, False, "macro"]
     assert rows["Yesterday"][1] == -1
-    assert rows["NFLX reports"] == ["2026-10-20", 0, False, "report"] and rows["IBM reports"][1] == 1
+    assert rows["NFLX reports today"] == ["2026-10-20", 0, False, "report"] and rows["IBM reports"][1] == 1
     order = [r[0] for r in got["rows"]]
-    assert order.index("Due at noon") < order.index("NFLX reports") < order.index("IBM reports") < order.index("Thursday")
+    assert order.index("Due at noon") < order.index("NFLX reports today") < order.index("IBM reports") < order.index("Thursday")
 
 
 def test_a_reading_names_its_period(tmp_path):

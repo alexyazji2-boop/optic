@@ -183,11 +183,13 @@ export function calendarItems(c, pr, now = new Date()) {
   // releases "tomorrow", and one built at 8 AM still called a 8:30 release due at noon
   const ev = (c.events || []).map((e) => { const day = e.at ? dayOf(e.at) : ''; return { ...e, kind: 'macro', day, days_away: day ? days(day) : e.days_away, released: !!(e.released || (e.at && !e.all_day && Date.parse(e.at) <= now.getTime())) }; });
   const col = ((pr || {}).columns || []).find((x) => x.id === 'earnings');
-  const reports = ((col || {}).rows || []).filter((r) => r.ticker && r.date).map((r) => ({ kind: 'report', day: String(r.date).slice(0, 10), days_away: days(String(r.date).slice(0, 10)), title: `${r.ticker} reports`, ticker: r.ticker, impact: r.impact, category: 'earnings', why: r.why }));
+  // a report earlier in the week is out, said in the past tense by the ET day (pitch audit, 2026-10-22: Tuesday's
+  // and Wednesday's reports were still listed as "reports" on Thursday)
+  const reports = ((col || {}).rows || []).filter((r) => r.ticker && r.date).map((r) => { const day = String(r.date).slice(0, 10), away = days(day); return { kind: 'report', day, days_away: away, released: away < 0, title: away < 0 ? `${r.ticker} reported` : away === 0 ? `${r.ticker} reports today` : `${r.ticker} reports`, ticker: r.ticker, impact: r.impact, category: 'earnings', why: r.why }; });
   return { today, tomorrow, items: [...ev, ...reports].sort((a, b) => (a.day < b.day ? -1 : a.day > b.day ? 1 : (a.kind === 'report') - (b.kind === 'report') || String(a.at || '').localeCompare(String(b.at || '')))) };
 }
 function calItem(e) {
-  if (e.kind === 'report') return html`<li class="cal-i"><p class="cal-top"><b>Company report</b> <a class="textlink" href="#/${e.ticker}/earnings">${e.title}</a> <span class="cal-imp">${IMPACT_WORD[e.impact] || ''}</span></p><p class="t-muted">${clean(e.why || '')}</p></li>`;
+  if (e.kind === 'report') return html`<li class="cal-i ${e.released ? 'is-out' : ''}"><p class="cal-top"><b>${e.released ? 'Reported' : 'Company report'}</b> <a class="textlink" href="#/${e.ticker}/earnings">${e.title}</a> <span class="cal-imp">${IMPACT_WORD[e.impact] || ''}</span></p><p class="t-muted">${clean(e.why || '')}</p></li>`;
   const r = e.readings || {};
   const when = e.all_day ? 'All day' : e.time_label || '';
   const status = e.released ? `Released${when ? ` ${when}` : ''}` : when ? `Due ${when}` : 'Due';
