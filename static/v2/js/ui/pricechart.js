@@ -372,7 +372,10 @@ export function createPriceChart(host, opts) {
         + `<title>${word} market structure break. Swing ${bull ? 'high' : 'low'} of ${num(m.price)} formed ${fmtT(bars[m.from].t)}; known as a swing from ${fmtT(bars[m.known].t)}, once the bars after it had closed (dotted before then); broken ${fmtT(at.t)} by a close of ${num(at.c)}.</title></g>`;
     });
     // earnings and other events
-    (S.overlays.events === false ? [] : S.events).forEach((e) => { const i = AX.bar(e.t); if (i < 0 || i < from || i > to) return; const x = X(i).toFixed(1); o += `<g class="evm"><line x1="${x}" x2="${x}" y1="${pp.y0}" y2="${pp.y1}"/><text x="${x}" y="${pp.y1 - 4}" text-anchor="middle">${esc(e.kind)}</text><title>${esc(e.label)}</title></g>`; });
+    (S.overlays.events === false ? [] : S.events).forEach((e) => { const i = AX.bar(e.t); if (i < 0 || i < from || i > to) return; const x = X(i).toFixed(1);
+      // a marker on the newest bar or the first kept its label inside the plot rather than cut off at the edge
+      const edge = X(i) > W - layout.r - 36 ? ['end', X(i) - 4] : X(i) < 36 ? ['start', X(i) + 4] : ['middle', X(i)];
+      o += `<g class="evm"><line x1="${x}" x2="${x}" y1="${pp.y0}" y2="${pp.y1}"/><text x="${edge[1].toFixed(1)}" y="${pp.y1 - 4}" text-anchor="${edge[0]}">${esc(e.kind)}</text><title>${esc(e.label)}</title></g>`; });
     // insider trades (S.insiders, from the ticker payload): a green arrow under the bar's low for a purchase, a red
     // one over its high for a sale, one arrow for all of a side's trades in a bar; the box comes from insiderTip()
     flags = [];

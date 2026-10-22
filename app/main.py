@@ -4844,6 +4844,29 @@ async def portfolio_scenarios(book: Optional[str] = Query(None, description="Whi
     return await _run(build)
 
 
+# ------------------------------------------------ learning replays (roadmap stage 7)
+from . import replays as replays_mod
+
+
+@app.get("/api/replays")
+async def replays_library() -> Dict[str, Any]:
+    """The replay library: what each one asks, never how it turned out."""
+    return replays_mod.library()
+
+
+@app.get("/api/replays/{rid}")
+async def replay_step(rid: str, at: int = Query(-replays_mod.LEAD, description="Sessions from the decision")) -> Dict[str, Any]:
+    """One replay at one session: the bars up to it and nothing after."""
+    def build() -> Dict[str, Any]:
+        try:
+            return replays_mod.step(YF_PROVIDER, rid, at)
+        except KeyError:
+            raise HTTPException(status_code=404, detail="No replay called {}.".format(rid))
+        except LookupError as exc:
+            raise HTTPException(status_code=503, detail=str(exc))
+    return await _run(build)
+
+
 def _cached_ranking() -> Optional[Dict[str, Any]]:
     """The screener's ranking as it sits on disk, or None.
 

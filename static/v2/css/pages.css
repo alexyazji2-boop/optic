@@ -1575,6 +1575,28 @@ ul.cal-react { display: flex; flex-wrap: wrap; gap: 4px 18px; padding-left: 0; l
 .scn-t .scn-g th { padding-top: var(--s-4); text-align: left; font: 600 var(--t-md)/1.3 var(--f-label); color: var(--c-ink-2); border-bottom: 1px solid var(--c-line-2); }
 @media (max-width: 1100px) { .scn-kv { --kv: 3; } }
 @media (max-width: 640px) { .scn-kv { --kv: 2; } .scn-lead { font-size: var(--t-base); } }
+/* Paper Desk, replay a past decision (roadmap stage 7): the library as rows; open, the chart, one row of controls
+   that stays one row on a phone and sticks under the top bar while the chart scrolls, then the decision and the review. */
+.rp-lib { margin: 0; padding: 0; list-style: none; border-top: 1px solid var(--c-line-2); }
+.rp-lib li { display: flex; justify-content: space-between; align-items: center; gap: var(--s-4); padding: var(--s-3) 0; border-bottom: 1px solid var(--c-line-2); }
+.rp-lib li p { margin: 2px 0 0; color: var(--c-ink-2); } .rp-lib li .btn { flex: none; }
+.rp-chart { margin: var(--s-3) 0; }
+.rp-ctl { position: sticky; top: calc(var(--topbar-h, 64px) + 4px); z-index: 2; display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2) var(--s-3); padding: var(--s-2) 0; background: var(--c-plane); }
+.rp-ctl .btn { min-height: var(--tap); }
+.rp-where { color: var(--c-ink-2); font-size: var(--t-md); }
+.rp-checks { margin: var(--s-2) 0 0; font-size: var(--t-md); }
+.rp-kept { margin: var(--s-3) 0 0; }
+.rp-form fieldset { border: 0; padding: 0; margin: var(--s-4) 0 0; display: grid; gap: var(--s-3); }
+.rp-row { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--s-3); }
+.rp-row .field input, .rp-row .field select { width: 100%; min-height: var(--tap); }
+.rp-form textarea { width: 100%; }
+.rp-review { scroll-margin-top: 150px; margin-top: var(--s-4); padding-top: var(--s-4); border-top: 1px solid var(--c-line-2); }
+.rp-why { margin: var(--s-2) 0; padding-left: var(--s-3); border-left: 2px solid var(--c-line); color: var(--c-ink); white-space: pre-wrap; }
+@media (max-width: 640px) {
+  .rp-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .rp-ctl .btn { flex: 1 1 0; padding: 0 8px; } .rp-where { flex: 1 0 100%; }
+  .rp-lib li { flex-direction: column; align-items: stretch; } .rp-lib li .btn { align-self: flex-start; }
+}
 
 /* ---------- Dossier: the printable research sheet (roadmap stage 4, 2026-10-22) ----------
    On screen a document on the page; in print two pages, the app's chrome hidden, ink on white. */

@@ -15,6 +15,7 @@ import { provideContext } from '../ui/milo.js';
 import { sectionHead } from './tabs.js';
 import { etStamp } from '../core/marketTime.js';
 import * as J from '../core/journal.js';
+import * as RP from './paper-replay.js';
 import { hrefFor } from '../nav.js';
 import { button as miloButton } from '../ui/milo.js';
 
@@ -254,6 +255,15 @@ function recordBlock() {
 }
 
 /* ---------------- page ---------------- */
+// a replay open sits at the top of the desk; closed, its library sits at the foot (roadmap stage 7)
+let replaying = null;
+const replayHost = html`<section class="section" id="pt-replay" aria-labelledby="rp-h"></section>`;
+function routeReplay(id) {
+  const want = id ? `#/paper?replay=${encodeURIComponent(id)}` : '#/paper';
+  if (location.hash !== want) { try { history.replaceState(history.state, '', `${location.pathname}${location.search}${want}`); } catch (e) { /* a sandboxed frame */ } }
+  const moved = !!replaying !== !!id; replaying = id;
+  if (moved) { paint(); const h = mainEl.querySelector('#pt-replay'); if (h && id) h.scrollIntoView({ block: 'start' }); }
+}
 function paint() {
   if (!live) return;
   const a = document.activeElement, keep = a && mainEl.contains(a) ? (a.name ? `[name="${a.name}"]` : a.id ? `#${a.id}` : null) : null, caret = a && 'selectionStart' in a ? a.selectionStart : null;
@@ -261,7 +271,8 @@ function paint() {
   const openRevs = [...mainEl.querySelectorAll('details[data-rev-id][open]')].map((d) => d.dataset.revId), planOpen = !!mainEl.querySelector('details.pt-plan[open]');
   draw(mainEl, html`<header class="page-head">${sectionHead('portfolio', 'paper')}
       <p class="section-sub">Practice trades you enter yourself, priced by Optic. They are saved in this browser only${store.signedIn() ? ', under your account, and hidden when you sign out' : ''}. Nothing reaches a broker or Optic Portfolio.</p></header>
-    ${healthBlock()}${fromDraft ? html`<p class="pt-note" role="status">${fromDraft}</p>` : ''}${ticketForm()}${openTable()}${recordBlock()}${journalBlock()}`);
+    ${replaying ? replayHost : ''}${healthBlock()}${fromDraft ? html`<p class="pt-note" role="status">${fromDraft}</p>` : ''}${ticketForm()}${openTable()}${recordBlock()}${journalBlock()}${replaying ? '' : replayHost}`);
+  RP.mount(mainEl.querySelector('#pt-replay'), { replay: replaying, onRoute: routeReplay });
   openRevs.forEach((id) => { const d = mainEl.querySelector(`details[data-rev-id="${id}"]`); if (d) d.open = true; });
   if (planOpen) { const d = mainEl.querySelector('details.pt-plan'); if (d) d.open = true; }
   if (keep) { const el = mainEl.querySelector(keep); if (el) { el.focus({ preventScroll: true }); if (caret !== null && 'setSelectionRange' in el) { try { el.setSelectionRange(caret, caret); } catch (e) { /* number inputs */ } } } }
@@ -318,8 +329,9 @@ function close(id) {
   const h = mainEl.querySelector('#po-h'); if (h) { h.setAttribute('tabindex', '-1'); h.focus(); }
 }
 
-export async function render(main) {
+export async function render(main, route) {
   live = true; mainEl = main; armed = false; note = ''; marks = {};
+  replaying = ((route || {}).params || {}).replay || null;
   document.title = 'Paper Desk, Optic';
   loadBook();
   fromDraft = '';
@@ -380,5 +392,6 @@ export async function render(main) {
   });
   paint(); mark();
 }
-export function dispose() { live = false; }
+export function dispose() { live = false; RP.dispose(); }
+export const retry = RP.retry;
 export function onAuth() { if (live) { loadBook(); marks = {}; paint(); mark(); } }
