@@ -8,7 +8,7 @@
 import { html, raw, render as draw } from '../core/dom.js';
 import * as api from '../core/api.js';
 import * as store from '../core/store.js';
-import { num, signed, dir, compact, clean, bolded, capFirst, longDate, fullDate, shortDate, isNum, ago } from '../core/format.js';
+import { num, signed, dir, compact, clean, bolded, capFirst, longDate, fullDate, shortDate, isNum, ago, plural } from '../core/format.js';
 import * as RP from '../core/reports.js';
 import { mountCharts } from '../ui/chart.js';
 import { signedBars, groupedBars } from '../ui/bars.js';
@@ -105,7 +105,7 @@ function pricing(sym) {
     ${ev && cmp ? html`<figure class="fv"><figcaption><p class="fv-take">Options price a move of about <b>±${num(ev.move_pct, 1)}% for the report day itself</b>${nr.date ? ` (${shortDate(nr.date)})` : ''}. The last ${cmp.n} reports moved ${num(cmp.avg, 1)}% on average in the session that traded on them; ${cmp.over} of ${cmp.n} moved more than ±${num(ev.move_pct, 1)}%.</p>
         <p class="legend-line fv-key"><span><i class="sw s1"></i>Size of each past report-day move</span><span><i class="ref-sw"></i>Today's report-day price, ±${num(ev.move_pct, 1)}%</span></p><p class="fv-unit">One session each: the past moves and the priced move cover the same window. Read from the ${shortDate(ev.after)} expiry against the ${shortDate(ev.before)} one.</p></figcaption>
       <div class="chart-slot" data-chart="evday"></div></figure>` : ''}
-    ${im.available ? html`<p><b>±${num(im.implied_move_pct)}% through the ${shortDate(im.expiry)} expiry.</b> The ${num(im.strike, 0)} ${term('straddle', 'straddle')} costs $${num(im.straddle_cost)}, ${im.dte} days out, at ${num(im.atm_iv_pct, 1)}% ${term('implied volatility', 'implied volatility')}. It covers ${im.dte} days of ordinary trading as well as the report, so it is not the report day's move and is not compared with one.</p>
+    ${im.available ? html`<p><b>±${num(im.implied_move_pct)}% through the ${shortDate(im.expiry)} expiry.</b> The ${num(im.strike, 0)} ${term('straddle', 'straddle')} costs $${num(im.straddle_cost)}, ${plural(im.dte, 'day')} out, at ${num(im.atm_iv_pct, 1)}% ${term('implied volatility', 'implied volatility')}. It covers ${plural(im.dte, 'day')} of ordinary trading as well as the report, so it is not the report day's move and is not compared with one.</p>
       <p class="asof">${im.priced_from === 'last_trades' ? `Priced from the contracts' last trades${im.last_trade ? `, the oldest ${etStamp(im.last_trade)}` : ''}: no two-sided quotes right now, so this is where they last traded, not where they are quoted.` : 'Priced from two-sided quotes, at the mid.'}</p>` : ''}
     ${historyRatio(pr, imx, (e.surprise || {}).quarters)}
     ${pr.stale ? html`<p class="stale">${clean(pr.stale_note || '')}</p>` : ''}${how(html`<p>${clean(pr.caveat || '')}</p>`, ev ? html`<p>The report day's move is the variance the ${shortDate(ev.after)} expiry carries beyond what the ${shortDate(ev.before)} expiry's rate implies for the ordinary days in between.</p>` : '')}</section>`;

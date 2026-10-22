@@ -841,7 +841,9 @@ def build_plan(
         return {
             "actionable": False,
             "stance": stance,
-            "headline": "No directional entry justified. The inputs disagree.",
+            # Said as what was measured: a neutral composite is not always a disagreement,
+            # and the cases panel already lists the disagreements one by one.
+            "headline": "No directional entry: the composite is inside its neutral band.",
             "reasoning": [
                 "The composite sits at {:+.0f}, inside the neutral band, so a directional option is a "
                 "coin flip paying theta for the privilege.".format((verdict or {}).get("composite_score") or 0),

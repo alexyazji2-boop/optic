@@ -13,7 +13,7 @@ import { $, $$, html, render as draw, raw } from '../core/dom.js';
 import { CLASSIC } from '../core/classic.js';
 import * as api from '../core/api.js';
 import * as store from '../core/store.js';
-import { num, signed, dir, money, compact, clean, capFirst, longDate, fullDate, shortDate, isNum, score100, inDays } from '../core/format.js';
+import { num, signed, dir, money, compact, clean, capFirst, longDate, fullDate, shortDate, isNum, score100, inDays, plural } from '../core/format.js';
 import * as RP from '../core/reports.js';
 import { lineChart, meter, mountCharts } from '../ui/chart.js';
 import { skeleton, empty, failed, staleLine, how } from '../ui/states.js';
@@ -243,7 +243,7 @@ function evidence(k, sym) {
   // what's next: the two figures kept apart, then the comparison with its basis
   return html`${nr.date ? html`<p><b>${longDate(nr.date)}</b>, ${RP.dateStatus(nr)}. ${RP.habitLine(nr)} Consensus EPS ${num(nr.eps_consensus)}, revenue ${nr.revenue_consensus_label || 'n/a'}. ${clean(nr.dispersion_note || '')}</p>` : ''}
     <h3>Two different figures</h3>
-    ${im ? html`<p><b>±${num(im.pct)}% through the ${shortDate(im.expiry)} expiry.</b> What the at-the-money straddle (the ${num(im.strike, 0)} strike, $${num(im.cost)}) costs as a share of the price, ${im.dte} days out. It covers ordinary trading as well as the report.</p>` : ''}
+    ${im ? html`<p><b>±${num(im.pct)}% through the ${shortDate(im.expiry)} expiry.</b> What the at-the-money straddle (the ${num(im.strike, 0)} strike, $${num(im.cost)}) costs as a share of the price, ${plural(im.dte, 'day')} out. It covers ordinary trading as well as the report.</p>` : ''}
     ${isNum(pr.event_day_avg_pct) ? html`<p><b>±${num(pr.event_day_avg_pct)}% on report days.</b> ${sym}'s average move on the session after its last ${((e.surprise || {}).quarters) || 8} reports. History, not a price.</p>` : ''}
     ${historyRatio(pr, im)}
     <p class="asof">${clean(pr.caveat || '')}</p>`;

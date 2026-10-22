@@ -8,7 +8,7 @@ import { html, render as draw } from '../core/dom.js';
 import * as api from '../core/api.js';
 import * as store from '../core/store.js';
 import { holds } from '../core/device.js';
-import { num, compact, clean, shortDate, isNum, dir } from '../core/format.js';
+import { num, compact, clean, shortDate, isNum, dir, plural } from '../core/format.js';
 import { signedBars } from '../ui/bars.js';
 import { mountCharts } from '../ui/chart.js';
 import { provideContext } from '../ui/milo.js';
@@ -111,7 +111,7 @@ function ticketForm() {
           <label class="select pt-f"><span class="t-label">Expiry</span><select name="expiry" data-v2-pt-expiry ${expiries.length ? '' : 'disabled'}>${expiries.length ? '' : html`<option value="">${prompt}</option>`}${expiries.length && !t.expiry ? html`<option value="">Pick an expiry</option>` : ''}${expiries.map((e) => html`<option value="${e}" ${t.expiry === e ? 'selected' : ''}>${e}</option>`)}</select></label>
           <label class="select pt-f"><span class="t-label">Strike</span><select name="strike" data-v2-pt-strike ${strikes.length ? '' : 'disabled'}>${strikes.length ? (t.strike ? '' : html`<option value="">Pick a strike</option>`) : html`<option value="">${expiries.length ? 'Pick an expiry' : 'n/a'}</option>`}${strikes.map((k) => html`<option value="${k}" ${String(t.strike) === String(k) ? 'selected' : ''}>${num(k)}</option>`)}</select></label></div>
         ${chainState === 'failed' ? html`<p class="stale">Could not read the options chain for ${s}${chainErr ? ` (${chainErr})` : ''}. <button type="button" class="textlink" data-v2-pt-chain>Try again</button></p>` : ''}
-        ${pk ? html`<p class="pt-quote">${pk.contract}, mid <b>$${num(pk.mid)}</b> (bid ${num(pk.bid)} / ask ${num(pk.ask)}), ${num(pk.dte, 0)} days, delta ${num(pk.delta)}${isNum(pk.spread_pct) ? `, spread ${num(pk.spread_pct, 1)}%` : ''}${pk.spread_pct > 10 ? html`<span class="down">, which is wide, so a real fill would be worse.</span>` : ''}</p>` : ''}` : ''}
+        ${pk ? html`<p class="pt-quote">${pk.contract}, mid <b>$${num(pk.mid)}</b> (bid ${num(pk.bid)} / ask ${num(pk.ask)}), ${plural(num(pk.dte, 0), 'day')}, delta ${num(pk.delta)}${isNum(pk.spread_pct) ? `, spread ${num(pk.spread_pct, 1)}%` : ''}${pk.spread_pct > 10 ? html`<span class="down">, which is wide, so a real fill would be worse.</span>` : ''}</p>` : ''}` : ''}
       <div class="pt-row pt-nums"><label class="pt-f"><span class="t-label">${isOpt ? 'Contracts' : 'Shares'}</span><span class="field"><input name="qty" type="number" min="0" step="any" inputmode="decimal" value="${t.qty}" placeholder="100"></span></label>
         <label class="pt-f"><span class="t-label">Entry ${isOpt ? 'premium' : 'price'}</span><span class="field"><input name="entry" type="number" min="0" step="any" inputmode="decimal" value="${t.entry}" placeholder="${pk ? num(pk.mid) : 'Last price'}"></span></label>
         <label class="pt-f"><span class="t-label">Stop</span><span class="field"><input name="stop" type="number" min="0" step="any" inputmode="decimal" value="${t.stop}" aria-required="true"></span></label>

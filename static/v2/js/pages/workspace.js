@@ -12,7 +12,7 @@ import { $, $$, html, raw, render as draw, announce } from '../core/dom.js';
 import * as api from '../core/api.js';
 import * as store from '../core/store.js';
 import * as prefs from '../core/prefs.js';
-import { num, signed, money, compact, dir, isNum, ago, clean, shortDate, longDate, capFirst } from '../core/format.js';
+import { num, signed, money, compact, dir, isNum, ago, clean, shortDate, longDate, capFirst, plural } from '../core/format.js';
 import * as RP from '../core/reports.js';
 import { etDay } from '../core/marketTime.js';
 import { marketSession } from '../core/status.js';
@@ -549,7 +549,7 @@ export const PANELS = {
       const vs = t.vol_surface || {}, r30 = row30(vs), iv = vs.iv30 || {}, rk = t.iv_rank || {};
       if (!vs.available && !iv.available) return html`<p class="ws-note">${optionsReason(t, link)}</p>`;
       return html`<dl class="ws-kv">
-        ${r30 ? html`<div><dt>Implied move to ${shortDate(r30.expiry)}</dt><dd>±${num(r30.straddle_move_pct, 1)}%</dd><small>${r30.dte} days${r30.contains_event ? ', includes earnings' : ''}</small></div>` : ''}
+        ${r30 ? html`<div><dt>Implied move to ${shortDate(r30.expiry)}</dt><dd>±${num(r30.straddle_move_pct, 1)}%</dd><small>${plural(r30.dte, 'day')}${r30.contains_event ? ', includes earnings' : ''}</small></div>` : ''}
         <div><dt>Implied volatility, 30 days</dt><dd>${iv.available ? `${num(iv.iv_pct, 1)}%` : 'n/a'}</dd><small>${rk.available ? `Rank ${num(rk.rank, 0)} of 100 over a year` : 'No rank yet: history still building'}</small></div>
         ${r30 ? html`<div><dt>Skew, ${shortDate(r30.expiry)}</dt><dd>${skewWords(r30.rr25_pts)}</dd><small>25-delta risk reversal ${signed(r30.rr25_pts, 1, ' pts')}</small></div>` : ''}</dl>
         <p><a class="textlink" href="#/${enc(link)}/options">${link} options in full ${icon('arrow')}</a></p>`;

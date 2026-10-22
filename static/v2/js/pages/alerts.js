@@ -10,7 +10,7 @@ import { $, html, render as draw } from '../core/dom.js';
 import * as api from '../core/api.js';
 import * as store from '../core/store.js';
 import { holds } from '../core/device.js';
-import { num, clean, ago, shortDate, signed } from '../core/format.js';
+import { num, clean, ago, shortDate, signed, plural } from '../core/format.js';
 import { skeleton, empty, failed } from '../ui/states.js';
 import { toast } from '../ui/toast.js';
 import * as drawer from '../ui/drawer.js';
@@ -107,7 +107,7 @@ function paramText(w) {
   const v = (w.params || {})[p.key];
   if (v === undefined || v === null || v === '') return '';
   if (p.choices) return ((p.choices.find((x) => x.value === v) || {}).label || v);
-  return p.kind === 'percent' ? `${num(v, 1)}%` : p.kind === 'price' ? `$${num(v)}` : p.kind === 'days' ? `${v} days` : String(v);
+  return p.kind === 'percent' ? `${num(v, 1)}%` : p.kind === 'price' ? `$${num(v)}` : p.kind === 'days' ? `${plural(v, 'day')}` : String(v);
 }
 const sentence = (w) => `${kindLabel(w.kind)} ${paramText(w)}`.trim();
 const etTime = (iso) => { try { return new Date(iso).toLocaleString('en-US', { timeZone: 'America/New_York', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) + ' ET'; } catch (e) { return ''; } };

@@ -284,9 +284,12 @@ def build(payload: Dict[str, Any]) -> Dict[str, Any]:
     # All of them, not a sample. These used to be repeated as callouts in the
     # verdict panel; that panel no longer shows them, so anything dropped here
     # is dropped from the page.
+    # Each under its own first sentence: one claim, "The inputs disagree", printed
+    # once per conflict read as the same line repeated (pitch audit, 2026-10-22).
     for conflict in (verdict.get("conflicts") or []):
         if isinstance(conflict, str) and conflict.strip():
-            bear.append(_arg("The inputs disagree", conflict.strip(), LIGHT, "Composite"))
+            head, _, rest = conflict.strip().partition(". ")
+            bear.append(_arg(head.rstrip("."), (rest or head).strip(), LIGHT, "Composite"))
 
     bull.sort(key=lambda a: -a["strength"])
     bear.sort(key=lambda a: -a["strength"])

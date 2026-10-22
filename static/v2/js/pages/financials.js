@@ -7,7 +7,7 @@
 import { html, raw, render as draw } from '../core/dom.js';
 import * as api from '../core/api.js';
 import * as store from '../core/store.js';
-import { num, signed, dir, money, compact, clean, capFirst, fullDate, shortDate, isNum } from '../core/format.js';
+import { num, signed, dir, money, compact, clean, capFirst, fullDate, shortDate, isNum, plural } from '../core/format.js';
 import { lineChart, mountCharts } from '../ui/chart.js';
 import { signedBars, hbars, groupedBars, periodLines, bridgeBars, stackedBars } from '../ui/bars.js';
 import * as FV from '../core/finviz.js';
@@ -255,9 +255,9 @@ function congress() {
   if (c === undefined) return '';
   if (!c || !c.available) return '';
   return html`<section class="section" id="fin-congress" aria-labelledby="cg-h"><h2 class="t-h2" id="cg-h">Congressional disclosures</h2>
-    <p>${c.count} trades by ${c.members} members of the House: ${c.buys} buys and ${c.sells} sales, worth ${money(c.amount_low, 0)} to ${money(c.amount_high, 0)} in the bands filed. Filed a median ${c.lag_median} days after the trade.</p>
+    <p>${c.count} trades by ${c.members} members of the House: ${c.buys} buys and ${c.sells} sales, worth ${money(c.amount_low, 0)} to ${money(c.amount_high, 0)} in the bands filed. Filed a median ${plural(c.lag_median, 'day')} after the trade.</p>
     <div class="tscroll"><table class="t"><thead><tr><th>Traded</th><th>Member</th><th>Action</th><th>Amount</th><th>Close that day</th><th>Filed after</th></tr></thead>
-      <tbody>${(c.trades || []).slice(0, 15).map((t) => html`<tr><td>${t.traded_iso ? fullDate(t.traded_iso) : t.traded}</td><td>${t.member} <small class="t-muted">${t.district || ''}</small></td><td>${capFirst(t.transaction || '')}</td><td>${money(t.amount_low, 0)} to ${money(t.amount_high, 0)}</td><td>${closeCell(t)}</td><td>${isNum(t.disclosure_lag_days) ? `${t.disclosure_lag_days} days` : ''}</td></tr>`)}</tbody></table></div>
+      <tbody>${(c.trades || []).slice(0, 15).map((t) => html`<tr><td>${t.traded_iso ? fullDate(t.traded_iso) : t.traded}</td><td>${t.member} <small class="t-muted">${t.district || ''}</small></td><td>${capFirst(t.transaction || '')}</td><td>${money(t.amount_low, 0)} to ${money(t.amount_high, 0)}</td><td>${closeCell(t)}</td><td>${isNum(t.disclosure_lag_days) ? `${plural(t.disclosure_lag_days, 'day')}` : ''}</td></tr>`)}</tbody></table></div>
     <p class="asof">${clean(c.caveat || '')} ${CLOSE_NOTE} Source: House Clerk disclosures${c.complete ? '' : ', partly read'}.</p></section>`;
 }
 
