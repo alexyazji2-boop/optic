@@ -1530,4 +1530,4 @@ ul.cal-react { display: flex; flex-wrap: wrap; gap: 4px 18px; padding-left: 0; l
 .fin-say > summary { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: var(--tap); cursor: pointer; list-style: none; }
 .fin-say > summary::-webkit-details-marker { display: none; }
 .fin-say > summary h3 { margin: 0; } .fin-say > summary .ic { width: 16px; height: 16px; color: var(--c-ink-3); transition: transform var(--d-fast) var(--ease); }
-.fin-say[open] > summary .ic { transform: rotate(180deg); }
+.fin-say[open] > summary .ic { transform: rotate(90deg); }   /* the More folds' turn: right when shut, down when open */
