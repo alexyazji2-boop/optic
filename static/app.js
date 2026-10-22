@@ -30407,7 +30407,7 @@ function mountMarketVisuals(m) {
     const [lo, hi] = band(em.implied_pct);
     const [rlo, rhi] = em.realized_pct > 0 ? band(em.realized_pct) : [null, null];
     vizMount('viz-mkt-move', (w) => rangeChart({
-      width: w, low: lo, high: hi, format: (v) => fmt(v, 0), trackLabel: 'One day, as the options price it',
+      width: w, low: lo, high: hi, format: (v) => fmt(v, 0), trackLabel: 'One day, the VIX as a daily equivalent',
       ariaLabel: `Options price a ${fmt(em.implied_pct, 2)} percent day${rlo
     ? `; the index has been moving ${fmt(em.realized_pct, 2)} percent` : ''}.`,
       marks: [{ value: em.spot, label: 'Now', color: C.ink, primary: true },
@@ -30442,18 +30442,19 @@ function macroExpectedMove(em) {
     <div class="grid c4">
       ${tile('Options price', `±${fmt(em.implied_pct, 2)}% a day`,
     `VIX ${fmt(em.vix, 1)} ÷ 16 · ±${fmt(em.implied_points, 0)} points`)}
-      ${tile('The S&P moves', `${fmt(em.atr_pct, 2)}% a day`,
-    `ATR 14 · ${fmt(em.atr14, 0)} points high to low`)}
-      ${em.ratio ? tile('On one footing', `${fmt(em.ratio, 1)}×`,
-    `options against ±${fmt(em.realized_pct, 2)}%, the range ÷ 1.6`) : ''}
+      ${tile('The S&P moves', `±${fmt(em.realized_pct, 2)}% a day`,
+    `ATR 14 ${fmt(em.atr_pct, 2)}% (${fmt(em.atr14, 0)} points) ÷ 1.6`)}
+      ${em.ratio ? tile('On one footing', `${fmt(em.ratio, 2)}×`,
+    `±${fmt(em.implied_pct, 2)} ÷ ±${fmt(em.realized_pct, 2)}`) : ''}
     </div>
-    <p class="macro-why"><strong>Why VIX ÷ 16.</strong> The VIX is the S&P's
-      implied volatility for a year. A year has about 252 trading days, and the
-      square root of 252 is close to 16, so the VIX over 16 is the daily move
-      its options price: one standard deviation, which about two days in three
-      should close inside. The ATR is the index's own average day, high to low,
-      and a day's range runs about 1.6 times its close-to-close move, which is
-      why the third tile divides by it.</p>
+    <p class="macro-why"><strong>Why VIX ÷ 16.</strong> The VIX is the volatility
+      S&P 500 options price over the next 30 days, stated as a yearly figure. A
+      year has about 256 trading days, and the square root of that is 16, so the
+      VIX over 16 restates it as one day's move: about one standard deviation, a
+      daily equivalent rather than the price of a one-day option. The ATR is the
+      index's own average day, high to low, and a day's range runs about 1.6
+      times its close-to-close move, which is why the second tile divides by it.
+      The third tile is the first divided by the second.</p>
   </div>`;
 }
 

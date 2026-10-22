@@ -156,7 +156,12 @@ def _expected_move(snaps: Dict[str, Dict[str, Any]], frames: Dict[str, Any]) -> 
     implied_pct = vix / RULE_OF_16
     atr_pct = range_now / close * 100.0
     realized_pct = atr_pct / RANGE_PER_SIGMA
-    ratio = implied_pct / realized_pct if realized_pct else None
+    # From the two figures as displayed (two decimals), so a reader dividing
+    # them gets the ratio printed beside them. The audit of 2026-10-22 divided
+    # the shown 1.17% by the shown 0.96% ATR and got 1.2x against a printed
+    # 1.97x: the ATR was on the page and the ATR / 1.6 the ratio used was not.
+    shown_implied, shown_realized = round(implied_pct, 2), round(realized_pct, 2)
+    ratio = shown_implied / shown_realized if shown_realized else None
     if ratio is None:
         reading = "The index has not moved enough lately to compare."
     elif ratio > 1.25:
@@ -177,6 +182,12 @@ def _expected_move(snaps: Dict[str, Dict[str, Any]], frames: Dict[str, Any]) -> 
         "realized_pct": _f(realized_pct, 3),
         "ratio": _f(ratio, 2) if ratio is not None else None,
         "reading": reading,
+        "implied_basis": ("The VIX divided by 16: the 30-day implied volatility of S&P 500 "
+                          "options restated as one day's move, about one standard deviation. "
+                          "A daily-equivalent approximation, not a one-day option price."),
+        "realized_basis": ("The 14-session average true range ({:.2f}%) divided by 1.6, which "
+                           "approximates one standard deviation of a day's move, so it compares "
+                           "with the VIX figure.".format(atr_pct)),
     }
 
 

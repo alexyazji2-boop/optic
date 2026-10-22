@@ -64,6 +64,14 @@ export function ordinal(n) {
   return `${v}${t >= 11 && t <= 13 ? 'th' : u === 1 ? 'st' : u === 2 ? 'nd' : u === 3 ? 'rd' : 'th'}`;
 }
 export const monthName = (m) => MONTHS[m - 1];
+/** "1 day", "2 days", "1 quarter": a count and its noun agree ("1 days" shipped on Options and the Overview). */
+export const plural = (n, one, many = `${one}s`) => `${n} ${Number(n) === 1 ? one : many}`;
+/** "Today", "Tomorrow", "In 3 days", "2 days ago". */
+export function inDays(n) {
+  if (!isNum(n)) return '';
+  const v = Math.round(Number(n));
+  return v === 0 ? 'Today' : v === 1 ? 'Tomorrow' : v === -1 ? 'Yesterday' : v > 0 ? `In ${plural(v, 'day')}` : `${plural(-v, 'day')} ago`;
+}
 
 // "4 minutes ago", "2 hours ago", "Fri 4:00 PM": used for freshness labels.
 export function ago(iso, now = Date.now()) {

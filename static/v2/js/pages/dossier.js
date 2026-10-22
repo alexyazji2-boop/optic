@@ -13,7 +13,7 @@ import { $, $$, html, render as draw, raw } from '../core/dom.js';
 import { CLASSIC } from '../core/classic.js';
 import * as api from '../core/api.js';
 import * as store from '../core/store.js';
-import { num, signed, dir, money, compact, clean, capFirst, longDate, fullDate, shortDate, isNum, score100 } from '../core/format.js';
+import { num, signed, dir, money, compact, clean, capFirst, longDate, fullDate, shortDate, isNum, score100, inDays } from '../core/format.js';
 import * as RP from '../core/reports.js';
 import { lineChart, meter, mountCharts } from '../ui/chart.js';
 import { skeleton, empty, failed, staleLine, how } from '../ui/states.js';
@@ -28,10 +28,27 @@ let lp = null;   // the header's price refresh (dossier-frame livePrice), stoppe
 let live = true;
 let D = {};
 let range = '1Y';
+// Sessions of change each range spans. The chart draws one more close than that, so its first point is the
+// close the one-year answer measures from: the chart started a session later and read 33.7% against the
+// answer's 31.5% (pitch audit, 2026-10-22).
 const RANGES = { '3M': 63, '6M': 126, '1Y': 252 };
+export const windowOf = (pts, r) => pts.slice(-(RANGES[r] + 1));
 
-const qualityWord = { A: 'Yes, high quality.', B: 'Yes, good quality.', C: 'Middling quality.', D: 'Weak.', F: 'Poor.' };
-const starsWord = { 5: 'Yes. Below its fair value range.', 4: 'Yes. Below the middle of its range.', 3: 'About fair.', 2: 'Not especially. Above the middle of its range.', 1: 'No. Above its fair value range.' };
+// Each answer describes; none says yes or no. The question was "Is the share price expensive?" and the answers
+// had been written for "is it cheap?", so AAPL above its range read "No. Above its fair value range." (pitch
+// audit, 2026-10-22). A description cannot point the wrong way when the question is reworded.
+const qualityWord = { A: "Strong on Optic's quality measures.", B: "Good on Optic's quality measures.", C: "Middling on Optic's quality measures.", D: "Weak on Optic's quality measures.", F: "Poor on Optic's quality measures." };
+export const starsWord = { 5: 'Below its usual valuation range.', 4: 'Inside its usual range, in the lower half.', 3: 'Near the middle of its usual range.', 2: 'Inside its usual range, in the upper half.', 1: 'Above its usual valuation range.' };
+export const PRICE_Q = 'How is it priced against its own history?';
+/** The valuation answer for every state the fair-value payload can be in. */
+export function priceAnswer(fvd, failed) {
+  if (failed) return 'Not available right now.';
+  if (!fvd) return null;
+  const st = fvd.stars || {}, fv = fvd.fair_value || {};
+  if (st.available) return starsWord[st.stars] || clean(st.word);
+  if (fv.available) return fv.wide ? 'Its usual range is too wide to place the price in.' : 'Not placed against its range.';
+  return 'No valuation range for this company.';
+}
 const stanceWord = { fair: 'priced about in line with that history', expensive: 'priced above that history', cheap: 'priced below that history' };
 const timing = { before_open: 'before the open', after_close: 'after the close', during: 'during the session' };
 
@@ -61,14 +78,14 @@ function chartBlock(sym) {
   if (!D.ticker) return html`<div class="chart-slot">${skeleton('chart', 1, 'Loading the price history')}</div>`;
   if (pts.length < 20) return empty('No price history to draw', 'The quote above is current; the chart returns when the history does.');
   const im = implied();
-  const last = pts[pts.length - 1];
-  return html`<div class="chart-bar"><p class="section-sub">Daily closes through ${fullDate(last.d)}. E marks an earnings report.${im ? html` The gold cone is the ±${num(im.pct)}% range options price through the ${shortDate(im.expiry)} expiry.` : ''}</p>
+  const shown = windowOf(pts, range), first = shown[0], last = pts[pts.length - 1];
+  return html`<div class="chart-bar"><p class="section-sub">Daily closes from ${fullDate(first.d)} through ${fullDate(last.d)}. E marks an earnings report.${im ? html` The gold cone is the ±${num(im.pct)}% range options price through the ${shortDate(im.expiry)} expiry.` : ''}</p>
     <div class="seg" role="group" aria-label="Chart range">${Object.keys(RANGES).map((r) => html`<button type="button" data-v2-range="${r}" aria-pressed="${r === range}">${r}</button>`)}</div></div>
     <div class="chart-slot" data-chart="price"></div>
     ${D.freshText ? html`<p class="asof">${D.freshText}</p>` : ''}`;
 }
 function mountChart(main, sym) {
-  const pts = series().slice(-RANGES[range]);
+  const pts = windowOf(series(), range);
   if (pts.length < 20) return;
   const im = implied();
   const evs = chartEvents(pts);
@@ -131,21 +148,18 @@ function answers(sym) {
     out.push({ k: 'quality', q: 'How is the business doing?', ...g });
   } else out.push({ k: 'quality', q: 'How is the business doing?', a: D.framework ? (qy.grade ? qualityWord[qy.grade] || `Grade ${qy.grade}.` : 'Not graded.') : null,
     because: qy.grade ? html`<span class="chip-tag">Grade ${qy.grade}</span>${clean(((qy.components || [])[0] || {}).headline || qy.summary || '')}` : clean(qy.summary || '') });
-  const priceA = D.fvError ? 'Not available right now.' : !D.fairValue ? null : st.available ? starsWord[st.stars] || clean(st.word) : fv.available ? 'No verdict.' : 'No estimate for this company.';
-  out.push({ k: 'price', q: 'Is the share price expensive?', a: priceA,
-    because: st.available && fv.available ? html`${raw(meter({ lo: fv.low, mid: fv.mid, hi: fv.high, price: q.price || fv.price, w: 214 }))}<span class="chip-tag">${st.stars} of 5 stars</span>Fair value ${num(fv.low, 0)} to ${num(fv.high, 0)}, from its own 5-year P/E.`
+  const priceA = priceAnswer(D.fairValue, D.fvError);
+  out.push({ k: 'price', q: PRICE_Q, a: priceA,
+    because: st.available && fv.available ? html`${raw(meter({ lo: fv.low, mid: fv.mid, hi: fv.high, price: q.price || fv.price, w: 214 }))}<span class="chip-tag">${st.stars} of 5 stars</span>Usual range ${num(fv.low, 0)} to ${num(fv.high, 0)}, from its own 5-year P/E. A reading against its past, not an intrinsic value.`
       : D.fvError ? gone(D.fvError).because : clean([st.reason, fv.wide ? fv.wide_note : fv.reason].filter(Boolean).join(' ')) });
   const setup = sw.setup || {};
-  const tradeA = D.fwError ? 'Not available right now.' : !D.framework ? null : sw.grade === 'S' || sw.grade === 'A' ? `Yes. A grade ${sw.grade} ${setup.kind || 'setup'}.` : sw.grade === 'B' ? `Not yet. ${capFirst(setup.kind || 'a setup')} is forming.` : sw.grade ? 'No clear trade.' : 'Not graded.';
-  const tradeItem = { k: 'trade', q: 'Is there a trade?', a: tradeA,
-    because: D.fwError ? gone(D.fwError).because : sw.grade ? html`<span class="chip-tag">Grade ${sw.grade}</span>${clean(setup.why || sw.why || '')}` : '' };
   // the four basic questions in the beginner brief's order (item 5): the business, its price, the share price's
   // trend, what is next. The short-term trade setup is deeper research, under More.
   if (isFundHere(sym)) { out.length = 0; out.push(...fundAnswers(sym, trendItem(sym))); return answerGrid(out); }
   out.push(trendItem(sym));
   const nextA = D.earnError ? 'Not available right now.' : !D.earnings ? null : nr.date ? `Earnings on ${longDate(nr.date)}.` : 'No report date yet.';
   out.push({ k: 'next', q: "What's next?", a: nextA,
-    because: D.earnError ? gone(D.earnError).because : nr.date ? html`In ${nr.days_away} days, ${RP.dateStatus(nr)}.${RP.habitLine(nr) ? ` ${RP.habitLine(nr)}` : ''}${im ? html` Options price ±${num(im.pct)}% through the ${shortDate(im.expiry)} expiry; report days have averaged ±${num(pr.event_day_avg_pct)}%.` : ''}` : '' });
+    because: D.earnError ? gone(D.earnError).because : nr.date ? html`${inDays(nr.days_away)}, ${RP.dateStatus(nr)}.${RP.habitLine(nr) ? ` ${RP.habitLine(nr)}` : ''}${im ? html` Options price ±${num(im.pct)}% through the ${shortDate(im.expiry)} expiry; report days have averaged ±${num(pr.event_day_avg_pct)}%.` : ''}` : '' });
   return answerGrid(out);
 }
 function answerGrid(out) {
@@ -201,13 +215,13 @@ function evidence(k, sym) {
       <p class="asof">${clean(lt.separation_note || '')}</p>`;
   }
   if (k === 'price' && !st.available) {
-    return html`<p><b>No verdict.</b> ${clean(st.reason || '')}</p>${fv.available ? html`<dl class="kv"><div><dt>Low</dt><dd>${num(fv.low)}</dd></div><div><dt>Middle</dt><dd>${num(fv.mid)}</dd></div><div><dt>High</dt><dd>${num(fv.high)}</dd></div><div><dt>Price</dt><dd>${num((D.quote || {}).price)}</dd></div></dl>
+    return html`<p><b>${priceAnswer(D.fairValue, D.fvError)}</b> ${clean(st.reason || '')}</p>${fv.available ? html`<dl class="kv"><div><dt>Low</dt><dd>${num(fv.low)}</dd></div><div><dt>Middle</dt><dd>${num(fv.mid)}</dd></div><div><dt>High</dt><dd>${num(fv.high)}</dd></div><div><dt>Price</dt><dd>${num((D.quote || {}).price)}</dd></div></dl>
       <p>${clean(fv.wide_note || '')}</p><h3>Method</h3><p>${clean(fv.basis || '')}</p>` : html`<p>${clean(fv.reason || 'No fair value estimate for this company.')}</p>`}
       ${val.label ? html`<h3>The framework's valuation</h3><p>${clean(val.summary || `Valuation ${val.label}.`)}</p>` : ''}`;
   }
   if (k === 'price') {
     return html`${raw(meter({ lo: fv.low, mid: fv.mid, hi: fv.high, price: (D.quote || {}).price, w: 400, showMid: true }))}
-      <p><b>${st.stars} of 5 stars: ${clean(st.word || '')}.</b> ${isNum(fv.gap_to_mid_pct) ? `The price is ${num(Math.abs(fv.gap_to_mid_pct), 1)}% ${fv.gap_to_mid_pct >= 0 ? 'above' : 'below'} the middle of the range.` : ''}</p>
+      <p><b>${st.stars} of 5 stars: ${starsWord[st.stars] || clean(st.word || '')}</b> ${isNum(fv.gap_to_mid_pct) ? `The price is ${num(Math.abs(fv.gap_to_mid_pct), 1)}% ${fv.gap_to_mid_pct >= 0 ? 'above' : 'below'} the middle of the range.` : ''}</p>
       <h3>Method</h3><p>${clean(fv.basis || '')}</p><p>${clean(st.rule || '')} ${clean(st.note || '')}</p>
       ${val.label ? html`<h3>The framework's valuation</h3><p>${clean(val.summary || `Valuation ${val.label}.`)} It looks at more than the P/E (intrinsic value, multiples against peers and history), so it can differ from the stars.</p>${comp(val.components)}` : ''}
       <ul class="plain">${(fv.limits || []).map((l) => html`<li>${clean(l)}</li>`)}</ul><p class="asof">Source: ${fv.source || 'company filings'}.</p>`;
@@ -296,7 +310,8 @@ export function synthesis(s100, grade, stars, valLabel, convLabel) {
   if (grade) (['A', 'B'].includes(grade) ? good : ['D', 'F'].includes(grade) ? bad : []).push(['A', 'B'].includes(grade) ? `the business grades ${grade}` : `the business grades ${grade}`);
   if (isNum(s100)) (s100 >= 70 ? good : s100 < 45 ? bad : []).push(s100 >= 70 ? `the long-term price trend is strong (${num(s100, 0)} of 100)` : `the long-term price trend is weak (${num(s100, 0)} of 100)`);
   const st = stars && stars.available ? stars.stars : null, val = valLabel ? valLabel.toLowerCase() : '';
-  if (isNum(st)) (st >= 4 ? good : st <= 2 ? bad : []).push(st >= 4 ? 'the price is below its fair value range' : `the price is ${st === 1 ? 'above' : 'in the upper part of'} its fair value range${val ? ` (valuation ${val})` : ''}`);
+  // 4 stars is inside the range, below its middle: it was worded "below its fair value range" like 5
+  if (isNum(st)) (st >= 4 ? good : st <= 2 ? bad : []).push(st >= 4 ? `the price is ${st === 5 ? 'below' : 'in the lower half of'} its fair value range` : `the price is ${st === 1 ? 'above' : 'in the upper half of'} its fair value range${val ? ` (valuation ${val})` : ''}`);
   else if (/stretch|expensive|rich/.test(val)) bad.push(`the valuation reads ${val}`);
   const join = (xs) => (xs.length > 1 ? `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}` : xs[0] || '');
   const cap = (t) => t.charAt(0).toUpperCase() + t.slice(1);
@@ -378,7 +393,7 @@ function about(sym) {
 function tradeNow(sym) {
   const sw = (D.framework || {}).swing || {}, setup = sw.setup || {};
   if (!D.framework || !sw.grade || isFundHere(sym)) return '';
-  const a = sw.grade === 'S' || sw.grade === 'A' ? `A grade ${sw.grade} ${setup.kind || 'setup'}.` : sw.grade === 'B' ? `${capFirst(setup.kind || 'A setup')} is forming.` : 'No clear trade.';
+  const a = sw.grade === 'S' || sw.grade === 'A' ? `A grade ${sw.grade} ${setup.kind || 'setup'} by Optic's rules.` : sw.grade === 'B' ? `${capFirst(setup.kind || 'A setup')} is forming.` : "No setup by Optic's rules.";
   return html`<p><b>${a}</b> <span class="chip-tag">Grade ${sw.grade}</span> ${clean(setup.why || sw.why || '')}</p><p class="asof">A model's reading of the next few weeks' price action, not a recommendation. The full reading is on <a class="textlink" href="${hrefFor('swing', sym)}">Options</a>.</p>`;
 }
 function more(sym) {
@@ -461,9 +476,11 @@ function wire(main, sym) {
     const a = e.target.closest('[data-v2-answer]');
     if (a) {
       const k = a.dataset.v2Answer;
-      const titles = { quality: 'How is the business doing?', price: 'Is the share price expensive?', trend: 'How has the share price moved?', trade: 'Is there a trade?', next: "What's next?" };
+      const titles = { quality: 'How is the business doing?', price: PRICE_Q, trend: 'How has the share price moved?', next: "What's next?" };
+      const asks = { quality: `How is ${sym}'s business doing?`, price: `How is ${sym} priced against its own history?`, trend: `How has ${sym}'s share price moved?`, next: `What's next for ${sym}?` };
+      if (isFundHere(sym)) Object.assign(titles, { quality: 'What is it?', price: 'What do its holdings cost?', next: 'What does it pay?' });
       drawer.open({ kicker: `${sym}, evidence and method`, title: titles[k], opener: a,
-        body: html`${evidence(k, sym)}${miloButton('Ask Milo about this', { ask: `${titles[k].replace('?', '')} for ${sym}?`, context: `${sym}, ${titles[k]}`, symbol: sym })}` });
+        body: html`${evidence(k, sym)}${miloButton('Ask Milo about this', { ask: isFundHere(sym) ? `${titles[k].replace('?', '')}, for ${sym}?` : asks[k], context: `${sym}, ${titles[k]}`, symbol: sym })}` });
       return;
     }
     const evb = e.target.closest('[data-v2-ev]');

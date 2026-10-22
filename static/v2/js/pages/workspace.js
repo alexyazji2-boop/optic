@@ -330,14 +330,15 @@ export const PANELS = {
   },
   expected: {
     title: 'Expected move', span: 6,
-    how: 'What S&P 500 options price for one day, from the VIX (annualised volatility divided by the square root of 252), next to how far the index has actually been moving (14-day average true range). A ratio above 1 means protection costs more than recent movement.',
+    how: 'The VIX is the 30-day implied volatility of S&P 500 options, a yearly figure; divided by 16 (about the square root of 256 trading days) it reads as one day\'s move, an approximation rather than a one-day option price. The typical day is the 14-session average true range divided by 1.6, which puts a high-to-low range on the same one-standard-deviation footing. The ratio is the first figure divided by the second. Above 1, options price more movement than the index has been delivering.',
     load: () => get('/api/home'),
     body: (d) => {
       const em = ((d || {}).macro || {}).expected_move || {};
       if (!isNum(em.implied_pct)) return html`<p class="ws-note">Expected move unavailable: the VIX or the S&P 500 quote did not load.</p>`;
-      return html`<dl class="ws-kv"><div><dt>Priced for one day</dt><dd>±${num(em.implied_pct)}%<small>±${num(em.implied_points, 0)} points on ${num(em.spot, 0)}</small></dd></div>
-        <div><dt>Recently delivered</dt><dd>${num(em.atr_pct)}%<small>14-day average true range</small></dd></div>
-        <div><dt>Priced against delivered</dt><dd>${num(em.ratio, 2)}×<small>VIX ${num(em.vix)}</small></dd></div></dl>
+      // the three figures on one footing, so the ratio is the first divided by the second (pitch audit, 2026-10-22)
+      return html`<dl class="ws-kv"><div><dt>Priced, as one day</dt><dd>±${num(em.implied_pct)}%<small>VIX ${num(em.vix)} ÷ 16, about ±${num(em.implied_points, 0)} points</small></dd></div>
+        <div><dt>Typical day lately</dt><dd>±${num(em.realized_pct)}%<small>14-day ATR ${num(em.atr_pct)}% ÷ 1.6</small></dd></div>
+        <div><dt>Priced against typical</dt><dd>${num(em.ratio, 2)}×<small>±${num(em.implied_pct)} ÷ ±${num(em.realized_pct)}</small></dd></div></dl>
         <p class="ws-read">${clean(em.reading || '')}</p>`;
     },
     foot: (d) => ({ source: 'VIX and S&P 500 from Yahoo Finance; Optic arithmetic', at: d.generated_at }),

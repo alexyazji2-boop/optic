@@ -122,7 +122,7 @@ def test_missing_data_is_never_a_zero_or_a_conclusion():
     assert "valuation added ${num(valuation ? valuation.points : 0, 0)}" not in SRC["pages/dossier.js"]
     # a source that failed is said so, not read as a finding
     dos = SRC["pages/dossier.js"]
-    assert "const gone = (e) => ({ a: 'Not available right now.'" in dos and "D.fwError ? 'Not available right now.'" in dos and "D.earnError ? 'Not available right now.'" in dos
+    assert "const gone = (e) => ({ a: 'Not available right now.'" in dos and "if (D.fwError) {" in dos and "if (failed) return 'Not available right now.';" in dos and "D.earnError ? 'Not available right now.'" in dos
     # colour only on a figure that exists
     for k, s in SRC.items():
         if k.startswith("pages/"):

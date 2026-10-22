@@ -44,8 +44,8 @@ function regimeBlock(m) {
 function expected(em) {
   if (!em || !isNum(em.implied_pct)) return '';
   return html`<h3>Expected S&amp;P move, from the VIX</h3><p>${clean(em.reading || '')}</p>
-    ${kv([['Options price', html`±${num(em.implied_pct, 2)}% a day <small class="t-muted">±${num(em.implied_points, 0)} points, from the VIX</small>`], ['The S&P moves', html`${num(em.atr_pct, 2)}% a day <small class="t-muted">${num(em.atr14, 0)} points, average over 14 sessions</small>`], ['On one footing', isNum(em.ratio) ? html`${num(em.ratio, 1)}× <small class="t-muted">priced against delivered</small>` : 'n/a']], 3)}
-    ${how(html`<p>Options price: the VIX (${num(em.vix, 1)}) divided by 16, as a share of the index. The S&amp;P moves: the 14-session average true range. On one footing: ±${num(em.implied_pct, 2)}% priced against ±${num(em.realized_pct, 2)}%, the average range divided by 1.6 so a range compares with a one-standard-deviation move.</p>`)}`;
+    ${kv([['Options price, as one day', html`±${num(em.implied_pct, 2)}% <small class="t-muted">±${num(em.implied_points, 0)} points, VIX ÷ 16</small>`], ['Its typical day lately', html`±${num(em.realized_pct, 2)}% <small class="t-muted">14-day ATR ${num(em.atr_pct, 2)}% (${num(em.atr14, 0)} points) ÷ 1.6</small>`], ['Priced against typical', isNum(em.ratio) ? html`${num(em.ratio, 2)}× <small class="t-muted">±${num(em.implied_pct, 2)} ÷ ±${num(em.realized_pct, 2)}</small>` : 'n/a']], 3)}
+    ${how(html`<p>${clean(em.implied_basis || '')} ${clean(em.realized_basis || '')} The ratio divides the first by the second.</p>`)}`;
 }
 
 /* ---------------- tabs ---------------- */

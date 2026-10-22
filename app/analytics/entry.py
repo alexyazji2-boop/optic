@@ -748,6 +748,15 @@ def _cluster_zone(levels: List[Dict[str, Any]], spot: float, atr: float):
     return lo, hi, used, dropped
 
 
+def _byline(ev: Dict[str, Any]) -> str:
+    """ (Reuters, published Oct 20): who said it and when it was published,
+    which is not when the event happened."""
+    parts = [str(ev.get("publisher") or "").strip(),
+             "published {}".format(str(ev.get("published"))[:10]) if ev.get("published") else ""]
+    parts = [p for p in parts if p]
+    return " ({})".format(", ".join(parts)) if parts else ""
+
+
 def build_plan(
     frame: pd.DataFrame,
     spot: float,
@@ -956,12 +965,15 @@ def build_plan(
     # ------------------------------------------------------ timing warnings
     warnings: List[str] = []
     days_to_earnings = (news or {}).get("days_to_earnings")
-    if days_to_earnings is not None and 0 <= days_to_earnings <= 10:
+    earnings_dated = days_to_earnings is not None and 0 <= days_to_earnings <= 10
+    if earnings_dated:
         warnings.append(
-            "Earnings in {} day{}. Premium bought now includes the market's price for the report, "
-            "and implied volatility usually falls once it is out, whichever way the stock moves.".format(
-                days_to_earnings, "" if days_to_earnings == 1 else "s"
-            )
+            "Earnings on {} ({}), from the earnings calendar. Premium bought now includes the market's "
+            "price for the report, and implied volatility usually falls once it is out, whichever way the "
+            "stock moves.".format(
+                (news or {}).get("earnings_date"),
+                "today" if days_to_earnings == 0 else "tomorrow" if days_to_earnings == 1
+                else "in {} days".format(days_to_earnings))
         )
     if ivc.get("verdict") == "rich":
         warnings.append(
@@ -984,34 +996,48 @@ def build_plan(
     # is fighting that rather than being paid for it.
     # A scheduled binary ahead is the same warning the earnings branch above
     # gives, for the same reason: buying premium into an unresolved event means
-    # paying event vol and eating the crush whichever way it lands. The earnings
-    # version only knows about earnings.
+    # paying event vol and eating the crush whichever way it lands.
+    #
+    # Each warning names its event and the headline it rests on (news.py
+    # _events). On 2026-10-22 one AAPL plan said earnings were eleven days out,
+    # that "an earnings event is still ahead", and that "an earnings catalyst
+    # resolved in the last few days", with nothing to tell which story was which.
+    # The dated earnings warning above covers the pending report, so a preview
+    # headline does not repeat it; a different kind of event ahead still shows.
     upcoming = pending_catalyst(news)
-    if upcoming.get("pending"):
+    for ev in (upcoming.get("events") or []):
+        if ev["kind"] in ("earnings", "guidance") and earnings_dated:
+            continue
+        when = (" The earnings calendar dates it {}.".format(ev["event_date"]) if ev.get("event_date")
+                else " The headline gives no date for it.")
         warnings.append(
-            "A {} event is still ahead: \u201c{}\u201d. Nothing in this plan "
+            "A {} event is still ahead: \u201c{}\u201d{}.{} Nothing in this plan "
             "predicts which way it resolves, and premium held through it "
             "includes the market's price for that event either "
-            "way.".format(" and ".join(upcoming["kinds"]),
-                           (upcoming.get("headline") or "").strip()[:90]))
+            "way.".format(ev["kind"], (ev.get("headline") or "").strip()[:90],
+                          _byline(ev), when))
 
     catalyst = material_catalyst(news)
-    if catalyst.get("material"):
-        kinds = " and ".join(catalyst["kinds"])
+    resolved = catalyst.get("events") or []
+    for ev in resolved:
+        if ev.get("event_date"):
+            what = "The {} report of {} is out".format(ev["kind"], ev["event_date"])
+        else:
+            what = "A {} catalyst resolved {}".format(
+                ev["kind"], "in the last day" if (ev.get("age_hours") or 0) < 24 else "in the last few days")
         warnings.append(
-            "A {} catalyst resolved {}. The trigger levels below are read off "
+            "{}: \u201c{}\u201d{}. The trigger levels below are read off "
             "price history that mostly predates it, and the stop widens with an "
             "ATR the gap itself inflated. Check both against the move before "
-            "using them.".format(
-                kinds,
-                "in the last day" if (catalyst.get("freshest_hours") or 0) < 24
-                else "in the last few days"))
-        if ivc.get("verdict") == "rich":
-            warnings.append(
-                "That premium is rich after the event, not before it. The usual "
-                "direction from here is down as the event vol comes out, which "
-                "a long option pays for twice."
-            )
+            "using them.".format(what, (ev.get("headline") or "").strip()[:90], _byline(ev)))
+    # Event volatility comes out after a scheduled event, which only a dated
+    # report is known to be; a lawsuit headline has no event premium to deflate.
+    if ivc.get("verdict") == "rich" and any(ev.get("event_date") for ev in resolved):
+        warnings.append(
+            "That premium is rich after the event, not before it. The usual "
+            "direction from here is down as the event vol comes out, which "
+            "a long option pays for twice."
+        )
     flip = ((gex or {}).get("regime") or {}).get("flip_point")
     if flip:
         near_flip = abs(spot / flip - 1.0) * 100.0
@@ -1121,6 +1147,9 @@ def build_plan(
             "the account you are willing to repeat. The allocation decision is yours.",
         },
         "warnings": warnings,
+        # The events behind those warnings, each with its date basis and headline
+        "catalyst_events": {"pending": upcoming.get("events") or [], "resolved": resolved,
+                            "set_aside": catalyst.get("set_aside") or []},
         "iv_context": ivc,
         "assumptions": [
             "Candidate returns hold implied vol constant and assume the target is reached in about {} calendar "

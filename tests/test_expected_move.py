@@ -44,7 +44,9 @@ def test_the_atr_is_the_indexs_own_day_and_is_put_on_one_footing():
     # Every day spans 1% of 6,000 high to low.
     assert em["atr14"] == pytest.approx(60.0) and em["atr_pct"] == pytest.approx(1.0)
     assert em["realized_pct"] == pytest.approx(1.0 / 1.6, abs=1e-3)
-    assert em["ratio"] == pytest.approx(1.6, abs=0.01)
+    # from the two figures as shown, so the printed ratio is the printed ones divided (pitch audit, 2026-10-22)
+    assert em["ratio"] == pytest.approx(round(em["implied_pct"], 2) / round(em["realized_pct"], 2), abs=0.005)
+    assert em["ratio"] == pytest.approx(1.6, abs=0.02)
     assert em["reading"].startswith("Options are pricing about 1.6 times the movement")
 
 

@@ -84,9 +84,9 @@ function scene(data, series) {
     <div class="copy">
       <p class="kicker" id="scene-h">The S&amp;P 500, next session</p>
       <p class="big">±${num(em.implied_pct, 2)}%</p>
-      <p class="big-cap">Options price about ${num(em.implied_points, 0)} points either way from ${num(em.spot, 0)} for the next session.</p>
-      ${real && isNum(em.ratio) ? html`<p class="second"><b>${num(em.ratio, 1)}×</b><span>the index's typical day over the last 14 sessions (±${num(em.realized_pct, 2)}%).</span></p>` : ''}
-      ${how(html`<p>The one-day move is the VIX (${num(em.vix, 1)}) divided by 16, the square root of about 256 trading days, as a percentage of the index level.${real ? ` The typical day is the 14-day average true range (${num(em.atr_pct, 2)}%) divided by 1.6, which puts a range on the same footing as a one-standard-deviation move.` : ''}</p>`)}
+      <p class="big-cap">About ${num(em.implied_points, 0)} points either way from ${num(em.spot, 0)}: the VIX's 30-day implied volatility as one day's move, an approximation.</p>
+      ${real && isNum(em.ratio) ? html`<p class="second"><b>${num(em.ratio, 2)}×</b><span>the index's typical day over the last 14 sessions (±${num(em.realized_pct, 2)}%).</span></p>` : ''}
+      ${how(html`<p>The one-day figure is the VIX (${num(em.vix, 1)}) divided by 16, the square root of about 256 trading days, as a percentage of the index level. The VIX measures the volatility S&amp;P 500 options price over the next 30 days, so this is a daily equivalent of that, not the price of a one-day option.${real ? ` The typical day is the 14-day average true range (${num(em.atr_pct, 2)}%) divided by 1.6, which puts a range on the same footing as a one-standard-deviation move. The ratio is ±${num(em.implied_pct, 2)}% divided by ±${num(em.realized_pct, 2)}%.` : ''}</p>`)}
       <p class="claim">${clean(em.reading || '')}</p>
       <div class="acts"><a class="btn btn-light" href="#/macro">See the macro picture</a><a class="btn" href="#/explore">What moved most</a>${miloButton('Ask Milo about today', { ask: 'What matters for the market in the next session?', context: 'Home, the market today' })}</div>
     </div>

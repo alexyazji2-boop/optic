@@ -9,7 +9,7 @@ lives in ai.py.
 from __future__ import annotations
 
 import re
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
 BULLISH_TERMS = {
@@ -573,7 +573,9 @@ def material_catalyst(news: Dict[str, Any]) -> Dict[str, Any]:
     An analyst note on a quiet week clears none of them.
     """
     articles = (news or {}).get("articles") or []
+    report = report_dates(news)
     hits: List[Dict[str, Any]] = []
+    set_aside: List[Dict[str, Any]] = []
     for row in articles:
         if not row.get("about_company"):
             continue
@@ -595,15 +597,28 @@ def material_catalyst(news: Dict[str, Any]) -> Dict[str, Any]:
             continue
         kinds = [c.get("type") for c in (row.get("catalysts") or [])
                  if c.get("importance") == "high" and c.get("type")]
+        event_date = None
+        if "earnings" in kinds:
+            state, why = _earnings_state(report, age)
+            if state == "resolved":
+                event_date = report["last"]
+            else:
+                # The report is not out, or Optic cannot place it. Guidance in an
+                # earnings headline is the same report, so it goes too; a
+                # guidance story on its own is still its own catalyst.
+                kinds = [k for k in kinds if k not in ("earnings", "guidance")]
+                set_aside.append({"kind": "earnings", "state": state, "why": why,
+                                  **_evidence(row)})
         if not kinds:
             continue
         hits.append({"title": row.get("title"), "tier": row.get("tier"),
                      "age_hours": age, "kinds": kinds,
                      "tone": row.get("tone"),
-                     "sentiment": row.get("sentiment_score")})
+                     "sentiment": row.get("sentiment_score"),
+                     "event_date": event_date, "row": row})
 
     if not hits:
-        return {"material": False}
+        return {"material": False, "set_aside": set_aside}
 
     # Direction from the material headlines only. The overall net sentiment
     # averages them with background coverage, which is how a resolved binary
@@ -624,7 +639,96 @@ def material_catalyst(news: Dict[str, Any]) -> Dict[str, Any]:
         "freshest_hours": _num(freshest, 1),
         "headline": sorted(hits, key=lambda h: h["age_hours"])[0]["title"],
         "window_hours": CATALYST_WINDOW_HOURS,
+        "events": _events(hits, "resolved"),
+        "set_aside": set_aside,
     }
+
+
+# ------------------------------------------------------- an event's identity
+#
+# A headline's publication time is not its event's time. The 2026-10-22 pitch
+# audit found AAPL's entry plan saying, at once, that earnings were eleven days
+# away and that "an earnings catalyst resolved in the last few days", then that
+# the option premium was "rich after the event, not before it": a preview
+# published that week carried the word "earnings", and nothing asked whether a
+# report had actually happened. Earnings is the one catalyst whose date Optic
+# knows apart from any headline, from the earnings calendar, so an earnings
+# headline counts as a resolved report only when the calendar has a report inside
+# the window, and as a pending one only when the calendar has one ahead. Every
+# other kind stays a headline-dated reading, and says so.
+
+def _today_et() -> date:
+    try:
+        from zoneinfo import ZoneInfo
+        return datetime.now(ZoneInfo("America/New_York")).date()
+    except Exception:
+        return datetime.now(timezone.utc).date()
+
+
+def _as_date(value: Any) -> Optional[date]:
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(str(value)[:10]).date()
+    except ValueError:
+        return None
+
+
+def report_dates(news: Dict[str, Any], today: Optional[date] = None) -> Dict[str, Any]:
+    """The last report on or before today and the next one after it, from the
+    earnings calendar fields the news payload carries. Right after a report the
+    calendar can still give the date just passed as its "next" one, so a past
+    `earnings_date` counts as a report too."""
+    today = today or _as_date((news or {}).get("today")) or _today_et()
+    nxt = _as_date((news or {}).get("earnings_date"))
+    last = _as_date((news or {}).get("last_report_date"))
+    if nxt and nxt <= today and (last is None or nxt > last):
+        last, nxt = nxt, None
+    if last and last > today:
+        last = None
+    return {"today": today, "last": last, "next": nxt}
+
+
+def _earnings_state(report: Dict[str, Any], age_hours: Optional[float]):
+    """resolved / upcoming / ambiguous, for one earnings headline."""
+    today, last, nxt = report["today"], report["last"], report["next"]
+    window_days = CATALYST_WINDOW_HOURS / 24.0
+    if last is not None:
+        since = (today - last).days
+        published_after = age_hours is None or age_hours / 24.0 <= since + 1
+        if since <= window_days and published_after:
+            return "resolved", "the earnings calendar has a report on {}".format(last.isoformat())
+    if nxt is not None and nxt >= today:
+        return "upcoming", ("the earnings calendar's next report is {}, so this "
+                            "headline is about it or about earlier results".format(nxt.isoformat()))
+    return "ambiguous", ("Optic cannot place this headline against a report date, "
+                         "so it is not counted as a report that happened")
+
+
+def _evidence(row: Dict[str, Any]) -> Dict[str, Any]:
+    return {"headline": row.get("title"), "publisher": row.get("publisher"),
+            "published": row.get("published"), "url": row.get("url"),
+            "age_hours": row.get("age_hours")}
+
+
+def _events(hits: List[Dict[str, Any]], state: str) -> List[Dict[str, Any]]:
+    """One entry per catalyst kind (and per report date for earnings), each with
+    its freshest headline as the evidence. Two kinds in one window are two
+    events, and both are kept."""
+    out: Dict[Tuple[str, Optional[date]], Dict[str, Any]] = {}
+    for h in sorted(hits, key=lambda x: x.get("age_hours") or 0.0):
+        for k in h["kinds"]:
+            when = h.get("event_date") if k in ("earnings", "guidance") else None
+            key = (k, when)
+            if key in out:
+                out[key]["headlines"] += 1
+                continue
+            out[key] = {"kind": k, "state": state,
+                        "event_date": when.isoformat() if when else None,
+                        "date_basis": "the earnings calendar" if when else "headline publication time",
+                        "headlines": 1, **_evidence(h.get("row") or {"title": h.get("title"),
+                                                                       "age_hours": h.get("age_hours")})}
+    return list(out.values())
 
 
 # Language that puts a catalyst in the future rather than the past.
@@ -638,7 +742,12 @@ PENDING_MARKERS = re.compile(
     r"|\bscheduled (?:for|to)\b|\bset (?:for|to (?:vote|decide|rule))\b"
     r"|\bawait(?:s|ing)\b|\bto vote\b|\bvote on\b|\bdeadline\b|\bslated\b"
     r"|\bdue (?:in|on|by)\b|\bahead of\b|\bnears?\b|\bupcoming\b"
-    r"|\bwill (?:decide|rule|vote)\b|\blooms?\b",
+    r"|\bwill (?:decide|rule|vote)\b|\blooms?\b"
+    # Earnings previews. "Apple Q4 earnings preview: what to expect" has no
+    # vote or deadline in it and was read as a report that had happened.
+    r"|\bpreview\b|\bwhat to (?:expect|watch)\b|\b(?:set|due|expected|poised) to report\b"
+    r"|\bwill report\b|\bbefore (?:the |its )?(?:earnings|report|results)\b"
+    r"|\binto (?:the |its )?(?:earnings|report|results|print)\b|\bearnings (?:on deck|next week|this week)\b",
     re.I)
 
 # A scheduled event can be announced weeks out, so this window is far wider than
@@ -666,6 +775,7 @@ def pending_catalyst(news: Dict[str, Any]) -> Dict[str, Any]:
     the feed rather than by the flag.
     """
     articles = (news or {}).get("articles") or []
+    report = report_dates(news)
     hits: List[Dict[str, Any]] = []
     for row in articles:
         age = row.get("age_hours")
@@ -676,10 +786,21 @@ def pending_catalyst(news: Dict[str, Any]) -> Dict[str, Any]:
             continue
         kinds = [c.get("type") for c in (row.get("catalysts") or [])
                  if c.get("importance") == "high" and c.get("type")]
+        event_date = None
+        if "earnings" in kinds:
+            # A preview written before the last report is about that report,
+            # which is out: it is not a pending event now.
+            last, nxt = report["last"], report["next"]
+            stale = last is not None and (report["today"] - last).days < age / 24.0
+            if nxt is not None and nxt >= report["today"] and not stale:
+                event_date = nxt
+            elif stale:
+                kinds = [k for k in kinds if k not in ("earnings", "guidance")]
         if not kinds:
             continue
         hits.append({"title": row.get("title"), "kinds": kinds,
-                     "age_hours": age, "url": row.get("url")})
+                     "age_hours": age, "url": row.get("url"),
+                     "event_date": event_date, "row": row})
     if not hits:
         return {"pending": False}
 
@@ -695,10 +816,12 @@ def pending_catalyst(news: Dict[str, Any]) -> Dict[str, Any]:
         "kinds": kinds,
         "headline": newest["title"],
         "url": newest.get("url"),
-        # No date. The headline says an event is scheduled; it does not give a
-        # parseable date, and inventing one would be the worst kind of precision.
+        # No date from the headline: it says an event is scheduled and gives
+        # no parseable date, and inventing one would be the worst kind of
+        # precision. An earnings event takes the calendar's date instead.
         "dated": False,
         "window_hours": PENDING_WINDOW_HOURS,
+        "events": _events(hits, "pending"),
     }
 
 
@@ -894,11 +1017,25 @@ def analyse(provider, ticker: str, limit: int = 12) -> Dict[str, Any]:
     def _lean(name: str) -> Dict[str, Any]:
         return lean_from_scores(catalyst_scores.get(name) or [])
 
+    # The last report, so an earnings headline can be placed before or after it
+    # (report_dates). Ten quarters cached by /api/ticker's own fundamentals.
+    last_report = None
+    try:
+        today = _today_et()
+        past = [r.get("date") for r in (provider.earnings_history(ticker) or [])
+                if r.get("date") and _as_date(r.get("date")) and _as_date(r.get("date")) <= today
+                and r.get("eps_reported") is not None]
+        last_report = max(past) if past else None
+    except Exception:
+        last_report = None
+
     earnings_warning = None
     days_to_earnings = None
     if earnings:
         try:
-            days_to_earnings = (datetime.fromisoformat(earnings).date() - datetime.now().date()).days
+            # ET, the exchange's day: the server's clock is UTC, which made a
+            # report "tomorrow" from 8 PM ET the night before
+            days_to_earnings = (datetime.fromisoformat(earnings).date() - _today_et()).days
         except ValueError:
             days_to_earnings = None
         if days_to_earnings is not None and 0 <= days_to_earnings <= 21:
@@ -942,6 +1079,7 @@ def analyse(provider, ticker: str, limit: int = 12) -> Dict[str, Any]:
                     "surplus": surplus},
         "matched_on": _match_terms(ticker, company_name),
         "earnings_date": earnings,
+        "last_report_date": last_report,
         "days_to_earnings": days_to_earnings,
         "earnings_warning": earnings_warning,
         "catalyst_summary": sorted(
