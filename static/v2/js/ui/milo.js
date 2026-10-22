@@ -240,9 +240,9 @@ function welcomeLine() {
 function openingHTML() {
   const fig = figure('full', 'Milo guide: what to ask, examples and animation');
   const sym = onSymbol();
-  // the owner's ask: Milo says hello first, from under Scout, then the question
-  return html`<div class="milo-opening"><div class="milo-hello">${fig}${fig ? menuHTML() : ''}</div>
-    <p class="milo-hi">Hey, I'm Milo!</p>
+  // the owner's ask: Milo says hello first, then the question. The bubble sits beside his head, its tail
+  // pointing at him (owner, 2026-10-22: "have the text next to his head"; it had been under his feet)
+  return html`<div class="milo-opening"><div class="milo-hello">${fig}<p class="milo-hi">Hey, I'm Milo!</p>${fig ? menuHTML() : ''}</div>
     <h3 class="milo-hello-h">What would you like to understand?</h3>
     <p class="milo-hello-say">${welcomeLine()}</p>
     ${SC.canAsk ? html`<p class="milo-can-ask" role="note">${CAN_ASK}</p>` : ''}

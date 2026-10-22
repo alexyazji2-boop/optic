@@ -80,7 +80,8 @@ def test_starters_fit_the_page_and_the_context(tmp_path):
 def test_the_welcome_is_one_heading_and_goes_once_a_conversation_starts():
     opening = MILO[MILO.index("function openingHTML() {"):MILO.index("export function button(")]
     assert '<h3 class="milo-hello-h">What would you like to understand?</h3>' in opening
-    # the owner's ask (2026-10-20): a friendly hello from under Scout, then the question
+    # the owner's ask (2026-10-20): a friendly hello, then the question; beside his head since 2026-10-22
+    assert "${fig}<p class=\"milo-hi\">Hey, I'm Milo!</p>${fig ? menuHTML() : ''}</div>" in opening, "in his row"
     assert opening.index('<div class="milo-hello">') < opening.index('<p class="milo-hi">Hey, I\'m Milo!</p>') < opening.index('class="milo-hello-h"')
     assert "figure('full', 'Milo guide: what to ask, examples and animation')" in opening
     assert 'class="milo-starters"' in opening and "starters().map(" in opening
