@@ -4,11 +4,17 @@ HONESTY NOTE: free data has no trade tape, so there is no true bid/ask side per
 print and therefore no real "bought vs sold" classification. Everything here is
 a documented *proxy*:
 
-  * call/put volume + premium ratios (directional appetite today)
-  * volume vs open interest (volume > OI means the position is new, not a close)
-  * premium-weighted skew (a $5m call sweep matters more than 10k pennies)
-  * OTM-vs-ITM split (OTM call buying = speculation, ITM put = hedging/assignment)
-  * per-strike net premium heatmap (where the money actually went)
+  * call/put volume + time-value ratios (where today's trading concentrated)
+  * volume vs the previous session's open interest (volume above it is
+    consistent with opening trades, and equally with contracts traded in and
+    out within the day: the feed cannot tell the two apart)
+  * premium-weighted skew (a $5m call print weighs more than 10k pennies)
+  * OTM-vs-ITM split (where the time value traded, not who traded it or why)
+  * per-strike net time value, calls minus puts
+
+Nothing here says who bought, who sold, or why (pitch audit, 2026-10-22: the
+panel had said "Time value bought in calls" and "New positions" beside its own
+sentence saying it could not know either).
 
 Each field is labeled so a proxy never gets read as a tape.
 """
@@ -172,28 +178,28 @@ def analyse(chain: pd.DataFrame, spot: float, top_n: int = 12) -> Dict[str, Any]
         new_share = new_call_prem / new_total
         if new_share > 0.6:
             score += 20
-            notes.append("New positions skew call-side ({:.0f}%)".format(new_share * 100))
+            notes.append("Where volume exceeded the previous session's open interest, {:.0f}% of the time value was in calls".format(new_share * 100))
         elif new_share < 0.4:
             score -= 20
-            notes.append("New positions skew put-side ({:.0f}%)".format((1 - new_share) * 100))
+            notes.append("Where volume exceeded the previous session's open interest, {:.0f}% of the time value was in puts".format((1 - new_share) * 100))
 
     otm_total = otm_call_prem + otm_put_prem
     if otm_total > 0:
         otm_share = otm_call_prem / otm_total
         if otm_share > 0.6:
             score += 15
-            notes.append("OTM premium favors upside speculation")
+            notes.append("Out-of-the-money time value traded leans to calls")
         elif otm_share < 0.4:
             score -= 15
-            notes.append("OTM premium favors downside protection")
+            notes.append("Out-of-the-money time value traded leans to puts")
 
     if skew is not None:
         if skew > 8:
             score -= 10
-            notes.append("Put IV richer than call IV by {:.1f} vol pts (fear bid)".format(skew))
+            notes.append("Out-of-the-money put IV is {:.1f} vol pts above call IV".format(skew))
         elif skew < -2:
             score += 10
-            notes.append("Call IV richer than put IV by {:.1f} vol pts (chase bid)".format(-skew))
+            notes.append("Out-of-the-money call IV is {:.1f} vol pts above put IV".format(-skew))
 
     score = float(np.clip(score, -100, 100))
     if score >= 35:
@@ -236,7 +242,11 @@ def analyse(chain: pd.DataFrame, spot: float, top_n: int = 12) -> Dict[str, Any]
             "total_paid": {"calls": call_paid, "puts": put_paid, "total": call_paid + put_paid},
         },
         "new_positions": {
-            "definition": "contracts where today's volume exceeded standing open interest",
+            # The key keeps its old name for readers of the payload; the label is the proxy's.
+            "label": "Volume above the previous session's open interest",
+            "definition": ("contracts where today's volume exceeded the previous session's open interest: "
+                           "consistent with opening trades, and equally with the same contracts traded in and "
+                           "out within the day. The feed cannot tell which, or who traded."),
             "call_premium": new_call_prem,
             "put_premium": new_put_prem,
             "contract_count": int(len(new_pos)),

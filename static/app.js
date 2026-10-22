@@ -14341,8 +14341,8 @@ function renderSwing(d) {
     ['Call time value traded', usdCompact((flow.premium || {}).calls)],
     ['Put time value traded', usdCompact((flow.premium || {}).puts)],
     ['Call share of time value', `${fmt((flow.premium || {}).call_share_pct, 1)}%`],
-    ['New-position time value (calls)', usdCompact((flow.new_positions || {}).call_premium)],
-    ['New-position time value (puts)', usdCompact((flow.new_positions || {}).put_premium)],
+    ['Time value where volume beat prior OI (calls)', usdCompact((flow.new_positions || {}).call_premium)],
+    ['Time value where volume beat prior OI (puts)', usdCompact((flow.new_positions || {}).put_premium)],
     ['OTM put IV − call IV', `${fmt((flow.iv_skew || {}).put_minus_call_vol_pts, 1)} vol pts`],
   ]))}
       <ul class="reasons">${(flow.notes || []).map((n) => `<li>${gloss(n)}</li>`).join('')}</ul>
@@ -14751,7 +14751,7 @@ function mountOptionsVisuals(d) {
     rows: [{ label: 'Volume', values: pair(flow.volume), unit: 'contracts' },
       { label: 'Open interest', values: pair(flow.open_interest), unit: 'contracts' },
       { label: 'Time value', values: pair(flow.premium), countLabel: (n) => `$${fmtCompact(n)}`, unit: '' },
-      { label: 'New positions', values: { calls: np.call_premium || 0, puts: np.put_premium || 0 },
+      { label: 'Vol above prior OI', values: { calls: np.call_premium || 0, puts: np.put_premium || 0 },
         countLabel: (n) => `$${fmtCompact(n)}`, unit: '' }],
   }), 'No volume or open interest today.');
   [...(d.naked_ideas || []), ...(d.strategy_ideas || [])].forEach((idea) => {

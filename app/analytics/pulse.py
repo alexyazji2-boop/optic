@@ -524,7 +524,7 @@ def options_brief(payload: Dict[str, Any]) -> Dict[str, Any]:
         items.append({
             "label": "Premium",
             "value": "{:.0f}% calls".format(share),
-            "note": "of the time value bought, not the contract count",
+            "note": "of the time value traded on either side, not the contract count",
             "tone": "up" if share > 55 else ("down" if share < 45 else "flat"),
         })
 
@@ -533,12 +533,13 @@ def options_brief(payload: Dict[str, Any]) -> Dict[str, Any]:
         top = max(unusual, key=lambda r: _num(r.get("vol_oi_ratio")) or 0)
         strike = _num(top.get("strike"))
         ratio = _num(top.get("vol_oi_ratio"))
-        # A contract with no open interest has no ratio: its volume is all new
-        # positions. "0.0x open interest" said the opposite of that.
+        # A contract with no open interest has no ratio. "0.0x open interest"
+        # said the opposite of a busy contract; its volume may be opening trades
+        # or same-day round trips, which the feed cannot separate.
         traded = ("{:.1f}x open interest".format(ratio) if ratio
                   else "{:,.0f} traded on no open interest".format(_num(top.get("volume")) or 0))
         items.append({
-            "label": "Unusual",
+            "label": "Vol vs OI",
             "value": "{:,.0f} {}".format(strike or 0, str(top.get("type", "")).lower()),
             "note": "{}, {} expiry \u00b7 {} contract{} flagged".format(
                 traded, top.get("expiry", "?"),
@@ -547,7 +548,7 @@ def options_brief(payload: Dict[str, Any]) -> Dict[str, Any]:
         })
     else:
         items.append({
-            "label": "Unusual",
+            "label": "Vol vs OI",
             "value": "none",
             "note": "no contract is trading far above its own open interest",
             "tone": "flat",
@@ -559,8 +560,8 @@ def options_brief(payload: Dict[str, Any]) -> Dict[str, Any]:
         items.append({
             "label": "Skew",
             "value": "{:+.1f} vol pts".format(pts),
-            "note": ("puts are bid over calls, the usual state" if pts > 0.5 else
-                     "calls are bid over puts, which is unusual" if pts < -0.5 else
+            "note": ("puts priced above calls, the usual state" if pts > 0.5 else
+                     "calls priced above puts, which is unusual" if pts < -0.5 else
                      "puts and calls priced level"),
             "tone": "down" if pts > 0.5 else ("up" if pts < -0.5 else "flat"),
         })

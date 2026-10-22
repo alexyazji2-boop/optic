@@ -120,18 +120,18 @@ export function flow(t, sym) {
   // each note is its own sentence: joined with spaces they ran together ("Mild call lean New positions skew put-side")
   const sentence = (n) => { const t = clean(n).trim(); return t ? `${capFirst(t)}${/[.!?]$/.test(t) ? '' : '.'}` : ''; };
   return html`<p><b>${capFirst(f.stance || '')}.</b> ${(f.notes || []).map(sentence).filter(Boolean).join(' ')}</p>
-    ${kv([['Calls per 100 puts traded', isNum(v.calls) && v.puts ? num((v.calls / v.puts) * 100, 0) : 'n/a'], ['Put/call open interest', num(oi.put_call_ratio, 2)], ['Time value bought in calls', pct(pm.call_share_pct, 0)], ['New positions, calls share', pct(np.call_share_pct, 0)], ['Put minus call IV', signed((f.iv_skew || {}).put_minus_call_vol_pts, 1, ' pts')]], 3)}
-    <p class="asof">"Premium" here is time value, not the whole price. ${clean(f.method || '')}</p>
-    <h3>Net premium by strike</h3><div class="chart-slot" data-chart="flowStrikes"></div>
+    ${kv([['Calls per 100 puts traded', isNum(v.calls) && v.puts ? num((v.calls / v.puts) * 100, 0) : 'n/a'], ['Put/call open interest', num(oi.put_call_ratio, 2)], ['Call share of traded time value', pct(pm.call_share_pct, 0)], ['Call share where volume beat prior open interest', pct(np.call_share_pct, 0)], ['Put minus call IV', signed((f.iv_skew || {}).put_minus_call_vol_pts, 1, ' pts')]], 3)}
+    <p class="asof">"Premium" here is time value, not the whole price, and nobody's side is known: a contract traded counts whether it was bought or sold, opened or closed. ${clean(f.method || '')}</p>
+    <h3>Traded time value by strike, calls minus puts</h3><div class="chart-slot" data-chart="flowStrikes"></div>
     ${(f.unusual || []).length ? html`<h3>${(f.activity_screen || {}).label || 'Most active contracts'}</h3><div class="tscroll"><table class="t"><thead><tr><th>Contract</th><th>Days</th><th>Volume</th><th>Open int.</th><th>Vol / OI</th><th>Premium</th><th>IV</th></tr></thead>
-      <tbody>${f.unusual.slice(0, 10).map((u) => html`<tr><td>${num(u.strike, 0)} ${(u.type || '').toLowerCase()} ${u.moneyness || ''}${u.is_new_position ? ', new' : ''}</td><td>${num(u.dte, 0)}</td><td>${compact(u.volume)}</td><td>${compact(u.open_interest)}</td><td>${num(u.vol_oi_ratio, 1)}×</td><td>${usd(u.premium_total ?? u.premium)}</td><td>${(isNum(u.iv) ? pct(u.iv * 100) : 'n/a')}</td></tr>`)}</tbody></table></div>
+      <tbody>${f.unusual.slice(0, 10).map((u) => html`<tr><td>${num(u.strike, 0)} ${(u.type || '').toLowerCase()} ${u.moneyness || ''}${u.volume_above_oi ? html` <span class="chip-tag" title="Volume above the previous session's open interest: opening trades or same-day round trips, the feed cannot tell">vol > prior OI</span>` : ''}</td><td>${num(u.dte, 0)}</td><td>${compact(u.volume)}</td><td>${compact(u.open_interest)}</td><td>${num(u.vol_oi_ratio, 1)}×</td><td>${usd(u.premium_total ?? u.premium)}</td><td>${(isNum(u.iv) ? pct(u.iv * 100) : 'n/a')}</td></tr>`)}</tbody></table></div>
       ${note(`${(f.activity_screen || {}).rule || ''} Cannot show: ${((f.activity_screen || {}).cannot_show || []).join('; ')}.`)}` : ''}
     ${t.options_brief && t.options_brief.available ? html`<h3>Options intelligence</h3>${kv(t.options_brief.items.map((i) => [i.label, html`${i.value} <span class="t-muted">${clean(i.note)}</span>`]), 2)}${note(t.options_brief.method)}` : ''}
     ${ask(sym, 'Ask Milo about the flow', `What is the options flow saying about ${sym}?`)}`;
 }
 export function flowCharts(t) {
   const bs = ((t.flow || {}).by_strike || []).slice().sort((a, b) => a.strike - b.strike);
-  return { flowStrikes: (w) => signedBars(bs.map((r) => ({ x: r.strike, v: r.net_premium, label: `${num(r.strike, 0)}: calls ${usd(r.call_premium)}, puts ${usd(r.put_premium)}` })), { w, h: 170, label: 'Net premium by strike, calls minus puts', fmt: (v) => signedMoneyCompact(v), marker: { x: (t.quote || {}).price, text: 'Now' } }) };
+  return { flowStrikes: (w) => signedBars(bs.map((r) => ({ x: r.strike, v: r.net_premium, label: `${num(r.strike, 0)}: calls ${usd(r.call_premium)}, puts ${usd(r.put_premium)}` })), { w, h: 170, label: 'Traded time value by strike, calls minus puts', fmt: (v) => signedMoneyCompact(v), marker: { x: (t.quote || {}).price, text: 'Now' } }) };
 }
 
 /* ---------- delta and gamma ---------- */

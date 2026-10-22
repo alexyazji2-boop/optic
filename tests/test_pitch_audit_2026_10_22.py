@@ -178,3 +178,24 @@ def test_every_surface_shows_the_atr_converted_beside_the_ratio():
     assert "html`${num(em.atr_pct, 2)}% a day" not in mac and "['Its typical day lately', html`±${num(em.realized_pct, 2)}%" in mac
     home = (JS / "pages/home.js").read_text()
     assert "30-day implied volatility as one day's move, an approximation" in home
+
+
+# ---------------------------------------------------------------- 4. the flow proxy claims no buyers or openings
+
+def test_no_flow_label_claims_a_side_an_opening_or_a_motive():
+    import pandas as pd
+    from app.analytics import flow as flow_mod
+    rows = []
+    for strike, is_call, vol, oi in ((100, True, 900, 100), (105, True, 800, 50), (95, False, 50, 900), (90, False, 40, 800)):
+        rows.append({"strike": float(strike), "is_call": is_call, "volume": float(vol), "open_interest": float(oi),
+                     "last": 2.0, "bid": 1.9, "ask": 2.1, "mid": 2.0, "iv": 0.4 if is_call else 0.3,
+                     "expiry": "2026-11-20", "dte": 29, "contract": "X"})
+    out = flow_mod.analyse(pd.DataFrame(rows), 100.0)
+    text = " ".join(out["notes"]).lower() + " " + out["new_positions"]["definition"].lower()
+    for banned in ("new positions", "bought", "speculation", "protection", "fear bid", "chase bid", "institutional", "sweep"):
+        assert banned not in text.replace("who bought", "").replace("bought or sold", ""), banned
+    panels = (JS / "pages/options-panels.js").read_text()
+    for banned in ("Time value bought in calls", "New positions, calls share", "', new'", "Net premium by strike"):
+        assert banned not in panels, banned
+    tools = open("app/milo_tools.py").read()
+    assert "never call it new or opening" in tools

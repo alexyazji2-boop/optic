@@ -60,7 +60,8 @@ SPECS: List[Dict[str, Any]] = [
     {
         "name": "get_options",
         "description": ("The Options tab's analytics for one symbol, computed from the delayed option chain: "
-                        "the call/put volume and open-interest flow proxy, dealer gamma exposure (net GEX per "
+                        "the call/put volume and open-interest flow proxy (no trade side: it cannot show buying, "
+                        "selling, opening or closing), dealer gamma exposure (net GEX per "
                         "1% move, its regime, net vanna), the call wall, put wall, largest-gamma strike, "
                         "largest open-interest strike, the gamma flip if the modeled range has one, ATM greeks, "
                         "implied volatility, its term structure and any priced event move, IV rank, and which "
@@ -391,7 +392,10 @@ def compact_options(snap: Dict[str, Any], limit: int = RESULT_CHARS) -> Dict[str
                            unusual=(flow.get("unusual") or [])[:5],
                            caveat=("A volume and open-interest proxy from the chain. It does not observe who bought "
                                    "or sold (no trade tape), whether a trade opened or closed a position, or who "
-                                   "holds it.")),
+                                   "holds it. `premium` is time value traded on either side. `new_positions` (an "
+                                   "old key name) is only volume above the previous session's open interest, "
+                                   "which same-day round trips also produce: never call it new or opening "
+                                   "positions, buying, sweeps or institutional activity.")),
         "dealer_gamma": dict(_pick(gex, "assumption", "spot", "expiries_used", "excluded_contracts", "inputs"),
                              totals=gex.get("totals"), regime=_pick(gex.get("regime"), "state", "note"),
                              levels=gex.get("levels"), flip=flip, by_expiry=gex.get("by_expiry"),
