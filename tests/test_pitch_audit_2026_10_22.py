@@ -563,3 +563,8 @@ def test_the_earnings_history_is_asked_for_only_when_a_headline_needs_it():
     assert news_mod.analyse(P("Apple ships a new iPad"), "AAPL")["last_report_date"] is None and calls == []
     assert news_mod.analyse(P("Apple earnings preview: what to expect"), "AAPL")["last_report_date"] == "2026-07-30"
     assert calls == ["AAPL"]
+
+
+def test_a_missing_estimate_range_is_left_out_not_printed_as_n_a():
+    earn = (JS / "pages/earnings.js").read_text()
+    assert "${isNum(nr.eps_low) && isNum(nr.eps_high) ? `, within a range of $${num(nr.eps_low)} to $${num(nr.eps_high)}` : ''}" in earn
