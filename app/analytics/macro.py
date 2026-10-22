@@ -544,21 +544,20 @@ def analyse(provider) -> Dict[str, Any]:
     # directly under the panel's own "Not a recommendation ... not advice to
     # change your positioning". The regime and what it usually goes with stay;
     # the instruction to the reader does not.
+    # The inputs' lean, not a behaviour: there are no measured outcomes behind
+    # "breakouts often fail" or "moves fade faster" (pitch audit, 2026-10-22).
     if score >= 35:
-        regime, stance = "risk-on", ("The backdrop leans risk-on: the kind of tape in which long positions "
-                                     "and breakouts usually have the market behind them.")
+        regime, stance = "risk-on", "The inputs above, taken together, lean toward risk."
     elif score >= 12:
-        regime, stance = "mildly risk-on", ("A mild lean to risk-on: supportive, but not strong enough on its own "
-                                            "to carry a weak setup.")
+        regime, stance = "mildly risk-on", "The inputs above lean mildly toward risk: supportive, not strong."
     elif score <= -35:
-        regime, stance = "risk-off", ("The backdrop leans risk-off: the kind of tape in which breakouts often "
-                                      "fail and demand for protection is high.")
+        regime, stance = "risk-off", ("The inputs above lean toward caution: the readings that signal "
+                                      "stress are elevated.")
     elif score <= -12:
-        regime, stance = "mildly risk-off", ("A mild lean to risk-off in the inputs above: a less forgiving "
-                                             "backdrop, in which rallies have often been harder to sustain.")
+        regime, stance = "mildly risk-off", "The inputs above, taken together, lean mildly toward caution."
     else:
-        regime, stance = "neutral / mixed", ("No clear lean either way: the backdrop is not pushing prices in one "
-                                             "direction, so a single stock's own setup matters more than the market.")
+        regime, stance = "neutral / mixed", ("The inputs above are mixed, so the market read says little "
+                                             "about any one stock.")
 
     grouped: Dict[str, List[Dict[str, Any]]] = {}
     for item in INSTRUMENTS:
