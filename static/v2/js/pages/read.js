@@ -184,8 +184,9 @@ export function calendarItems(c, pr, now = new Date()) {
   const ev = (c.events || []).map((e) => { const day = e.at ? dayOf(e.at) : ''; return { ...e, kind: 'macro', day, days_away: day ? days(day) : e.days_away, released: !!(e.released || (e.at && !e.all_day && Date.parse(e.at) <= now.getTime())) }; });
   const col = ((pr || {}).columns || []).find((x) => x.id === 'earnings');
   // a report earlier in the week is out, said in the past tense by the ET day (pitch audit, 2026-10-22: Tuesday's
-  // and Wednesday's reports were still listed as "reports" on Thursday)
-  const reports = ((col || {}).rows || []).filter((r) => r.ticker && r.date).map((r) => { const day = String(r.date).slice(0, 10), away = days(day); return { kind: 'report', day, days_away: away, released: away < 0, title: away < 0 ? `${r.ticker} reported` : away === 0 ? `${r.ticker} reports today` : `${r.ticker} reports`, ticker: r.ticker, impact: r.impact, category: 'earnings', why: r.why }; });
+  // and Wednesday's reports were still listed as "reports" on Thursday); today's too once its figures are in, the
+  // same test Home's rows use (priority row `result`, not pending)
+  const reports = ((col || {}).rows || []).filter((r) => r.ticker && r.date).map((r) => { const day = String(r.date).slice(0, 10), away = days(day), out = away < 0 || !!(r.result && !r.result.pending); return { kind: 'report', day, days_away: away, released: out, title: out ? `${r.ticker} reported` : away === 0 ? `${r.ticker} reports today` : `${r.ticker} reports`, ticker: r.ticker, impact: r.impact, category: 'earnings', why: r.why }; });
   return { today, tomorrow, items: [...ev, ...reports].sort((a, b) => (a.day < b.day ? -1 : a.day > b.day ? 1 : (a.kind === 'report') - (b.kind === 'report') || String(a.at || '').localeCompare(String(b.at || '')))) };
 }
 function calItem(e) {

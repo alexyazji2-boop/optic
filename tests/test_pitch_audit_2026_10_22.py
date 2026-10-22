@@ -542,7 +542,7 @@ def test_every_answer_carries_the_protections_and_hsts_only_over_https():
 def test_read_calendar_puts_earlier_reports_in_the_past_tense(tmp_path):
     got = _run(tmp_path, f"""
       const R = await import('{(JS / "pages/read.js").as_posix()}');
-      const pr = {{ columns: [{{ id: 'earnings', rows: [{{ ticker: 'GS', date: '2026-10-20' }}, {{ ticker: 'TSLA', date: '2026-10-22' }}, {{ ticker: 'AAPL', date: '2026-11-02' }}] }}] }};
+      const pr = {{ columns: [{{ id: 'earnings', rows: [{{ ticker: 'GS', date: '2026-10-20' }}, {{ ticker: 'TSLA', date: '2026-10-22' }}, {{ ticker: 'AAPL', date: '2026-11-02' }}, {{ ticker: 'IBM', date: '2026-10-22', result: {{ pending: false, eps: 2.1 }} }}] }}] }};
       // 11:30 PM ET on Thursday is already Friday in UTC: the ET day decides
       const late = R.calendarItems({{ events: [] }}, pr, new Date('2026-10-23T03:30:00Z'));
       const day = R.calendarItems({{ events: [] }}, pr, new Date('2026-10-22T15:00:00Z'));
@@ -550,7 +550,7 @@ def test_read_calendar_puts_earlier_reports_in_the_past_tense(tmp_path):
       print(JSON.stringify({{ late: t(late), day: t(day), today: late.today }}));
     """)
     assert got["today"] == "2026-10-22"
-    assert got["day"] == ["GS reported|true", "TSLA reports today|false", "AAPL reports|false"]
+    assert got["day"] == ["GS reported|true", "TSLA reports today|false", "IBM reported|true", "AAPL reports|false"]
     assert got["late"] == got["day"]
 
 
