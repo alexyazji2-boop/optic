@@ -199,3 +199,89 @@ def test_no_flow_label_claims_a_side_an_opening_or_a_motive():
         assert banned not in panels, banned
     tools = open("app/milo_tools.py").read()
     assert "never call it new or opening" in tools
+
+
+# ---------------------------------------------------------------- 5-6. Retirement: final weights, total return
+
+import numpy as _np
+import pandas as _pd
+from app.analytics import retirement as ret
+
+
+class _RothProvider:
+    """Ten years of daily bars for the fund universe: price drifts, plus a cash
+    distribution each quarter that only the adjusted close carries back in."""
+    def __init__(self, young=("AVUV",), price_only=()):
+        self.young, self.price_only = set(young), set(price_only)
+
+    def batch_history(self, symbols, period="10y", interval="1d"):
+        out = {}
+        for i, sym in enumerate(symbols):
+            n = 1600 if sym in self.young else 2520
+            idx = _pd.bdate_range(end="2026-10-21", periods=n)
+            rng = _np.random.default_rng(i + 1)
+            price = 100 * _np.cumprod(1 + rng.normal(0.0002, 0.01, n))
+            adj = price * _np.cumprod(_np.where(_np.arange(n) % 63 == 62, 1.008, 1.0))
+            frame = _pd.DataFrame({"Close": price, "Adj Close": adj, "Open": price, "High": price, "Low": price, "Volume": 1.0}, index=idx)
+            out[sym] = frame.drop(columns=["Adj Close"]) if sym in self.price_only else frame
+        return out
+
+    def fund_meta(self, sym):
+        return {"expense_ratio_pct": 0.05, "yield_pct": 2.0}
+
+
+@pytest.mark.parametrize("risk", ["conservative", "balanced", "growth"])
+@pytest.mark.parametrize("years", [1, 5, 15, 30, 45])
+def test_the_headline_split_is_the_table_summed(risk, years, monkeypatch):
+    monkeypatch.setattr(ret, "_stock_sleeve", lambda *a, **k: {"available": False, "rows": []})
+    d = ret.analyse(_RothProvider(), years=years, risk=risk)
+    a, rows = d["allocation"], d["rows"]
+    by = lambda roles: sum(r["weight_pct"] for r in rows if r["role"] in roles)
+    assert abs(a["bond_pct"] - by({"bonds"})) < 0.15
+    assert abs(a["gold_pct"] - by({"gold"})) < 0.15
+    assert abs(a["equity_pct"] - (by(set(ret.EQUITY_ROLES)) + by({"reit"}))) < 0.15
+    assert abs(a["equity_pct"] + a["bond_pct"] + a["gold_pct"] - 100) < 0.3
+
+
+def test_the_default_model_no_longer_reads_90_and_11():
+    a = ret._model_allocation(30, "balanced")
+    assert a["glidepath_equity_pct"] == 89.5
+    assert a["bond_pct"] == 6.5 and a["reit_pct"] == 4.0 and abs(a["equity_pct"] - 93.5) <= 0.15   # rounded weights summed
+
+
+def test_a_stock_sleeve_is_inside_the_split(monkeypatch):
+    monkeypatch.setattr(ret, "_stock_sleeve", lambda *a, **k: {"available": True, "rows": [{"suggested_pct": 6.0}]})
+    d = ret.analyse(_RothProvider(), years=30, risk="growth", stock_candidates="AAPL")
+    a, rows = d["allocation"], d["rows"]
+    assert a["stock_sleeve_pct"] == 6.0
+    assert abs(a["equity_pct"] - (sum(r["weight_pct"] for r in rows if r["role"] in ret.EQUITY_ROLES or r["role"] == "reit") + 6.0)) < 0.15
+    assert "The stock sleeve is grown at the same rate" in d["projection"]["rate_basis"]
+
+
+def test_returns_include_reinvested_distributions():
+    f = _RothProvider().batch_history(["BND"])["BND"]
+    st = ret._fund_stats(f)
+    yrs = (len(f)) / ret.TRADING_DAYS
+    want = ((f["Adj Close"].iloc[-1] / f["Adj Close"].iloc[0]) ** (1 / yrs) - 1) * 100
+    assert st["return_basis"] == "total" and abs(st["cagr_full_pct"] - want) < 0.01
+    price_only = ret._fund_stats(f.drop(columns=["Adj Close"]))
+    assert price_only["return_basis"] == "price" and price_only["cagr_full_pct"] < st["cagr_full_pct"] - 2.5
+
+
+def test_the_projection_rate_is_one_window_not_a_blend_of_spans(monkeypatch):
+    monkeypatch.setattr(ret, "_stock_sleeve", lambda *a, **k: {"available": False, "rows": []})
+    d = ret.analyse(_RothProvider(young=("AVUV",)), years=30, risk="balanced")
+    bl, pr = d["blended"], d["projection"]
+    assert bl["window"]["years"] < 6.5, "the youngest fund (1,600 sessions) sets the shared window"
+    assert pr["rate_pct"] == bl["cagr_long_pct"] and "hypothetical" in pr["rate_basis"]
+    assert "not a probability range" in pr["band_note"] and "Nominal dollars" in pr["inflation_note"]
+    assert pr["contribution_timing"].startswith("Each year's contribution goes in at the start")
+    assert "upper bound" not in bl["caveat"].lower()
+    mixed = ret.analyse(_RothProvider(price_only=("BND",)), years=30, risk="balanced")["blended"]
+    assert mixed["return_basis"] == "mixed"
+
+
+def test_roth_language_is_qualified():
+    notes = " ".join(n["body"] for n in ret._roth_notes({"bond_pct": 20}, "balanced", 30))
+    assert "never taxed" not in notes and "five years" in notes and "59½" in notes
+    assert "belongs in the Roth" not in notes

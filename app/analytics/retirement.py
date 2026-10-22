@@ -9,8 +9,10 @@ against, not a recommendation to act on.
 
 Roth-specific reasoning that genuinely changes the answer versus a taxable account:
 
-* Growth compounds tax-free and is never taxed on withdrawal after 59½, so the
-  highest-expected-return assets are the ones that benefit most from the space.
+* Growth compounds tax-free, and qualified withdrawals are tax-free: after 59½
+  and five years from the first Roth contribution (or for disability, death or
+  up to $10,000 for a first home). Earnings taken out earlier can be taxed and
+  penalised; contributions themselves can be withdrawn any time (IRS Pub 590-B).
 * Dividends and fund distributions aren't taxed year to year, which makes
   otherwise tax-inefficient holdings (REITs, high-yield) cheapest to own here.
 * Losses aren't deductible and there's no tax-loss harvesting, so there's no
@@ -64,12 +66,34 @@ def _f(value: Any, digits: int = 4) -> Optional[float]:
 # ------------------------------------------------------------------ fund stats
 
 
+# Total return: Yahoo's adjusted close, which folds each cash distribution back
+# into the price on its ex-date, so the series is what a holder who reinvested
+# every distribution would have had (before tax, at the ex-date close). It was the
+# unadjusted Close, which leaves the distributions out: over the ten years to
+# 2026-10-22 BND read -1.58% a year on price and 1.44% with distributions, SCHD
+# 9.80% against 13.57% (pitch audit, 2026-10-22). Price only when a frame has no
+# adjusted close, and the row says which it is.
+def _return_series(frame: Optional[pd.DataFrame]):
+    if frame is None or frame.empty:
+        return None, None
+    if "Adj Close" in frame and frame["Adj Close"].notna().sum() >= TRADING_DAYS:
+        return frame["Adj Close"].dropna(), "total"
+    if "Close" in frame:
+        return frame["Close"].dropna(), "price"
+    return None, None
+
+
+RETURN_BASIS = {
+    "total": "Total return: distributions reinvested on their ex-dates (Yahoo's adjusted close), before tax.",
+    "price": "Price only: distributions are not included, which understates bond and dividend funds most.",
+    "mixed": "Mixed: some funds include reinvested distributions and some are price only.",
+}
+
+
 def _fund_stats(frame: pd.DataFrame) -> Dict[str, Any]:
     """Long-run return and risk for one fund."""
-    if frame is None or frame.empty or "Close" not in frame:
-        return {}
-    closes = frame["Close"].dropna()
-    if len(closes) < TRADING_DAYS:
+    closes, basis = _return_series(frame)
+    if closes is None or len(closes) < TRADING_DAYS:
         return {}
 
     values = closes.to_numpy()
@@ -102,6 +126,8 @@ def _fund_stats(frame: pd.DataFrame) -> Dict[str, Any]:
     sharpe = _f(full_cagr / vol, 2) if full_cagr and vol else None
 
     return {
+        "return_basis": basis,
+        "history_start": str(pd.Timestamp(closes.index[0]).date()),
         "years_of_history": _f(years, 1),
         "cagr_full_pct": full_cagr,
         "cagr_10y_pct": cagr(10),
@@ -119,10 +145,10 @@ def _correlations(frames: Dict[str, pd.DataFrame], symbols: List[str]) -> Dict[s
     fund actually diversifies or just adds another way to own the same risk."""
     series = {}
     for sym in symbols:
-        frame = frames.get(sym)
-        if frame is None or frame.empty or "Close" not in frame:
+        closes, _ = _return_series(frames.get(sym))
+        if closes is None:
             continue
-        series[sym] = frame["Close"].pct_change()
+        series[sym] = closes.pct_change()
     if len(series) < 2:
         return {}
     joined = pd.DataFrame(series).dropna()
@@ -204,10 +230,33 @@ def _model_allocation(years: int, risk: str) -> Dict[str, Any]:
     if total:
         weights = {k: v / total * 100.0 for k, v in weights.items()}
 
+    out = {"glidepath_equity_pct": _f(equity, 1), "weights": {k: _f(v, 1) for k, v in weights.items()}}
+    out.update(allocation_summary(out["weights"]))
+    return out
+
+
+EQUITY_ROLES = ("us_total", "us_large", "us_growth", "small_value", "intl_dev", "intl_em", "dividend")
+
+
+def allocation_summary(weights: Dict[str, Any], stock_sleeve_pct: float = 0.0) -> Dict[str, Any]:
+    """The headline split, read off the final weights, so it is the table summed.
+
+    It was the glidepath's split before the REIT and gold sleeves came out of
+    bonds: 30 years, balanced read "Equity 90%, Bonds 11%" over a table with BND
+    at 6.5% and 93.5% in stock funds and REITs (pitch audit, 2026-10-22). Each
+    figure is rounded on its own, so the four can sum to 99 or 101.
+    """
+    w = {k: float(v or 0.0) for k, v in (weights or {}).items()}
+    funds = sum(w.get(k, 0.0) for k in EQUITY_ROLES)
+    reit, bonds, gold = w.get("reit", 0.0), w.get("bonds", 0.0), w.get("gold", 0.0)
+    stocks = float(stock_sleeve_pct or 0.0)
     return {
-        "equity_pct": _f(equity, 1),
-        "bond_pct": _f(100.0 - equity, 1),
-        "weights": {k: _f(v, 1) for k, v in weights.items()},
+        "equity_pct": _f(funds + stocks + reit, 1),       # stocks, stock funds and REITs, as the header says
+        "equity_funds_pct": _f(funds, 1),
+        "stock_sleeve_pct": _f(stocks, 1),
+        "reit_pct": _f(reit, 1),
+        "bond_pct": _f(bonds, 1),
+        "gold_pct": _f(gold, 1),
     }
 
 
@@ -239,13 +288,15 @@ def _allocation_rows(alloc: Dict[str, Any], stats: Dict[str, Dict[str, Any]],
     return rows
 
 
-def _blended(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
-    """Weighted portfolio characteristics.
+def _blended(rows: List[Dict[str, Any]], history: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """Weighted costs and yield, and the model's risk from its own history.
 
-    Blended volatility here is the weighted average of each holding's volatility,
-    which overstates the real figure because it ignores the diversification
-    benefit of imperfect correlation. Stated plainly rather than quietly, since a
-    proper covariance calculation is the honest version of this number.
+    Return, volatility and drawdown come from `history` (_portfolio_history):
+    the fund weights held together over the one window every fund traded
+    through. They were weighted averages of each fund's full-history figures,
+    which mixes a 2019 fund's seven years with others' ten and presents the
+    result as a portfolio return nobody could have had; and an average of
+    drawdowns that happened at different times is not the portfolio's drawdown.
     """
     def wavg(key: str) -> Optional[float]:
         pairs = [(r["weight_pct"], r[key]) for r in rows if r.get(key) is not None]
@@ -254,22 +305,76 @@ def _blended(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
         w = sum(p[0] for p in pairs)
         return _f(sum(p[0] * p[1] for p in pairs) / w, 2) if w else None
 
+    h = history or {}
+    ok = bool(h.get("available"))
     return {
         "expense_ratio_pct": wavg("expense_ratio_pct"),
         "yield_pct": wavg("yield_pct"),
-        "cagr_10y_pct": wavg("cagr_10y_pct"),
-        # Full-history CAGR drives the projection: it's defined for every fund,
-        # including younger ones like AVUV that have no 10-year figure and would
-        # otherwise drop silently out of the weighted average.
-        "cagr_long_pct": wavg("cagr_full_pct"),
         "min_years_history": min((r.get("years_of_history") or 99) for r in rows) if rows else None,
-        "volatility_pct_upper_bound": wavg("volatility_pct"),
-        "max_drawdown_pct": wavg("max_drawdown_pct"),
+        "return_basis": h.get("return_basis"),
+        # The projection's rate: the model's own hypothetical record over one window
+        "cagr_long_pct": h.get("cagr_pct") if ok else None,
+        "volatility_pct": h.get("volatility_pct") if ok else None,
+        "max_drawdown_pct": h.get("max_drawdown_pct") if ok else None,
+        "window": {k: h.get(k) for k in ("start", "end", "years", "sessions")} if ok else None,
         "caveat": (
-            "Blended volatility and drawdown are weighted averages of the individual funds, so "
-            "they overstate portfolio risk. Holdings that don't move together partly cancel out. "
-            "Treat them as an upper bound."
+            "Return, volatility and worst fall are the fund weights above held together, rebalanced "
+            "each January, from {} to {} ({:.1f} years, the stretch every fund traded through). {} "
+            "A hypothetical record before costs and taxes beyond the funds' own expenses: nobody held "
+            "this exact mix, and a past fall is not a limit on a future one.".format(
+                h.get("start"), h.get("end"), h.get("years") or 0, RETURN_BASIS.get(h.get("return_basis"), ""))
+            if ok else (h.get("reason") or "Too little shared history to measure the model as one portfolio.")
         ),
+    }
+
+
+def _portfolio_history(frames: Dict[str, pd.DataFrame], weights: Dict[str, float]) -> Dict[str, Any]:
+    """The model's fund weights as one portfolio, over the window they share.
+
+    Rebalanced to target on the first session of each year, the way a yearly
+    contribution would be pointed at the underweights; between those dates each
+    fund's share drifts with its own return.
+    """
+    by_sym = {BY_ROLE[r]["symbol"]: float(w) for r, w in (weights or {}).items() if r in BY_ROLE and w}
+    series, bases = {}, set()
+    for sym in by_sym:
+        closes, basis = _return_series((frames or {}).get(sym))
+        if closes is None:
+            return {"available": False, "reason": "No price history for {}, so the model cannot be measured as one portfolio.".format(sym)}
+        series[sym] = closes
+        bases.add(basis)
+    if not series:
+        return {"available": False, "reason": "No fund weights to measure."}
+    joined = pd.DataFrame(series).dropna()
+    if len(joined) < 3 * TRADING_DAYS:
+        return {"available": False, "reason": "Fewer than three years when every fund in the model traded."}
+    total_w = sum(by_sym.values())
+    target = np.array([by_sym[c] / total_w for c in joined.columns])
+    rets = joined.pct_change().fillna(0.0).to_numpy()
+    years_idx = np.array([pd.Timestamp(x).year for x in joined.index])
+    value, hold, path = 1.0, target.copy(), []
+    for i in range(len(joined)):
+        if i:
+            if years_idx[i] != years_idx[i - 1]:
+                hold = target * value
+            hold = hold * (1.0 + rets[i])
+            value = float(hold.sum())
+        path.append(value)
+    path = np.array(path)
+    yrs = (len(path) - 1) / TRADING_DAYS
+    daily = np.diff(path) / path[:-1]
+    peak = np.maximum.accumulate(path)
+    return {
+        "available": True,
+        "return_basis": bases.pop() if len(bases) == 1 else "mixed",
+        "start": str(pd.Timestamp(joined.index[0]).date()),
+        "end": str(pd.Timestamp(joined.index[-1]).date()),
+        "years": _f(yrs, 1),
+        "sessions": int(len(path)),
+        "cagr_pct": _f((path[-1] ** (1.0 / yrs) - 1.0) * 100.0, 2),
+        "volatility_pct": _f(float(np.std(daily, ddof=1) * np.sqrt(TRADING_DAYS) * 100.0), 2),
+        "max_drawdown_pct": _f(float((path / peak - 1.0).min() * 100.0), 1),
+        "rebalance": "first session of each year",
     }
 
 
@@ -278,12 +383,13 @@ def _blended(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
 
 def _projection(annual: float, years: int, cagr_pct: Optional[float],
                 vol_pct: Optional[float]) -> Dict[str, Any]:
-    """Compound annual contributions at the blended historical rate.
+    """Compound annual contributions at the model's historical rate.
 
-    This is arithmetic on past returns, not a forecast. The bands come from
-    applying ±1 standard deviation to the annualized rate, which is a crude way
-    to show dispersion — real return sequences matter, and a bad decade early
-    hurts far more than the same decade late.
+    This is arithmetic on past returns, not a forecast. The band moves the rate
+    up and down by the volatility over the square root of the horizon: a
+    sensitivity scenario, not a calibrated probability interval. Real return
+    sequences matter, and a bad decade early hurts far more than the same decade
+    late.
     """
     if cagr_pct is None or years < 1:
         return {"available": False,
@@ -324,12 +430,19 @@ def _projection(annual: float, years: int, cagr_pct: Optional[float],
         "balance_high": high[-1]["balance"],
         "series_low": [p["balance"] for p in low],
         "series_high": [p["balance"] for p in high],
+        "contribution_timing": "Each year's contribution goes in at the start of the year, then grows for the whole year.",
+        "dollars": "nominal",
+        "inflation_note": (
+            "Nominal dollars, not adjusted for inflation. At 3% a year, an assumption rather than a "
+            "forecast, a dollar in {} years buys what about ${:.2f} buys today.".format(years, 1.0 / (1.03 ** years))),
+        "band_note": (
+            "The band is a scenario: the rate moved up and down by the portfolio's volatility over "
+            "the square root of {} years ({:.1f} points). It shows how much the end balance depends "
+            "on the average return; it is not a probability range and not a best or worst case.".format(years, spread)),
         "caveat": (
             "Arithmetic on past returns, not a prediction. It assumes you contribute every year "
-            "without fail, never sell, and that the coming decades resemble the last one. The band "
-            "is one standard error of the annualized return (σ/√years), so it shows uncertainty in "
-            "the long-run average, not the risk of a bad decade landing early. Sequence of returns "
-            "matters more than the average, and this doesn't model it."
+            "without fail, never sell, and that the coming decades resemble the window measured. "
+            "Sequence of returns matters more than the average, and this doesn't model it."
         ),
     }
 
@@ -739,22 +852,25 @@ def _roth_notes(alloc: Dict[str, Any], risk: str, years: int) -> List[Dict[str, 
     """Why the Roth wrapper changes the answer, not just generic allocation talk."""
     notes = [
         {
-            "title": "Put your highest-growth assets here",
-            "body": "Growth inside a Roth is never taxed, so the space is worth most to whatever you "
-                    "expect to compound fastest. If you hold both a Roth and a taxable account, the "
-                    "aggressive equity sleeve belongs in the Roth and the boring ballast in taxable.",
+            "title": "Tax-free growth favours higher-growth assets",
+            "body": "Qualified Roth withdrawals are tax-free: after age 59½ and at least five years "
+                    "after your first Roth contribution (with exceptions for disability, death and up "
+                    "to $10,000 for a first home). Earnings taken out before that can be taxed and "
+                    "penalised, though your contributions can come out any time. Because growth is "
+                    "what goes untaxed, one common approach for someone with a taxable account too is "
+                    "to hold the faster-growing assets in the Roth. Whether it suits you depends on "
+                    "your other accounts, tax rates and when you will need the money.",
         },
         {
             "title": "Distributions are free of annual tax",
             "body": "REITs and high-dividend funds throw off income that is taxed every year in a "
-                    "taxable account. Inside a Roth that drag disappears, which makes this the "
-                    "cheapest place to own them if you want them at all.",
+                    "taxable account. Inside a Roth it is not taxed as it arrives, which makes the "
+                    "Roth a cheaper place to own them, if you want them at all.",
         },
         {
             "title": "No tax-loss harvesting",
-            "body": "Losses in a Roth aren't deductible, so there's no tax silver lining to a "
-                    "position that falls. That removes one argument for holding highly volatile "
-                    "single names here.",
+            "body": "Losses in a Roth aren't deductible, so there's no tax offset when a position "
+                    "falls. That removes one argument for holding highly volatile single names here.",
         },
         {
             "title": "Keep it to a handful of funds",
@@ -826,14 +942,21 @@ def analyse(provider, years: int = 30, risk: str = "balanced",
     if sleeve_pct > 0:
         keep = (100.0 - sleeve_pct) / 100.0
         alloc["weights"] = {k: _f(v * keep, 1) for k, v in alloc["weights"].items()}
-        alloc["stock_sleeve_pct"] = _f(sleeve_pct, 1)
-        alloc["equity_pct"] = _f((alloc["equity_pct"] or 0) * keep + sleeve_pct, 1)
-        alloc["bond_pct"] = _f((alloc["bond_pct"] or 0) * keep, 1)
+    # From the final weights, after the stock sleeve, so the headline is the table summed
+    alloc.update(allocation_summary(alloc["weights"], sleeve_pct))
 
     rows = _allocation_rows(alloc, stats, meta, annual)
-    blended = _blended(rows)
+    history = _portfolio_history(frames, alloc["weights"])
+    blended = _blended(rows, history)
     projection = _projection(annual, years, blended.get("cagr_long_pct"),
-                             blended.get("volatility_pct_upper_bound"))
+                             blended.get("volatility_pct"))
+    if projection.get("available"):
+        projection["rate_basis"] = (
+            "The fund weights' hypothetical yearly return from {} to {}, {}{}".format(
+                history.get("start"), history.get("end"),
+                RETURN_BASIS.get(history.get("return_basis"), "").rstrip(".").lower(),
+                ". The stock sleeve is grown at the same rate; its own record is not blended in."
+                if sleeve_pct > 0 else "."))
 
     fund_rows = []
     for fund in UNIVERSE:

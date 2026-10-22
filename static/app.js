@@ -704,7 +704,7 @@ const HEADER_DEFS = {
   'roth ira model allocation': "A rules-based target mix built from your horizon and risk tolerance, measured against ten years of fund data. A starting point to compare your own plan against. Not advice, and it knows nothing about your income, taxes or other accounts.",
   'target weights': "The model's suggested split, with what each fund costs to own, what it yields, and how badly it has fallen in the past. Weights are targets to rebalance toward, not prices to chase.",
   'contribution projection': "What steady annual contributions would compound to at the blended historical return of these funds. Arithmetic on the past, not a forecast. The band shows uncertainty in the average rate, not the risk of a bad decade arriving early.",
-  'what the roth wrapper changes': "Reasoning that applies specifically because this is a Roth: growth and distributions are never taxed, losses aren't deductible, and the annual limit is small.",
+  'what the roth wrapper changes': "Reasoning that applies specifically because this is a Roth: qualified withdrawals are tax-free (after 59½ and five years), distributions are not taxed as they arrive, losses aren't deductible, and the annual limit is small.",
   'fund universe': "Every candidate fund measured over its full history (return, cost, volatility and worst drawdown) so you can see why the model picked what it picked, and what it left out.",
   'correlation': "How closely two funds move together, from -1 to +1. Near +1 means owning both adds little diversification; the low pairs are what actually reduce risk.",
   'drift from target': "How far your actual holdings have wandered from the model weights. Markets cause this on their own. Whatever grows fastest ends up overweight, quietly making the portfolio riskier than you chose.",
@@ -32427,16 +32427,16 @@ function renderRoth(d) {
     <p class="caveat" style="margin-top:var(--space-2)">${gloss(d.limit_note || '')}</p>
 
     <div class="grid c4" style="margin:var(--space-3) 0">
-      ${tile('Equity', fmt(alloc.equity_pct, 0) + '%', 'stocks and REITs')}
-      ${tile('Bonds', fmt(alloc.bond_pct, 0) + '%', 'ballast')}
+      ${tile('Equity', fmt(alloc.equity_pct, 0) + '%', alloc.reit_pct > 0 ? `includes ${fmt(alloc.reit_pct, 1)}% REITs` : 'stocks and stock funds')}
+      ${tile('Bonds', fmt(alloc.bond_pct, 0) + '%', alloc.gold_pct > 0 ? `ballast; gold ${fmt(alloc.gold_pct, 1)}% besides` : 'ballast')}
       ${tile('Blended expense ratio', fmt(bl.expense_ratio_pct, 2) + '%',
     bl.expense_ratio_pct !== null ? `about ${money(Math.round((bl.expense_ratio_pct / 100) * 100000))} per $100k a year` : null)}
-      ${tile('Blended yield', fmt(bl.yield_pct, 2) + '%', 'untaxed inside a Roth')}
+      ${tile('Blended yield', fmt(bl.yield_pct, 2) + '%', 'not taxed as it arrives in a Roth')}
     </div>
 
     <h3>${hg('Target weights')}</h3>
     <table class="data">
-      <thead><tr><th>Fund</th><th>Weight</th><th>Per year</th><th>Expense</th><th>Yield</th><th>10y CAGR</th><th>Volatility</th><th>Worst drawdown</th></tr></thead>
+      <thead><tr><th>Fund</th><th>Weight</th><th>Per year</th><th>Expense</th><th>Yield</th><th>10y return a year</th><th>Volatility</th><th>Worst drawdown</th></tr></thead>
       <tbody>${allocRows}</tbody>
     </table>
     <p class="caveat">${gloss(bl.caveat || '')}</p>
@@ -32447,16 +32447,16 @@ function renderRoth(d) {
     <h2>${hg('Contribution projection')}</h2>
     ${pr.available ? `
       <p class="sub">Contributing ${money(pr.annual_contribution)} a year for ${pr.years} years at
-        a blended ${fmt(pr.rate_pct, 1)}%. The weighted historical return of the funds above.</p>
+        ${fmt(pr.rate_pct, 1)}% a year. ${esc(pr.rate_basis || '')}</p>
       <div class="grid c4" style="margin-bottom:var(--space-3)">
         ${tile('You put in', money(pr.total_contributed), `${pr.years} × ${money(pr.annual_contribution)}`)}
-        ${tile('Lower band', money(pr.balance_low), `at ${fmt(pr.rate_low_pct, 1)}%`)}
-        ${tile('Central estimate', money(pr.balance_base), `at ${fmt(pr.rate_pct, 1)}%`, 'up')}
-        ${tile('Upper band', money(pr.balance_high), `at ${fmt(pr.rate_high_pct, 1)}%`)}
+        ${tile('Lower scenario', money(pr.balance_low), `at ${fmt(pr.rate_low_pct, 1)}%`)}
+        ${tile('At the historical rate', money(pr.balance_base), `at ${fmt(pr.rate_pct, 1)}%, nominal`)}
+        ${tile('Upper scenario', money(pr.balance_high), `at ${fmt(pr.rate_high_pct, 1)}%`)}
       </div>
       <div id="legend-roth"></div>
       <div id="chart-roth"></div>
-      <p class="caveat">${gloss(pr.caveat || '')}</p>
+      <p class="caveat">${gloss([pr.band_note, pr.contribution_timing, pr.inflation_note, pr.caveat].filter(Boolean).join(' '))}</p>
     ` : `<div class="callout">${esc(pr.note || 'Projection unavailable.')}</div>`}
   </div>
 
@@ -32574,8 +32574,8 @@ function renderRoth(d) {
     // The band in one neutral colour, dashed as the legend says: orange under
     // green read as bad and good, and the lines were drawn solid.
     mount('legend-roth', legend([
-      { name: 'Central estimate', color: C.brand },
-      { name: 'Lower and upper band', color: C.ink2, dash: true },
+      { name: 'At the historical rate', color: C.brand },
+      { name: 'Lower and upper scenario', color: C.ink2, dash: true },
       { name: 'Contributions only', color: C.s7, dash: true },
     ]));
     mount('chart-roth', (w) => lineChart({
@@ -32583,9 +32583,9 @@ function renderRoth(d) {
       height: 300,
       labels: pr.series.map((p) => `yr ${p.year}`),
       series: [
-        { name: 'Central estimate', values: pr.series.map((p) => p.balance), color: C.brand },
-        { name: 'Lower band', values: pr.series_low, color: C.ink2, width: 1.5, marker: false, dash: '5 4' },
-        { name: 'Upper band', values: pr.series_high, color: C.ink2, width: 1.5, marker: false, dash: '5 4' },
+        { name: 'At the historical rate', values: pr.series.map((p) => p.balance), color: C.brand },
+        { name: 'Lower scenario', values: pr.series_low, color: C.ink2, width: 1.5, marker: false, dash: '5 4' },
+        { name: 'Upper scenario', values: pr.series_high, color: C.ink2, width: 1.5, marker: false, dash: '5 4' },
         { name: 'Contributions only', values: pr.series.map((p) => p.contributed), color: C.s7, width: 1.5, marker: false, dash: '5 4' },
       ],
       // The chart pads its range 8% below the lowest value, which on an
