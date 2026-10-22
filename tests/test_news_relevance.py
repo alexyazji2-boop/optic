@@ -223,7 +223,7 @@ def test_the_panel_reports_what_it_removed():
         _item("Some rival launches a product", "Its Q2 results were fine."),
     ]
     out = news.analyse(_Provider(items), "AAPL", limit=12)
-    assert out["dropped"] == {"filler": 1, "off_topic": 1, "total": 2,
+    assert out["dropped"] == {"filler": 1, "off_topic": 1, "landing": 0, "total": 2,
                               "surplus": 0}
     assert out["article_count"] == 1
 

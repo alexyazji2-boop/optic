@@ -804,6 +804,7 @@ def mark_open_positions(provider, rate: float = 0.0) -> Dict[str, int]:
                 closed_positions.append({
                     "id": pos["id"], "ticker": pos["ticker"],
                     "instrument": pos["instrument"], "direction": pos["direction"],
+                    "option_type": pos.get("option_type"), "strike": pos.get("strike"),
                     "entry_price": pos["entry_price"], "exit_price": fill,
                     "exit_reason": reason, "book": pos.get("book"),
                     "exit_at": _now(),

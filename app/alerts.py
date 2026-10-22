@@ -206,7 +206,10 @@ def from_scan(result: Dict[str, Any]) -> int:
         tkr = pos.get("ticker")
         made += raise_alert(
             "closed",
-            "%s closed: %s" % (tkr, pos.get("exit_reason") or "exit"),
+            # Which book, instrument and trade: two books closing the same name read as
+            # two identical "NOW closed: Stop hit" rows (pitch audit, 2026-10-22).
+            "%s %s closed%s: %s" % (tkr, _instrument_words(pos), _book_words(pos),
+                                    pos.get("exit_reason") or "exit"),
             ticker=tkr,
             body=_closed_body(pos),
             payload=pos,
@@ -214,6 +217,21 @@ def from_scan(result: Dict[str, Any]) -> int:
         ) and 1 or 0
 
     return made
+
+
+def _instrument_words(pos: Dict[str, Any]) -> str:
+    inst = pos.get("instrument") or "position"
+    if inst == "option":
+        parts = [str(pos.get("option_type") or "option")]
+        if pos.get("strike") is not None:
+            parts.insert(0, "{:g}".format(float(pos["strike"])))
+        return " ".join(parts)
+    return "{} {}".format(pos.get("direction") or "", inst).strip()
+
+
+def _book_words(pos: Dict[str, Any]) -> str:
+    book = str(pos.get("book") or "").strip()
+    return " in the %s book" % book.capitalize() if book else ""
 
 
 def _closed_body(pos: Dict[str, Any]) -> str:
@@ -237,6 +255,9 @@ def _closed_body(pos: Dict[str, Any]) -> str:
     out = (sentence + ".") if sentence else ""
     if held:
         out = (out + " Held %s." % held).strip()
+    if pos.get("id") is not None:
+        out = (out + " Trade #%s%s." % (pos["id"], ", entered at %s" % pos["entry_price"]
+                                         if pos.get("entry_price") is not None else "")).strip()
     # Absence stated rather than punctuated. An alert whose body is empty is
     # indistinguishable from the blank rows the view used to render.
     return out or "The ledger recorded the exit without a price or a duration."

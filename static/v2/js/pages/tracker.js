@@ -248,7 +248,7 @@ function paint() {
   // every reader, with pretend money; the reader's own practice portfolio and real accounts are elsewhere
   draw(mainEl, html`<header class="page-head">${sectionHead('portfolio', 'tracker')}
       <div class="whose" role="note"><p><b>This is Optic's demonstration portfolio, not yours.</b> Three simulated accounts trade Optic's own signals with pretend money, the same for every reader. No money is real and no order reaches a broker.</p>
-        <p>Your own practice portfolio is the <a class="textlink" href="#/paper">Paper Desk</a>.${store.signedIn() ? ' Accounts you link are under <a class="textlink" href="#/brokerage">Brokerage</a>, read only.' : ''}</p></div></header>
+        <p>Your own practice portfolio is the <a class="textlink" href="#/paper">Paper Desk</a>.${store.signedIn() ? html` Accounts you link are under <a class="textlink" href="#/brokerage">Brokerage</a>, read only.` : ''}</p></div></header>
     ${D.err ? failed("Optic's position ledger", D.err, { retry: 'load' }) : !d ? skeleton('rows', 6, "Loading Optic's own position ledger") : html`
       ${books(d)}${ledger(d)}${openPositions(d.open || [])}${months(d)}${funnel(d)}
       ${empty ? html`<section class="section"><h2 class="t-h2">No trades yet</h2><p>The ledger is empty. It only opens a position when a name's composite score clears ${num((d.config || {}).min_composite, 0)}, and most scans find nothing. Open "Run the shared scan" above to run one, or wait for the scheduled one.</p></section>` : ''}

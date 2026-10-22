@@ -42,6 +42,10 @@ BEARISH_TERMS = {
     "headwind": 2, "headwinds": 2, "slowdown": 2, "weak demand": 3, "shortfall": 3,
     "price target cut": 3, "dilution": 2, "offering": 1, "short seller": 3,
     "worst week": 3, "worst day": 3, "worst month": 3, "worst session": 3, "worst since": 3,
+    # "Apple faces margin pressure" scored +1 on "growth" elsewhere in it and read
+    # mildly bullish (pitch audit, 2026-10-22).
+    "margin pressure": 3, "margin squeeze": 3, "margins shrink": 3, "pressure on margins": 3,
+    "slows": 1, "slowing": 1, "weaker": 1,
     "biggest drop": 3, "biggest decline": 3, "sell-off": 3, "selloff": 3, "rout": 3, "steer clear": 2,
 }
 
@@ -506,19 +510,58 @@ def _age_words(age_hours: Optional[float]) -> str:
     return "{} day{} ago".format(days, "" if days == 1 else "s")
 
 
+# A term just after one of these is not counted: "fails to beat", "no
+# approval", "not a recession". Counted as written, each scored the opposite of
+# what the headline says. Left out rather than flipped, because "not a beat" is
+# not the same claim as "a miss".
+_NEGATORS = re.compile(r"\b(?:not|no|never|without|fails?\s+to|failed\s+to|unlikely\s+to|"
+                       r"won'?t|didn'?t|doesn'?t|isn'?t|aren'?t|can'?t|cannot)\s+(?:\w+\s+){0,1}$")
+
+# Language that puts a headline's event in the future. Its tone is about an
+# expectation, so it counts half (FUTURE_WEIGHT) and the row says "future".
+FUTURE_TENSE = re.compile(
+    r"\b(?:could|may|might|would|expected\s+to|set\s+to|poised\s+to|likely\s+to|plans?\s+to|"
+    r"aims?\s+to|to\s+report|will|preview|what\s+to\s+expect|ahead\s+of|upcoming)\b", re.I)
+FUTURE_WEIGHT = 0.5
+
+
 def _score_text(text: str) -> Tuple[float, List[str]]:
+    """The headline's tone from its wording: whole words only ("beat" had
+    matched "beaten" and "upbeat"), a negated term left out, and half weight for
+    a headline about something that has not happened."""
     lowered = " " + re.sub(r"\s+", " ", text.lower()) + " "
     score = 0.0
     hits: List[str] = []
-    for term, weight in BULLISH_TERMS.items():
-        if term in lowered:
-            score += weight
-            hits.append("+" + term)
-    for term, weight in BEARISH_TERMS.items():
-        if term in lowered:
-            score -= weight
-            hits.append("-" + term)
+    for terms, sign in ((BULLISH_TERMS, "+"), (BEARISH_TERMS, "-")):
+        for term, weight in terms.items():
+            counted = False
+            # a whole word, with its plain inflections ("crashes", "rallying"), so
+            # "beat" no longer matches "beaten" or "upbeat"
+            for m in re.finditer(r"(?<![\w-])" + re.escape(term) + r"(?:s|es|ed|d|ing)?(?![\w-])", lowered):
+                if _NEGATORS.search(lowered[:m.start()]):
+                    hits.append("~" + term)
+                    continue
+                counted = True
+            if counted:
+                score += weight if sign == "+" else -weight
+                hits.append(sign + term)
+    if FUTURE_TENSE.search(text or ""):
+        score *= FUTURE_WEIGHT
     return score, hits
+
+
+# Pages that are a site's own index rather than a story: "Apple Inc. (AAPL)
+# Stock Price, News, Quote & History", a "Stock Market News" landing page. They
+# arrive with fresh-looking timestamps and say nothing (pitch audit, 2026-10-22).
+_LANDING = re.compile(
+    r"stock\s+price,?\s+news|price,\s+quote|quote\s*(?:&|and)\s*history|\bstock\s+quote\b"
+    r"|^\s*(?:latest\s+)?(?:stock\s+)?market\s+news\s*$|^\s*(?:\w+\s+){0,3}news\s*(?:\||-|$)"
+    r"|\blive\s+(?:stock\s+)?(?:quotes?|prices?)\b", re.I)
+_LANDING_URL = re.compile(r"/(?:quote|quotes|symbol|stocks?)/[A-Za-z.^=-]{1,12}/?(?:\?.*)?$|/news/?(?:\?.*)?$", re.I)
+
+
+def is_landing_page(title: str, url: str = "") -> bool:
+    return bool(_LANDING.search(title or "") or _LANDING_URL.search(url or ""))
 
 
 
@@ -897,8 +940,11 @@ def analyse(provider, ticker: str, limit: int = 12) -> Dict[str, Any]:
 
     name_words = _name_words(company_name)
     scored: List[Dict[str, Any]] = []
-    dropped: Dict[str, int] = {"filler": 0, "off-topic": 0}
+    dropped: Dict[str, int] = {"filler": 0, "off-topic": 0, "landing": 0}
     for item in items:
+        if is_landing_page(str(item.get("title") or ""), str(item.get("url") or "")):
+            dropped["landing"] += 1
+            continue
         blob = "{} {}".format(item.get("title", ""), item.get("summary", ""))
         score, hits = _score_text(blob)
         age = _age_hours(item.get("published", ""))
@@ -937,6 +983,12 @@ def analyse(provider, ticker: str, limit: int = 12) -> Dict[str, Any]:
                 "url": item.get("url"),
                 "sentiment_score": round(score, 2),
                 "tone": tone,
+                # The headline's wording, not a forecast of the stock; a separate
+                # thing from the tier (importance) and from any market effect,
+                # which this does not infer.
+                "tone_basis": "headline wording",
+                "tense": "future" if FUTURE_TENSE.search(blob) else "past or present",
+                "time_basis": "publication time from the feed; the event itself may be earlier or later",
                 "keywords": hits[:8],
                 "catalysts": cats,
                 "tier": placed["tier"],
@@ -1053,7 +1105,7 @@ def analyse(provider, ticker: str, limit: int = 12) -> Dict[str, Any]:
                 )
             )
 
-    removed = dropped["filler"] + dropped["off-topic"]
+    removed = dropped["filler"] + dropped["off-topic"] + dropped["landing"]
     return {
         "method": "Lexicon sentiment and regex catalyst tagging over the "
                   "headline feed, recency-weighted. Ranked by tier, then "
@@ -1073,8 +1125,14 @@ def analyse(provider, ticker: str, limit: int = 12) -> Dict[str, Any]:
         # is a headline about some other company with nothing market-wide in
         # it. `surplus` is the tail past the requested limit and is not a
         # judgement about the items.
+        "fetched_at": (datetime.fromtimestamp(held_at, timezone.utc).isoformat() if held_at
+                       else datetime.now(timezone.utc).isoformat()),
+        "times_note": ("Each time is when the story was published, as the feed gives it. "
+                       "An event can be earlier (a report covered the next morning) or later "
+                       "(a preview of a date ahead). The list was fetched at fetched_at."),
         "dropped": {"filler": dropped["filler"],
                     "off_topic": dropped["off-topic"],
+                    "landing": dropped["landing"],
                     "total": removed,
                     "surplus": surplus},
         "matched_on": _match_terms(ticker, company_name),

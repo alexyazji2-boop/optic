@@ -409,3 +409,67 @@ def test_the_execution_note_is_beside_the_record():
     src = open("app/paper.py").read()
     assert "fill = min(pos[\"stop\"], price) if long_pos else max(pos[\"stop\"], price)" in src, "a gap through a long's stop fills below it"
     assert "How fills are modelled." in (JS / "pages/tracker.js").read_text()
+
+
+# ---------------------------------------------------------------- 14. headline tone, tense, pages and times
+
+@pytest.mark.parametrize("title,sign", [
+    ("Apple faces margin pressure as growth slows in China", -1),
+    ("Company fails to beat estimates", 0),
+    ("Shares sink after the miss", -1),
+    ("Upbeat outlook for the beaten-down stock", 0),
+])
+def test_tone_reads_negation_whole_words_and_margin_pressure(title, sign):
+    score, hits = news_mod._score_text(title)
+    assert (score > 0) - (score < 0) == sign, (title, score, hits)
+
+
+def test_a_future_headline_counts_half_and_says_so():
+    past, _ = news_mod._score_text("Apple beat estimates")
+    future, _ = news_mod._score_text("Apple could beat estimates")
+    assert future == past * news_mod.FUTURE_WEIGHT
+
+
+@pytest.mark.parametrize("title,url,landing", [
+    ("Apple Inc. (AAPL) Stock Price, News, Quote & History", "https://finance.yahoo.com/quote/AAPL/", True),
+    ("Stock Market News", "https://example.com/news/", True),
+    ("Apple ships a minor iOS point release", "https://example.com/news/apple-ships-ios-1.html", False),
+])
+def test_site_index_pages_are_left_out(title, url, landing):
+    assert news_mod.is_landing_page(title, url) is landing
+
+
+def test_rows_say_what_their_time_and_tone_measure():
+    class P:
+        def news(self, t, limit=12):
+            return [{"title": "Apple could beat estimates next week", "summary": "", "publisher": "Reuters",
+                     "published": "2026-10-21T12:00:00Z", "url": "https://x.test/1"},
+                    {"title": "Apple Inc. (AAPL) Stock Price, News, Quote & History", "publisher": "Yahoo",
+                     "published": "2026-10-22T12:00:00Z", "url": "https://finance.yahoo.com/quote/AAPL/"}]
+        def earnings_date(self, t): return None
+        def quote(self, t): return {"name": "Apple Inc."}
+    out = news_mod.analyse(P(), "AAPL")
+    row = out["articles"][0]
+    assert row["tense"] == "future" and row["tone_basis"] == "headline wording" and row["publisher"] == "Reuters"
+    assert "publication time" in row["time_basis"] and out["fetched_at"] and out["dropped"]["landing"] == 1
+
+
+# ---------------------------------------------------------------- 15. rendering and record identity
+
+def test_the_portfolio_intro_link_is_markup_not_text():
+    tr = (JS / "pages/tracker.js").read_text()
+    assert "store.signedIn() ? html` Accounts you link are under <a class=\"textlink\" href=\"#/brokerage\">Brokerage</a>" in tr
+    assert "store.signedIn() ? ' Accounts you link" not in tr
+
+
+def test_two_books_closing_one_name_are_two_identified_alerts(monkeypatch):
+    from app import alerts as alerts_mod
+    raised = []
+    monkeypatch.setattr(alerts_mod, "raise_alert", lambda kind, title, **kw: raised.append((title, kw)) or True)
+    base = {"ticker": "NOW", "instrument": "shares", "direction": "long", "exit_reason": "Stop hit",
+            "exit_price": 900.0, "entry_price": 950.0, "exit_at": "2026-10-21T15:00:00+00:00"}
+    alerts_mod.from_scan({"closed_positions": [dict(base, id=11, book="balanced"), dict(base, id=12, book="aggressive")]})
+    titles = [t for t, _ in raised]
+    assert titles == ["NOW long shares closed in the Balanced book: Stop hit", "NOW long shares closed in the Aggressive book: Stop hit"]
+    assert len({kw["dedupe_key"] for _, kw in raised}) == 2, "kept apart by trade id, not merged on matching text"
+    assert "Trade #11, entered at 950.0." in raised[0][1]["body"]

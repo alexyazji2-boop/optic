@@ -37,10 +37,10 @@ function timeline(articles) {
 
 function row(a) {
   // A tone is shown only when a scored term supports it; the terms are its evidence (owner, 2026-10-19).
-  const terms = (a.keywords || []).map((k) => `${k.slice(1)} (${k[0] === '+' ? 'positive' : 'negative'})`);
-  return html`<li class="nw"><div class="nw-top"><span class="pill" title="${a.tier_why || ''}">${capFirst(a.tier || '')}</span>${terms.length ? html`<span class="nw-tone ${toneShape(a.tone)}" title="Scored on: ${terms.join(', ')}">${capFirst(a.tone || 'mixed') === 'Neutral' ? 'Mixed' : capFirst(a.tone)}</span>` : html`<span class="nw-tone flat" title="No word in Optic's list of scored terms appears in this headline">Not scored</span>`}</div>
+  const terms = (a.keywords || []).filter((k) => k[0] !== '~').map((k) => `${k.slice(1)} (${k[0] === '+' ? 'positive' : 'negative'})`);
+  return html`<li class="nw"><div class="nw-top"><span class="pill" title="${a.tier_why || ''}">${capFirst(a.tier || '')}</span>${terms.length ? html`<span class="nw-tone ${toneShape(a.tone)}" title="Headline wording, scored on: ${terms.join(', ')}${a.tense === 'future' ? '. About something ahead, so it counts half' : ''}">${capFirst(a.tone || 'mixed') === 'Neutral' ? 'Mixed' : capFirst(a.tone)} wording</span>` : html`<span class="nw-tone flat" title="No word in Optic's list of scored terms appears in this headline">Not scored</span>`}</div>
     <a class="nw-title" href="${a.url}" target="_blank" rel="noopener">${clean(a.title)}</a>
-    <p class="t-muted">${a.publisher}, ${a.age_words || ''}</p>
+    <p class="t-muted">${a.publisher || 'Publisher not given'}, published ${a.age_words || 'at an unknown time'}${a.tense === 'future' ? ', about something ahead' : ''}</p>
     ${a.summary ? html`<p>${clean(a.summary).slice(0, 220)}${a.summary.length > 220 ? '…' : ''}</p>` : ''}
     ${(a.catalysts || []).length ? html`<p class="nw-tags">${a.catalysts.map((c) => html`<span class="flag">${c.type}</span>`)}</p>` : ''}</li>`;
 }
@@ -53,7 +53,7 @@ function body(sym) {
   const about = shown.filter((a) => a.about_company !== false), ctx = shown.filter((a) => a.about_company === false);
   const tc = n.tier_counts || {};
   return html`<section class="section" aria-labelledby="nt-h"><div class="section-head"><div><h2 class="t-h2" id="nt-h">News and catalysts</h2>
-      <p class="section-sub"><span class="nw-tone ${toneShape(n.overall_tone)}">${capFirst(n.overall_tone || 'neutral')}</span> overall, net ${signed(n.net_sentiment, 2, '')} across ${n.article_count} headlines.</p>${how(html`<p>The net tone adds up each headline's score. Beyond ±0.5 it leans one way, beyond ±2 it is strong.</p>`)}</div>
+      <p class="section-sub"><span class="nw-tone ${toneShape(n.overall_tone)}">${capFirst(n.overall_tone || 'neutral')}</span> overall, net ${signed(n.net_sentiment, 2, '')} across ${n.article_count} headlines.</p>${how(html`<p>The net tone adds up each headline's wording score, weighted toward the newest. Beyond ±0.5 it leans one way, beyond ±2 it is strong. It describes how the headlines are worded: how much a story matters is its tier, and what it did to the price is not inferred here. A negated term ("fails to beat") is not counted, and a headline about something ahead counts half.</p>`)}</div>
       ${miloButton('Ask Milo about the news', { ask: `Which recent ${sym} headlines matter for the stock, and why?`, context: `${sym} Dossier, News`, symbol: sym })}</div>
     ${n.earnings_warning ? html`<p class="stale">${clean(n.earnings_warning)}</p>` : ''}${(n.held || {}).note ? html`<p class="stale">${clean(n.held.note)}</p>` : ''}
     <div class="chart-wrap tl-wrap">${raw(timeline(arts))}</div>
@@ -61,7 +61,7 @@ function body(sym) {
     ${(n.catalyst_summary || []).length ? html`<h3>Catalyst types found</h3><div class="chips" role="group" aria-label="Show headlines by catalyst">${n.catalyst_summary.map((c) => html`<button type="button" class="chip" data-v2-cat="${c.type}" aria-pressed="${filter === c.type}">${capFirst(c.type)} <span class="t-muted">${c.mentions}, ${c.lean}</span></button>`)}${filter ? html`<button type="button" class="textlink" data-v2-cat="">Show all</button>` : ''}</div>` : ''}
     <h3>About ${sym} <span class="t-muted">${about.length}</span></h3>${about.length ? html`<ul class="nw-list">${about.map(row)}</ul>` : html`<p class="quiet">None ${filter ? 'with this catalyst' : ''}.</p>`}
     ${ctx.length ? html`<h3>Market context <span class="t-muted">${ctx.length}</span></h3><ul class="nw-list">${ctx.map(row)}</ul>` : ''}
-    <p class="asof">${(n.dropped || {}).total ? `Left out: ${n.dropped.filler || 0} filler and ${n.dropped.off_topic || 0} off-topic headlines.` : ''}</p>
+    <p class="asof">${(n.dropped || {}).total ? `Left out: ${n.dropped.filler || 0} filler, ${n.dropped.off_topic || 0} off-topic and ${n.dropped.landing || 0} site index pages. ` : ''}${clean(n.times_note || '')}</p>
     <details class="more-inline"><summary>How these are ranked</summary><ul class="plain">${(n.tiers || []).map((t) => html`<li><b>${t.label}</b> (${tc[t.id] || 0}): ${clean(t.rule)}</li>`)}</ul>
       <p>Matched on ${(n.matched_on || []).join(', ')}. A catalyst type has no direction of its own; its lean is the average tone of its headlines. These rules cannot read sarcasm, judge a source or know what the market already priced.</p><p class="asof">${clean(n.method || '')}</p></details>
   </section>`;
