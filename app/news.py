@@ -1070,9 +1070,13 @@ def analyse(provider, ticker: str, limit: int = 12) -> Dict[str, Any]:
         return lean_from_scores(catalyst_scores.get(name) or [])
 
     # The last report, so an earnings headline can be placed before or after it
-    # (report_dates). Ten quarters cached by /api/ticker's own fundamentals.
+    # (report_dates). Ten quarters cached by /api/ticker's own fundamentals, and
+    # asked for only when a headline carries an earnings tag: a scan reads news
+    # for every shortlisted name, and most have none.
     last_report = None
     try:
+        if not any(c.get("type") == "earnings" for r in scored for c in r["catalysts"]):
+            raise LookupError("no earnings headline")
         today = _today_et()
         past = [r.get("date") for r in (provider.earnings_history(ticker) or [])
                 if r.get("date") and _as_date(r.get("date")) and _as_date(r.get("date")) <= today

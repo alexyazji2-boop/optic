@@ -547,3 +547,19 @@ def test_read_calendar_puts_earlier_reports_in_the_past_tense(tmp_path):
     assert got["today"] == "2026-10-22"
     assert got["day"] == ["GS reported|true", "TSLA reports today|false", "AAPL reports|false"]
     assert got["late"] == got["day"]
+
+
+def test_the_earnings_history_is_asked_for_only_when_a_headline_needs_it():
+    calls = []
+
+    class P:
+        def __init__(self, title): self.title = title
+        def news(self, t, limit=12):
+            return [{"title": self.title, "summary": "", "publisher": "AP", "published": "2026-10-21T12:00:00Z", "url": "https://x.test/1"}]
+        def earnings_date(self, t): return "2026-11-02"
+        def earnings_history(self, t, limit=10):
+            calls.append(t); return [{"date": "2026-07-30", "eps_reported": 1.5}]
+        def quote(self, t): return {"name": "Apple Inc."}
+    assert news_mod.analyse(P("Apple ships a new iPad"), "AAPL")["last_report_date"] is None and calls == []
+    assert news_mod.analyse(P("Apple earnings preview: what to expect"), "AAPL")["last_report_date"] == "2026-07-30"
+    assert calls == ["AAPL"]
