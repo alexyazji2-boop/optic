@@ -19,8 +19,8 @@ function rowsOf(g) {
 
 function table(sc, hasOptions) {
   const cols = hasOptions ? 6 : 4;
-  return html`<div class="tscroll"><table class="t sc-t"><thead><tr><th scope="col">If</th><th scope="col">Change in value</th><th scope="col">Of today's value</th><th scope="col">Hardest hit</th>${hasOptions ? html`<th scope="col">Options alone</th><th scope="col">Delta alone says</th>` : ''}</tr></thead>
-    <tbody>${sc.groups.map((g) => html`<tr class="sc-g"><th scope="colgroup" colspan="${cols}">${g.title}</th></tr>
+  return html`<div class="tscroll"><table class="t scn-t"><thead><tr><th scope="col">If</th><th scope="col">Change in value</th><th scope="col">Of today's value</th><th scope="col">Hardest hit</th>${hasOptions ? html`<th scope="col">Options alone</th><th scope="col">Delta alone says</th>` : ''}</tr></thead>
+    <tbody>${sc.groups.map((g) => html`<tr class="scn-g"><th scope="colgroup" colspan="${cols}">${g.title}</th></tr>
       ${rowsOf(g).map((r) => (r.unavailable ? html`<tr><th scope="row">${clean(r.label)}</th><td colspan="${cols - 1}" class="t-muted">${clean(r.unavailable)}</td></tr>`
           : html`<tr><th scope="row">${clean(r.label)}${(r.left_out || []).length ? html` <small class="t-muted">without ${r.left_out.join(', ')}</small>` : ''}</th>${cell(r.pnl)}<td class="n ${dir(r.pnl)}">${pctOf(r.pnl, sc.gross_value)}</td>
           <td>${(r.worst || []).length ? r.worst.map((w) => `${w.symbol} ${signedMoney(w.pnl, 0)}`).join(', ') : html`<span class="t-muted">none lose</span>`}</td>
@@ -31,14 +31,14 @@ function lead(sc) {
   const find = (gid, id) => ((sc.groups.find((g) => g.id === gid) || { rows: [] }).rows.find((r) => r.id === id));
   const all = find('together', 'all-10'), spx = find('market', 'spx-10');
   if (!all) return '';
-  return html`<p class="sc-lead">If every holding fell 10% together, these positions would be worth about <b class="${dir(all.pnl)}">${money(Math.abs(all.pnl), 0)} ${all.pnl < 0 ? 'less' : 'more'}</b> (${pctOf(all.pnl, sc.gross_value)})${spx && isNum(spx.pnl) ? html`; a 10% fall in the S&P 500, through each holding's beta, comes to <b class="${dir(spx.pnl)}">${signedMoney(spx.pnl, 0)}</b>` : ''}.</p>`;
+  return html`<p class="scn-lead">If every holding fell 10% together, these positions would be worth about <b class="${dir(all.pnl)}">${money(Math.abs(all.pnl), 0)} ${all.pnl < 0 ? 'less' : 'more'}</b> (${pctOf(all.pnl, sc.gross_value)})${spx && isNum(spx.pnl) ? html`; a 10% fall in the S&P 500, through each holding's beta, comes to <b class="${dir(spx.pnl)}">${signedMoney(spx.pnl, 0)}</b>` : ''}.</p>`;
 }
 
 function exposures(e, sc) {
   const c = e.concentration || {}, nl = e.nonlinear || {};
   const kv = (t, v, note) => html`<div><dt>${t}</dt><dd>${v}</dd>${note ? html`<dd class="note">${note}</dd>` : ''}</div>`;
   const opts = isNum(e.premium_at_risk) || isNum(e.short_premium) || isNum(nl.vega_per_point);
-  return html`<dl class="kv sc-kv">
+  return html`<dl class="kv scn-kv">
       ${kv('Delta-adjusted, net', money(e.delta_adjusted_net, 0), `gross ${money(e.delta_adjusted_gross, 0)}: what it moves like`)}
       ${kv('Notional, gross', money(e.gross_notional, 0), `net ${money(e.net_notional, 0)}: what it controls`)}
       ${opts ? kv('Premium at risk', money(e.premium_at_risk || 0, 0), 'the most the long options can lose') : ''}
