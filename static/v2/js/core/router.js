@@ -35,6 +35,8 @@ export function parse(hash = location.hash) {
   const symbol = parts[0].toUpperCase();
   if (!/^[A-Z0-9.^=-]{1,12}$/.test(symbol)) return { view: 'notfound', params };
   const tab = (parts[1] || '').toLowerCase();
+  // the printable research sheet: reached from the Dossier's menu, not a tab of its own (roadmap stage 4)
+  if (tab === 'sheet') return { view: 'sheet', symbol, params };
   return { view: TAB_VIEW[tab] || 'overview', symbol, params };
 }
 
