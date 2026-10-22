@@ -895,6 +895,9 @@ html.ch-max .ch-side, html.ch-max .ch-wrail { max-height: min(calc(100vh - 16px)
 /* Chip rows wrap at every width: scrolling sideways clipped the last chips with no sign more were there
    (overnight sweep, 2026-10-19). */
 @media (max-width: 860px) { .chips-scroll { flex-wrap: wrap; } }
+/* Scan's examples as a fold: one line on a phone, open from 641 px (pitch audit, 2026-10-22) */
+.sc-ex { margin-top: 4px; } .sc-ex > summary { display: inline-flex; align-items: center; gap: 6px; min-height: var(--tap); cursor: pointer; font: 500 var(--t-md)/1.3 var(--f-label); color: var(--c-ink-2); }
+.sc-ex[open] > summary { margin-bottom: 4px; }
 .t td .textlink, .top-list .textlink { min-width: 44px; justify-content: flex-start; text-align: left; }
 
 /* ---------- Settings and Reports (round 4) ---------- */
@@ -1463,6 +1466,13 @@ ul.cal-react { display: flex; flex-wrap: wrap; gap: 4px 18px; padding-left: 0; l
   .ws-onboard .ob-picks { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .ws-onboard .ob-picks .ob-follow { justify-content: flex-start; text-align: left; }
   .ob-ways { gap: var(--s-3); }
+}
+/* A phone: each way is its lead and its action on one row, the explanation left for wider screens; the card
+   was 533 px of a 780 px screen at 360 wide (pitch audit, 2026-10-22). "It does not buy shares" stays. */
+@media (max-width: 640px) {
+  .ob-ways .ob-more { display: none; }
+  .ob-ways li:not(:last-child) { grid-template-columns: minmax(0, 1fr) auto; align-items: center; }
+  .ws-onboard .ob-picks { gap: 4px; }
 }
 
 /* Overview for a newcomer (beginner brief, 2026-10-20, items 5 and 6): what the company does first, in a few lines */

@@ -67,13 +67,16 @@ function screenTable(res, emptyText) {
 }
 
 /* ---------------- Find stocks ---------------- */
+const wideScreen = () => { try { return matchMedia('(min-width: 641px)').matches; } catch (e) { return true; } };
 function ask() {
   const r = S.ask, recent = readKey(RECENT_KEY, []);
   return html`<section class="section first" aria-labelledby="fs-h"><h2 class="t-h2" id="fs-h">Find stocks</h2>
     <form class="ask-form" data-v2-ask><label class="sr" for="sc-ask">Describe the stocks you want</label><textarea id="sc-ask" name="text" maxlength="300" rows="2" placeholder="Strong stocks on the 200-day average right now">${S.askText || ''}</textarea>
       <div class="cluster"><button type="submit" class="btn btn-primary" ${S.asking ? 'disabled' : ''}>${S.asking ? 'Screening…' : 'Find symbols now'}</button>${miloButton(S.ask && S.ask.result ? 'Ask Milo about the results' : 'Ask Milo to help phrase it', { ask: S.ask && S.ask.result ? `I asked for "${S.askText}". ${S.ask.result.matched} of ${S.ask.result.considered} ranked names matched: ${(S.ask.result.rows || []).slice(0, 15).map((x) => x.symbol).join(', ')}. Which fit best, and what would make each stop fitting?` : 'Help me turn my idea into a stock screen.', context: 'Discover, Scan' })}</div></form>
-    <p class="asof">Most requests are read by fixed rules at no cost. Words the rules cannot read go to Milo and use one question from your allowance, once.</p>
-    <div class="chips chips-scroll" role="group" aria-label="Examples">${EXAMPLES.map((e) => html`<button type="button" class="chip" data-v2-ask-ex="${e}">${e}</button>`)}</div>
+    <p class="asof">Fixed rules read most requests at no cost; words they cannot read use one Milo question, once.</p>
+    ${/* on a phone the six examples fold to one line, so the results start on the first screen (pitch audit, 2026-10-22) */ ''}
+    <details class="sc-ex" ${wideScreen() ? 'open' : ''}><summary>Examples <span class="t-muted">${EXAMPLES.length}</span></summary>
+      <div class="chips chips-scroll" role="group" aria-label="Examples">${EXAMPLES.map((e) => html`<button type="button" class="chip" data-v2-ask-ex="${e}">${e}</button>`)}</div></details>
     ${recent.length ? html`<p class="t-label" style="margin-top:12px">Your recent requests <button type="button" class="textlink" data-v2-ask-clear>Clear</button></p><div class="chips chips-scroll">${recent.map((e) => html`<button type="button" class="chip" data-v2-ask-ex="${e}">${e}</button>`)}</div>` : ''}
     <div aria-live="polite">${r ? (r.error ? html`<div class="state err" role="alert"><p class="t-h3">The request did not run</p><p>${api.explain(r.error, 'The screen')}</p></div>` : html`
       <p class="t-label" style="margin-top:16px">Read by ${r.read_by === 'pulse' ? 'Milo' : 'the screener'}</p>

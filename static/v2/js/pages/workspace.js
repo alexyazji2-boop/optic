@@ -744,11 +744,11 @@ function onboard() {
   return html`<section class="ws-onboard" id="ws-new" aria-labelledby="ob-h">
     <div class="ob-text"><h2 class="ws-title" id="ob-h">New to Optic? Three ways to start</h2></div>
     <ul class="ob-ways">
-      <li><p><b>Research a company.</b> Search by its name, such as Apple, or by its ${term('ticker', 'ticker')}, the short code it trades under, such as AAPL.</p>
+      <li><p><b>Research a company.</b> <span class="ob-more">Search by its name, such as Apple, or by its ${term('ticker', 'ticker')}, the short code it trades under, such as AAPL.</span></p>
         <div class="ob-acts"><button type="button" class="btn btn-sm" data-v2-open-palette>Search for a company</button><a class="textlink ob-wide" href="#/AAPL">Apple · AAPL</a><a class="textlink ob-wide" href="#/NVDA">NVIDIA · NVDA</a></div></li>
-      <li><p><b>Understand today's market.</b> What moved, what is scheduled and what it means, in a few lines; Market conditions below sums it up too.</p>
+      <li><p><b>Understand today's market.</b> <span class="ob-more">What moved, what is scheduled and what it means, in a few lines; Market conditions below sums it up too.</span></p>
         <div class="ob-acts"><a class="btn btn-sm" href="#/read">Read today's market</a></div></li>
-      <li><p><b>Save a company to follow.</b> Following adds it to your ${term('watchlist', 'watchlist')}; it does not buy shares or spend money. SPY is a fund that tracks the S&P 500. ${store.signedIn() ? '' : 'Kept in this browser until you sign in.'}</p>
+      <li><p><b>Save a company to follow.</b> Following adds it to your ${term('watchlist', 'watchlist')}; it does not buy shares or spend money. <span class="ob-more">SPY is a fund that tracks the S&P 500. ${store.signedIn() ? '' : 'Kept in this browser until you sign in.'}</span></p>
         <div class="ob-picks" role="group" aria-label="Follow a company">${STARTERS.map((sym) => followBtn(sym))}</div></li>
     </ul>
     <button type="button" class="btn btn-sm" data-ws-onboard-done>${following.length ? 'Done' : 'Not now'}</button>
