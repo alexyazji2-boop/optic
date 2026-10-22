@@ -3178,6 +3178,11 @@ def auto_loaded_sources(context: Optional[Dict[str, Any]]) -> List[Dict[str, Any
         out.append({"symbols": [str(sym).upper()], "label": "{} quote, chart and options summary".format(str(sym).upper()),
                     "data_type": "quote, chart and options summary", "source": (q or {}).get("source"),
                     "as_of": (q or {}).get("as_of_utc"), "ok": True})
+    # Named by the question but not fetched in time: still what the answer is about, said with no data
+    skipped = ((context or {}).get("auto_load_skipped") or {}).get("symbols") or [] if isinstance((context or {}).get("auto_load_skipped"), dict) else []
+    for sym in skipped:
+        out.append({"symbols": [str(sym).upper()], "label": "{} not loaded in time".format(str(sym).upper()),
+                    "data_type": "quote, chart and options summary", "ok": False, "status": "timeout"})
     return out
 
 

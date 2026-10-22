@@ -336,11 +336,14 @@ function msgHTML(it) {
 /** The instruments an answer's data concerns: what the server loaded for the question and what Milo looked up,
  * apart from the page it was asked from. */
 export function concerns(info) {
-  const out = [];
-  [...((info || {}).loaded || []), ...((info || {}).retrieved || [])].filter((r) => r && r.ok !== false)
-    .forEach((r) => (r.symbols || []).forEach((s) => { if (s && !out.includes(s)) out.push(s); }));
+  const out = [], add = (s) => { if (s && !out.includes(s)) out.push(s); };
+  // what the question named (loaded, or not in time), then what Milo looked up successfully
+  ((info || {}).loaded || []).forEach((r) => (r.symbols || []).forEach(add));
+  ((info || {}).retrieved || []).filter((r) => r && r.ok !== false).forEach((r) => (r.symbols || []).forEach(add));
   return out;
 }
+/** Symbols the answer concerns for which no data came back. */
+const dataless = (info, syms) => syms.filter((s) => ![...((info || {}).loaded || []), ...((info || {}).retrieved || [])].some((r) => r && r.ok !== false && (r.symbols || []).includes(s)));
 // What an answer was about and when it was asked. The page attached as context and the instruments the answer's
 // data concerns are said apart: an NVDA answer asked from AAPL's Investing page read "About AAPL" (pitch audit,
 // 2026-10-22). Before the data is known (while it streams), the page is all there is to say.
@@ -353,7 +356,8 @@ export function aboutLine(info, now = route) {
   const join = (xs) => (xs.length > 1 ? `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}` : xs[0]);
   const ctx = page && !about.includes(page) ? `${where && where !== page ? where : `${page}'s page`} attached as context` : (where && (!page || where !== page) ? `asked from ${where}` : '');
   const other = about.length && now && now.symbol && !about.includes(now.symbol);
-  return html`<p class="milo-about ${other ? 'is-other' : ''}">${about.length ? `About ${join(about)}` : `From ${where}`}${ctx ? `; ${ctx}` : ''}${f.captured_at ? `, ${prefs.clock(f.captured_at)}` : ''}${other ? html`. <b>Not about ${now.symbol}, the page now open.</b>` : ''}</p>`;
+  const none = data.length ? dataless(info, data) : [];
+  return html`<p class="milo-about ${other ? 'is-other' : ''}">${about.length ? `About ${join(about)}` : `From ${where}`}${none.length ? ` (no ${join(none)} data came back)` : ''}${ctx ? `; ${ctx}` : ''}${f.captured_at ? `, ${prefs.clock(f.captured_at)}` : ''}${other ? html`. <b>Not about ${now.symbol}, the page now open.</b>` : ''}</p>`;
 }
 // Every source behind an answer, one fold away: what it cited, what it read, the data it looked up
 function sourceLists(info) {

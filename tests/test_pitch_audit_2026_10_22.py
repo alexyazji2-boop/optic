@@ -488,12 +488,15 @@ def test_an_nvda_answer_asked_from_aapl_is_labelled_nvda(tmp_path):
         both: strip(M.aboutLine({{ symbol: 'AAPL', context: ctx, loaded: [{{ symbols: ['NVDA'] }}], retrieved: [{{ symbols: ['AAPL'], ok: true }}] }}, {{ symbol: 'AAPL' }})),
         plain: strip(M.aboutLine({{ symbol: 'AAPL', context: ctx }}, {{ symbol: 'AAPL' }})),
         failed: strip(M.aboutLine({{ symbol: 'AAPL', context: ctx, retrieved: [{{ symbols: ['XYZQ'], ok: false }}] }}, {{ symbol: 'AAPL' }})),
+        skipped: strip(M.aboutLine({{ symbol: 'AAPL', context: ctx, loaded: [{{ symbols: ['NVDA'], ok: false }}], retrieved: [{{ symbols: ['AAPL'], ok: true }}] }}, {{ symbol: 'AAPL' }})),
       }}));
     """)
     assert got["nvda"] == "About NVDA; AAPL Dossier, Investing attached as context. Not about AAPL, the page now open."
     assert got["both"].startswith("About NVDA and AAPL; asked from AAPL Dossier, Investing")
     assert got["plain"].startswith("About AAPL; asked from AAPL Dossier, Investing")
     assert got["failed"].startswith("About AAPL"), "a lookup that failed is not what the answer concerns"
+    # the question named NVDA, which did not load in time: still about NVDA, and said to have no data (seen live, 2026-10-22)
+    assert got["skipped"].startswith("About NVDA and AAPL (no NVDA data came back); asked from AAPL Dossier, Chart") or got["skipped"].startswith("About NVDA and AAPL (no NVDA data came back); asked from AAPL Dossier, Investing")
 
 
 def test_the_done_event_carries_what_was_loaded():
@@ -502,6 +505,8 @@ def test_the_done_event_carries_what_was_loaded():
     assert rows == [{"symbols": ["NVDA"], "label": "NVDA quote, chart and options summary", "data_type": "quote, chart and options summary",
                      "source": "Yahoo Finance quote (delayed)", "as_of": "2026-10-22T15:00:00Z", "ok": True}]
     assert ai.auto_loaded_sources({}) == [] and ai.auto_loaded_sources(None) == []
+    skipped = ai.auto_loaded_sources({"auto_load_skipped": {"symbols": ["NVDA"], "note": "slow"}})
+    assert skipped == [{"symbols": ["NVDA"], "label": "NVDA not loaded in time", "data_type": "quote, chart and options summary", "ok": False, "status": "timeout"}]
 
 
 # ---------------------------------------------------------------- 20. the health hint agrees with enabled
