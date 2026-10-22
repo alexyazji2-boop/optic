@@ -1230,8 +1230,9 @@ def available() -> Dict[str, Any]:
             source = None
 
     client = _client()
+    enabled = bool(client is not None and source)
     return {
-        "enabled": bool(client is not None and source),
+        "enabled": enabled,
         # What answers in the panel this status is for.
         "model": PULSE_MODEL,
         "credential_source": source or "none",
@@ -1247,7 +1248,10 @@ def available() -> Dict[str, Any]:
         #
         # Same branch and same reason as `originIsEphemeral()` on the client:
         # who is reading decides which sentence is true.
+        # Only when it is off: /api/health said "enabled: true" beside "Milo is not
+        # configured" while Milo was answering (pitch audit, 2026-10-22).
         "hint": (
+            "Milo is configured and can answer questions." if enabled else
             "Milo is not configured on this deployment, so it cannot answer "
             "questions. Every other panel on the terminal works without it."
             if is_hosted() else

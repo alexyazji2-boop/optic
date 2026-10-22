@@ -502,3 +502,16 @@ def test_the_done_event_carries_what_was_loaded():
     assert rows == [{"symbols": ["NVDA"], "label": "NVDA quote, chart and options summary", "data_type": "quote, chart and options summary",
                      "source": "Yahoo Finance quote (delayed)", "as_of": "2026-10-22T15:00:00Z", "ok": True}]
     assert ai.auto_loaded_sources({}) == [] and ai.auto_loaded_sources(None) == []
+
+
+# ---------------------------------------------------------------- 20. the health hint agrees with enabled
+
+def test_an_enabled_assistant_is_not_described_as_unconfigured(monkeypatch):
+    from app import ai
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test-not-a-real-key")
+    monkeypatch.setattr(ai, "_client", lambda: object())
+    on = ai.available()
+    assert on["enabled"] is True and "not configured" not in on["hint"]
+    monkeypatch.setattr(ai, "_client", lambda: None)
+    off = ai.available()
+    assert off["enabled"] is False and ("not configured" in off["hint"] or "ANTHROPIC_API_KEY" in off["hint"])

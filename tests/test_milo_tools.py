@@ -22,6 +22,18 @@ from app.desk import research
 from app.research import modes
 
 ROOT = Path(__file__).resolve().parent.parent
+
+# A controlled symbol directory. main._symbols_in checks a named ticker against NASDAQ's directory,
+# which these tests fetched over the network: offline, "AMD" and "NVDA" were not symbols and three
+# tests failed (pitch audit, 2026-10-22). Whether the directory answers is not what they test.
+DIRECTORY = {"AMD", "NVDA", "AAPL", "MSFT", "SPY", "QQQ", "TSLA", "GOOGL", "META", "AMZN", "COIN", "BRK.B"}
+
+
+@pytest.fixture(autouse=True)
+def _fixed_directory(monkeypatch):
+    import app.main as m
+    monkeypatch.setattr(m.universe_mod, "search",
+                        lambda q, limit=10: [{"symbol": q.upper()}] if q.upper() in DIRECTORY else [])
 APP = (ROOT / "static/app.js").read_text()
 HTML = (ROOT / "static/index.html").read_text()
 
