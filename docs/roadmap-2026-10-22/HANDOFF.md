@@ -16,9 +16,10 @@ branch out of production until after the pitch and until each part has been look
 
 Full suite at 00e9e53: 6,744 passed, 1 skipped.
 
-## Decisions waiting on the owner
+## Owner decisions
 
-1. **Brokerage scenarios vs the what-if lab.** On 2026-10-20 the owner removed the Brokerage what-if lab
+1. **Brokerage scenarios vs the what-if lab: decided 2026-10-22, keep it.** The owner chose to keep the
+   read-only scenarios section on Brokerage. Background: on 2026-10-20 the owner removed the Brokerage what-if lab
    ("remove this feature entirely, useless"). Stage 6 adds something different: no tab, no form of
    hypothetical trades, a read-only section inside Holdings & Exposure that revalues the holdings as they
    stand. The removal test now pins the lab's own pieces (its tab, its form, `POST /workspace/scenario`)
