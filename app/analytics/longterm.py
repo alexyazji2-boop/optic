@@ -174,19 +174,23 @@ def _long_trend(weekly: pd.DataFrame) -> Dict[str, Any]:
 
     if above_200w and above_40w and (slope_40w or 0) > 0:
         phase = "secular uptrend"
-        guidance = "Structurally bullish. Pullbacks toward the 40-week average are accumulation, not exits."
+        # Described, not advised: what was measured and what would change it. "Pullbacks are
+        # accumulation, not exits" named buyers this cannot see (pitch audit, 2026-10-22).
+        guidance = ("Above both the 40-week and 200-week averages, with the 40-week rising. Pullbacks toward "
+                    "the 40-week have stayed inside this phase; a weekly close below it would change the phase.")
     elif above_200w and not above_40w:
         phase = "uptrend, correcting"
-        guidance = "Long-term trend intact but under its 40-week line. A normal correction inside a bull phase. Stagger entries."
+        guidance = ("Above the 200-week average but under the 40-week: so far a correction inside the longer "
+                    "uptrend. A weekly close back above the 40-week would resume it; one below the 200-week would end it.")
     elif above_200w is False and above_40w:
         phase = "attempted bottom"
-        guidance = "Below the 200-week but reclaiming the 40-week. Early recovery signal, not confirmation. Start small."
+        guidance = "Below the 200-week average but back above the 40-week: an early recovery, not a confirmed one."
     elif above_200w is False:
         phase = "secular downtrend"
-        guidance = "Below both long-term averages. Capital preservation over accumulation; wait for the 40-week reclaim."
+        guidance = "Below both long-term averages. The model's condition for improving is a reclaim of the 40-week average."
     else:
         phase = "neutral"
-        guidance = "No clear long-term trend. Position size for uncertainty."
+        guidance = "No clear long-term trend."
 
     return {
         "phase": phase,
@@ -553,16 +557,20 @@ def analyse_holding(provider, ticker: str,
             )
         )
 
+    # What the model reads, not what the reader should do: a price trend cannot say whether a
+    # holding suits anyone ("Suitable as a core long-term holding. Scale in", pitch audit, 2026-10-22).
     if score >= 40:
-        conviction, plan = "high", "Suitable as a core long-term holding. Scale in on weakness toward the listed zones."
+        conviction, plan = "high", ("The long-term trend model reads strongly positive on the price's path. It "
+                                    "would weaken on a weekly close below the 40-week average.")
     elif score >= 12:
-        conviction, plan = "moderate", "Reasonable holding. Build the position gradually rather than all at once."
+        conviction, plan = "moderate", "The long-term trend model reads positive, not strongly."
     elif score <= -40:
-        conviction, plan = "low", "Long-term picture is unfavourable. Avoid new capital until the trend repairs."
+        conviction, plan = "low", ("The long-term trend model reads strongly negative on the price's path. Its "
+                                   "condition for improving is a reclaim of the 40-week average.")
     elif score <= -12:
-        conviction, plan = "cautious", "Mixed to negative. Any exposure should be small and dated to a specific catalyst."
+        conviction, plan = "cautious", "The long-term trend model reads mildly negative."
     else:
-        conviction, plan = "neutral", "No long-term edge either way. Dollar-cost averaging is the honest approach here."
+        conviction, plan = "neutral", "The long-term trend model shows no lean either way."
 
     return {
         "ticker": ticker.upper(),

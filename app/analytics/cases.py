@@ -232,15 +232,17 @@ def build(payload: Dict[str, Any]) -> Dict[str, Any]:
     regime = (gex.get("regime") or {}).get("state")
     if regime == "positive":
         bear.append(_arg(
-            "Dealer hedging dampens breakouts",
-            "Net gamma is positive, so market makers hedge against direction. Ranges "
-            "hold and a breakout needs a catalyst to overcome the drag.",
+            "Modelled dealer hedging would lean against breakouts",
+            "Net gamma is positive under the model's assumption about which side dealers "
+            "hold, in which case their hedging would trade against direction. That would "
+            "favour ranges; whether dealers actually hold that side is not observed.",
             LIGHT, "Gamma"))
     elif regime == "negative":
         bull.append(_arg(
-            "Dealer hedging amplifies moves",
-            "Net gamma is negative, so market makers hedge with direction. Moves "
-            "extend rather than fade. It cuts both ways.",
+            "Modelled dealer hedging would add to moves",
+            "Net gamma is negative under the model's assumption about which side dealers "
+            "hold, in which case their hedging would trade with direction and could extend "
+            "moves either way. The side dealers hold is assumed, not observed.",
             LIGHT, "Gamma"))
 
     # -- earnings ------------------------------------------------------------

@@ -642,8 +642,9 @@ def build_strategy_ideas(
             short_put = _pick(chain, False, expiry, 0.20)
             long_put = _pick(chain, False, expiry, 0.10)
             condor_note = (
-                "No directional edge and dealers are long gamma. Hedging suppresses realized vol, "
-                "which is the condition premium selling wants."
+                "No directional lean, and modelled dealer gamma is positive: if dealers hold the "
+                "assumed side, their hedging would damp realised volatility, the condition premium "
+                "selling wants. The side is assumed, not observed."
                 if regime == "positive"
                 else "No directional edge; implied vol isn't cheap, so selling the range collects a "
                 "premium that realized vol is unlikely to eat into."
@@ -867,8 +868,10 @@ def _sector_pair_idea(
         long_name, short_name = ticker, etf
         thesis = (
             "{} has outpaced its own sector ETF ({}) by {:.1f}% over the past month. Stock-specific "
-            "strength, not just the sector moving. A pair trade isolates that: long calls on {}, long "
-            "puts on {}, so a sector-wide reversal doesn't erase the edge.".format(
+            "strength, not just the sector moving. A pair aims at that gap: long calls on {}, long "
+            "puts on {}, so a sector-wide move hits both legs. It is not a hedge that keeps a gain: "
+            "the stock moves more or less than its sector (residual beta), both premiums decay, "
+            "and the correlation between the two can change.".format(
                 ticker, etf, abs(rs_1m if rs_1m is not None else rs_3m), ticker, etf
             )
         )

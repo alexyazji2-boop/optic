@@ -61,7 +61,8 @@ def test_an_unusual_contract_on_no_open_interest_is_said_so():
     out = pulse_mod.options_brief({"flow": {"unusual": [
         {"strike": 140, "type": "CALL", "expiry": "2026-12-18", "volume": 150,
          "open_interest": 0, "vol_oi_ratio": None}]}})
-    note = [i for i in out["items"] if i["label"] == "Unusual"][0]["note"]
+    # labelled "Vol vs OI", not "Unusual": a ratio, not a judgement (pitch audit, 2026-10-22)
+    note = [i for i in out["items"] if i["label"] == "Vol vs OI"][0]["note"]
     assert note.startswith("150 traded on no open interest"), note
     assert "0.0x" not in note
 

@@ -53,6 +53,13 @@ const ask = (sym, label, q) => miloButton(label, { ask: q, context: `${sym} Doss
 const pct = (v, dp = 1) => (isNum(v) ? `${num(v, dp)}%` : 'n/a');
 
 /* ---------------- sections ---------------- */
+const PRICE_KINDS = ['trend', 'relative strength', 'risk'];
+/** What the score is built from, read off its own factor rows: it had said "It does not measure valuation" over a
+ * table with a valuation row in it (pitch audit, 2026-10-22). */
+export function scoreScope(h, noun = 'stock') {
+  const other = [...new Set((h.conviction_factors || []).map((f) => f.kind).filter((k) => k && !PRICE_KINDS.includes(k)))];
+  return `Mostly how the ${noun} has traded over the years: trend, strength against the S&P 500 and risk.${other.length ? ` ${capFirst(other.join(', ').replace(/, ([^,]*)$/, ' and $1'))} add or take away a few points (rows below).` : ''} A reading of the price's path, not a valuation.`;
+}
 function trend(sym) {
   const h = (D.lt || {}).holding;
   if (D.ltErr) return failed('The long-term model', D.ltErr, { retry: 'lt' });
@@ -63,14 +70,14 @@ function trend(sym) {
   const conv = (((D.fw || {}).long_term) || {}).conviction || {};
   const clash = s !== null && s >= 60 && ((st.available && st.stars <= 2) || (vh.available && vh.percentile >= 80));
   return html`<section class="section" aria-labelledby="lt-h">
-    <div class="section-head"><div><h2 class="t-h2" id="lt-h">Long-term trend score, from price history</h2><p class="section-sub">How the ${kindOf(sym, D) === 'fund' ? 'fund' : 'stock'} has traded over the years: trend, strength against the S&amp;P 500 and risk. It does not measure valuation.</p></div>${ask(sym, 'Ask Milo about this score', `What is ${sym}'s long-term trend score built from, and what does it leave out?`)}</div>
-    <div class="figure"><p class="t-display-m">${s === null ? 'n/a' : num(s, 0)} <small class="t-muted">of 100</small></p><p class="delta"><span>${capFirst(h.conviction || '')} conviction</span><span class="t-muted">${capFirst((h.long_trend || {}).phase || '')}</span></p></div>
-    <p><b>The model's rule:</b> ${clean(h.plan || '')}</p>
+    <div class="section-head"><div><h2 class="t-h2" id="lt-h">Long-term trend score, from price history</h2><p class="section-sub">${scoreScope(h, kindOf(sym, D) === 'fund' ? 'fund' : 'stock')}</p></div>${ask(sym, 'Ask Milo about this score', `What is ${sym}'s long-term trend score built from, and what does it leave out?`)}</div>
+    <div class="figure"><p class="t-display-m">${s === null ? 'n/a' : num(s, 0)} <small class="t-muted">of 100</small></p><p class="delta"><span>${capFirst(h.conviction || '')} on the trend model</span><span class="t-muted">${capFirst((h.long_trend || {}).phase || '')}</span></p></div>
+    <p><b>The model's reading:</b> ${clean(h.plan || '')}</p>
     ${clash ? html`<p class="reconcile"><b>Read it beside the price.</b> The score is built from trend and the five-year record${st.available ? `, while the price earns ${st.stars} of 5 stars against its own usual valuation` : ''}${vh.available ? ` and the P/E sits at the ${ordinal(vh.percentile)} percentile of its own history` : ''}.${conv.label ? ` The business-and-price case on the Overview reads ${conv.label}.` : ''}</p>` : ''}
     ${(h.data_quality || {}).warnings && h.data_quality.warnings.length ? h.data_quality.warnings.map((w) => html`<p class="stale">${clean(w)}</p>`) : ''}
-    <div class="tscroll"><table class="t"><thead><tr><th>Factor</th><th>Type</th><th>Points</th><th>Why</th></tr></thead>
+    <div class="tscroll"><table class="t"><thead><tr><th>Factor</th><th>Type</th><th>Raw points</th><th>Why</th></tr></thead>
       <tbody>${(h.conviction_factors || []).map((f) => html`<tr><td>${f.label}</td><td>${f.kind}</td><td>${signed(f.points, 0, '')}</td><td style="text-align:left">${clean(f.detail)}</td></tr>`)}
-      <tr><td><b>Total</b></td><td></td><td><b>${signed(h.conviction_score, 0, '')}</b></td><td style="text-align:left" class="t-muted">On a scale of ${sc.min_possible} to ${sc.max_possible}; ${num(s, 0)} of 100 when mapped.</td></tr></tbody></table></div>
+      <tr><td><b>Total</b></td><td></td><td><b>${signed(h.conviction_score, 0, '')}</b></td><td style="text-align:left" class="t-muted">Raw points on a scale of ${sc.min_possible} to ${sc.max_possible}; ${num(s, 0)} of 100 when mapped. A strength reading on past prices, not a probability or a judgement of whether it suits you.</td></tr></tbody></table></div>
   </section>`;
 }
 

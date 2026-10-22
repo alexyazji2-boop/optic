@@ -99,7 +99,8 @@ def test_the_money_and_the_risk_are_drawn_side_by_side():
     html, split = out["html"], out["split"]
     assert "TECL carries 48% of the risk on 35% of the money" in html
     assert "1 name without enough history is left out" in html
-    assert "An option counts as one share of its stock per contract" in html
+    # options are weighted by delta exposure now, with premium at risk and notional beside (pitch audit, 2026-10-22)
+    assert "Long options' premium at risk" in html and "An option counts as one share" not in html
     assert [r["label"] for r in split["rows"]] == ["TECL", "AMD", "XLU"]
     xlu = split["rows"][2]
     assert xlu["left"] == 25.0 and xlu["right"] == 0, "a short's money is its size; a hedge offsets, drawn as none"

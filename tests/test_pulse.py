@@ -153,7 +153,7 @@ def test_the_gamma_reason_reads_the_regime_state_not_a_flip_key():
                 "levels": {"gamma_pin": {"strike": 230.0}}},
     })
     r = out["reasons"][0]
-    assert "dampening" in r["headline"]
+    assert "would damp moves" in r["headline"] and "assumed side" in r["headline"]
     assert any("12.3M" in e for e in r["evidence"])
     assert any("230" in e for e in r["evidence"])
 

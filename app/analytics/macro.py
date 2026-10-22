@@ -554,8 +554,8 @@ def analyse(provider) -> Dict[str, Any]:
         regime, stance = "risk-off", ("The backdrop leans risk-off: the kind of tape in which breakouts often "
                                       "fail and demand for protection is high.")
     elif score <= -12:
-        regime, stance = "mildly risk-off", ("A mild lean to risk-off: a less forgiving backdrop, in which moves "
-                                             "fade faster than usual.")
+        regime, stance = "mildly risk-off", ("A mild lean to risk-off in the inputs above: a less forgiving "
+                                             "backdrop, in which rallies have often been harder to sustain.")
     else:
         regime, stance = "neutral / mixed", ("No clear lean either way: the backdrop is not pushing prices in one "
                                              "direction, so a single stock's own setup matters more than the market.")

@@ -224,17 +224,19 @@ def analyse_short_interest(raw: Dict[str, Any], avg_volume: Optional[float]) -> 
     if days_to_cover is not None:
         if days_to_cover >= 5:
             notes.append(
-                "{:.1f} days to cover at average volume. Shorts cannot exit quickly, "
-                "which is what makes squeezes violent.".format(days_to_cover)
+                "{:.1f} days to cover at average volume: a rough crowding measure, high here. "
+                "Crowded shorts are the condition squeezes come from, not a sign one is "
+                "coming.".format(days_to_cover)
             )
         else:
-            notes.append("{:.1f} days to cover. Shorts can exit without moving price much.".format(days_to_cover))
+            notes.append("{:.1f} days to cover at average volume: a rough crowding measure, "
+                         "low here. It is not a guarantee of how buying back would move the price.".format(days_to_cover))
 
     if change_pct is not None:
         if change_pct > 10:
-            notes.append("Short interest rose {:.0f}% versus the prior settlement. Bears are adding.".format(change_pct))
+            notes.append("Short interest rose {:.0f}% versus the prior settlement. More shares are sold short.".format(change_pct))
         elif change_pct < -10:
-            notes.append("Short interest fell {:.0f}% versus the prior settlement. Bears are covering.".format(abs(change_pct)))
+            notes.append("Short interest fell {:.0f}% versus the prior settlement. Fewer shares are sold short.".format(abs(change_pct)))
 
     return {
         "available": True,

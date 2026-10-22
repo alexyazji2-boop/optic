@@ -221,9 +221,11 @@ def why(payload: Dict[str, Any]) -> Dict[str, Any]:
             # "Amplifying" used to cover a missing regime as well as a negative
             # one. Each sign is said, under the model's assumption, and no sign
             # says nothing about direction.
-            headline = ("Dealer hedging is dampening moves" if regime == "positive" else
-                        "Dealer hedging is amplifying moves" if regime == "negative" else
-                        "Dealer hedging has no lean")
+            # The assumption rides in the conclusion itself: whether dealers are
+            # long or short these options is assumed, not observed (pitch audit, 2026-10-22).
+            headline = ("If dealers hold the assumed side, their hedging would damp moves" if regime == "positive" else
+                        "If dealers hold the assumed side, their hedging would add to moves" if regime == "negative" else
+                        "Modelled dealer gamma has no lean")
             if net is not None:
                 evidence.append("net GEX {}${:,.1f}M per 1% move".format(
                     "+" if net >= 0 else "-", abs(net)))

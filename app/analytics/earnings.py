@@ -885,8 +885,12 @@ def _verdict(next_report: Dict[str, Any], surprise: Dict[str, Any], revisions: D
             "so a directional long here needs the move to happen almost immediately."
         )
     elif days <= 21:
-        headline = f"Reports in {days} days. Premium is starting to build."
-        reasons.append("Implied vol usually climbs into the last two weeks, which helps long premium held into the date.")
+        # A tendency, not a measurement: there is no implied-volatility history here
+        # to say premium is building today (pitch audit, 2026-10-22).
+        headline = f"Reports in {days} days. Event premium typically builds in this window."
+        reasons.append("Implied vol has tended to climb into the last two weeks before a report; Optic has no "
+                       "history of this stock's implied volatility to show whether it is doing so now. Long "
+                       "premium held through the date still pays for the event and loses it afterwards.")
     else:
         headline = f"Next report is {days} days out. No event premium yet."
         reasons.append("Far enough out that earnings shouldn't drive strike selection for a normal swing.")
