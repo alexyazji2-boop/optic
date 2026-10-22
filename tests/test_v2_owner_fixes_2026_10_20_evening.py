@@ -50,9 +50,14 @@ def test_the_ticket_puts_each_label_above_its_control():
 
 
 def test_the_what_if_lab_is_gone_from_both_apps_and_the_server():
+    # The lab (its own tab, a form of hypothetical buys and sells, POST /workspace/scenario) stays gone. The
+    # roadmap's portfolio scenarios (stage 6, 2026-10-22) are a different thing and allowed: a read-only
+    # section inside Holdings & Exposure, revaluing the holdings as they stand, with no form and no tab.
     for f in (JS / "pages/brokerage.js", V2.parent / "brokerage.js"):
-        src = f.read_text()
-        assert "scenario" not in src.lower(), f
+        src = f.read_text().lower()
+        for gone in ("what-if", "{ id: 'scenarios'", "data-v2-bk-scen", "bk-scen", "workspace/scenario`", "funding"):
+            assert gone not in src, (f, gone)
+    assert "scenario" not in (V2.parent / "brokerage.js").read_text().lower(), "the classic app has no scenarios at all"
     assert "'events', 'connections'].includes(section)" in (V2.parent / "app.js").read_text()
     paths = {getattr(r, "path", "") for r in main.app.routes}
     assert "/api/brokerage/workspace/scenario" not in paths

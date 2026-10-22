@@ -14,6 +14,7 @@ import { mountCharts } from '../ui/chart.js';
 import { button as miloButton, provideContext } from '../ui/milo.js';
 import { toast } from '../ui/toast.js';
 import { sectionHead } from './tabs.js';
+import { scenariosSection } from '../ui/scenarios.js';
 
 let book = 'balanced', month = null, D = {}, live = true, mainEl = null, poll = null, scanning = false, notice = null;
 const $0 = (v) => (isNum(v) ? money(v, 0) : 'n/a');
@@ -252,7 +253,7 @@ function paint() {
     ${D.err ? failed("Optic's position ledger", D.err, { retry: 'load' }) : !d ? skeleton('rows', 6, "Loading Optic's own position ledger") : html`
       ${books(d)}${ledger(d)}${openPositions(d.open || [])}${months(d)}${funnel(d)}
       ${empty ? html`<section class="section"><h2 class="t-h2">No trades yet</h2><p>The ledger is empty. It only opens a position when a name's composite score clears ${num((d.config || {}).min_composite, 0)}, and most scans find nothing. Open "Run the shared scan" above to run one, or wait for the scheduled one.</p></section>` : ''}
-      ${record(d.summary || {})}${risk(d)}${rest(d)}`}`);
+      ${record(d.summary || {})}${risk(d)}${(d.open || []).length ? scenariosSection(D.scen, { id: 'bsc-h' }) : ''}${rest(d)}`}`);
   if (Math.abs(window.scrollY - y) > 2) window.scrollTo(0, y);
   if (fid) { const el = fid.startsWith('data-') ? mainEl.querySelector(`[${fid}]`) : mainEl.querySelector(`#${fid}`); if (el) { if (!el.hasAttribute('tabindex') && /^H\d$/.test(el.tagName)) el.setAttribute('tabindex', '-1'); el.focus({ preventScroll: true }); } }
   if (!d) return;
@@ -264,7 +265,7 @@ function paint() {
 }
 
 async function load(quiet) {
-  if (!quiet) { D.d = null; D.err = null; D.risk = undefined; paint(); }
+  if (!quiet) { D.d = null; D.err = null; D.risk = undefined; D.scen = undefined; paint(); }
   const q = new URLSearchParams({ book }); if (month) q.set('month', month);
   try {
     const d = await api.get(`/api/tracker?${q}`, { force: true, timeout: 45000 });
@@ -275,11 +276,21 @@ async function load(quiet) {
   clearTimeout(poll);
   if (live && D.d && (D.d.progress || {}).running) poll = setTimeout(() => load(true), 4000);
   if (D.d && (D.d.open || []).length && D.risk === undefined) loadRisk();
+  if (D.d && (D.d.open || []).length && D.scen === undefined) loadScenarios();
 }
 async function loadRisk() {
   try { D.risk = await api.get(`/api/portfolio-risk?book=${encodeURIComponent(book)}`, { ttl: 120000, timeout: 60000 }); }
   catch (e) { D.risk = { error: e }; }
   paint();
+}
+// the hypothetical revaluation, apart from the record above it (roadmap stage 6)
+async function loadScenarios() {
+  const asked = book;
+  let got;
+  try { got = await api.get(`/api/portfolio-scenarios?book=${encodeURIComponent(asked)}`, { ttl: 120000, timeout: 90000 }); }
+  catch (e) { got = { error: e }; }
+  if (asked !== book) return;
+  D.scen = got; paint();
 }
 async function action(kind) {
   notice = null; if (kind === 'scan') scanning = true; paint();
@@ -290,7 +301,7 @@ async function action(kind) {
     scanning = false;
     notice = e.status === 429 || e.status === 409 ? clean(e.message) : api.explain(e, kind === 'scan' ? 'The scan' : 'The mark');
   }
-  D.risk = undefined; load(true);
+  D.risk = undefined; D.scen = undefined; load(true);
 }
 
 export async function render(main) {
@@ -306,4 +317,4 @@ export async function render(main) {
   load();
 }
 export function dispose() { live = false; clearTimeout(poll); }
-export const retry = { load: () => load(), risk: () => { D.risk = undefined; loadRisk(); } };
+export const retry = { load: () => load(), risk: () => { D.risk = undefined; loadRisk(); }, scenarios: () => { D.scen = undefined; paint(); loadScenarios(); } };

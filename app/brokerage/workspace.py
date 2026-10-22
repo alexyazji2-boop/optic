@@ -386,6 +386,58 @@ def options_risk(user: Dict[str, Any], account_ids: Optional[List[str]] = None) 
     return out
 
 
+def scenarios(user: Dict[str, Any], account_ids: Optional[List[str]] = None) -> Dict[str, Any]:
+    """The linked holdings revalued under each scenario (roadmap stage 6), with the same engine and market
+    inputs as the Optic Portfolio books. Computed here, on Optic's server; nothing is sent to a model."""
+    from ..analytics import scenarios as scenarios_mod
+    from .options_risk import _check_multiplier, _style, occ_root
+    core = _core(user, account_ids)
+    as_of = core.get("as_of") or {}
+    synced = as_of.get("oldest_broker") or as_of.get("oldest_sync")
+    legs: List[Dict[str, Any]] = []
+    left: List[Dict[str, Any]] = []
+    for h in core.get("holdings") or []:
+        sym = str(h.get("symbol") or "").upper()
+        if h.get("kind") not in ("equity", "etf", "fund") or not sym:
+            left.append({"label": h.get("description") or sym or "A holding", "reason": "Not a stock or fund, so no scenario models it."})
+            continue
+        if (h.get("currency") or "USD").upper() != "USD":
+            left.append({"label": sym, "reason": "Priced in {}; the scenarios are in US dollars only.".format(h.get("currency"))})
+            continue
+        legs.append({"symbol": sym, "kind": "stock", "qty": float(h.get("quantity") or 0), "price": h.get("price"),
+                     "price_as_of": synced, "price_basis": "Optic's quote"})
+    shares = {l["symbol"]: l["qty"] for l in legs}
+    for o in core.get("options") or []:
+        if (o.get("currency") or "USD").upper() != "USD":
+            left.append({"label": o.get("occ") or o.get("underlying"), "reason": "Priced in {}; the scenarios are in US dollars only.".format(o.get("currency"))})
+            continue
+        root = occ_root(o.get("occ"))
+        mult = _check_multiplier(o, root)
+        style = _style(str(o.get("underlying") or "").upper(), root)
+        legs.append({"symbol": o.get("underlying"), "kind": "option", "qty": o.get("contracts"),
+                     "price": o.get("price"), "price_as_of": synced, "price_basis": "the broker's last price at its sync",
+                     "option_type": o.get("option_type"), "strike": o.get("strike"), "expiry": o.get("expiry"),
+                     "multiplier": mult["multiplier"], "multiplier_assumed": mult["assumed"], "american": style["american"],
+                     "adjusted": mult["adjusted"], "adjusted_reason": mult["adjusted_reason"],
+                     "not_modelled": ("VIX options are priced off the VIX future, and Optic has no futures curve."
+                                      if style["vix"] else None)})
+    if not legs:
+        return {"section": "scenarios", "available": False, "reason": "No stocks, funds or options in the accounts counted.",
+                "coverage": {"unpriced": left}}
+    market = _m("scenario_market")
+    got = _safe(market, [l["symbol"] for l in legs], default=None) if market else None
+    closes, spots, earnings = got if got else ({}, {}, {})
+    sectors = {h["symbol"].upper(): h.get("sector") for h in core.get("holdings") or [] if h.get("symbol") and h.get("sector")}
+    rate = (_safe(_m("rate"), default=None) or {}).get("rate")
+    out = scenarios_mod.build(legs, spots, closes, rate, earnings=earnings, sectors=sectors, stock_shares=shares,
+                              source="Your linked accounts: the broker's quantities and option prices at its last sync, Optic's quotes")
+    if out.get("available"):
+        out["coverage"]["unpriced"] = left + out["coverage"]["unpriced"]
+        out["coverage"]["positions"] += len(left)
+    out["section"] = "scenarios"
+    return out
+
+
 # ------------------------------------------------------------------ performance
 
 

@@ -1014,7 +1014,7 @@ table.narrow { max-width: 640px; }
 .funnel-steps b { font: 600 26px/1.1 var(--f-sans); } .funnel-steps span { font-weight: 600; }
 tr.is-dim td { opacity: .55; }
 tr.sh-notes td { padding-top: 0; font-size: var(--t-md); color: var(--c-ink-3); white-space: normal; border-top: 0; }
-@media (max-width: 860px) { .grid2 { grid-template-columns: 1fr; } .funnel-steps { grid-template-columns: 1fr 1fr; } .bk-figs { grid-template-columns: repeat(2, auto); } }
+@media (max-width: 860px) { .grid2 { grid-template-columns: minmax(0, 1fr); } .funnel-steps { grid-template-columns: 1fr 1fr; } .bk-figs { grid-template-columns: repeat(2, auto); } }
 .kv dd.up { color: var(--c-pos); } .kv dd.down { color: var(--c-neg); }
 /* Positions: Paper Desk */
 /* the ticket: every control has its label above it, on rows of even columns (owner, 2026-10-20: "clear this up
@@ -1566,6 +1566,14 @@ ul.cal-react { display: flex; flex-wrap: wrap; gap: 4px 18px; padding-left: 0; l
 @media (max-width: 640px) { .sl-two { grid-template-columns: minmax(0, 1fr); } .sl-kv { --kv: 1; } }
 /* Scan's three modes stay one row on a phone: the switch takes the width and its buttons share it. */
 @media (max-width: 480px) { .sc-modes { display: flex; flex-wrap: nowrap; width: 100%; } .sc-modes button { flex: 1 1 auto; padding: 0 6px; white-space: nowrap; } }
+/* Portfolio scenarios (roadmap stage 6): the answer first, the exposures as one strip, one table with a row per scenario. */
+.sc-lead { margin: var(--s-3) 0 var(--s-4); font: 500 var(--t-lg)/1.45 var(--f-sans); color: var(--c-ink); }
+.sc-kv { --kv: 5; margin-bottom: var(--s-4); }
+.sc-t th[scope="row"] { text-align: left; font-weight: 500; color: var(--c-ink); }
+.sc-t th[scope="row"] small { display: block; font-weight: 400; }
+.sc-t .sc-g th { padding-top: var(--s-4); text-align: left; font: 600 var(--t-md)/1.3 var(--f-label); color: var(--c-ink-2); border-bottom: 1px solid var(--c-line-2); }
+@media (max-width: 1100px) { .sc-kv { --kv: 3; } }
+@media (max-width: 640px) { .sc-kv { --kv: 2; } .sc-lead { font-size: var(--t-base); } }
 
 /* ---------- Dossier: the printable research sheet (roadmap stage 4, 2026-10-22) ----------
    On screen a document on the page; in print two pages, the app's chrome hidden, ink on white. */

@@ -19,6 +19,7 @@ import { skeleton } from '../ui/states.js';
 import { lineChart, mountCharts } from '../ui/chart.js';
 import { button as miloButton, provideContext } from '../ui/milo.js';
 import { toast } from '../ui/toast.js';
+import { scenariosSection } from '../ui/scenarios.js';
 
 export const SECTIONS = [
   { id: 'overview', label: 'Overview', ask: 'What deserves my attention in my linked portfolio this week?' },
@@ -232,7 +233,7 @@ function holdings(d) {
             <td>${isNum(q.price) ? html`${money(q.price, 'USD')} ${sPct(q.change_pct)}` : html`<span class="t-muted">n/a</span>`}</td><td>${money(h.market_value, h.currency)}</td><td>${pct(h.weight_pct)}</td><td>${h.cost_basis === null ? html`<span class="t-muted">Not supplied</span>` : money(h.cost_basis, h.currency)}</td>
             <td>${h.unrealized_pl === null || h.unrealized_pl === undefined ? html`<span class="t-muted">Not supplied</span>` : html`${signedMoney(h.unrealized_pl, h.currency)} ${sPct(h.unrealized_pct, 1)}`}</td></tr>`; }) : html`<tr><td colspan="9">No holdings in these accounts.</td></tr>`}</tbody></table></div>
       ${(d.price_checks || []).length ? html`<p class="asof">The broker's price and Optic's quote differ by 2% or more for ${d.price_checks.map((c) => c.symbol).join(', ')}; the broker's is from its last sync.</p>` : ''}</section>
-    ${exposure(d.exposure, d)}${scorecard(W.extra.scorecard)}${(d.options || []).length ? optionsRisk(W.extra.options) : ''}
+    ${exposure(d.exposure, d)}${scorecard(W.extra.scorecard)}${(d.options || []).length ? optionsRisk(W.extra.options) : ''}${(d.holdings || []).length || (d.options || []).length ? scenariosSection(W.extra.scenarios, { id: 'bsn-h' }) : ''}
     ${others.length ? html`<div class="grid2">${others}</div>` : ''}${limits(d.notes)}`;
 }
 function exposure(e, d) {
@@ -457,6 +458,7 @@ async function loadBriefing() {
 async function loadExtras() {
   const scope = W.scopeKey, want = [['scorecard', 'scorecard']];
   if ((W.data.holdings || {}).options && W.data.holdings.options.length) want.push(['options', 'options']);
+  if (((W.data.holdings || {}).holdings || []).length || ((W.data.holdings || {}).options || []).length) want.push(['scenarios', 'scenarios']);
   await Promise.all(want.map(async ([k, path]) => {
     if (W.extra[k] || W.loading[k] === scope) return;
     W.loading[k] = scope;
@@ -615,4 +617,5 @@ async function saveRename(id) {
   const r = await act(() => api.patch(`/api/brokerage/accounts/${encodeURIComponent(id)}`, { nickname: field ? field.value : '' }), null, 'Could not rename that.');
   if (r) { S.renaming = null; loadAll(true); }
 }
+export const retry = { scenarios: () => { delete W.extra.scenarios; paint(); loadExtras(); } };
 void store; void raw; void stamp; void num;

@@ -82,6 +82,7 @@ from .analytics import pe_history as pe_history_mod
 from .analytics import valuation_inputs as valuation_inputs_mod
 from .analytics import pattern_stats as pattern_stats_mod
 from .analytics import portfolio_risk as portfolio_risk_mod
+from .analytics import scenarios as scenarios_mod
 from .analytics import evaluate as evaluate_mod
 from .analytics import backtest as backtest_mod
 from .analytics import stops as stops_mod
@@ -4755,6 +4756,94 @@ async def portfolio_risk_panel(
     return await _run(build)
 
 
+# ------------------------------------------------ portfolio scenarios (roadmap stage 6)
+SCENARIO_MAX_NAMES = 25
+
+
+def _scenario_market(symbols: List[str]) -> Tuple[Dict[str, Any], Dict[str, Dict[str, Any]], Dict[str, Dict[str, Any]]]:
+    """What the scenarios need from the market, for the Optic Portfolio books and a linked brokerage alike:
+    two years of closes (betas, correlation, past report moves), the regular-session price the option marks
+    belong with, and the next report inside the window with this stock's own typical report-day move."""
+    syms = sorted({str(s).upper() for s in symbols if s})[:SCENARIO_MAX_NAMES]
+    frames = YF_PROVIDER.batch_history(sorted(set(syms) | {"SPY"}), period="2y", interval="1d") or {}
+    closes = {s: f["Close"].dropna() for s, f in frames.items() if f is not None and not getattr(f, "empty", True)}
+    try:
+        quotes = YF_PROVIDER.session_quotes(syms) or {}
+    except Exception:                                           # noqa: BLE001
+        quotes = {}
+    spots: Dict[str, Dict[str, Any]] = {}
+    for s in syms:
+        q = quotes.get(s) or {}
+        if q.get("price"):
+            spots[s] = {"price": q["price"], "as_of": q.get("regular_market_time")}
+        elif s in closes and len(closes[s]):
+            d = pd.Timestamp(closes[s].index[-1]).date()
+            spots[s] = {"price": float(closes[s].iloc[-1]), "as_of": session_mod.regular_close(d) or None}
+    today = datetime.now(session_mod.ET).date()
+    earnings: Dict[str, Dict[str, Any]] = {}
+    for s in syms:
+        try:
+            when = YF_PROVIDER.earnings_date(s)
+        except Exception:                                       # noqa: BLE001
+            when = None
+        if not when:
+            continue
+        try:
+            ahead = (datetime.fromisoformat(str(when)[:10]).date() - today).days
+        except ValueError:
+            continue
+        if not 0 <= ahead <= scenarios_mod.EARNINGS_WINDOW_DAYS:
+            continue
+        try:
+            hist = YF_PROVIDER.earnings_history(s, limit=12) or []
+        except Exception:                                       # noqa: BLE001
+            hist = []
+        past = [h for h in hist if h.get("date") and h["date"] < today.isoformat()]
+        mv = scenarios_mod.report_move(closes.get(s), [h["date"] for h in past],
+                                       [h["date"] for h in past if h.get("timing") == "before_open"])
+        earnings[s] = {"date": str(when)[:10], **(mv or {})}
+    return closes, spots, earnings
+
+
+def _paper_scenario_legs(positions: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    out = []
+    for p in positions or []:
+        opt = p.get("instrument") == "option"
+        sign = -1.0 if str(p.get("direction") or "long").lower() in ("short", "sell") else 1.0
+        out.append({"symbol": p.get("ticker"), "kind": "option" if opt else "stock", "qty": sign * float(p.get("qty") or 0),
+                    "price": p.get("mark_price") if p.get("mark_price") is not None else p.get("entry_price"),
+                    "price_as_of": p.get("marked_at") or p.get("entry_at"),
+                    "price_basis": p.get("mark_source") or ("Optic's mark" if p.get("mark_price") is not None else "entry price"),
+                    "option_type": p.get("option_type"), "strike": p.get("strike"), "expiry": p.get("expiry"),
+                    # the paper ledger opens standard contracts only (paper._pnl prices them at 100 shares)
+                    "multiplier": 100.0 if opt else None, "spot": p.get("mark_spot")})
+    return out
+
+
+@app.get("/api/portfolio-scenarios")
+async def portfolio_scenarios(book: Optional[str] = Query(None, description="Which book")) -> Dict[str, Any]:
+    """What the open paper book would be worth under each scenario, and its exposures, apart."""
+    def build() -> Dict[str, Any]:
+        try:
+            state = paper.state(60, None, book if book in paper.BOOK_IDS else paper.DEFAULT_BOOK)
+        except Exception as exc:                                # noqa: BLE001
+            return {"available": False, "reason": "Tracker unavailable: {}".format(exc)}
+        legs = _paper_scenario_legs((state or {}).get("open") or [])
+        if not legs:
+            return {"available": False, "version": scenarios_mod.VERSION, "reason": "No open positions."}
+        closes, spots, earnings = _scenario_market([l["symbol"] for l in legs])
+        sectors = {}
+        for s in {str(l["symbol"]).upper() for l in legs}:
+            try:
+                sectors[s] = (YF_PROVIDER.profile(s) or {}).get("sector")
+            except Exception:                                   # noqa: BLE001
+                pass
+        rate = (rates_mod.risk_free(YF_PROVIDER) or {}).get("rate")
+        return scenarios_mod.build(legs, spots, closes, rate, earnings=earnings, sectors=sectors,
+                                   source="Optic Portfolio's paper book, at Optic's marks")
+    return await _run(build)
+
+
 def _cached_ranking() -> Optional[Dict[str, Any]]:
     """The screener's ranking as it sits on disk, or None.
 
@@ -7703,6 +7792,7 @@ brokerage_workspace.set_market(
     spot_of=_ws_spot,
     div_of=_ws_div,
     rate=lambda: rates_mod.risk_free(YF_PROVIDER),
+    scenario_market=_scenario_market,
     market_ref=_ws_market_ref,
     fundamentals_of=_ws_fundamentals,
     constituents_of=_ws_constituents,

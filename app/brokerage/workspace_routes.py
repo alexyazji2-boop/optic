@@ -82,6 +82,11 @@ async def ws_options(request: Request, accounts: Optional[str] = None) -> Dict[s
     return await _run(workspace.options_risk, _reader(request), _scope(accounts))
 
 
+@router.get("/scenarios")
+async def ws_scenarios(request: Request, accounts: Optional[str] = None) -> Dict[str, Any]:
+    return await _run(workspace.scenarios, _reader(request), _scope(accounts))
+
+
 @router.get("/performance")
 async def ws_performance(request: Request, accounts: Optional[str] = None, period: str = "1y",
                          benchmark: str = "SPY") -> Dict[str, Any]:

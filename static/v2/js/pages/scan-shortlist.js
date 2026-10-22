@@ -27,9 +27,9 @@ function record(r) {
   if (!r) return '';
   if (!r.outcomes_recorded) return html`<p class="asof">Forward record: ${plural(r.entries_listed || 0, 'entry', 'entries')} listed since ${r.since ? fullDate(r.since) : 'the first list'}; outcomes are recorded ten sessions after each list, so none are in yet.</p>`;
   return html`<h3>The forward record</h3>
-    <dl class="kv sl-kv"><div><dt>Outcomes recorded</dt><dd>${r.outcomes_recorded}</dd><dd class="kv-note">of ${r.entries_listed} listed since ${fullDate(r.since)}</dd></div>
-      <div><dt>Moved its way after 10 sessions</dt><dd>${r.positive} of ${r.outcomes_recorded}</dd><dd class="kv-note">average ${signed(r.avg_move_pct, 2)} from the list's close</dd></div>
-      <div><dt>Closed through the invalidation</dt><dd>${r.invalidated}</dd><dd class="kv-note">within 10 sessions</dd></div></dl>
+    <dl class="kv sl-kv"><div><dt>Outcomes recorded</dt><dd>${r.outcomes_recorded}</dd><dd class="note">of ${r.entries_listed} listed since ${fullDate(r.since)}</dd></div>
+      <div><dt>Moved its way after 10 sessions</dt><dd>${r.positive} of ${r.outcomes_recorded}</dd><dd class="note">average ${signed(r.avg_move_pct, 2)} from the list's close</dd></div>
+      <div><dt>Closed through the invalidation</dt><dd>${r.invalidated}</dd><dd class="note">within 10 sessions</dd></div></dl>
     <div class="tscroll"><table class="t"><thead><tr><th scope="col">Name</th><th scope="col">Setup</th><th scope="col">Then</th><th scope="col">Invalidated</th><th scope="col">Move its way, 10 sessions</th></tr></thead>
       <tbody>${(r.recent || []).map((o) => html`<tr><th scope="row">${o.symbol} <small class="t-muted">${o.direction === 'bull' ? 'rising' : 'falling'}</small></th><td>${o.setup}</td><td>${o.state_then}${o.state_then === 'armed' ? (o.triggered ? ', then triggered' : ', never triggered') : ''}</td><td>${o.invalidated_on ? shortDate(o.invalidated_on) : 'No'}</td><td class="${o.move_pct > 0 ? 'up' : o.move_pct < 0 ? 'down' : ''}">${signed(o.move_pct, 2)}</td></tr>`)}</tbody></table></div>
     <p class="asof">${clean(r.note)}${r.pending ? ` ${r.pending} more still inside their ten sessions.` : ''}</p>`;

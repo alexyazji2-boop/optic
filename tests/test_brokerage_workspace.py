@@ -365,7 +365,7 @@ def test_milos_portfolio_tool_reads_only_the_asking_reader(market, monkeypatch):
 
 # ------------------------------------------------ hard cases, through the routes
 
-SECTIONS = ("overview", "holdings", "scorecard", "options", "performance", "events", "briefing")
+SECTIONS = ("overview", "holdings", "scorecard", "options", "scenarios", "performance", "events", "briefing")
 
 
 @pytest.mark.parametrize("scenario", ["edge", "partial", "outage", "expired"])
@@ -464,3 +464,31 @@ def test_the_status_chip_says_the_brokerage_overview_refreshes():
     src = open(os.path.join(os.path.dirname(__file__), "..", "static", "app.js"), encoding="utf-8").read()
     assert "(STATE.view === 'brokerage' && typeof bkwSection === 'function' && bkwSection() === 'overview' && isTapeLiveET())" in src
 
+
+
+def test_scenarios_revalue_the_linked_holdings_on_optics_server(market, monkeypatch):
+    """Roadmap stage 6: the linked holdings through the same engine as the Optic Portfolio books. The
+    market inputs come from the workspace's own lookup; nothing about the holdings leaves the server."""
+    import numpy as np
+    import pandas as pd
+    i = pd.bdate_range(end=date.today(), periods=300)
+    seen = []
+
+    def scenario_market(syms):
+        seen.append(sorted(syms))
+        closes = {s: pd.Series(100 * np.exp(np.cumsum(np.random.default_rng(len(s)).normal(0, 0.01, 300))), i) for s in set(syms) | {"SPY"}}
+        return closes, {s: {"price": float(closes[s].iloc[-1]), "as_of": datetime.now(timezone.utc).isoformat()} for s in syms}, {}
+    workspace.MARKET["scenario_market"] = scenario_market
+    workspace.MARKET["rate"] = lambda: {"rate": 0.04}
+    c, user = reader()
+    paid(user)
+    link(c, "standard")
+    sc = c.get("/api/brokerage/workspace/scenarios").json()
+    assert sc["section"] == "scenarios" and sc["available"] is True
+    assert seen, "the workspace asked its market lookup, not a fetch of its own"
+    assert sc["coverage"]["positions"] >= 3 and sc["hypothetical"].startswith("Hypothetical")
+    held = {r["symbol"] for r in sc["exposure"]["by_underlying"]}
+    assert held, "the stocks and funds are revalued"
+    groups = [g["id"] for g in sc["groups"]]
+    assert groups[:2] == ["together", "market"]
+    assert not {"returns", "twr", "mwr", "flows"} & set(sc), "kept apart from recorded performance"
