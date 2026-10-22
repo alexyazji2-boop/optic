@@ -1525,3 +1525,9 @@ ul.cal-react { display: flex; flex-wrap: wrap; gap: 4px 18px; padding-left: 0; l
 .inst-spark { display: inline-block; color: inherit; } .inst-spark:focus-visible { outline: 2px solid var(--c-focus); outline-offset: 2px; }
 .inst-back { margin: 0 0 8px; } .inst-back .textlink { display: inline-flex; align-items: center; gap: 4px; min-height: var(--tap); font-size: var(--t-md); } .inst-back .ic { width: 16px; height: 16px; transform: scaleX(-1); }
 
+
+/* Financials' "What the figures say" as a fold: open from 641 px, one line on a phone (pitch audit, 2026-10-22) */
+.fin-say > summary { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: var(--tap); cursor: pointer; list-style: none; }
+.fin-say > summary::-webkit-details-marker { display: none; }
+.fin-say > summary h3 { margin: 0; } .fin-say > summary .ic { width: 16px; height: 16px; color: var(--c-ink-3); transition: transform var(--d-fast) var(--ease); }
+.fin-say[open] > summary .ic { transform: rotate(180deg); }

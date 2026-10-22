@@ -16,6 +16,7 @@ import { skeleton, empty, failed } from '../ui/states.js';
 import { button as miloButton, provideContext } from '../ui/milo.js';
 import { core, header, tabs, isFund, livePrice } from './dossier-frame.js';
 import { kindOf, can, kindWord } from '../core/instrument.js';
+import { icon } from '../ui/icons.js';
 let lp = null;   // the header's price refresh (dossier-frame livePrice), stopped in dispose()
 
 let D = {}, live = true, mainEl = null;
@@ -94,7 +95,8 @@ function readings() {
   ] : [];
   return html`<section class="section fin-sum" id="fin-summary" aria-labelledby="fr-h"><h2 class="t-h2" id="fr-h">Summary${yr ? `, ${/^FY/.test(yr) ? yr : `fiscal ${yr}`}` : ''}</h2>${per[0] ? html`<p class="section-sub">The fiscal year to ${fullDate(per[0])}.</p>` : ''}
     ${cells.length ? html`<div class="readings fin-figs" style="--rn:${cells.length}">${cells.map(([k, v, d]) => html`<div class="rd"><span class="k">${k}</span><span class="v">${v}</span><span class="d">${d}</span></div>`)}</div>` : ''}
-    ${items.length ? html`<h3>What the figures say</h3><dl class="reads-dl">${items.map(([k, v]) => html`<div><dt>${k}</dt><dd>${v}</dd></div>`)}</dl>` : ''}</section>`;
+    ${/* folded on a phone, so the period control and the charts come sooner (pitch audit, 2026-10-22); the figures above are the finding */ ''}
+    ${items.length ? html`<details class="fin-say" ${wideScreen() ? 'open' : ''}><summary><h3>What the figures say</h3>${icon('chev')}</summary><dl class="reads-dl">${items.map(([k, v]) => html`<div><dt>${k}</dt><dd>${v}</dd></div>`)}</dl></details>` : ''}</section>`;
 }
 
 // Where each section is, for the jump list: only the sections this company has.
@@ -112,6 +114,7 @@ function sectionsHere() {
     ['fin-congress', 'Congress', D.cg && D.cg.available],
   ].filter((x) => x[2]);
 }
+const wideScreen = () => { try { return matchMedia('(min-width: 641px)').matches; } catch (e) { return true; } };
 function jumpList() {
   const xs = sectionsHere();
   if (xs.length < 3) return '';
