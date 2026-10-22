@@ -189,6 +189,14 @@ body.drawer-open .rows:has([aria-expanded="true"]) .row:not([aria-expanded="true
 .ev-head[aria-expanded="true"] .chev { transform: rotate(90deg); }
 .ev-body { padding: 0 8px 22px 108px; color: var(--c-ink-2); display: grid; gap: 12px; font-size: var(--t-lg); }
 .ev-body p { max-width: 66ch; }
+/* Out: the figure leads in ink, the agency's headline backs it, and what the
+   report is drops a step to a muted line under them. */
+.ev-head .ev-res { font-variant-numeric: tabular-nums; }
+.ev-head .ev-res + .pill { margin-left: 10px; }
+.ev-result { color: var(--c-ink); font-variant-numeric: tabular-nums; }
+.ev-result.is-pending { color: var(--c-ink-2); }
+.ev-src { color: var(--c-ink-2); }
+.ev-body .ev-why { color: var(--c-ink-3); font-size: var(--t-base); }
 .quiet { color: var(--c-ink-3); font-size: var(--t-base); padding: 16px 8px 0; }
 
 /* ---------- questions: answer first ---------- */

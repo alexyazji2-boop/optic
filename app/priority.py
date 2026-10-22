@@ -239,8 +239,13 @@ def _earnings(provider, now: Optional[datetime] = None) -> List[Dict[str, Any]]:
     except Exception as exc:
         log.warning("priority: earnings scan unavailable: %s", exc)
         return []
+    today = (now or datetime.now(timezone.utc)).astimezone(session_mod.ET).date()
     rows = []
     for day in block.get("days", []):
+        try:
+            days_away = (datetime.fromisoformat(day.get("date") or "").date() - today).days
+        except ValueError:
+            days_away = None
         for symbol in day.get("symbols", []):
             result = _earnings_result(provider, symbol, day.get("date"), now)
             done = bool(result) and not result.get("pending")
@@ -257,6 +262,10 @@ def _earnings(provider, now: Optional[datetime] = None) -> List[Dict[str, Any]]:
                 "title": "{} {} {}".format(symbol, "reported" if done else "reports", day["day"]),
                 "when": day["day"],
                 "date": day.get("date"),
+                # Negative for a report earlier this week, as the calendar's
+                # rows count it, so a page can tell what is out from what is
+                # still to come without its own clock.
+                "days_away": days_away,
                 "result": result,
                 "why": ("An earnings report resets the estimate the price is built "
                         "on, which is why the option market charges more into it."),

@@ -275,3 +275,96 @@ def test_the_figures_are_styled_from_tokens():
         assert sel in CSS, sel
     block = CSS.split(".cs-note-result {", 1)[1].split("}", 1)[0]
     assert "var(--" in block and "#" not in block
+
+
+# ------------------------------------------------------------------ v2
+
+def _v2(tmp_path, payload, followed=()):
+    from tests.test_frontend_v2_stage0 import V2
+    from tests.test_v2_p3 import _run
+    return _run(tmp_path, f"""
+      const H = await import('{(V2 / "js/pages/home.js").as_posix()}');
+      const D = await import('{(V2 / "js/core/dom.js").as_posix()}');
+      const out = D.toString(H.eventsBlock({json.dumps(payload)}, {json.dumps(list(followed))}, 'all'));
+      print(JSON.stringify({{html: out}}));
+    """)["html"]
+
+
+V2_PAYLOAD = {"available": True, "horizon_days": 5, "generated_at": "2026-10-15T18:00:00+00:00", "columns": [
+    _col("events", [dict(_row("Producer Price Index", short="PPI", result=RES_PPI), when="Today"),
+                    dict(_row("Retail sales", short="Retail", result=PENDING), when="Today"),
+                    dict(_row("Import prices", short="Imports", released=False), when="Tomorrow", days_away=1)]),
+    _col("earnings", [dict(_row("GS reported Tuesday", kind="earnings", why="An earnings report resets the estimate.",
+                                result=RES_GS, days_away=-2, when="Tuesday"), ticker="GS"),
+                      dict(_row("PEP reports Friday", kind="earnings", why="An earnings report resets the estimate.",
+                                days_away=1, when="Friday", released=False), ticker="PEP")])]}
+
+
+def test_v2_shows_the_figure_on_the_row_and_leads_the_opened_row_with_it(tmp_path):
+    out = _v2(tmp_path, V2_PAYLOAD)
+    assert '<span class="ev-res">+1.3%</span>' in out
+    body = out[out.index("Producer Price Index"):]
+    body = body[:body.index('class="ev"')] if 'class="ev"' in body else body
+    assert body.index("+1.3% for September 2026") < body.index("What the producer price index measures.")
+    assert 'class="ev-why"' in body, "the description is the muted line under the figure"
+    assert "BLS: “PPI for final demand increases 1.3% in September”" in body
+    assert 'href="https://www.bls.gov/news.release/ppi.nr0.htm" target="_blank" rel="noopener"' in body
+
+
+def test_v2_says_when_a_release_is_out_but_its_figures_are_not(tmp_path):
+    out = _v2(tmp_path, V2_PAYLOAD)
+    assert '<p class="ev-result is-pending">' in out and "have not reached Optic" in out
+    retail = out[out.index("Retail sales"):]
+    assert 'class="ev-res"' not in retail[:retail.index("</button>")], "no figure on the row while it is pending"
+
+
+def test_v2_puts_reports_already_out_under_earlier_this_week(tmp_path):
+    """GS's Tuesday report sat under "Through the next 5 days" on Thursday."""
+    out = _v2(tmp_path, V2_PAYLOAD)
+    week = out.index("<b>This week</b>")
+    earlier = out.index("<b>Earlier this week</b>")
+    assert "Reported, with results" in out
+    assert out.index("GS reported Tuesday") > earlier, "under Earlier this week"
+    assert week < out.index("PEP reports Friday") < earlier, "what is still to come stays under This week"
+    gs = out[out.index("GS reported Tuesday"):]
+    assert '<span class="ev-res">Beat</span>' in gs[:gs.index("</button>")]
+    assert "EPS 4.60 against 4.52 expected" in gs
+
+
+def test_v2_result_styles_use_tokens():
+    css = open("static/v2/css/components.css", encoding="utf-8").read()
+    for sel in (".ev-result {", ".ev-src {", ".ev-body .ev-why {", ".ev-head .ev-res {"):
+        block = css.split(sel, 1)[1].split("}", 1)[0]
+        assert "#" not in block, sel
+    assert "var(--c-ink-3)" in css.split(".ev-body .ev-why {", 1)[1].split("}", 1)[0]
+
+
+def test_earnings_rows_count_days_like_the_calendar(monkeypatch):
+    block = {"days": [{"day": "Tuesday", "date": "2026-10-13", "symbols": ["GS"]},
+                      {"day": "Thursday", "date": "2026-10-15", "symbols": ["TSM"]},
+                      {"day": "Friday", "date": "2026-10-16", "symbols": ["PEP"]}]}
+    monkeypatch.setattr(priority.weekly_mod, "earnings_this_week", lambda provider, now: block)
+    rows = {r["ticker"]: r["days_away"] for r in priority._earnings(_Provider([]), THU)}
+    assert rows == {"GS": -2, "TSM": 0, "PEP": 1}
+
+
+def test_v2_lists_what_is_out_newest_first_and_says_the_day_once(tmp_path):
+    payload = json.loads(json.dumps(V2_PAYLOAD))
+    payload["columns"][1]["rows"].append(dict(_row("ASML reported Wednesday", kind="earnings", why="x", result=RES_GS,
+                                                   days_away=-1, when="Wednesday"), ticker="ASML", date="2026-10-14"))
+    payload["columns"][1]["rows"][0]["date"] = "2026-10-13"
+    out = _v2(tmp_path, payload)
+    assert out.index("ASML reported Wednesday") < out.index("GS reported Tuesday")
+    gs = out[out.index("GS reported Tuesday"):]
+    assert "<small>Tuesday" not in gs[:gs.index("</button>")], "the title already says Tuesday"
+
+
+def test_v2_within_a_day_already_out_the_high_impact_names_lead(tmp_path):
+    payload = json.loads(json.dumps(V2_PAYLOAD))
+    rows = payload["columns"][1]["rows"]
+    rows.append(dict(_row("TXN reported Wednesday", kind="earnings", why="x", result=RES_GS, days_away=-1,
+                          when="Wednesday"), ticker="TXN", date="2026-10-14", impact="medium"))
+    rows.append(dict(_row("TSLA reported Wednesday", kind="earnings", why="x", result=RES_GS, days_away=-1,
+                          when="Wednesday"), ticker="TSLA", date="2026-10-14", impact="high"))
+    out = _v2(tmp_path, payload)
+    assert out.index("TSLA reported Wednesday") < out.index("TXN reported Wednesday")

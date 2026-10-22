@@ -127,7 +127,17 @@ function bucket(r) {
   const d = Number(r.days_away);
   if (r.kind === 'sector') return 'Now';
   if (d === 0 || r.when === 'Today') return 'Today';
+  // A report from earlier in the week is out, with its result: under "Through
+  // the next 5 days" it read as one still to come.
+  if (Number.isFinite(d) && d < 0) return 'Earlier this week';
   return 'This week';
+}
+/* What a release or a report that is out printed, ahead of what the report
+ * is. The agency's own headline backs a release's figure when it is that day's. */
+function resultBody(res) {
+  if (!res) return '';
+  if (res.pending) return html`<p class="ev-result is-pending">${clean(res.text || '')}</p>`;
+  return html`<p class="ev-result">${clean(res.text || '')}${res.headline ? html` <span class="ev-src">${clean(res.headline_source || 'Agency')}: \u201c${clean(res.headline)}\u201d${res.headline_url ? html` <a class="textlink" href="${res.headline_url}" target="_blank" rel="noopener">Release</a>` : ''}</span>` : ''}${res.source ? html` <small class="t-muted">${clean(res.source)}.</small>` : ''}</p>`;
 }
 export function eventsBlock(pr, followed, filter) {
   const cols = (pr.columns || []);
@@ -137,18 +147,20 @@ export function eventsBlock(pr, followed, filter) {
   const shown = filter === 'mine' ? mine : rows.filter((r) => r.col !== 'movers');
   if (!rows.length) return empty('Nothing scheduled that moves the market', 'No major releases, earnings or sector moves in the next few days.');
   const byDate = (a, b) => String(a.date || '').localeCompare(String(b.date || '')) || (a.impact === 'high' ? -1 : 0);
-  const groups = ['Now', 'Today', 'This week'].map((b) => [b, shown.filter((r) => bucket(r) === b).sort(byDate)]).filter(([, l]) => l.length);
+  // What is out reads newest first; what is coming, soonest first.
+  const newest = (a, b) => String(b.date || '').localeCompare(String(a.date || '')) || (a.impact === 'high' ? -1 : 0);
+  const groups = ['Now', 'Today', 'This week', 'Earlier this week'].map((b) => [b, shown.filter((r) => bucket(r) === b).sort(b === 'Earlier this week' ? newest : byDate)]).filter(([, l]) => l.length);
   let n = 0;
-  const item = (r) => { n += 1; const id = `ev-${n}`; return html`<div class="ev">
+  const item = (r) => { n += 1; const id = `ev-${n}`; const res = r.result && !r.result.pending ? r.result : null; return html`<div class="ev">
         <button type="button" class="ev-head" aria-expanded="false" aria-controls="${id}" data-v2-ev>
           <span class="who">${r.kind === 'sector' ? 'Sector' : r.ticker || r.short || ''}</span>
-          <span class="what">${clean(r.title)}<small>${[r.when, r.time, r.impact ? `${r.impact} impact` : ''].filter(Boolean).join(', ')}</small></span>
-          <span class="ch">${r.ticker && followed.includes(r.ticker) ? html`<span class="pill">On your list</span>` : ''}</span>${icon('chev')}</button>
-        <div class="ev-body" id="${id}" hidden><p>${clean(r.why || '')}</p>${r.ticker ? html`<div class="cluster"><a class="textlink" href="#/${r.ticker}">Open ${r.ticker} ${icon('arrow')}</a></div>` : ''}</div></div>`; };
+          <span class="what">${clean(r.title)}<small>${[r.when && !String(r.title || '').includes(r.when) ? r.when : '', r.time, r.impact ? `${r.impact} impact` : ''].filter(Boolean).join(', ')}</small></span>
+          <span class="ch">${res && res.short ? html`<span class="ev-res">${res.short}</span>` : ''}${r.ticker && followed.includes(r.ticker) ? html`<span class="pill">On your list</span>` : ''}</span>${icon('chev')}</button>
+        <div class="ev-body" id="${id}" hidden>${resultBody(r.result)}<p class="${r.result ? 'ev-why' : ''}">${clean(r.why || '')}</p>${r.ticker ? html`<div class="cluster"><a class="textlink" href="#/${r.ticker}">Open ${r.ticker} ${icon('arrow')}</a></div>` : ''}</div></div>`; };
   return html`<div class="chips" role="group" aria-label="Show">
       <button type="button" class="chip" data-v2-evfilter="all" aria-pressed="${filter !== 'mine'}">Everything</button>
       <button type="button" class="chip" data-v2-evfilter="mine" aria-pressed="${filter === 'mine'}">Your names <span class="t-muted">${mine.length}</span></button></div>
-    ${groups.length ? groups.map(([b, list], gi) => html`<p class="group-h"><b>${b}</b>${b === 'Now' ? 'Sector moves' : b === 'Today' ? 'Releases and reports' : `Through the next ${pr.horizon_days || 5} days`}</p>
+    ${groups.length ? groups.map(([b, list], gi) => html`<p class="group-h"><b>${b}</b>${b === 'Now' ? 'Sector moves' : b === 'Today' ? 'Releases and reports' : b === 'Earlier this week' ? 'Reported, with results' : `Through the next ${pr.horizon_days || 5} days`}</p>
       ${list.slice(0, 3).map(item)}
       ${list.length > 3 ? html`<div id="evmore-${gi}" hidden>${list.slice(3).map(item)}</div>
         <button type="button" class="textlink ev-more" aria-expanded="false" aria-controls="evmore-${gi}" data-v2-evmore="${list.length - 3}">Show ${list.length - 3} more</button>` : ''}`)
