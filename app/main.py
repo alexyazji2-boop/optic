@@ -732,6 +732,16 @@ def _swing_snapshot(
             event_date = legs.get("earnings_date")
         except Exception:                                         # noqa: BLE001
             event_date = None
+        if not event_date:
+            # the quote's earnings field can be empty while the calendar has the date: AAPL's report-day pricing
+            # was missing ("no scheduled report") while Earnings showed Nov 2 (audit 2026-10-22). The same
+            # fallback the Contract Picker uses, to the first calendar date not yet past.
+            try:
+                today_et = datetime.now(session_mod.ET).date().isoformat()
+                ahead = sorted(d for d in ((YF_PROVIDER.earnings_calendar(ticker) or {}).get("dates") or []) if str(d)[:10] >= today_et)
+                event_date = str(ahead[0])[:10] if ahead else None
+            except Exception:                                     # noqa: BLE001
+                event_date = None
         chain = vol_surface_mod.apply_clock(chain, clock)
         chain = vol_surface_mod.apply_quotes(chain, clock)
         chain = vol_surface_mod.resolve_surface(chain, spot, rate, div,
