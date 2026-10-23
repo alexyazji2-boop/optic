@@ -24,7 +24,9 @@ let watched = null, showT = null;
 export function watchLoading(root, bar) {
   if (!root || !bar) return;
   if (watched) watched.disconnect();
-  const busy = () => !!root.querySelector('.sk-wrap, [aria-busy="true"]');
+  // on screen only: Home hides its portfolio panel for a reader with no linked brokerage and leaves the panel's
+  // skeleton inside it, which held the line on for good (audit regression, 2026-10-22)
+  const busy = () => [...root.querySelectorAll('.sk-wrap, [aria-busy="true"]')].some((el) => el.getClientRects().length > 0);
   const sync = () => {
     if (busy()) {
       if (!bar.classList.contains('is-on') && !showT) showT = setTimeout(() => { showT = null; if (busy()) bar.classList.add('is-on'); }, SHOW_AFTER);
