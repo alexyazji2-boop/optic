@@ -77,7 +77,11 @@ function readings() {
   const c = (D.t || {}).company || {}, f = c.financials || {}, m = f.margins || {}, g = f.growth || {}, eh = c.earnings_history || {}, si = c.short_interest || {}, ow = c.ownership || {};
   const items = [];
   if (f.available) items.push(['Margins', `Gross ${pct(m.gross_pct)}, operating ${pct(m.operating_pct)}, net ${pct(m.net_pct)}.`]);
-  if (f.available) items.push(['Growth', `Revenue ${signed(g.revenue_yoy_pct)} and net income ${signed(g.net_income_yoy_pct)} in the last fiscal year${isNum(g.net_income_yoy_pct) && isNum(g.revenue_yoy_pct) && g.net_income_yoy_pct - g.revenue_yoy_pct > 2 ? ': net income outpaced revenue, so the net margin widened' : isNum(g.net_income_yoy_pct) && isNum(g.revenue_yoy_pct) && g.revenue_yoy_pct - g.net_income_yoy_pct > 2 ? ': revenue outpaced net income, so the net margin narrowed' : ''}.`]);
+  // a swing to a loss is said as one, with no margin clause: CRCL read "net income -483.83% ... revenue outpaced net
+  // income, so the net margin narrowed" for a margin that went from positive to negative (audit 2026-10-22)
+  const ni0 = ((f.annual || {}).net_income || [])[0], niGo = isNum(g.net_income_yoy_pct) && isNum(g.revenue_yoy_pct) && isNum(ni0) && ni0 > 0;
+  const niWords = !isNum(g.net_income_yoy_pct) ? `net income has no growth rate (${isNum(ni0) && ni0 < 0 ? 'a loss' : 'a loss or no figure the year before'})` : isNum(ni0) && ni0 < 0 ? 'net income swung from a profit to a loss' : `net income ${signed(g.net_income_yoy_pct)}`;
+  if (f.available) items.push(['Growth', `Revenue ${isNum(g.revenue_yoy_pct) ? signed(g.revenue_yoy_pct) : 'with no growth rate'} and ${niWords} in the last fiscal year${niGo && g.net_income_yoy_pct - g.revenue_yoy_pct > 2 ? ': net income outpaced revenue, so the net margin widened' : niGo && g.revenue_yoy_pct - g.net_income_yoy_pct > 2 ? ': revenue outpaced net income, so the net margin narrowed' : ''}.`]);
   if (eh.available && eh.sample_size) items.push(['Against estimates', `Beat in ${eh.beat_count} of ${eh.sample_size} quarters${eh.in_line_count ? `, in line in ${eh.in_line_count}` : ''}, by ${signed(eh.avg_surprise_pct, 1)} on average.`]);
   // only what was reported: a missing share of float is not 0%, and no squeeze reading is drawn without it
   if (si.available) { const parts = [isNum(si.percent_of_float) ? `${pct(si.percent_of_float * 100)} of float` : 'Share of float not reported', isNum(si.days_to_cover) ? `${num(si.days_to_cover, 1)} days to cover` : '', isNum(si.change_vs_prior_pct) ? `${signed(si.change_vs_prior_pct, 1)} since the last report` : ''].filter(Boolean); items.push(['Short interest', `${parts.join(', ')}.${isNum(si.percent_of_float) && si.squeeze_potential ? ` Squeeze potential ${si.squeeze_potential}.` : ''}`]); }
@@ -87,8 +91,8 @@ function readings() {
   const yr = (f.annual_fiscal || [])[0] || (per[0] ? String(per[0]).slice(0, 4) : '');
   const latest = (k) => (a[k] || [])[0];
   const cells = f.available ? [
-    ['Revenue', usd(latest('revenue')), `${signed(g.revenue_yoy_pct)} on the year before`],
-    ['Net income', usd(latest('net_income')), `${signed(g.net_income_yoy_pct)} on the year before`],
+    ['Revenue', usd(latest('revenue')), isNum(g.revenue_yoy_pct) ? `${signed(g.revenue_yoy_pct)} on the year before` : noRate(latest('revenue'))],
+    ['Net income', usd(latest('net_income')), isNum(g.net_income_yoy_pct) ? (latest('net_income') < 0 ? `swung to a loss from a profit the year before (${signed(g.net_income_yoy_pct, 0)})` : `${signed(g.net_income_yoy_pct)} on the year before`) : noRate(latest('net_income'))],
     ['Free cash flow', usd(latest('free_cash_flow')), isNum(latest('free_cash_flow')) && latest('revenue') ? `${num((latest('free_cash_flow') / latest('revenue')) * 100, 1)}% of revenue` : ''],
     ['Operating margin', pct(m.operating_pct), `Gross ${pct(m.gross_pct)}, net ${pct(m.net_pct)}`],
     [isNum(bs.net_cash) && bs.net_cash < 0 ? 'Net debt' : 'Net cash', usd(isNum(bs.net_cash) ? Math.abs(bs.net_cash) : null), `Cash ${usd(bs.cash)}, debt ${usd(bs.total_debt)}`],
@@ -201,11 +205,13 @@ function statementCharts() {
   return out;
 }
 
+// "n/a on the year before" gave no reason (RIVN, audit 2026-10-22): a loss in either year has no growth rate
+const noRate = (v) => (isNum(v) && v < 0 ? 'a loss, so no growth rate' : 'no growth rate: the year before was a loss or is not reported');
 function record(which) {
   const c = (D.t || {}).company || {}, eh = which === 'earnings' ? c.earnings_history || {} : {}, si = which === 'short' ? c.short_interest || {} : {};
   return html`${eh.available ? html`<section class="section" id="fin-earnings" aria-labelledby="er-h"><h2 class="t-h2" id="er-h">Earnings track record</h2>
       <div class="tscroll"><table class="t"><thead><tr><th>Report</th><th>Estimate</th><th>Reported</th><th>Surprise</th></tr></thead><tbody>${(eh.quarters || []).map((q) => html`<tr><td>${fullDate(q.date)}</td><td>${num(q.eps_estimate)}</td><td>${num(q.eps_reported)}</td><td class="${dir(q.surprise_pct)}">${signed(q.surprise_pct, 1)}</td></tr>`)}</tbody></table></div>
-      ${(eh.upcoming || [])[0] ? html`<p>Next report ${fullDate(eh.upcoming[0].date)}, estimate ${num(eh.upcoming[0].eps_estimate)}.</p>` : ''}<ul class="plain">${(eh.notes || []).map((n) => html`<li>${clean(n)}</li>`)}</ul></section>` : ''}
+      ${(eh.upcoming || [])[0] ? html`<p>Next report ${fullDate(eh.upcoming[0].date)}, estimate ${num(eh.upcoming[0].eps_estimate)}.</p>` : ''}<ul class="plain">${(eh.notes || []).map((n) => html`<li>${clean(n)}</li>`)}</ul>${eh.eps_basis ? html`<p class="asof">${clean(eh.eps_basis)}</p>` : ''}</section>` : ''}
     ${si.available ? html`<section class="section" id="fin-short" aria-labelledby="si-h"><h2 class="t-h2" id="si-h">Short interest</h2>
       ${kv([['Share of float', isNum(si.percent_of_float) ? pct(si.percent_of_float * 100, 2) : 'Not reported'], ['Days to cover', isNum(si.days_to_cover) ? num(si.days_to_cover, 1) : 'Not reported'], ['Since the last report', isNum(si.change_vs_prior_pct) ? signed(si.change_vs_prior_pct, 1) : 'Not reported'], ['Shares short', isNum(si.shares_short) ? compact(si.shares_short) : 'Not reported'], ['Prior', isNum(si.shares_short_prior) ? compact(si.shares_short_prior) : 'Not reported'], ['Float', isNum(si.float_shares) ? compact(si.float_shares) : 'Not reported']], 3)}
       <p>${isNum(si.percent_of_float) && si.squeeze_potential ? `Squeeze potential: ${si.squeeze_potential}. ` : 'No squeeze reading without the share of float. '}${(si.notes || []).map(clean).join(' ')}</p><p class="asof">Settlement ${fullDate(si.settlement_date)}. ${clean(si.caveat || '')}</p></section>` : ''}`;

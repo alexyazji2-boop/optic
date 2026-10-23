@@ -292,7 +292,9 @@ def analyse_financials(raw: Dict[str, Any]) -> Dict[str, Any]:
         n, d = numer[idx], denom[idx]
         if n is None or d in (None, 0):
             return None
-        return _f(n / d * 100.0, 2)
+        # four places, so every display rounds once from near the raw ratio: rounded to two here and to one
+        # again on the page, RIVN's -66.549% read -66.6% on the card and -66.5% on the chart (audit 2026-10-22)
+        return _f(n / d * 100.0, 4)
 
     total_debt = _pick_row(balance, "total_debt")
     cash_bal = _pick_row(balance, "cash")
@@ -406,7 +408,13 @@ def analyse_earnings_history(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
     surprises = [r["surprise_pct"] for r in reported if r.get("surprise_pct") is not None]
     counts = surprise_counts(surprises)
     beat_rate = counts["beat_rate_pct"]
-    avg_surprise = _f(float(np.mean(surprises)), 2) if surprises else None
+    # A percentage surprise on an estimate at or below zero is a ratio to nearly nothing: CRCL's -0.16
+    # estimate made one quarter +813.9% and the average +249% (audit 2026-10-22). Those quarters still
+    # count as beats or misses; they are left out of the average, which says how many it rests on.
+    sized = [r["surprise_pct"] for r in reported if r.get("surprise_pct") is not None
+             and r.get("eps_estimate") is not None and r["eps_estimate"] > 0]
+    avg_surprise = _f(float(np.mean(sized)), 2) if sized else None
+    left_out = len(surprises) - len(sized)
 
     notes: List[str] = []
     if beat_rate is not None:
@@ -414,18 +422,25 @@ def analyse_earnings_history(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
             "Beat consensus in {} of the last {} quarters ({:.0f}%){}{}.".format(
                 counts["beat_count"], counts["rate_quarters"], beat_rate,
                 ", {} in line".format(counts["in_line_count"]) if counts["in_line_count"] else "",
-                ", average surprise {:+.1f}%".format(avg_surprise) if avg_surprise is not None else "",
+                ", average surprise {:+.1f}%{}".format(
+                    avg_surprise, " over the {} with a positive estimate".format(len(sized)) if left_out else "")
+                if avg_surprise is not None else "",
             )
         )
     if counts["miss_count"] >= 2:
         notes.append("{} misses in the window. The beat streak is not dependable.".format(counts["miss_count"]))
-    if avg_surprise is not None and avg_surprise > 5:
+    # only for a record that is consistent: beside "3 misses, not dependable" it contradicted itself (RIVN)
+    if avg_surprise is not None and avg_surprise > 5 and counts["miss_count"] < 2 and (beat_rate or 0) >= 75:
         notes.append(
             "A consistent large beat is usually already in the price; the reaction depends on guidance, not the print."
         )
 
     return {
         "available": True,
+        # the track record is on analysts' basis; the per-share chart on the same page is GAAP, and CRCL's
+        # reported 1.12 sat beside a GAAP -4.48 for the same quarter with nothing saying why (audit 2026-10-22)
+        "eps_basis": ("Estimates and reported EPS on the basis analysts use, usually adjusted, which can differ "
+                      "from the GAAP diluted EPS charted above."),
         "quarters": reported,
         "upcoming": upcoming[:2],
         "beat_count": counts["beat_count"],

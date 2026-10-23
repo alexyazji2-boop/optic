@@ -95,7 +95,8 @@ export function perShareLine(eps, shares, labels, back = 1, against = '') {
   const ce = pctChange(e0, (eps || [])[back]), cs = pctChange(s0, (shares || [])[back]);
   const then = `${labels[back] || ''}${against ? `, ${against}` : ''}`;
   const a = `Diluted EPS was ${num(e0, 2)} in ${labels[0]}${ce === null ? '' : flat(ce) ? `, unchanged from ${then}` : `, ${ce > 0 ? 'up' : 'down'} ${num(Math.abs(ce), 1)}% from ${num(eps[back], 2)} in ${then}`}.`;
-  return cs === null ? a : `${a} Over the same span the diluted share count ${flat(cs) ? `was unchanged at ${compact(s0)}` : `${cs > 0 ? 'rose' : 'fell'} ${num(Math.abs(cs), 1)}%, to ${compact(s0)}`}.`;
+  // with the EPS change left out (a base at or below zero), "the same span" named no span (CRCL, audit 2026-10-22)
+  return cs === null ? a : `${a} ${ce === null ? `From ${then} to ${labels[0]}` : 'Over the same span'} the diluted share count ${flat(cs) ? `was unchanged at ${compact(s0)}` : `${cs > 0 ? 'rose' : 'fell'} ${num(Math.abs(cs), 1)}%, to ${compact(s0)}`}.`;
 }
 
 /** The parts of a total for one period, as filed: rows with no figure dropped; an aggregate line (Apple files

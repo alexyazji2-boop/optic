@@ -120,6 +120,34 @@ def _next_report(history: List[Dict[str, Any]], calendar: Dict[str, Any],
     return out
 
 
+def _reconcile_consensus(next_report: Dict[str, Any], growth: Dict[str, Any]) -> None:
+    """Make the next report's consensus agree with the estimate table on the same page, or say they differ.
+
+    Yahoo sends two estimates for the coming quarter: the calendar's average (tied to the report date) and the
+    estimate table's "current quarter". They can disagree: RIVN's calendar said -0.65 and the table -0.72 for
+    one quarter, and the page printed both as the consensus (audit 2026-10-22). Which quarter Yahoo's table
+    means is not stated, so neither is overwritten: the calendar's figure stays with the date, and a
+    difference of more than 2% is said in words beside it.
+
+    The dispersion reading needs analysts to disperse: one estimate (ESP, low = high = 0.91) read as
+    "tightly clustered", which is agreement from nobody.
+    """
+    cq = next((f for f in growth.get("forward") or [] if f.get("period") == "0q"), None) or {}
+    c, t = next_report.get("eps_consensus"), cq.get("eps_avg")
+    if c is not None and t is not None and abs(c - t) > max(0.02 * abs(t), 0.005):
+        next_report["consensus_note"] = (
+            "Yahoo gives two figures for this quarter: {:.2f} from its earnings calendar, used here, and {:.2f} "
+            "for the current quarter in its estimate table below. They may cover different counts of analysts "
+            "or update at different times.".format(c, t))
+    n = cq.get("eps_analysts")
+    if next_report.get("dispersion_note") and (n is None or n < 3):
+        next_report["eps_dispersion_pct"] = None
+        next_report["dispersion_note"] = (
+            "Only {} analyst estimate{} for this quarter, too few to read agreement from.".format(
+                n, "" if n == 1 else "s") if n else
+            "The number of analysts behind this estimate is not in the data, so their agreement is not read.")
+
+
 # ------------------------------------------------------ surprise + reaction
 
 
@@ -172,6 +200,11 @@ def _surprise_history(history: List[Dict[str, Any]], hist: pd.DataFrame, limit: 
     ]
     reported.sort(key=lambda r: r["date"], reverse=True)
     reported = reported[:limit]
+    # "the last 8 reports" must be recent quarters: ESP's eight ran back to 2013 with gaps (audit 2026-10-22).
+    # Reports more than about three years before the newest are left out of the record.
+    if reported:
+        newest = pd.Timestamp(reported[0]["date"])
+        reported = [r for r in reported if (newest - pd.Timestamp(r["date"])).days <= 1100]
     if not reported:
         return {"available": False, "rows": []}
 
@@ -530,17 +563,27 @@ def _growth(financials: Dict[str, Any], est: Dict[str, Any]) -> Dict[str, Any]:
     for key, label in _PERIOD_LABELS.items():
         e = eps_est.get(key) or {}
         r = rev_est.get(key) or {}
-        if e.get("avg") is None and r.get("avg") is None:
+        # No analysts is no estimate: SIEB's feed carries a 0.0 average with nobody behind it, and the page said
+        # "Analysts expect about $0 of revenue" (audit 2026-10-22). A revenue average at or below zero is the same.
+        eps_n = int(e["numberOfAnalysts"]) if e.get("numberOfAnalysts") else 0
+        rev_n = int(r["numberOfAnalysts"]) if r.get("numberOfAnalysts") else 0
+        eps_avg = e.get("avg") if (eps_n or e.get("numberOfAnalysts") is None) else None
+        rev_avg = r.get("avg") if r.get("avg") is not None and r["avg"] > 0 and (rev_n or r.get("numberOfAnalysts") is None) else None
+        if eps_avg is None and rev_avg is None:
             continue
+        # Yahoo's growth on a base at or below zero is a ratio to nothing: RIVN's -2.43 read "+20.8% EPS growth"
+        base = e.get("yearAgoEps")
+        eps_growth = (None if e.get("growth") is None or eps_avg is None or eps_avg < 0 or (base is not None and base <= 0)
+                      else _f(e["growth"] * 100.0, 1))
         forward.append({
             "period": key,
             "label": label,
-            "eps_avg": _f(e.get("avg"), 2),
-            "eps_growth_pct": _f((e.get("growth") or 0) * 100.0, 1) if e.get("growth") is not None else None,
-            "eps_analysts": int(e["numberOfAnalysts"]) if e.get("numberOfAnalysts") else None,
-            "revenue_avg": _f(r.get("avg"), 0),
-            "revenue_label": "$" + _human(r.get("avg")) if r.get("avg") else None,
-            "revenue_growth_pct": _f((r.get("growth") or 0) * 100.0, 1) if r.get("growth") is not None else None,
+            "eps_avg": _f(eps_avg, 2),
+            "eps_growth_pct": eps_growth,
+            "eps_analysts": eps_n or None,
+            "revenue_avg": _f(rev_avg, 0),
+            "revenue_label": "$" + _human(rev_avg) if rev_avg else None,
+            "revenue_growth_pct": _f((r.get("growth") or 0) * 100.0, 1) if r.get("growth") is not None and rev_avg else None,
         })
 
     notes: List[str] = []
@@ -896,9 +939,10 @@ def _verdict(next_report: Dict[str, Any], surprise: Dict[str, Any], revisions: D
         reasons.append("Far enough out that earnings shouldn't drive strike selection for a normal swing.")
 
     if revisions.get("direction") == "rising":
-        reasons.append("Estimate revisions are positive, which historically precedes beats more often than misses.")
+        # "historically precedes beats" had no measurement behind it in Optic (audit 2026-10-22)
+        reasons.append("Estimate revisions are rising into the report. Optic has not measured how often that comes before a beat.")
     elif revisions.get("direction") == "falling":
-        reasons.append("Estimates are being cut into the date. A lower bar, but a signal of deteriorating guidance.")
+        reasons.append("Estimates are being cut into the date, which lowers the bar. Why analysts cut them is not in this data.")
 
     if surprise.get("beat_rate_pct") is not None and surprise["beat_rate_pct"] >= 75:
         reasons.append(f"Consistent beater ({surprise['beat_rate_pct']:.0f}% hit rate), so a beat alone is close to the base case.")
@@ -1051,6 +1095,7 @@ def analyse(provider, yf_provider, ticker: str, quote: Dict[str, Any], rate: flo
     latest = _latest_result(surprise, extended)
     revisions = _revisions(est)
     growth = _growth(financials, est)
+    _reconcile_consensus(next_report, growth)
     implied = _implied_move(provider, ticker, spot, next_report.get("date"), rate,
                             next_report.get("timing"))
     pricing = _event_pricing(implied, surprise, hist)
