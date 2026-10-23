@@ -98,6 +98,12 @@
   /* motion */
   --ease: cubic-bezier(.2, .7, .2, 1);
   --d-fast: 120ms; --d: 200ms; --d-slow: 320ms;
+  /* the shared motion system (ui/motion.js, audit and motion session 2026-10-22), timed in the browser: a control's
+     own feedback is immediate, content arriving fades in a beat, a panel slides a little longer, and anything
+     leaving goes faster than it came. Nothing waits for these: they run while the work does. */
+  --m-press: 90ms; --m-content: 150ms; --m-panel: 200ms; --m-exit: 130ms;
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);      /* entering: moves at once, settles softly */
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);   /* a sheet or drawer */
   color-scheme: light;
 }
 :root[data-theme="charcoal"] {

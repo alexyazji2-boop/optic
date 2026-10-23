@@ -11,6 +11,7 @@ import * as prefs from './core/prefs.js';
 import * as shell from './ui/shell.js';
 import * as palette from './ui/palette.js';
 import * as drawer from './ui/drawer.js';
+import * as motion from './ui/motion.js';
 import { openMilo, resetContext, checkAvailability, markButtons } from './ui/milo.js';
 import { toggleWatch } from './ui/company.js';
 import { linkHome } from './core/homelink.js';
@@ -110,6 +111,22 @@ async function afterAuth() {
   if (current && current.page.onAuth) current.page.onAuth(current.view);
 }
 
+// The thin line under the top bar while the page has a section still loading (ui/motion.js watchLoading)
+let LINE = null;
+function pageLine() {
+  if (!LINE) { LINE = document.createElement('div'); LINE.className = 'page-line'; LINE.setAttribute('aria-hidden', 'true'); document.body.appendChild(LINE); }
+  return LINE;
+}
+/** Run `fn` once `sel` is in `view`: at the next frame if the page drew at once, or when it does, within a second. */
+function whenDrawn(view, sel, fn) {
+  requestAnimationFrame(() => {
+    if (view.querySelector(sel)) { fn(); return; }
+    const mo = new MutationObserver(() => { if (view.querySelector(sel)) { mo.disconnect(); requestAnimationFrame(fn); } });
+    mo.observe(view, { childList: true, subtree: true });
+    setTimeout(() => mo.disconnect(), 1000);
+  });
+}
+
 async function show(route) {
   // v2 closed to this reader since the page loaded: the move lands on the classic app instead
   if (isClosed()) { location.href = `${CLASSIC}${location.hash}`; return; }
@@ -130,9 +147,11 @@ async function show(route) {
   drawer.close({ silent: true, route: true });
   palette.close({ silent: true });
   const main = $('#main');
+  const tabsWere = motion.tabsBefore(main.querySelector('.page-view'));
   const view = document.createElement('div');
   view.className = 'page-view';
   main.replaceChildren(view);
+  motion.watchLoading(view, pageLine());
   // The page's own notice (not advice, hypothetical performance), where Classic puts it: below the
   // answer, above the evidence, i.e. after the page's first section. Pages repaint themselves, so an
   // observer puts it back after every paint; no page can drop it.
@@ -160,6 +179,8 @@ async function show(route) {
     console.error(e);
     render(view, html`<div class="state err" role="alert"><p class="t-h3">This page did not load</p><p>${e.message || 'An error stopped it.'}</p><a class="btn" href="${hrefFor(route.view, route.symbol)}">Try again</a></div>`);
   });
+  // the Dossier's tab bar slides and its content fades in, once the new strip is drawn (ui/motion.js)
+  if (tabsWere) whenDrawn(view, 'nav.tabs[data-v2-dtabs]', () => motion.tabsAfter(view, tabsWere));
   // Focus the page's heading so a screen reader hears where it landed.
   requestAnimationFrame(() => {
     const h = drawer.isOpen() ? null : view.querySelector('h1');

@@ -127,3 +127,18 @@ def test_methods_fold_behind_how_this_works():
     assert "${how((d.events || []).filter((e) => !/report/i.test(e.text || ''))" in op, "the report inside the expiry stays in view"
     assert "ITM (model) is N(d2)" in op[op.index("${how("):], "the formulas are inside the fold"
     assert "${how(html`<p>The strike chart shows the strikes with the most gamma only" in pan
+
+
+def test_one_motion_system_with_tokens_and_a_still_reduced_motion_line():
+    # the shared motion system (audit and motion session, 2026-10-22): tokens, one module, and a line that stands
+    # still rather than vanishing under reduced motion
+    from pathlib import Path
+    v2 = Path(__file__).resolve().parent.parent / "static" / "v2"
+    tokens = (v2 / "css/tokens.css").read_text()
+    for t in ("--m-press:", "--m-content:", "--m-panel:", "--m-exit:", "--ease-out:", "--ease-drawer:"):
+        assert t in tokens, t
+    comp = (v2 / "css/components.css").read_text()
+    assert ".page-line::before, .activity::before { animation: none !important; transform: none; width: 100%;" in comp
+    motion = (v2 / "js/ui/motion.js").read_text()
+    assert "if (!before || reduced()) return;" in motion, "no tab motion under reduced motion"
+    assert "export const MILO_STATES" in (v2 / "js/ui/milo.js").read_text()

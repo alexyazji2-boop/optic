@@ -281,8 +281,9 @@ ul.plain { margin: 0; padding-left: 18px; } ul.plain li { margin-bottom: 7px; }
 
 /* ---------- drawer: one inspector for every object ---------- */
 .drawer { position: fixed; inset: 0; z-index: 60; pointer-events: none; }
-.drawer-scrim { position: absolute; inset: 0; background: var(--c-scrim); opacity: 0; transition: opacity var(--d); pointer-events: none; }
-.drawer-panel { position: absolute; top: 0; right: 0; bottom: 0; width: min(480px, 100vw); background: var(--c-raised); border-left: 1px solid var(--c-line); box-shadow: var(--sh-sheet); display: flex; flex-direction: column; transform: translateX(28px); opacity: 0; transition: transform var(--d) var(--ease), opacity var(--d); pointer-events: auto; }
+.drawer-scrim { position: absolute; inset: 0; background: var(--c-scrim); opacity: 0; transition: opacity var(--m-panel) var(--ease-out); pointer-events: none; }
+.drawer-panel { position: absolute; top: 0; right: 0; bottom: 0; width: min(480px, 100vw); background: var(--c-raised); border-left: 1px solid var(--c-line); box-shadow: var(--sh-sheet); display: flex; flex-direction: column; transform: translateX(28px); opacity: 0; transition: transform var(--m-panel) var(--ease-drawer), opacity var(--m-panel) var(--ease-out); pointer-events: auto; }
+.drawer:not(.is-open) .drawer-panel, .drawer:not(.is-open) .drawer-scrim { transition-duration: var(--m-exit); }   /* leaving is faster */
 .drawer.is-open .drawer-panel { transform: none; opacity: 1; }
 .drawer-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; padding: 20px 16px 14px 28px; border-bottom: 1px solid var(--c-line-2); }
 .drawer-kicker { font: 500 var(--t-md)/1 var(--f-label); color: var(--c-ink-3); margin: 6px 0 8px; }
@@ -575,6 +576,33 @@ ul.plain { margin: 0; padding-left: 18px; } ul.plain li { margin-bottom: 7px; }
 .sk { position: relative; overflow: hidden; background: var(--c-plane-2); border-radius: var(--r-md); }
 .sk::after { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--c-raised) 70%, transparent), transparent); transform: translateX(-100%); animation: sk 1.1s infinite; }
 @keyframes sk { to { transform: translateX(100%); } }
+
+/* ---------- the shared activity line (ui/motion.js): thin, gold, only while there is real work ---------- */
+/* the page's: under the top bar while a section still shows its skeleton, shown after 220 ms so a fast load never flashes */
+.page-line { position: fixed; top: 0; left: 0; right: 0; z-index: 45; height: 2px; overflow: hidden; pointer-events: none; opacity: 0; transition: opacity var(--m-exit) ease-out; }
+.page-line.is-on { opacity: 1; transition-duration: var(--m-content); }
+/* Milo's, inside an answer from Send until it is complete, stopped or failed */
+.activity { display: block; position: relative; height: 2px; margin: 10px 0 2px; overflow: hidden; border-radius: 2px; background: var(--c-line-2); }
+.page-line::before, .activity::before { content: ""; position: absolute; top: 0; bottom: 0; left: 0; width: 32%; background: var(--c-gold); transform: translateX(-100%); }
+.page-line.is-on::before, .activity::before { animation: activity-glide 1.15s linear infinite; }
+@keyframes activity-glide { to { transform: translateX(320%); } }
+/* still, not gone: with reduced motion the line stands at full width and says the same thing */
+@media (prefers-reduced-motion: reduce) {
+  .page-line::before, .activity::before { animation: none !important; transform: none; width: 100%; opacity: .55; }
+}
+
+/* ---------- the Dossier tab bar moving to the new tab (ui/motion.js tabsAfter) ---------- */
+.tabs { position: relative; }
+/* the question just sent: one short entrance (ui/milo.js marks it for a single paint) */
+.milo-sofar { margin: 6px 0 0; font-size: var(--t-sm); color: var(--c-ink-3); }
+.milo-you.is-new { animation: milo-sent var(--m-content) var(--ease-out); }
+@keyframes milo-sent { from { opacity: 0; transform: translateY(4px); } }
+.tab-ink { position: absolute; bottom: -1px; height: 2px; background: var(--c-gold); transform-origin: left center; pointer-events: none; }
+.tabs.is-moving a[aria-current="page"] { border-bottom-color: transparent; }
+
+/* ---------- a control's own feedback: immediate, small ---------- */
+.seg button, .chip { transition: transform var(--m-press) var(--ease-out); }
+.seg button:active:not(:disabled), .chip:active:not(:disabled) { transform: scale(.98); }
 .sk-line { height: 14px; margin: 8px 0; } .sk-chart { min-height: 220px; } .sk-row { height: 56px; margin-bottom: 2px; border-radius: 0; }
 .state { padding: 22px 24px; border: 1px dashed var(--c-line); border-radius: var(--r-3); display: grid; gap: 8px; justify-items: start; background: color-mix(in srgb, var(--c-raised) 60%, transparent); }
 .state p { color: var(--c-ink-2); max-width: 62ch; }

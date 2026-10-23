@@ -3372,6 +3372,8 @@ async def stream_chat(
                         words = "Looking that up"
                     yield _sse("status", {"state": words})
                     content, is_error, _ = await toolbox.run(b.name, b.input)
+                    # what has been looked up so far, as it is attached: the panel lists it while the answer streams
+                    yield _sse("retrieved", {"items": toolbox.retrieved()})
                     result = {"type": "tool_result", "tool_use_id": b.id, "content": content}
                     if is_error:
                         result["is_error"] = True

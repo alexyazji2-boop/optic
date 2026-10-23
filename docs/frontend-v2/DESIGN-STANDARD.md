@@ -87,6 +87,10 @@ One family, the line icons in `ui/icons.js`: a 24px grid, a stroke of about 1.6 
 - No decorative gradients, glows, stock illustrations or emoji. The two gold glows (the Home scene's lens and the first-visit art) were removed.
 - Two gradients remain, both functional: the sidebar's divider and the loading shimmer.
 - Motion answers an action (opening, expanding), or carries meaning (Scout reacting to Milo's events, the loading shimmer). Under reduced motion it stops.
+- **One motion system** (2026-10-22, `ui/motion.js`, tokens in `css/tokens.css`): `--m-press` 90 ms for a control's own feedback, `--m-content` 150 ms for content arriving, `--m-panel` 200 ms for a drawer or panel, `--m-exit` 130 ms for anything leaving (faster than it came); `--ease-out` for entrances, `--ease-drawer` for sheets. No page writes its own durations. Nothing is delayed to make a motion visible.
+- **The activity line** is the one loading indicator that moves: thin, gold, only while there is real work. The page's sits under the top bar while a section still shows its skeleton (after 220 ms, so a fast load never flashes); Milo's runs inside an answer from Send until it is complete, stopped or failed. With reduced motion it stands still at full width.
+- **Dossier tabs:** the gold bar slides to the new tab and the content under the header fades in, between tabs of one symbol only. A new symbol keeps its own loading layout. No full-page fades, no staggered rows, no flashing prices, no pulsing controls.
+- **Milo's states** are only those an event supports: submitted, preparing, retrieving (the server's own tool words), streaming, complete, stopped, failed (`MILO_STATES` in `ui/milo.js`).
 
 ### Explanations
 - **Visible:** a section shows its finding and one useful line.
