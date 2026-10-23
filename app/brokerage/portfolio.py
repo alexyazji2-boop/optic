@@ -163,6 +163,7 @@ def build(accounts: List[Dict[str, Any]],
                 acct_sum += mv
             else:
                 acct_sum_ok = False
+        unpriced_opts: List[str] = []
         for opt in p.get("options") or []:
             n, price, avg = _num(opt.get("contracts")), _num(opt.get("price")), _num(opt.get("avg_cost"))
             mult = multiplier(opt)
@@ -179,11 +180,15 @@ def build(accounts: List[Dict[str, Any]],
                 "market_value_est": _r(mv), "cost_basis": _r(cost),
                 "unrealized_pl_est": _r(mv - cost) if mv is not None and cost is not None else None,
                 "account": a.get("name"),
+                # the time the broker's price belongs to: without it the 60-minute freshness check in
+                # options_risk could never fire (audit 2026-10-22)
+                "price_as_of": a.get("broker_as_of") or a.get("last_sync_at"),
             })
             if mv is not None:
                 acct_sum += mv
             else:
                 acct_sum_ok = False
+                unpriced_opts.append("{} {}".format(opt.get("underlying") or "", opt.get("occ") or "option").strip())
         for c in p.get("cash") or []:
             amt = _num(c.get("amount"))
             ccy = (c.get("currency") or acct_ccy).upper()
@@ -202,6 +207,10 @@ def build(accounts: List[Dict[str, Any]],
                 notes.append("{}: the broker's own total differs from the sum of the holdings Optic "
                              "received by {:.1f}%. Something the broker holds may not be reported "
                              "through the connection.".format(a.get("name"), gap))
+        if unpriced_opts:
+            # an option with no broker price was left out of every total without a word (audit 2026-10-22)
+            notes.append("{}: {} came without a price from the broker, so {} left out of every total.".format(
+                a.get("name"), ", ".join(unpriced_opts), "it is" if len(unpriced_opts) == 1 else "they are"))
         if p.get("problems"):
             notes.append("{}: the last sync did not return {}. Figures for this account are partial."
                          .format(a.get("name"), " or ".join(p["problems"])))

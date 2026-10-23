@@ -328,20 +328,30 @@ def _exposure(core: Dict[str, Any]) -> Dict[str, Any]:
           for s in funds}
     fx = _lookups().get("fx_to_usd")
 
+    unconverted: List[str] = []
+
     def usd(amount: Any, ccy: Optional[str]) -> float:
         if amount is None:
             return 0.0
         if (ccy or "USD").upper() == "USD":
             return float(amount)
         r = _safe(fx, ccy)
-        return float(amount) * float(r) if r else 0.0
+        if not r:
+            # CAD 10,000 with no rate vanished from cash without a word (audit 2026-10-22)
+            unconverted.append("{} {:,.2f}".format(ccy, float(amount)))
+            return 0.0
+        return float(amount) * float(r)
     cash_usd = sum(usd(c.get("amount"), c.get("currency")) for c in core.get("cash") or [])
     opts_usd = sum(float(o.get("market_value_est") or 0) for o in core.get("options") or []
                    if (o.get("currency") or "USD") == "USD")
     try:
-        return exposure_mod.build(held, lt, _budgeted(_m("sector_of"), LOOKUP_BUDGET) or (lambda s: None),
-                                  country_of=_budgeted(_m("country_of"), LOOKUP_BUDGET),
-                                  cash_usd=round(cash_usd, 2), options_usd=round(opts_usd, 2))
+        out = exposure_mod.build(held, lt, _budgeted(_m("sector_of"), LOOKUP_BUDGET) or (lambda s: None),
+                                 country_of=_budgeted(_m("country_of"), LOOKUP_BUDGET),
+                                 cash_usd=round(cash_usd, 2), options_usd=round(opts_usd, 2))
+        if unconverted and isinstance(out, dict):
+            out.setdefault("limitations", []).append(
+                "Cash of {} is left out: no exchange rate to US dollars came back.".format(", ".join(unconverted)))
+        return out
     except TypeError:
         return exposure_mod.build(held, lt, _budgeted(_m("sector_of"), LOOKUP_BUDGET) or (lambda s: None),
                                   country_of=_budgeted(_m("country_of"), LOOKUP_BUDGET))
@@ -372,7 +382,9 @@ def options_risk(user: Dict[str, Any], account_ids: Optional[List[str]] = None) 
     core = _core(user, account_ids)
     opts = core.get("options") or []
     if not opts:
-        return {"section": "options", "available": False, "reason": "No option positions in the accounts counted."}
+        missing = [n for n in core.get("notes") or [] if "did not return" in n and "option" in n]
+        return {"section": "options", "available": False,
+                "reason": " ".join(missing) if missing else "No option positions in the accounts counted."}
     shares: Dict[str, float] = {}
     for h in core.get("holdings") or []:
         if h.get("symbol") and h.get("kind") in ("equity", "etf"):
@@ -398,15 +410,17 @@ def scenarios(user: Dict[str, Any], account_ids: Optional[List[str]] = None) -> 
     left: List[Dict[str, Any]] = []
     for h in core.get("holdings") or []:
         sym = str(h.get("symbol") or "").upper()
-        if h.get("kind") not in ("equity", "etf", "fund") or not sym:
-            left.append({"label": h.get("description") or sym or "A holding", "reason": "Not a stock or fund, so no scenario models it."})
-            continue
-        if (h.get("currency") or "USD").upper() != "USD":
-            left.append({"label": sym, "reason": "Priced in {}; the scenarios are in US dollars only.".format(h.get("currency"))})
-            continue
-        legs.append({"symbol": sym, "kind": "stock", "qty": float(h.get("quantity") or 0), "price": h.get("price"),
-                     "price_as_of": synced, "price_basis": "Optic's quote"})
-    shares = {l["symbol"]: l["qty"] for l in legs}
+        usd = (h.get("currency") or "USD").upper() == "USD"
+        # left out, but still counted in coverage at the broker's value (a CAD holding and a crypto position
+        # were missing from it, and coverage read 100% with one of five positions priced: audit 2026-10-22)
+        why = ("Not a stock or fund, so no scenario models it." if h.get("kind") not in ("equity", "etf", "fund") or not sym
+               else None if usd else "Priced in {}; the scenarios are in US dollars only.".format(h.get("currency")))
+        legs.append({"symbol": sym or (h.get("description") or "holding"), "label": h.get("description") or sym if why else None,
+                     "kind": "stock", "qty": float(h.get("quantity") or 0), "price": h.get("price"),
+                     "ref_value": abs(float(h.get("market_value") or 0)) if usd else None, "not_modelled": why,
+                     "price_as_of": synced, "price_basis": "the broker's price at its last sync"})
+    shares = {l["symbol"]: l["qty"] for l in legs if not l.get("not_modelled")}
+    div_of = _m("div_of")
     for o in core.get("options") or []:
         if (o.get("currency") or "USD").upper() != "USD":
             left.append({"label": o.get("occ") or o.get("underlying"), "reason": "Priced in {}; the scenarios are in US dollars only.".format(o.get("currency"))})
@@ -414,8 +428,12 @@ def scenarios(user: Dict[str, Any], account_ids: Optional[List[str]] = None) -> 
         root = occ_root(o.get("occ"))
         mult = _check_multiplier(o, root)
         style = _style(str(o.get("underlying") or "").upper(), root)
+        dy = (_safe(div_of, str(o.get("underlying") or "").upper(), default=None) or {}).get("yield") if div_of else None
         legs.append({"symbol": o.get("underlying"), "kind": "option", "qty": o.get("contracts"),
-                     "price": o.get("price"), "price_as_of": synced, "price_basis": "the broker's last price at its sync",
+                     # the dividend yield options_risk prices with, so the two agree on a dividend payer's delta
+                     "dividend_yield": dy,
+                     "price": o.get("price"), "price_as_of": o.get("price_as_of") or synced,
+                     "price_basis": "the broker's last price at its sync",
                      "option_type": o.get("option_type"), "strike": o.get("strike"), "expiry": o.get("expiry"),
                      "multiplier": mult["multiplier"], "multiplier_assumed": mult["assumed"], "american": style["american"],
                      "adjusted": mult["adjusted"], "adjusted_reason": mult["adjusted_reason"],
@@ -425,15 +443,20 @@ def scenarios(user: Dict[str, Any], account_ids: Optional[List[str]] = None) -> 
         return {"section": "scenarios", "available": False, "reason": "No stocks, funds or options in the accounts counted.",
                 "coverage": {"unpriced": left}}
     market = _m("scenario_market")
-    got = _safe(market, [l["symbol"] for l in legs], default=None) if market else None
+    got = _safe(market, [l["symbol"] for l in legs if not l.get("not_modelled")], default=None) if market else None
     closes, spots, earnings = got if got else ({}, {}, {})
     sectors = {h["symbol"].upper(): h.get("sector") for h in core.get("holdings") or [] if h.get("symbol") and h.get("sector")}
     rate = (_safe(_m("rate"), default=None) or {}).get("rate")
     out = scenarios_mod.build(legs, spots, closes, rate, earnings=earnings, sectors=sectors, stock_shares=shares,
                               source="Your linked accounts: the broker's quantities and option prices at its last sync, Optic's quotes")
+    # a partial sync said nothing here: the options that did not arrive are not in these figures
+    missing = [n for n in core.get("notes") or [] if "did not return" in n]
     if out.get("available"):
         out["coverage"]["unpriced"] = left + out["coverage"]["unpriced"]
         out["coverage"]["positions"] += len(left)
+        out["coverage"]["missing_from_sync"] = missing
+    elif missing:
+        out["reason"] = "{} {}".format(out.get("reason") or "", " ".join(missing)).strip()
     out["section"] = "scenarios"
     return out
 

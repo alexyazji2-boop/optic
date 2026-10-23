@@ -77,3 +77,34 @@ def test_estimate_revisions_make_no_unmeasured_historical_claim():
         text = " ".join(str(x) for x in (v.get("reasons") or []) + [v.get("headline") or ""])
         assert "historically" not in text and "deteriorating guidance" not in text, text
         assert ("not measured" in text) if d == "rising" else ("not in this data" in text)
+
+
+# ------------------------------------------------------------------ Portfolio scenarios (stage 6 code)
+
+from datetime import datetime, timezone  # noqa: E402
+
+from app.analytics import scenarios as SC  # noqa: E402
+
+_NOW = datetime(2026, 10, 22, 17, 0, tzinfo=timezone.utc)
+
+
+def test_coverage_is_a_share_of_everything_held_not_of_what_was_priced():
+    # edge sandbox: one of five positions priced read value_covered_pct 100.0
+    legs = [{"symbol": "AAA", "kind": "stock", "qty": 10, "price": 100.0},
+            {"symbol": "BTC", "label": "Bitcoin", "kind": "stock", "qty": 1, "price": 3000.0, "not_modelled": "Not a stock or fund."},
+            {"symbol": "SHOP.TO", "kind": "stock", "qty": 5, "price": 80.0, "ref_value": None, "not_modelled": "Priced in CAD."}]
+    out = SC.build(legs, {"AAA": {"price": 100.0, "as_of": _NOW.isoformat()}}, {}, 0.04, _NOW)
+    c = out["coverage"]
+    assert c["priced"] == 1 and c["positions"] == 3
+    assert c["value_covered_pct"] == 25.0, "1,000 of 4,000 with a known dollar value"
+    assert {u["label"] for u in c["unpriced"]} == {"Bitcoin", "Long 5 SHOP.TO shares"}
+
+
+def test_a_name_with_nothing_priced_is_unknown_not_zero_and_a_missing_quote_is_said():
+    legs = [{"symbol": "AAA", "kind": "stock", "qty": 10, "price": 100.0},
+            {"symbol": "MMM", "kind": "option", "qty": 2, "option_type": "call", "strike": 420, "expiry": "2026-11-20", "price": None},
+            {"symbol": "ZZZ", "kind": "stock", "qty": 10, "price": 50.0, "price_basis": "the broker's price at its last sync"}]
+    out = SC.build(legs, {"AAA": {"price": 100.0, "as_of": _NOW.isoformat()}, "MMM": {"price": 400.0, "as_of": _NOW.isoformat()}}, {}, 0.04, _NOW)
+    row = {r["symbol"]: r for r in out["exposure"]["by_underlying"]}
+    assert row["MMM"]["delta_adjusted"] is None and row["MMM"]["share_pct"] is None and "Not valued" in row["MMM"]["note"]
+    assert any("No current quote for ZZZ" in s["reason"] and "broker's price" in s["reason"] for s in out["coverage"]["stale"])

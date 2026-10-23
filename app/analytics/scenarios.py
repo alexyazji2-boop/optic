@@ -145,7 +145,16 @@ def _prepare(p: Dict[str, Any], spots: Dict[str, Dict[str, Any]], rate: float, n
     spot = _num(sq.get("price")) or (_num(p.get("spot")) if kind == "option" else None) or (_num(p.get("price")) if kind == "stock" else None)
     spot_at = _when(sq.get("as_of") or p.get("spot_as_of"))
     leg: Dict[str, Any] = {"symbol": sym, "kind": kind, "qty": qty, "label": _label({**p, "symbol": sym, "kind": kind}),
-                           "spot": spot, "priced": False, "reason": None, "stale": None, "price_basis": p.get("price_basis")}
+                           "spot": spot, "priced": False, "reason": None, "stale": None, "price_basis": p.get("price_basis"),
+                           # the position's own value, priced or not, so coverage is a share of everything held
+                           # (with one of five positions priced it said 100%: audit 2026-10-22)
+                           "ref_value": _num(p.get("ref_value"))}
+    # a caller that passes ref_value None means "no dollar value" (a CAD holding), not "work it out"
+    if "ref_value" not in p and _num(p.get("price")) is not None:
+        leg["ref_value"] = abs(qty * _num(p.get("price")) * (1.0 if kind == "stock" else (_num(p.get("multiplier")) or STANDARD_MULTIPLIER)))
+    if p.get("not_modelled") and kind == "stock":
+        leg["reason"] = p["not_modelled"]
+        return leg
     if not sym or qty == 0:
         leg["reason"] = "No symbol or no quantity."
         return leg
@@ -155,6 +164,10 @@ def _prepare(p: Dict[str, Any], spots: Dict[str, Dict[str, Any]], rate: float, n
     if spot_at is not None and _trading_minutes(spot_at, now) > OLD_QUOTE_TRADING_MINUTES:
         leg["stale"] = "The {} quote is from {}, more than a session old.".format(sym, spot_at.date().isoformat())
     if kind == "stock":
+        if not _num(sq.get("price")):
+            # a stock with no current quote was valued at the broker's sync price without a word (audit 2026-10-22)
+            leg["stale"] = "No current quote for {}: valued at its last price from the source ({}).".format(
+                sym, p.get("price_basis") or "the broker's sync")
         leg.update(priced=True, multiplier=1.0, value=qty * spot, delta_shares=qty, gamma=0.0, vega=0.0, theta=0.0,
                    notional=abs(qty * spot), signed_notional=qty * spot)
         return leg
@@ -343,17 +356,22 @@ def build(positions: List[Dict[str, Any]], spots: Dict[str, Dict[str, Any]], clo
             row["option_delta_dollars"] += l["delta_shares"] * l["spot"]
     for row in by.values():
         row["delta_adjusted"] = row["stock_value"] + row["option_delta_dollars"]
+        row["priced"] = row["positions"] - row["unpriced"]
     gross_da = sum(abs(r_["delta_adjusted"]) for r_ in by.values())
     rows = sorted(by.values(), key=lambda x: -abs(x["delta_adjusted"]))
     for row in rows:
         row["share_pct"] = _r(100.0 * abs(row["delta_adjusted"]) / gross_da, 1) if gross_da else None
         for k in ("stock_value", "option_delta_dollars", "notional", "delta_adjusted"):
             row[k] = _r(row[k])
-    w = np.array([abs(x["delta_adjusted"]) / gross_da for x in rows]) if gross_da else np.array([])
+        if not row["priced"]:
+            # nothing in this name could be valued: unknown, not 0.0 (audit 2026-10-22)
+            row.update(stock_value=None, option_delta_dollars=None, delta_adjusted=None, share_pct=None,
+                       note="Not valued: no position in {} could be priced.".format(row["symbol"]))
+    w = np.array([abs(x["delta_adjusted"]) / gross_da for x in rows if x["delta_adjusted"] is not None]) if gross_da else np.array([])
     hhi = float((w ** 2).sum()) if len(w) else None
     sector_share: Dict[str, float] = {}
     for row in rows:
-        if row["sector"] and gross_da:
+        if row["sector"] and gross_da and row["delta_adjusted"] is not None:
             sector_share[row["sector"]] = sector_share.get(row["sector"], 0.0) + abs(row["delta_adjusted"]) / gross_da * 100.0
     clusters, pairs = _clusters(closes or {}, syms)
     correlated = []
@@ -382,9 +400,10 @@ def build(positions: List[Dict[str, Any]], spots: Dict[str, Dict[str, Any]], clo
         "uncovered_short_calls": uncovered_calls,
         "gross_notional": _r(sum(l.get("notional") or 0.0 for l in legs)),
         "net_notional": _r(sum(l.get("signed_notional") or 0.0 for l in legs)),
-        "delta_adjusted_gross": _r(gross_da), "delta_adjusted_net": _r(sum(x["delta_adjusted"] for x in rows)),
+        "delta_adjusted_gross": _r(gross_da), "delta_adjusted_net": _r(sum(x["delta_adjusted"] or 0.0 for x in rows)),
         "by_underlying": rows,
-        "concentration": {"largest": rows[0]["symbol"] if rows else None, "largest_pct": rows[0]["share_pct"] if rows else None,
+        "concentration": {"largest": rows[0]["symbol"] if rows and rows[0]["share_pct"] is not None else None,
+                          "largest_pct": rows[0]["share_pct"] if rows else None,
                           "top3_pct": _r(sum(x["share_pct"] or 0 for x in rows[:3]), 1),
                           "effective_names": _r(1.0 / hhi, 1) if hhi else None,
                           "sectors": sorted(({"sector": k, "share_pct": _r(v, 1)} for k, v in sector_share.items()), key=lambda x: -x["share_pct"])},
@@ -512,8 +531,13 @@ def build(positions: List[Dict[str, Any]], spots: Dict[str, Dict[str, Any]], clo
         "iv_solved": sum(1 for l in p_opts if l.get("iv_basis") == "solved from the price"),
         "value_covered_pct": None,
     }
-    all_value = gross_value + sum(abs(l.get("premium_value") or 0.0) for l in legs if not l["priced"] and l["kind"] == "option")
-    coverage["value_covered_pct"] = _r(100.0 * gross_value / all_value, 1) if all_value else None
+    # over every position with a value of its own, priced or not; a position with no value at all is counted
+    # in `positions` and listed, and the share says what it rests on
+    known = [l for l in legs if l.get("ref_value") is not None or l["priced"]]
+    num_v = sum(abs(l["value"]) if l["priced"] else 0.0 for l in known)
+    den_v = sum(abs(l["value"]) if l["priced"] else (l.get("ref_value") or 0.0) for l in known)
+    coverage["value_covered_pct"] = _r(100.0 * num_v / den_v, 1) if den_v else None
+    coverage["valued_positions"] = len(known)
     return {
         "available": True, "version": VERSION, "as_of": now.isoformat(timespec="seconds"), "source": source,
         "hypothetical": HYPOTHETICAL, "value_now": _r(value_now), "gross_value": _r(gross_value),

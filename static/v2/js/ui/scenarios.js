@@ -55,7 +55,8 @@ function coverage(sc) {
   const c = sc.coverage || {}, m = sc.marks || {};
   return html`<p class="asof">${c.priced} of ${plural(c.positions, 'position')} revalued, ${num(c.value_covered_pct, 0)}% of the value${(c.multiplier_assumed || []).length ? `; a standard contract size assumed for ${c.multiplier_assumed.length === 1 ? 'one option' : `${c.multiplier_assumed.length} options`}, the source did not say` : ''}. ${clean(m.note || '')}</p>
     ${(c.unpriced || []).length ? html`<p class="asof"><b>Left out of every figure:</b> ${c.unpriced.map((u) => `${u.label} (${clean(u.reason || '').replace(/\.$/, '')})`).join('; ')}.</p>` : ''}
-    ${(c.stale || []).length ? html`<p class="asof"><b>Prices from different times:</b> ${c.stale.map((s) => clean(s.reason)).join(' ')}</p>` : ''}`;
+    ${(c.stale || []).length ? html`<p class="asof"><b>Prices from different times:</b> ${c.stale.map((s) => clean(s.reason)).join(' ')}</p>` : ''}
+    ${(c.missing_from_sync || []).length ? html`<p class="asof"><b>Not in these figures:</b> ${c.missing_from_sync.map(clean).join(' ')}</p>` : ''}`;
 }
 
 /** The scenarios section. `sc` undefined while loading; {error} on failure. */
