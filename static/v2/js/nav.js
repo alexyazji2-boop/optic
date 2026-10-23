@@ -51,6 +51,7 @@ export const GROUPS = [
     { view: 'reports', label: 'Problem Reports', slug: 'reports', v2: true },
     { view: 'usage', label: 'Claude usage', slug: 'usage', v2: true },
     { view: 'accounts', label: 'Accounts', slug: 'accounts', v2: true },
+    { view: 'metrics', label: 'Metrics', slug: 'metrics', v2: true },
   ] },
 ];
 

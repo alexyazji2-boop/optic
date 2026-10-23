@@ -155,6 +155,7 @@ async def me(request: Request, response: Response) -> Dict[str, Any]:
         if session and token:
             remember = bool(session.get("remember", 1))
             store.touch_session(session["id"], config.session_ttl(remember))
+            store.note_active(session.get("user_id"))
             response.set_cookie(config.COOKIE_NAME, token,
                                 **config.session_cookie_kwargs(remember))
     response.headers["Cache-Control"] = "no-store"

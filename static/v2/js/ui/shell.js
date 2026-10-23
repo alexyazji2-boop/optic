@@ -31,7 +31,7 @@ const WHAT = {
   insiders: 'Company insiders and House members\' trades', analysts: 'Rating and price-target changes, newest first',
   tracker: "Optic's own demonstration portfolio", paper: 'Practice trades you enter yourself', roth: 'A rules-based allocation to compare yours against',
   brokerage: 'Your linked accounts, read-only', watchlist: 'The names you follow', alerts: 'What fired on your alerts, and why',
-  reports: 'What readers reported as broken', usage: 'What the model has cost', accounts: 'Everyone who signed up', settings: 'Your account and preferences',
+  reports: 'What readers reported as broken', usage: 'What the model has cost', accounts: 'Everyone who signed up', metrics: 'Sign-ups, actives, retention and Milo', settings: 'Your account and preferences',
 };
 /* ---------------- unread alerts: the bell on the top bar, the count on the phone bar's Watchlist (where Alerts lives) */
 let unread = 0;

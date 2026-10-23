@@ -38,6 +38,7 @@ from .brokerage import workspace as brokerage_workspace
 from .brokerage import workspace_routes as brokerage_ws_routes
 from . import db as accounts_db
 from . import frontend
+from . import metrics as metrics_mod
 from .auth import admin as auth_admin
 from .auth import deps as auth_deps
 from .auth import ratelimit as auth_ratelimit
@@ -5743,6 +5744,15 @@ async def admin_accounts(request: Request) -> JSONResponse:
     CSRF header is required as on every owner request made with a cookie.
     Nobody else learns anything from the refusal but that the page is not
     theirs."""
+    _owner_session_guard(request)
+    out = await _run(auth_store.accounts_overview)
+    # Never kept by a browser or a proxy: it is a list of people's addresses.
+    return JSONResponse(content=out, headers={"Cache-Control": "no-store"})
+
+
+def _owner_session_guard(request: Request) -> None:
+    """The signed-in, verified owner with the CSRF header, and nobody else: the
+    owner pages that read about other people (Accounts, Metrics)."""
     refusal = HTTPException(status_code=403, detail="This page is for the owner of this site.")
     if not auth_admin.configured():
         raise refusal
@@ -5756,8 +5766,16 @@ async def admin_accounts(request: Request) -> JSONResponse:
     if not auth_admin.is_admin(user):
         raise refusal
     auth_deps.csrf_guard(request)
-    out = await _run(auth_store.accounts_overview)
-    # Never kept by a browser or a proxy: it is a list of people's addresses.
+
+
+@app.get("/api/admin/metrics")
+async def admin_metrics(request: Request) -> JSONResponse:
+    """Sign-ups, active accounts, retention, Milo questions and plans, counted
+    from Optic's own tables (app/metrics.py) for the owner's Metrics page. Asked
+    for on 2026-10-23 with no third-party analytics. Counts only, no addresses,
+    and the same guard as the Accounts page."""
+    _owner_session_guard(request)
+    out = await _run(metrics_mod.overview)
     return JSONResponse(content=out, headers={"Cache-Control": "no-store"})
 
 
@@ -6349,6 +6367,7 @@ async def screener_ask(request: Request,
         else:
             try:
                 _spend_guard(request)
+                _count_question(request, "scan")
             except HTTPException as exc:
                 note = str(exc.detail)
             else:
@@ -7248,8 +7267,18 @@ def ai_allowance(request: Request) -> Dict[str, Any]:
                 "signed_in_allowance": auth_store.PLANS["free"]["ai_calls_per_day"]}
 
 
+def _count_question(request: Request, kind: str) -> None:
+    """A question passed `_spend_guard`: count it for the owner's Metrics page
+    (`kind`: chat, research, scan, portfolio). The owner's own are recorded and
+    left out there. Never raises."""
+    try:
+        user = auth_deps.current_user(request)
+    except Exception:                                             # noqa: BLE001
+        user = None
+    metrics_mod.note_question((user or {}).get("id"), kind)
+
+
 def _spend_guard(request: Request) -> None:
-    """Raise 429 once a caller has spent an allowance, daily or hourly."""
     try:
         user = auth_deps.current_user(request)
         if user and auth_admin.is_admin(user):
@@ -7639,6 +7668,7 @@ async def chat(request: Request,
     straight through to the model and never written to disk.
     """
     _spend_guard(request)
+    _count_question(request, "chat")
     history = payload.get("messages") or []
     context = payload.get("context")
     use_web = bool(payload.get("web"))
@@ -7683,6 +7713,7 @@ async def research(request: Request,
                    payload: Dict[str, Any] = Body(...)) -> StreamingResponse:
     """Streaming live web research for a ticker or macro question."""
     _spend_guard(request)
+    _count_question(request, "research")
     ticker = (payload.get("ticker") or "").upper()
     question = payload.get("question")
     # Research is about a company or the market, never the reader's accounts.
@@ -7878,7 +7909,12 @@ brokerage_workspace.set_market(
     named_in=catalyst_rules_mod.named_companies,
     catalysts_of=lambda s: (catalysts_mod.ticker_catalysts(YF_PROVIDER, s) or {}).get("rows") or [],
 )
-brokerage_ws_routes.set_hooks(spend_guard=lambda request: _spend_guard(request),
+def _portfolio_spend_guard(request: Request) -> None:
+    _spend_guard(request)
+    _count_question(request, "portfolio")
+
+
+brokerage_ws_routes.set_hooks(spend_guard=_portfolio_spend_guard,
                               write_brief=ai.write_portfolio_brief)
 
 

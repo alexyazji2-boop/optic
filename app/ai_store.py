@@ -383,6 +383,28 @@ def _add(bucket: Dict[str, Any], row: sqlite3.Row) -> None:
         bucket["cost_usd"] += usd
 
 
+def calls_by_feature(now: Optional[float] = None) -> Dict[str, Any]:
+    """Model calls by feature over seven and thirty days, for the owner's Metrics page.
+
+    Calls, not questions: one Milo answer can take several rounds of the tool loop,
+    and the scheduled writers (the Read, the desk) make calls nobody asked for. The
+    ledger keeps no account, so the owner's own use is in these counts."""
+    now = time.time() if now is None else now
+    try:
+        with closing(_connect()) as conn:
+            rows = conn.execute(
+                "SELECT feature, SUM(at >= ?) AS week, COUNT(*) AS month FROM calls WHERE at >= ? "
+                "GROUP BY feature", (now - 7 * 86400, now - 30 * 86400)).fetchall()
+    except (sqlite3.Error, OSError) as exc:
+        log.warning("ai ledger unreadable: %s: %s", type(exc).__name__, exc)
+        return {"available": False, "reason": "The usage ledger could not be read on this server."}
+    order = list(FEATURES)
+    listed = [{"feature": r["feature"], "label": FEATURES.get(r["feature"], r["feature"]),
+               "last_7_days": int(r["week"] or 0), "last_30_days": int(r["month"] or 0)} for r in rows]
+    listed.sort(key=lambda e: (order.index(e["feature"]) if e["feature"] in order else len(order), e["feature"]))
+    return {"available": True, "features": listed}
+
+
 def usage(now: Optional[float] = None, recent: int = 25) -> Dict[str, Any]:
     """Spend by feature today (Eastern), over seven days and over thirty.
 

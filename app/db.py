@@ -932,6 +932,30 @@ MIGRATION_17 = [
 ]
 
 
+# The owner's Metrics page (2026-10-23): which days each account used Optic, and
+# one row per question asked of Milo. Sessions keep only their latest use and are
+# deleted at sign-out, so weekly actives and retention could not be counted from
+# them; these are counted from the day they start. No page views, no content.
+MIGRATION_18 = [
+    """
+    CREATE TABLE IF NOT EXISTS activity_days (
+        user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        day     TEXT NOT NULL,
+        PRIMARY KEY (user_id, day)
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS milo_questions (
+        id      INTEGER PRIMARY KEY AUTOINCREMENT,
+        at      TEXT NOT NULL,
+        user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+        kind    TEXT NOT NULL
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS milo_questions_at ON milo_questions (at)",
+]
+
+
 MIGRATIONS: List[Tuple[int, str, List[str]]] = [
     (1, "accounts", MIGRATION_1),
     (2, "oauth_pkce", MIGRATION_2),
@@ -950,6 +974,7 @@ MIGRATIONS: List[Tuple[int, str, List[str]]] = [
     (15, "brokerage_history", MIGRATION_15),
     (16, "brokerage_workspace", MIGRATION_16),
     (17, "watch_state", MIGRATION_17),
+    (18, "usage_metrics", MIGRATION_18),
 ]
 
 

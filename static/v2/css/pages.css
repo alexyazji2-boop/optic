@@ -930,6 +930,11 @@ table.narrow { max-width: 640px; }
 .usage-t th[scope="row"] { font-weight: 500; text-align: left; }
 .ac-t th[scope="row"] { text-align: left; font-weight: 400; min-width: 200px; }
 .ac-mail { word-break: break-all; }
+/* Metrics (owner): the four headline counts, then one table per question */
+.mt-kv dd { font-size: var(--t-xl); }
+.mt-h { margin-top: var(--s-8); } .mt-h3 { margin-top: var(--s-6); }
+.mt-t { width: 100%; } .mt-t th[scope="row"] { text-align: left; font-weight: 500; } .mt-new { white-space: nowrap; }
+@media (max-width: 600px) { .mt-kv { --kv: 2; } }
 @media (max-width: 860px) {
   .set-row { grid-template-columns: minmax(0, 1fr); } .set-row-act { justify-content: flex-start; }
   .set-name { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; width: 100%; } .set-name .field { width: auto; min-width: 0; padding: 0 12px; }

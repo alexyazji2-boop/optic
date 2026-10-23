@@ -120,6 +120,13 @@ def touch_login(user_id: str) -> None:
     now = db.utcnow()
     db.execute("UPDATE users SET last_login_at = ?, updated_at = ? WHERE id = ?",
                (now, now, user_id))
+    note_active(user_id)
+
+
+def note_active(user_id: Optional[str]) -> None:
+    """The day this account used Optic, for the owner's Metrics page (app/metrics.py)."""
+    from .. import metrics                                       # app.metrics imports this module
+    metrics.note_active(user_id)
 
 
 def delete_user(user_id: str) -> None:

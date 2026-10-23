@@ -37,6 +37,7 @@ Status words:
 | Reports | Problem Reports | `#/reports` | Rebuilt |
 | Reports | Claude usage | `#/usage` | Rebuilt |
 | Reports | Accounts | `#/accounts` | Rebuilt |
+| Reports | Metrics | `#/metrics` | Rebuilt |
 | (rail footer) | Settings | `#/settings` | Rebuilt |
 | (none) | Instrument | `#/instrument/{SYM}` | Rebuilt |
 
@@ -378,6 +379,7 @@ Status words:
 | Problem Reports: open and resolved, mark resolved or reopen, resolve all (press twice) | Rebuilt | |
 | Claude usage: by feature, totals, latest calls | Rebuilt | Reads the ledger only; no model call. |
 | Accounts | Rebuilt | Owner session only, as before. |
+| Metrics | Rebuilt | New in v2 (2026-10-23): owner session only, counts from Optic's own tables (app/metrics.py). Not in Classic. |
 | Not the owner, or signed out | Rebuilt | Same wording. |
 
 ## Watchlist

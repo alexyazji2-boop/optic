@@ -1,18 +1,19 @@
-// Reports, the owner's three pages: Problem Reports (/api/feedback), Claude
-// usage (/api/ai/usage) and Accounts (/api/admin/accounts). Owner only: the
+// Reports, the owner's four pages: Problem Reports (/api/feedback), Claude
+// usage (/api/ai/usage), Accounts (/api/admin/accounts) and Metrics
+// (/api/admin/metrics, counted in app/metrics.py). Owner only: the
 // group shows only when /api/auth/me says admin, each page checks again before
 // and after it fetches, and the server enforces it on every request. Nothing
 // here calls a model.
 import { html, render as draw } from '../core/dom.js';
 import * as api from '../core/api.js';
 import * as store from '../core/store.js';
-import { clean } from '../core/format.js';
+import { clean, shortDate, fullDate } from '../core/format.js';
 import { stamp, dayTime } from '../core/prefs.js';
-import { skeleton, failed } from '../ui/states.js';
+import { skeleton, failed, how } from '../ui/states.js';
 import { toast } from '../ui/toast.js';
 import { groupTabs } from './tabs.js';
 
-const TITLES = { reports: 'Problem Reports', usage: 'Claude usage', accounts: 'Accounts' };
+const TITLES = { reports: 'Problem Reports', usage: 'Claude usage', accounts: 'Accounts', metrics: 'Metrics' };
 let view = 'reports', D = {}, live = true, mainEl = null, tab = 'open', armedAll = null, seq = 0;
 const isOwner = () => !!(store.state.me && store.state.me.admin);
 const count = (n) => Number(n || 0).toLocaleString('en-US');
@@ -90,11 +91,57 @@ function accounts() {
     <p class="asof">Newest first. Last active is the last time the account used Optic; last sign-in is the last time it entered a password, passkey or provider. No passwords or tokens are shown or kept here.</p>`;
 }
 
+/* ---------------- Metrics ---------------- */
+const pct = (v) => (v === null || v === undefined ? '' : `${Math.round(Number(v))}%`);
+function metrics() {
+  const d = D.d, a = d.accounts || {}, weeks = d.weeks || [], cohorts = (d.retention || {}).cohorts || [];
+  const q = d.questions || {}, kinds = q.by_kind || [], calls = d.model_calls || {}, since = d.tracking_since;
+  const left = d.owners_left_out ? ` Your own account${d.owners_left_out === 1 ? ' is' : 's are'} left out of every count.` : '';
+  const lead = a.total ? `${count(a.total)} account${a.total === 1 ? '' : 's'}: ${count(a.active_7_days)} used Optic in the last 7 days and ${count(a.active_30_days)} in the last 30.${left}`
+    : `Nobody but you has made an account yet.${left}`;
+  const wk = (w) => `${shortDate(w.week_start)}${w.partial ? ', so far' : ''}`;
+  const active = (w) => (w.active_accounts === null || w.active_accounts === undefined ? html`<span class="t-muted">Not recorded</span>`
+    : html`${count(w.active_accounts)}${w.active_from ? html` <small class="t-muted">from ${shortDate(w.active_from)}</small>` : ''}`);
+  const shown = weeks.slice().reverse(), recent = cohorts.slice().reverse();
+  const anyQ = kinds.some((k) => k.all);
+  return html`<p class="section-sub">${lead}</p>
+    <dl class="kv mt-kv"><div><dt>Accounts</dt><dd>${count(a.total)}</dd></div><div><dt>Active, 7 days</dt><dd>${count(a.active_7_days)}</dd></div><div><dt>Active, 30 days</dt><dd>${count(a.active_30_days)}</dd></div><div><dt>Verified email</dt><dd>${count(a.verified)}</dd></div></dl>
+
+    <h2 class="t-h2 mt-h">Sign-ups and weekly active accounts</h2>
+    <p class="asof">Weeks start on Monday (UTC). An active account opened Optic while signed in that week.${since ? ` Weekly actives are recorded from ${fullDate(since)}; earlier weeks were not kept.` : ''}</p>
+    <div class="tscroll"><table class="t mt-t"><caption class="sr">Sign-ups and active accounts by week, newest first</caption><thead><tr><th scope="col">Week of</th><th scope="col" class="n">Sign-ups</th><th scope="col" class="n">Verified</th><th scope="col" class="n">Active accounts</th></tr></thead>
+      <tbody>${shown.map((w) => html`<tr><th scope="row">${wk(w)}</th><td class="n">${count(w.signups)}</td><td class="n">${count(w.verified)}</td><td class="n">${active(w)}</td></tr>`)}</tbody></table></div>
+
+    <h2 class="t-h2 mt-h">Came back after four weeks</h2>
+    <p class="asof">For each sign-up week: of the accounts at least ${count((d.retention || {}).days || 28)} days old, how many used Optic again ${count((d.retention || {}).days || 28)} days or more after signing up.</p>
+    <div class="tscroll"><table class="t mt-t"><caption class="sr">Four-week retention by sign-up week, newest first</caption><thead><tr><th scope="col">Week of</th><th scope="col" class="n">Sign-ups</th><th scope="col" class="n">Old enough</th><th scope="col" class="n">Came back</th></tr></thead>
+      <tbody>${recent.map((c) => html`<tr><th scope="row">${shortDate(c.week_start)}</th><td class="n">${count(c.signups)}</td><td class="n">${count(c.measurable)}</td><td class="n">${c.measurable ? html`${count(c.retained)} <small class="t-muted mt-new">(${pct(c.retained_pct)})</small>` : c.signups ? html`<span class="t-muted mt-new">Too new</span>` : ''}</td></tr>`)}</tbody></table></div>
+
+    <h2 class="t-h2 mt-h">Questions to Milo</h2>
+    <p class="asof">One per question sent, wherever it was asked${since ? `, counted from ${fullDate(since)}` : ''}. In the last 7 days, ${count(q.askers_7_days)} account${q.askers_7_days === 1 ? '' : 's'} asked, and guests asked ${count(q.guest_questions_7_days)}.${q.owner_questions_left_out ? ` Your own ${q.owner_questions_left_out === 1 ? 'question is' : `${count(q.owner_questions_left_out)} questions are`} left out.` : ''}</p>
+    ${anyQ ? html`<div class="tscroll"><table class="t mt-t"><caption class="sr">Questions to Milo by where they were asked</caption><thead><tr><th scope="col">Asked through</th><th scope="col" class="n">7 days</th><th scope="col" class="n">30 days</th><th scope="col" class="n">Since counting began</th></tr></thead>
+      <tbody>${kinds.map((k) => html`<tr><th scope="row">${k.label}</th><td class="n">${count(k.last_7_days)}</td><td class="n">${count(k.last_30_days)}</td><td class="n">${count(k.all)}</td></tr>`)}</tbody></table></div>` : html`<p>No questions counted yet.</p>`}
+
+    ${calls.available === false ? html`<p class="asof">${clean(calls.reason || 'The usage ledger could not be read.')}</p>` : (calls.features || []).length ? html`<h3 class="t-h3 mt-h3">Model calls by feature</h3>
+      <p class="asof">Calls to Claude, not questions: one Milo answer can take several, and the Read and the desk write on a schedule. These include your own use. Costs are on Claude usage.</p>
+      <div class="tscroll"><table class="t mt-t"><caption class="sr">Model calls by feature</caption><thead><tr><th scope="col">Feature</th><th scope="col" class="n">7 days</th><th scope="col" class="n">30 days</th></tr></thead>
+        <tbody>${calls.features.map((f) => html`<tr><th scope="row">${f.label}</th><td class="n">${count(f.last_7_days)}</td><td class="n">${count(f.last_30_days)}</td></tr>`)}</tbody></table></div>` : ''}
+
+    <h2 class="t-h2 mt-h">Plans</h2>
+    <div class="tscroll"><table class="t mt-t"><caption class="sr">Accounts by plan</caption><thead><tr><th scope="col">Plan</th><th scope="col" class="n">Accounts</th></tr></thead>
+      <tbody>${(d.plans || []).map((p) => html`<tr><th scope="row">${p.label}</th><td class="n">${count(p.accounts)}</td></tr>`)}</tbody></table></div>
+    ${how(html`<p>Everything here is counted from Optic's own database. Nothing is sent to an analytics service, and nothing records which pages were viewed or what was asked.</p>
+      <p>An account counts as active on a day it loaded Optic while signed in, or signed in. Visitors who never sign in are not counted, except as guest questions to Milo.</p>
+      <p>The plan is the one Optic's limits read: a lapsed subscription counts as Free.</p>`)}
+    <p class="asof">Counted ${stamp(d.generated_at)}.</p>`;
+}
+
 /* ---------------- page ---------------- */
 function paint() {
   if (!live) return;
-  const body = !isOwner() ? notOwner() : D.err ? errorBlock(D.err, view === 'reports' ? 'The reports' : view === 'usage' ? 'The usage ledger' : 'The accounts') : !D.d ? skeleton('rows', 5, 'Loading')
-    : view === 'reports' ? reports() : view === 'usage' ? usage() : accounts();
+  const what = { reports: 'The reports', usage: 'The usage ledger', accounts: 'The accounts', metrics: 'The metrics' }[view];
+  const body = !isOwner() ? notOwner() : D.err ? errorBlock(D.err, what) : !D.d ? skeleton('rows', 5, 'Loading')
+    : view === 'reports' ? reports() : view === 'usage' ? usage() : view === 'metrics' ? metrics() : accounts();
   draw(mainEl, html`<header class="page-head"><h1 class="t-display-m">${TITLES[view]}</h1>${isOwner() ? groupTabs('reports', view) : ''}</header>
     <section class="section first" aria-label="${TITLES[view]}">${body}</section>`);
 }
@@ -107,6 +154,7 @@ async function load() {
     let d;
     if (view === 'reports') d = await api.get(`/api/feedback?limit=50&status=${tab}`, { force: true, timeout: 20000 });
     else if (view === 'usage') { [d, D.health] = await Promise.all([api.get('/api/ai/usage', { force: true }), api.get('/api/health', { ttl: 60000 }).catch(() => null)]); }
+    else if (view === 'metrics') d = await api.get('/api/admin/metrics', { force: true });
     else d = await api.get('/api/admin/accounts', { force: true });
     if (my !== seq || !live || !isOwner()) return;
     D.d = d;

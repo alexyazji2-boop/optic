@@ -31,6 +31,7 @@ export const PLACES = [
   { view: 'reports', label: 'Problem Reports', owner: true, terms: 'reports problem report feedback bug issue complaints readers inbox support' },
   { view: 'usage', label: 'Claude usage', owner: true, terms: 'usage credits spend cost bill billing anthropic claude tokens api model' },
   { view: 'accounts', label: 'Accounts', owner: true, terms: 'accounts users signups sign ups members people registered emails readers' },
+  { view: 'metrics', label: 'Metrics', owner: true, terms: 'metrics analytics active users weekly actives wau retention cohorts growth plans subscribers milo questions' },
   { view: 'watchlist', label: 'Watchlist', terms: 'watchlist watching follow list' },
   { view: 'alerts', label: 'Alerts', terms: 'alerts alarms notifications fired' },
   { view: 'compare', label: 'Compare', terms: 'compare versus vs side by side' },
