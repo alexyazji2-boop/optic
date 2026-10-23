@@ -10,7 +10,7 @@ import { $, $$, html, render as draw, raw } from '../core/dom.js';
 import { CLASSIC } from '../core/classic.js';
 import * as api from '../core/api.js';
 import * as store from '../core/store.js';
-import { num, signed, dir, money, signedMoney, clean, ago, shortDate, isNum } from '../core/format.js';
+import { num, signed, dir, money, signedMoney, clean, ago, shortDate, fullDate, isNum } from '../core/format.js';
 import { lineChart, spark, mountCharts } from '../ui/chart.js';
 import { skeleton, empty, failed, staleLine, how } from '../ui/states.js';
 import { icon } from '../ui/icons.js';
@@ -100,8 +100,15 @@ export function portfolio(ov, perf) {
   const v = isNum(vn) ? vn : (vn && isNum(vn.value) ? vn.value : (ov.totals || {}).value);
   const today = ov.today || {};
   const series = ((perf || {}).series || []).filter((p) => isNum(p.value)).map((p) => ({ d: String(p.date).slice(0, 10), c: Number(p.value) }));
-  ctx.portfolio = series;
+  // Under a week of values is not a three-month chart: the connection sends no past balances, so Optic's own
+  // snapshots began on the day of the first sync, and two equal ones drew a flat line read as "my portfolio has not
+  // moved" (owner, 2026-10-23). Until there is a week, the panel says how much history there is and what changed.
+  const per = (perf || {}).period || {}, days = new Set(series.map((p) => p.d)).size;
+  const short = series.length > 0 && (days < 7 || (isNum(per.covered_days) && per.covered_days < 7));
+  const noBackfill = ((perf || {}).data_status || []).some((x) => x.balance_history === 'unavailable');
+  ctx.portfolio = short ? [] : series;
   const twr = (((perf || {}).returns || {}).twr || {}).pct;
+  const from = per.measured_start || (series[0] || {}).d, to = per.measured_end || (series[series.length - 1] || {}).d;
   const rows = (today.rows || []).slice().sort((x, y) => Math.abs(y.contribution || 0) - Math.abs(x.contribution || 0));
   const sync = ((ov.freshness || {}).broker || {}).newest_sync;
   const brokerTotal = ((ov.totals || {}).combined_usd || {}).value;
@@ -112,8 +119,10 @@ export function portfolio(ov, perf) {
     <p class="t-label" id="pf-h">Your portfolio, value now${ov.holdings_count ? html`<span class="pill">${ov.holdings_count} holdings</span>` : ''}</p>
     <p class="t-display">${money(v)}</p>
     <p class="delta">${isNum(today.total) ? html`<span class="${dir(today.total)}">${signedMoney(today.total)} (${signed(today.total_pct)}) on the day</span>` : ''}${isNum(brokerTotal) && Math.abs(brokerTotal - v) > 1 ? html`<span class="t-muted">Your broker's own total: ${money(brokerTotal)}${sync ? `, ${ago(sync)}` : ''}</span>` : ''}</p>
-    ${series.length > 1 ? html`<p class="pf-chart-k">Account value as your broker reported it, three months. It includes your own deposits and withdrawals, so it is not a return.${switches.length ? ` The source changes on ${switches.join(', ')}, marked on the chart; the step there is not a gain or loss.` : ''}</p><div class="chart-slot" data-chart="portfolio"></div>` : html`<p class="asof">The value chart fills in as daily snapshots accumulate.</p>`}
-    ${isNum(twr) ? html`<p class="pf-twr"><b>${signed(twr)}</b> over the period, time-weighted, measured from ${srcWords}.${switches.length ? ' A change of source inside the period moves this figure, so read it with the chart.' : ''}</p>` : ''}
+    ${short ? html`<p class="pf-chart-k">Optic has ${days === 1 ? 'one day' : `${days} days`} of value history for these accounts, since ${fullDate(series[0].d)}.${noBackfill ? " Your broker's connection does not send past balances, so" : ''} Optic records the value your broker reports at each sync; the three-month chart appears once there is a week of them.</p>
+      ${series.length > 1 ? html`<p class="pf-twr">${isNum(twr) ? html`<b class="${dir(twr)}">${signed(twr)}</b> from ${fullDate(from)} to ${fullDate(to)}` : 'No return yet'}, time-weighted, from your broker's reported values (${money(series[0].c)} on ${shortDate(series[0].d)}, ${money(series[series.length - 1].c)} on ${shortDate(series[series.length - 1].d)}). The value now above is at Optic's current quotes.</p>` : ''}`
+    : series.length > 1 ? html`<p class="pf-chart-k">Account value as your broker reported it, three months. It includes your own deposits and withdrawals, so it is not a return.${switches.length ? ` The source changes on ${switches.join(', ')}, marked on the chart; the step there is not a gain or loss.` : ''}</p><div class="chart-slot" data-chart="portfolio"></div>` : html`<p class="asof">The value chart fills in as daily snapshots accumulate.</p>`}
+    ${isNum(twr) && !short ? html`<p class="pf-twr"><b>${signed(twr)}</b> from ${fullDate(from)} to ${fullDate(to)}, time-weighted, measured from ${srcWords}.${switches.length ? ' A change of source inside the period moves this figure, so read it with the chart.' : ''}</p>` : ''}
     </div><div class="pf-side">${rows.length ? html`<div class="pf-rows" role="table" aria-label="Holdings, by their effect on the day">
       <div class="pf-row pf-head" role="row"><span role="columnheader">Holding</span><span role="columnheader" class="num">Price</span><span role="columnheader" class="num">Day</span><span role="columnheader" class="num">Effect</span></div>
       ${rows.slice(0, 6).map((r) => html`<a class="pf-row" role="row" href="#/${r.symbol}"><span role="cell"><b class="tick">${r.symbol}</b> <small class="t-muted">${num(r.quantity, 0)} shares</small></span><span role="cell" class="num">${num(r.price)}</span><span role="cell" class="num ${dir(r.change_pct)}">${signed(r.change_pct)}</span><span role="cell" class="num ${dir(r.contribution)}">${signedMoney(r.contribution, 0)}</span></a>`)}</div>` : ''}

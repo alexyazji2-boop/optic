@@ -38,7 +38,9 @@ export function lineChart(series, opts = {}) {
   overlays.forEach((o) => o.values.forEach((v) => { if (Number.isFinite(v)) { lo = Math.min(lo, v); hi = Math.max(hi, v); } }));
   const bars = opts.bars ? opts.bars.slice(-pts.length) : null;
   if (bars) bars.forEach((v) => { if (Number.isFinite(v)) { lo = Math.min(lo, v, 0); hi = Math.max(hi, v, 0); } });
-  const span = hi - lo || 1; lo -= span * 0.06; hi += span * 0.06;
+  // a flat or nearly flat series keeps a span in proportion to its level: two equal portfolio values of 12,698.15
+  // drew an axis of 12,698.102 to 12,698.198, ticks to a tenth of a cent (2026-10-23)
+  const span = Math.max(hi - lo, Math.abs(hi) * 0.002) || 1; lo -= span * 0.06; hi += span * 0.06;
   if (opts.domain) [lo, hi] = opts.domain;
   const slots = pts.length - 1 + (opts.future || 0);
   const mode = opts.measure === false ? null : (opts.measure || (opts.domain ? 'points' : 'change'));
