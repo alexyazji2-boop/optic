@@ -301,6 +301,7 @@ async function submit(main, form) {
   const c = cond(f.kind);
   const fail = (msg) => { f.error = msg; const e = $('.form-error', form); if (e) e.textContent = msg; };
   if (!/^[A-Z0-9.^=-]{1,12}$/.test(f.symbol)) return fail('Enter a ticker, such as AAPL.');
+  if (!f.id && await api.knownSymbol(f.symbol) === false) return fail(`No quote came back for ${f.symbol}. Check the symbol before setting an alert on it.`);
   const params = {};
   if (c && c.param) {
     const raw = f.param ?? c.param.default;

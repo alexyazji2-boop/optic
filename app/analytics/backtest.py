@@ -508,4 +508,7 @@ def _verdict(total: float, bh: float, pct: Optional[float], n: int) -> str:
     if not luck:
         return ("Did worse than buying and holding, though better than {:.0f}% of random-entry books: the timing "
                 "helped, being out of the market cost more.".format(pct))
-    return "Did worse than buying and holding, and no better than random entries with the same exposure."
+    # "no better than random" beside "beat 71% of random books" read as a contradiction (audit 2026-10-22): the
+    # claim is that the share is one chance alone often gives, not that it was no better
+    return ("Did worse than buying and holding, and not clearly better than random entries with the same exposure: "
+            "beating {:.0f}% of random books is a share chance alone often gives.".format(pct))

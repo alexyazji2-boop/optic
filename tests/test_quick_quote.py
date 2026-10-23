@@ -56,7 +56,8 @@ def test_a_failed_quote_is_unavailable_and_does_not_say_why_to_the_reader(monkey
     monkeypatch.setattr(main.PROVIDER, "quote", quote)
     res = TestClient(main.app).get("/api/quote/HOOD")
     assert res.status_code == 200, "best effort: the full load reports failures"
-    assert res.json() == {"ticker": "HOOD", "available": False}
+    # "unreachable" tells a failing source from an unknown symbol (audit 2026-10-22) and says nothing of why
+    assert res.json() == {"ticker": "HOOD", "available": False, "unreachable": True}
     assert "crumb" not in res.text
 
 

@@ -17,7 +17,8 @@ import * as api from '../core/api.js';
 import * as store from '../core/store.js';
 import { holds } from '../core/device.js';
 import { marketSession } from '../core/status.js';
-import { num, clean, isNum, signed } from '../core/format.js';
+import { num, clean, isNum, signed, fullDate } from '../core/format.js';
+import { tradeTime } from '../core/marketTime.js';
 import { skeleton, failed } from '../ui/states.js';
 import { icon } from '../ui/icons.js';
 import { chartReadCard } from '../ui/chartread.js';
@@ -33,6 +34,7 @@ let lp = null;   // the header's price refresh (dossier-frame livePrice), stoppe
 
 const VIEW_KEY = 'optic.v2.chart.v1';
 const DRAW_KEY = 'optic.chart.drawings.v2';
+const ET_ISO = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' });   // YYYY-MM-DD in New York
 const INTERVALS = [
   { key: '1', label: '1m', intraday: true, history: '5d', period: 1 }, { key: '5', label: '5m', intraday: true, history: '1mo', period: 5 },
   { key: '15', label: '15m', intraday: true, history: '60d', period: 30 }, { key: '30', label: '30m', intraday: true, history: '60d', period: 30 },
@@ -134,6 +136,10 @@ async function loadBars() {
       const ps = (t.technicals || {}).price_series || {};
       bars = (ps.dates || []).map((x, i) => ({ t: Date.parse(x), o: ps.open[i], h: ps.high[i], l: ps.low[i], c: ps.close[i], v: ps.volume[i] }));
       note = 'Daily bars, split-adjusted.';
+      // Yahoo can publish a session's daily bar hours after its close: on 2026-10-22 the daily bars ended at Oct 21
+      // while the header's price and the hourly bars were Oct 22's, and nothing said so (audit 2026-10-22)
+      const tt = tradeTime(t.quote), traded = tt ? ET_ISO.format(new Date(tt)) : '', lastBar = String((ps.dates || []).slice(-1)[0] || '').slice(0, 10);
+      if (traded && lastBar && traded > lastBar) note += ` The feed has no daily bar for ${fullDate(traded)} yet: the last one is ${fullDate(lastBar)}, while the price in the header is from ${fullDate(traded)}. Shorter bar sizes include it.`;
     }
     bars = clip(bars);
     if (bars.length < 5) throw new api.ApiError('notfound', 404, 'Not enough bars to draw.');

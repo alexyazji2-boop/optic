@@ -78,6 +78,14 @@ const cache = new Map();
  * onUpdate(data): called again if a stale cached copy was returned first and a
  * fresh one arrives later.
  */
+/** Whether the quote source knows a symbol: true, false, or null when it could not be asked. A watchlist and an
+ * alert took ZZZZQX without a word (audit 2026-10-22); an outage must not stop a real symbol being added either. */
+export async function knownSymbol(sym) {
+  try {
+    const q = await get(`/api/quote/${encodeURIComponent(sym)}`, { ttl: 300000, timeout: 15000 });
+    return q && q.available === true ? true : q && q.unreachable ? null : false;
+  } catch (e) { return null; }
+}
 export async function get(path, { ttl = 60000, force = false, onUpdate, timeout } = {}) {
   const hit = cache.get(path);
   const now = Date.now();

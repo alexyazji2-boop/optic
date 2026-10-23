@@ -27,7 +27,10 @@ function save() {
 
 export function start() {
   try { history.scrollRestoration = 'manual'; } catch (e) { /* older browsers */ }
-  window.addEventListener('scroll', () => { clearTimeout(timer); timer = setTimeout(save, 120); }, { passive: true });
+  // The position is noted on every scroll, while the page it belongs to is still on screen; only the write to
+  // sessionStorage waits. Debouncing the note as well lost a scroll made just before leaving (2,000 px came back as
+  // 1,400: audit 2026-10-22), and noting it at arrival is too late: the old page is already cleared by then.
+  window.addEventListener('scroll', () => { const k = id(); if (k && !restoring) mem[k] = Math.round(window.scrollY); clearTimeout(timer); timer = setTimeout(save, 120); }, { passive: true });
   window.addEventListener('pagehide', save);
 }
 

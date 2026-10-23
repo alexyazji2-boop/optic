@@ -108,3 +108,42 @@ def test_a_name_with_nothing_priced_is_unknown_not_zero_and_a_missing_quote_is_s
     row = {r["symbol"]: r for r in out["exposure"]["by_underlying"]}
     assert row["MMM"]["delta_adjusted"] is None and row["MMM"]["share_pct"] is None and "Not valued" in row["MMM"]["note"]
     assert any("No current quote for ZZZ" in s["reason"] and "broker's price" in s["reason"] for s in out["coverage"]["stale"])
+
+
+# ------------------------------------------------------------------ Front end (contracts; behaviour checked in the browser)
+
+from pathlib import Path  # noqa: E402
+
+from tests.test_frontend_v2_stage0 import V2, _run  # noqa: E402
+
+JS = V2 / "js"
+
+
+def test_the_ticker_repaint_waits_for_focus_to_land():
+    # typing a ticker then clicking the thesis lost what was typed next: the repaint ran inside the blur
+    src = (JS / "pages/paper.js").read_text()
+    line = next(l for l in src.splitlines() if "if (t.name === 'ticker')" in l)
+    assert "setTimeout(" in line and "else paint(); }, 0)" in line
+
+
+def test_chart_overlays_are_placed_in_css_pixels_under_page_zoom():
+    src = (JS / "ui/pricechart.js").read_text()
+    assert src.count("cssZoom(hr)") >= 2, "the scale handle and the tooltip both divide by the zoom"
+
+
+def test_the_quote_endpoint_tells_an_unreachable_source_from_an_unknown_symbol(monkeypatch):
+    from fastapi.testclient import TestClient
+    from app import main
+
+    def boom(sym):
+        raise RuntimeError("refused")
+    monkeypatch.setattr(main.PROVIDER, "quote", boom)
+    assert TestClient(main.app).get("/api/quote/AAPL").json() == {"ticker": "AAPL", "available": False, "unreachable": True}
+    monkeypatch.setattr(main.PROVIDER, "quote", lambda sym: {})
+    assert TestClient(main.app).get("/api/quote/ZZZZQX").json() == {"ticker": "ZZZZQX", "available": False}
+
+
+def test_scroll_positions_are_noted_on_every_scroll():
+    src = (JS / "core/scrollmem.js").read_text()
+    listener = next(l for l in src.splitlines() if "addEventListener('scroll'" in l)
+    assert "mem[k] = Math.round(window.scrollY)" in listener and "setTimeout(save, 120)" in listener

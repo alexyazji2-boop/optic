@@ -189,7 +189,7 @@ const BODY = {
     if (isNum(q.peg_ratio)) rows.push(['PEG', num(q.peg_ratio, 2)]);
     if (isNum(q.revenue_growth)) rows.push(['Revenue growth', signed(q.revenue_growth * 100, 1)]);
     const em = t.earnings_momentum || {};
-    if (em.revision_direction && em.revision_direction !== 'unknown') rows.push(['Revisions', capFirst(em.revision_direction)]);   // "unknown" is no revision history
+    if (em.revision_direction && em.revision_direction !== 'unknown') rows.push(['EPS estimate revisions', capFirst(em.revision_direction)]);   // "Revisions: Flat" beside the price target read as the target's   // "unknown" is no revision history
     if (!rows.length) {
       const fund = ['ETF', 'MUTUALFUND'].includes(String(q.quote_type || '').toUpperCase());
       return none(fund ? 'A fund has no earnings, so it has no analyst estimates or price target of its own. Its holdings do.' : 'No analyst data for this symbol.');

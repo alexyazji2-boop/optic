@@ -1148,7 +1148,8 @@ async def quick_quote(ticker: str, response: Response) -> Dict[str, Any]:
             quote = timings.wrap("quote", PROVIDER.quote)(sym)
         except Exception as exc:                                # noqa: BLE001
             logging.getLogger("uvicorn.error").info("quick quote for %s: %s", sym, exc)
-            return {"ticker": sym, "available": False}
+            # the source failing is not the symbol being unknown: the watchlist and alerts refuse only the second
+            return {"ticker": sym, "available": False, "unreachable": True}
         if not quote or quote.get("price") is None:
             return {"ticker": sym, "available": False}
         return {"ticker": sym, "available": True, "quote": quote}

@@ -208,6 +208,10 @@ export function createPriceChart(host, opts) {
   // points or a drawing is selected, the chart takes the whole gesture.
   const syncTouch = () => { svg.style.touchAction = S.tool !== 'select' || sel >= 0 || mOn ? 'none' : 'pan-y'; };
   const CLIP = `pc-clip-${++clipSeq}`;
+  // Settings' Text size zooms the page: getBoundingClientRect then reports screen pixels while style.left takes CSS
+  // pixels, so the price-scale handle was placed past the chart and the page scrolled sideways under Large (39 px at
+  // 1440, 67 px at 844 x 390: audit 2026-10-22). Boxes are divided by this before they position anything.
+  const cssZoom = (hr) => (host.offsetWidth ? (hr || host.getBoundingClientRect()).width / host.offsetWidth : 1) || 1;
 
   host.classList.add('pc');
   // the legend sits over the plot's top-left corner (absolute, at its place in the flow); the navigator under it
@@ -510,8 +514,8 @@ export function createPriceChart(host, opts) {
     const panes = layout.panes, foot = (panes.find((q) => q.id === 'vol') || panes[0]).y1, sig = [W, H, panes.map((q) => `${q.id}:${q.y0}`).join(',')].join('|');
     const ps2 = S.onRemove ? panes.slice(1).map((q) => q.id).join(',') : '';
     if (ps2 !== paneSig) { paneSig = ps2; panex.innerHTML = S.onRemove ? panes.slice(1).map((q) => { const k = q.id === 'vol' ? 'volume' : q.id, name = esc(PANE_LABEL[q.id] || q.id); return `<button type="button" class="pc-px" data-pc-pane="${esc(k)}" data-pane-at="${esc(q.id)}" aria-label="Remove the ${name} pane" title="Remove ${name}">${icon('close').s}</button>`; }).join('') : ''; placedSig = ''; }
-    // an <svg> has no offsetTop: its place in the host comes from the two boxes
-    const r = svg.getBoundingClientRect(), hr = host.getBoundingClientRect(), k = r.width / (W || 1), top0 = r.top - hr.top, left0 = r.left - hr.left;
+    // an <svg> has no offsetTop: its place in the host comes from the two boxes, in CSS pixels (cssZoom)
+    const r = svg.getBoundingClientRect(), hr = host.getBoundingClientRect(), z = cssZoom(hr), k = r.width / (W || 1) / z, top0 = (r.top - hr.top) / z, left0 = (r.left - hr.left) / z;
     const at = `${sig}|${Math.round(top0)}|${Math.round(left0)}|${k.toFixed(3)}|${ctl.offsetHeight}`;
     if (at === placedSig) return;
     placedSig = at;
@@ -594,11 +598,11 @@ export function createPriceChart(host, opts) {
     tipEl.innerHTML = head + rows + (n > 4 ? `<p class="t-muted">And ${n - 4} more on this bar.</p>` : '') + (S.onInsider ? `<p class="t-muted">${touchy ? 'Tap the arrow' : 'Press it, or Enter'} to open the insider filings.</p>` : '');
     tipEl.hidden = false;
     // an <svg> has no offsetTop: its place in the host comes from the two boxes
-    const r = svg.getBoundingClientRect(), hr = host.getBoundingClientRect(), k = r.width / (W || 1), top0 = r.top - hr.top, hw = host.clientWidth;
-    const bw = tipEl.offsetWidth, bh = tipEl.offsetHeight, ax = f.x * k + (r.left - hr.left), ay = f.y * k + top0;
+    const r = svg.getBoundingClientRect(), hr = host.getBoundingClientRect(), z = cssZoom(hr), k = r.width / (W || 1) / z, top0 = (r.top - hr.top) / z, hw = host.clientWidth;
+    const bw = tipEl.offsetWidth, bh = tipEl.offsetHeight, ax = f.x * k + (r.left - hr.left) / z, ay = f.y * k + top0;
     let left = ax + 14; if (left + bw > hw - 4) left = Math.max(4, ax - 14 - bw);
     // inside the plot, and inside the window when the plot runs past it
-    const lo = Math.max(top0, -hr.top + 72) + 4, hi = Math.min(top0 + H * k, window.innerHeight - hr.top) - bh - 4;
+    const lo = Math.max(top0, (-hr.top + 72) / z) + 4, hi = Math.min(top0 + H * k, (window.innerHeight - hr.top) / z) - bh - 4;
     const top = Math.max(lo, Math.min(hi, ay - bh / 2));
     tipEl.style.left = `${Math.round(left)}px`; tipEl.style.top = `${Math.round(top)}px`;
   }

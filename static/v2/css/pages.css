@@ -121,6 +121,8 @@
 /* alerts */
 /* Scan: each result's next steps, and the symbol kept in view while the table scrolls sideways */
 .sc-t th[scope="row"] { position: sticky; left: 0; z-index: 1; background: var(--c-raised); text-align: left; }
+/* a finger gets the row header's height, not the symbol's 14 px of text (33 x 14 at 390: audit 2026-10-22) */
+@media (pointer: coarse) { .sc-t th[scope="row"] > a { display: inline-flex; align-items: center; min-height: var(--tap); min-width: var(--tap); } }
 .sc-acts { white-space: nowrap; text-align: right; } .sc-acts .icon-btn { display: inline-grid; vertical-align: middle; } .sc-acts .icon-btn svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.7; }
 /* .scan-next, not .sc-next: that name is the top bar session chip's, and an 8px margin here pushed its "After hours at 4 pm" off the line */
 .scan-next { margin-top: 8px; } .flt-count { margin: 0 0 8px; display: flex; align-items: center; gap: 12px; }

@@ -359,7 +359,10 @@ export async function render(main, route) {
     if (t.dataset.v2PtEvFam !== undefined) { ticket.evidence[Number(t.dataset.v2PtEvFam)].family = t.value; paint(); return; }
     if (t.dataset.v2PtAdh) { const tr = book.closed.find((x) => x.id === t.dataset.v2PtAdh); if (tr) { tr.adherence = { ...(tr.adherence || {}), [t.dataset.k]: t.value || null }; save(); paint(); } return; }
     if (t.matches('[data-v2-pt-plan]')) { ticket[t.name] = t.type === 'checkbox' ? t.checked : t.value; if (t.tagName === 'SELECT' || t.type === 'checkbox') paint(); return; }
-    if (t.name === 'ticker') { ticket.ticker = t.value.toUpperCase().trim(); ticket.expiry = ''; ticket.strike = ''; if (ticket.instrument === 'option') loadChain(sym()); else paint(); return; }
+    // A ticker's change fires as focus leaves it, while the reader's click is still moving focus to the next field:
+    // repainting the form there replaced that field, nothing kept focus, and what was typed next was lost (audit
+    // 2026-10-22: "def" typed into the thesis never arrived). After the focus has landed, paint() keeps it.
+    if (t.name === 'ticker') { ticket.ticker = t.value.toUpperCase().trim(); ticket.expiry = ''; ticket.strike = ''; setTimeout(() => { if (ticket.instrument === 'option') loadChain(sym()); else paint(); }, 0); return; }
     if (t.matches('[data-v2-pt-expiry]')) { ticket.expiry = t.value; ticket.strike = ''; paint(); return; }
     if (t.matches('[data-v2-pt-strike]')) { ticket.strike = t.value; paint(); }
   });

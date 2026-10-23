@@ -127,6 +127,8 @@ export function trendFinding(pts, sma200) {
 }
 function trendItem(sym) {
   const ps = ((D.ticker || {}).technicals || {}).price_series || {}, sma = (ps.sma200 || []).filter(isNum);
+  // a failed price history ended the chart's wait but left this card shimmering beside the error (audit 2026-10-22)
+  if (D.tickerError && !D.ticker) return { k: 'trend', q: 'How has the share price moved?', a: 'Not available right now.', because: `${clean(String(D.tickerError.message || 'The price history did not load').replace(/\.$/, ''))}. The chart below has a Try again.` };
   const t = D.ticker ? trendFinding(series(), sma[sma.length - 1]) : undefined;
   if (t === undefined) return { k: 'trend', q: 'How has the share price moved?', a: null };
   if (!t || !isNum(t.ch)) return { k: 'trend', q: 'How has the share price moved?', a: 'Not enough price history.', because: 'Optic needs a few months of daily closes for this.' };

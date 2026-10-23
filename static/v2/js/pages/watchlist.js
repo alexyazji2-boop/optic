@@ -284,6 +284,7 @@ async function doUndo(main) {
 }
 
 function wire(main) {
+  const adding = new Set();
   main.addEventListener('submit', async (e) => {
     const add = e.target.closest('[data-v2-add]');
     if (add) {
@@ -294,6 +295,12 @@ function wire(main) {
       if (!/^[A-Z0-9.^=-]{1,12}$/.test(sym)) { toast('That does not look like a ticker. Try letters such as MSFT.'); return; }
       const a = store.activeList();
       if (a && a.symbols.includes(sym)) { toast(`${sym} is already on ${a.name}.`); input.select(); return; }
+      // one add per symbol at a time: the check below awaits, and a second Enter must not slip past the duplicate test
+      if (adding.has(sym)) return;
+      adding.add(sym);
+      try {
+        if (await api.knownSymbol(sym) === false) { toast(`No quote came back for ${sym}. Check the symbol, or try its exchange suffix, such as SHOP.TO.`); input.select(); return; }
+      } finally { setTimeout(() => adding.delete(sym), 1500); }
       input.value = '';
       focusNext = { act: 'v2WlAdd' };
       try {
