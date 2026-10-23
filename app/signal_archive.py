@@ -186,6 +186,35 @@ def reads() -> List[Dict[str, Any]]:
     return out
 
 
+LEVEL_FIELDS = ("symbol", "day", "recorded_at", "spot", "regime", "net_gex", "flip", "call_wall",
+                "put_wall", "iv30", "index_like", "rule_version")
+
+
+def levels(symbol: Optional[str] = None, since: Optional[str] = None,
+           until: Optional[str] = None) -> List[Dict[str, Any]]:
+    """The recorded walls and flip, one row per symbol and day, as they were read.
+
+    For comparing Optic's levels with another vendor's on the same days (asked
+    2026-10-23 for SpotGamma's SPY/SPX levels). The scores and components stay
+    out: this is the levels and the price they were read at, nothing else.
+    """
+    sql, args = "SELECT {} FROM reads WHERE 1=1".format(", ".join(LEVEL_FIELDS)), []
+    if symbol:
+        sql += " AND symbol = ?"
+        args.append(symbol.upper())
+    if since:
+        sql += " AND day >= ?"
+        args.append(since)
+    if until:
+        sql += " AND day <= ?"
+        args.append(until)
+    try:
+        with _LOCK, _connect() as conn:
+            return [dict(r) for r in conn.execute(sql + " ORDER BY day, symbol", args)]
+    except sqlite3.Error:
+        return []
+
+
 # ------------------------------------------------------------------ testing
 
 def _closes_after(bars: pd.DataFrame, day: str) -> Optional[int]:

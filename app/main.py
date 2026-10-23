@@ -2028,6 +2028,24 @@ async def validation() -> Dict[str, Any]:
     return body
 
 
+@app.get("/api/validation/levels")
+async def validation_levels(
+    request: Request,
+    symbol: Optional[str] = Query(None, max_length=12, pattern=r"^[A-Za-z0-9^.\-=]+$"),
+    since: Optional[str] = Query(None, pattern=r"^\d{4}-\d{2}-\d{2}$"),
+    until: Optional[str] = Query(None, pattern=r"^\d{4}-\d{2}-\d{2}$"),
+) -> Dict[str, Any]:
+    """The archive's walls and flip by symbol and day, for the owner: the rows
+    `/api/validation` only counts. Asked 2026-10-23 to set Optic's past SPY levels
+    beside SpotGamma's for the same days. Owner-only, as the usage page is."""
+    _write_guard(request)
+    rows = await _run(signal_archive.levels, symbol, since, until)
+    return {"rows": rows, "count": len(rows), "rule_version": signal_archive.RULE_VERSION,
+            "note": "The first in-session read of each symbol each ET trading day, as the engine reported it; "
+                    "a day with no read of the symbol has no row. Walls and flip are from the main read's "
+                    "expiries, not the 0 to 5 day read."}
+
+
 @app.get("/api/signals")
 async def signals_list(
     request: Request,

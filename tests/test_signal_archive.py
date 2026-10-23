@@ -183,3 +183,19 @@ def test_milo_is_told_the_reads_are_untested():
     from app import ai
     assert "have not been shown to predict returns" in ai.SYSTEM_PROMPT
     assert "track_record" in ai._ORDER_BASE
+
+
+def test_the_levels_are_the_owners_only_and_carry_no_scores(monkeypatch):
+    # asked 2026-10-23: past SPY walls and flip beside SpotGamma's for the same days
+    sa.record("SPY", 760.0, {"composite_score": 7.0}, _gex(call=810.0, put=760.0), now=OPEN)
+    sa.record("QQQ", 600.0, {"composite_score": 3.0}, _gex(), now=OPEN)
+    client = TestClient(m.app)
+    monkeypatch.setattr(m, "WRITE_TOKEN", "test-write-token")
+    assert client.get("/api/validation/levels").status_code == 401
+    got = client.get("/api/validation/levels?symbol=spy&since=2026-10-13&until=2026-10-13",
+                     headers={"X-Optic-Token": "test-write-token"}).json()
+    assert got["count"] == 1
+    row = got["rows"][0]
+    assert (row["symbol"], row["day"], row["call_wall"], row["put_wall"], row["flip"]) == ("SPY", "2026-10-13", 810.0, 760.0, 98.0)
+    assert "composite" not in row and "components" not in row
+    assert client.get("/api/validation/levels?since=13-10-2026", headers={"X-Optic-Token": "test-write-token"}).status_code == 422
