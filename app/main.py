@@ -4035,6 +4035,21 @@ _CHAT_MAX_LOOKUPS = 1
 _CHAT_AUTOLOAD_BUDGET = 20.0
 
 
+_NOT_SYMBOL_WORDS = {"CEO", "CFO", "COO", "USA", "FAQ", "LLC", "INC", "THE", "AND", "BUY", "SELL", "HOLD", "NYSE",
+                     "SEC", "IPO", "WHY", "HOW", "WHAT", "NOT", "YES", "ALL", "ANY", "FED", "OPEC", "FDA", "TTM"}
+
+
+def _unknown_symbols(text: str, known: List[str]) -> List[str]:
+    """All-capital tokens of three to six letters that look like a ticker and are not one Optic knows."""
+    out: List[str] = []
+    for token in re.findall(r"\$?\b[A-Z]{3,6}\b(?![.\-][A-Z])", text or ""):   # BRK of BRK-A is not a symbol of its own
+        t = token.lstrip("$")
+        if t in known or t in out or t in _CHAT_NOT_TICKERS or t in _NOT_SYMBOL_WORDS:
+            continue
+        out.append(t)
+    return out[:3]
+
+
 def _symbols_in(text: str) -> List[str]:
     """Uppercase tokens in a message that are really tradeable symbols."""
     out: List[str] = []
@@ -6848,7 +6863,16 @@ async def _augment_chat_context_lookups(history: List[Dict[str, Any]],
             already.add((block.get("ticker") or "").upper())
 
     text = last.get("content") or ""
-    wanted = [s for s in _symbols_in(text) if s not in already]
+    named = _symbols_in(text)
+    wanted = [s for s in named if s not in already]
+    # What the question is about, for the line under the answer: every symbol it named, the page's own included,
+    # and ticker-like tokens no directory knows. Without it the label followed whatever Milo looked up: a BRK-A
+    # question read "About SPY", and ZZZZQX asked from Home read "About MSFT" (audit 2026-10-22).
+    unknown = _unknown_symbols(text, named)
+    asked = {"symbols": named, "unknown": unknown}
+    if unknown:
+        asked["note"] = ("The question names {}, which Optic's symbol directory does not have. Say that no data "
+                         "is available for it; do not supply figures for it.".format(", ".join(unknown)))
 
     if not wanted:
         # No symbol named. Give the question whatever it is actually about.
@@ -6864,7 +6888,7 @@ async def _augment_chat_context_lookups(history: List[Dict[str, Any]],
             if market:
                 out["market"] = market
                 added = True
-        return out if added else context
+        return dict(out if added else (context or {}), question_named=asked)
 
     out = dict(context or {})
     fetched: Dict[str, Any] = {}
@@ -6900,6 +6924,7 @@ async def _augment_chat_context_lookups(history: List[Dict[str, Any]],
             "were not open in the reader's browser: the same data the tabs show, summarised. "
             "Milo's tools can fetch more."
         )
+    out["question_named"] = asked
     return out
 
 

@@ -30,6 +30,8 @@ import { icon } from './icons.js';
 const HISTORY_KEY = 'optic.pulse.history.v1', PERSONA_KEY = 'optic.pulse.persona.v1', HORIZON_KEY = 'optic.milo.horizon.v1', RESEARCH_KEY = 'optic.research.v1';
 const MAX_CONVERSATIONS = 30, MAX_MESSAGES = 60, MAX_CHARS = 12000;
 const DOSSIER = new Set(['overview', 'chart', 'swing', 'long', 'earnings', 'financials', 'news']);
+// a source's time as a reader says it: "2026-10-22T20:11:00+00:00" printed raw under every headline (audit 2026-10-22)
+const readWhen = (v) => { const t = /^\d{4}-\d{2}-\d{2}T/.test(String(v || '')) ? new Date(v) : null; return t && !Number.isNaN(t.getTime()) ? `published ${t.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' })} ET` : (v || ''); };
 const STEP_WORDS = { thinking: 'Thinking it through', 'searching the web': 'Searching the web', searching: 'Searching live sources', 'reading results': 'Reading what it found' };
 const SCOPES = { auto: 'This page', market: 'Market only', none: 'No page context' };
 
@@ -337,11 +339,22 @@ function msgHTML(it) {
  * apart from the page it was asked from. */
 export function concerns(info) {
   const out = [], add = (s) => { if (s && !out.includes(s)) out.push(s); };
-  // what the question named (loaded, or not in time), then what Milo looked up successfully
+  const nm = (info || {}).named;
+  // what the question named, the page's own symbol included (sent with the answer since 2026-10-22), and what the
+  // server loaded for it. What Milo looked up besides is "also looked up", not the subject: a BRK-A question that
+  // fetched SPY for the market read "About SPY ... Not about BRK-A" (audit 2026-10-22).
+  if (nm && typeof nm === 'object') {
+    (nm.symbols || []).forEach(add); ((info || {}).loaded || []).forEach((r) => (r.symbols || []).forEach(add));
+    if (!out.length && !(nm.unknown || []).length) ((info || {}).retrieved || []).filter((r) => r && r.ok !== false).forEach((r) => (r.symbols || []).forEach(add));
+    return out;
+  }
+  // an answer saved before then: what the question loaded, then what Milo looked up
   ((info || {}).loaded || []).forEach((r) => (r.symbols || []).forEach(add));
   ((info || {}).retrieved || []).filter((r) => r && r.ok !== false).forEach((r) => (r.symbols || []).forEach(add));
   return out;
 }
+/** Symbols Milo looked up that the question was not about. */
+const alsoLooked = (info, about) => [...new Set(((info || {}).retrieved || []).filter((r) => r && r.ok !== false).flatMap((r) => r.symbols || []))].filter((s) => s && !about.includes(s));
 /** Symbols the answer concerns for which no data came back. */
 const dataless = (info, syms) => syms.filter((s) => ![...((info || {}).loaded || []), ...((info || {}).retrieved || [])].some((r) => r && r.ok !== false && (r.symbols || []).includes(s)));
 // What an answer was about and when it was asked. The page attached as context and the instruments the answer's
@@ -350,14 +363,15 @@ const dataless = (info, syms) => syms.filter((s) => ![...((info || {}).loaded ||
 export function aboutLine(info, now = route) {
   const f = ((info || {}).context || {}).focus || {};
   const page = (info || {}).symbol || f.ticker || null, where = f.view_label || '';
-  const data = concerns(info);
-  const about = data.length ? data : page ? [page] : [];
-  if (!about.length && !where) return '';
+  const data = concerns(info), unknown = (((info || {}).named || {}).unknown || []);
+  const about = data.length ? data : unknown.length ? [] : page ? [page] : [];
+  if (!about.length && !where && !unknown.length) return '';
+  const also = (info || {}).named ? alsoLooked(info, about) : [];
   const join = (xs) => (xs.length > 1 ? `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}` : xs[0]);
   const ctx = page && !about.includes(page) ? `${where && where !== page ? where : `${page}'s page`} attached as context` : (where && (!page || where !== page) ? `asked from ${where}` : '');
   const other = about.length && now && now.symbol && !about.includes(now.symbol);
-  const none = data.length ? dataless(info, data) : [];
-  return html`<p class="milo-about ${other ? 'is-other' : ''}">${about.length ? `About ${join(about)}` : `From ${where}`}${none.length ? ` (no ${join(none)} data came back)` : ''}${ctx ? `; ${ctx}` : ''}${f.captured_at ? `, ${prefs.clock(f.captured_at)}` : ''}${other ? html`. <b>Not about ${now.symbol}, the page now open.</b>` : ''}</p>`;
+  const none = data.length ? dataless(info, data).filter((x) => x !== page) : [];   // the page's own data is attached
+  return html`<p class="milo-about ${other || unknown.length ? 'is-other' : ''}">${about.length ? `About ${join(about)}` : unknown.length ? `About ${join(unknown)}, a symbol Optic has no data for` : `From ${where}`}${none.length ? ` (no ${join(none)} data came back)` : ''}${also.length ? `; also looked up ${join(also)}` : ''}${ctx ? `; ${ctx}` : ''}${f.captured_at ? `, ${prefs.clock(f.captured_at)}` : ''}${other ? html`. <b>Not about ${now.symbol}, the page now open.</b>` : ''}</p>`;
 }
 // Every source behind an answer, one fold away: what it cited, what it read, the data it looked up
 function sourceLists(info) {
@@ -366,7 +380,7 @@ function sourceLists(info) {
   if (!n) return html`<span class="milo-src-none"></span>`;
   return html`<details class="milo-src-all"><summary>Sources (${n})</summary><div class="milo-src-body">
     ${cites.length ? html`<div class="milo-sources"><p class="t-label">Cited</p>${cites.map((c) => (/^https?:\/\//i.test(c.url || '') ? html`<a href="${c.url}" target="_blank" rel="noopener">${c.title || c.url}</a>` : html`<span>${c.title || ''}</span>`))}</div>` : ''}
-    ${read.length ? html`<div class="milo-read"><p class="t-label">Sources Milo read (${read.length})</p><ul class="plain">${read.map((r) => html`<li>${/^https?:\/\//i.test(r.url || '') ? html`<a href="${r.url}" target="_blank" rel="noopener">${r.source}</a>` : r.source} <small class="t-muted">${[r.what, r.period].filter(Boolean).join(', ')}</small></li>`)}</ul></div>` : ''}
+    ${read.length ? html`<div class="milo-read"><p class="t-label">Sources Milo read (${read.length})</p><ul class="plain">${read.map((r) => html`<li>${r.symbol ? html`<b>${r.symbol}</b> ` : ''}${/^https?:\/\//i.test(r.url || '') ? html`<a href="${r.url}" target="_blank" rel="noopener">${r.source}</a>` : r.source} <small class="t-muted">${[r.what, readWhen(r.period), r.kind === 'headline' ? 'the headline only, not the article' : ''].filter(Boolean).join(', ')}</small></li>`)}</ul></div>` : ''}
     ${got.length ? html`<div class="milo-read"><p class="t-label">Data Milo retrieved (${got.length})</p><ul class="plain">${got.map((r) => html`<li>${r.label || ''} <small class="t-muted">${[r.source, r.as_of ? `observed ${prefs.clock(r.as_of)}` : '', r.retrieved_at ? `retrieved ${prefs.clock(r.retrieved_at)}` : '', r.ok === false ? 'could not be retrieved' : ''].filter(Boolean).join(', ')}</small></li>`)}</ul></div>` : ''}
     ${loaded.length ? html`<div class="milo-read"><p class="t-label">Loaded because the question named them (${loaded.length})</p><ul class="plain">${loaded.map((r) => html`<li>${r.label || ''} <small class="t-muted">${[r.source, r.as_of ? `quote observed ${prefs.clock(r.as_of)}` : ''].filter(Boolean).join(', ')}</small></li>`)}</ul></div>` : ''}</div></details>`;
 }
@@ -576,7 +590,7 @@ export async function send(text) {
   if (ta) { ta.value = ''; grow(ta); } S.draft = ''; S.showHistory = false; S.showSettings = false; S.toEnd = true;
   paintChrome(); paintLog(); paintForm(); paintLive();
   scoutTo(ai, 'thinking', 'ack');
-  const ctl = new AbortController(); S.abort = ctl;
+  const ctl = new AbortController(); S.abort = ctl; S.sentAt = performance.now();
   let finished = false, ended = '', failed = null;
   try {
     const res = await fetch('/api/chat', {
@@ -607,7 +621,7 @@ export async function send(text) {
           else if (ev === 'status') { const w = STEP_WORDS[String(p.state || '')] || String(p.state || '').replace(/^./, (x) => x.toUpperCase()); S.live.status = w; paintLive(); if (SC.i === ai && SC.state !== 'streaming') scoutTo(ai, SEARCHING.has(String(p.state || '')) ? 'searching' : 'thinking'); }
           else if (ev === 'assumed') { const hz = (((S.personas || {}).horizons || {}).horizons || []).find((x) => x.id === p.horizon); if (hz && p.horizon_source === 'question' && p.horizon !== horizon()) meta.get(ai).assumed = `Answered for a ${hz.label.toLowerCase()} timeframe, from your question. Your setting is unchanged.`; }
           else if (ev === 'error') { finished = true; failed = { text: p.message || 'Milo could not answer.' }; }
-          else if (ev === 'done') { finished = true; Object.assign(meta.get(ai), { citations: p.sources || p.citations || [], read: Array.isArray(p.read) ? p.read : [], retrieved: Array.isArray(p.retrieved) ? p.retrieved : [], loaded: Array.isArray(p.loaded) ? p.loaded : [] }); }
+          else if (ev === 'done') { finished = true; Object.assign(meta.get(ai), { citations: p.sources || p.citations || [], read: Array.isArray(p.read) ? p.read : [], retrieved: Array.isArray(p.retrieved) ? p.retrieved : [], loaded: Array.isArray(p.loaded) ? p.loaded : [], named: p.named && typeof p.named === 'object' ? p.named : null }); }
         }
       }
       if (!finished && !ended && !failed) ended = ctl.signal.aborted ? 'stopped' : 'cut';
@@ -641,7 +655,9 @@ export async function send(text) {
   // the state, for a screen reader: the log reads the answer itself
   announce(failed ? 'Milo could not answer. Your question is back in the box.' : ended === 'stopped' ? 'Stopped. The answer is incomplete.' : ended === 'cut' ? 'The answer was cut off.' : 'Milo has answered.');
 }
-export function stop() { if (S.abort) S.abort.abort(); }
+// Send turns into Stop in the same place, so a double-click on Send, or Enter on the button just pressed, stopped
+// the answer it had started ("Stopped before Milo answered": audit 2026-10-22). Stop listens from 600 ms after Send.
+export function stop() { if (S.abort && performance.now() - (S.sentAt || 0) > 600) S.abort.abort(); }
 
 /* ---------------- actions in answers ---------------- */
 const chartRange = { '1m': '1M', '3m': '3M', '6m': '6M', '1y': '1Y', all: 'All' };

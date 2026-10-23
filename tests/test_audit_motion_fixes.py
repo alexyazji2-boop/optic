@@ -147,3 +147,30 @@ def test_scroll_positions_are_noted_on_every_scroll():
     src = (JS / "core/scrollmem.js").read_text()
     listener = next(l for l in src.splitlines() if "addEventListener('scroll'" in l)
     assert "mem[k] = Math.round(window.scrollY)" in listener and "setTimeout(save, 120)" in listener
+
+
+# ------------------------------------------------------------------ Milo: what an answer is about
+
+def test_the_about_line_follows_what_the_question_named_not_every_lookup(tmp_path):
+    js = (JS / "ui/milo.js").as_posix()
+    got = _run(tmp_path, f"""
+      globalThis.localStorage = {{ getItem() {{ return null; }}, setItem() {{}}, removeItem() {{}} }};
+      const M = await import('{js}');
+      const D = await import('{(JS / "core/dom.js").as_posix()}');
+      const t = (info) => D.toString(M.aboutLine(info, {{ symbol: info.context.focus.ticker }})).replace(/<[^>]+>/g, '');
+      print(JSON.stringify({{
+        brk: t({{ symbol: 'BRK-A', context: {{ focus: {{ ticker: 'BRK-A', view_label: 'BRK-A Dossier, Options' }} }}, named: {{ symbols: ['BRK-A'], unknown: [] }}, retrieved: [{{ symbols: ['SPY'], ok: true }}] }}),
+        zz: t({{ symbol: 'MSFT', context: {{ focus: {{ ticker: 'MSFT', view_label: 'Home' }} }}, named: {{ symbols: [], unknown: ['ZZZZQX'] }}, retrieved: [{{ symbols: ['MSFT'], ok: true }}] }}),
+        nvda: t({{ symbol: 'AAPL', context: {{ focus: {{ ticker: 'AAPL', view_label: 'AAPL Dossier, Overview' }} }}, named: {{ symbols: ['NVDA'], unknown: [] }}, loaded: [{{ symbols: ['NVDA'] }}], retrieved: [] }}),
+      }}));
+    """)
+    assert got["brk"].startswith("About BRK-A; also looked up SPY"), got["brk"]
+    assert got["zz"].startswith("About ZZZZQX, a symbol Optic has no data for"), got["zz"]
+    assert got["nvda"].startswith("About NVDA;") and "attached as context" in got["nvda"]
+
+
+def test_unknown_ticker_like_tokens_are_named_and_parts_of_symbols_are_not():
+    from app import main
+    assert main._unknown_symbols("What is ZZZZQX trading at?", []) == ["ZZZZQX"]
+    assert main._unknown_symbols("What do BRK-A options price?", ["BRK-A"]) == []
+    assert main._unknown_symbols("Is the CEO buying? What about the FED and EPS?", []) == []

@@ -541,6 +541,11 @@ whether a contract was bought or sold is inferred, never observed. Say so when i
 - The GEX numbers assume dealers are long the calls customers sold and short the puts customers \
 bought (calls count as positive gamma exposure, puts negative); that is a model assumption, not \
 observed dealer inventory. It is the standard retail assumption and it is sometimes wrong.
+- News items are headlines, publishers and times, not articles. Say "a headline reported", and never \
+describe what an article argues or concludes.
+- A change in a rate is in percentage points: a margin from 20% to 22% rose 2 points, which is a 10% \
+rise. Say which you mean, and never write a points change as a percent.
+- A figure CONTEXT and your tools do not have is unavailable. Say so, and do not supply it from memory.
 
 ## How to answer
 Answer the question that was asked, at the scope it was asked. Lead with the takeaway: one or two \
@@ -3204,6 +3209,9 @@ def sources_read(kwargs: Optional[Dict[str, Any]], limit: int = 12) -> List[Dict
         return []
     pack = sent.get("research") if isinstance(sent, dict) else None
     items = pack.get("items") if isinstance(pack, dict) else None
+    # Each row says which instrument it is about and, for news, that only the headline was read: asked about NVDA
+    # from AAPL's page, eleven AAPL rows read as the answer's sources with no symbol on them (audit 2026-10-22)
+    symbol = str(pack.get("ticker") or "").upper() if isinstance(pack, dict) else ""
     rows: List[Dict[str, Any]] = []
     index: Dict[Tuple[str, str], Dict[str, Any]] = {}
     for it in items or []:
@@ -3219,8 +3227,11 @@ def sources_read(kwargs: Optional[Dict[str, Any]], limit: int = 12) -> List[Dict
         if row is None:
             if len(rows) >= limit:
                 continue
+            group = str(it.get("group") or "")
             row = {"source": source or url, "url": url if url.startswith(("https://", "http://")) else "",
-                   "period": str(it.get("period") or it.get("as_of") or "").strip(), "labels": []}
+                   "period": str(it.get("period") or it.get("as_of") or "").strip(), "labels": [],
+                   "symbol": symbol if symbol and group not in ("macro", "market", "desk") else None,
+                   "kind": "headline" if group == "news" else None}
             index[key] = row
             rows.append(row)
         if label and label not in row["labels"]:
@@ -3229,7 +3240,7 @@ def sources_read(kwargs: Optional[Dict[str, Any]], limit: int = 12) -> List[Dict
     for row in rows:
         labels = row.pop("labels")
         what = ", ".join(labels[:3]) + (" and {} more".format(len(labels) - 3) if len(labels) > 3 else "")
-        out.append(dict(row, what=what))
+        out.append({k: v for k, v in dict(row, what=what).items() if v is not None or k not in ("symbol", "kind")})
     return out
 
 
@@ -3383,6 +3394,8 @@ async def stream_chat(
                 # Symbols the server loaded because the question named them: what
                 # the answer concerns, apart from the page it was asked from
                 "loaded": auto_loaded_sources(context),
+                # what the question named, the page's symbol included, and tokens no directory knows
+                "named": ((context or {}).get("question_named") or {}) if isinstance((context or {}).get("question_named"), dict) else {},
                 "usage": usage_sum,
             },
         )
