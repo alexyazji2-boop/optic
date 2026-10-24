@@ -28,7 +28,7 @@ const delta = [{ avg: Infinity, max: 255 }];
 let cur = null;
 for (const line of out.split("\n")) {
   if (line.startsWith("frame:")) delta.push((cur = { avg: 0, max: 0 }));
-  const m = line.match(/lavfi\.signalstats\.(YAVG|YMAX)=([\d.]+)/);
+  const m = line.match(/lavfi\.signalstats\.(YAVG|YMAX)=([\d.e+-]+)/);
   if (m && cur) cur[m[1] === "YAVG" ? "avg" : "max"] = Number(m[2]);
 }
 if (delta.length !== VIDEO.frames) console.warn(`warning: ${delta.length} frames on disk, VIDEO.frames is ${VIDEO.frames}`);
