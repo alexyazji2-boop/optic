@@ -8,6 +8,7 @@
    class) now waits until it has left: run at once it dropped the phone panel into the generic sheet mid-exit.
 3. On a phone, the first move of a pan unhid Reset zoom on a toolbar row of its own and pushed the plot 38 px down
    under the finger. It sits over the plot there now, above the chart's own buttons, clear of the volume pane's.
+   Which one shows is the width's, by CSS: chosen in JS when the chart was made, a resize past 860px showed both.
 
 Measured in headless Chrome with the frame-stepped recorder and Chrome's screencast, and with drawer_edges.mjs and
 reset_zoom.mjs (~/Optic/work/motion-check-2026-10-24); the wiring is read as text here.
@@ -44,8 +45,11 @@ def test_the_drawer_plays_its_exit_before_it_hides():
 
 
 def test_a_phone_reset_zoom_moves_nothing():
-    assert "homeButton: isPhone()," in CH
-    assert "${isPhone() ? '' : html`<button type=\"button\" class=\"btn btn-sm ch-home\" data-v2-ch-home" in CH, "the toolbar's is the wide screen's"
+    assert "homeButton: true," in CH and '<button type="button" class="btn btn-sm ch-home" data-v2-ch-home' in CH
+    assert "${isPhone() ? '' : html`<button type=\"button\" class=\"btn btn-sm ch-home\"" not in CH, "both are drawn; the width picks one"
+    # one Reset zoom at any width, by CSS, so a resize past 860px never shows both (the chart is not rebuilt on resize)
+    assert "@media (max-width: 860px) { .ctools .ch-home { display: none; } }" in PAGES
+    assert "@media not all and (max-width: 860px) { .pc-cb.pc-home { display: none; } }" in PAGES
     assert "(S.homeButton ? '<button type=\"button\" class=\"pc-cb pc-home\" data-pc-home hidden" in PC
     assert "if (zoomed !== zoomedWas && homeEl) homeEl.hidden = !zoomed;" in PC
     assert "if (b.hasAttribute('data-pc-home')) { home(); return; }" in PC

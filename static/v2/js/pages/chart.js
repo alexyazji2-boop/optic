@@ -288,7 +288,7 @@ function toolbar() {
     : isPhone() ? html`<label class="select ch-rng"><span class="sr">Range</span><select data-v2-ch-rangesel>${Object.keys(RANGES.daily).map((r) => html`<option value="${r}" ${V.range === r ? 'selected' : ''}>${r}</option>`)}</select></label>`
     : html`<div class="seg" role="group" aria-label="Range">${Object.keys(RANGES.daily).map((r) => html`<button type="button" data-v2-ch-range="${r}" aria-pressed="${V.range === r}">${r}</button>`)}</div>`}
     ${isPhone() ? '' : html`<button type="button" class="btn btn-sm" data-v2-ch-fit title="Every loaded bar on screen">Fit</button>`}
-    ${isPhone() ? '' : html`<button type="button" class="btn btn-sm ch-home" data-v2-ch-home ${D.zoomed ? '' : 'hidden'} title="Back to the ${iv.intraday ? iv.label : V.range} view">Reset zoom</button>`}
+    <button type="button" class="btn btn-sm ch-home" data-v2-ch-home ${D.zoomed ? '' : 'hidden'} title="Back to the ${iv.intraday ? iv.label : V.range} view">Reset zoom</button>
     ${isPhone() ? '' : html`<div class="seg seg-ic" role="group" aria-label="Style">${[['candles', 'Candles', 'candles'], ['line', 'Line', 'lineChart'], ['area', 'Area', 'area']].map(([k, l, ic]) => html`<button type="button" data-v2-ch-style="${k}" aria-pressed="${V.style === k}" aria-label="${l}" title="${l}">${icon(ic)}</button>`)}</div>`}
   </div>
   <div class="ctools ch-layers" id="ch-layers" role="group" aria-label="Layers" ${V.layers ? '' : 'hidden'}>
@@ -334,7 +334,9 @@ function paintChart(over) {
   chart = createPriceChart(host.lastChild, {
     ...kept, extended: D.intra && D.intra.extended, onChange: (c) => { D.can = c; syncDrawButtons(); },
     bars: D.bars, intraday: !!iv.intraday, msbK: V.msbK || 5, style: V.style, snap: V.snap, title: titleOf(),
-    homeButton: isPhone(),   // a phone's Reset zoom sits over the plot (ui/pricechart.js), so showing it moves nothing
+    // a second Reset zoom over the plot (ui/pricechart.js) for a phone, where showing the toolbar's moved the plot;
+    // which of the two shows is the width's, in pages.css, so a window resized past 860px never shows both
+    homeButton: true,
     onView: (v) => { D.zoomed = v.zoomed; const z = $('[data-v2-ch-home]', mainEl); if (z) z.hidden = !v.zoomed; }, overlays: V.overlays, panes: V.panes, levels: levels(), events: events(),
     drawings: D.drawings, tool: V.tool, window: windowBars(), label: `${D.sym}, ${iv.label} bars`, ...extras(), ...studies(), pageKeys: mainEl,
     // an insider arrow opens the stock's insider filings, as Classic's markers did (openInsidersFor)

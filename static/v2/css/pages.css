@@ -685,6 +685,11 @@ table.chw-table { font-size: var(--t-sm); } table.chw-table th { padding: 6px 4p
 /* Reset zoom among the plot's own buttons (a phone's Chart page): the toolbar's wording on a control of their height */
 .pc-cb.pc-home { position: absolute; z-index: 3; width: auto; padding: 0 12px; font: 500 var(--t-md)/1 var(--f-sans); color: var(--c-ink); }
 .pc-cb.pc-home[hidden] { display: none; }
+/* One Reset zoom at any width: the plot's on a phone, the toolbar's on a wide screen. Decided here and not when the
+   chart was made: chosen in JS, a window resized past 860px kept the plot's and drew the toolbar's too (seen at 870px).
+   [hidden] still wins at every width (base.css), so neither shows until the view is zoomed. */
+@media (max-width: 860px) { .ctools .ch-home { display: none; } }
+@media not all and (max-width: 860px) { .pc-cb.pc-home { display: none; } }
 .pc-px { position: absolute; z-index: 3; width: 28px; height: 28px; display: grid; place-items: center; padding: 0; border: 0; border-radius: var(--r-sm); background: none; color: var(--c-ink-3); cursor: pointer; }
 .pc-px svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.8; }
 .pc-px:hover { background: var(--c-sunk); color: var(--c-ink); } .pc-px:focus-visible { outline: 2px solid var(--c-focus); outline-offset: 1px; }
