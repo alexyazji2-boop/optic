@@ -128,3 +128,32 @@ def test_the_marks_are_drawn_named_and_counted():
     assert "x - lastX >= 34 && x - 14 > legW" in PC, "crowded labels and labels under the legend are left off"
     assert "SEC filing${fileMarks.length === 1 ? '' : 's'} marked." in PC
     assert 'class="pc-fil"' in PC, "the readout names a filing on the bar being read"
+
+
+# ------------------------------------------------------------ the chart comparison
+
+def test_compare_lines_are_percent_from_one_start_bar_and_gaps_stay_gaps():
+    st = PC[PC.index("function cmpState()"):PC.index("function priceScale(")]
+    assert "bars.findIndex((b) => b.t >= S.compare.anchor)" in st, "the first bar at or after the start"
+    assert "(v / base - 1) * 100" in st and "Number.isFinite(v) ? (v / base - 1) * 100 : null" in st, "a missing close is a gap, not a carried value"
+    assert "lo = Math.min(lo, 0); hi = Math.max(hi, 0);" in PC, "0% is always on the scale"
+    assert "D.bars.map((b) => (c.at.has(b.t) ? c.at.get(b.t) : null))" in CHART, "matched by time at every paint"
+
+
+def test_price_unit_layers_and_drawing_stand_aside_while_comparing():
+    assert "if (!C) {\n    // levels" in PC and "if (!C) S.drawings.forEach" in PC and "if (!C) o += msSvg();" in PC
+    assert "if (S.tool !== 'select' && !cmpOn()) { place(p); return; }" in PC
+    assert "tool: compareOpt() ? 'select' : V.tool, compare: compareOpt()," in CHART
+    assert "dr.inert = on;" in CHART
+
+
+def test_a_yield_is_refused_and_the_start_is_stated():
+    assert "RATES = /^\\^(TNX|IRX|FVX|TYX)$/" in CHART and "is a yield, so its percent change is not a return" in CHART
+    assert "Price only, split-adjusted: dividends are not added back." in CHART
+    assert "Percent from ${esc(fmtT(bars[C.ai].t))}" in PC, "the readout names the start bar"
+    assert "V.cmpAnchor < first || V.cmpAnchor > last" in CHART, "a start outside these bars goes back to the view's first"
+
+
+def test_range_buttons_open_the_range_on_the_same_bars():
+    assert "function newRange() { const k = chart ? chart.keep() : {}; paintChart({ history: k.history }); }" in CHART
+    assert CHART.count("else newRange(); return; }") == 2

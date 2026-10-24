@@ -259,7 +259,34 @@ export function createPriceChart(host, opts) {
     return { l, r, panes, bw, X: (i) => l + (i - from + 0.5) * bw, I: (x) => Math.round((x - l) / bw - 0.5 + from) };
   }
 
-  function priceScale(p) {
+  /* ---------- comparison (motion proposal Phase 2, 2026-10-24) ----------
+   * S.compare: { anchor: epoch ms, series: [{ sym, cls, closes }] }. Each series' `closes` is aligned to these bars by
+   * time, null where that symbol has no bar on this one's (a gap, never a carried value). The price pane then shows
+   * every line as the percent change from its close on the anchor bar, labelled with the anchor's date; the price
+   * scale, indicators, levels, insider arrows and drawings, all in price, stand aside until the comparison ends. */
+  const cmpOn = () => !!(S.compare && (S.compare.series || []).length);
+  function cmpState() {
+    if (!cmpOn()) return null;
+    // the start bar is the first at or after the start's moment: a daily start on hourly bars is that day's first hour,
+    // never the hour before it
+    let ai = bars.findIndex((b) => b.t >= S.compare.anchor);
+    if (ai < 0) ai = N - 1;
+    // each line's base is its own close on the anchor bar, or its first close after it when it has none there
+    const rebase = (vals) => { let k = ai; while (k < N && !Number.isFinite(vals[k])) k += 1; if (k >= N) return null; const base = vals[k]; return { from: k, pct: vals.map((v) => (Number.isFinite(v) ? (v / base - 1) * 100 : null)) }; };
+    const lines = [Object.assign({ sym: (S.title && S.title.sym) || 'Price', cls: 'cm0', closes }, rebase(closes))]
+      .concat(S.compare.series.map((x) => { const r = rebase(x.closes); return r ? Object.assign({ sym: x.sym, cls: x.cls, closes: x.closes }, r) : null; }).filter(Boolean));
+    return { ai, lines };
+  }
+  function priceScale(p, C) {
+    if (C) {
+      let lo = Infinity, hi = -Infinity;
+      C.lines.forEach((l) => { for (let i = from; i <= to; i++) { const v = l.pct[i]; if (Number.isFinite(v)) { lo = Math.min(lo, v); hi = Math.max(hi, v); } } });
+      if (!Number.isFinite(lo)) { lo = -1; hi = 1; }
+      lo = Math.min(lo, 0); hi = Math.max(hi, 0);   // the anchor's 0% is always on the scale
+      const sp = (hi - lo) || 1; lo -= sp * 0.06; hi += sp * 0.08;
+      if (yZoom !== 1) { const mid = (lo + hi) / 2, half = (hi - lo) / 2 / yZoom; lo = mid - half; hi = mid + half; }
+      return { lo, hi, pct: true, Y: (v) => p.y0 + (1 - (v - lo) / (hi - lo)) * (p.y1 - p.y0), P: (y) => lo + (1 - (y - p.y0) / (p.y1 - p.y0)) * (hi - lo) };
+    }
     let lo = Infinity, hi = -Infinity;
     for (let i = from; i <= to; i++) { const b = bars[i]; if (!b) continue; lo = Math.min(lo, S.style === 'candles' ? b.l : b.c); hi = Math.max(hi, S.style === 'candles' ? b.h : b.c); }
     const sp = (hi - lo) || 1; lo -= sp * 0.06; hi += sp * 0.08;
@@ -276,16 +303,19 @@ export function createPriceChart(host, opts) {
     raf = 0; drawnW = host.clientWidth;
     layout = computeLayout();
     const { X, bw, panes } = layout;
-    const pp = panes[0], ps = priceScale(pp); layout.ps = ps;
+    const C = cmpState();
+    const pp = panes[0], ps = priceScale(pp, C); layout.ps = ps; layout.cmp = C;
     let o = '';
-    // grid and price axis
-    [0.15, 0.5, 0.85].forEach((f) => { const v = ps.lo + (ps.hi - ps.lo) * f, y = ps.Y(v); o += `<line class="g" x1="0" x2="${W - layout.r}" y1="${y.toFixed(1)}" y2="${y.toFixed(1)}"/><text class="ax" x="${W - layout.r + 6}" y="${(y + 4).toFixed(1)}">${num(v, v < 10 ? 2 : v < 1000 ? 1 : 0)}</text>`; });
+    // grid and price axis (in percent from the anchor while comparing)
+    [0.15, 0.5, 0.85].forEach((f) => { const v = ps.lo + (ps.hi - ps.lo) * f, y = ps.Y(v); o += `<line class="g" x1="0" x2="${W - layout.r}" y1="${y.toFixed(1)}" y2="${y.toFixed(1)}"/><text class="ax" x="${W - layout.r + 6}" y="${(y + 4).toFixed(1)}">${C ? signed(v, Math.abs(ps.hi - ps.lo) < 6 ? 1 : 0) : num(v, v < 10 ? 2 : v < 1000 ? 1 : 0)}</text>`; });
     // time axis
     const step = Math.max(1, Math.round((to - from) / Math.max(3, Math.floor(W / 120))));
     for (let i = from; i <= to; i += step) o += `<text class="ax" x="${Math.max(2, X(i)).toFixed(1)}" y="${H - 6}" text-anchor="${X(i) < 20 ? 'start' : 'middle'}">${esc(S.intraday ? new Date(bars[i].t).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'America/New_York' }) : new Date(bars[i].t).toLocaleDateString('en-US', { month: 'short', year: '2-digit', timeZone: 'UTC' }))}</text>`;
     // everything on the price stays in the price pane: a 200-bar average or a channel below the scale ran into
     // the panes under it
     o += `<defs><clipPath id="${CLIP}"><rect x="0" y="${pp.y0}" width="${W - layout.r}" height="${pp.y1 - pp.y0}"/></clipPath></defs><g clip-path="url(#${CLIP})">`;
+    let endsSvg = '';
+    if (!C) {
     // levels
     const L = S.levels || {};
     // a label sits over its line at the left, or under it (`below`) or at the right (`end`) where lines run close;
@@ -369,7 +399,6 @@ export function createPriceChart(host, opts) {
     { const lb = bars[N - 1], v = lb && lb.c; let pb = bars[N - 2]; if (S.intraday && lb) { const d = nyDate(lb.t); for (let j = N - 2; j >= 0; j--) if (nyDate(bars[j].t) !== d) { pb = bars[j]; break; } } if (Number.isFinite(v) && v >= ps.lo && v <= ps.hi) { const y = ps.Y(v).toFixed(1), up = !pb || v >= pb.c; o += `<line class="lastp ${up ? 'up' : 'dn'}" x1="0" x2="${W - layout.r}" y1="${y}" y2="${y}"/>`; layout.last = { y, up, v }; } else layout.last = null; }
     // the end labels, right-aligned inside the plot, drawn after the markers so nothing covers them; where two would
     // overlap the lower one steps down
-    let endsSvg = '';
     { const pl = ends.filter((e) => e.v >= ps.lo && e.v <= ps.hi).map((e) => Object.assign(e, { y: ps.Y(e.v) + 4 })).sort((a, b) => a.y - b.y); let last = -Infinity;
       pl.forEach((e) => { e.y = Math.min(pp.y1 - 2, Math.max(e.y, last + 13)); last = e.y; endsSvg += `<text class="endl ${e.c}" x="${(right - 6).toFixed(1)}" y="${e.y.toFixed(1)}" text-anchor="end">${e.t}</text>`; }); }
     // the stage of each run named along the foot of the price, where there is room
@@ -389,6 +418,17 @@ export function createPriceChart(host, opts) {
         + (m.at <= to ? `<circle cx="${X(m.at).toFixed(1)}" cy="${ps.Y(at.c).toFixed(1)}" r="${Math.max(5, Math.min(10, bw * 0.9)).toFixed(1)}"/>` : '')
         + `<title>${word} market structure break. Swing ${bull ? 'high' : 'low'} of ${num(m.price)} formed ${fmtT(bars[m.from].t)}; known as a swing from ${fmtT(bars[m.known].t)}, once the bars after it had closed (dotted before then); broken ${fmtT(at.t)} by a close of ${num(at.c)}.</title></g>`;
     });
+    } else {
+      // the comparison: a dotted line on the anchor bar, where every line is 0%, the zero line, and each symbol's
+      // line in percent; each named at its right end with its change, as the indicators are
+      if (C.ai >= from && C.ai <= to) { const x = X(C.ai).toFixed(1); o += `<line class="cm-anchor" x1="${x}" x2="${x}" y1="${pp.y0}" y2="${pp.y1}"/>`; }
+      { const y0 = ps.Y(0).toFixed(1); o += `<line class="cm-zero" x1="0" x2="${W - layout.r}" y1="${y0}" y2="${y0}"/>`; }
+      C.lines.forEach((l) => { o += `<path class="cmp ${l.cls}" d="${path(l.pct, X, ps.Y)}"/>`; });
+      const right = W - layout.r, pl = [];
+      C.lines.forEach((l) => { for (let i = to; i >= from; i--) if (Number.isFinite(l.pct[i])) { pl.push({ y: ps.Y(l.pct[i]) + 4, c: l.cls, t: `${l.sym} ${signed(l.pct[i], 1)}` }); break; } });
+      pl.sort((a, b) => a.y - b.y); let last = -Infinity;
+      pl.forEach((e) => { e.y = Math.min(pp.y1 - 2, Math.max(e.y, last + 13)); last = e.y; endsSvg += `<text class="endl ${e.c}" x="${(right - 6).toFixed(1)}" y="${e.y.toFixed(1)}" text-anchor="end">${esc(e.t)}</text>`; });
+    }
     // earnings and other events
     (S.overlays.events === false ? [] : S.events).forEach((e) => { const i = AX.bar(e.t); if (i < 0 || i < from || i > to) return; const x = X(i).toFixed(1);
       // a marker on the newest bar or the first kept its label inside the plot rather than cut off at the edge
@@ -412,7 +452,7 @@ export function createPriceChart(host, opts) {
     // insider trades (S.insiders, from the ticker payload): a green arrow under the bar's low for a purchase, a red
     // one over its high for a sale, one arrow for all of a side's trades in a bar; the box comes from insiderTip()
     flags = [];
-    if (S.overlays.ins !== false && (S.insiders || []).length) {
+    if (!C && S.overlays.ins !== false && (S.insiders || []).length) {
       const by = new Map();
       S.insiders.forEach((it) => { const i = AX.bar(it.t); if (i < 0 || i < from || i > to || !bars[i]) return; const k = `${i}${it.side}`; if (!by.has(k)) by.set(k, { i, side: it.side, items: [] }); by.get(k).items.push(it); });
       by.forEach((f) => {
@@ -424,18 +464,18 @@ export function createPriceChart(host, opts) {
       });
     }
     // fills a side widget asks for (the backtest's entries and exits): B under the bar's low, S over its high
-    (S.marks || []).forEach((m) => {
+    (C ? [] : (S.marks || [])).forEach((m) => {
       const i = AX.bar(m.t); if (i < 0 || i < from || i > to || !bars[i]) return;
       const b = bars[i], x = X(i), r = 8, buy = m.kind === 'B';
       const y = Math.max(pp.y0 + r, Math.min(pp.y1 - r, buy ? ps.Y(b.l) + r + 4 : ps.Y(b.h) - r - 4));
       o += `<g class="tm ${m.tone === 'neg' ? 'neg' : 'pos'}"><circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${r}"/><text x="${x.toFixed(1)}" y="${(y + 4).toFixed(1)}" text-anchor="middle">${esc(m.kind)}</text><title>${esc(m.label)}</title></g>`;
     });
     // drawings
-    S.drawings.forEach((dr, k) => { o += drawing(dr, k === sel); });
+    if (!C) S.drawings.forEach((dr, k) => { o += drawing(dr, k === sel); });
     // the tool being placed, to the pointer (snapped as a click there would be)
-    if (pending && pending.points.length) pending.points.forEach((q) => { o += `<circle class="dr-h dr-placed" cx="${X(AX.f(q.t)).toFixed(1)}" cy="${ps.Y(q.p).toFixed(1)}" r="5"/>`; });
-    if (pending && pending.points.length && cross >= 0 && crossY !== null) o += drawing({ kind: pending.kind, points: [...pending.points, { t: bars[cross].t, p: S.snap ? snap(bars[cross], crossY, ps.Y).price : crossY }] }, false, true);
-    o += msSvg();
+    if (!C && pending && pending.points.length) pending.points.forEach((q) => { o += `<circle class="dr-h dr-placed" cx="${X(AX.f(q.t)).toFixed(1)}" cy="${ps.Y(q.p).toFixed(1)}" r="5"/>`; });
+    if (!C && pending && pending.points.length && cross >= 0 && crossY !== null) o += drawing({ kind: pending.kind, points: [...pending.points, { t: bars[cross].t, p: S.snap ? snap(bars[cross], crossY, ps.Y).price : crossY }] }, false, true);
+    if (!C) o += msSvg();
     o += '</g>';
     // panes
     panes.slice(1).forEach((p) => {
@@ -484,7 +524,9 @@ export function createPriceChart(host, opts) {
     if (cross >= from && cross <= to) {
       const x = X(cross).toFixed(1);
       o += `<line class="xh" x1="${x}" x2="${x}" y1="${pp.y0}" y2="${H - 22}"/>`;
-      if (crossY !== null) { const y = ps.Y(crossY).toFixed(1); o += `<line class="xh" x1="0" x2="${W - layout.r}" y1="${y}" y2="${y}"/><rect class="xh-tag" x="${W - layout.r + 2}" y="${y - 9}" width="${layout.r - 4}" height="18" rx="3"/><text class="xh-t" x="${W - layout.r + 6}" y="${(Number(y) + 4)}">${num(crossY, crossY < 10 ? 2 : 1)}</text>`; }
+      // comparing, the level line sits on this symbol's own line at the bar being read, so the tag is a figure drawn
+      if (C && Number.isFinite(C.lines[0].pct[cross])) { const v = C.lines[0].pct[cross], y = ps.Y(v).toFixed(1); o += `<line class="xh" x1="0" x2="${W - layout.r}" y1="${y}" y2="${y}"/><rect class="xh-tag" x="${W - layout.r + 2}" y="${y - 9}" width="${layout.r - 4}" height="18" rx="3"/><text class="xh-t" x="${W - layout.r + 6}" y="${(Number(y) + 4)}">${signed(v, 1)}</text>`; }
+      else if (!C && crossY !== null) { const y = ps.Y(crossY).toFixed(1); o += `<line class="xh" x1="0" x2="${W - layout.r}" y1="${y}" y2="${y}"/><rect class="xh-tag" x="${W - layout.r + 2}" y="${y - 9}" width="${layout.r - 4}" height="18" rx="3"/><text class="xh-t" x="${W - layout.r + 6}" y="${(Number(y) + 4)}">${num(crossY, crossY < 10 ? 2 : 1)}</text>`; }
     }
     svg.setAttribute('viewBox', `0 0 ${W} ${H}`); svg.setAttribute('width', W); svg.setAttribute('height', H);
     svg.innerHTML = o;
@@ -646,12 +688,23 @@ export function createPriceChart(host, opts) {
     insiderTip();
     const i = cross >= 0 ? cross : to, b = bars[i];
     if (!b) { read.textContent = ''; return; }
+    // comparing: each line's change from the anchor and its close on this bar, or that it has no bar here
+    const C = layout && layout.cmp;
+    if (C) {
+      read.innerHTML = `${S.title ? `<b class="pc-sym">${esc(S.title.sym)}</b> <span class="pc-what">Percent from ${esc(fmtT(bars[C.ai].t))}</span> ` : ''}<b>${esc(fmtT(b.t))}</b> ${C.lines.map((l) => `<span class="cm-r ${l.cls}"><b>${esc(l.sym)}</b> ${Number.isFinite(l.pct[i]) ? `${signed(l.pct[i], 1)} <span class="cm-px">(${num(l.closes[i])})</span>` : 'no bar this day'}</span>`).join(' ')}`;
+      return;
+    }
     const prev = bars[i - 1], chg = prev ? (b.c / prev.c - 1) * 100 : null;
     const filed = fileMarks.filter((m) => m.i === i).map((m) => m.f.form);
     read.innerHTML = `${S.title ? `<b class="pc-sym">${esc(S.title.sym)}</b> <span class="pc-what">${esc(S.title.what)}</span> ` : ''}<b>${esc(fmtT(b.t))}</b> <span>O ${num(b.o)}</span> <span>H ${num(b.h)}</span> <span>L ${num(b.l)}</span> <span>C ${num(b.c)}</span>${chg !== null ? ` <span class="${chg >= 0 ? 'up' : 'down'}">${chg >= 0 ? '+' : '−'}${num(Math.abs(chg))}%</span>` : ''}${b.v ? ` <span class="t-muted">Vol ${num(b.v / 1e6, 1)}M</span>` : ''}${filed.length ? ` <span class="pc-fil">${esc(filed.join(', '))} filed</span>` : ''}`;
   }
   function summary() {
     const a = bars[from], b = bars[to]; if (!a || !b) return 'Price chart';
+    const C = layout && layout.cmp;
+    if (C) {
+      const at = (l) => { for (let k = to; k >= from; k--) if (Number.isFinite(l.pct[k])) return `${l.sym} ${signed(l.pct[k], 1)}`; return `${l.sym} no bars in view`; };
+      return `Comparison in percent from ${fmtT(bars[C.ai].t)}, ${fmtT(a.t)} to ${fmtT(b.t)}: ${C.lines.map(at).join(', ')}. Left and right read each bar.`;
+    }
     const ch = (b.c / a.c - 1) * 100;
     const breaks = S.overlays.msb ? ind.msb.filter((m) => m.at >= from && m.at <= to) : [];
     const last = breaks[breaks.length - 1];
@@ -810,7 +863,7 @@ export function createPriceChart(host, opts) {
     hoverP = p;   // a tap on an arrow opens its box on a touch screen
     touchy = e.pointerType === 'touch' || e.pointerType === 'pen';
     if (touchy) { touchDown(e, p); return; }
-    if (S.tool !== 'select') { place(p); return; }
+    if (S.tool !== 'select' && !cmpOn()) { place(p); return; }
     if (onScale(p)) { drag = { mode: 'scale', cy: e.clientY, z: yZoom }; svg.dataset.drag = 'scale'; return; }
     // on the selected drawing's handle: move that point; Shift or Measure: measure; on a drawing: select it and
     // move it all; else pan
@@ -851,7 +904,7 @@ export function createPriceChart(host, opts) {
     if (onScale(p)) { tg.mode = 'scale'; drag = { mode: 'scale', cy: e.clientY, z: yZoom }; cross = -1; crossY = null; return; }
     if (mOn && S.tool === 'select') { tg.mode = 'measure1'; ms = { a: idx(p), b: idx(p) }; drag = { mode: 'measure' }; cross = -1; crossY = null; redraw(); return; }
     readAt(p);
-    if (S.tool !== 'select') { tg.mode = 'place'; place(p); return; }
+    if (S.tool !== 'select' && !cmpOn()) { tg.mode = 'place'; place(p); return; }
     const h = handleAt(p);
     if (h >= 0) { tg.mode = 'draw'; drag = { mode: 'handle', k: sel, h, before: S.drawings, moved: false }; redraw(); return; }
     const hit = hitTest(p);
@@ -1112,7 +1165,7 @@ export function createPriceChart(host, opts) {
     if (k === 'ArrowLeft' || k === 'ArrowRight') { const d = k === 'ArrowLeft' ? -1 : 1; if (e.shiftKey) pan(d * Math.max(1, Math.round((to - from) / 10))); else { cross = Math.max(0, Math.min(N - 1, cross + d)); if (cross < from) pan(cross - from); if (cross > to) pan(cross - to); } crossY = bars[cross].c; if (ms && ms.key) ms.b = cross; announce(); e.preventDefault(); }
     else if (k === 'ArrowUp' || k === 'ArrowDown') { yZoom = Math.max(0.25, Math.min(8, yZoom * (k === 'ArrowUp' ? 1.12 : 1 / 1.12))); e.preventDefault(); }
     else if ((k === 'Enter' || k === ' ') && S.onInsider && flags.some((g) => g.i === cross)) { e.preventDefault(); openInsider(flags.find((g) => g.i === cross)); return; }
-    else if ((k === 'm' || k === 'M') && !e.metaKey && !e.ctrlKey && !e.altKey) { ms = ms && ms.key ? null : { a: cross, b: cross, key: true }; announce(); e.preventDefault(); }
+    else if ((k === 'm' || k === 'M') && !e.metaKey && !e.ctrlKey && !e.altKey && !cmpOn()) { ms = ms && ms.key ? null : { a: cross, b: cross, key: true }; announce(); e.preventDefault(); }
     else if (k === '+' || k === '=') { zoom(1 / 1.25, cross); e.preventDefault(); } else if (k === '-' || k === '_') { zoom(1.25, cross); e.preventDefault(); }
     else if (k === 'Home') { cross = from; crossY = bars[cross].c; announce(); e.preventDefault(); } else if (k === 'End') { cross = to; crossY = bars[cross].c; announce(); e.preventDefault(); }
     else if ((k === 'Delete' || k === 'Backspace') && sel >= 0) { commit(S.drawings.filter((_, j) => j !== sel)); sel = -1; e.preventDefault(); }

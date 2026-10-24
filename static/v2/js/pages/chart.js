@@ -79,9 +79,11 @@ function readView() {
   if (!INTERVALS.some((x) => x.key === d.interval)) d.interval = '60';   // a first visit opens on hourly bars, as in the classic app
   try { d.snap = localStorage.getItem(SNAP_KEY) !== 'off'; } catch (e) { d.snap = true; }   // on, as it always was in the classic app
   d.dock = Array.isArray(d.dock) ? d.dock.filter((id, i, a) => W.IDS.includes(id) && a.indexOf(id) === i) : [];
+  d.compare = Array.isArray(d.compare) ? d.compare.filter((x, i, a) => typeof x === 'string' && /^[A-Z0-9.^=-]{1,12}$/.test(x) && a.indexOf(x) === i).slice(0, 3) : [];
+  d.cmpAnchor = Number.isFinite(d.cmpAnchor) ? d.cmpAnchor : null;
   return d;
 }
-function saveView() { try { localStorage.setItem(VIEW_KEY, JSON.stringify({ interval: V.wantInterval || V.interval, range: V.range, style: V.style, session: V.session, read: V.read, layers: V.layers, dock: V.dock, overlays: V.overlays, panes: V.panes, msbK: V.msbK })); } catch (e) { /* private */ } }
+function saveView() { try { localStorage.setItem(VIEW_KEY, JSON.stringify({ interval: V.wantInterval || V.interval, range: V.range, style: V.style, session: V.session, read: V.read, layers: V.layers, dock: V.dock, overlays: V.overlays, panes: V.panes, msbK: V.msbK, compare: V.compare, cmpAnchor: V.cmpAnchor })); } catch (e) { /* private */ } }
 
 function readDrawings(sym) {
   if (!holds(store.state.user)) return [];
@@ -151,6 +153,7 @@ async function loadBars() {
     D.bars = bars; D.note = note; D.noVolume = !bars.some((b) => b.v > 0);
   } catch (e) { if (!current()) return; D.barsErr = e; }
   paintChart();
+  if (V.compare.length && D.bars) loadCompare();
 }
 const intradayBars = (d) => d.times.map((t, i) => ({ t: Date.parse(t), o: d.opens[i], h: d.highs[i], l: d.lows[i], c: d.closes[i], v: d.volumes[i] }));
 const clip = (bars) => bars.filter((b) => isNum(b.c) && isNum(b.t) && b.c > 0).map((b) => ({ t: b.t, o: isNum(b.o) ? b.o : b.c, h: isNum(b.h) ? b.h : b.c, l: isNum(b.l) ? b.l : b.c, c: b.c, v: b.v || 0 }));
@@ -234,6 +237,85 @@ function events() {
     ...(eh.upcoming || []).map((q) => ({ t: Date.parse(q.date), kind: 'E', label: `Next report ${q.date}` }))].filter((e) => isNum(e.t));
 }
 
+/* ---------------- comparison (motion proposal Phase 2, 2026-10-24) ---------------- */
+// Up to three other symbols on this chart, each line in percent from one start bar (TradingView's "same % scale"), the
+// start a stated date that moves only when the reader moves it. Their bars come at the chart's own bar size and are
+// matched to its bars by time: a bar one of them lacks is a gap, never a carried close. Yields are refused: a yield's
+// percent change is not a return, and drawing it beside a price would imply one.
+const CMP_MAX = 3, CMP_CLS = ['cm1', 'cm2', 'cm3'], RATES = /^\^(TNX|IRX|FVX|TYX)$/;
+// sym -> { key, at: Map(bar time -> close) } or { key, err }; matched to the bars on screen at every paint, so a live
+// new bar never shifts the match (it is a gap for the others until their bars are fetched again)
+let CMP = {};
+const cmpKey = () => `${V.interval}|${V.range === 'All' ? 'all' : ''}|${V.session}`;
+async function cmpRows(sym) {
+  const iv = INTERVALS.find((x) => x.key === V.interval), e = encodeURIComponent(sym);
+  if (iv.intraday) { const d = await api.get(`/api/intraday/${e}?range=${iv.key}&window=${iv.history}&session=${V.session}`, { ttl: 60000, timeout: 45000 }); if (!d || !d.available) throw new api.ApiError('notfound', 404, `No ${iv.label} bars for ${sym}`); return d.times.map((t, i) => [Date.parse(t), d.closes[i]]); }
+  const d = V.interval === 'weekly' ? await api.get(`/api/weekly-bars/${e}?span=${V.range === 'All' ? 'max' : '10y'}`, { ttl: 3600000, timeout: 45000 }) : await api.get(`/api/daily-bars/${e}`, { ttl: 3600000, timeout: 60000 });
+  if (!d || d.available === false || !(d.dates || []).length) throw new api.ApiError('notfound', 404, `No bars for ${sym}`);
+  return d.dates.map((t, i) => [Date.parse(t), d.close[i]]);
+}
+async function loadCompare() {
+  const key = cmpKey(), sym0 = D.sym, want = V.compare.slice();
+  await Promise.all(want.map(async (sym) => {
+    if (CMP[sym] && CMP[sym].key === key) return;
+    CMP[sym] = { key, loading: true };
+    try {
+      const rows = await cmpRows(sym), at = new Map(rows.filter(([t, c]) => isNum(t) && isNum(c) && c > 0));
+      if (!D.bars || cmpKey() !== key) return;
+      CMP[sym] = D.bars.some((b) => at.has(b.t)) ? { key, at } : { key, err: `no bars at the same times as ${sym0}` };
+    } catch (e) { CMP[sym] = { key, err: api.explain(e, `${sym}'s bars`) }; }
+  }));
+  if (!live || D.sym !== sym0) return;
+  paintChart(); paintTools();   // the chart settles the start bar, which the menu then names
+}
+function compareOpt() {
+  if (!V.compare.length || !D.bars) return null;
+  const key = cmpKey();
+  const series = V.compare.map((sym, i) => { const c = CMP[sym]; return c && c.at && c.key === key ? { sym, cls: CMP_CLS[i], closes: D.bars.map((b) => (c.at.has(b.t) ? c.at.get(b.t) : null)) } : null; }).filter(Boolean);
+  if (!series.length) return null;
+  // the start: the reader's, or the first bar of the view the chart opens on; one outside these bars (a shorter bar
+  // size holds less history) goes back to that, so the date the chart names is always a bar it has
+  const first = D.bars[0].t, last = D.bars[D.bars.length - 1].t;
+  if (!isNum(V.cmpAnchor) || V.cmpAnchor < first || V.cmpAnchor > last) { V.cmpAnchor = D.bars[Math.max(0, D.bars.length - windowBars())].t; saveView(); }
+  return { anchor: V.cmpAnchor, series };
+}
+function cmpWhy(sym) {
+  sym = String(sym || '').trim().toUpperCase().replace(/^\$/, '');
+  if (!/^[A-Z0-9.^=-]{1,12}$/.test(sym)) return ['', 'That does not look like a ticker. Try letters such as SPY.'];
+  if (sym === D.sym) return ['', `This chart is ${sym} already.`];
+  if (V.compare.includes(sym)) return ['', `${sym} is on the chart already.`];
+  if (V.compare.length >= CMP_MAX) return ['', `Up to ${CMP_MAX} at a time. Remove one first.`];
+  if (RATES.test(sym)) return ['', `${sym} is a yield, so its percent change is not a return. Compare it on Macro instead.`];
+  return [sym, ''];
+}
+// a start bar's moment as the chart names its bars: the day, with the time on intraday bars
+const cmpWhen = (t) => { const iv = INTERVALS.find((x) => x.key === V.interval) || {}; return iv.intraday ? new Date(t).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' }) : fullDate(new Date(t).toISOString().slice(0, 10)); };
+// the bar the chart starts the comparison on: the first at or after the start's moment (ui/pricechart.js cmpState)
+const cmpStartT = () => { if (!D.bars || !isNum(V.cmpAnchor)) return null; const b = D.bars.find((x) => x.t >= V.cmpAnchor) || D.bars[D.bars.length - 1]; return b.t; };
+function cmpBody() {
+  const ok = V.compare.length, st = cmpStartT(), start = st !== null ? cmpWhen(st) : '';
+  const sug = ['SPY', 'QQQ', 'IWM'].filter((x) => x !== D.sym && !V.compare.includes(x));
+  return html`<form class="cmp-form" data-v2-ch-cmpform><label class="field field-sm"><span class="sr">Symbol to compare with ${D.sym}</span><input name="s" placeholder="Add a symbol, such as SPY" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="12"></label><button type="submit" class="btn btn-sm">Add</button></form>
+    ${D.cmpErr ? html`<p class="menu-help ch-cannot" role="alert">${D.cmpErr}</p>` : ''}
+    ${ok < CMP_MAX && sug.length ? html`<div class="cluster cmp-sug">${sug.map((x) => html`<button type="button" class="btn btn-sm btn-quiet" data-v2-ch-cmpadd="${x}">${x}</button>`)}</div>` : ''}
+    ${ok ? html`<ul class="cmp-list">${V.compare.map((sym, i) => { const c = CMP[sym] || {}; return html`<li><i class="cmp-key ${CMP_CLS[i]}" aria-hidden="true"></i><b>${sym}</b><span class="t-muted">${c.err ? c.err : c.loading || !c.at ? 'Loading' : ''}</span><button type="button" class="textlink" data-v2-ch-cmprm="${sym}" aria-label="Remove ${sym} from the comparison">Remove</button></li>`; })}</ul>
+      <p class="menu-help">Lines in percent from ${start || 'the first bar in view'}.</p>
+      <div class="cluster"><button type="button" class="btn btn-sm" data-v2-ch-cmpanchor>Start from the first bar in view</button><button type="button" class="btn btn-sm btn-quiet" data-v2-ch-cmpclear>Stop comparing</button></div>` : ''}
+    <p class="menu-help">Each line is its close divided by its close on the start bar, as a change in percent. Price only, split-adjusted: dividends are not added back. Lines are drawn on ${D.sym}'s bars; a bar another symbol lacks is a gap. Indicators, levels and drawings are in price, so they are hidden while comparing.</p>`;
+}
+function cmpNote() {
+  const o = compareOpt(); if (!o) return [];
+  return [`Comparing in percent from ${cmpWhen(cmpStartT())}: ${D.sym} with ${o.series.map((x) => x.sym).join(', ')}. Indicators, levels and drawings are hidden while comparing.`];
+}
+function addCompare(raw) {
+  const [sym, why] = cmpWhy(raw);
+  D.cmpErr = why;
+  if (sym) { V.compare.push(sym); if (V.compare.length === 1) V.cmpAnchor = null; saveView(); }
+  paintTools();
+  if (sym) loadCompare();
+  const i = $('[data-v2-ch-cmpform] input', mainEl); if (i) { if (sym) i.value = ''; i.focus(); }
+}
+
 /* ---------------- page ---------------- */
 // A box that would draw nothing on these bars is shown off, with the reason under it (the chart audit,
 // 2026-10-20: candle colours on a line, trend lines on hourly bars, volume studies on an index).
@@ -264,7 +346,7 @@ export function findIndicators(q) {
   return { overlays: OVERLAYS.filter(([k, l]) => hit(k, l)).map(([k]) => k), panes: PANES.filter(([k, l]) => hit(k, l)).map(([k]) => k) };
 }
 // what is drawing inside Layers, for the count on its button: a closed drawer must not hide what is on
-const layersOn = () => LAYER_MENUS.reduce((n, [, , ks]) => n + countOf(ks), 0) + PANES.filter(([k]) => k !== 'volume' && V.panes[k]).length;
+const layersOn = () => LAYER_MENUS.reduce((n, [, , ks]) => n + countOf(ks), 0) + PANES.filter(([k]) => k !== 'volume' && V.panes[k]).length + V.compare.length;   // the comparison lives in this row too
 // price and volume and nothing else, the state Reset goes back to
 const isClean = () => !Object.values(V.overlays).some(Boolean) && PANES.every(([k]) => (k === 'volume' ? V.panes.volume : !V.panes[k]));
 // The counts on Indicators, the Layers menus and Layers, and whether Reset can act, updated in place after a box
@@ -310,6 +392,7 @@ function toolbar() {
     ${isPhone() ? '' : html`<div class="seg seg-ic" role="group" aria-label="Style">${[['candles', 'Candles', 'candles'], ['line', 'Line', 'lineChart'], ['area', 'Area', 'area']].map(([k, l, ic]) => html`<button type="button" data-v2-ch-style="${k}" aria-pressed="${V.style === k}" aria-label="${l}" title="${l}">${icon(ic)}</button>`)}</div>`}
   </div>
   <div class="ctools ch-layers" id="ch-layers" role="group" aria-label="Layers" ${V.layers ? '' : 'hidden'}>
+    ${menu('cmp', 'Compare', V.compare.length, cmpBody(), 'ch-cmp')}
     ${LAYER_MENUS.map(([id, label, ks]) => menu(id, label, countOf(ks), ks.map(ovRow)))}
     ${menu('panes', 'Panes', PANES.filter(([k]) => k !== 'volume' && V.panes[k]).length, html`${PANES.map(([k, l]) => html`<label class="check ${cannot(k) ? 'is-off' : ''}"><input type="checkbox" data-v2-ch-pane="${k}" ${V.panes[k] && !cannot(k) ? 'checked' : ''} ${cannot(k) ? 'disabled' : ''} ${ST.HELP[k] ? html`aria-describedby="ch-help-${k}"` : ''}> <span>${l}</span></label>${cannot(k) ? html`<p class="menu-help ch-cannot">${cannot(k)}</p>` : ''}${ST.HELP[k] ? html`<p class="menu-help" id="ch-help-${k}">${ST.HELP[k]}</p>` : ''}`)}<p class="menu-help">Drawn under the price on the same bars.</p>`)}
     <details class="menu ch-colours"><summary class="btn btn-sm" aria-label="Chart colours" title="Colour of the candles and the line">${icon('palette')}<span>Colours</span></summary><div class="menu-body ch-cmenu" id="ch-cmenu"></div></details>
@@ -345,6 +428,9 @@ function barsPending(host, what) {
   if (!el) { el = document.createElement('p'); el.className = 'ch-pending'; el.setAttribute('role', 'status'); host.appendChild(el); }
   draw(el, what);
 }
+// A new range on the same bars: the chart opens on that range, keeping only the drawings' undo history. Rebuilt with
+// its kept view, the range buttons on daily bars changed nothing (found 2026-10-24, live too).
+function newRange() { const k = chart ? chart.keep() : {}; paintChart({ history: k.history }); }
 function paintChart(over) {
   const host = $('#ch-body', mainEl); if (!host) return;
   if (chart && D.pending && !D.bars) {
@@ -369,7 +455,7 @@ function paintChart(over) {
     // which of the two shows is the width's, in pages.css, so a window resized past 860px never shows both
     homeButton: true,
     onView: (v) => { D.zoomed = v.zoomed; const z = $('[data-v2-ch-home]', mainEl); if (z) z.hidden = !v.zoomed; }, overlays: V.overlays, panes: V.panes, levels: levels(), events: events(), filings: filings(),
-    drawings: D.drawings, tool: V.tool, window: windowBars(), label: `${D.sym}, ${iv.label} bars`, ...extras(), ...studies(), pageKeys: mainEl,
+    drawings: D.drawings, tool: compareOpt() ? 'select' : V.tool, compare: compareOpt(), window: windowBars(), label: `${D.sym}, ${iv.label} bars`, ...extras(), ...studies(), pageKeys: mainEl,
     // an insider arrow opens the stock's insider filings, as Classic's markers did (openInsidersFor)
     onInsider: () => { location.hash = `#/insiders?symbol=${encodeURIComponent(D.sym)}&view=insiders`; },
     height: plotHeight(host),
@@ -383,7 +469,8 @@ function paintChart(over) {
   refit();
   syncHeight();
   const n = $('#ch-note', mainEl); if (n) n.textContent = clean(D.note || '');
-  const sn = $('#ch-snote', mainEl); if (sn) sn.textContent = ST.notes(ticked()).concat(filingNote()).join(' ');
+  const sn = $('#ch-snote', mainEl); if (sn) sn.textContent = cmpNote().concat(ST.notes(ticked()), filingNote()).join(' ');
+  const dr = $('#ch-draw', mainEl); if (dr) { const on = !!compareOpt(); dr.classList.toggle('is-cmp', on); dr.inert = on; }
 }
 // The plot fills the window under the toolbar, less the reading line above it (40 until it is drawn) and the
 // navigator under it; in full screen all of what is left, less the page's padding under the navigator.
@@ -585,7 +672,7 @@ function paintExtras() { if (chart) chart.set(extras()); }
 // draw yet, or its reading.
 const ticked = () => Object.assign({}, V.overlays, V.panes);
 function studies() { ST.need(ticked()); return ST.data(ticked()); }
-function paintStudies() { if (chart) chart.set(Object.assign({ overlays: V.overlays }, ST.data(ticked()))); const n = $('#ch-snote', mainEl); if (n) n.textContent = ST.notes(ticked()).concat(filingNote()).join(' '); }
+function paintStudies() { if (chart) chart.set(Object.assign({ overlays: V.overlays }, ST.data(ticked()))); const n = $('#ch-snote', mainEl); if (n) n.textContent = cmpNote().concat(ST.notes(ticked()), filingNote()).join(' '); }
 const phase = () => ((D.session || {}).prices || {}).phase || ((D.session || {}).session || {}).phase || (marketSession() || {}).phase || null;
 
 export async function render(main, route) {
@@ -654,7 +741,7 @@ function wire(main) {
     if (el.matches('[data-v2-cc-pick]')) { pickColour(el.dataset.v2CcPick, el.value, `[data-v2-cc-pick="${el.dataset.v2CcPick}"]`); return; }
     if (el.matches('[data-v2-ch-sessionsel]')) { V.session = el.value; saveView(); loadBars(); return; }
     if (el.matches('[data-v2-ch-iv]')) { V.interval = el.value; V.wantInterval = null; if (V.interval === 'weekly' && !RANGES.weekly[V.range]) V.range = '1Y'; saveView(); paintTools(); loadBars(); return; }
-    if (el.matches('[data-v2-ch-rangesel]')) { const was = V.range; V.range = el.value; saveView(); paintTools(); if (V.range === 'All' || was === 'All') loadBars(); else paintChart(); return; }
+    if (el.matches('[data-v2-ch-rangesel]')) { const was = V.range; V.range = el.value; saveView(); paintTools(); if (V.range === 'All' || was === 'All') loadBars(); else newRange(); return; }
     if (el.matches('[data-v2-ch-msbk]')) { V.msbK = Number(el.value) || 5; saveView(); paintChart(); return; }
     if (el.matches('[data-v2-ch-ov]')) { $$(`[data-v2-ch-ov="${CSS.escape(el.dataset.v2ChOv)}"]`, mainEl).forEach((x) => { if (x !== el) x.checked = el.checked; }); V.overlays[el.dataset.v2ChOv] = el.checked; saveView(); ST.need(ticked()); paintStudies(); syncToolbar(); if (el.dataset.v2ChOv === 'sr') repaintWidget('levels'); if (el.dataset.v2ChOv === 'ins') repaintWidget('insiders'); return; }
     if (el.matches('[data-v2-ch-pane]')) { $$(`[data-v2-ch-pane="${CSS.escape(el.dataset.v2ChPane)}"]`, mainEl).forEach((x) => { if (x !== el) x.checked = el.checked; }); V.panes[el.dataset.v2ChPane] = el.checked; saveView(); paintChart(); syncToolbar(); }
@@ -666,7 +753,11 @@ function wire(main) {
     if ((b = t('[data-chw-close]'))) { const id = b.dataset.chwClose; toggleWidget(id); const r = $(`[data-chw="${id}"]`, mainEl); if (r) r.focus(); return; }
     if (t('.chw') && W.onClick(e)) return;
     if (t('[data-v2-ch-rebars]')) { loadBars(); return; }
-    if ((b = t('[data-v2-ch-range]'))) { const was = V.range; V.range = b.dataset.v2ChRange; saveView(); paintTools(); if (V.range === 'All' || was === 'All') loadBars(); else paintChart(); return; }
+    if ((b = t('[data-v2-ch-cmpadd]'))) { addCompare(b.dataset.v2ChCmpadd); return; }
+    if ((b = t('[data-v2-ch-cmprm]'))) { const sym = b.dataset.v2ChCmprm; V.compare = V.compare.filter((x) => x !== sym); delete CMP[sym]; if (!V.compare.length) V.cmpAnchor = null; D.cmpErr = ''; saveView(); paintTools(); paintChart(); const i = $('[data-v2-ch-cmpform] input', mainEl); if (i) i.focus(); return; }
+    if (t('[data-v2-ch-cmpclear]')) { V.compare = []; V.cmpAnchor = null; CMP = {}; D.cmpErr = ''; saveView(); paintTools(); paintChart(); const m = $('[data-ch-menu="cmp"] > summary', mainEl); if (m) m.focus(); return; }
+    if (t('[data-v2-ch-cmpanchor]')) { if (chart && D.bars) { const v = chart.keep().view || {}; V.cmpAnchor = D.bars[Math.max(0, v.from || 0)].t; saveView(); paintTools(); paintChart(); } return; }
+    if ((b = t('[data-v2-ch-range]'))) { const was = V.range; V.range = b.dataset.v2ChRange; saveView(); paintTools(); if (V.range === 'All' || was === 'All') loadBars(); else newRange(); return; }
     if (t('[data-v2-ch-layers]')) { V.layers = !V.layers; saveView(); paintTools(); const again = $('[data-v2-ch-layers]', mainEl); if (again) again.focus(); return; }
     if (t('[data-v2-ch-reset]')) {
       const was = { overlays: Object.assign({}, V.overlays), panes: Object.assign({}, V.panes) };
@@ -716,6 +807,8 @@ function wire(main) {
   main.addEventListener('toggle', (e) => { if (e.target.matches && e.target.matches('details.ch-colours') && e.target.open) { paintColours(); placeMenu(e.target); } }, true);
   main.addEventListener('submit', (e) => {
     if (e.target.closest('.chw') && W.onSubmit(e)) return;
+    const cf = e.target.closest('[data-v2-ch-cmpform]');
+    if (cf) { e.preventDefault(); addCompare(($('input', cf) || {}).value); return; }
     const f = e.target.closest('[data-v2-ch-text]'); if (!f) return;
     e.preventDefault();
     const done = D.textFor; D.textFor = null; done(String(f.t.value || '').trim()); paintTools();

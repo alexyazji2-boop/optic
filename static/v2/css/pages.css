@@ -1681,3 +1681,18 @@ ul.cal-react { display: flex; flex-wrap: wrap; gap: 4px 18px; padding-left: 0; l
 /* the company drawer's More menu (ui/company.js tickerMenu): it has no Alert or Compare buttons of its own */
 .co-more .menu-phone { display: block; } .co-more button { width: 100%; text-align: left; }
 .co-more > summary svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.8; }
+/* the comparison (pages/chart.js, ui/pricechart.js): this symbol's line in gold, the others in the chart categories
+   (never --c-cat-4), each named at its right end; the start bar dotted, the zero line plain */
+.pc .cmp { fill: none; stroke-width: 1.6; stroke-linejoin: round; }
+.pc .cmp.cm0 { stroke: var(--c-gold); stroke-width: 1.8; } .pc .cmp.cm1 { stroke: var(--c-cat-1); } .pc .cmp.cm2 { stroke: var(--c-cat-2); } .pc .cmp.cm3 { stroke: var(--c-cat-3); }
+.pc .endl.cm0 { fill: var(--c-gold-ink); } .pc .endl.cm1 { fill: var(--c-cat-1); } .pc .endl.cm2 { fill: var(--c-cat-2); } .pc .endl.cm3 { fill: var(--c-cat-3); }
+.pc .cm-anchor { stroke: var(--c-ink-3); stroke-dasharray: 2 3; } .pc .cm-zero { stroke: var(--c-line); }
+.pc-read .cm-r b { font-weight: 600; } .pc-read .cm-r.cm0 b { color: var(--c-gold-ink); } .pc-read .cm-r.cm1 b { color: var(--c-cat-1); } .pc-read .cm-r.cm2 b { color: var(--c-cat-2); } .pc-read .cm-r.cm3 b { color: var(--c-cat-3); }
+.pc-read .cm-px { color: var(--c-ink-3); }
+.ch-cmp .menu-body { min-width: 320px; gap: 10px; }
+.cmp-form { display: flex; gap: 8px; } .cmp-form .field { flex: 1; }
+.cmp-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.cmp-list li { display: grid; grid-template-columns: 16px auto 1fr auto; align-items: center; gap: 8px; min-height: 36px; border-bottom: 1px solid var(--c-line-2); font-size: var(--t-md); }
+.cmp-key { width: 14px; height: 0; border-top: 2px solid; } .cmp-key.cm1 { border-color: var(--c-cat-1); } .cmp-key.cm2 { border-color: var(--c-cat-2); } .cmp-key.cm3 { border-color: var(--c-cat-3); }
+/* drawing tools rest while comparing: a point placed on a percent scale would be saved as a price */
+#ch-draw.is-cmp { opacity: .45; }

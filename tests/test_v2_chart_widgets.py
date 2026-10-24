@@ -143,7 +143,8 @@ def test_intraday_and_weekly_charts_place_trades_by_minute_and_by_week(tmp_path)
 def test_the_chart_draws_what_the_open_widgets_ask_for():
     pc = (JS / "ui/pricechart.js").read_text()
     assert "(S.lines || []).forEach((l) => { o += hline(l.price, l.cls, l.label, l); });" in pc
-    assert "(S.marks || []).forEach((m) => {" in pc and "<title>${esc(m.label)}</title>" in pc
+    # hidden while comparing in percent (Phase 2, 2026-10-24): a fill is placed in price
+    assert "(C ? [] : (S.marks || [])).forEach((m) => {" in pc and "<title>${esc(m.label)}</title>" in pc
     assert "...extras()," in CH and "function paintExtras() { if (chart) chart.set(extras()); }" in CH
     # what a widget draws goes with it: only the widgets on screen
     assert "W.onChart(shown())" in CH
@@ -204,7 +205,8 @@ def test_insider_trades_become_arrows_with_the_words_for_their_box(tmp_path):
 
 def test_the_arrows_their_box_and_the_switches():
     pc = (JS / "ui/pricechart.js").read_text()
-    assert "if (S.overlays.ins !== false && (S.insiders || []).length) {" in pc
+    # hidden while comparing in percent (Phase 2, 2026-10-24): an arrow sits on a bar's price
+    assert "if (!C && S.overlays.ins !== false && (S.insiders || []).length) {" in pc
     assert "<path class=\"ins ${buy ? 'buy' : 'sell'}\"" in pc, "a green arrow for a purchase, a red one for a sale"
     assert "const k = `${i}${it.side}`" in pc, "one arrow for each side's trades in a bar"
     assert "tipEl.className = 'pc-tip'; tipEl.setAttribute('role', 'tooltip')" in pc
