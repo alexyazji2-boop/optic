@@ -78,7 +78,8 @@ def test_a_funds_financials_link_explains_rather_than_bouncing():
 
 def test_linked_panels_never_paint_data_fetched_for_another_ticker():
     ws = _src("pages/workspace.js")
-    assert "DLINK[id] !== S.link" in ws, "a linked panel must not draw another ticker's data under the link"
+    # symOf(id) is the linked ticker, or the panel's own once the reader unlinked it (Phase 2, 2026-10-24)
+    assert "DLINK[id] !== symOf(id)" in ws, "a linked panel must not draw another ticker's data under the link"
     assert "DLINK[id] = linkAt" in ws
     assert "p.body(d, P, forLink)" in ws, "labels come from the ticker the data is for"
 

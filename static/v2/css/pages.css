@@ -1175,7 +1175,13 @@ tr.sh-notes td { padding-top: 0; font-size: var(--t-md); color: var(--c-ink-3); 
 .ws-grip { flex: none; width: 32px; height: 32px; border: 0; border-radius: var(--r-sm); background: none; color: var(--c-ink-3); cursor: grab; display: inline-grid; place-items: center; touch-action: none; }
 .ws-grip svg, .ws-hbtn svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; }
 .ws-grip:hover { background: var(--c-sunk); color: var(--c-ink); }
-.ws-linkchip { font: 600 var(--t-xs)/1 var(--f-label); padding: 4px 7px; border-radius: var(--r-pill); border: 1px solid var(--c-gold); color: var(--c-gold-ink); }
+.ws-linkchip { display: inline-flex; align-items: center; gap: 4px; min-height: 24px; font: 600 var(--t-xs)/1 var(--f-label); padding: 3px 7px; border-radius: var(--r-xs); border: 1px solid var(--c-gold); background: none; color: var(--c-gold-ink); cursor: pointer; white-space: nowrap; }
+.ws-linkchip svg { width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 1.8; flex: none; }
+.ws-linkchip:hover { background: var(--c-sunk); }
+/* unlinked: the panel keeps its own ticker; quieter and dashed, so it reads as apart from the link */
+.ws-linkchip.is-kept { border-style: dashed; border-color: var(--c-line); color: var(--c-ink-2); }
+.ws-linkchip.is-hint { cursor: default; } .ws-linkchip.is-hint:hover { background: none; }
+@media (pointer: coarse) { .ws-head .ws-linkchip { min-height: 32px; } }
 .ws-hbtn { min-height: 28px; padding: 0 8px; border: 0; border-radius: var(--r-sm); background: none; color: var(--c-ink-3); font: 500 var(--t-xs)/1 var(--f-label); cursor: pointer; display: inline-flex; align-items: center; }
 .ws-hbtn:hover, .ws-hbtn[aria-expanded="true"] { background: var(--c-sunk); color: var(--c-ink); }
 html[data-milo="off"] .ws-ask { opacity: .55; }

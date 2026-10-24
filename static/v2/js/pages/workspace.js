@@ -150,6 +150,8 @@ function standard(list, preset) {
 // Panel settings worth keeping between visits (a heatmap's period, a chart's range, a chain's side and
 // sort, a calendar's impact, an economy series). Per-ticker ones (an expiry, implied moves) are not kept.
 const KEEP = { sectors: ['period'], quote: ['span'], contracts: ['side', 'sort'], calendar: ['imp'], economy: ['group', 'code'], priority: ['filter'] };
+// a linked panel the reader unlinked keeps its own ticker (`pin`, 2026-10-24), kept with the panel's other settings
+const keepOf = (id) => [...(KEEP[id] || []), ...(PANELS[id] && PANELS[id].linked ? ['pin'] : [])];
 function load() {
   let v = null;
   try { v = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch (e) { v = null; }
@@ -174,13 +176,13 @@ function load() {
   Object.keys(PRESETS).forEach((k) => { if (!S.layouts[k]) S.layouts[k] = defaults(k); });
   // a panel a later version adds appears hidden in a changed layout, never lost; a removed one is dropped
   Object.keys(PRESETS).forEach((k) => { const have = new Set(S.layouts[k].map((x) => x.id)); Object.keys(PANELS).forEach((id) => { if (!have.has(id)) S.layouts[k].push({ id, span: PANELS[id].span || 6, h: 'm', hidden: true }); }); });
-  Object.entries(S.settings).forEach(([id, vals]) => { if (!KEEP[id] || !PANELS[id] || !vals || typeof vals !== 'object') return; const P = ps(id); KEEP[id].forEach((k) => { if (k in vals) P[k] = vals[k]; }); });
+  Object.entries(S.settings).forEach(([id, vals]) => { if (!PANELS[id] || !keepOf(id).length || !vals || typeof vals !== 'object') return; const P = ps(id); keepOf(id).forEach((k) => { if (k in vals) P[k] = vals[k]; }); });
   // a ticker linked from elsewhere ("Show on Home") survives even when the saved layout did not
   if (!S.link) S.link = (((store.activeList() || {}).symbols || [])[0] || store.recent()[0] || 'SPY');
 }
 function save() {
   S.settings = {};
-  Object.entries(KEEP).forEach(([id, keys]) => { if (PS[id]) S.settings[id] = Object.fromEntries(keys.filter((k) => k in PS[id]).map((k) => [k, PS[id][k]])); });
+  Object.keys(PANELS).forEach((id) => { const keys = keepOf(id); if (PS[id] && keys.length) S.settings[id] = Object.fromEntries(keys.filter((k) => k in PS[id] && PS[id][k] !== undefined).map((k) => [k, PS[id][k]])); });
   try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { /* private mode: the layout lasts this visit */ }
 }
 const layout = () => S.layouts[S.preset];
@@ -659,6 +661,8 @@ let root = null, live = false, timer = null, lastScroll = 0, mq = null, mq2 = nu
 // under the current link (owner, 2026-10-19: Quote and chart showed SPY's name and price under AAPL).
 const DATA = {}, ERR = {}, PS = {}, AT = {}, RETRIED = {}, DLINK = {}, ERRLINK = {};
 const ps = (id) => (PS[id] || (PS[id] = JSON.parse(JSON.stringify(PANELS[id].state || {}))));
+/** The ticker a panel shows: its own when the reader unlinked it, else the linked one (S.link). */
+const symOf = (id) => (PANELS[id] && PANELS[id].linked && ps(id).pin) || S.link;
 const NEW = { starters: undefined, modes: undefined };
 const isNew = () => !store.allSymbols().length && !(DATA.portfolio && !DATA.portfolio.absent);
 
@@ -691,12 +695,21 @@ function linkRow() {
   return html`<div class="ws-linkrow">
       <form class="ws-linkform" data-ws-linkform><label for="ws-link">Company or fund shown in linked panels</label><input id="ws-link" name="link" value="${S.link}" autocomplete="off" spellcheck="false" maxlength="12" aria-describedby="ws-link-help"><button type="submit" class="btn btn-sm">Update panels</button><span id="ws-link-help" class="sr">Panels showing the ticker chip follow it</span></form>
       ${recent.length ? html`<div class="ws-recent" role="group" aria-label="Show a recent company in the linked panels">${recent.map((sym) => tickBtn(sym))}</div>` : ''}
-      <p class="ws-sub ws-linkhint">Panels marked with <span class="ws-linkchip">${S.link}</span> show this company or fund; the others show the whole market.</p>
+      <p class="ws-sub ws-linkhint">Panels marked <span class="ws-linkchip is-hint">${icon('link')}<span>Follows</span></span> show this company or fund; the others show the whole market. Press a panel's marker to keep its ticker when this one changes.</p>
     </div>`;
 }
 
+// A linked panel says which ticker it follows, in words, with a way to unlink it (motion proposal Phase 2,
+// 2026-10-24: the bare ticker in a gold pill did not say it was linked, or that it could be undone). Unlinked, it keeps
+// its own ticker until the reader links it again.
+function linkChip(id) {
+  const P = ps(id), own = P.pin;
+  return own
+    ? html`<button type="button" class="ws-linkchip is-kept" data-ws-pin="${id}" title="Kept on ${own}: it does not follow the linked ticker. Press to follow ${S.link} again.">${icon('link')}<span>Kept on ${own}</span></button>`
+    : html`<button type="button" class="ws-linkchip" data-ws-pin="${id}" title="Follows ${S.link}, the ticker chosen above these panels. Press to keep ${S.link} here when the link changes.">${icon('link')}<span>Follows ${S.link}</span></button>`;
+}
 function panelShell(x, i, n) {
-  const p = PANELS[x.id], locked = !EDIT, link = S.link, fold = folded(x.id), P = ps(x.id);
+  const p = PANELS[x.id], locked = !EDIT, link = symOf(x.id), fold = folded(x.id), P = ps(x.id);
   const ask = typeof p.milo === 'function' ? p.milo(link) : p.milo;
   const hasTable = !!CONTRACT_COLS && ['watch', 'earnings', 'movers', 'contracts'].includes(x.id);
   const sized = LIST.has(x.id) || !!CH[x.id];   // a height choice changes only lists and charts
@@ -705,7 +718,7 @@ function panelShell(x, i, n) {
     <header class="ws-head">
       ${locked ? '' : html`<button type="button" class="ws-grip" data-ws-grip="${x.id}" aria-label="Move ${p.title}: arrow keys move it earlier or later">${icon('grip')}</button>`}
       <h2 class="ws-title" id="wsh-${x.id}"><span class="ws-tt">${p.title}</span><button type="button" class="ws-tbtn" data-ws-fold="${x.id}" aria-expanded="${!fold}" aria-controls="wsb-${x.id}"><span>${p.title}</span>${icon('chev')}</button></h2>
-      ${p.linked ? html`<span class="ws-linkchip" title="Shows ${link}, the company or fund chosen above these panels">${link}</span>` : SCOPE[x.id] ? html`<span class="ws-scope">${SCOPE[x.id]}</span>` : ''}
+      ${p.linked ? linkChip(x.id) : SCOPE[x.id] ? html`<span class="ws-scope">${SCOPE[x.id]}</span>` : ''}
       <span class="spacer"></span>
       <button type="button" class="ws-ibtn ws-howbtn" data-ws-how="${x.id}" aria-expanded="false" aria-controls="wsw-${x.id}" aria-label="About ${p.title}: how to read it, its source and how fresh it is" title="About this panel">${icon('help')}</button>
       <button type="button" class="ws-ibtn ws-ask" data-v2-milo="${ask}" data-v2-milo-ctx="Home: ${p.title}" data-v2-milo-sym="${p.linked ? link : ''}" aria-label="Ask Milo about ${p.title}" title="Ask Milo about ${p.title}">${icon('milo')}</button>
@@ -719,6 +732,7 @@ function panelShell(x, i, n) {
         ${x.span === 12 ? (back ? html`<button type="button" class="ws-wide-only" data-ws-full="${x.id}">Back to its width</button>` : '') : html`<button type="button" class="ws-wide-only" data-ws-full="${x.id}">Full width</button>`}
         <button type="button" data-ws-hide="${x.id}">Hide panel</button>`}
         ${hasTable ? html`<button type="button" class="ws-phone-only" data-ws-cols="${x.id}">${P.allCols ? 'Fewer columns' : 'All columns'}</button>` : ''}
+        ${p.linked ? html`<button type="button" data-ws-pin="${x.id}">${P.pin ? `Follow the linked ticker (${S.link})` : `Keep ${link} here when the link changes`}</button>` : ''}
         <button type="button" data-ws-reload="${x.id}">Refresh</button></div></details>
     </header>
     <div class="ws-how" id="wsw-${x.id}" hidden>${SCOPE[x.id] && !p.linked ? html`<p class="ws-k">${SCOPE[x.id]}</p>` : ''}<p>${p.how}</p><dl class="ws-srcd" id="wsd-${x.id}"></dl></div>
@@ -803,14 +817,14 @@ function paintBody(id) {
     // a linked panel's 404 means the provider had nothing for this ticker just now, not that the panel is missing
     if (p.linked && ERR[id].kind === 'notfound') {
       const optionsPanel = ['contracts', 'vol', 'gex'].includes(id);
-      draw(body, html`<div class="state err" role="alert"><p class="t-h3">${p.title} did not load</p><p>The data provider has nothing for ${ERRLINK[id] || S.link} just now. ${optionsPanel && !marketOpen() ? 'Outside market hours the free feed often serves option chains without quotes; they return when trading resumes.' : 'This is usually brief.'}</p></div>`);
+      draw(body, html`<div class="state err" role="alert"><p class="t-h3">${p.title} did not load</p><p>The data provider has nothing for ${ERRLINK[id] || symOf(id)} just now. ${optionsPanel && !marketOpen() ? 'Outside market hours the free feed often serves option chains without quotes; they return when trading resumes.' : 'This is usually brief.'}</p></div>`);
     }
     else draw(body, failed(p.title, ERR[id], {}));
     body.insertAdjacentHTML('beforeend', `<button type="button" class="btn btn-sm" data-ws-reload="${id}">Try again</button>`);
     draw(foot, ''); return;
   }
   const d = DATA[id]; if (d === undefined) return;
-  if (p.linked && DLINK[id] !== S.link) { draw(body, skeleton('rows', 4, `Loading ${p.title} for ${S.link}`)); draw(foot, ''); return; }
+  if (p.linked && DLINK[id] !== symOf(id)) { draw(body, skeleton('rows', 4, `Loading ${p.title} for ${symOf(id)}`)); draw(foot, ''); return; }
   const forLink = p.linked ? DLINK[id] : S.link;
   draw(body, p.body(d, P, forLink));
   if (p.charts) mountCharts(body, p.charts(d, P, forLink));
@@ -829,11 +843,11 @@ function paintBody(id) {
 async function loadPanel(id, { force = false, quiet = false } = {}) {
   const p = PANELS[id]; const P = ps(id);
   if (folded(id) && !force) return;
-  const linkAt = S.link; delete ERR[id]; ERRLINK[id] = linkAt;
+  const linkAt = symOf(id); delete ERR[id]; ERRLINK[id] = linkAt;
   if (force) { DATA[id] = undefined; const b = $(`#wsb-${id}`, root); if (b) draw(b, skeleton('rows', 4, `Loading ${p.title}`)); }
   try {
-    const d = await p.load(S.link, P);
-    if (!live || (p.linked && linkAt !== S.link)) return;   // the link moved on while this loaded
+    const d = await p.load(linkAt, P);
+    if (!live || (p.linked && linkAt !== symOf(id))) return;   // the link moved on while this loaded
     const was = DATA[id], wasLink = DLINK[id];
     DATA[id] = d; AT[id] = Date.now(); DLINK[id] = linkAt;
     // a board the server is still building: ask again shortly, quietly, while this panel is on screen
@@ -841,7 +855,7 @@ async function loadPanel(id, { force = false, quiet = false } = {}) {
     // a quiet refresh that changed nothing repaints nothing, so a reader mid-scroll keeps their place
     if (quiet && was !== undefined && wasLink === linkAt && JSON.stringify(was) === JSON.stringify(d)) return;
   } catch (e) {
-    if (!live || (p.linked && linkAt !== S.link)) return;   // an error for a ticker no longer linked
+    if (!live || (p.linked && linkAt !== symOf(id))) return;   // an error for a ticker no longer linked
     if (quiet && DATA[id] !== undefined) return;
     // A slow or empty answer from the data provider is usually brief: one quiet retry before the reader is told. A
     // timeout keeps the panel loading while it asks again (2026-10-21: the provider was slow, /api/home took over
@@ -867,9 +881,9 @@ function setLink(sym) {
   S.link = sym; save();
   try { store.pushRecent(sym); } catch (e) { /* recent is a convenience */ }
   $$('[data-ws-pick]', root).forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.wsPick === sym)));
-  $$('.ws-linkchip', root).forEach((c) => { c.textContent = sym; });
+  layout().filter((x) => !x.hidden && PANELS[x.id].linked).forEach((x) => { const c = $(`[data-ws-panel="${x.id}"] .ws-linkchip`, root); if (c) { const tmp = document.createElement('div'); draw(tmp, linkChip(x.id)); c.replaceWith(tmp.firstElementChild); } });
   const inp = $('#ws-link', root); if (inp) inp.value = sym;
-  layout().filter((x) => !x.hidden && PANELS[x.id].linked).forEach((x) => {
+  layout().filter((x) => !x.hidden && PANELS[x.id].linked && !ps(x.id).pin).forEach((x) => {
     const p = PANELS[x.id];
     // the header's Ask Milo and the phone menu's both ask about the new ticker
     $$(`[data-ws-panel="${x.id}"] [data-v2-milo]`, root).forEach((a) => { a.dataset.v2MiloSym = sym; if (typeof p.milo === 'function') a.dataset.v2Milo = p.milo(sym); });
@@ -918,7 +932,8 @@ function miloContext() {
   const q = ((DATA.quote || {}).q || {}).quote || null;
   return {
     focus_label: `Home, ${PRESETS[S.preset].label}${S.link ? `, linked to ${S.link}` : ''}`,
-    workspace: { layout: PRESETS[S.preset].label, linked_ticker: S.link, panels: layout().filter((x) => !x.hidden).map((x) => PANELS[x.id].title) },
+    workspace: { layout: PRESETS[S.preset].label, linked_ticker: S.link, panels: layout().filter((x) => !x.hidden).map((x) => PANELS[x.id].title),
+      kept: Object.fromEntries(layout().filter((x) => !x.hidden && PANELS[x.id].linked && ps(x.id).pin).map((x) => [PANELS[x.id].title, ps(x.id).pin])) },
     macro: m.regime ? { regime: m.regime, risk_score: m.risk_score, stance: m.stance, expected_move: m.expected_move } : undefined,
     sentiment: (DATA.regime || {}).s && DATA.regime.s.available !== false ? { score: DATA.regime.s.score, label: DATA.regime.s.label } : undefined,
     linked_quote: q && DLINK.quote === S.link ? { ticker: S.link, price: q.price, change_pct: q.change_pct } : undefined,
@@ -967,6 +982,16 @@ function wire() {
     if ((b = t('[data-ws-span]'))) { const [id, d] = b.dataset.wsSpan.split(':'); resize(id, Number(d)); return; }
     if ((b = t('[data-ws-h]'))) { const [id, d] = b.dataset.wsH.split(':'); mutate((L) => { const x = L.find((y) => y.id === id); x.h = HEIGHTS[Math.max(0, Math.min(2, HEIGHTS.indexOf(x.h) + Number(d)))]; }, `${PANELS[id].title} is ${HEIGHT_WORDS[layout().find((y) => y.id === id).h]} height.`, id); return; }
     if ((b = t('[data-ws-full]'))) { const id = b.dataset.wsFull; mutate((L) => { const x = L.find((y) => y.id === id); if (x.span === 12) { x.span = x.was || PANELS[id].span || 6; delete x.was; } else { x.was = x.span; x.span = 12; } }, `${PANELS[id].title} is ${layout().find((y) => y.id === id).span === 12 ? 'back to its width' : 'full width'}.`, id); return; }
+    if ((b = t('[data-ws-pin]'))) {
+      const id = b.dataset.wsPin, P = ps(id), p = PANELS[id];
+      if (P.pin) { const was = P.pin; delete P.pin; save(); say(`${p.title} follows ${S.link} again.`); if (was !== S.link) loadPanel(id, { force: true }); }
+      else { P.pin = symOf(id); save(); say(`${p.title} is kept on ${P.pin}; it no longer follows the link.`); }
+      const sec = $(`[data-ws-panel="${id}"]`, root), c = sec && $('.ws-linkchip', sec);
+      if (c) { const tmp = document.createElement('div'); draw(tmp, linkChip(id)); const n = tmp.firstElementChild; c.replaceWith(n); if (b === c) n.focus(); }
+      const m = sec && $('.ws-menu', sec); if (m) { m.open = false; const mb = $('[data-ws-pin]', m); if (mb) mb.textContent = P.pin ? `Follow the linked ticker (${S.link})` : `Keep ${symOf(id)} here when the link changes`; }
+      $$(`[data-ws-panel="${id}"] [data-v2-milo]`, root).forEach((a) => { a.dataset.v2MiloSym = symOf(id); if (typeof p.milo === 'function') a.dataset.v2Milo = p.milo(symOf(id)); });
+      return;
+    }
     if ((b = t('[data-ws-hide]'))) { const id = b.dataset.wsHide, next = nextShown(id); mutate((L) => { L.find((y) => y.id === id).hidden = true; }, `${PANELS[id].title} hidden. Add panel brings it back.`, next); return; }
     if ((b = t('[data-ws-show]'))) {
       const id = b.dataset.wsShow;

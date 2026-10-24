@@ -49,3 +49,29 @@ def test_the_prefix_searches_no_companies():
     block = PALETTE[PALETTE.index("if (q.startsWith('>')) {"):PALETTE.index("const upper = q.toUpperCase()")]
     assert "/api/search" not in block and "openMilo" not in block and "return rows;" in block
     assert "pages and actions" in PALETTE, "the palette's foot names the prefix"
+
+
+# ------------------------------------------------------------ Home's link markers
+
+WS = (JS / "pages/workspace.js").read_text()
+PAGES_CSS = (V2 / "css/pages.css").read_text()
+
+
+def test_a_linked_panel_says_what_it_follows_and_can_be_unlinked():
+    chip = WS[WS.index("function linkChip(id)"):WS.index("function panelShell(")]
+    assert "Follows ${S.link}" in chip and "Kept on ${own}" in chip and 'data-ws-pin="${id}"' in chip
+    assert "${p.linked ? linkChip(x.id) :" in WS
+    assert "data-ws-pin=\"${x.id}\"" in WS, "the panel's menu offers it too"
+
+
+def test_a_kept_panel_loads_its_own_ticker_and_keeps_it():
+    assert "const symOf = (id) => (PANELS[id] && PANELS[id].linked && ps(id).pin) || S.link;" in WS
+    assert "const linkAt = symOf(id);" in WS and "const d = await p.load(linkAt, P);" in WS
+    assert "PANELS[x.id].linked && !ps(x.id).pin).forEach" in WS, "a new link leaves kept panels alone"
+    assert "...(PANELS[id] && PANELS[id].linked ? ['pin'] : [])" in WS, "the kept ticker is saved with the layout"
+
+
+def test_the_marker_is_a_squared_control_not_a_pill():
+    rule = PAGES_CSS[PAGES_CSS.index(".ws-linkchip {"):]
+    rule = rule[:rule.index("}")]
+    assert "var(--r-xs)" in rule and "--r-pill" not in rule
