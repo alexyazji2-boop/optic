@@ -797,7 +797,7 @@ def _swing_snapshot(
         except Exception as exc:  # macro is supporting context, never fatal
             macro_read = {"error": "macro panel unavailable: {}".format(exc)}
 
-    call = swing.verdict(tech, gex_read, flow_read, news_read, macro_read, spot)
+    call = swing.verdict(tech, gex_read, flow_read, news_read, spot)
     # O3 (Options audit): the read as it stood, kept once per symbol per
     # session day so whether it predicts anything can be measured later.
     try:
@@ -805,7 +805,8 @@ def _swing_snapshot(
             ticker, spot, call, gex_read,
             strikes=(chain["strike"].tolist() if chain is not None and not chain.empty and not partial else ()),
             iv30=(surface.get("iv30") or {}).get("iv_pct") if isinstance(surface, dict) else None,
-            macro_included=bool(include_macro), index_like=ticker in gex_mod.INDEX_LIKE)
+            # the macro read left the composite on 2026-10-24 (swing.WEIGHTS), so it is never in the score now
+            macro_included=False, index_like=ticker in gex_mod.INDEX_LIKE)
     except Exception as exc:                                      # noqa: BLE001
         logging.getLogger("uvicorn.error").warning("signal archive: %s", exc)
 

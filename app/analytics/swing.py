@@ -1,8 +1,7 @@
 """Composite swing verdict and concrete option structures.
 
 Nothing here invents new information: it weighs the separate reads
-(trend/momentum, dealer gamma regime, options flow, news, macro) into one
-stance. Two of them are not independent: dealer gamma and the flow proxy are
+(trend/momentum, dealer gamma regime, options flow, news) into one stance. Two of them are not independent: dealer gamma and the flow proxy are
 both read from the same option chain's open interest and volume. Then it
 picks actual strikes and expiries from the live chain so the output is a trade,
 not an adjective.
@@ -45,12 +44,21 @@ SECTOR_ETF_MAP = {
 
 # Relative weights. Technicals lead because they're the most reliable input on a
 # swing timeframe; flow is a proxy on free data, so it's weighted lightest.
+#
+# The macro market score was a fifth input at 0.10 until 2026-10-24, and is not
+# one now. A pre-registered back-test of it on 2007-2026 history
+# (~/Optic/work/macro-backtest-2026-10-23/REPORT.md) found that leaning risk-on
+# or risk-off was not followed by better or worse stock returns over the next
+# month, and the strongest risk-off readings were followed by better ones. It is
+# also one number for the whole market, so it moved every stock's stance by the
+# same amount whatever the stock. The four weights left keep their proportions
+# (0.34 : 0.24 : 0.20 : 0.12, over 0.90) and are rounded to sum to one. The macro
+# read is still shown on its own, as a description of the market.
 WEIGHTS = {
-    "technicals": 0.34,
-    "gamma": 0.24,
-    "flow": 0.20,
-    "news": 0.12,
-    "macro": 0.10,
+    "technicals": 0.38,
+    "gamma": 0.27,
+    "flow": 0.22,
+    "news": 0.13,
 }
 
 
@@ -141,12 +149,6 @@ def _news_score(news: Dict[str, Any], catalyst: Optional[Dict[str, Any]] = None,
     if (imminent or (pending or {}).get("pending")) and not (catalyst or {}).get("material"):
         score *= 0.5
     return score
-
-
-def _macro_score(macro: Optional[Dict[str, Any]]) -> Optional[float]:
-    if not macro or macro.get("error"):
-        return None
-    return macro.get("risk_score")
 
 
 # ------------------------------------------------------------ trade ideas
@@ -912,7 +914,6 @@ COMPONENT_UNAVAILABLE = {
     "gamma": "the option chain did not load, so dealer gamma could not be computed",
     "flow": "the option chain did not load, so the flow proxy has nothing to read",
     "news": "no recent headlines were retrieved for this name",
-    "macro": "the cross-asset macro read was not available on this request",
 }
 
 COMPONENT_MEANING = {
@@ -924,8 +925,6 @@ COMPONENT_MEANING = {
             "A positioning proxy, not real order flow. Free data has no trade tape.",
     "news": "Tone of recent headlines, scored against a keyword lexicon and weighted toward "
             "the most recent stories, plus any detected catalyst types.",
-    "macro": "The cross-asset risk regime. VIX, credit, the dollar, rates and oil. Scored "
-             "risk-on to risk-off. Applies to the whole market, not this ticker specifically.",
 }
 
 
@@ -934,7 +933,6 @@ def verdict(
     gex: Dict[str, Any],
     flow: Dict[str, Any],
     news: Dict[str, Any],
-    macro: Optional[Dict[str, Any]],
     spot: float,
 ) -> Dict[str, Any]:
     catalyst = material_catalyst(news)
@@ -944,7 +942,6 @@ def verdict(
         "gamma": _gamma_score(gex, spot),
         "flow": (flow or {}).get("flow_score"),
         "news": _news_score(news, catalyst, pending),
-        "macro": _macro_score(macro),
     }
 
     # A resolved catalyst reweights the read, because it has changed what the
@@ -1054,7 +1051,7 @@ def verdict(
                 "the averages are still holding.")
 
     # What each component actually measures, and its arithmetic contribution to
-    # the composite. Without this the five weighted numbers are unexplained: a
+    # the composite. Without this the weighted numbers are unexplained: a
     # reader can see "gamma -13, weight 24%" and still not know what was measured.
     breakdown = []
     for name, value in components.items():

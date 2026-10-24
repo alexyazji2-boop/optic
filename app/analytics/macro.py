@@ -1,8 +1,18 @@
 """Macro regime panel: volatility, dollar, rates, commodities, credit, crypto.
 
-The point isn't a wall of quotes — it's a single risk-on / risk-off read that
-tells you whether to press directional swing trades or stand down, assembled
-from the cross-asset signals that actually lead equities.
+Beside the quotes, one summary: a risk score from -100 to +100 that adds up
+named rules on these instruments (the VIX's level and 5-day change, 20-day moves
+in the S&P, the dollar, copper, Bitcoin and the Russell, the yen, crude, the
+10-year yield, credit and the curve), each reported with its share of the score.
+
+It describes how stressed cross-asset markets are now. It is not a forecast.
+A pre-registered back-test on 2007-2026 history (2026-10-23,
+~/Optic/work/macro-backtest-2026-10-23/REPORT.md) found that leaning risk-on or
+risk-off was not followed by better or worse stock returns over the next month,
+and the strongest risk-off readings were followed by better ones. Stressed
+readings did go with rougher months, about as well as the VIX alone sorts them.
+So it is shown on its own and is no longer an input to any stock's score
+(swing.WEIGHTS, 2026-10-24).
 """
 
 from __future__ import annotations

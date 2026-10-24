@@ -54,7 +54,9 @@ import pandas as pd
 
 ET = ZoneInfo("America/New_York")
 DB_PATH = os.path.join(os.environ.get("TRACKER_DATA_DIR", "data"), "signal_archive.db")
-RULE_VERSION = "2026-10-13"
+# 2026-10-24: the composite lost its macro input (swing.WEIGHTS). Reads are compared only with reads of the same
+# version, so a day that straddles the change is two groups rather than one.
+RULE_VERSION = "2026-10-24"
 _LOCK = threading.Lock()
 
 # Not in the first quarter hour, when quotes and the chain are still settling.
@@ -259,7 +261,8 @@ def test_composite(rows: List[Dict[str, Any]], bars: Dict[str, pd.DataFrame],
             continue
         c = b["Close"].to_numpy(dtype=float)
         mom = c[i] / c[i - lb] - 1 if i - lb >= 0 else None
-        obs.append({"day": r["day"], "group": (r["day"], r["macro_included"]), "score": r["composite"],
+        obs.append({"day": r["day"], "group": (r["day"], r["macro_included"], r.get("rule_version")),
+                    "score": r["composite"],
                     "stance": r.get("stance"), "fwd": c[i + h] / c[i] - 1, "mom": mom})
     groups: Dict[Any, List[Dict[str, Any]]] = {}
     for o in obs:

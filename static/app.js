@@ -691,7 +691,7 @@ const HEADER_DEFS = {
   'analyst view': "Where the sell side thinks the stock is going and how the ratings are split. Best treated as a sentiment and positioning gauge. Targets sit above spot in almost every market.",
 
   // ---- macro & sectors
-  'macro regime': 'Whether the overall market is currently rewarding risk-taking or punishing it, scored from cross-asset signals like the VIX, credit, the dollar and oil. It sets how aggressive to be, not what to buy.',
+  'macro regime': 'Whether the overall market is currently rewarding risk-taking or punishing it, scored from cross-asset signals like the VIX, credit, the dollar and oil. It describes conditions now: tested on 2007 to 2026, it did not show whether stocks would do better or worse over the next month.',
   'market breadth': 'How many parts of the market are joining a move. A rally with broad participation tends to keep going; one carried by a handful of names is fragile.',
   'treasury yield curve': "Government bond yields at different maturities, joined into one line. Longer loans usually pay more; when short ones pay more the curve is inverted, which has often come before a recession, though not on any reliable timetable.",
   'cross-asset dashboard': 'Key markets outside stocks. Volatility, the dollar, bonds, commodities, credit and crypto. Because these usually move before equities do.',
@@ -12985,8 +12985,8 @@ function renderOptionsPlain(d) {
   if (p.stance) {
     items.push({ text: `Optic\u2019s short-term signals: ${String(p.stance).toLowerCase()}${p.conviction ? `, ${convictionWords(p.conviction)}` : ''}.`,
       why: chainErr
-        ? 'A model reading for the next 2 to 8 weeks from charts, news tone and the economy. Options activity is left out of it until the chain is quoted again. It is not a forecast.'
-        : 'A model reading for the next 2 to 8 weeks from charts, options activity, news tone and the economy. It is not a forecast.' });
+        ? 'A model reading for the next 2 to 8 weeks from charts and news tone. Options activity is left out of it until the chain is quoted again. It is not a forecast.'
+        : 'A model reading for the next 2 to 8 weeks from charts, options activity and news tone. It is not a forecast.' });
   }
   if (knowledgeLevel() >= 2 || !items.length) return '';
   const sym = esc(d.ticker || STATE.ticker || '');
@@ -17520,7 +17520,7 @@ function ovDrivers(d) {
   if (p.stance) {
     out.push({ kind: "Optic's short-term signals",
       text: `${cap(String(p.stance))}${p.conviction ? `, ${convictionWords(p.conviction)}` : ''}${tops.length ? `. Strongest inputs: ${tops.join('; ').toLowerCase()}` : ''}.`,
-      note: 'A model reading of charts, options activity, news tone and the economy for the next 2 to 8 weeks, not a forecast or a reason for today’s move.',
+      note: 'A model reading of charts, options activity and news tone for the next 2 to 8 weeks, not a forecast or a reason for today’s move.',
       view: 'swing' });
   }
   const reg = ((d.gex || {}).regime) || {};
@@ -18114,7 +18114,7 @@ function ovScoreHTML(d) {
     <h2 class="ov-q" id="ov-score-h">Optic Score</h2>
     <div class="osc-grid">
       ${ovScoreTile('Short term', 'the next 2 to 8 weeks', short, shortWords,
-    'Built from the daily chart trend, current options positioning, the tone of recent headlines and the economy, weighted into one reading for a 2-to-8-week swing.', 'swing', 'See how it is scored on Options')}
+    'Built from the daily chart trend, current options positioning and the tone of recent headlines, weighted into one reading for a 2-to-8-week swing.', 'swing', 'See how it is scored on Options')}
       ${ovScoreTile('Long term', 'holding for several years', long, longWords || longNote,
     'Built from up to five years of history: the 200-week and 40-week price trends, the five-year return against the S&P 500, the last year\'s return for the risk taken, valuation, distance from the high and the dividend.', 'long', 'See how it is scored on Investing')}
     </div>
@@ -51421,7 +51421,7 @@ document.addEventListener('keydown', (evt) => {
  * listing its headings here. */
 const METRIC_GUIDES = [
   { views: ['swing'], match: ['swing verdict'],
-    measures: "Optic's combined short-term reading of five inputs (the chart trend, dealer gamma, options activity, news tone and the economy) as one score.",
+    measures: "Optic's combined short-term reading of four inputs (the chart trend, dealer gamma, options activity and news tone) as one score.",
     why: 'A quick summary of whether the signals Optic tracks lean up or down over the next 2 to 8 weeks, and how strongly they agree.',
     read: 'Above the midpoint leans bullish, below it bearish. The conviction word says how strong and how consistent the inputs are; near the middle means they are weak or disagree.',
     limits: "It is not a forecast or a price target, and Optic shows its track record only where it has measured one. It cannot see news it has not received." },

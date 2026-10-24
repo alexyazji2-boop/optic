@@ -89,11 +89,11 @@ def test_the_freshest_is_the_one_reported():
 def _gamma(monkeypatch):
     """RARE's gamma read, stubbed.
 
-    All five inputs have to be present or the weights renormalise over the
+    All four inputs have to be present or the weights renormalise over the
     survivors and the published percentages are no longer the ones a reader
-    sees. A first version passed an empty gex and no macro, which dropped two
-    components, pushed the composite to a flatly bearish -37 and made
-    `weight_pct` 26 rather than 17. That is correct arithmetic on the wrong
+    sees. A first version passed an empty gex and no macro (then a fifth
+    input), which dropped two components, pushed the composite to a flatly
+    bearish -37 and made `weight_pct` 26 rather than 17. That is correct arithmetic on the wrong
     fixture: the point here is the real breakdown.
     """
     monkeypatch.setattr(swing, "_gamma_score", lambda gex, spot: 20.0)
@@ -106,14 +106,14 @@ def _verdict(trend, news_articles, net_sentiment=5.27):
         {}, {"flow_score": -60.0},
         {"net_sentiment": net_sentiment, "days_to_earnings": 46,
          "articles": news_articles},
-        {"risk_score": 14.2}, 14.77)
+        14.77)
 
 
 def test_a_material_catalyst_moves_weight_off_the_chart():
     out = _verdict(-75.0, [_article()])
     weights = out["effective_weights"]
-    assert weights["technicals"] == pytest.approx(0.17, abs=0.001)
-    assert weights["news"] == pytest.approx(0.29, abs=0.001)
+    assert weights["technicals"] == pytest.approx(0.19, abs=0.001)
+    assert weights["news"] == pytest.approx(0.32, abs=0.001)
     # Nothing is created: what the chart loses, the news gains.
     assert sum(weights.values()) == pytest.approx(sum(swing.WEIGHTS.values()), abs=1e-9)
 
@@ -138,10 +138,10 @@ def test_the_reweighting_is_published_not_hidden():
     the weight moved and by how much."""
     out = _verdict(-75.0, [_article()])
     rows = {b["component"]: b for b in out["breakdown"]}
-    assert rows["technicals"]["weight_pct"] == 17.0
-    assert rows["technicals"]["nominal_weight_pct"] == 34.0
-    assert rows["news"]["weight_pct"] == 29.0
-    assert rows["news"]["nominal_weight_pct"] == 12.0
+    assert rows["technicals"]["weight_pct"] == 19.0
+    assert rows["technicals"]["nominal_weight_pct"] == 38.0
+    assert rows["news"]["weight_pct"] == 32.0
+    assert rows["news"]["nominal_weight_pct"] == 13.0
 
 
 def test_the_catalyst_rides_on_the_verdict():
@@ -609,12 +609,13 @@ def _v(articles, trend=100.0):
     the composite from 59.5 to 53.9, which is still "high" - but a first
     version of the cap test used those numbers and passed with the cap deleted,
     because the halving had already done the work. Here the composite lands at
-    87.1 with the halving applied, so anything reading "moderate" is the cap.
+    70.0 with the halving applied (87.1 while macro was a fifth input), so
+    anything reading "moderate" is the cap.
     """
     return swing.verdict({"trend_score": trend}, {}, {"flow_score": 100.0},
                          {"net_sentiment": 6.0, "days_to_earnings": 46,
                           "articles": articles},
-                         {"risk_score": 80.0}, 100.0)
+                         100.0)
 
 
 def test_a_pending_event_caps_conviction_without_moving_the_stance():
