@@ -6,7 +6,7 @@
 import { html, render as draw } from '../core/dom.js';
 import * as api from '../core/api.js';
 import { num, signed, dir, clean, capFirst, isNum } from '../core/format.js';
-import { watchButton } from '../ui/company.js';
+import { watchButton, tickerMenu } from '../ui/company.js';
 import { icon } from '../ui/icons.js';
 import { button as miloButton } from '../ui/milo.js';
 import { GROUPS, pageOf } from '../nav.js';
@@ -105,7 +105,7 @@ function actions(sym, label, sm) {
   return html`<div class="acts" role="group" aria-label="${sym} actions">
     <span class="acts-2"><a class="btn btn-quiet ${s}" href="#/alerts?symbol=${sym}">Alert</a><a class="btn btn-quiet ${s}" href="#/compare?t=${sym}">Compare</a><a class="btn btn-quiet ${s}" href="#/${encodeURIComponent(sym)}/sheet" title="A printable research sheet">Export</a></span>
     ${watchButton(sym, { compact: sm })}${miloButton(`Ask about ${sym}`, { ask: `What is the case for ${sym} right now?`, context: `${sym} Dossier, ${label}`, symbol: sym, cls: `${s} acts-milo` })}
-    <details class="menu acts-more"><summary class="btn btn-quiet ${s}" aria-label="More actions for ${sym}">${icon('more')}</summary><div class="menu-body menu-end"><a href="#/alerts?symbol=${sym}">Alert</a><a href="#/compare?t=${sym}">Compare</a><a href="#/${encodeURIComponent(sym)}/sheet">Export research sheet</a></div></details>
+    <details class="menu acts-more"><summary class="btn btn-quiet ${s}" aria-label="More actions for ${sym}">${icon('more')}</summary><div class="menu-body menu-end">${tickerMenu(sym)}</div></details>
   </div>`;
 }
 

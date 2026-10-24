@@ -1,3 +1,15 @@
+// One More menu for a ticker (motion proposal Phase 2, 2026-10-24), the same wherever it opens: set an alert, compare,
+// the printable sheet, show it on Home, and copy the ticker or the price as it is on screen with its time. The first
+// three are buttons of their own on a wide header, so there they sit in the menu only on a phone (.menu-phone).
+// `price` is a selector for the figure to copy, read from the page so what is copied is what the reader sees.
+export function tickerMenu(sym, { price = '.dhead .dh-price', sheet = true } = {}) {
+  const e = encodeURIComponent(sym);
+  return html`<a class="menu-phone" href="#/alerts?symbol=${e}">Set an alert</a><a class="menu-phone" href="#/compare?t=${e}">Compare</a>${sheet ? html`<a class="menu-phone" href="#/${e}/sheet">Export research sheet</a>` : ''}
+    <button type="button" data-v2-homelink="${sym}">Show on Home</button>
+    <button type="button" data-v2-copy="${sym}">Copy ticker</button>
+    ${price ? html`<button type="button" data-v2-copy-price="${sym}" data-v2-copy-from="${price}">Copy price and time</button>` : ''}`;
+}
+
 // Pieces about one company used on several pages: the Watch toggle, the
 // watchlist row, and the company drawer that opens from a row (master-detail:
 // the list stays put, the detail opens beside it).
@@ -107,7 +119,7 @@ export function openCompany(r, opener, { context = 'Home', earnings = null, aler
       </dl>
       <div class="cluster"><a class="btn btn-primary" href="${hrefFor('overview', sym)}">Open the Dossier</a>${watchButton(sym)}</div>
       <div class="cluster co-go" role="group" aria-label="Open ${sym} in">${[['Chart', 'chart'], ['Options', 'swing'], ['Earnings', 'earnings']].map(([l, v]) => html`<a class="btn btn-sm" href="${hrefFor(v, sym)}">${l}</a>`)}
-        <button type="button" class="btn btn-sm" data-v2-homelink="${sym}">Show on Home</button></div>
+        <details class="menu co-more"><summary class="btn btn-sm" aria-label="More actions for ${sym}">More ${icon('chev')}</summary><div class="menu-body">${tickerMenu(sym, { price: null })}</div></details></div>
       ${miloButton(`Ask Milo about ${sym}`, { ask: `What should I know about ${sym} right now?`, context: `${sym}, from your watchlist`, symbol: sym })}
       <p class="asof">From daily bars and the companies' published calendars, by fixed rules: nothing here is written by a model. Each change names the number that triggered it.</p>`,
   });

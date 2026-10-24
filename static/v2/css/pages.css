@@ -56,12 +56,20 @@
 .dhead .acts { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 8px; margin-left: auto; }
 .acts-2 { display: inline-flex; gap: 2px; padding-right: 8px; border-right: 1px solid var(--c-line-2); }
 .acts-2 .btn { padding: 0 12px; }
-.acts-more { display: none; }
+.acts-more { display: block; flex: none; }
+.acts-more .menu-phone { display: none; }   /* Alert, Compare and Export are buttons of their own on a wide header */
+.acts-more button { width: 100%; }
+/* .menu-body { left: 0 } comes later in this file and beat .menu-end: the header's menu opens leftward from its button */
+.acts-more { position: relative; }
+@media (min-width: 861px) { .acts-more > .menu-body.menu-end { left: auto; right: 0; min-width: 220px; } }   /* phones keep the fixed sheet */
 .acts-more > summary { min-width: 46px; padding: 0; font-size: var(--t-xl); letter-spacing: 1px; }
 .menu-end { left: auto; right: 0; min-width: 180px; }
 .menu-body > a { display: flex; align-items: center; min-height: 44px; padding: 0 10px; border-radius: var(--r-md); color: var(--c-ink); text-decoration: none; font-weight: 500; }
 .menu-body > a:hover { background: var(--c-sunk); }
-@media (max-width: 640px) { .acts-2 { display: none; } .acts-more { display: block; flex: none; } }
+/* the ticker menus' buttons read as their links do (ui/company.js tickerMenu); other menus style their own */
+.acts-more .menu-body > button, .co-more .menu-body > button { display: flex; align-items: center; min-height: 44px; padding: 0 10px; border: 0; border-radius: var(--r-md); background: none; color: var(--c-ink); font: 500 var(--t-base)/1.2 var(--f-sans); text-align: left; cursor: pointer; }
+.acts-more .menu-body > button:hover, .co-more .menu-body > button:hover { background: var(--c-sunk); }
+@media (max-width: 640px) { .acts-2 { display: none; } .acts-more .menu-phone { display: block; } }
 .dchart { margin-top: 26px; }
 .chart-bar { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; flex-wrap: wrap; margin-bottom: 12px; }
 .chart-bar .section-sub { margin: 0; }
@@ -1667,3 +1675,6 @@ ul.cal-react { display: flex; flex-wrap: wrap; gap: 4px 18px; padding-left: 0; l
 .wl-price.is-tick-up, .dh-px.is-tick-up, .dh-price .t-display.is-tick-up { color: var(--c-pos); transition: none; }
 .wl-price.is-tick-dn, .dh-px.is-tick-dn, .dh-price .t-display.is-tick-dn { color: var(--c-neg); transition: none; }
 .wl-resort { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 0 0 12px; font-size: var(--t-md); color: var(--c-ink-2); }
+/* the company drawer's More menu (ui/company.js tickerMenu): it has no Alert or Compare buttons of its own */
+.co-more .menu-phone { display: block; } .co-more button { width: 100%; text-align: left; }
+.co-more > summary svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.8; }

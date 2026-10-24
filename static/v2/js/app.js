@@ -206,6 +206,22 @@ function accountBody() {
     <button type="button" class="btn" data-v2-signout>Sign out</button>`;
 }
 
+// Copy a ticker, or the price as the page shows it with the words that say when it is from ("347.73, Close of Fri Oct
+// 23"), never a figure the page is not showing. The menu it came from closes; the toast says what was copied.
+async function copyFrom(b) {
+  const sym = b.dataset.v2Copy || b.dataset.v2CopyPrice;
+  let text = sym;
+  if (b.dataset.v2CopyPrice) {
+    const box = document.querySelector(b.dataset.v2CopyFrom || '.dhead .dh-price');
+    const px = box && (box.querySelector('.dh-px, .t-display') || {}).textContent;
+    if (!px) { toast(`No price for ${sym} on screen yet.`); return; }
+    const chg = ((box.querySelector('.dh-chg') || {}).textContent || '').trim(), when = ((box.querySelector('.dh-ext') || {}).textContent || '').trim();
+    text = `${sym} ${px.trim()}${chg ? ` ${chg}` : ''}${when ? `, ${when}` : ''}`;
+  }
+  const menu = b.closest('details.menu'); if (menu) { menu.open = false; const s = menu.querySelector('summary'); if (s) s.focus(); }
+  try { await navigator.clipboard.writeText(text); toast(`Copied: ${text}`); } catch (e) { toast('The browser did not allow copying. Select the text on the page instead.'); }
+}
+
 function wireGlobal() {
   document.addEventListener('click', async (e) => {
     const t = (s) => e.target.closest(s);
@@ -217,6 +233,7 @@ function wireGlobal() {
     if (t('[data-v2-use-classic]')) { e.preventDefault(); document.cookie = 'optic_ui=classic; path=/; max-age=31536000; samesite=lax'; location.href = `${CLASSIC}${location.hash}`; return; }
     if ((b = t('[data-v2-legal-more]'))) { const full = $('#legal-full'); const open = full.hidden; full.hidden = !open; b.setAttribute('aria-expanded', String(open)); b.textContent = open ? 'Hide the full disclaimer' : 'Full disclaimer'; return; }
     if ((b = t('[data-v2-shortcuts]'))) { openShortcuts(b); return; }
+    if ((b = t('[data-v2-copy]')) || (b = t('[data-v2-copy-price]'))) { copyFrom(b); return; }
     if ((b = t('[data-v2-open-palette]'))) { e.preventDefault(); palette.open(b, { symbol: current && current.route.symbol }); return; }
     if ((b = t('[data-v2-milo]'))) {
       openMilo({ question: b.dataset.v2Milo || '', opener: b, about: b.dataset.v2MiloCtx || '', symbol: b.dataset.v2MiloSym || '' });

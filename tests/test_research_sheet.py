@@ -23,7 +23,9 @@ def test_the_route_is_the_dossiers_not_a_tab(tmp_path):
     assert got["r"]["view"] == "sheet" and got["r"]["symbol"] == "AAPL"
     assert "sheet" not in got["tabs"], "no new Dossier tab"
     frame = (JS / "pages/dossier-frame.js").read_text()
-    assert 'href="#/${encodeURIComponent(sym)}/sheet">Export research sheet</a>' in frame
+    # the header's More menu is the shared ticker menu since Phase 2 (2026-10-24): the sheet's link lives there
+    company = open("static/v2/js/ui/company.js").read()
+    assert '${tickerMenu(sym)}' in frame and 'href="#/${e}/sheet">Export research sheet</a>' in company
     assert 'title="A printable research sheet">Export</a>' in frame
 
 

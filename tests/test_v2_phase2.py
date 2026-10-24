@@ -75,3 +75,28 @@ def test_the_marker_is_a_squared_control_not_a_pill():
     rule = PAGES_CSS[PAGES_CSS.index(".ws-linkchip {"):]
     rule = rule[:rule.index("}")]
     assert "var(--r-xs)" in rule and "--r-pill" not in rule
+
+
+# ------------------------------------------------------------ the ticker More menu
+
+COMPANY = (JS / "ui/company.js").read_text()
+FRAME = (JS / "pages/dossier-frame.js").read_text()
+
+
+def test_one_more_menu_for_a_ticker():
+    menu = COMPANY[COMPANY.index("export function tickerMenu("):COMPANY.index("// Pieces about one company")]
+    for item in ("Set an alert", "Compare", "Export research sheet", "Show on Home", "Copy ticker", "Copy price and time"):
+        assert item in menu, item
+    assert "${tickerMenu(sym)}" in FRAME and "tickerMenu(sym, { price: null })" in COMPANY
+
+
+def test_copy_takes_the_figure_on_screen_with_its_time():
+    fn = APP[APP.index("async function copyFrom(b)"):APP.index("function wireGlobal()")]
+    assert "box.querySelector('.dh-px, .t-display')" in fn and ".dh-ext" in fn, "the price and the words that date it"
+    assert "No price for ${sym} on screen yet." in fn, "nothing is copied when nothing is shown"
+    assert "navigator.clipboard.writeText(text)" in fn and "menu.open = false" in fn
+
+
+def test_the_header_menu_opens_from_its_button_on_a_wide_screen():
+    assert "@media (min-width: 861px) { .acts-more > .menu-body.menu-end { left: auto; right: 0;" in PAGES_CSS
+    assert ".acts-more .menu-phone { display: none; }" in PAGES_CSS
