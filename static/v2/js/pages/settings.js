@@ -136,6 +136,8 @@ function preferences() {
     <section class="section" aria-labelledby="ts-h"><h2 class="t-h2" id="ts-h">Text size</h2>
       <p class="section-sub">Scales the whole interface, type and spacing together, so the proportions stay as they are and only the size changes.</p>
       ${row('Size', 'Default is 15% larger than the terminal shipped with. Compact is that original density, for a small screen or a reader who wants more on it at once.', seg('Text size', [['compact', 'Compact'], ['default', 'Default'], ['large', 'Large']], prefs.scale(), 'scale'))}</section>
+    <section class="section" aria-labelledby="kb-h"><h2 class="t-h2" id="kb-h">Keyboard</h2>
+      ${row('Shortcuts', 'Every key the terminal answers to, in one list. Press ? anywhere outside a field to open it.', html`<button type="button" class="btn btn-sm" data-v2-shortcuts>Show the shortcuts</button>`)}</section>
     <!-- the level changes Milo's answers and nothing on the pages; it was described as changing every page (beginner audit, 2026-10-20) -->
     <section class="section" aria-labelledby="hm-h"><h2 class="t-h2" id="hm-h">How Milo explains things</h2>
       <p class="section-sub">This sets the level Milo pitches its answers at, the Level in Milo's Response settings. The pages are the same at every level: each leads with a plain finding, then its figures, with methods one step away.</p>

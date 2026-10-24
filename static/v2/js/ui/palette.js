@@ -16,6 +16,7 @@ import { getFlags } from './shell.js';
 import { openMilo } from './milo.js';
 // Row markers are the app's own line icons: the sparkle and arrow characters read as emoji (owner's checklist, 2026-10-19).
 import { icon } from './icons.js';
+import { openShortcuts } from './shortcuts.js';
 
 // The classic labels and search words, so nothing becomes unfindable by the word it was found by.
 export const PLACES = [
@@ -103,6 +104,7 @@ const QUICK = [
   { label: 'Compare stocks', detail: 'Side by side on the same measures', run: go('#/compare') },
   { label: 'Charting', detail: 'Drawings, studies and intraday', run: () => go(symFor() ? `#/${symFor()}/chart` : '#/')() },
   { label: 'Ask Milo', detail: 'Put a question to the assistant', run: () => openMilo({ opener }) },
+  { label: 'Keyboard shortcuts', detail: 'Every key in one list; ? opens it anywhere', run: () => openShortcuts(opener) },
 ];
 
 function savedFor(sym) {
@@ -142,6 +144,15 @@ async function build(q, early) {
     POPULAR.filter(([s2]) => !rec.includes(s2)).slice(0, rec.length ? 2 : 4).forEach(([s2, name, d]) => rows.push({ group: 'Companies', lead: icon(s2 === 'SPY' ? 'markets' : 'dossier'), label: `${name} · ${s2}`, detail: d, run: go(openHref(s2)) }));
     QUICK.slice(0, 3).forEach((x) => rows.push({ group: 'Actions', lead: icon('arrow'), label: x.label, detail: x.detail, run: x.run }));
     places.slice(0, 4).forEach((p) => rows.push({ group: 'Go to', lead: icon('arrow'), label: p.label, run: go(placeHref(p)) }));
+    return rows;
+  }
+  // ">" first (Linear's command prefixes, 2026-10-24): pages and actions only, no company search and no Milo row
+  if (q.startsWith('>')) {
+    const w = q.slice(1).trim().toLowerCase();
+    const hit = (s) => !w || s.toLowerCase().includes(w);
+    places.filter((p) => hit(`${p.label} ${p.terms}`)).forEach((p, i) => rows.push({ group: 'Go to', lead: icon('arrow'), label: p.label, detail: p.symbol && symFor() ? symFor() : '', tag: i === 0 ? 'enter' : '', run: go(placeHref(p)) }));
+    QUICK.filter((x) => hit(`${x.label} ${x.detail}`)).forEach((x) => rows.push({ group: 'Actions', lead: icon('arrow'), label: x.label, detail: x.detail, tag: rows.length ? '' : 'enter', run: x.run }));
+    if (!rows.length) notice = `No page or action matches "${w}".`;
     return rows;
   }
   const upper = q.toUpperCase(), lower = q.toLowerCase(), isTicker = looksLikeTicker(q), isQuestion = looksLikeQuestion(q);
@@ -220,7 +231,7 @@ function ensure() {
       <button type="button" class="palette-x" data-pal-close>Cancel</button></div>
     <div class="palette-list" id="pal-list" role="listbox" aria-label="Results"></div>
     <p class="palette-note" role="status" aria-live="polite" hidden></p>
-    <p class="palette-foot" aria-hidden="true"><span><kbd>↑</kbd><kbd>↓</kbd> move</span><span><kbd>↵</kbd> open</span><span><kbd>esc</kbd> close</span></p></div>`;
+    <p class="palette-foot" aria-hidden="true"><span><kbd>↑</kbd><kbd>↓</kbd> move</span><span><kbd>↵</kbd> open</span><span><kbd>esc</kbd> close</span><span><kbd>&gt;</kbd> pages and actions</span></p></div>`;
   document.body.appendChild(root);
   input = $('input', root); list = $('.palette-list', root); note = $('.palette-note', root);
   // the scrim, Cancel or Escape close it and put the reader back where they were (beginner brief item 12: a phone

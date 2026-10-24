@@ -11,6 +11,7 @@ import * as prefs from './core/prefs.js';
 import * as shell from './ui/shell.js';
 import * as palette from './ui/palette.js';
 import * as drawer from './ui/drawer.js';
+import { openShortcuts } from './ui/shortcuts.js';
 import * as motion from './ui/motion.js';
 import { openMilo, resetContext, checkAvailability, markButtons } from './ui/milo.js';
 import { toggleWatch } from './ui/company.js';
@@ -215,6 +216,7 @@ function wireGlobal() {
     if ((b = t('[data-v2-rail-collapse]'))) { const on = !shell.railTight(); shell.setRailTight(on); b.setAttribute('aria-pressed', String(on)); return; }
     if (t('[data-v2-use-classic]')) { e.preventDefault(); document.cookie = 'optic_ui=classic; path=/; max-age=31536000; samesite=lax'; location.href = `${CLASSIC}${location.hash}`; return; }
     if ((b = t('[data-v2-legal-more]'))) { const full = $('#legal-full'); const open = full.hidden; full.hidden = !open; b.setAttribute('aria-expanded', String(open)); b.textContent = open ? 'Hide the full disclaimer' : 'Full disclaimer'; return; }
+    if ((b = t('[data-v2-shortcuts]'))) { openShortcuts(b); return; }
     if ((b = t('[data-v2-open-palette]'))) { e.preventDefault(); palette.open(b, { symbol: current && current.route.symbol }); return; }
     if ((b = t('[data-v2-milo]'))) {
       openMilo({ question: b.dataset.v2Milo || '', opener: b, about: b.dataset.v2MiloCtx || '', symbol: b.dataset.v2MiloSym || '' });
@@ -277,6 +279,7 @@ function wireGlobal() {
     const typing = /^(INPUT|TEXTAREA|SELECT)$/.test((e.target && e.target.tagName) || '') || (e.target && e.target.isContentEditable);
     if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); if (palette.isOpen()) palette.close(); else { const f = document.activeElement; const seed = f && f.matches && f.matches('input[type=search], input[type=text]:not([name=password])') && !f.closest('.palette') ? f.value : ''; palette.open(null, { seed, symbol: current && current.route.symbol }); } }
     else if (e.key === '/' && !typing && !drawer.isOpen()) { e.preventDefault(); palette.open(null, { symbol: current && current.route.symbol }); }
+    else if (e.key === '?' && !typing && !e.metaKey && !e.ctrlKey && !drawer.isOpen() && !palette.isOpen()) { e.preventDefault(); openShortcuts(document.activeElement); }
   });
   store.subscribe((what) => {
     if (what !== 'lists') return;

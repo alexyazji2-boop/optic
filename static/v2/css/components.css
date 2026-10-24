@@ -955,3 +955,12 @@ html.pc-touching, html.pc-touching * { -webkit-user-select: none; user-select: n
 /* a short screen (an iPhone SE's Safari is 549 px tall): the attached list scrolls in a strip rather than push the
    conversation off the screen */
 @media (max-height: 760px) { .milo-parts-l { max-height: 112px; overflow-y: auto; } .milo-parts .asof { display: none; } }
+
+/* the keyboard shortcuts (ui/shortcuts.js): key caps at the left, what they do beside them */
+.shortcuts { display: grid; gap: 20px; }
+.shortcuts h3 { margin: 0 0 6px; }
+.sc-list { margin: 0; display: grid; gap: 0; }
+.sc-list > div { display: grid; grid-template-columns: minmax(112px, auto) 1fr; gap: 12px; align-items: center; min-height: 36px; border-bottom: 1px solid var(--c-line-2); }
+.sc-list dt { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.sc-list dd { margin: 0; font-size: var(--t-md); color: var(--c-ink-2); }
+.sc-list kbd { font-family: var(--f-label); color: var(--c-ink); background: var(--c-sunk); }
