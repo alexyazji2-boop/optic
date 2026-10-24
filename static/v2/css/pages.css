@@ -682,6 +682,9 @@ table.chw-table { font-size: var(--t-sm); } table.chw-table th { padding: 6px 4p
 .pc-msb { opacity: 0; } .pc:hover .pc-msb, .pc-msb:focus-visible, .pc-msb[aria-pressed="true"] { opacity: 1; }
 .pc-z { display: none; }
 @media (hover: none), (pointer: coarse) { .pc-msb { opacity: 1; } .pc-z { display: grid; } .pc-cb { width: var(--tap); height: var(--tap); } }
+/* Reset zoom among the plot's own buttons (a phone's Chart page): the toolbar's wording on a control of their height */
+.pc-cb.pc-home { position: absolute; z-index: 3; width: auto; padding: 0 12px; font: 500 var(--t-md)/1 var(--f-sans); color: var(--c-ink); }
+.pc-cb.pc-home[hidden] { display: none; }
 .pc-px { position: absolute; z-index: 3; width: 28px; height: 28px; display: grid; place-items: center; padding: 0; border: 0; border-radius: var(--r-sm); background: none; color: var(--c-ink-3); cursor: pointer; }
 .pc-px svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.8; }
 .pc-px:hover { background: var(--c-sunk); color: var(--c-ink); } .pc-px:focus-visible { outline: 2px solid var(--c-focus); outline-offset: 1px; }

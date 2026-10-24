@@ -283,7 +283,7 @@ ul.plain { margin: 0; padding-left: 18px; } ul.plain li { margin-bottom: 7px; }
 .drawer { position: fixed; inset: 0; z-index: 60; pointer-events: none; }
 .drawer-scrim { position: absolute; inset: 0; background: var(--c-scrim); opacity: 0; transition: opacity var(--m-panel) var(--ease-out); pointer-events: none; }
 .drawer-panel { position: absolute; top: 0; right: 0; bottom: 0; width: min(480px, 100vw); background: var(--c-raised); border-left: 1px solid var(--c-line); box-shadow: var(--sh-sheet); display: flex; flex-direction: column; transform: translateX(28px); opacity: 0; transition: transform var(--m-panel) var(--ease-drawer), opacity var(--m-panel) var(--ease-out); pointer-events: auto; }
-.drawer:not(.is-open) .drawer-panel, .drawer:not(.is-open) .drawer-scrim { transition-duration: var(--m-exit); }   /* leaving is faster */
+.drawer:not(.is-open) .drawer-panel, .drawer:not(.is-open) .drawer-scrim { transition-duration: var(--m-exit); pointer-events: none; }   /* leaving is faster, and a leaving panel takes no clicks or taps */
 .drawer.is-open .drawer-panel { transform: none; opacity: 1; }
 .drawer-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; padding: 20px 16px 14px 28px; border-bottom: 1px solid var(--c-line-2); }
 .drawer-kicker { font: 500 var(--t-md)/1 var(--f-label); color: var(--c-ink-3); margin: 6px 0 8px; }
@@ -714,7 +714,10 @@ ul.plain { margin: 0; padding-left: 18px; } ul.plain li { margin-bottom: 7px; }
   .drawer-panel { top: auto; left: 0; width: 100%; height: 88vh; border-radius: var(--r-xl) var(--r-xl) 0 0; border-left: 0; transform: translateY(32px); }
   .drawer-head { padding-left: 20px; } .drawer-body { padding: 16px 20px 40px; }
   .drawer-panel.is-form { height: min(88vh, var(--vvh, 100dvh)); max-height: var(--vvh, 100dvh); }
-  .tabbar { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); position: fixed; left: 0; right: 0; bottom: 0; z-index: 40; background: color-mix(in srgb, var(--c-raised) 94%, transparent); backdrop-filter: blur(12px); border-top: 1px solid var(--c-line-2); padding: 4px 4px max(8px, env(safe-area-inset-bottom)); }
+  .tabbar { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); position: fixed; left: 0; right: 0; bottom: 0; z-index: 40; background: color-mix(in srgb, var(--c-raised) 94%, transparent); backdrop-filter: blur(12px); border-top: 1px solid var(--c-line-2); padding: 4px 4px max(8px, env(safe-area-inset-bottom));
+    /* its full height before its buttons arrive: the shell mounts it empty and the route paints it, and empty it was
+       13px tall, so every load grew it 54px upward (motion check 2026-10-24: top 831 to 777, part of a 0.58 shift) */
+    min-height: calc(55px + 4px + max(8px, env(safe-area-inset-bottom))); }
   .tabbar a, .tabbar button { min-width: 0; overflow-wrap: anywhere; text-align: center; min-height: 54px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; text-decoration: none; font: 500 var(--t-sm)/1 var(--f-sans); color: var(--c-ink-3); border: 0; background: none; cursor: pointer; }
   .tabbar svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.6; }
   .tabbar [aria-current="page"] { color: var(--c-ink); font-weight: 600; } .tabbar [aria-current="page"] svg { stroke: var(--c-gold); }
@@ -785,6 +788,10 @@ table.st td a { text-decoration: none; font-weight: 600; } table.st td a:hover {
 @media (max-width: 860px) { table.st .ph-hide { display: none; } }
 /* legal */
 .legal { padding: 18px clamp(20px, 4vw, 56px) 32px; border-top: 1px solid var(--c-line-2); font-size: var(--t-md); color: var(--c-ink-3); max-width: var(--page); box-sizing: border-box; }
+/* Not laid out until the first page draws into #main. With an empty #main it sat under the top bar, filling a
+   phone's screen, and every page load pushed it away: layout shift 0.14 to 0.22 on desktop and 0.58 to 0.63 on
+   phones, from this footer alone (motion check 2026-10-24). Arriving under the page is not a shift. */
+#main:empty + .legal { display: none; }
 @media (max-width: 860px) { .legal { padding: 16px 16px 110px; } }
 .legal p { margin: 0 0 8px; max-width: 90ch; } .legal .textlink { font-size: var(--t-md); min-height: 32px; }
 @media (pointer: coarse), (max-width: 860px) { .legal .textlink { min-height: var(--tap); } }

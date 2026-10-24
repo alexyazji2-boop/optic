@@ -91,7 +91,7 @@ def test_the_classic_layout():
     assert "['ruler', 'Measure']" in CH and "Regular hours" in tb and "Extended hours" in tb
     assert "title=\"Back to price and volume. Your drawings are kept.\">Reset</button>" in tb
     assert 'id="ch-layers" role="group" aria-label="Layers"' in tb and "menu('panes', 'Panes'" in tb
-    assert "onView: (v) => { D.zoomed = v.zoomed;" in CH and "home() { from = home0.from; to = home0.to; yZoom = 1; redraw(); }" in PC, "Reset zoom shows once zoomed (and puts a stretched price scale back)"
+    assert "onView: (v) => { D.zoomed = v.zoomed;" in CH and "function home() { from = home0.from; to = home0.to; yZoom = 1; redraw(); }" in PC, "Reset zoom shows once zoomed (and puts a stretched price scale back)"
     assert "${miloButton('Explain'" in CH and "<div class=\"ch-pacts\"></div><div class=\"pc-host\"></div>" in CH, "Explain and full screen at the plot's corner"
     assert '<b class="pc-sym">' in PC, "the symbol and the bar size head the readout"
     assert "lastp-tag" in PC and "if (S.intraday && lb)" in PC, "the last price tagged, green or red with the day"

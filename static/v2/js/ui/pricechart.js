@@ -221,9 +221,13 @@ export function createPriceChart(host, opts) {
     + `<div class="pc-scale" title="Drag up or down to stretch the price scale. Double-click to fit it to the bars."></div>`
     + `<div class="pc-ctl" role="group" aria-label="Chart tools"><button type="button" class="pc-cb pc-msb" data-pc-measure aria-pressed="false" aria-label="Measure between two bars" title="Measure: drag between two bars (or Shift-drag, or M)">${icon('ruler').s}</button>`
     + `<button type="button" class="pc-cb pc-z" data-pc-zoom="out" aria-label="Zoom out" title="Zoom out">${icon('minus').s}</button><button type="button" class="pc-cb pc-z" data-pc-zoom="in" aria-label="Zoom in" title="Zoom in">${icon('plus').s}</button></div>`
+    // Reset zoom over the plot, for a page that asks (the Chart page on a phone): in the toolbar it wrapped onto a row
+    // of its own the moment a pan began, and pushed the plot 38 px down under the finger (motion check 2026-10-24).
+    // It stands above the chart's own buttons: beside them its 44 px reached the volume pane's remove button at 390.
+    + (S.homeButton ? '<button type="button" class="pc-cb pc-home" data-pc-home hidden title="Back to the view the chart opened on">Reset zoom</button>' : '')
     + `<div class="pc-panex"></div>`;
   const svg = host.querySelector('.pc-svg'), read = host.querySelector('.pc-read'), live = host.querySelector('.pc-sr');
-  const scaleEl = host.querySelector('.pc-scale'), ctl = host.querySelector('.pc-ctl'), panex = host.querySelector('.pc-panex');
+  const scaleEl = host.querySelector('.pc-scale'), ctl = host.querySelector('.pc-ctl'), panex = host.querySelector('.pc-panex'), homeEl = host.querySelector('[data-pc-home]');
   // a chart that asked for neither (the Instrument page's) gets detached stand-ins, so nothing below needs a guard
   const leg = host.querySelector('.pc-leg') || document.createElement('div'), nav = host.querySelector('.pc-nav') || document.createElementNS('http://www.w3.org/2000/svg', 'svg');
   // the box that names an insider trade under the pointer (or the keyboard's bar); `flags` are the arrows drawn
@@ -463,8 +467,9 @@ export function createPriceChart(host, opts) {
     svg.setAttribute('aria-label', summary());
     readout();
     const zoomed = from !== home0.from || to !== home0.to || yZoom !== 1;
+    if (zoomed !== zoomedWas && homeEl) homeEl.hidden = !zoomed;
     place2();
-    if (S.onView && zoomed !== zoomedWas) { zoomedWas = zoomed; S.onView({ zoomed }); }
+    if (zoomed !== zoomedWas) { zoomedWas = zoomed; if (S.onView) S.onView({ zoomed }); }
     legend(); drawNav();
   }
 
@@ -525,6 +530,8 @@ export function createPriceChart(host, opts) {
     let lx = (layout.l + 6) * k;
     if (vol && (vol.y1 - vol.y0) * k < bh + 16) { const t = [...svg.querySelectorAll('text.pane-t')].find((x) => x.textContent === 'Volume'); if (t) lx = (6 + t.getBBox().width + 10) * k; }
     Object.assign(ctl.style, { left: `${left0 + lx}px`, top: `${top0 + foot * k - bh - 4}px` });
+    // Reset zoom over the foot of the price, clear of the volume band's label (or above the buttons with no band)
+    if (homeEl) Object.assign(homeEl.style, { left: `${left0 + lx}px`, top: `${(vol ? top0 + vol.y0 * k : top0 + foot * k - bh - 4) - bh - 6}px` });
     panex.querySelectorAll('[data-pane-at]').forEach((b) => { const q = panes.find((x) => x.id === b.dataset.paneAt); if (q) Object.assign(b.style, { top: `${top0 + (q.y0 - 2) * k}px`, left: `${left0 + (W - layout.r) * k - 40}px` }); });
   }
 
@@ -1010,8 +1017,9 @@ export function createPriceChart(host, opts) {
   };
   document.addEventListener('keydown', pageKey);
   host.addEventListener('click', (e) => {
-    const b = e.target.closest('[data-pc-zoom], [data-pc-measure], [data-pc-pane]');
+    const b = e.target.closest('[data-pc-zoom], [data-pc-measure], [data-pc-pane], [data-pc-home]');
     if (!b || !host.contains(b)) return;
+    if (b.hasAttribute('data-pc-home')) { home(); return; }
     if (b.dataset.pcZoom) { zoom(b.dataset.pcZoom === 'in' ? 1 / 1.5 : 1.5, to); return; }   // about the latest bar shown
     if (b.hasAttribute('data-pc-measure')) { setMeasure(!mOn); return; }
     if (b.dataset.pcPane && S.onRemove) S.onRemove(b.dataset.pcPane);
@@ -1087,13 +1095,16 @@ export function createPriceChart(host, opts) {
     if (ms && ms.key) { const r = measuredBars(bars, ms.a, ms.b, fmtT); live.textContent = ms.a === ms.b ? `Measuring from ${fmtT(bars[ms.a].t)}. Move with the arrow keys; Escape clears.` : `${r.span}: ${r.head}.`; return; }
     const b = bars[cross], ins = flags.filter((g) => g.i === cross).map((g) => `${g.items.length} insider ${g.side === 'buy' ? 'purchase' : 'sale'}${g.items.length === 1 ? '' : 's'}: ${g.items.map((it) => `${it.who}, ${it.amount}`).join('; ')}`).join('. '); live.textContent = `${fmtT(b.t)}: open ${num(b.o)}, high ${num(b.h)}, low ${num(b.l)}, close ${num(b.c)}.${ins ? ` ${ins}.` : ''}`; }
 
+  /** Back to the bars the chart opened on, and a stretched price scale back to 1. */
+  function home() { from = home0.from; to = home0.to; yZoom = 1; redraw(); }
+
   const ro = new ResizeObserver(() => redraw()); ro.observe(host);
   syncTouch();
   draw();
 
   return {
     set(next) { Object.assign(S, next); if (next.tool) pending = null; if ('drawings' in next && sel >= S.drawings.length) sel = -1; syncTouch(); redraw(); },
-    zoom: (f) => zoom(f, cross >= 0 ? cross : to), fit, pan, home() { from = home0.from; to = home0.to; yZoom = 1; redraw(); },
+    zoom: (f) => zoom(f, cross >= 0 ? cross : to), fit, pan, home,
     measure: (on) => setMeasure(on), measuring: () => mOn,
     /** Something has the chart under the reader's hand: a drag, a touch or a pointer held. */
     busy: () => !!(drag || tg || pointers.size),

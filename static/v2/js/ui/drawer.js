@@ -5,7 +5,17 @@
 import { $, html, render, trapFocus, announce } from '../core/dom.js';
 import { icon } from './icons.js';
 
-let root, panel, from, untrap, onClose, sticky = false, vvOff = null;
+let root, panel, from, untrap, onClose, sticky = false, vvOff = null, shown = false, hideT = 0, leaving = null;
+
+// How long the drawer takes to leave: its longest transition as computed, so the CSS stays the one place that says
+// (--m-exit, and 0 under reduced motion, where the drawer goes at once).
+function exitMs() {
+  const longest = (el) => {
+    const s = getComputedStyle(el), d = s.transitionDuration.split(','), w = s.transitionDelay.split(',');
+    return Math.max(0, ...d.map((x, i) => (parseFloat(x) + parseFloat(w[i % w.length] || '0')) * 1000));
+  };
+  return Math.max(longest(panel), longest($('.drawer-scrim', root)));
+}
 
 function ensure() {
   if (root) return;
@@ -26,7 +36,8 @@ function ensure() {
 // (Milo's compact header, 2026-10-20); every other drawer keeps the kicker and title.
 export function open({ kicker = '', title, body, opener, mount, closed, keep = false, form = false, head = null, actions = null }) {
   ensure();
-  if (!root.hidden) close({ silent: true, force: true });
+  if (shown) close({ silent: true, force: true, now: true });
+  if (leaving) { clearTimeout(hideT); leaving(); }   // opened again while the last one was still leaving: finish it first
   panel.classList.toggle('is-form', !!form);
   const vv = window.visualViewport;
   if (form && vv) { const fit = () => panel.style.setProperty('--vvh', `${Math.round(vv.height)}px`); fit(); vv.addEventListener('resize', fit); vvOff = () => { vv.removeEventListener('resize', fit); panel.style.removeProperty('--vvh'); vvOff = null; }; }
@@ -37,7 +48,7 @@ export function open({ kicker = '', title, body, opener, mount, closed, keep = f
   render(panel, html`<header class="drawer-head">${head || html`<div><p class="drawer-kicker">${kicker}</p><h2 id="drawer-title" tabindex="-1">${title}</h2></div>`}
     ${actions ? html`<div class="drawer-acts">${actions}${shut}</div>` : shut}</header>
     <div class="drawer-body">${body}</div>`);
-  root.hidden = false;
+  root.hidden = false; shown = true;
   document.body.classList.add('drawer-open');
   if (from && from.setAttribute && from.hasAttribute('aria-expanded')) from.setAttribute('aria-expanded', 'true');
   requestAnimationFrame(() => { root.classList.add('is-open'); $('#drawer-title', panel).focus(); });
@@ -46,20 +57,27 @@ export function open({ kicker = '', title, body, opener, mount, closed, keep = f
   announce(`${title} opened`);
 }
 
-export function close({ silent, route, force } = {}) {
-  if (!root || root.hidden) return;
+// The drawer closes at once (isOpen, focus, the page behind it), and its panel then plays the exit before it leaves
+// the page, inert so nothing in it can be reached. Hiding it in the same moment skipped the exit transition: the
+// panel was gone in the next painted frame (motion check 2026-10-24). What the panel's owner set up on it is taken
+// down once it has left (`closed`, the keyboard's height): Milo's teardown, run at once, dropped its full-screen
+// layout for the generic sheet's in the first frame of the exit. `now` is for open() replacing one drawer with another.
+export function close({ silent, route, force, now } = {}) {
+  if (!root || !shown) return;
   if (sticky && route && !force) return;
-  sticky = false;
+  sticky = false; shown = false;
   root.classList.remove('is-open');
-  root.hidden = true;
   document.body.classList.remove('drawer-open');
   if (untrap) untrap();
-  if (vvOff) vvOff();
   if (from && from.setAttribute && from.hasAttribute('aria-expanded')) from.setAttribute('aria-expanded', 'false');
-  if (onClose) onClose();
   if (!silent && from && document.contains(from)) from.focus();
   from = null;
+  const done = onClose, vv = vvOff;
+  onClose = null; vvOff = null;
+  leaving = () => { leaving = null; root.hidden = true; root.inert = false; if (vv) vv(); if (done) done(); };
+  const ms = now ? 0 : exitMs();
+  if (ms > 0) { root.inert = true; hideT = setTimeout(leaving, ms + 20); } else leaving();
 }
 
-export const isOpen = () => !!root && !root.hidden;
+export const isOpen = () => !!root && shown;
 export const body = () => root && $('.drawer-body', panel);
