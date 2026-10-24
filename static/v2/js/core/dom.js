@@ -87,5 +87,6 @@ export function announce(msg) {
   setTimeout(() => { live.textContent = msg; }, 30);
 }
 
-export const reducedMotion = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
+/** The system's reduced-motion setting, or Settings' Motion: Reduce (html[data-motion], core/prefs.js). */
+export const reducedMotion = () => document.documentElement.getAttribute('data-motion') === 'reduce' || !!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
 export const isPhone = () => matchMedia('(max-width: 860px)').matches;

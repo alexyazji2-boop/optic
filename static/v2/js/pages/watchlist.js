@@ -19,6 +19,8 @@ import { openCompany, alertsBySymbol } from '../ui/company.js';
 import { toast } from '../ui/toast.js';
 import { provideContext, button as miloButton } from '../ui/milo.js';
 import { groupTabs } from './tabs.js';
+import { poll, inTradingDay } from '../core/poll.js';
+import { clock } from '../core/prefs.js';
 
 const SIGNAL_RANK = { bullish: 3, neutral: 2, bearish: 1, unknown: 0 };
 const has = (v) => typeof v === 'number' && Number.isFinite(v);
@@ -60,15 +62,22 @@ export function sortRows(rows, sortId) {
 }
 
 const readSort = () => { try { const v = localStorage.getItem(SORT_KEY); return SORTS.some((x) => x.id === v) ? v : 'changed'; } catch (e) { return 'changed'; } };
-const fresh = () => ({ sort: readSort(), filter: 'all', q: '', rows: null, err: null, editing: null, confirmDelete: false, method: '', earn: {}, alerts: {}, undo: null });
+const fresh = () => ({ sort: readSort(), filter: 'all', q: '', rows: null, err: null, editing: null, confirmDelete: false, method: '', earn: {}, alerts: {}, undo: null, hold: null, shown: [], resort: false, checked: null });
 let S = fresh();
-let live = true;
+let live = true, refresh = null;
+// The prices refresh on their own (motion proposal, 2026-10-24: the page used to show load-time prices for good):
+// every minute in the trading day, every five minutes outside it (the server keeps the list's bars for 90 s, so asking
+// more often would return the same figures). A refresh never moves a row the reader may be looking at: the order on
+// screen is held, and when the sort would now put the rows differently a Re-sort button says so. Choosing a sort, a
+// filter, a search, another list, or coming back to the page sorts afresh.
+const EVERY = 60000, CLOSED = 300000;
 let seq = 0;
 
-async function fetchRows(symbols) {
+async function fetchRows(symbols, { force = false } = {}) {
   const chunks = [];
   for (let i = 0; i < symbols.length; i += 40) chunks.push(symbols.slice(i, i + 40));
-  const res = await Promise.all(chunks.map((c) => api.get(`/api/watchlist?symbols=${c.map(encodeURIComponent).join(',')}`, { ttl: 60000, timeout: 30000 })));
+  const res = await Promise.all(chunks.map((c) => api.get(`/api/watchlist?symbols=${c.map(encodeURIComponent).join(',')}`, { ttl: 60000, timeout: 30000, force })));
+  S.checked = new Date().toISOString();
   S.method = (res[0] || {}).method || '';
   const got = new Map(res.flatMap((r) => r.rows || []).map((r) => [r.symbol, r]));
   return symbols.map((s) => got.get(s) || { symbol: s, available: false, reason: 'No data returned for this symbol.' });
@@ -149,8 +158,17 @@ function rowsBlock() {
   const q = S.q.trim().toUpperCase();
   let rows = withExtras.filter((r) => (!r.available ? S.filter === 'all' : flt.keep(r)) && (!q || r.symbol.includes(q)));
   rows = sortRows(rows, S.sort);
+  const sortedIds = rows.map((r) => r.symbol).join(',');
+  if (S.hold) {
+    // the order on screen before the refresh; a name new to the list goes at the end
+    const at = new Map(S.hold.map((sym, i) => [sym, i]));
+    rows = rows.slice().sort((x, y) => (at.has(x.symbol) ? at.get(x.symbol) : 1e6) - (at.has(y.symbol) ? at.get(y.symbol) : 1e6));
+  }
+  S.shown = rows.map((r) => r.symbol);
+  S.resort = !!S.hold && S.shown.join(',') !== sortedIds;
   const custom = S.sort === 'custom' && S.filter === 'all' && !q;
   const banner = html`${S.err ? html`<div class="stale" role="status">Prices did not load: ${api.explain(S.err, 'This list')} <button type="button" class="textlink" data-v2-retry="watchlist">Try again</button></div>` : ''}
+    ${S.resort ? html`<p class="wl-resort" role="status">Prices have updated, so this sort would now order the rows differently. They stay where they are until you choose. <button type="button" class="btn btn-sm" data-v2-wl-resort>Re-sort</button></p>` : ''}
     ${S.undo ? html`<p class="wl-undo" role="status">${S.undo.text} <button type="button" class="btn btn-sm" data-v2-wl-undo>Undo</button></p>` : ''}`;
   if (!rows.length) {
     return html`${banner}${q ? empty(`No name matches “${S.q.trim()}”`, '', html`<button type="button" class="btn btn-sm" data-v2-wl-clear>Clear the search</button>`)
@@ -170,9 +188,10 @@ function rowsBlock() {
       ${custom ? html`<span class="order"><button type="button" class="icon-btn" data-v2-sym-move="-1" data-v2-sym="${r.symbol}" aria-label="Move ${r.symbol} up" ${i === 0 ? 'disabled' : ''}>${icon('up')}</button><button type="button" class="icon-btn" data-v2-sym-move="1" data-v2-sym="${r.symbol}" aria-label="Move ${r.symbol} down" ${i === rows.length - 1 ? 'disabled' : ''}>${icon('down')}</button></span>` : ''}
       <button type="button" class="icon-btn" data-v2-unwatch="${r.symbol}" aria-label="Remove ${r.symbol} from ${a.name}">${icon('close')}</button>
     </div>`)}</div></div>
-    <p class="asof">${clean(S.method)} Volume is the last session's against its 20-session average. Earnings dates are the companies' published or expected dates, from Yahoo Finance.</p>`;
+    <p class="asof">${S.checked ? `Checked for new prices at ${clock(S.checked)}; checked again every ${refreshWord()}. ` : ''}${clean(S.method)} Volume is the last session's against its 20-session average. Earnings dates are the companies' published or expected dates, from Yahoo Finance.</p>`;
 }
 
+const refreshWord = () => (inTradingDay() ? 'minute in the trading day' : 'five minutes outside the trading day');
 function controls() {
   const a = store.activeList();
   if (!a || !a.symbols.length) return '';
@@ -251,9 +270,31 @@ async function loadRows(main) {
   loadExtras(main, a.symbols);
 }
 
+/** A refresh: new figures into the rows already on screen, in the order they are in, with the prices that moved marked. */
+async function quietRefresh(main, current) {
+  const a = store.activeList();
+  if (!a || !a.symbols.length || !S.rows || S.err) return;
+  const was = new Map(S.rows.map((r) => [r.symbol, r.price]));
+  const rows = await fetchRows(a.symbols, { force: true });
+  if (!current() || !live || store.activeList() !== a) return;
+  if (S.sort !== 'custom' && !S.hold) S.hold = S.shown.slice();
+  S.rows = rows;
+  const moved = rows.filter((r) => r.available && Number.isFinite(r.price) && Number.isFinite(was.get(r.symbol)) && r.price !== was.get(r.symbol));
+  paintRows(main);
+  // a price that changed holds its direction's colour for a moment; the figure itself is the record
+  moved.forEach((r) => {
+    const cell = main.querySelector(`[data-v2-company="${CSS.escape(r.symbol)}"] .wl-price`);
+    if (!cell) return;
+    cell.classList.add(r.price > was.get(r.symbol) ? 'is-tick-up' : 'is-tick-dn');
+    setTimeout(() => cell.classList.remove('is-tick-up', 'is-tick-dn'), 1200);
+  });
+}
+
 export async function render(main) {
   live = true;
   S = fresh();
+  if (refresh) refresh.stop();
+  refresh = poll((current) => quietRefresh(main, current), { every: EVERY, closed: CLOSED });
   provideContext(() => ({ view: 'watchlist', watchlist: { name: (store.activeList() || {}).name, rows: S.rows, earnings: S.earn } }));
   document.title = 'Watchlist, Optic';
   render_(main);
@@ -266,7 +307,7 @@ function render_(main) {
   paint(main);
 }
 
-export function dispose() { live = false; }
+export function dispose() { live = false; if (refresh) { refresh.stop(); refresh = null; } }
 export function onLists(main) { S.confirmDelete = false; loadRows(main); }
 export const retry = { watchlist: (main) => loadRows(main), lists: async (main) => { await store.loadLists({ force: true }); loadRows(main); } };
 
@@ -285,6 +326,12 @@ async function doUndo(main) {
 
 function wire(main) {
   const adding = new Set();
+  // up and down move between rows from the keyboard; Enter or Space opens the row's company drawer, as a click does
+  main.addEventListener('keydown', (e) => {
+    if ((e.key !== 'ArrowDown' && e.key !== 'ArrowUp') || !e.target.matches || !e.target.matches('#wl-rows .row-main')) return;
+    const all = [...main.querySelectorAll('#wl-rows .row-main')], i = all.indexOf(e.target), next = all[i + (e.key === 'ArrowDown' ? 1 : -1)];
+    if (next) { e.preventDefault(); next.focus(); }
+  });
   main.addEventListener('submit', async (e) => {
     const add = e.target.closest('[data-v2-add]');
     if (add) {
@@ -329,15 +376,15 @@ function wire(main) {
     if (e.key === 'Escape' && e.target.closest('[data-v2-list-form]')) { e.preventDefault(); S.editing = null; paint(main); const r = $('[data-v2-list-rename]', main) || $('[data-v2-list-new]', main); if (r) r.focus(); }
   });
   main.addEventListener('input', (e) => {
-    if (e.target.matches('[data-v2-wl-q]')) { S.q = e.target.value; paintRows(main); }
+    if (e.target.matches('[data-v2-wl-q]')) { S.q = e.target.value; S.hold = null; paintRows(main); }
   });
   main.addEventListener('change', (e) => {
-    if (e.target.matches('[data-v2-wl-sort]')) { S.sort = e.target.value; try { localStorage.setItem(SORT_KEY, S.sort); } catch (err) { /* private */ } paint(main); }
+    if (e.target.matches('[data-v2-wl-sort]')) { S.sort = e.target.value; S.hold = null; try { localStorage.setItem(SORT_KEY, S.sort); } catch (err) { /* private */ } paint(main); }
   });
   main.addEventListener('click', async (e) => {
     const t = (sel) => e.target.closest(sel);
     let b;
-    if ((b = t('[data-v2-list]'))) { store.setActive(b.dataset.v2List); S.rows = null; S.q = ''; S.undo = null; return; }
+    if ((b = t('[data-v2-list]'))) { store.setActive(b.dataset.v2List); S.rows = null; S.q = ''; S.undo = null; S.hold = null; return; }
     if ((b = t('[data-v2-list-new]'))) {
       if (b.getAttribute('aria-disabled') === 'true') { const c = store.listCap(); toast(c.plan ? `The ${c.plan} plan keeps ${c.n} watchlists. Rename or delete one to make room.` : 'Twelve lists is the limit. Rename or delete one.'); return; }
       S.editing = 'new'; paint(main); const i = $('[data-v2-list-form] input', main); if (i) i.focus(); return;
@@ -353,7 +400,8 @@ function wire(main) {
       S.confirmDelete = false; S.rows = null; return;
     }
     if ((b = t('[data-v2-list-move]'))) { try { await store.moveList(store.state.activeId, Number(b.dataset.v2ListMove)); } catch (err) { toast(say(err, 'Moving it'), { kind: 'bad' }); } return; }
-    if ((b = t('[data-v2-wl-filter]'))) { S.filter = b.dataset.v2WlFilter; paint(main); return; }
+    if ((b = t('[data-v2-wl-filter]'))) { S.filter = b.dataset.v2WlFilter; S.hold = null; paint(main); return; }
+    if (t('[data-v2-wl-resort]')) { S.hold = null; paintRows(main); const first = main.querySelector('#wl-rows .row-main'); if (first) first.focus({ preventScroll: true }); return; }
     if (t('[data-v2-wl-clear]')) { S.q = ''; paint(main); return; }
     if (t('[data-v2-wl-reorder]')) { S.sort = 'custom'; S.filter = 'all'; S.q = ''; try { localStorage.setItem(SORT_KEY, 'custom'); } catch (err) { /* private */ } paint(main); const m = $('[data-v2-sym-move]:not([disabled])', main); if (m) m.focus(); return; }
     if (t('[data-v2-wl-undo]')) { await doUndo(main); return; }

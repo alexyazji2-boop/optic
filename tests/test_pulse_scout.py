@@ -135,7 +135,9 @@ def test_pauses_are_five_to_ten_seconds_and_nothing_runs_hidden():
 def test_motion_setting_full_subtle_still_remembered_and_reduced_by_default():
     assert "var STORE = 'optic.scout.motion.v1';" in SCOUT
     assert "v === 'full' || v === 'subtle' || v === 'still'" in SCOUT
-    assert "reduceQuery && reduceQuery.matches ? 'still' : 'full'" in SCOUT
+    # the system's reduced motion, or v2's Settings, Motion: Reduce (html[data-motion], 2026-10-24); a choice still wins
+    assert "var asked = (reduceQuery && reduceQuery.matches) || document.documentElement.getAttribute('data-motion') === 'reduce';" in SCOUT
+    assert "return choice() || (asked ? 'still' : 'full');" in SCOUT
     # Gestures belong to full alone; subtle keeps poses and single blinks.
     assert "if (motion() !== 'full') { done(); return; }" in _proto("gesture")
     menu = _fn("scoutMenuHTML")

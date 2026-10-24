@@ -38,6 +38,11 @@
      shares), s3 the bottom line (net income and margin, free cash flow). Checked with the dataviz validator in both
      themes (2026-10-20): lightness, chroma, colour-blind and normal-vision separation, contrast against a panel */
   --c-s1: #5b7fbf; --c-s2: #c27a2c; --c-s3: #c75b88;
+  /* the price chart's indicators, the owner's mapping (2026-10-24): VWAP the one cool hue, EMA 50 red and dashed,
+     EMA 21 green, EMA 9 the ink (white on charcoal). Red and green here are deeper and shifted from --c-neg and --c-pos
+     so a line never reads as a candle, and each line is named at its right end, so none is told apart by colour alone.
+     On ivory every one clears 4.5:1 against the panel, so the end labels read as text. */
+  --c-ind-ema9: var(--c-ink); --c-ind-ema21: #2e7613; --c-ind-ema50: #c4283a; --c-ind-vwap: #7b4fd6;
   /* charts */
   --c-chart-ink: var(--c-ink);
   --c-chart-grid: #e3dccd;
@@ -102,6 +107,10 @@
      own feedback is immediate, content arriving fades in a beat, a panel slides a little longer, and anything
      leaving goes faster than it came. Nothing waits for these: they run while the work does. */
   --m-press: 90ms; --m-content: 150ms; --m-panel: 200ms; --m-exit: 130ms;
+  /* 2026-10-24 (motion proposal): hover and focus colour on quiet controls; a line chart's first draw on a page, short
+     enough to finish before a reader reaches for it and cancelled the moment data, a resize or a gesture arrives (it
+     was 620 ms); and the one stagger, between at most the first four things that arrive together */
+  --m-hover: 120ms; --m-reveal: 400ms; --m-stagger: 24ms;
   --ease-out: cubic-bezier(0.23, 1, 0.32, 1);      /* entering: moves at once, settles softly */
   --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);   /* a sheet or drawer */
   color-scheme: light;
@@ -115,7 +124,7 @@
   --c-ink: #f3f1eb; --c-ink-2: #d3cfc6; --c-ink-3: #b4afa5;
   --c-line: #363430; --c-line-2: #272623;
   --c-gold: #d4b144; --c-gold-ink: #e3c76f;
-  --c-pos: #4cc38a; --c-neg: #f07a66; --c-warn: #e7b25a; --c-proposed: #b9a0ff; --c-focus: #f0d77c;
+  --c-pos: #4cc38a; --c-neg: #f07a66; --c-warn: #e7b25a; --c-proposed: #b9a0ff; --c-focus: #f0d77c; --c-ind-ema21: #7bd64f; --c-ind-ema50: #ff5a63; --c-ind-vwap: #b28cff;
   --c-chart-grid: #2a2925; --c-area-top: rgba(212, 177, 68, .20); --c-cone-a: rgba(212, 177, 68, .30); --c-cone-edge: #e3c76f;
   --c-tip-bg: #eceae4; --c-tip-ink: #0b0b0a; --c-scrim: rgba(0, 0, 0, .6); --c-on-gold: #0b0b0a;
   color-scheme: dark;
@@ -127,7 +136,7 @@
     --c-ink: #f3f1eb; --c-ink-2: #d3cfc6; --c-ink-3: #b4afa5;
     --c-line: #363430; --c-line-2: #272623;
     --c-gold: #d4b144; --c-gold-ink: #e3c76f;
-    --c-pos: #4cc38a; --c-neg: #f07a66; --c-warn: #e7b25a; --c-proposed: #b9a0ff; --c-focus: #f0d77c;
+    --c-pos: #4cc38a; --c-neg: #f07a66; --c-warn: #e7b25a; --c-proposed: #b9a0ff; --c-focus: #f0d77c; --c-ind-ema21: #7bd64f; --c-ind-ema50: #ff5a63; --c-ind-vwap: #b28cff;
     --c-chart-grid: #2a2925; --c-area-top: rgba(212, 177, 68, .20); --c-cone-a: rgba(212, 177, 68, .30); --c-cone-edge: #e3c76f;
     --c-tip-bg: #eceae4; --c-tip-ink: #0b0b0a; --c-scrim: rgba(0, 0, 0, .6); --c-on-gold: #0b0b0a;
     color-scheme: dark;

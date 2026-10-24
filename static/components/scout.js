@@ -107,7 +107,9 @@
     } catch (e) { return null; }
   }
   function motion() {
-    return choice() || (reduceQuery && reduceQuery.matches ? 'still' : 'full');
+    // v2's Settings, Motion: Reduce (html[data-motion]) counts as the system asking, so a choice made here still wins
+    var asked = (reduceQuery && reduceQuery.matches) || document.documentElement.getAttribute('data-motion') === 'reduce';
+    return choice() || (asked ? 'still' : 'full');
   }
 
   function html(opts) {

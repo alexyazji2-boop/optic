@@ -72,7 +72,7 @@ def test_the_bust_beside_an_answer_and_the_head_on_the_button():
     assert '<div class="milo-id">${figure(\'compact\')}<div><h2 id="drawer-title" tabindex="-1">Milo</h2>' in MILO, "the name stays readable beside him"
     assert "const replyEl = (h, i) => (i === null || i === undefined ? null : headEl());" in MILO
     assert 'aria-label="Ask Milo"><span class="scout-badge" aria-hidden="true"><span class="scout-badge-fig"></span></span>' in SHELL
-    assert ":root[data-scout-motion=\"still\"] .scout-badge-fig { animation: none; }" in CSS and "@media (prefers-reduced-motion: reduce) { .scout-badge-fig { animation: none; } }" in CSS
+    assert ":root[data-scout-motion=\"still\"] .scout-badge-fig, :root[data-motion=\"reduce\"] .scout-badge-fig { animation: none; }" in CSS and "@media (prefers-reduced-motion: reduce) { .scout-badge-fig { animation: none; } }" in CSS
     assert ".topbar-milo .scout-badge { width: 26px; height: 26px; }" in PAGES
 
 

@@ -517,6 +517,8 @@ SETTINGS = {
     "optic.chart.snap.v1",
     # The rebuilt frontend's chart view: bar range, style, indicators, panes.
     "optic.v2.chart.v1",
+    # Settings, Motion: Follow system or Reduce (2026-10-24). A device preference, like the theme.
+    "optic.v2.motion.v1",
     "optic.v2.workspace.v1",       # Home's workspace: layouts, lock, panels folded on a phone, the linked ticker
     # Where each page was scrolled to, for Back, Forward and refresh (sessionStorage, this tab only).
     "optic.v2.scroll.v1",

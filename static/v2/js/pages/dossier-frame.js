@@ -83,7 +83,7 @@ export function livePrice(root, sym, getD, view, opts) {
     const [q, s] = await Promise.allSettled([api.get(`/api/quote/${enc}`, { ttl: 0, force: true, timeout: 15000 }), api.get(`/api/session/${enc}`, { ttl: 60000 })]);
     const D = getD();
     if (!current() || !D || D.sym !== sym) return;
-    const was = key(D);
+    const was = key(D), pxWas = D.quote && D.quote.price;
     if (q.status === 'fulfilled' && q.value && q.value.available !== false) D.quote = fresher(D.quote, q.value.quote || q.value);
     if (s.status === 'fulfilled' && s.value) D.session = s.value;
     if (onQuote) onQuote(D);
@@ -91,6 +91,9 @@ export function livePrice(root, sym, getD, view, opts) {
     const h = root.querySelector('.dhead'); if (!h) return;
     const tmp = document.createElement('div'); draw(tmp, header(sym, D, view, opts));
     ['.dh-price', '.dh-state'].forEach((sel) => { const a = h.querySelector(sel), b = tmp.querySelector(sel); if (a && b && a.innerHTML !== b.innerHTML) a.innerHTML = b.innerHTML; });
+    // a price that moved holds its direction's colour for a moment (motion proposal, 2026-10-24); the figure is the record
+    const px = D.quote && D.quote.price, el = h.querySelector('.dh-px, .dh-price .t-display');
+    if (el && isNum(px) && isNum(pxWas) && px !== pxWas) { el.classList.add(px > pxWas ? 'is-tick-up' : 'is-tick-dn'); setTimeout(() => el.classList.remove('is-tick-up', 'is-tick-dn'), 1200); }
   }, { every });
 }
 

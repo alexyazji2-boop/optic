@@ -4,7 +4,7 @@
 // short interest, corporate actions, filings and congressional disclosures. Statements come with the shared
 // /api/ticker snapshot (company); the rest from /api/extras, /api/congress and
 // /api/segments. Funds have no Financials page, as in the classic app.
-import { html, raw, render as draw } from '../core/dom.js';
+import { html, raw, render as draw, reducedMotion } from '../core/dom.js';
 import * as api from '../core/api.js';
 import * as store from '../core/store.js';
 import { num, signed, dir, money, compact, clean, capFirst, fullDate, shortDate, isNum, plural } from '../core/format.js';
@@ -393,7 +393,7 @@ export async function render(main, route) {
   provideContext(() => ({ view: 'financials', ticker: sym, quote: D.quote, company: (D.t || {}).company, filings: (D.t || {}).filings, extras: D.x }));
   if (!main.dataset.finWired) {
     main.dataset.finWired = '1';
-    const jump = (id) => { const sec = document.getElementById(id); if (!sec) return; sec.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' }); const h = sec.querySelector('h2'); if (h) { h.tabIndex = -1; h.focus({ preventScroll: true }); } };
+    const jump = (id) => { const sec = document.getElementById(id); if (!sec) return; sec.scrollIntoView({ behavior: reducedMotion() ? 'auto' : 'smooth', block: 'start' }); const h = sec.querySelector('h2'); if (h) { h.tabIndex = -1; h.focus({ preventScroll: true }); } };
     main.addEventListener('click', (e) => {
       const b = e.target.closest('[data-fin-jump]'); if (b) { jump(b.dataset.finJump); return; }
       const p = e.target.closest('[data-fin-period]');

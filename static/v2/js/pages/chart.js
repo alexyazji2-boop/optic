@@ -102,6 +102,9 @@ async function loadBars() {
   // seq: a slower answer for the bar size or range chosen before must not replace the one chosen after
   const sym = D.sym, enc = encodeURIComponent(sym), iv = INTERVALS.find((x) => x.key === V.interval), seq = (D.barSeq = (D.barSeq || 0) + 1);
   const current = () => D.sym === sym && D.barSeq === seq;
+  // A chart already on screen stays, dimmed and marked, until the new bars replace it in one frame (motion proposal,
+  // 2026-10-24): no blank skeleton between bar sizes, and nothing on it can be read as the new bars meanwhile
+  D.pending = chart ? `Loading ${iv.label} bars` : '';
   D.bars = null; D.barsErr = null; paintChart();
   let note = '';
   try {
@@ -319,8 +322,21 @@ function drawbar() {
 
 // what the plot's header line names: the symbol, the bar size and the style, as the classic chart's does
 const titleOf = () => ({ sym: D.sym, what: `${INTERVALS.find((x) => x.key === V.interval).label} · ${{ candles: 'Candles', line: 'Line', area: 'Area' }[V.style]}` });
+/** The note over a dimmed chart while its next bars load, or why they did not (`what` empty: none). */
+function barsPending(host, what) {
+  host.classList.toggle('is-pending', !!what);
+  let el = host.querySelector(':scope > .ch-pending');
+  if (!what) { if (el) el.remove(); return; }
+  if (!el) { el = document.createElement('p'); el.className = 'ch-pending'; el.setAttribute('role', 'status'); host.appendChild(el); }
+  draw(el, what);
+}
 function paintChart(over) {
   const host = $('#ch-body', mainEl); if (!host) return;
+  if (chart && D.pending && !D.bars) {
+    barsPending(host, D.barsErr ? html`${api.explain(D.barsErr, D.pending.replace(/^Loading /, '').replace(/^./, (x) => x.toUpperCase()))} <button type="button" class="textlink" data-v2-ch-rebars>Try again</button>` : D.pending);
+    return;
+  }
+  D.pending = ''; barsPending(host, '');
   if (D.barsErr) { if (chart) { chart.destroy(); chart = null; } draw(host, failed('The bars', D.barsErr, { retry: 'bars' })); return; }
   if (!D.bars) { if (chart) { chart.destroy(); chart = null; } draw(host, skeleton('chart', 1, 'Loading bars')); return; }
   const iv = INTERVALS.find((x) => x.key === V.interval);
@@ -633,6 +649,7 @@ function wire(main) {
     if ((b = t('[data-chw]'))) { toggleWidget(b.dataset.chw); return; }
     if ((b = t('[data-chw-close]'))) { const id = b.dataset.chwClose; toggleWidget(id); const r = $(`[data-chw="${id}"]`, mainEl); if (r) r.focus(); return; }
     if (t('.chw') && W.onClick(e)) return;
+    if (t('[data-v2-ch-rebars]')) { loadBars(); return; }
     if ((b = t('[data-v2-ch-range]'))) { const was = V.range; V.range = b.dataset.v2ChRange; saveView(); paintTools(); if (V.range === 'All' || was === 'All') loadBars(); else paintChart(); return; }
     if (t('[data-v2-ch-layers]')) { V.layers = !V.layers; saveView(); paintTools(); const again = $('[data-v2-ch-layers]', mainEl); if (again) again.focus(); return; }
     if (t('[data-v2-ch-reset]')) {

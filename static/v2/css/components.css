@@ -479,7 +479,7 @@ ul.plain { margin: 0; padding-left: 18px; } ul.plain li { margin-bottom: 7px; }
   0% { background-position-x: 0%; } 36% { background-position-x: 4.7619%; } 36.32% { background-position-x: 9.5238%; } 36.77% { background-position-x: 4.7619%; } 37.13% { background-position-x: 0%; }
   93% { background-position-x: 4.7619%; } 93.32% { background-position-x: 9.5238%; } 93.77% { background-position-x: 4.7619%; } 94.13% { background-position-x: 0%; }
   95.22% { background-position-x: 4.7619%; } 95.54% { background-position-x: 9.5238%; } 95.99% { background-position-x: 4.7619%; } 96.35% { background-position-x: 0%; } 100% { background-position-x: 0%; } }
-:root[data-scout-motion="still"] .scout-badge-fig { animation: none; }
+:root[data-scout-motion="still"] .scout-badge-fig, :root[data-motion="reduce"] .scout-badge-fig { animation: none; }
 @media (prefers-reduced-motion: reduce) { .scout-badge-fig { animation: none; } }
 /* the welcome: the whole figure above the question, a button that opens his guide menu (no fill, no hover pill;
    a focus ring for the keyboard and a target well over 44 px); then the starters as plain rows */
@@ -545,7 +545,10 @@ ul.plain { margin: 0; padding-left: 18px; } ul.plain li { margin-bottom: 7px; }
 /* a phone: the whole screen, inside its safe areas, the composer above the keyboard (the panel is the part of the
    screen the keyboard leaves); Response settings rise as a sheet; the personas in two rows of full-size targets */
 @media (max-width: 860px) {
-  .drawer-panel.milo-panel { top: var(--vvt, 0px); bottom: auto; left: 0; width: 100%; height: var(--vvh, 100dvh); max-height: var(--vvh, 100dvh); border-radius: 0; transform: none; padding-top: env(safe-area-inset-top, 0px); }
+  .drawer-panel.milo-panel { top: var(--vvt, 0px); bottom: auto; left: 0; width: 100%; height: var(--vvh, 100dvh); max-height: var(--vvh, 100dvh); border-radius: 0; padding-top: env(safe-area-inset-top, 0px);
+    /* opaque from the first frame and rising 16 px, not a fade: a fade showed its text over the page's for two or three
+       frames (motion check, 2026-10-24); .drawer.is-open puts it in place */
+    transform: translateY(16px); opacity: 1; }
   .milo-panel .drawer-head { padding: 6px max(6px, env(safe-area-inset-right, 0px)) 6px max(16px, env(safe-area-inset-left, 0px)); }
   .milo-ctx, .milo-persona, .milo-info, .milo-moved, .milo-log { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
   .milo-ctx { padding-right: max(8px, env(safe-area-inset-right, 0px)); }
@@ -590,6 +593,7 @@ ul.plain { margin: 0; padding-left: 18px; } ul.plain li { margin-bottom: 7px; }
 @media (prefers-reduced-motion: reduce) {
   .page-line::before, .activity::before { animation: none !important; transform: none; width: 100%; opacity: .55; }
 }
+:root[data-motion="reduce"] .page-line::before, :root[data-motion="reduce"] .activity::before { animation: none !important; transform: none; width: 100%; opacity: .55; }
 
 /* ---------- the Dossier tab bar moving to the new tab (ui/motion.js tabsAfter) ---------- */
 .tabs { position: relative; }
@@ -932,3 +936,22 @@ html.pc-touching, html.pc-touching * { -webkit-user-select: none; user-select: n
 .chart-measure[aria-pressed="true"] { background: var(--c-active); color: var(--c-ink); }
 .chart-measure:focus-visible { outline: 2px solid var(--c-focus); outline-offset: 2px; }
 @media (hover: none) { .chart-measure { opacity: 1; } }
+
+/* Milo, 2026-10-24 (motion proposal): the silence notice, what is attached, and a report on one answer */
+.milo-quiet { margin: 8px 0 0; font-size: var(--t-sm); color: var(--c-warn); }
+.milo-parts { margin: 2px 0 0; font-size: var(--t-sm); }
+.milo-ctx .milo-parts > summary { min-height: 32px; font-weight: 500; color: var(--c-ink-2); }   /* beats pages.css's gold .more-inline summary */
+.milo-parts-l { list-style: none; margin: 6px 0 4px; padding: 0; display: grid; gap: 2px; }
+.milo-parts-l li { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 32px; padding: 0 2px; border-bottom: 1px solid var(--c-line-2); color: var(--c-ink-2); }
+.milo-parts-l li.is-off span { color: var(--c-ink-3); text-decoration: line-through; }
+.milo-parts-l .textlink { min-height: 32px; font-size: var(--t-sm); }
+.milo-parts-none { margin: 2px 0 0; font-size: var(--t-sm); color: var(--c-ink-3); }
+.milo-report { display: grid; gap: 8px; margin: 10px 0 0; padding: 12px; border: 1px solid var(--c-line); border-radius: var(--r-md); background: var(--c-sunk); }
+.milo-report label { font-size: var(--t-md); font-weight: 500; color: var(--c-ink); }
+.milo-report textarea { width: 100%; min-height: 72px; resize: vertical; padding: 8px 10px; border: 1px solid var(--c-line); border-radius: var(--r-ctl); background: var(--c-raised); color: var(--c-ink); font: 400 var(--t-md)/1.45 var(--f-sans); }
+.milo-report .asof { margin: 0; }
+.milo-report-err { margin: 0; font-size: var(--t-sm); color: var(--c-neg); }
+.milo-report-done { margin: 10px 0 0; font-size: var(--t-sm); color: var(--c-ink-2); }
+/* a short screen (an iPhone SE's Safari is 549 px tall): the attached list scrolls in a strip rather than push the
+   conversation off the screen */
+@media (max-height: 760px) { .milo-parts-l { max-height: 112px; overflow-y: auto; } .milo-parts .asof { display: none; } }

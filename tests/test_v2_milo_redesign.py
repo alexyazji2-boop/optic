@@ -127,7 +127,8 @@ def test_the_composer_is_pinned_with_its_send_control_inside():
 def test_the_conversation_scrolls_on_its_own_and_never_pulls_the_reader():
     assert "if (S.toEnd || (stick && pinned)) log.scrollTop = log.scrollHeight;" in MILO
     assert "b.hidden = !(S.items.length && !S.showHistory && log.scrollHeight - log.scrollTop - log.clientHeight > 160);" in MILO
-    assert "behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth'" in MILO
+    # reducedMotion() is the system setting or Settings' Motion: Reduce (core/dom.js, 2026-10-24)
+    assert "behavior: reducedMotion() ? 'auto' : 'smooth'" in MILO
     assert ".milo-panel .drawer-body { display: flex; flex-direction: column; min-height: 0; overflow: hidden; overflow: clip;" in CSS, "nothing scrolls the header away"
     assert ".milo-log { flex: 1; min-width: 0; min-height: 0; overflow-y: auto; overscroll-behavior: contain;" in CSS
 

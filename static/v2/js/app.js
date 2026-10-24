@@ -147,7 +147,9 @@ async function show(route) {
   drawer.close({ silent: true, route: true });
   palette.close({ silent: true });
   const main = $('#main');
-  const tabsWere = motion.tabsBefore(main.querySelector('.page-view'));
+  // between two pages of one strip only: the same page drawn again (Try again, a sign-in) gets no entrance
+  const again = current && current.route.view === route.view && current.route.symbol === route.symbol && current.route.section === route.section;
+  const tabsWere = again ? null : motion.tabsBefore(main.querySelector('.page-view'));
   const view = document.createElement('div');
   view.className = 'page-view';
   main.replaceChildren(view);
@@ -179,8 +181,8 @@ async function show(route) {
     console.error(e);
     render(view, html`<div class="state err" role="alert"><p class="t-h3">This page did not load</p><p>${e.message || 'An error stopped it.'}</p><a class="btn" href="${hrefFor(route.view, route.symbol)}">Try again</a></div>`);
   });
-  // the Dossier's tab bar slides and its content fades in, once the new strip is drawn (ui/motion.js)
-  if (tabsWere) whenDrawn(view, 'nav.tabs[data-v2-dtabs]', () => motion.tabsAfter(view, tabsWere));
+  // a tab strip's bar slides (if the press has not moved it already) and the content fades in, once drawn (ui/motion.js)
+  if (tabsWere) whenDrawn(view, 'nav.tabs', () => motion.tabsAfter(view, tabsWere));
   // Focus the page's heading so a screen reader hears where it landed.
   requestAnimationFrame(() => {
     const h = drawer.isOpen() ? null : view.querySelector('h1');
@@ -207,6 +209,8 @@ function wireGlobal() {
   document.addEventListener('click', async (e) => {
     const t = (s) => e.target.closest(s);
     let b;
+    // a tab answers its press at once; the address change that follows loads the page (ui/motion.js tabPressed)
+    if ((b = t('nav.tabs a[href^="#"]')) && !e.defaultPrevented && e.button === 0 && !(e.metaKey || e.ctrlKey || e.shiftKey || e.altKey)) motion.tabPressed(b);
     if ((b = t('[data-v2-report-open]'))) { openReport(b, current ? document.title.replace(', Optic', '') : 'Optic'); return; }
     if ((b = t('[data-v2-rail-collapse]'))) { const on = !shell.railTight(); shell.setRailTight(on); b.setAttribute('aria-pressed', String(on)); return; }
     if (t('[data-v2-use-classic]')) { e.preventDefault(); document.cookie = 'optic_ui=classic; path=/; max-age=31536000; samesite=lax'; location.href = `${CLASSIC}${location.hash}`; return; }
@@ -286,10 +290,10 @@ function wireGlobal() {
 }
 
 async function boot() {
-  prefs.applyTheme(); prefs.applyScale();
+  prefs.applyTheme(); prefs.applyScale(); prefs.applyMotion();
   matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => prefs.applyTheme());
   // another tab (or the classic app in one) changed a setting
-  window.addEventListener('storage', (e) => { if (/^optic\.(theme|ui\.scale\.v1)$/.test(e.key || '')) { prefs.applyTheme(); prefs.applyScale(); } });
+  window.addEventListener('storage', (e) => { if (/^optic\.(theme|ui\.scale\.v1|v2\.motion\.v1)$/.test(e.key || '')) { prefs.applyTheme(); prefs.applyScale(); prefs.applyMotion(); } });
   shell.mount($('#app'));
   watchTables($('#app'));   // every shared table aligned by what its columns hold (ui/align.js)
   wireGlobal();

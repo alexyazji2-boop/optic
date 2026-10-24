@@ -569,7 +569,10 @@ table.chw-table { font-size: var(--t-sm); } table.chw-table th { padding: 6px 4p
 .pc .area.up { fill: var(--pc-area, color-mix(in srgb, var(--pc-up, var(--c-pos)) 18%, transparent)); } .pc .area.dn { fill: var(--pc-area, color-mix(in srgb, var(--pc-down, var(--c-neg)) 18%, transparent)); }
 .pc .vol { opacity: .28; } .pc .vol.u { fill: var(--pc-up, var(--c-pos)); } .pc .vol.d { fill: var(--pc-down, var(--c-neg)); }
 .pc .ov { fill: none; stroke-width: 1.4; } .pc .m1 { stroke: var(--c-gold); } .pc .m2 { stroke: var(--c-cat-1); } .pc .m3 { stroke: var(--c-ink-2); stroke-dasharray: 5 3; }
-.pc .e1 { stroke: var(--c-cat-3); } .pc .e2 { stroke: var(--c-cat-4); } .pc .e3 { stroke: var(--c-cat-2); }
+.pc .e1 { stroke: var(--c-ind-ema9); } .pc .e2 { stroke: var(--c-ind-ema21); } .pc .e3 { stroke: var(--c-ind-ema50); stroke-dasharray: 6 3; }
+/* each indicator named at its line's right end, in its own colour, over a halo so candles under it don't cut it */
+.pc .endl { font: 600 var(--t-xs)/1 var(--f-label); paint-order: stroke; stroke: var(--c-plane); stroke-width: 3px; stroke-linejoin: round; }
+.pc .endl.e1 { fill: var(--c-ind-ema9); } .pc .endl.e2 { fill: var(--c-ind-ema21); } .pc .endl.e3 { fill: var(--c-ind-ema50); } .pc .endl.vw { fill: var(--c-ind-vwap); }
 .pc .bb { stroke: var(--c-ink-3); stroke-dasharray: 3 3; } .pc .bbm { stroke: var(--c-ink-3); opacity: .5; }
 .pc .rsi, .pc .macd { stroke: var(--c-chart-ink); } .pc .macds { stroke: var(--c-gold); }
 .pc .mh.u { fill: var(--c-pos); opacity: .5; } .pc .mh.d { fill: var(--c-neg); opacity: .5; }
@@ -608,7 +611,7 @@ table.chw-table { font-size: var(--t-sm); } table.chw-table th { padding: 6px 4p
 .ch-snote:empty { display: none; }
 .pc .zn { stroke-width: 1; } .pc .zn.sup { fill: color-mix(in srgb, var(--c-neg) 12%, transparent); stroke: color-mix(in srgb, var(--c-neg) 45%, transparent); } .pc .zn.dem { fill: color-mix(in srgb, var(--c-pos) 12%, transparent); stroke: color-mix(in srgb, var(--c-pos) 45%, transparent); } .pc .zn.brk { stroke-dasharray: 4 3; fill-opacity: .5; }
 .pc .lv.acc { stroke: var(--c-cat-2); stroke-dasharray: 2 4; } .pc .lv-t.acc { fill: var(--c-cat-2); }
-.pc .sl { stroke-width: 1.2; } .pc .sl.mid { stroke-dasharray: 5 4; } .pc .sl.kc { stroke: var(--c-cat-3); } .pc .sl.dc { stroke: var(--c-cat-2); } .pc .sl.rc { stroke: var(--c-cat-1); } .pc .sl.vw { stroke: var(--c-gold); stroke-width: 1.6; }
+.pc .sl { stroke-width: 1.2; } .pc .sl.mid { stroke-dasharray: 5 4; } .pc .sl.kc { stroke: var(--c-cat-3); } .pc .sl.dc { stroke: var(--c-cat-2); } .pc .sl.rc { stroke: var(--c-cat-1); } .pc .sl.vw { stroke: var(--c-ind-vwap); stroke-width: 1.6; }
 .pc .cl { stroke: none; } .pc .cl.up { fill: color-mix(in srgb, var(--c-cat-1) 22%, transparent); } .pc .cl.dn { fill: color-mix(in srgb, var(--c-cat-3) 22%, transparent); }
 .pc .tl { stroke-width: 1.8; } .pc .tl.up { stroke: var(--c-pos); } .pc .tl.dn { stroke: var(--c-neg); } .pc .tl.brk { stroke-width: 1.4; stroke-dasharray: 5 4; opacity: .75; }
 .pc .vbp { fill: color-mix(in srgb, var(--c-ink-3) 26%, transparent); } .pc .vbp.poc { fill: color-mix(in srgb, var(--c-gold) 45%, transparent); }
@@ -626,7 +629,7 @@ table.chw-table { font-size: var(--t-sm); } table.chw-table th { padding: 6px 4p
 .pc .wick.tint.st3, .pc .body.tint.st3 { stroke: var(--c-warn); fill: var(--c-warn); }
 .pc .st-t { font: 600 var(--t-xs)/1 var(--f-label); paint-order: stroke; stroke: var(--c-plane); stroke-width: 3px; } .pc .st-t.st1 { fill: color-mix(in srgb, var(--c-pos) 50%, var(--c-ink-3)); } .pc .st-t.st2 { fill: var(--c-pos); } .pc .st-t.st3 { fill: var(--c-warn); } .pc .st-t.st4 { fill: var(--c-neg); }
 .pc-leg i.kcu { border-top: 6px solid color-mix(in srgb, var(--c-cat-1) 45%, transparent); } .pc-leg i.kcd { border-top: 6px solid color-mix(in srgb, var(--c-cat-3) 45%, transparent); }
-.pc-leg i.kkc { border-top-color: var(--c-cat-3); } .pc-leg i.kdc { border-top-color: var(--c-cat-2); } .pc-leg i.krc { border-top-color: var(--c-cat-1); } .pc-leg i.kvw { border-top-color: var(--c-gold); } .pc-leg i.kacc { border-top: 2px dotted var(--c-cat-2); }
+.pc-leg i.kkc { border-top-color: var(--c-cat-3); } .pc-leg i.kdc { border-top-color: var(--c-cat-2); } .pc-leg i.krc { border-top-color: var(--c-cat-1); } .pc-leg i.kvw { border-top-color: var(--c-ind-vwap); } .pc-leg i.kacc { border-top: 2px dotted var(--c-cat-2); }
 .pc-leg i.kzs { border-top: 6px solid color-mix(in srgb, var(--c-neg) 35%, transparent); } .pc-leg i.kzd { border-top: 6px solid color-mix(in srgb, var(--c-pos) 35%, transparent); }
 .pc-leg i.ktu { border-top-color: var(--c-pos); } .pc-leg i.ktd { border-top-color: var(--c-neg); } .pc-leg i.kvbp { border-top: 6px solid color-mix(in srgb, var(--c-ink-3) 45%, transparent); } .pc-leg i.ksd { border-top: 2px dashed var(--c-ink-3); }
 .pc-leg i.kst1, .pc-leg i.kst2, .pc-leg i.kst3, .pc-leg i.kst4, .pc-leg i.kmt1, .pc-leg i.kmt0, .pc-leg i.kmt4 { width: 8px; height: 8px; border: 0; border-radius: 2px; }
@@ -772,7 +775,7 @@ html.ch-max .ch-side, html.ch-max .ch-wrail { max-height: min(calc(100vh - 16px)
 .star-row { width: 120px; height: 22px; } .star-row .on { fill: var(--c-gold); } .star-row .off { fill: var(--c-sunk); stroke: var(--c-line); }
 .stars { color: var(--c-ink); letter-spacing: 0; }
 .legend-line i.m1, .pc-leg i.m1 { border-color: var(--c-gold); } .legend-line i.m2, .pc-leg i.m2 { border-color: var(--c-cat-1); } .legend-line i.m3, .pc-leg i.m3 { border-top: 2px dashed var(--c-ink-2); }
-.legend-line i.e1, .pc-leg i.e1 { border-color: var(--c-cat-3); } .legend-line i.e2, .pc-leg i.e2 { border-color: var(--c-cat-4); } .legend-line i.e3, .pc-leg i.e3 { border-color: var(--c-cat-2); }
+.legend-line i.e1, .pc-leg i.e1 { border-color: var(--c-ind-ema9); } .legend-line i.e2, .pc-leg i.e2 { border-color: var(--c-ind-ema21); } .legend-line i.e3, .pc-leg i.e3 { border-color: var(--c-ind-ema50); border-top-style: dashed; }
 .legend-line .kE, .pc-leg .kE { color: var(--c-gold-ink); font: 600 var(--t-sm)/1 var(--f-label); margin-right: 4px; }
 .pc-leg .kE { margin-right: 6px; }
 .search-btn .sb-short { flex: none; }
@@ -1648,3 +1651,13 @@ ul.cal-react { display: flex; flex-wrap: wrap; gap: 4px 18px; padding-left: 0; l
   .sh-tag { border-color: #888 !important; } .sh-na { color: #555 !important; }
   .sh-chart svg path, .sh-chart svg line { stroke: #333 !important; } .sh-chart svg .area, .sh-chart svg [fill-opacity] { fill: #ddd !important; }
 }
+
+/* the Chart page between bar sizes (pages/chart.js pending): the old plot dimmed and out of reach, a note over it */
+#ch-body.is-pending > .pc-host, #ch-body.is-pending > .ch-pacts { opacity: .5; pointer-events: none; transition: opacity var(--m-press) var(--ease-out); }
+.ch-pending { position: absolute; top: 56px; left: 50%; transform: translateX(-50%); z-index: 4; margin: 0; max-width: calc(100% - 24px); padding: 8px 12px; border-radius: var(--r-md); border: 1px solid var(--c-line); background: var(--c-raised); box-shadow: var(--sh-pop); font-size: var(--t-sm); color: var(--c-ink-2); text-align: center; }
+/* the watchlist's refresh (pages/watchlist.js): a moved price holds its direction's colour, then eases back; a
+   note with Re-sort when the held order no longer matches the sort */
+.wl-price, .dh-px, .dh-price .t-display { transition: color 800ms ease-out; }
+.wl-price.is-tick-up, .dh-px.is-tick-up, .dh-price .t-display.is-tick-up { color: var(--c-pos); transition: none; }
+.wl-price.is-tick-dn, .dh-px.is-tick-dn, .dh-price .t-display.is-tick-dn { color: var(--c-neg); transition: none; }
+.wl-resort { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 0 0 12px; font-size: var(--t-md); color: var(--c-ink-2); }

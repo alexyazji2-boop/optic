@@ -29,6 +29,7 @@ const tag = (on, text) => html` <span class="set-tag ${on ? 'on' : 'off'}">${tex
 // written out per control, so the dead-controls test can see who reads each attribute
 const seg = (label, items, cur, attr) => html`<div class="seg" role="group" aria-label="${label}">${items.map(([v, l]) => (attr === 'theme'
   ? html`<button type="button" data-v2-theme="${v}" aria-pressed="${cur === v}">${l}</button>`
+  : attr === 'motion' ? html`<button type="button" data-v2-motion="${v}" aria-pressed="${cur === v}">${l}</button>`
   : html`<button type="button" data-v2-scale="${v}" aria-pressed="${cur === v}">${l}</button>`))}</div>`;
 
 /* ---------------- account ---------------- */
@@ -130,7 +131,8 @@ function preferences() {
   });
   return html`<section class="section" aria-labelledby="ap-h"><h2 class="t-h2" id="ap-h">Appearance</h2>
       <p class="section-sub">Both themes are hand-picked rather than one flipped into the other, so contrast and colour-vision separation hold either way.</p>
-      ${row('Theme', 'Dark is the default. "Follow system" tracks your operating system setting and changes with it.', seg('Theme', [['dark', 'Dark'], ['light', 'Light'], ['system', 'Follow system']], prefs.theme(), 'theme'))}</section>
+      ${row('Theme', 'Dark is the default. "Follow system" tracks your operating system setting and changes with it.', seg('Theme', [['dark', 'Dark'], ['light', 'Light'], ['system', 'Follow system']], prefs.theme(), 'theme'))}
+      ${row('Motion', 'How much the interface moves: drawers sliding, a chart tracing itself in, tabs fading. "Reduce" stills all of it, as your system\'s reduced-motion setting does; "Follow system" uses that setting.', seg('Motion', [['system', 'Follow system'], ['reduce', 'Reduce']], prefs.motion(), 'motion'))}</section>
     <section class="section" aria-labelledby="ts-h"><h2 class="t-h2" id="ts-h">Text size</h2>
       <p class="section-sub">Scales the whole interface, type and spacing together, so the proportions stay as they are and only the size changes.</p>
       ${row('Size', 'Default is 15% larger than the terminal shipped with. Compact is that original density, for a small screen or a reader who wants more on it at once.', seg('Text size', [['compact', 'Compact'], ['default', 'Default'], ['large', 'Large']], prefs.scale(), 'scale'))}</section>
@@ -240,6 +242,7 @@ function wire(main) {
   main.addEventListener('click', async (e) => {
     const t = (s) => e.target.closest(s); let b;
     if ((b = t('[data-v2-theme]'))) { prefs.setTheme(b.dataset.v2Theme); paint(); return; }
+    if ((b = t('[data-v2-motion]'))) { prefs.setMotion(b.dataset.v2Motion); paint(); const again = mainEl.querySelector(`[data-v2-motion="${b.dataset.v2Motion}"]`); if (again) again.focus(); return; }
     if ((b = t('[data-v2-scale]'))) { prefs.setScale(b.dataset.v2Scale); paint(); const again = mainEl.querySelector(`[data-v2-scale="${b.dataset.v2Scale}"]`); if (again) again.focus(); return; }
     if (t('[data-v2-report]')) { openReport(t('[data-v2-report]')); return; }
     if (t('[data-v2-set-recheck]')) { await store.loadMe(); if (appRef) appRef.settleAuth(); return; }

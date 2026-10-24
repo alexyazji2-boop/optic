@@ -106,7 +106,7 @@ def test_financials_leads_with_a_summary_and_a_jump_list():
     for sec in ("fin-summary", "fin-statements", "fin-segments", "fin-earnings", "fin-ownership", "fin-short", "fin-actions", "fin-filings", "fin-congress"):
         assert f'id="{sec}"' in fin, sec
     assert "data-fin-jump" in fin and "data-fin-jumpsel" in fin
-    assert "prefers-reduced-motion" in fin
+    assert "reducedMotion()" in fin, "the jump scrolls without smoothing under reduced motion"
     # the Earnings tables share the rule since 2026-10-20 (backlog task 8)
     rule = CSS[CSS.index(".fin .tscroll .t th:first-child, .fin .tscroll .t td:first-child"):]
     assert rule.split("{")[1].strip().startswith("position: sticky; left: 0;") and ".earn .tscroll .t td:first-child" in rule.split("{")[0]

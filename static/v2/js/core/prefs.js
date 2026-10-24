@@ -55,6 +55,19 @@ export function applyTheme() {
 export function setTheme(t) { put(THEME_KEY, t === 'light' || t === 'system' ? t : 'dark'); applyTheme(); emit('theme'); }
 try { matchMedia('(prefers-color-scheme: light)').addEventListener('change', () => { if (theme() === 'system') applyTheme(); }); } catch (e) { /* no matchMedia in tests */ }
 
+/* ---------------- motion ---------------- */
+// v2's own setting (2026-10-24; Classic has none): 'system' follows the operating system's reduced-motion setting,
+// 'reduce' asks for the same stillness whatever the system says. It sets html[data-motion], which the CSS and
+// core/dom.js reducedMotion() read, and Scout goes still with it unless the reader chose his motion themselves.
+const MOTION_KEY = 'optic.v2.motion.v1';
+export function motion() { return get(MOTION_KEY) === 'reduce' ? 'reduce' : 'system'; }
+export function applyMotion() {
+  if (motion() === 'reduce') document.documentElement.setAttribute('data-motion', 'reduce');
+  else document.documentElement.removeAttribute('data-motion');
+  try { if (window.OpticScout) window.OpticScout.setMotion(null); } catch (e) { /* Scout not loaded yet: he reads it when he is */ }
+}
+export function setMotion(m) { put(MOTION_KEY, m === 'reduce' ? 'reduce' : null); applyMotion(); emit('motion'); }
+
 /* ---------------- text size ---------------- */
 export function scale() { const s = get(SCALE_KEY); return SCALES[s] ? s : 'default'; }
 export function applyScale() {

@@ -11,7 +11,7 @@
 // sees is built the same way, so it always names the page actually open.
 //
 // Nothing is sent until the reader presses Send. Every entry point drafts.
-import { html, render, $, raw, announce } from '../core/dom.js';
+import { html, render, $, raw, announce, reducedMotion } from '../core/dom.js';
 import * as drawer from './drawer.js';
 import * as api from '../core/api.js';
 import * as store from '../core/store.js';
@@ -42,6 +42,10 @@ const readWhen = (v) => { const t = /^\d{4}-\d{2}-\d{2}T/.test(String(v || '')) 
 //   stopped     the reader pressed Stop: "Stopped by you. This answer is incomplete."
 //   failed      an error event or no answer: the reason, and the question back in the box
 export const MILO_STATES = { submitted: 'Sending your question', preparing: 'Preparing the answer' };
+// No word from the server for this long (no event, no bytes) and the answer says so, with Stop beside it: a silent
+// stream looked frozen (motion proposal, 2026-10-24). It goes the moment anything arrives. It claims nothing more.
+const QUIET_MS = 30000;
+export const QUIET_TEXT = 'No reply from the server for 30 seconds. You can keep waiting or stop the answer.';
 const STEP_WORDS = { thinking: 'Thinking it through', 'searching the web': 'Searching the web', searching: 'Searching live sources', 'reading results': 'Reading what it found' };
 const SCOPES = { auto: 'This page', market: 'Market only', none: 'No page context' };
 
@@ -55,7 +59,7 @@ let asked = null;
 export function provideContext(fn) { provider = typeof fn === 'function' ? fn : null; }
 /** Called by the app on every navigation, before the new page renders. */
 export function resetContext(r) {
-  provider = null; route = r || { view: 'home' }; asked = null;
+  provider = null; route = r || { view: 'home' }; asked = null; S.dropped.clear();
   // an open panel redraws its answers' "About" lines against the page now open (not while one streams)
   if (typeof paintLog === 'function' && host() && !S.live) { try { paintLog(false); paintChrome(); } catch (e) { /* drawn on next open */ } }
 }
@@ -83,6 +87,8 @@ export function buildContext(scope, prevTicker, now = new Date()) {
     Object.keys(ctx).forEach((k) => { const v = ctx[k]; const own = v && typeof v === 'object' && !Array.isArray(v) ? (v.symbol || v.ticker) : null; if (own && typeof own === 'string' && own.toUpperCase() !== r.symbol) delete ctx[k]; });
     if (ctx.ticker && ctx.ticker !== r.symbol) ctx.ticker = r.symbol;
   }
+  // the parts the reader took out before sending (the attached list in the context menu)
+  if (scope === 'auto') S.dropped.forEach((k) => { delete ctx[k]; });
   const own = DOSSIER.has(r.view) || r.view === 'instrument' ? r.symbol || null : null;
   // a block about one symbol on a page about none (a Brokerage thesis) names it; it never overrides the page's own
   const ticker = scope === 'auto' ? own || (asked && asked.symbol) || null : null;
@@ -116,7 +122,7 @@ function persist() {
 
 /* ---------------- state ---------------- */
 const blankConv = () => ({ id: newId(), messages: [], lastTicker: null });
-const S = { conv: blankConv(), items: [], busy: false, abort: null, scope: 'auto', showHistory: false, showSettings: false, showInfo: false, allowance: null, personas: null, modes: null, draft: '', live: null, mounted: null, panel: null, toEnd: false, symbolAtAsk: null };
+const S = { conv: blankConv(), items: [], busy: false, abort: null, scope: 'auto', showHistory: false, showSettings: false, showInfo: false, allowance: null, personas: null, modes: null, draft: '', live: null, mounted: null, panel: null, toEnd: false, symbolAtAsk: null, dropped: new Set(), report: null };
 // items: what the log shows this session: {kind:'msg', i} for conv.messages[i], or {kind:'note', text}; meta per message index
 const meta = new Map();
 const persona = () => { try { return localStorage.getItem(PERSONA_KEY) || 'neutral'; } catch (e) { return 'neutral'; } };
@@ -343,8 +349,30 @@ function msgHTML(it) {
     ${live ? html`<span class="activity" role="progressbar" aria-label="Milo is working on this answer"></span>` : ''}
     ${info.ended || /\[(Stopped by the reader|Cut off): incomplete\]$/.test(m.content || '') ? html`<p class="milo-ended" role="note">${(info.ended || (/Stopped by the reader/.test(m.content) ? 'stopped' : 'cut')) === 'stopped' ? 'Stopped by you. This answer is incomplete.' : 'The connection ended before Milo finished. This answer is incomplete.'}</p>` : ''}
     ${live ? '' : html`${ups.length ? html`<div class="milo-ups" role="group" aria-label="Follow-up questions">${ups.map((q) => html`<button type="button" class="milo-up" data-v2-milo-follow="${q}">${q}</button>`)}</div>` : ''}
-      <div class="milo-foot">${sourceLists(info)}<div class="milo-acts"><button type="button" class="milo-act-btn" data-v2-milo-copy="${it.i}">${icon('copy')}<span>Copy</span></button>${info.question ? html`<button type="button" class="milo-act-btn" data-v2-milo-again="${it.i}" title="Put the question back in the box">${icon('retry')}<span>Ask again</span></button>` : ''}</div></div>
+      <div class="milo-foot">${sourceLists(info)}<div class="milo-acts"><button type="button" class="milo-act-btn" data-v2-milo-copy="${it.i}">${icon('copy')}<span>Copy</span></button>${info.question ? html`<button type="button" class="milo-act-btn" data-v2-milo-again="${it.i}" title="Put the question back in the box">${icon('retry')}<span>Ask again</span></button>` : ''}<button type="button" class="milo-act-btn" data-v2-milo-report="${it.i}" aria-expanded="${S.report && S.report.i === it.i ? 'true' : 'false'}" title="Tell Optic this answer has a wrong figure or a mistake">${icon('flag')}<span>Report a problem</span></button></div></div>
+      ${S.report && S.report.i === it.i ? reportHTML(it.i) : ''}
       <p class="milo-gen">Generated by an AI model from Optic's data. It can be wrong; check the figures against the sources.</p>`}</article>`;
+}
+// A problem with one answer, sent to the operator's problem reports (/api/feedback) with the question and the answer
+// attached, so a wrong figure can be traced. It goes to a person; nothing here trains or changes the model.
+function reportHTML(i) {
+  const r = S.report;
+  if (r.sent) return html`<p class="milo-report-done" role="status">Report sent. It goes to the people who run Optic, with this question and answer attached.</p>`;
+  return html`<form class="milo-report" data-v2-milo-report-form="${i}"><label for="milo-rep-${i}">What is wrong with this answer?</label>
+    <textarea id="milo-rep-${i}" rows="3" maxlength="600" placeholder="For example: the P/E it gives is not the one on the Overview">${r.text || ''}</textarea>
+    ${r.err ? html`<p class="milo-report-err" role="alert">${r.err}</p>` : ''}
+    <p class="asof">Sent to the people who run Optic with the question and the first part of the answer. It does not train or change Milo.</p>
+    <div class="cluster"><button type="submit" class="btn btn-sm" ${r.busy ? 'disabled' : ''}>${r.busy ? 'Sending...' : 'Send report'}</button><button type="button" class="btn btn-quiet btn-sm" data-v2-milo-report-cancel>Cancel</button></div></form>`;
+}
+async function sendReport(i, text) {
+  const q = String((S.conv.messages[i - 1] || {}).content || ''), a = String((S.conv.messages[i] || {}).content || '');
+  const head = `${text.trim().slice(0, 600)}\n\nMilo answer report\nQuestion: ${q.slice(0, 300)}\nAnswer: `;
+  S.report = { i, text, busy: true }; paintLog(false);
+  try {
+    await api.post('/api/feedback', { message: head + a.slice(0, Math.max(200, 1990 - head.length)), page: `Milo, ${contextLabel('auto')}`.slice(0, 200) });
+    S.report = { i, sent: true };
+  } catch (e) { S.report = { i, text, err: api.explain(e, 'The report') }; }
+  paintLog(false);
 }
 /** The instruments an answer's data concerns: what the server loaded for the question and what Milo looked up,
  * apart from the page it was asked from. */
@@ -444,11 +472,29 @@ function attachedLine() {
   return `${contextLabel('auto')} attached`;
 }
 const placeholder = () => { const sym = S.scope === 'auto' ? onSymbol() : null; return sym ? `Ask about ${sym}` : 'Ask Milo'; };
+// What the page's context holds, by name, so the reader sees what goes with the question and can take a part out
+// (motion proposal, 2026-10-24). Read from the same buildContext() that Send uses; nothing here is a summary of it.
+// the Chart page's bar sizes as its menu names them: '60' is 1h, 'daily' 1D
+const barWord = (k) => { const n = Number(k); return Number.isFinite(n) && n > 0 ? (n >= 60 ? `${n / 60}h` : `${n}m`) : ({ daily: '1D', weekly: '1W' }[k] || String(k || '')); };
+const partName = (k) => String(k).replace(/_/g, ' ').replace(/([a-z])([A-Z])/g, '$1 $2').replace(/^./, (x) => x.toUpperCase());
+function attachedParts() {
+  if (S.scope !== 'auto') return '';
+  const ctx = buildContext('auto'), f = ctx.focus || {};
+  // `view` only names the page, which the focus already says
+  const parts = Object.keys(ctx).filter((k) => k !== 'focus' && k !== 'view' && ctx[k] !== null && ctx[k] !== undefined && ctx[k] !== '');
+  const dropped = [...S.dropped];
+  if (!parts.length && !dropped.length) return html`<p class="milo-parts-none">This page sends no figures of its own: only which page it is${f.ticker ? ` and ${f.ticker}` : ''}.</p>`;
+  return html`<details class="more-inline milo-parts" ${S.partsOpen ? 'open' : ''}><summary>What is attached: ${parts.length} part${parts.length === 1 ? '' : 's'}${f.ticker ? `, ${f.ticker}` : ''}${f.chart ? `, ${barWord(f.chart.interval)} bars${f.chart.range ? `, ${f.chart.range}` : ''}` : ''}</summary>
+    <ul class="milo-parts-l">${parts.map((k) => html`<li><span>${partName(k)}</span><button type="button" class="textlink" data-v2-milo-drop="${k}" aria-label="Remove ${partName(k)} from what Milo receives">Remove</button></li>`)}
+      ${dropped.map((k) => html`<li class="is-off"><span>${partName(k)}, removed</span><button type="button" class="textlink" data-v2-milo-undrop="${k}">Put back</button></li>`)}</ul>
+    <p class="asof">Read from the page when you press Send. Removed parts stay out until you change page.</p></details>`;
+}
 function ctxHTML() {
   const opts = [['auto', `This page: ${contextLabel('auto')}`, 'The figures on the page you have open.'], ['market', SCOPES.market, "The market's state: indices, sectors and the macro read. No company."], ['none', SCOPES.none, 'Your question and this conversation only.']];
   return html`<div class="milo-ctx"><div class="milo-ctx-l">
       <details class="menu milo-ctx-pick"><summary class="milo-ctx-btn" title="What Milo receives with your question"><span class="sr">What Milo receives: </span><span class="milo-ctx-now">${contextShort()}</span>${icon('chev')}</summary>
         <div class="menu-body milo-ctx-menu" role="group" aria-label="What Milo receives">${opts.map(([k, l, d]) => html`<button type="button" class="milo-ctx-opt" aria-pressed="${S.scope === k ? 'true' : 'false'}" data-v2-milo-scope="${k}">${S.scope === k ? icon('check') : html`<span class="milo-ctx-gap"></span>`}<span><b>${l}</b><small>${d}</small></span></button>`)}</div></details>
+      ${attachedParts()}
       <p class="milo-ctx-meta"><span>${freshness()} Not financial advice.</span><button type="button" class="milo-info-btn" data-v2-milo-info aria-expanded="${S.showInfo ? 'true' : 'false'}" aria-controls="milo-info" aria-label="About Milo's data and its limits" title="About Milo's data and its limits">${icon('info')}</button></p></div>
     <button type="button" class="btn btn-quiet btn-sm milo-set-btn" data-v2-milo-settings aria-expanded="${S.showSettings ? 'true' : 'false'}" aria-controls="milo-settings" title="Response settings: Level and Timeframe">${icon('sliders')}<span class="milo-set-l">Response settings</span></button>
     ${settingsHTML()}</div>
@@ -541,7 +587,7 @@ function paintLive() {
     const text = L.text, cut = text.lastIndexOf('\n\n');
     const settled = cut > 0 ? renderAnswer(text.slice(0, cut), L.symbol).html : '';
     const got = (L.got || []).filter((r) => r && r.ok !== false).map((r) => r.label || (r.symbols || []).join(', ')).filter(Boolean);
-    node.innerHTML = `${settled}<p class="milo-tail">${esc(streamingTail(cut > 0 ? text.slice(cut + 2) : text))}</p>${L.status ? `<p class="milo-status" role="status">${esc(L.status)}…</p>` : ''}${got.length ? `<p class="milo-sofar">Looked up so far: ${esc([...new Set(got)].join('; '))}. Every source is listed when the answer is complete.</p>` : ''}`;
+    node.innerHTML = `${settled}<p class="milo-tail">${esc(streamingTail(cut > 0 ? text.slice(cut + 2) : text))}</p>${L.status ? `<p class="milo-status" role="status">${esc(L.status)}…</p>` : ''}${L.quiet ? `<p class="milo-quiet" role="status">${esc(QUIET_TEXT)}</p>` : ''}${got.length ? `<p class="milo-sofar">Looked up so far: ${esc([...new Set(got)].join('; '))}. Every source is listed when the answer is complete.</p>` : ''}`;
     mountAnswerCharts(node); mountAnswerFigures(node);
     const log = $('.milo-log', h); if (log && log.scrollHeight - log.scrollTop - log.clientHeight < 120) log.scrollTop = log.scrollHeight;
     syncLatest(); paintForm();
@@ -599,12 +645,14 @@ export async function send(text) {
   const ai = S.conv.messages.length; // index the answer will take
   S.conv.messages.push({ role: 'assistant', content: '' }); S.items.push({ kind: 'msg', i: ai });
   meta.set(ai, { question: text, symbol: focusTicker || route.symbol || null, context });
-  S.busy = true; S.live = { i: ai, text: '', status: MILO_STATES.submitted, symbol: focusTicker || route.symbol || null };
+  S.busy = true; S.live = { i: ai, text: '', status: MILO_STATES.submitted, symbol: focusTicker || route.symbol || null, lastAt: performance.now(), quiet: false };
   if (ta) { ta.value = ''; grow(ta); } S.draft = ''; S.showHistory = false; S.showSettings = false; S.toEnd = true;
   paintChrome(); paintLog(); paintForm(); paintLive();
   scoutTo(ai, 'thinking', 'ack');
   const ctl = new AbortController(); S.abort = ctl; S.sentAt = performance.now();
   let finished = false, ended = '', failed = null;
+  const heard = () => { if (!S.live) return; S.live.lastAt = performance.now(); if (S.live.quiet) { S.live.quiet = false; paintLive(); } };
+  const quietT = setInterval(() => { if (S.live && !S.live.quiet && performance.now() - S.live.lastAt > QUIET_MS) { S.live.quiet = true; paintLive(); } }, 2000);
   try {
     const res = await fetch('/api/chat', {
       method: 'POST', credentials: 'same-origin', signal: ctl.signal,
@@ -612,6 +660,7 @@ export async function send(text) {
       body: JSON.stringify({ messages: S.conv.messages.slice(0, ai).map((m) => ({ role: m.role, content: m.content })), context, web: false, attachments: [], persona: persona(), mode: prefs.knowledge(), horizon: horizon() }),
     });
     // the server has the question and has put its context together: the answer is being prepared
+    heard();
     if (res.ok && S.live && !S.live.text) { S.live.status = MILO_STATES.preparing; paintLive(); }
     if (!res.ok || !res.body) {
       let d = null; try { d = await res.json(); } catch (e) { /* not json */ }
@@ -625,7 +674,7 @@ export async function send(text) {
         let step;
         try { step = await reader.read(); } catch (e) { ended = ctl.signal.aborted ? 'stopped' : 'cut'; break; } // eslint-disable-line no-await-in-loop
         if (step.done) break;
-        buf += dec.decode(step.value, { stream: true });
+        buf += dec.decode(step.value, { stream: true }); heard();
         const chunks = buf.split('\n\n'); buf = chunks.pop();
         for (const c of chunks) {
           let ev = 'message', data = '';
@@ -646,6 +695,7 @@ export async function send(text) {
     if (ctl.signal.aborted) ended = 'stopped';
     else failed = { text: offlineOr('') };
   }
+  clearInterval(quietT);
   const reply = S.live ? S.live.text : '';
   S.live = null; S.busy = false; S.abort = null;
   if (failed && !reply) {
@@ -858,7 +908,20 @@ function setSettings(open, refocus = true) {
 }
 
 function wire(root) {
-  root.addEventListener('submit', (e) => { if (e.target.closest('[data-v2-milo-form]')) { e.preventDefault(); send($('#milo-q', root).value); } });
+  root.addEventListener('submit', (e) => {
+    if (e.target.closest('[data-v2-milo-form]')) { e.preventDefault(); send($('#milo-q', root).value); return; }
+    const rf = e.target.closest('[data-v2-milo-report-form]');
+    if (rf) {
+      e.preventDefault();
+      const i = Number(rf.dataset.v2MiloReportForm), text = ($('textarea', rf) || {}).value || '';
+      if (!text.trim()) { S.report = { i, text, err: 'Say what is wrong first, in a few words.' }; paintLog(false); const ta = $('.milo-report textarea', root); if (ta) ta.focus(); return; }
+      sendReport(i, text);
+    }
+  });
+  // the attached list stays open or shut as the reader left it when the chrome redraws (toggle does not bubble)
+  root.addEventListener('toggle', (e) => { if (e.target.classList && e.target.classList.contains('milo-parts')) S.partsOpen = e.target.open; }, true);
+  // a report being written survives the log redrawing under it
+  root.addEventListener('input', (e) => { if (S.report && e.target.matches && e.target.matches('.milo-report textarea')) S.report.text = e.target.value; });
   root.addEventListener('keydown', (e) => { if (e.target.id === 'milo-q' && e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); send(e.target.value); } });
   // Escape closes what is open inside the panel first (a menu, then Response settings, focus back to its button),
   // and only then the panel: the drawer's own Escape would otherwise shut everything at once
@@ -917,7 +980,7 @@ function wire(root) {
     if ((b = t('[data-v2-milo-pp]'))) { pickPersona(b.dataset.v2MiloPp, root, true); return; }
     if ((b = t('[data-v2-milo-hz]'))) { setPref(HORIZON_KEY, b.dataset.v2MiloHz); paintChrome(); const hb = $(`[data-v2-milo-hz="${b.dataset.v2MiloHz}"]`, root); if (hb) hb.focus(); return; }
     if ((b = t('[data-v2-milo-start]'))) { send(b.dataset.v2MiloStart); return; }
-    if (t('[data-v2-milo-latest]')) { const log = $('.milo-log', root); if (log) log.scrollTo({ top: log.scrollHeight, behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' }); return; }
+    if (t('[data-v2-milo-latest]')) { const log = $('.milo-log', root); if (log) log.scrollTo({ top: log.scrollHeight, behavior: reducedMotion() ? 'auto' : 'smooth' }); return; }
     if (t('[data-v2-milo-stop]')) { stop(); return; }
     if (t('[data-v2-milo-history-close]')) { toggleHistory(false); return; }
     if (t('[data-v2-milo-history]')) { toggleHistory(); return; }
@@ -933,6 +996,21 @@ function wire(root) {
     if ((b = t('[data-v2-milo-del]'))) { const id = b.dataset.v2MiloDel; saveHistory(loadHistory().filter((c) => c.id !== id)); if (S.conv.id === id && !S.busy) { S.conv = blankConv(); S.items = []; meta.clear(); } paintChrome(); paintLog(false); const hd = $('#milo-hist-h', root); if (hd) { hd.setAttribute('tabindex', '-1'); hd.focus({ preventScroll: true }); } return; }
     if ((b = t('[data-v2-milo-follow]'))) { const ta = $('#milo-q', root); if (ta) { ta.value = b.dataset.v2MiloFollow; S.draft = ta.value; grow(ta); ta.focus(); scoutListen(ta.value); } return; }
     if ((b = t('[data-v2-milo-again]'))) { const q = (meta.get(Number(b.dataset.v2MiloAgain)) || {}).question; const ta = $('#milo-q', root); if (q && ta) { ta.value = q; S.draft = q; grow(ta); ta.focus(); } return; }
+    if ((b = t('[data-v2-milo-report]'))) {
+      const i = Number(b.dataset.v2MiloReport);
+      S.report = S.report && S.report.i === i ? null : { i, text: '' }; paintLog(false);
+      const form = S.report && $(`[data-v2-milo-report-form="${i}"]`, root);
+      if (form) { form.scrollIntoView({ block: 'nearest' }); $('textarea', form).focus({ preventScroll: true }); }
+      return;
+    }
+    if (t('[data-v2-milo-report-cancel]')) { const i = S.report && S.report.i; S.report = null; paintLog(false); const rb = $(`[data-v2-milo-report="${i}"]`, root); if (rb) rb.focus(); return; }
+    if ((b = t('[data-v2-milo-drop]')) || (b = t('[data-v2-milo-undrop]'))) {
+      const k = b.dataset.v2MiloDrop || b.dataset.v2MiloUndrop;
+      if (b.dataset.v2MiloDrop) S.dropped.add(k); else S.dropped.delete(k);
+      S.partsOpen = true; paintChrome();
+      const again = $('.milo-parts summary', root); if (again) again.focus();
+      return;
+    }
     if ((b = t('[data-v2-milo-copy]'))) {
       const m = S.conv.messages[Number(b.dataset.v2MiloCopy)] || {}; const txt = sourcesAsText(String(m.content || '').split(/\n(?:→|->) /)[0]);
       const lab = $('span', b) || b;

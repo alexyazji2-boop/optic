@@ -64,14 +64,17 @@ def test_the_cone_shows_its_outlook():
 
 def test_the_draw_on_runs_once_as_the_chart_first_draws_never_on_scroll():
     src = (JS / "ui/drawon.js").read_text()
-    assert "IntersectionObserver" not in src and "scroll" not in src.split("*/")[-1].split("export function")[1]
-    assert "prefers-reduced-motion: reduce" in src and "return none" in src
-    assert "DRAW_MS = 620, FADE_MS = 300, STAGGER_MS = 70" in src, "the classic timings"
+    assert "IntersectionObserver" not in src and "scroll" not in src.split("export function")[1]
+    assert "import { reducedMotion as reduced } from '../core/dom.js';" in src and "return none" in src
+    # the owner chose 400 ms on 2026-10-24 (motion proposal, decision 3); it was Classic's 620 ms
+    assert "tok('--m-reveal', 400)" in src, "the timing is the token"
     mount = CHART[CHART.index("const fresh = !el._drawn;"):CHART.index("const drawnOn = new WeakMap();")]
     assert "at === undefined || performance.now() - at < 900" in mount, "once per visit, and a double paint drawn too"
     pc = (JS / "ui/pricechart.js").read_text()
     assert "if (first) { first = false; if (S.animate !== false && !S.view && (S.style === 'line' || S.style === 'area'))" in pc
-    assert "if (anim && anim.busy())" in pc, "a redraw waits for the line rather than cutting it off"
+    # a redraw no longer waits for the line (it held figures back up to 620 ms): it carries the trace on over the same
+    # bars and ends it on a zoom, a pan or a new bar (2026-10-24)
+    assert "anim.carry(); else { anim.finish(); anim = null; }" in pc
 
 
 # ---------- Milo ----------

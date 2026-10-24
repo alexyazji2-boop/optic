@@ -269,11 +269,11 @@ export function createPriceChart(host, opts) {
   const path = (vals, X, Y) => { let d = '', pen = false; for (let i = from; i <= to; i++) { const v = vals[i]; if (v === null || v === undefined || !Number.isFinite(v)) { pen = false; continue; } d += `${pen ? 'L' : 'M'}${X(i).toFixed(1)} ${Y(v).toFixed(1)}`; pen = true; } return d; };
 
   // the classic draw-on, once, on a line or area chart's first draw; not on a rebuild that keeps the view
-  // (a pane added, a refresh), and other redraws wait until the line has drawn rather than cut it off
-  let anim = null, first = true, holdT = 0;
+  // (a pane added, a refresh). Any later redraw (a tick, the crosshair, a resize) ends it at once: the figures are
+  // never held back for it (it used to make redraws wait up to 620 ms)
+  let anim = null, animWin = '', first = true, holdT = 0, drawnW = -1;
   function draw() {
-    raf = 0;
-    if (anim && anim.busy()) { if (!holdT) holdT = setTimeout(() => { holdT = 0; redraw(); }, 140); return; }
+    raf = 0; drawnW = host.clientWidth;
     layout = computeLayout();
     const { X, bw, panes } = layout;
     const pp = panes[0], ps = priceScale(pp); layout.ps = ps;
@@ -342,6 +342,11 @@ export function createPriceChart(host, opts) {
     if (S.overlays.bb) o += `<path class="ov bb" d="${path(ind.bb.up, X, ps.Y)}"/><path class="ov bb" d="${path(ind.bb.dn, X, ps.Y)}"/><path class="ov bbm" d="${path(ind.bb.mid, X, ps.Y)}"/>`;
     if (S.overlays.ma) [['sma20', 'm1'], ['sma50', 'm2'], ['sma200', 'm3']].forEach(([k, c]) => { o += `<path class="ov ${c}" d="${path(ind[k], X, ps.Y)}"/>`; });
     if (S.overlays.ema) [['ema9', 'e1'], ['ema21', 'e2'], ['ema50', 'e3']].forEach(([k, c]) => { o += `<path class="ov ${c}" d="${path(ind[k], X, ps.Y)}"/>`; });
+    // the EMAs and VWAP named at the right end of what is in view (owner, 2026-10-24): colour alone told them apart
+    const ends = [];
+    const endOf = (vals) => { if (!vals) return null; for (let i = to; i >= from; i--) if (Number.isFinite(vals[i])) return vals[i]; return null; };
+    if (S.overlays.ema) [['ema9', 'e1', 'EMA 9'], ['ema21', 'e2', 'EMA 21'], ['ema50', 'e3', 'EMA 50']].forEach(([k, c, t]) => { const v = endOf(ind[k]); if (v !== null) ends.push({ v, c, t }); });
+    if (OV.vwap && SD.lines && SD.lines.vwap) SD.lines.vwap.forEach((ln) => { const v = endOf(ln.values); if (v !== null) ends.push({ v, c: 'vw', t: 'VWAP' }); });
     // price
     // candle colours: MA Trend's (above all five averages, below all five, between) over Weinstein stages
     const tint = OV.matrend ? (i) => (ind.mat[i] === 1 ? ' tint mt1' : ind.mat[i] === -1 ? ' tint mt4' : ind.mat[i] === 0 ? ' tint mt0' : '')
@@ -362,6 +367,11 @@ export function createPriceChart(host, opts) {
     // the last price, as the classic chart marks it: a dashed line across the plot and its value tagged on the axis
     // green or red with the day's move: on intraday bars against the last close of the session before
     { const lb = bars[N - 1], v = lb && lb.c; let pb = bars[N - 2]; if (S.intraday && lb) { const d = nyDate(lb.t); for (let j = N - 2; j >= 0; j--) if (nyDate(bars[j].t) !== d) { pb = bars[j]; break; } } if (Number.isFinite(v) && v >= ps.lo && v <= ps.hi) { const y = ps.Y(v).toFixed(1), up = !pb || v >= pb.c; o += `<line class="lastp ${up ? 'up' : 'dn'}" x1="0" x2="${W - layout.r}" y1="${y}" y2="${y}"/>`; layout.last = { y, up, v }; } else layout.last = null; }
+    // the end labels, right-aligned inside the plot, drawn after the markers so nothing covers them; where two would
+    // overlap the lower one steps down
+    let endsSvg = '';
+    { const pl = ends.filter((e) => e.v >= ps.lo && e.v <= ps.hi).map((e) => Object.assign(e, { y: ps.Y(e.v) + 4 })).sort((a, b) => a.y - b.y); let last = -Infinity;
+      pl.forEach((e) => { e.y = Math.min(pp.y1 - 2, Math.max(e.y, last + 13)); last = e.y; endsSvg += `<text class="endl ${e.c}" x="${(right - 6).toFixed(1)}" y="${e.y.toFixed(1)}" text-anchor="end">${e.t}</text>`; }); }
     // the stage of each run named along the foot of the price, where there is room
     if (OV.stages && !OV.matrend && SD.stages && S.style === 'candles') { let a = from; for (let i = from; i <= to + 1; i++) { if (i <= to && SD.stages[i] === SD.stages[a]) continue; const n = SD.stages[a]; if (n && (i - a) * bw > 96) o += `<text class="st-t st${n}" x="${(X(a) - bw / 2 + 4).toFixed(1)}" y="${(pp.y1 - 5).toFixed(1)}">Stage ${n}, ${esc((S.stageNames || {})[n] || '')}</text>`; a = i; } }
     // market structure breaks: the level dotted from the swing bar to the bar that confirmed it (before it
@@ -454,6 +464,7 @@ export function createPriceChart(host, opts) {
       }
     });
     if (layout.last) o += `<rect class="lastp-tag ${layout.last.up ? 'up' : 'dn'}" x="${W - layout.r + 2}" y="${layout.last.y - 9}" width="${layout.r - 4}" height="18" rx="3"/><text class="lastp-t" x="${W - layout.r + 6}" y="${Number(layout.last.y) + 4}">${num(layout.last.v, layout.last.v < 10 ? 2 : layout.last.v < 1000 ? 2 : 0)}</text>`;
+    o += endsSvg;
     // crosshair
     if (cross >= from && cross <= to) {
       const x = X(cross).toFixed(1);
@@ -462,8 +473,11 @@ export function createPriceChart(host, opts) {
     }
     svg.setAttribute('viewBox', `0 0 ${W} ${H}`); svg.setAttribute('width', W); svg.setAttribute('height', H);
     svg.innerHTML = o;
+    // a draw-on under way carries on while the same bars are in view (a settling redraw, a rescaled price axis, the
+    // crosshair); a zoom, a pan or a new bar ends it on the spot. Either way the figures drawn are the current ones.
+    if (anim) { if (anim.busy() && animWin === `${from}:${to}:${N}:${S.style}`) anim.carry(); else { anim.finish(); anim = null; } }
     if (ms) fitPlate();
-    if (first) { first = false; if (S.animate !== false && !S.view && (S.style === 'line' || S.style === 'area')) anim = drawOn(svg, { lines: '.pline', fades: '.area' }); }
+    if (first) { first = false; if (S.animate !== false && !S.view && (S.style === 'line' || S.style === 'area')) { anim = drawOn(svg, { lines: '.pline', fades: '.area' }); animWin = `${from}:${to}:${N}:${S.style}`; } }
     svg.setAttribute('aria-label', summary());
     readout();
     const zoomed = from !== home0.from || to !== home0.to || yZoom !== 1;
@@ -1098,7 +1112,8 @@ export function createPriceChart(host, opts) {
   /** Back to the bars the chart opened on, and a stretched price scale back to 1. */
   function home() { from = home0.from; to = home0.to; yZoom = 1; redraw(); }
 
-  const ro = new ResizeObserver(() => redraw()); ro.observe(host);
+  // only a change of width redraws: the observer's first call, just after the first draw, would otherwise end the draw-on
+  const ro = new ResizeObserver(() => { if (host.clientWidth !== drawnW) redraw(); }); ro.observe(host);
   syncTouch();
   draw();
 
