@@ -95,6 +95,14 @@ One family, the line icons in `ui/icons.js`: a 24px grid, a stroke of about 1.6 
 - **The Motion setting** (Settings, Appearance; `optic.v2.motion.v1`): "Follow system" or "Reduce". Reduce sets `html[data-motion="reduce"]`, which the CSS and `reducedMotion()` in `core/dom.js` treat exactly as the system setting, and Scout goes still with it unless the reader chose his motion.
 - **Milo's states** are only those an event supports: submitted, preparing, retrieving (the server's own tool words), streaming, complete, stopped, failed (`MILO_STATES` in `ui/milo.js`). After 30 seconds with nothing from the server, the answer says "No reply from the server for 30 seconds" beside Stop, and the line goes when anything arrives. Milo's context bar lists the parts of the page that go with a question, each removable until the reader changes page. Each answer has Report a problem, which goes to the operator's problem reports with the question and answer, and says it does not train the model.
 
+### Phase 2 of the motion proposal (2026-10-24)
+- **Keyboard:** `?` outside a field opens the one list of shortcuts (`ui/shortcuts.js`); every key on it is one the code handles, and a test pairs them. In the search box, `>` first lists pages and actions only.
+- **Linked panels on Home** say "Follows NVDA" on a squared marker; pressing it keeps that panel's ticker ("Kept on NVDA", dashed) until pressed again. One function, `symOf(id)`, is the ticker a panel loads and paints.
+- **One More menu per ticker** (`tickerMenu` in `ui/company.js`) on the Dossier header and the company drawer. Copy price copies the figure on screen with the words that date it, never one that is not shown.
+- **SEC filing marks** on the price chart come from the ticker payload's EDGAR list, on their filing dates, off by default; the note says only the latest are marked.
+- **Compare** (Chart, Layers): up to three symbols in percent from a stated start bar, the first bar at or after the start's moment. Bars are matched by time; a missing bar is a gap. Yields are refused. Layers in price and the drawing tools stand aside while comparing.
+- **Crosshair sync:** charts given the same `sync` group follow each other by date (Options: price, RSI and MACD; Brokerage: return and value). Each shows its own figure; a chart with no point on that date says so.
+
 ### Price chart indicators
 The owner's mapping (2026-10-24): VWAP the one cool hue (the indicator exception to "no purple"), EMA 50 red and dashed, EMA 21 green, EMA 9 the ink, white on charcoal. Tokens `--c-ind-vwap`, `--c-ind-ema50`, `--c-ind-ema21`, `--c-ind-ema9` in `css/tokens.css`. The red and green are deeper and shifted from `--c-neg` and `--c-pos` so a line never reads as a candle, every one clears 4.5:1 on a panel in both themes, and each line is named at its right end in its own colour (`.endl` in `ui/pricechart.js`), so none is identified by colour alone.
 

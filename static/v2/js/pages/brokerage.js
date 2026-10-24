@@ -327,13 +327,14 @@ function performance(d) {
 function perfCharts(d) {
   const ser = (d.series || []).filter((p) => isNum(p.cum_twr_pct)), out = {};
   if (ser.length >= 2) {
-    out.cum = (w) => lineChart(ser.map((p) => ({ d: p.date, c: p.cum_twr_pct })), { measure: 'points', msUnit: ' pts', w, h: 220, dp: 1, label: 'Your time-weighted return, %', overlays: [{ values: ser.map((p) => (isNum(p.cum_benchmark_pct) ? p.cum_benchmark_pct : NaN)), cls: 'c2' }, { values: ser.map(() => 0), cls: 'c0' }],
+    // the two charts follow each other's crosshair by date (ui/chart.js sync), each in its own unit
+    out.cum = (w) => lineChart(ser.map((p) => ({ d: p.date, c: p.cum_twr_pct })), { sync: 'bk-perf', measure: 'points', msUnit: ' pts', w, h: 220, dp: 1, label: 'Your time-weighted return, %', overlays: [{ values: ser.map((p) => (isNum(p.cum_benchmark_pct) ? p.cum_benchmark_pct : NaN)), cls: 'c2' }, { values: ser.map(() => 0), cls: 'c0' }],
       summary: `Cumulative time-weighted return ${pct(ser[ser.length - 1].cum_twr_pct, 1, true)} against the benchmark's ${pct(ser[ser.length - 1].cum_benchmark_pct, 1, true)}, ${day(ser[0].date)} to ${day(ser[ser.length - 1].date)}.` });
   }
   const vals = (d.series || []).filter((p) => isNum(p.value));
   if (vals.length > 1) {
     let cum = 0; const net = vals.map((p) => { cum += Number(p.net_flow || 0); return cum; }); const base = Number(vals[0].value) - net[0];
-    out.val = (w) => lineChart(vals.map((p) => ({ d: p.date, c: Number(p.value) })), { w, h: 180, dp: 0, label: 'Account value', overlays: [{ values: net.map((n) => base + n), cls: 'c0' }] });
+    out.val = (w) => lineChart(vals.map((p) => ({ d: p.date, c: Number(p.value) })), { sync: 'bk-perf', w, h: 180, dp: 0, label: 'Account value', overlays: [{ values: net.map((n) => base + n), cls: 'c0' }] });
   }
   return out;
 }

@@ -525,7 +525,7 @@ function mountPrice() {
     ...(eh.upcoming || []).map((q) => ({ t: Date.parse(q.date), kind: 'E', label: `Next report ${q.date}` }))].filter((e) => isNum(e.t));
   pc = createPriceChart(host, Object.assign(kept, {
     bars, style: 'candles', overlays: { ma: true, events: true, ins: true }, panes: { volume: true, rsi: false, macd: false },
-    insiders, events: er, window: 126, label: `${sym}, daily bars`, height: Math.max(280, Math.min(420, Math.round(window.innerHeight * 0.5))),
+    insiders, events: er, window: 126, label: `${sym}, daily bars`, sync: 'opt-daily',   // follows RSI and MACD below by date, and they it height: Math.max(280, Math.min(420, Math.round(window.innerHeight * 0.5))),
     onInsider: () => { location.hash = `#/insiders?symbol=${encodeURIComponent(sym)}&view=insiders`; },
   }));
 }

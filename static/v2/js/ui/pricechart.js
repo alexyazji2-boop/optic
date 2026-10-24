@@ -233,6 +233,9 @@ export function createPriceChart(host, opts) {
   // the box that names an insider trade under the pointer (or the keyboard's bar); `flags` are the arrows drawn
   const tipEl = document.createElement('div'); tipEl.className = 'pc-tip'; tipEl.setAttribute('role', 'tooltip'); tipEl.hidden = true; host.appendChild(tipEl);
   let flags = [], hoverP = null, fileMarks = [];
+  // crosshair sync with the page's line charts of the same `sync` group, by date, on daily and weekly bars only
+  // (ui/chart.js has the other half); `told` is the date last sent or taken, so a date taken is not sent back
+  const SYNC_ID = `pc${clipSeq}`; let told;
 
   // daily and weekly bars are dates (UTC midnight); intraday bars are moments in New York
   // a page can name its own bars (`when`: the Investing tab's weeks and months), else the date or the moment
@@ -685,6 +688,10 @@ export function createPriceChart(host, opts) {
     tipEl.style.left = `${Math.round(left)}px`; tipEl.style.top = `${Math.round(top)}px`;
   }
   function readout() {
+    if (S.sync && !S.intraday) {
+      const d = cross >= 0 && bars[cross] ? new Date(bars[cross].t).toISOString().slice(0, 10) : null;
+      if (d !== told) { told = d; document.dispatchEvent(new CustomEvent('v2:xsync', { detail: { group: S.sync, d, src: SYNC_ID } })); }
+    }
     insiderTip();
     const i = cross >= 0 ? cross : to, b = bars[i];
     if (!b) { read.textContent = ''; return; }
@@ -1183,6 +1190,16 @@ export function createPriceChart(host, opts) {
 
   // only a change of width redraws: the observer's first call, just after the first draw, would otherwise end the draw-on
   const ro = new ResizeObserver(() => { if (host.clientWidth !== drawnW) redraw(); }); ro.observe(host);
+  const onSync = (e) => {
+    const q = e.detail || {};
+    if (!S.sync || S.intraday || q.group !== S.sync || q.src === SYNC_ID) return;
+    if (drag || tg) return;   // the reader has this chart in hand
+    told = q.d;
+    if (q.d === null) { cross = -1; crossY = null; redraw(); return; }
+    const i = bars.findIndex((b) => new Date(b.t).toISOString().slice(0, 10) === q.d);
+    cross = i >= 0 && i >= from && i <= to ? i : -1; crossY = null; redraw();
+  };
+  document.addEventListener('v2:xsync', onSync);
   syncTouch();
   draw();
 
@@ -1212,7 +1229,7 @@ export function createPriceChart(host, opts) {
     keep: () => ({ view: { from, to }, history: { undo, redo }, yZoom }),
     deleteSelected() { if (sel >= 0) { commit(S.drawings.filter((_, j) => j !== sel)); sel = -1; } },
     clearDrawings() { commit([]); },
-    destroy() { ro.disconnect(); clearTimeout(holdT); anim = null; unregisterChart(wheelHandle); document.removeEventListener('keydown', pageKey); cancelAnimationFrame(acc.raf); if (tg) clearTimeout(tg.hold); document.documentElement.classList.remove('pc-touching'); },
+    destroy() { document.removeEventListener('v2:xsync', onSync); ro.disconnect(); clearTimeout(holdT); anim = null; unregisterChart(wheelHandle); document.removeEventListener('keydown', pageKey); cancelAnimationFrame(acc.raf); if (tg) clearTimeout(tg.hold); document.documentElement.classList.remove('pc-touching'); },
     focus() { svg.focus(); },
   };
 }

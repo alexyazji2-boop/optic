@@ -142,7 +142,12 @@ export function lineChart(series, opts = {}) {
     const el = root.querySelector('#' + id); if (!el) return;
     const tip = el.nextElementSibling, xh = el.querySelector('.xh');
     let k = pts.length - 1;
-    const show = (i) => {
+    // crosshair sync (motion proposal Phase 2, 2026-10-24): charts on a page given the same `sync` group follow each
+    // other's crosshair by date. Each shows its own figure, in its own unit, for that date; one with no point on that
+    // date says so rather than show the nearest
+    const group = opts.sync || '';
+    const tell = (d) => { if (group) document.dispatchEvent(new CustomEvent('v2:xsync', { detail: { group, d, src: id } })); };
+    const show = (i, synced = false) => {
       k = i;
       const p = pts[i], x = X(i), y = Y(p.c);
       xh.style.display = '';
@@ -151,7 +156,9 @@ export function lineChart(series, opts = {}) {
       const ev = (opts.events || []).find((e) => at(e.d) === i) || (() => { const m = marks.find((x) => x.i === i); return m ? { label: m.label, detail: m.detail } : null; })();
       tip.style.display = '';
       tip.innerHTML = `<b>${num(p.c, dp)}</b> <span>${fullDate(p.d)}</span>${ev ? `<em>${esc(ev.label)}${ev.detail ? ', ' + esc(ev.detail) : ''}</em>` : ''}${opts.tipMore ? `<em>${esc(opts.tipMore(i) || '')}</em>` : ''}`;
+      tip.classList.toggle('is-synced', synced);
       place(x / W);
+      if (!synced) tell(p.d);
     };
     // the tip centred on a point of the chart (a fraction of its width) and kept inside it, measured at its real width
     // (a phone's text is larger); one wider than the chart stacks its dates and wraps instead of running off the screen
@@ -162,7 +169,7 @@ export function lineChart(series, opts = {}) {
       if (tw > box.width) { tip.classList.add('is-narrow'); tw = tip.offsetWidth || box.width; }
       tip.style.left = Math.max(0, Math.min(box.width - tw, f * box.width - tw / 2)) + 'px';
     }
-    const hide = () => { if (measuring()) return; xh.style.display = 'none'; tip.style.display = 'none'; tip.style.top = ''; };
+    const hide = () => { if (measuring()) return; xh.style.display = 'none'; tip.style.display = 'none'; tip.style.top = ''; tell(null); };
     // ---- measuring (docs/frontend-v2/CHART-GESTURES.md): explicit only, never a plain drag or a scroll
     const wrap = el.parentElement, ms = el.querySelector('.ms'), btn = wrap.querySelector('[data-chart-measure]'), say = wrap.querySelector('[data-ms-say]');
     let mOn = false, anchor = null, end = null, drag = null, hold = null, keyM = false, hx = 0, hy = 0;
@@ -184,7 +191,7 @@ export function lineChart(series, opts = {}) {
       place(((xa + xb) / 2) / W);
       return r;
     }
-    function clearMs() { anchor = null; end = null; drag = null; keyM = false; if (ms) ms.style.display = 'none'; tip.style.display = 'none'; xh.style.display = 'none'; }
+    function clearMs() { anchor = null; end = null; drag = null; keyM = false; if (ms) ms.style.display = 'none'; tip.style.display = 'none'; xh.style.display = 'none'; tell(null); }
     const announce = (r) => { if (say && r && r.i !== r.j) say.textContent = `Measured ${r.span}: ${r.head}.`; };
     const setMode = (on) => { mOn = on; if (btn) btn.setAttribute('aria-pressed', String(on)); wrap.classList.toggle('is-measuring', on); if (!on) clearMs(); };
     if (btn) btn.addEventListener('click', () => setMode(!mOn));
@@ -291,6 +298,20 @@ export function lineChart(series, opts = {}) {
       else if (e.key === 'Home') { onCone = false; show(0); e.preventDefault(); }
       else if (e.key === 'End') { onCone = false; show(pts.length - 1); e.preventDefault(); }
     });
+    if (group) {
+      const onSync = (e) => {
+        const q = e.detail || {};
+        if (q.group !== group || q.src === id) return;
+        if (!el.isConnected) { document.removeEventListener('v2:xsync', onSync); return; }
+        if (measuring()) return;
+        if (q.d === null) { xh.style.display = 'none'; tip.style.display = 'none'; return; }
+        const i = pts.findIndex((p) => p.d === q.d);
+        if (i >= 0) { show(i, true); return; }
+        xh.style.display = 'none'; tip.style.display = ''; tip.classList.add('is-synced');
+        tip.innerHTML = `<span>No figure on ${fullDate(q.d)}</span>`; place(1);
+      };
+      document.addEventListener('v2:xsync', onSync);
+    }
     if (opts.onEvent) {
       el.querySelectorAll('.ev-mark').forEach((g) => {
         g.addEventListener('click', () => opts.onEvent(g.dataset.ev, g));

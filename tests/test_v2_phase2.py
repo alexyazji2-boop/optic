@@ -157,3 +157,30 @@ def test_a_yield_is_refused_and_the_start_is_stated():
 def test_range_buttons_open_the_range_on_the_same_bars():
     assert "function newRange() { const k = chart ? chart.keep() : {}; paintChart({ history: k.history }); }" in CHART
     assert CHART.count("else newRange(); return; }") == 2
+
+
+# ------------------------------------------------------------ crosshair sync
+
+LINE = (JS / "ui/chart.js").read_text()
+OPTIONS = (JS / "pages/options.js").read_text()
+OPANELS = (JS / "pages/options-panels.js").read_text()
+BROKER = (JS / "pages/brokerage.js").read_text()
+
+
+def test_charts_in_one_group_follow_each_other_by_date():
+    assert "document.dispatchEvent(new CustomEvent('v2:xsync', { detail: { group, d, src: id } }))" in LINE
+    assert "const i = pts.findIndex((p) => p.d === q.d);" in LINE, "matched by date, never the nearest point"
+    assert "No figure on ${fullDate(q.d)}" in LINE, "a missing date is said"
+    assert "if (!synced) tell(p.d);" in LINE, "a date taken is not sent back"
+    assert "if (!el.isConnected) { document.removeEventListener('v2:xsync', onSync); return; }" in LINE
+
+
+def test_the_price_chart_takes_part_on_daily_bars_only():
+    assert "if (S.sync && !S.intraday) {" in PC and "if (!S.sync || S.intraday || q.group !== S.sync || q.src === SYNC_ID) return;" in PC
+    assert "if (drag || tg) return;" in PC, "a chart in the reader's hand is not moved"
+    assert "destroy() { document.removeEventListener('v2:xsync', onSync);" in PC
+
+
+def test_the_groups_on_the_pages():
+    assert "sync: 'opt-daily'" in OPTIONS and OPANELS.count("sync: 'opt-daily'") == 2
+    assert BROKER.count("sync: 'bk-perf'") == 2
