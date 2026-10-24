@@ -59,12 +59,12 @@ const TOOL_HOW = {
 // The classic toolbar's split: the averages and bands under Indicators, everything else drawn on the price in
 // Layers, a second row that the button opens, with Panes and Colours beside them.
 const IND_KEYS = ['ma', 'ema', 'cloud921', 'cloud2150', 'bb', 'keltner', 'donchian', 'sec', 'vwap'];
-const LAYER_MENUS = [['levels', 'Levels', ['fib', 'sr', 'gex', 'zones', 'accum', 'trends', 'vbp']], ['events', 'Events', ['msb', 'events', 'ins', 'sessions']], ['candles', 'Candle colours', ['stages', 'matrend']]];
+const LAYER_MENUS = [['levels', 'Levels', ['fib', 'sr', 'gex', 'zones', 'accum', 'trends', 'vbp']], ['events', 'Events', ['msb', 'events', 'ins', 'filings', 'sessions']], ['candles', 'Candle colours', ['stages', 'matrend']]];
 const SNAP_KEY = 'optic.chart.snap.v1';   // the classic key: 'off', or on
 // The classic studies (C11) joined these on 2026-10-19, under the classic names; chart-studies.js has their data.
 const OVERLAYS = [['ma', 'MA 20, 50, 200'], ['ema', 'EMA 9, 21, 50'], ['cloud921', 'EMA 9 / 21 cloud'], ['cloud2150', 'EMA 21 / 50 cloud'], ['bb', 'Bollinger 20, 2'], ['keltner', 'Keltner channel'], ['donchian', 'Donchian channel'], ['sec', 'Regression channel'], ['vwap', 'Anchored VWAP'],
   ['fib', 'Fibonacci'], ['sr', 'Support and resistance'], ['gex', 'Dealer gamma levels'], ['zones', 'Supply and demand'], ['accum', 'Accumulation zones'], ['trends', 'Auto trend lines'], ['vbp', 'Volume by price'],
-  ['msb', 'Market structure breaks'], ['events', 'Earnings'], ['ins', 'Insider trades'], ['sessions', 'Session dividers'],
+  ['msb', 'Market structure breaks'], ['events', 'Earnings'], ['ins', 'Insider trades'], ['filings', 'SEC filings'], ['sessions', 'Session dividers'],
   ['stages', 'Weinstein stages'], ['matrend', 'MA Trend Identifier']];
 // where each group of the Indicators menu starts
 const OV_GROUP = { ma: 'Averages and bands', fib: 'Levels', msb: 'Structure and events', stages: 'Candle colours' };
@@ -214,6 +214,20 @@ function levels() {
   const t = D.t || {}, te = t.technicals || {}, g = t.gex || {}, I = D.intra;
   return { fib: I && I.fib ? I.fib : te.fibonacci, sr: I && I.sr ? I.sr : te.support_resistance, gex: g.error ? null : { call_wall: ((g.levels || {}).call_wall || {}).strike, put_wall: ((g.levels || {}).put_wall || {}).strike, flip: (g.regime || {}).flip_point } };
 }
+// The latest notable SEC filings in the ticker payload (analytics/filings.py: 10-K, 10-Q, 8-K and the rest of its list, at
+// most 12), on their filing dates. A filing older than that list is not marked, and the note under the chart says so.
+function filings() {
+  const fl = (D.t || {}).filings || {};
+  return (fl.filings || []).map((f) => ({ t: Date.parse(f.filed), form: f.form, url: f.url, label: `${f.form}, ${f.what || ''}${f.what ? ', ' : ''}filed ${f.filed}. From SEC EDGAR.` })).filter((f) => isNum(f.t));
+}
+function filingNote() {
+  if (!V.overlays.filings) return [];
+  const fl = (D.t || {}).filings;
+  if (!fl) return ['Loading the SEC filings.'];
+  if (fl.available === false) return [`SEC filings: ${clean(fl.reason || 'not available for this symbol')}.`];
+  const n = (fl.filings || []).length;
+  return [n ? `SEC filings: the latest ${n} notable filings from SEC EDGAR, each on the day it was filed; older ones are not marked.` : 'SEC filings: none of the notable kinds on file.'];
+}
 function events() {
   const eh = ((D.t || {}).company || {}).earnings_history || {};
   return [...(eh.quarters || []).map((q) => ({ t: Date.parse(q.date), kind: 'E', label: `Earnings ${q.date}: EPS ${num(q.eps_reported)} against ${num(q.eps_estimate)}` })),
@@ -230,6 +244,7 @@ function cannot(k) {
   if (k === 'trends' && iv.intraday) return 'Drawn on daily and weekly bars only.';
   if (k === 'sessions' && !iv.intraday) return 'Marks where each trading day starts, on intraday bars only.';
   if (VOLUME_KEYS.has(k) && D.noVolume) return `${D.sym} reports no volume, so there is nothing to draw.`;
+  if (k === 'filings' && D.t && D.t.filings && D.t.filings.available === false) return clean(D.t.filings.reason || 'SEC filings are not available for this symbol.');
   return '';
 }
 // One overlay's row in a menu: its box, its name, what it is, and for MSB the swing strength.
@@ -237,7 +252,7 @@ const ovRow = (k) => { const l = (OVERLAYS.find((x) => x[0] === k) || [])[1], no
   <label class="ws-sel menu-help">Swing strength <select data-v2-ch-msbk aria-label="Market structure swing strength">${[3, 5, 10].map((n) => html`<option value="${n}" ${V.msbK === n ? 'selected' : ''}>${n} bars each side${n === 3 ? ', more breaks' : n === 10 ? ', fewer' : ''}</option>`)}</select></label>` : ''}`; };
 const countOf = (keys) => keys.filter((k) => V.overlays[k]).length;
 // what each is also called, for Find (Classic's indicator search): a reader types RSI, moving average or volume profile
-const ALSO = { ma: 'moving average sma simple', ema: 'exponential moving average', cloud921: 'ema cloud', cloud2150: 'ema cloud', bb: 'bollinger bands volatility', keltner: 'atr channel', donchian: 'breakout channel high low', sec: 'linear regression', vwap: 'volume weighted average price',
+const ALSO = { filings: 'sec edgar filings 10-k 10-q 8-k annual quarterly report proxy', ma: 'moving average sma simple', ema: 'exponential moving average', cloud921: 'ema cloud', cloud2150: 'ema cloud', bb: 'bollinger bands volatility', keltner: 'atr channel', donchian: 'breakout channel high low', sec: 'linear regression', vwap: 'volume weighted average price',
   fib: 'fibonacci retracement', sr: 'support resistance levels', gex: 'gamma exposure call wall put wall flip', zones: 'supply demand', accum: 'accumulation', trends: 'trendlines', vbp: 'volume profile point of control', msb: 'market structure break swing', events: 'earnings reports', ins: 'insider buying selling form 4', sessions: 'session dividers intraday',
   stages: 'stage analysis weinstein', matrend: 'moving average trend', volume: 'volume', rsi: 'relative strength index momentum', macd: 'moving average convergence divergence momentum', tso: 'trend strength oscillator', adx: 'directional movement di', stochastic: 'stoch oscillator', obv: 'on balance volume', mfi: 'money flow index', rs: 'relative strength line versus spy' };
 const paneRow = (k) => { const l = (PANES.find((x) => x[0] === k) || [])[1]; return html`<label class="check ${cannot(k) ? 'is-off' : ''}"><input type="checkbox" data-v2-ch-pane="${k}" ${V.panes[k] && !cannot(k) ? 'checked' : ''} ${cannot(k) ? 'disabled' : ''}> <span>${l}</span> <small class="t-muted">pane</small></label>`; };
@@ -353,7 +368,7 @@ function paintChart(over) {
     // a second Reset zoom over the plot (ui/pricechart.js) for a phone, where showing the toolbar's moved the plot;
     // which of the two shows is the width's, in pages.css, so a window resized past 860px never shows both
     homeButton: true,
-    onView: (v) => { D.zoomed = v.zoomed; const z = $('[data-v2-ch-home]', mainEl); if (z) z.hidden = !v.zoomed; }, overlays: V.overlays, panes: V.panes, levels: levels(), events: events(),
+    onView: (v) => { D.zoomed = v.zoomed; const z = $('[data-v2-ch-home]', mainEl); if (z) z.hidden = !v.zoomed; }, overlays: V.overlays, panes: V.panes, levels: levels(), events: events(), filings: filings(),
     drawings: D.drawings, tool: V.tool, window: windowBars(), label: `${D.sym}, ${iv.label} bars`, ...extras(), ...studies(), pageKeys: mainEl,
     // an insider arrow opens the stock's insider filings, as Classic's markers did (openInsidersFor)
     onInsider: () => { location.hash = `#/insiders?symbol=${encodeURIComponent(D.sym)}&view=insiders`; },
@@ -368,7 +383,7 @@ function paintChart(over) {
   refit();
   syncHeight();
   const n = $('#ch-note', mainEl); if (n) n.textContent = clean(D.note || '');
-  const sn = $('#ch-snote', mainEl); if (sn) sn.textContent = ST.notes(ticked()).join(' ');
+  const sn = $('#ch-snote', mainEl); if (sn) sn.textContent = ST.notes(ticked()).concat(filingNote()).join(' ');
 }
 // The plot fills the window under the toolbar, less the reading line above it (40 until it is drawn) and the
 // navigator under it; in full screen all of what is left, less the page's padding under the navigator.
@@ -570,7 +585,7 @@ function paintExtras() { if (chart) chart.set(extras()); }
 // draw yet, or its reading.
 const ticked = () => Object.assign({}, V.overlays, V.panes);
 function studies() { ST.need(ticked()); return ST.data(ticked()); }
-function paintStudies() { if (chart) chart.set(Object.assign({ overlays: V.overlays }, ST.data(ticked()))); const n = $('#ch-snote', mainEl); if (n) n.textContent = ST.notes(ticked()).join(' '); }
+function paintStudies() { if (chart) chart.set(Object.assign({ overlays: V.overlays }, ST.data(ticked()))); const n = $('#ch-snote', mainEl); if (n) n.textContent = ST.notes(ticked()).concat(filingNote()).join(' '); }
 const phase = () => ((D.session || {}).prices || {}).phase || ((D.session || {}).session || {}).phase || (marketSession() || {}).phase || null;
 
 export async function render(main, route) {
@@ -609,7 +624,8 @@ export async function render(main, route) {
 }
 function loadTicker(sym) {
   D.tErr = null;
-  tickerData().then(() => { if (live && D.sym === sym) { if (D.bars) paintChart(); paintRead(); afterTicker(); } }).catch((e) => { if (live && D.sym === sym) { D.tErr = e || true; D.tPromise = null; paintRead(); afterTicker(); } });
+  // the menus are drawn again too: a box the ticker data rules out (SEC filings for a fund) says so once it is known
+  tickerData().then(() => { if (live && D.sym === sym) { if (D.bars) paintChart(); paintRead(); afterTicker(); paintTools(); } }).catch((e) => { if (live && D.sym === sym) { D.tErr = e || true; D.tPromise = null; paintRead(); afterTicker(); } });
 }
 // The widgets that read the ticker payload are drawn again, and the stop check can start once it knows the plan's stop.
 function afterTicker() { shown().forEach((id) => { if (W.FROM_TICKER.includes(id)) { repaintWidget(id); W.need(id); } }); }

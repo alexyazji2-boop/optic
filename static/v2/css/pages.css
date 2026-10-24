@@ -659,7 +659,10 @@ table.chw-table { font-size: var(--t-sm); } table.chw-table th { padding: 6px 4p
 .pc .msb circle { fill-opacity: .22; stroke-width: 1.4; }
 .pc .msb.bull line, .pc .msb.bull circle { stroke: var(--c-pos); } .pc .msb.bull circle, .pc .msb.bull text { fill: var(--c-pos); }
 .pc .msb.bear line, .pc .msb.bear circle { stroke: var(--c-neg); } .pc .msb.bear circle, .pc .msb.bear text { fill: var(--c-neg); }
-.pc .evm line { stroke: var(--c-gold); stroke-dasharray: 2 3; opacity: .6; } .pc .evm text { fill: var(--c-gold-ink); font: 600 var(--t-xs)/1 var(--f-label); }
+.pc .evm line { stroke: var(--c-gold); stroke-dasharray: 2 3; opacity: .6; }
+/* SEC filing marks (ui/pricechart.js): quieter than earnings, the form at the top of the price */
+.pc .fim line { stroke: var(--c-ink-3); stroke-dasharray: 1 3; opacity: .7; } .pc .fim text { fill: var(--c-ink-2); font: 600 var(--t-xs)/1 var(--f-label); paint-order: stroke; stroke: var(--c-plane); stroke-width: 3px; }
+.pc-read .pc-fil { color: var(--c-ink-2); } .pc .evm text { fill: var(--c-gold-ink); font: 600 var(--t-xs)/1 var(--f-label); }
 .pc .pane-sep { stroke: var(--c-line); } .pc .pane-t { fill: var(--c-ink-3); font: 500 var(--t-xs)/1 var(--f-label); }
 .pc .xh { stroke: var(--c-ink-3); stroke-dasharray: 3 3; } .pc .xh-tag { fill: var(--c-tip-bg); } .pc .xh-t { fill: var(--c-tip-ink); font: 600 var(--t-xs)/1 var(--f-sans); }
 .pc .dr { stroke: var(--c-gold-ink); stroke-width: 1.6; fill: none; } .pc .dr.sel { stroke: var(--c-focus); stroke-width: 2.6; } .pc .dr.ghost { opacity: .5; }

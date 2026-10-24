@@ -175,7 +175,7 @@ export function marketStructure(bars, k = 3) {
 }
 
 export function createPriceChart(host, opts) {
-  const S = Object.assign({ style: 'candles', overlays: {}, panes: { volume: true, rsi: false, macd: false }, levels: {}, events: [], marks: [], lines: [], drawings: [], tool: 'select', intraday: false }, opts);
+  const S = Object.assign({ style: 'candles', overlays: {}, panes: { volume: true, rsi: false, macd: false }, levels: {}, events: [], filings: [], marks: [], lines: [], drawings: [], tool: 'select', intraday: false }, opts);
   const bars = S.bars;
   const N = bars.length;
   const closes = bars.map((b) => b.c);
@@ -232,7 +232,7 @@ export function createPriceChart(host, opts) {
   const leg = host.querySelector('.pc-leg') || document.createElement('div'), nav = host.querySelector('.pc-nav') || document.createElementNS('http://www.w3.org/2000/svg', 'svg');
   // the box that names an insider trade under the pointer (or the keyboard's bar); `flags` are the arrows drawn
   const tipEl = document.createElement('div'); tipEl.className = 'pc-tip'; tipEl.setAttribute('role', 'tooltip'); tipEl.hidden = true; host.appendChild(tipEl);
-  let flags = [], hoverP = null;
+  let flags = [], hoverP = null, fileMarks = [];
 
   // daily and weekly bars are dates (UTC midnight); intraday bars are moments in New York
   // a page can name its own bars (`when`: the Investing tab's weeks and months), else the date or the moment
@@ -394,6 +394,21 @@ export function createPriceChart(host, opts) {
       // a marker on the newest bar or the first kept its label inside the plot rather than cut off at the edge
       const edge = X(i) > W - layout.r - 36 ? ['end', X(i) - 4] : X(i) < 36 ? ['start', X(i) + 4] : ['middle', X(i)];
       o += `<g class="evm"><line x1="${x}" x2="${x}" y1="${pp.y0}" y2="${pp.y1}"/><text x="${edge[1].toFixed(1)}" y="${pp.y1 - 4}" text-anchor="${edge[0]}">${esc(e.kind)}</text><title>${esc(e.label)}</title></g>`; });
+    // SEC filings (S.filings: the ticker payload's EDGAR list, its latest notable filings), on the bar of the day each was
+    // filed: a dotted line and the form at the top of the price, where the earnings marks' letters at the foot are clear;
+    // a form within 34 px of the one before keeps its line and leaves its label off
+    fileMarks = [];
+    if (S.overlays.filings && (S.filings || []).length) {
+      // the legend sits over the plot's top-left corner: a form under it keeps its line and loses its label
+      let lastX = -1e9; const legW = S.names && leg.offsetWidth ? leg.offsetLeft + leg.offsetWidth + 6 : 0;
+      S.filings.slice().sort((a, b) => a.t - b.t).forEach((f) => {
+        const i = AX.bar(f.t); if (i < 0 || i < from || i > to) return;
+        const x = X(i), room = x - lastX >= 34 && x - 14 > legW; if (room) lastX = x;
+        const edge = x > W - layout.r - 30 ? ['end', x - 3] : x < 30 ? ['start', x + 3] : ['middle', x];
+        fileMarks.push({ i, f });
+        o += `<g class="fim"><line x1="${x.toFixed(1)}" x2="${x.toFixed(1)}" y1="${pp.y0 + 16}" y2="${pp.y1}"/>${room ? `<text x="${edge[1].toFixed(1)}" y="${pp.y0 + 12}" text-anchor="${edge[0]}">${esc(f.form)}</text>` : ''}<title>${esc(f.label)}</title></g>`;
+      });
+    }
     // insider trades (S.insiders, from the ticker payload): a green arrow under the bar's low for a purchase, a red
     // one over its high for a sale, one arrow for all of a side's trades in a bar; the box comes from insiderTip()
     flags = [];
@@ -632,7 +647,8 @@ export function createPriceChart(host, opts) {
     const i = cross >= 0 ? cross : to, b = bars[i];
     if (!b) { read.textContent = ''; return; }
     const prev = bars[i - 1], chg = prev ? (b.c / prev.c - 1) * 100 : null;
-    read.innerHTML = `${S.title ? `<b class="pc-sym">${esc(S.title.sym)}</b> <span class="pc-what">${esc(S.title.what)}</span> ` : ''}<b>${esc(fmtT(b.t))}</b> <span>O ${num(b.o)}</span> <span>H ${num(b.h)}</span> <span>L ${num(b.l)}</span> <span>C ${num(b.c)}</span>${chg !== null ? ` <span class="${chg >= 0 ? 'up' : 'down'}">${chg >= 0 ? '+' : '−'}${num(Math.abs(chg))}%</span>` : ''}${b.v ? ` <span class="t-muted">Vol ${num(b.v / 1e6, 1)}M</span>` : ''}`;
+    const filed = fileMarks.filter((m) => m.i === i).map((m) => m.f.form);
+    read.innerHTML = `${S.title ? `<b class="pc-sym">${esc(S.title.sym)}</b> <span class="pc-what">${esc(S.title.what)}</span> ` : ''}<b>${esc(fmtT(b.t))}</b> <span>O ${num(b.o)}</span> <span>H ${num(b.h)}</span> <span>L ${num(b.l)}</span> <span>C ${num(b.c)}</span>${chg !== null ? ` <span class="${chg >= 0 ? 'up' : 'down'}">${chg >= 0 ? '+' : '−'}${num(Math.abs(chg))}%</span>` : ''}${b.v ? ` <span class="t-muted">Vol ${num(b.v / 1e6, 1)}M</span>` : ''}${filed.length ? ` <span class="pc-fil">${esc(filed.join(', '))} filed</span>` : ''}`;
   }
   function summary() {
     const a = bars[from], b = bars[to]; if (!a || !b) return 'Price chart';
@@ -640,7 +656,7 @@ export function createPriceChart(host, opts) {
     const breaks = S.overlays.msb ? ind.msb.filter((m) => m.at >= from && m.at <= to) : [];
     const last = breaks[breaks.length - 1];
     const msb = S.overlays.msb ? (last ? ` ${breaks.length} market structure break${breaks.length === 1 ? '' : 's'} in view; the latest is ${last.dir === 'bull' ? 'bullish' : 'bearish'}, on ${fmtT(bars[last.at].t)} through ${num(last.price)}.` : ' No market structure break in view.') : '';
-    const ins = flags.length ? ` ${flags.reduce((a, g) => a + g.items.length, 0)} insider trades marked.` : '';
+    const ins = (flags.length ? ` ${flags.reduce((a, g) => a + g.items.length, 0)} insider trades marked.` : '') + (fileMarks.length ? ` ${fileMarks.length} SEC filing${fileMarks.length === 1 ? '' : 's'} marked.` : '');
     return `${S.label || 'Price'}, ${to - from + 1} bars from ${fmtT(a.t)} to ${fmtT(b.t)}: from ${num(a.c)} to ${num(b.c)}, ${ch >= 0 ? 'up' : 'down'} ${num(Math.abs(ch), 1)} percent.${msb}${ins} Left and right read each bar, up and down stretch the price scale, plus and minus zoom, M measures.`;
   }
   const redraw = () => { if (!raf) raf = requestAnimationFrame(draw); };
