@@ -122,7 +122,9 @@ def test_missing_data_is_never_a_zero_or_a_conclusion():
     assert "valuation added ${num(valuation ? valuation.points : 0, 0)}" not in SRC["pages/dossier.js"]
     # a source that failed is said so, not read as a finding
     dos = SRC["pages/dossier.js"]
-    assert "const gone = (e) => ({ a: 'Not available right now.'" in dos and "if (D.fwError) {" in dos and "if (failed) return 'Not available right now.';" in dos and "D.earnError ? 'Not available right now.'" in dos
+    ovr = SRC["pages/overview-research.js"]   # a company's four questions since 2026-10-25 (Classic's, ported)
+    assert "if (c.fwError) body = pendingGrid(c, `The four grades are not available right now:" in ovr and "D.fwNetError = e" in dos
+    assert "The long-term score is not available:" in ovr and "had no data on this run" in ovr, "a missing score or input is said, never scored as neutral"
     # colour only on a figure that exists
     for k, s in SRC.items():
         if k.startswith("pages/"):

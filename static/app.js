@@ -18050,77 +18050,180 @@ function ovMethodHTML(d) {
   </section>`;
 }
 
-/* The Optic Score: both conviction readings on one 0-100 scale, on the
- * Overview. Asked for as "give a conviction score for short term and long
- * term in the overview ... from 0-100".
+/* The Optic Score (owner's refinement, 2026-10-25): one reading per horizon,
+ * each as its span, its score, what it means, what moved it, and how it is
+ * calculated behind one fold. v2's Overview shows the same readings with the
+ * same words (static/v2/js/pages/overview-research.js shortScore, longScore).
  *
- * Short term is the swing verdict's composite (-100 to +100), from the
- * ticker payload already here. Long term is the long-term model's conviction
- * score, which comes with /api/longterm/{T}: no model call, fetched once per
- * symbol into its own slot (STATE.ovLong) rather than STATE.long, so the
- * Investing tab still runs its own first load (P/E history and the rest).
- * Both go through score100 / longScore100, the same mapping the Options and
- * Investing headlines use, so the three pages show one number for one
- * reading: the worst possible is 0, no edge is 50, the best is 100. */
-function ovScoreTile(label, horizon, n, words, basis, view, viewLabel) {
-  const cls = n === null ? '' : n >= 55 ? ' up' : n <= 45 ? ' down' : '';
-  return `<div class="osc-tile">
-    <p class="osc-label">${esc(label)} <span class="osc-horizon">${esc(horizon)}</span></p>
-    <p class="osc-num${cls}">${n === null ? '<span class="osc-none">—</span>'
-    : `${fmt(n, 0)}<span class="osc-of">/100</span>`}</p>
-    ${words ? `<p class="osc-words">${esc(words)}</p>` : ''}
-    <p class="osc-basis">${esc(basis)}</p>
-    <p class="ov-fine"><button type="button" class="ov-linkbtn" data-sec-view="${esc(view)}"
-      data-sec-sym="${esc(STATE.ticker || '')}">${esc(viewLabel)}</button>${n === null ? ''
-    : miloExplainButton(`Optic Score, ${label.toLowerCase()} (${horizon})`, `${fmt(n, 0)}/100${words ? `, ${words}` : ''}`, 'Overview')}</p>
+ * Checked against app/analytics/swing.py verdict() and longterm.py before the
+ * words were chosen:
+ * - "Conviction" is not a measured confidence. Short term it is a band of the
+ *   composite's size (10, 30 and 50 points from zero), long term a band of the
+ *   points total, so the words here describe how strong the reading is.
+ * - 50 is each model's neutral midpoint, a composite or a points total of
+ *   zero. Neither model has been shown to predict returns (the composite's own
+ *   scale note; the validation programme of 2026-10-14), so 50 is not "no
+ *   edge" and the panel no longer says it is.
+ * - The long-term number was coloured at 55 and 45 while its model's neutral
+ *   band runs from about 42 to 56, so a neutral 43 showed red: each score is
+ *   coloured by its own model's bands now.
+ * - A missing short-term input is left out and its weight shared by the
+ *   others; a missing long-term factor adds no points. Both are said. */
+/* Up to three drivers by their pull on the score (`size`, in points of 0 to
+ * 100). When all three pull one way and the other side has a material one (2
+ * points or more), it takes the third place, so a material negative is never
+ * left out behind smaller positives (owner's brief, 2026-10-25). */
+function oscPickDrivers(rows, size) {
+  const by = rows.filter((r) => Number.isFinite(size(r)) && Math.abs(size(r)) >= 0.5)
+    .sort((x, y) => Math.abs(size(y)) - Math.abs(size(x)));
+  const top = by.slice(0, 3);
+  [1, -1].forEach((sign) => {
+    if (top.length < 3 || top.some((r) => Math.sign(size(r)) === sign)) return;
+    const other = by.find((r) => Math.sign(size(r)) === sign && Math.abs(size(r)) >= 2);
+    if (other) top[2] = other;
+  });
+  return top.sort((x, y) => Math.abs(size(y)) - Math.abs(size(x)));
+}
+
+function oscShortRead(d, now) {
+  const v = (d || {}).verdict;
+  const p = (d || {}).pulse || {};
+  if (!v || !Number.isFinite(v.composite_score)) return null;
+  const c = v.composite_score;
+  const a = Math.abs(c);
+  const side = c >= 10 ? 'pos' : c <= -10 ? 'neg' : '';
+  const lean = side === 'pos' ? 'bullish' : 'bearish';
+  const line = !side ? 'The inputs roughly cancel out: no lean either way.'
+    : a >= 50 ? `The inputs lean strongly ${lean}.` : a >= 30 ? `The inputs lean ${lean}.` : `The inputs lean ${lean}, but only slightly.`;
+  const why = {};
+  (((d || {}).why || {}).reasons || []).forEach((r) => { if (r && r.factor) why[r.factor] = r.headline; });
+  const rows = (p.factors || []).map((f) => {
+    const missing = !!f.unavailable || !Number.isFinite(f.score);
+    return { key: f.key, label: f.label, score: f.score, weight: f.weight_pct, missing, whyMissing: f.why_unavailable,
+      pts: !missing && Number.isFinite(f.weight_pct) ? (f.score * f.weight_pct) / 200 : null, note: why[f.key] || '' };
+  });
+  const drivers = oscPickDrivers(rows, (r) => r.pts)
+    .map((r) => ({ label: r.label, pts: r.pts,
+      detail: `Reads ${r.score > 0 ? '+' : ''}${fmt(r.score, 0)} with ${fmt(r.weight, 0)}% of the weight.${r.note ? ` ${r.note}.` : ''}` }));
+  const missing = rows.filter((r) => r.missing);
+  const notes = [];
+  if (missing.length) {
+    notes.push(`${missing.map((r) => r.label).join(' and ')} had no data on this run${missing.some((r) => r.whyMissing)
+      ? ` (${missing.map((r) => r.whyMissing || 'reason not given').join('; ')})` : ''}, so ${missing.length === 1 ? 'its' : 'their'} weight went to the other inputs. ${missing.length === 1 ? 'It is' : 'They are'} left out, not counted as neutral.`);
+  }
+  if ((v.pending_catalyst || {}).pending) notes.push('A scheduled event is still ahead, and nothing here predicts which way it resolves.');
+  const age = Date.parse((d || {}).generated_at || '');
+  if (Number.isFinite(age) && now - age > 60 * 60000) notes.push(`Worked out ${agoWords(d.generated_at)}; the inputs may have moved since.`);
+  const nominal = (v.breakdown || []).filter((b) => Number.isFinite(b.nominal_weight_pct))
+    .map((b) => `${(rows.find((r) => r.key === b.component) || {}).label || b.component} ${fmt(b.nominal_weight_pct, 0)}%`);
+  return { n: score100(c), tone: side, label: cap(String(v.stance || 'neutral')), line, drivers, notes, rows, nominal, band: [45, 55] };
+}
+
+function oscLongRead(lt, now) {
+  if (!lt) return { pending: true };
+  const h = lt.holding;
+  if (lt.error || !h || h.error) return { unavailable: (h && h.error) || lt.error || 'no data' };
+  const sc = h.conviction_scale || {};
+  const th = sc.thresholds || { high: 40, moderate: 12, cautious: -12, low: -40 };
+  const at = (s) => score100(s, sc.min_possible, sc.max_possible);
+  const s = h.conviction_score;
+  const n = at(s);
+  if (n === null) return { unavailable: 'no score in the data' };
+  const conv = String(h.conviction || '');
+  const side = conv === 'high' || conv === 'moderate' ? 'pos' : conv === 'cautious' || conv === 'low' ? 'neg' : '';
+  const label = { high: 'Strongly positive', moderate: 'Positive', neutral: 'No clear lean', cautious: 'Negative', low: 'Strongly negative' }[conv] || cap(conv);
+  const facs = (h.conviction_factors || []).filter((f) => Number.isFinite(f.points));
+  const raw = facs.reduce((x, f) => x + f.points, 0);
+  const q = h.data_quality || {};
+  const capped = Math.abs(raw - s) > 0.6;
+  // One model point on the 0 to 100 scale, on the side of zero the total is on.
+  const k = s >= 0 ? 50 / (sc.max_possible || 100) : 50 / Math.abs(sc.min_possible || -100);
+  const drivers = oscPickDrivers(facs, (f) => f.points * k)
+    .map((f) => ({ label: f.label, pts: capped ? null : f.points * k, model: f.points, detail: f.detail || '' }));
+  const missing = [];
+  const trend = h.long_trend || {};
+  const reliable = q.reliable !== false;
+  if (trend.above_200w_sma === null || trend.above_200w_sma === undefined) missing.push('the 200-week trend');
+  if (!Number.isFinite(h.excess_cagr_5y_pct) || !reliable) missing.push('the five-year return against the S&P 500');
+  if (!Number.isFinite((h.risk || {}).sharpe_proxy) || !reliable) missing.push("the past year's return for the risk taken");
+  if (!Number.isFinite((h.valuation || {}).forward_pe)) missing.push('valuation (no forward P/E in the feed)');
+  const notes = [];
+  if (missing.length) notes.push(`Not scored for lack of data, so ${missing.length === 1 ? 'it adds' : 'they add'} nothing either way: ${missing.join(', ')}. The score rests on the rest.`);
+  if (!reliable) notes.push(`Only ${fmt(q.history_years, 1)} years of usable price history, so the model holds the score between ${fmt(at(-25), 0)} and ${fmt(at(25), 0)}.`);
+  const age = Date.parse(lt.generated_at || '');
+  if (Number.isFinite(age) && now - age > 24 * 3600000) notes.push(`Worked out ${agoWords(lt.generated_at)}; prices may have moved since.`);
+  return { n, tone: side, label, line: h.plan || '', phase: cap(String((h.long_trend || {}).phase || '')), drivers, notes, factors: facs,
+    band: [at(th.cautious), at(th.moderate)], cuts: { strongNeg: at(th.low), neg: at(th.cautious), pos: at(th.moderate), strongPos: at(th.high) },
+    min: sc.min_possible, max: sc.max_possible };
+}
+
+function oscPts(x) {
+  return `${x > 0 ? '+' : x < 0 ? '−' : ''}${fmt(Math.abs(x), 0)}`;
+}
+
+function oscCardHTML(o) {
+  const at = (x) => `${Math.max(0, Math.min(100, x)).toFixed(1)}%`;
+  const body = o.empty ? `<p class="osc-num osc-none">n/a</p><p class="osc-line">${esc(o.empty)}</p>` : `
+    <p class="osc-num${o.tone ? ` ${o.tone}` : ''}">${fmt(o.n, 0)}<span class="osc-of">of 100</span></p>
+    <span class="osc-scale" aria-hidden="true"><span class="osc-band" style="left:${at(o.band[0])};width:${at(o.band[1] - o.band[0])}"></span><span class="osc-mid"></span><span class="osc-dot${o.tone ? ` ${o.tone}` : ''}" style="left:${at(o.n)}"></span></span>
+    <span class="osc-ends" aria-hidden="true"><span>0</span><span>50</span><span>100</span></span>
+    <p class="osc-words">${esc(o.label)}${o.meta ? `<span class="osc-meta">, ${esc(o.meta)}</span>` : ''}</p>
+    ${o.line ? `<p class="osc-line">${esc(o.line)}</p>` : ''}
+    ${o.drivers.length ? `<ul class="osc-drv" aria-label="What moved it most">${o.drivers.map((x) => {
+    const v = Number.isFinite(x.pts) ? x.pts : x.model;
+    return `<li><span class="osc-drv-l">${esc(x.label)}</span><span class="osc-drv-v ${v >= 0 ? 'pos' : 'neg'}">${Number.isFinite(x.pts) ? oscPts(x.pts) : `${oscPts(x.model)} model points`}</span><span class="osc-drv-d">${esc(x.detail)}</span></li>`;
+  }).join('')}</ul>` : ''}
+    ${o.notes.map((x) => `<p class="osc-note">${esc(x)}</p>`).join('')}`;
+  return `<div class="osc-tile" aria-labelledby="osc-${o.id}-h">
+    <h3 class="osc-label" id="osc-${o.id}-h">${esc(o.span)}</h3>${body}${o.method || ''}
   </div>`;
 }
 
 function ovScoreHTML(d) {
   const sym = STATE.ticker || '';
-  const v = d.verdict || {};
-  const p = d.pulse || {};
-  const short = score100(v.composite_score);
-  const shortWords = [cap(String(p.stance || v.stance || '')), convictionWords(p.conviction || v.conviction)]
-    .filter(Boolean).join(' · ');
-  const lt = STATE.ovLong && STATE.ovLong.ticker === sym ? STATE.ovLong : null;
-  const h = lt && lt.holding;
-  let long = null;
-  let longWords = '';
-  let longNote = '';
-  if (!lt) longNote = 'Working out the long-term score…';
-  else if (lt.error || !h || h.error) longNote = `The long-term score is not available: ${(h && h.error) || lt.error || 'no data'}.`;
-  else {
-    long = longScore100(h, h.conviction_score);
-    longWords = cap([h.conviction ? convictionWords(h.conviction) : '', cap((h.long_trend || {}).phase || '')]
-      .filter(Boolean).join(' · '));
-  }
-  let apart = '';
-  if (short !== null && long !== null && Math.abs(short - long) >= 25) {
-    apart = short > long
-      ? 'The two horizons disagree: the recent signals are stronger than the long-run record. A short-term lift inside a weaker long-term picture can fade.'
-      : 'The two horizons disagree: the long-run record is stronger than the recent signals. A strong long-term picture can still go through weak weeks.';
+  const now = Date.now();
+  const held = STATE.ovLong && STATE.ovLong.ticker === sym ? STATE.ovLong : null;
+  const s = oscShortRead(d, now);
+  const l = oscLongRead(held ? { holding: held.holding, error: held.error,
+    generated_at: (STATE.ovLongData && STATE.ovLongData.ticker === sym ? STATE.ovLongData : {}).generated_at } : null, now);
+  const lok = !l.pending && !l.unavailable;
+  const link = (view, text) => `<p class="ov-fine"><button type="button" class="ov-linkbtn" data-sec-view="${view}" data-sec-sym="${esc(sym)}">${text}</button></p>`;
+  const sMethod = s ? `<details class="ov-ev osc-how"><summary>How this is calculated</summary><div class="osc-how-body">
+      <p>Four inputs, each scored from −100 to +100, are averaged with fixed weights (${esc(s.nominal.join(', '))}). The average is placed on 0 to 100, so an average of zero is 50.</p>
+      <p>An input with no data is left out and the others' weights grow to fill its share. After a material news event, part of the momentum weight moves to news.</p>
+      <p>55 and above reads leaning bullish, 65 and above bullish; 45 and below leaning bearish, 35 and below bearish; in between, neutral.</p>
+      <table class="data osc-t"><thead><tr><th>Input</th><th>Reading</th><th>Weight</th><th>Points</th></tr></thead><tbody>${s.rows.map((r) => `<tr><td class="name">${esc(r.label)}</td><td>${r.missing ? 'no data' : `${r.score > 0 ? '+' : ''}${fmt(r.score, 0)}`}</td><td>${r.missing ? 'n/a' : `${fmt(r.weight, 0)}%`}</td><td>${Number.isFinite(r.pts) ? oscPts(r.pts) : 'n/a'}</td></tr>`).join('')}</tbody></table>
+      <p class="ov-fine">Points are each input's share of the distance from 50. Options and Positioning are both read from one option chain, so their agreement is one source, not two. Optic's own evaluation has not found that this blend beats a single momentum reading.</p>
+      ${link('swing', 'The full breakdown, on Options')}</div></details>` : '';
+  const lMethod = lok ? `<details class="ov-ev osc-how"><summary>How this is calculated</summary><div class="osc-how-body">
+      <p>The model adds and subtracts points for the 200-week and 40-week price trends, the five-year return against the S&amp;P 500, the past year's return for the risk taken, the forward P/E, a deep fall from the high while the long trend holds, the dividend and any resolved news event. The total can run from ${oscPts(l.min)} to ${oscPts(l.max)}, and it is placed on 0 to 100 with zero points at 50.</p>
+      <p>About ${fmt(l.cuts.pos, 0)} and above reads positive, ${fmt(l.cuts.strongPos, 0)} and above strongly positive; about ${fmt(l.cuts.neg, 0)} and below negative, ${fmt(l.cuts.strongNeg, 0)} and below strongly negative; in between, no clear lean.</p>
+      <table class="data osc-t"><thead><tr><th>Factor</th><th>Model points</th><th>What it found</th></tr></thead><tbody>${l.factors.map((f) => `<tr><td class="name">${esc(f.label)}</td><td>${oscPts(f.points)}</td><td style="text-align:left;white-space:normal">${esc(f.detail || '')}</td></tr>`).join('')}</tbody></table>
+      ${link('long', 'The full breakdown, on Investing')}</div></details>` : '';
+  const notes = [];
+  if (s && lok && s.tone && l.tone && s.tone !== l.tone) {
+    notes.push("The two point different ways. That is common: the short-term reading weighs the last few weeks of trading, the long-term one up to five years of the price's path.");
   }
   /* A high long-term score beside a stretched price, said in one place
-   * (strategy pass, 2026-10-12). AAPL scored 74, "high conviction", with
-   * valuation worth 0 of those points and the P/E at the top of its own
-   * range: the score is mostly trend and track record, and a reader taking
-   * it as "good value" would be reading something it does not measure. */
+   * (strategy pass, 2026-10-12): the score reads the price's path, so a
+   * reader taking it as "good value" would be reading something it does not
+   * measure. */
   const val = ovValuationRead();
-  const priceNote = long !== null && long >= 60 && val && val.tone === 'bad'
-    ? `The long-term score is built mostly from the price trend and the five-year record. It does not say the price is low: at ${fmt(val.cur, 1)} times earnings against ${fmt(val.med, 1)} on average, the price asks more than usual.`
-    : '';
+  if (lok && l.n >= 60 && val && val.tone === 'bad') {
+    notes.push(`The long-term score reads the price's path, not its value. It does not say the price is low: at ${fmt(val.cur, 1)} times earnings against ${fmt(val.med, 1)} on average, the price asks more than usual.`);
+  }
   return `<section class="ov-sec osc" id="ov-score" aria-labelledby="ov-score-h">
     <h2 class="ov-q" id="ov-score-h">Optic Score</h2>
+    <p class="ov-meta">Two separate readings from different inputs over different spans, so they are not directly comparable.</p>
     <div class="osc-grid">
-      ${ovScoreTile('Short term', 'the next 2 to 8 weeks', short, shortWords,
-    'Built from the daily chart trend, current options positioning and the tone of recent headlines, weighted into one reading for a 2-to-8-week swing.', 'swing', 'See how it is scored on Options')}
-      ${ovScoreTile('Long term', 'holding for several years', long, longWords || longNote,
-    'Built from up to five years of history: the 200-week and 40-week price trends, the five-year return against the S&P 500, the last year\'s return for the risk taken, valuation, distance from the high and the dividend.', 'long', 'See how it is scored on Investing')}
+      ${s ? oscCardHTML({ id: 'short', span: 'Short term: 2 to 8 weeks', ...s, method: sMethod })
+    : oscCardHTML({ id: 'short', span: 'Short term: 2 to 8 weeks', empty: 'No short-term reading in the data for this symbol.' })}
+      ${lok ? oscCardHTML({ id: 'long', span: 'Long term: several years', ...l, meta: l.phase, method: lMethod })
+    : oscCardHTML({ id: 'long', span: 'Long term: several years',
+      empty: l.unavailable ? `The long-term score is not available: ${String(l.unavailable).replace(/\.$/, '')}.` : 'Working out the long-term score…' })}
     </div>
-    ${apart ? `<p class="lt-conflict">${esc(apart)}</p>` : ''}
-    ${priceNote ? `<p class="lt-conflict">${esc(priceNote)}</p>` : ''}
-    <p class="ov-fine">50 means no edge either way; above 50 the inputs lean favourable, below 50 unfavourable, and 100 is every input at its best. Each score is a rule-based summary of past data, not a forecast, a price target or a recommendation to buy or sell.</p>
+    ${notes.map((x) => `<p class="osc-both">${esc(x)}</p>`).join('')}
+    <p class="ov-fine">50 is each model's neutral midpoint, where its inputs balance; it is not a measured break-even. Neither score is a probability, an expected return or a forecast, and neither has been shown to predict returns. Not a recommendation to buy or sell.</p>
   </section>`;
 }
 

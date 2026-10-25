@@ -86,8 +86,9 @@ def test_one_icon_family_in_the_shared_panels():
 
 def test_the_compact_header_on_every_dossier_tab():
     frame = (JS / "pages/dossier-frame.js").read_text()
-    assert "export function header(sym, D, view = 'overview', { compact = false, bar = true, stage = '' } = {}) {" in frame
-    assert "html`<span class=\"dh-ext dh-stage\">${term(`stage:${sym}`, stage)}</span>`" in frame, "the stage is a text label in the line, not a chip (owner's amendment, B6a)"
+    assert "export function header(sym, D, view = 'overview', { compact = false, bar = true, stage = null } = {}) {" in frame
+    assert "<header class=\"dhead bar${st ? ' is-wide' : ''}\">${raw(logoHTML(sym, { lazy: false }))}" in frame, "the company's logo on every tab (Classic, 2026-10-25)"
+    assert "${stageLine(sym, st)}${actions(sym, label, true)}" in frame, "the stage on the Overview's header line, with Explain"
     assert ".account-btn { flex: none; white-space: nowrap;" in CSS["components.css"], "Sign in never wraps"
     pages = CSS["pages.css"]
     assert ".ch-pacts + .pc-host .pc-read { padding-right: 190px; }" in pages, "Explain and full screen keep off the readout"

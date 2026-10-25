@@ -1,35 +1,39 @@
-// Dossier, Overview. One company: a compact header, the year's chart with the
-// options-implied range ahead of it, four questions answered directly, the two
-// long-term views told apart, Optic's combined read, what changed lately, and
-// the rest one step away. The other Dossier pages open in the current app until
-// they move (nav.js).
+// Dossier, Overview. One company: a compact header (its logo, and its Weinstein
+// stage with Explain), what it does, the past year's chart with its marked dates
+// and the options-implied range ahead of it, then Classic's Overview (owner's
+// screenshots, 2026-10-25; overview-research.js): four questions answered
+// separately, the Optic Score, the key figures, the bull case and the bear case,
+// Optic's combined read, what changed lately, what to look at next, and Advanced
+// research, which "Show advanced analysis" opens. A fund keeps a fund's four
+// answers and its long-term record. The rest is one step away under More.
 //
-// Every answer is worded by a stated rule from the server's own fields; the
-// drawer behind each answer shows the evidence and the method. No number here
-// is computed differently from the classic app.
+// Every answer is worded by a stated rule from the server's own fields. No
+// number here is computed differently from the classic app.
 import * as FV from '../core/finviz.js';
 import { term } from '../ui/term.js';
 import { $, $$, html, render as draw, raw } from '../core/dom.js';
+import { CLASSIC } from '../core/classic.js';
 import * as api from '../core/api.js';
 import * as store from '../core/store.js';
 import { sections } from '../ui/sections.js';
-import { num, signed, dir, money, compact, clean, capFirst, longDate, fullDate, shortDate, isNum, score100, inDays, plural } from '../core/format.js';
+import { num, signed, dir, money, compact, clean, longDate, fullDate, shortDate, isNum, score100, inDays, plural } from '../core/format.js';
 import * as RP from '../core/reports.js';
-import { lineChart, meter, mountCharts } from '../ui/chart.js';
+import { lineChart, mountCharts } from '../ui/chart.js';
 import { skeleton, empty, failed, staleLine, how } from '../ui/states.js';
 import { icon } from '../ui/icons.js';
-import { header as frameHeader, tabs as frameTabs, isFund, fresher, livePrice } from './dossier-frame.js';
+import { header as frameHeader, tabs as frameTabs, isFund, fresher, livePrice, advSwitch } from './dossier-frame.js';
 import { button as miloButton, provideContext } from '../ui/milo.js';
 import * as drawer from '../ui/drawer.js';
 import { hrefFor } from '../nav.js';
 import { kindOf, learn } from '../core/instrument.js';
 import { mountThesis, disposeThesis, thesisContext } from './thesis.js';
 import * as OR from './overview-research.js';
-import { knowledge } from '../core/prefs.js';
+import * as prefs from '../core/prefs.js';
 import { defineLive } from '../ui/term.js';
 import * as TR from '../core/track.js';
-import { scoreLine, tone100 } from '../ui/score.js';
 let lp = null;   // the header's price refresh (dossier-frame livePrice), stopped in dispose()
+let unPrefs = null;   // the advanced switch's subscription, ended in dispose()
+let advMoved = false;   // set when the switch moved, so the next paint lets its folds follow it
 
 let live = true;
 let D = {};
@@ -40,21 +44,7 @@ let range = '1Y';
 const RANGES = { '3M': 63, '6M': 126, '1Y': 252 };
 export const windowOf = (pts, r) => pts.slice(-(RANGES[r] + 1));
 
-// Each answer describes; none says yes or no. The question was "Is the share price expensive?" and the answers
-// had been written for "is it cheap?", so AAPL above its range read "No. Above its fair value range." (pitch
-// audit, 2026-10-22). A description cannot point the wrong way when the question is reworded.
-const qualityWord = { A: "Strong on Optic's quality measures.", B: "Good on Optic's quality measures.", C: "Middling on Optic's quality measures.", D: "Weak on Optic's quality measures.", F: "Poor on Optic's quality measures." };
-export const starsWord = { 5: 'Below its usual valuation range.', 4: 'Inside its usual range, in the lower half.', 3: 'Near the middle of its usual range.', 2: 'Inside its usual range, in the upper half.', 1: 'Above its usual valuation range.' };
-export const PRICE_Q = 'How is it priced against its own history?';
-/** The valuation answer for every state the fair-value payload can be in. */
-export function priceAnswer(fvd, failed) {
-  if (failed) return 'Not available right now.';
-  if (!fvd) return null;
-  const st = fvd.stars || {}, fv = fvd.fair_value || {};
-  if (st.available) return starsWord[st.stars] || clean(st.word);
-  if (fv.available) return fv.wide ? 'Its usual range is too wide to place the price in.' : 'Not placed against its range.';
-  return 'No valuation range for this company.';
-}
+// A fund's four answers (a company's are Classic's four questions, overview-research.js).
 const stanceWord = { fair: 'priced about in line with that history', expensive: 'priced above that history', cheap: 'priced below that history' };
 const timing = { before_open: 'before the open', after_close: 'after the close', during: 'during the session' };
 
@@ -64,15 +54,9 @@ function series() {
   const dates = (ps.dates || []).map((x) => String(x).slice(0, 10));
   return dates.map((d, i) => ({ d, c: Number((ps.close || [])[i]) })).filter((p) => p.d && isNum(p.c) && p.c > 0);
 }
-function chartEvents(pts) {
-  const eh = (((D.ticker || {}).company || {}).earnings_history) || {};
-  const first = pts.length ? pts[0].d : '';
-  return (eh.quarters || []).filter((r) => r.date && String(r.date).slice(0, 10) >= first).map((r) => ({
-    d: String(r.date).slice(0, 10), kind: 'E', label: 'Earnings report',
-    detail: [isNum(r.eps_reported) ? `EPS ${num(r.eps_reported)}` : '', isNum(r.eps_estimate) ? `against ${num(r.eps_estimate)} expected` : '', isNum(r.surprise_pct) ? `(${r.surprise_pct >= 0 ? 'beat' : 'missed'} by ${num(Math.abs(r.surprise_pct), 1)}%)` : ''].filter(Boolean).join(' '),
-    r,
-  })).sort((a, b) => a.d.localeCompare(b.d));
-}
+// Classic's earnings reports (E), ex-dividend dates (D) and splits (S), inside the window shown
+const chartEvents = (pts) => (pts.length ? OR.chartMarks(D.ticker, D.extras, pts[0].d, pts[pts.length - 1].d) : []);
+const RANGE_TITLE = { '1Y': 'The past year', '6M': 'The past six months', '3M': 'The past three months' };
 function implied() {
   const im = (D.earnings || {}).implied || {};
   const q = D.quote || {};
@@ -81,13 +65,18 @@ function implied() {
 }
 function chartBlock(sym) {
   const pts = series();
-  if (!D.ticker) return html`<div class="chart-slot">${skeleton('chart', 1, 'Loading the price history')}</div>`;
-  if (pts.length < 20) return empty('No price history to draw', 'The quote above is current; the chart returns when the history does.');
+  const head = (bar) => html`<div class="section-head"><div><h2 class="t-h2" id="py-h">${RANGE_TITLE[range]}</h2></div>${bar || ''}</div>`;
+  if (!D.ticker) return html`${head()}<div class="chart-slot">${skeleton('chart', 1, 'Loading the price history')}</div>`;
+  if (pts.length < 20) return html`${head()}${empty('No price history to draw', 'The quote above is current; the chart returns when the history does.')}`;
   const im = implied();
-  const shown = windowOf(pts, range), first = shown[0], last = pts[pts.length - 1];
-  return html`<div class="chart-bar"><p class="section-sub">Daily closes from ${fullDate(first.d)} through ${fullDate(last.d)}. E marks an earnings report.${im ? html` The gold cone is the ±${num(im.pct)}% range options price through the ${shortDate(im.expiry)} expiry.` : ''}</p>
-    <div class="seg" role="group" aria-label="Chart range">${Object.keys(RANGES).map((r) => html`<button type="button" data-v2-range="${r}" aria-pressed="${r === range}">${r}</button>`)}</div></div>
+  const shown = windowOf(pts, range), last = pts[pts.length - 1];
+  const up = ((((D.ticker || {}).company || {}).earnings_history || {}).upcoming || [])[0] || {};
+  const next = String(((D.earnings || {}).next_report || {}).date || up.date || '').slice(0, 10);
+  return html`${head(html`<div class="seg" role="group" aria-label="Chart range">${Object.keys(RANGES).map((r) => html`<button type="button" data-v2-range="${r}" aria-pressed="${r === range}">${r}</button>`)}</div>`)}
+    <p class="py-title">${OR.chartTitle(sym, shown.map((p) => p.c))}</p>
+    <p class="section-sub">${OR.chartSource(D.ticker, last.d, next)}${im ? html` The gold cone is the ±${num(im.pct)}% range options price through the ${shortDate(im.expiry)} expiry.` : ''}</p>
     <div class="chart-slot" data-chart="price"></div>
+    ${OR.marksFold(chartEvents(shown))}
     ${D.freshText ? html`<p class="asof">${D.freshText}</p>` : ''}`;
 }
 function mountChart(main, sym) {
@@ -99,7 +88,11 @@ function mountChart(main, sym) {
     w, h: Math.round(Math.max(220, Math.min(340, w * 0.3))), area: true, label: `${sym} closing price`,
     events: evs, monthStep: range === '1Y' ? 3 : 1, pad: { t: 26, r: 52, b: 24, l: 0 },
     future: im ? im.sessions : 0, cone: im ? { lo: im.lo, hi: im.hi, pct: im.pct, expiry: im.expiry, from: (D.quote || {}).price } : null, focusEnd: true,
-    onEvent: (iso, el) => { const e = evs.find((x) => x.d === iso); if (e) drawer.open({ kicker: `${sym}, earnings`, title: `Reported ${longDate(iso)}`, opener: el, body: html`<p>${sym} reported ${timing[e.r.timing] || ''} on ${fullDate(iso)}. ${e.detail}.</p>${miloButton('Ask Milo about this report', { ask: `How did ${sym} react to the ${shortDate(iso)} report?`, context: `${sym}, the ${shortDate(iso)} report`, symbol: sym })}` }); },
+    onEvent: (iso, el) => {
+      const on = evs.filter((x) => x.d === iso), e = on.find((x) => x.kind === 'E');
+      if (e) drawer.open({ kicker: `${sym}, earnings`, title: `Reported ${longDate(iso)}`, opener: el, body: html`<p>${sym} reported ${timing[e.r.timing] || ''} on ${fullDate(iso)}. ${e.detail}.</p>${on.filter((x) => x !== e).map((x) => html`<p>${x.label}: ${x.text}.</p>`)}${miloButton('Ask Milo about this report', { ask: `How did ${sym} react to the ${shortDate(iso)} report?`, context: `${sym}, the ${shortDate(iso)} report`, symbol: sym })}` });
+      else if (on.length) drawer.open({ kicker: `${sym}, ${on[0].label.toLowerCase()}`, title: longDate(iso), opener: el, body: html`${on.map((x) => html`<p>${x.label} on ${fullDate(iso)}: ${x.text}.</p>`)}` });
+    },
   }) });
 }
 
@@ -143,32 +136,7 @@ function trendItem(sym) {
 }
 
 function answers(sym) {
-  const fw = D.framework || {}, lt = fw.long_term || {}, sw = fw.swing || {};
-  const qy = lt.quality || {}, fv = (D.fairValue || {}).fair_value || {}, st = (D.fairValue || {}).stars || {};
-  const nr = (D.earnings || {}).next_report || {};
-  const pr = (D.earnings || {}).pricing || {};
-  const im = implied();
-  const q = D.quote || {};
-  const out = [];
-  const gone = (e) => ({ a: 'Not available right now.', because: `${clean((e && e.message) || 'Its source did not answer.')} The other answers do not depend on it.` });
-  if (D.fwError) {
-    const g = gone(D.fwError);
-    out.push({ k: 'quality', q: 'How is the business doing?', ...g });
-  } else out.push({ k: 'quality', q: 'How is the business doing?', a: D.framework ? (qy.grade ? qualityWord[qy.grade] || `Grade ${qy.grade}.` : 'Not graded.') : null,
-    because: qy.grade ? html`<span class="chip-tag">Grade ${qy.grade}</span>${clean(((qy.components || [])[0] || {}).headline || qy.summary || '')}` : clean(qy.summary || '') });
-  const priceA = priceAnswer(D.fairValue, D.fvError);
-  out.push({ k: 'price', q: PRICE_Q, a: priceA,
-    because: st.available && fv.available ? html`${raw(meter({ lo: fv.low, mid: fv.mid, hi: fv.high, price: q.price || fv.price, w: 214 }))}<span class="chip-tag">${st.stars} of 5 stars</span>Usual range ${num(fv.low, 0)} to ${num(fv.high, 0)}, from its own 5-year P/E. A reading against its past, not an intrinsic value.`
-      : D.fvError ? gone(D.fvError).because : clean([st.reason, fv.wide ? fv.wide_note : fv.reason].filter(Boolean).join(' ')) });
-  const setup = sw.setup || {};
-  // the four basic questions in the beginner brief's order (item 5): the business, its price, the share price's
-  // trend, what is next. The short-term trade setup is deeper research, under More.
-  if (isFundHere(sym)) { out.length = 0; out.push(...fundAnswers(sym, trendItem(sym))); return answerGrid(out); }
-  out.push(trendItem(sym));
-  const nextA = D.earnError ? 'Not available right now.' : !D.earnings ? null : nr.date ? `Earnings on ${longDate(nr.date)}.` : 'No report date yet.';
-  out.push({ k: 'next', q: "What's next?", a: nextA,
-    because: D.earnError ? gone(D.earnError).because : nr.date ? html`${inDays(nr.days_away)}, ${RP.dateStatus(nr)}.${RP.habitLine(nr) ? ` ${RP.habitLine(nr)}` : ''}${im ? html` Options price ±${num(im.pct)}% through the ${shortDate(im.expiry)} expiry; report days have averaged ±${num(pr.event_day_avg_pct)}%.` : ''}` : '' });
-  return answerGrid(out);
+  return answerGrid(fundAnswers(sym, trendItem(sym)));
 }
 function answerGrid(out) {
   return html`<section class="answers" aria-label="Four questions, answered">${out.map((x) => x.a === null
@@ -211,111 +179,33 @@ function fundEvidence(k, sym) {
 }
 
 function evidence(k, sym) {
-  if (isFundHere(sym)) { const f = fundEvidence(k, sym); if (f) return f; }
-  const fw = D.framework || {}, lt = fw.long_term || {}, sw = fw.swing || {};
-  const qy = lt.quality || {}, val = lt.valuation || {};
-  const fvd = D.fairValue || {}, fv = fvd.fair_value || {}, st = fvd.stars || {};
-  const e = D.earnings || {}, pr = e.pricing || {}, nr = e.next_report || {}, im = implied();
-  const comp = (list) => html`<ul class="evlist">${(list || []).map((c) => html`<li><b>${c.label}</b>${c.grade ? html` <span class="chip-tag">${c.grade}</span>` : ''}<span>${clean(c.headline || c.status || '')}</span></li>`)}</ul>`;
-  if (k === 'quality') {
-    return html`<p>${clean(qy.summary)}</p>${comp(qy.components)}
-      <h3>Method</h3><p>Seven measures of the business, each graded A to F and weighted: ${Object.entries(qy.weights || {}).map(([id, w]) => `${id} ${w}%`).join(', ')}.</p>
-      <p class="asof">${clean(lt.separation_note || '')}</p>`;
-  }
-  if (k === 'price' && !st.available) {
-    return html`<p><b>${priceAnswer(D.fairValue, D.fvError)}</b> ${clean(st.reason || '')}</p>${fv.available ? html`<dl class="kv"><div><dt>Low</dt><dd>${num(fv.low)}</dd></div><div><dt>Middle</dt><dd>${num(fv.mid)}</dd></div><div><dt>High</dt><dd>${num(fv.high)}</dd></div><div><dt>Price</dt><dd>${num((D.quote || {}).price)}</dd></div></dl>
-      <p>${clean(fv.wide_note || '')}</p><h3>Method</h3><p>${clean(fv.basis || '')}</p>` : html`<p>${clean(fv.reason || 'No fair value estimate for this company.')}</p>`}
-      ${val.label ? html`<h3>The framework's valuation</h3><p>${clean(val.summary || `Valuation ${val.label}.`)}</p>` : ''}`;
-  }
-  if (k === 'price') {
-    return html`${raw(meter({ lo: fv.low, mid: fv.mid, hi: fv.high, price: (D.quote || {}).price, w: 400, showMid: true }))}
-      <p><b>${st.stars} of 5 stars: ${starsWord[st.stars] || clean(st.word || '')}</b> ${isNum(fv.gap_to_mid_pct) ? `The price is ${num(Math.abs(fv.gap_to_mid_pct), 1)}% ${fv.gap_to_mid_pct >= 0 ? 'above' : 'below'} the middle of the range.` : ''}</p>
-      <h3>Method</h3><p>${clean(fv.basis || '')}</p><p>${clean(st.rule || '')} ${clean(st.note || '')}</p>
-      ${val.label ? html`<h3>The framework's valuation</h3><p>${clean(val.summary || `Valuation ${val.label}.`)} It looks at more than the P/E (intrinsic value, multiples against peers and history), so it can differ from the stars.</p>${comp(val.components)}` : ''}
-      <ul class="plain">${(fv.limits || []).map((l) => html`<li>${clean(l)}</li>`)}</ul><p class="asof">Source: ${fv.source || 'company filings'}.</p>`;
-  }
-  if (k === 'trend') {
-    const ps = ((D.ticker || {}).technicals || {}).price_series || {}, sma = (ps.sma200 || []).filter(isNum), t = trendFinding(series(), sma[sma.length - 1]);
-    return html`<p>${t && isNum(t.ch) ? `The share price ${t.ch >= 0 ? 'rose' : 'fell'} ${num(Math.abs(t.ch), 1)}% from ${num(t.from.c)} on ${fullDate(t.from.d)} to ${num(t.to.c)} on ${fullDate(t.to.d)}.` : 'Not enough history.'}</p>
-      ${t && isNum(t.vsAvg) ? html`<p>It is ${num(Math.abs(t.vsAvg), 1)}% ${t.vsAvg >= 0 ? 'above' : 'below'} its 200-day average, the average close of about the last ten months, which smooths out day-to-day swings.</p>` : ''}
-      <p>A rising share price and a growing business are different things: the price moves with what investors expect, and can rise while results weaken, or fall while they improve. How is the business doing answers the second; Financials and Earnings have the figures.</p>`;
-  }
-  if (k === 'trade') {
-    const plan = sw.plan || {};
-    return html`<p><b>Grade ${sw.grade}.</b> ${clean(sw.why || '')}</p>
-      ${plan.entry ? html`<dl class="kv"><div><dt>Entry</dt><dd>${num(plan.entry)}</dd></div><div><dt>Invalidation</dt><dd>${num((plan.invalidation || {}).price)}</dd></div>${(plan.targets || []).slice(0, 2).map((t, i) => html`<div><dt>Target ${i + 1}</dt><dd>${num(t.price ?? t)}</dd></div>`)}</dl>
-        <p>${clean(plan.confirmation || '')}</p>` : ''}
-      ${(sw.objections || []).length ? html`<h3>Against it</h3><ul class="plain">${sw.objections.map((o) => html`<li>${clean(o.text)}</li>`)}</ul>` : ''}
-      <h3>Method</h3><p>${clean(sw.framework_note || '')}</p><p class="asof">Model output, not a recommendation to trade.</p>`;
-  }
-  // what's next: the two figures kept apart, then the comparison with its basis
-  return html`${nr.date ? html`<p><b>${longDate(nr.date)}</b>, ${RP.dateStatus(nr)}. ${RP.habitLine(nr)} Consensus EPS ${num(nr.eps_consensus)}, revenue ${nr.revenue_consensus_label || 'n/a'}. ${clean(nr.dispersion_note || '')}</p>` : ''}
-    <h3>Two different figures</h3>
-    ${im ? html`<p><b>±${num(im.pct)}% through the ${shortDate(im.expiry)} expiry.</b> What the at-the-money straddle (the ${num(im.strike, 0)} strike, $${num(im.cost)}) costs as a share of the price, ${plural(im.dte, 'day')} out. It covers ordinary trading as well as the report.</p>` : ''}
-    ${isNum(pr.event_day_avg_pct) ? html`<p><b>±${num(pr.event_day_avg_pct)}% on report days.</b> ${sym}'s average move on the session after its last ${((e.surprise || {}).quarters) || 8} reports. History, not a price.</p>` : ''}
-    ${historyRatio(pr, im)}
-    <p class="asof">${clean(pr.caveat || '')}</p>`;
+  const f = fundEvidence(k, sym); if (f) return f;
+  const ps = ((D.ticker || {}).technicals || {}).price_series || {}, sma = (ps.sma200 || []).filter(isNum), t = trendFinding(series(), sma[sma.length - 1]);
+  return html`<p>${t && isNum(t.ch) ? `The share price ${t.ch >= 0 ? 'rose' : 'fell'} ${num(Math.abs(t.ch), 1)}% from ${num(t.from.c)} on ${fullDate(t.from.d)} to ${num(t.to.c)} on ${fullDate(t.to.d)}.` : 'Not enough history.'}</p>
+    ${t && isNum(t.vsAvg) ? html`<p>It is ${num(Math.abs(t.vsAvg), 1)}% ${t.vsAvg >= 0 ? 'above' : 'below'} its 200-day average, the average close of about the last ten months, which smooths out day-to-day swings.</p>` : ''}
+    <p>A rising share price and a growing business are different things: the price moves with what investors expect, and can rise while results weaken, or fall while they improve. Financials and Earnings have the figures.</p>`;
 }
 
 /* ---------------- two long-term views (point 3) ---------------- */
 function fundRecord(sym) {
   const h = (D.longterm || {}).holding;
   if (!h) return html`<section class="section">${skeleton('lines', 3, 'Loading the long-term record')}</section>`;
-  const sc = h.conviction_scale || {}, s100 = !h.error ? score100(h.conviction_score, sc.min_possible, sc.max_possible) : null;
   const hz = h.horizons || {}, dd = h.drawdown || {}, rk = h.risk || {};
   const pct = (v) => (isNum(v) ? signed(v, 1) : 'n/a');
   return html`<section class="section" aria-labelledby="lv-h">
     <div class="section-head"><div><h2 class="t-h2" id="lv-h">The long-term record</h2><p class="section-sub">From ${num((h.data_quality || {}).history_years, 0)} years of daily closes.</p></div></div>
-    <div class="views">
-      <div class="view"><p class="t-label">Long-term trend score, from price history</p>
-        <p class="n ${tone100(s100)}">${s100 === null ? 'n/a' : num(s100, 0)}<small> of 100</small></p>${scoreLine(s100)}<p>${clean(h.plan || '')}</p>
-        <p class="asof">The 200-week and 40-week trends, return per unit of risk and distance from the high.</p></div>
-      <div class="view"><p class="t-label">Returns a year, and the falls along the way</p>
-        <dl class="kv"><div><dt>1 year</dt><dd>${pct(hz.return_1y_pct)}</dd></div><div><dt>3 years</dt><dd>${pct(hz.cagr_3y_pct)}</dd></div><div><dt>5 years</dt><dd>${pct(hz.cagr_5y_pct)}</dd></div><div><dt>10 years</dt><dd>${pct(hz.cagr_10y_pct)}</dd></div>
-          <div><dt>Largest fall</dt><dd>${pct(dd.max_drawdown_pct)}${dd.max_drawdown_date ? html` <small>to ${shortDate(dd.max_drawdown_date)} ${String(dd.max_drawdown_date).slice(0, 4)}</small>` : ''}</dd></div><div><dt>Below its high now</dt><dd>${pct(dd.current_drawdown_pct)}</dd></div>
-          <div><dt>Volatility, annualised</dt><dd>${isNum(rk.annualised_vol_pct) ? `${num(rk.annualised_vol_pct, 1)}%` : 'n/a'}</dd></div></dl>
-        <p class="asof">Compound annual returns from closing prices, before tax; distributions are not reinvested in these figures.</p></div>
-    </div></section>`;
+    <p class="t-label">Returns a year, and the falls along the way</p>
+    <dl class="kv"><div><dt>1 year</dt><dd>${pct(hz.return_1y_pct)}</dd></div><div><dt>3 years</dt><dd>${pct(hz.cagr_3y_pct)}</dd></div><div><dt>5 years</dt><dd>${pct(hz.cagr_5y_pct)}</dd></div><div><dt>10 years</dt><dd>${pct(hz.cagr_10y_pct)}</dd></div>
+      <div><dt>Largest fall</dt><dd>${pct(dd.max_drawdown_pct)}${dd.max_drawdown_date ? html` <small>to ${shortDate(dd.max_drawdown_date)} ${String(dd.max_drawdown_date).slice(0, 4)}</small>` : ''}</dd></div><div><dt>Below its high now</dt><dd>${pct(dd.current_drawdown_pct)}</dd></div>
+      <div><dt>Volatility, annualised</dt><dd>${isNum(rk.annualised_vol_pct) ? `${num(rk.annualised_vol_pct, 1)}%` : 'n/a'}</dd></div></dl>
+    <p class="asof">Compound annual returns from closing prices, before tax; distributions are not reinvested in these figures. The long-term trend score is under Optic Score.</p></section>`;
 }
 
-function longViews(sym) {
-  if (isFundHere(sym)) return fundRecord(sym);
-  const h = (D.longterm || {}).holding;
-  const lt = (D.framework || {}).long_term || {};
-  if (!h && !D.framework) return html`<section class="section">${skeleton('lines', 3, 'Loading the long-term views')}</section>`;
-  const sc = (h && h.conviction_scale) || {};
-  const s100 = h && !h.error ? score100(h.conviction_score, sc.min_possible, sc.max_possible) : null;
-  const facs = (h && h.conviction_factors) || [];
-  const pts = (kind) => facs.filter((f) => kind.includes(f.kind)).reduce((a, f) => a + (Number(f.points) || 0), 0);
-  const priceBehaviour = pts(['trend', 'relative strength', 'risk']);
-  const valuation = facs.find((f) => f.kind === 'valuation');
-  const conv = lt.conviction || {};
-  const q = (lt.quality || {}).grade, v = (lt.valuation || {}).label;
-  if (s100 === null && !conv.label) return '';
-  const syn = synthesis(s100, q, (D.fairValue || {}).stars || {}, v, conv.label);
-  return html`<section class="section" aria-labelledby="lv-h">
-    <div class="section-head"><div><h2 class="t-h2" id="lv-h">How the long-term views fit together</h2><p class="section-sub">Each model answers a different question, over a different span. A strong company or a strong price trend can still be an expensive stock.</p></div></div>
-    ${syn ? html`<p class="synth">${syn}</p>` : ''}
-    <div class="views">
-      <div class="view"><p class="t-label">Price trend score: how the share price has behaved over about five years</p>
-        <p class="n ${tone100(s100)}">${s100 === null ? 'n/a' : num(s100, 0)}<small> of 100</small></p>${scoreLine(s100)}
-        <p>${s100 === null ? 'Not available.' : `${trendBand(s100)}. A finding about the share price's path, not about the business, its price today or whether it suits you.`}</p>
-        ${how(html`<p>From the 200-week and 40-week trends, five years against the S&amp;P 500, return per unit of risk, forward P/E, distance from the high, the dividend and catalysts.</p>`, h && h.plan ? html`<p>The trend model's own wording: "${clean(h.plan)}" It reads the price trend only.</p>` : '')}</div>
-      <div class="view"><p class="t-label">Long-term case: the business and what it costs, over years</p>
-        <p class="n">${conv.label || 'n/a'}</p>
-        <p>${clean(conv.why || '')}</p>
-        <p class="asof">Business quality${q ? ` (grade ${q})` : ''} weighed against valuation${v ? ` (${v.toLowerCase()})` : ''} and the weekly chart.</p></div>
-    </div>
-    ${h && conv.label ? html`<p class="reconcile"><b>Why they differ.</b> The trend score reads how the stock has behaved: ${num(priceBehaviour, 0)} of its ${num(h.conviction_score, 0)} points come from trend, relative strength and risk-adjusted return${valuation && isNum(valuation.points) ? `, and valuation added ${num(valuation.points, 0)}` : ''}.${valuation ? html` On valuation the trend model says: “${clean(valuation.detail)}”` : ''} The long-term case asks whether today's price pays for the business${v ? `, and grades the valuation ${v.toLowerCase()}` : ''}. Optic's combined read below uses the long-term case.</p>` : ''}
-  </section>`;
-}
-
-const trendBand = (x) => (x >= 70 ? 'A strong long-term price trend' : x >= 45 ? 'A middling long-term price trend' : 'A weak long-term price trend');
-/** One sentence on where the views agree and where they do not, from their own labels (beginner brief item 6):
- * nothing is reweighted or left out to make them agree. */
+/** One sentence on where the long-term views agree and where they do not, from their own labels (beginner brief item
+ * 6): nothing is reweighted or left out to make them agree. Said first under "Taken together". */
 export function synthesis(s100, grade, stars, valLabel, convLabel) {
   const good = [], bad = [];
-  if (grade) (['A', 'B'].includes(grade) ? good : ['D', 'F'].includes(grade) ? bad : []).push(['A', 'B'].includes(grade) ? `the business grades ${grade}` : `the business grades ${grade}`);
+  if (grade) (['A', 'B'].includes(grade) ? good : ['D', 'F'].includes(grade) ? bad : []).push(`the business grades ${grade}`);
   if (isNum(s100)) (s100 >= 70 ? good : s100 < 45 ? bad : []).push(s100 >= 70 ? `the long-term price trend is strong (${num(s100, 0)} of 100)` : `the long-term price trend is weak (${num(s100, 0)} of 100)`);
   const st = stars && stars.available ? stars.stars : null, val = valLabel ? valLabel.toLowerCase() : '';
   // 4 stars is inside the range, below its middle: it was worded "below its fair value range" like 5
@@ -327,11 +217,18 @@ export function synthesis(s100, grade, stars, valLabel, convLabel) {
   const lead = good.length && bad.length ? `${cap(join(good))}, but ${join(bad)}.` : `${cap(join(good.length ? good : bad))}.`;
   return `${lead}${convLabel ? ` Weighing them, Optic's combined long-term case is ${convLabel.toLowerCase()}.` : ''}`;
 }
+function synthesisLine() {
+  const h = (D.longterm || {}).holding, lt = (D.framework || {}).long_term || {}, sc = (h && h.conviction_scale) || {};
+  const s100 = h && !h.error ? score100(h.conviction_score, sc.min_possible, sc.max_possible) : null;
+  return synthesis(s100, (lt.quality || {}).grade, (D.fairValue || {}).stars || {}, (lt.valuation || {}).label, (lt.conviction || {}).label);
+}
 
 function combined() {
   const c = (D.framework || {}).combined;
   if (!c || isFundHere(D.sym)) return '';   // the combined verdict weighs a business case a fund does not have
+  const syn = synthesisLine();
   return html`<section class="section verdict" aria-labelledby="cv-h"><h2 class="t-h3" id="cv-h">Taken together</h2>
+    ${syn ? html`<p class="synth">${syn}</p>` : ''}
     <p class="verdict-line">${clean(c.verdict)}</p>
     <ul class="plain">${(c.lines || []).map((l) => html`<li>${clean(l)}</li>`)}</ul>
     <p class="asof">${clean(c.note || '')}</p></section>`;
@@ -397,75 +294,65 @@ function about(sym) {
 }
 
 /* ---------------- the rest, one step away ---------------- */
-// Optic's short-term setup (a swing grade), for readers who trade: deeper research, not a basic question
-function tradeNow(sym) {
-  const sw = (D.framework || {}).swing || {}, setup = sw.setup || {};
-  if (!D.framework || !sw.grade || isFundHere(sym)) return '';
-  const a = sw.grade === 'S' || sw.grade === 'A' ? `A grade ${sw.grade} ${setup.kind || 'setup'} by Optic's rules.` : sw.grade === 'B' ? `${capFirst(setup.kind || 'A setup')} is forming.` : "No setup by Optic's rules.";
-  return html`<p><b>${a}</b> <span class="chip-tag">Grade ${sw.grade}</span> ${clean(setup.why || sw.why || '')}</p><p class="asof">A model's reading of the next few weeks' price action, not a recommendation. The full reading is on <a class="textlink" href="${hrefFor('swing', sym)}">Options</a>.</p>`;
-}
 function more(sym) {
   const t = D.ticker || {}, q = D.quote || {}, prof = (D.session || {}).profile || {};
-  const cases = t.cases || {}, news = t.news || {}, fil = (t.filings || {}).filings || [];
-  const name = q.name || sym;
-  const kv = isFundHere(sym)
-    ? [['P/E of its holdings', num(q.trailing_pe, 1)], ['Distribution yield', isNum(q.dividend_yield) ? `${num(q.dividend_yield * 100, 2)}%` : 'n/a'], ['52-week range', `${num(q.fifty_two_low)} to ${num(q.fifty_two_high)}`],
-      ['Volume', compact(q.volume)], ['Average volume', compact(q.avg_volume)], ['Category', prof.category || 'n/a']]
-    : [['Market cap', compact(q.market_cap)], ['P/E, trailing', num(q.trailing_pe, 1)], ['P/E, forward', num(q.forward_pe, 1)], ['52-week range', `${num(q.fifty_two_low)} to ${num(q.fifty_two_high)}`],
-      ['Volume', compact(q.volume)], ['Average volume', compact(q.avg_volume)], ['Dividend yield', isNum(q.dividend_yield) ? `${num(q.dividend_yield * 100, 2)}%` : 'n/a'], ['Beta', num(q.beta, 2)]];
+  const fil = (t.filings || {}).filings || [];
+  const name = q.name || sym, fund = isFundHere(sym);
+  // a company's key figures, its bull case and bear case, and its trade setup are on the page itself (Classic's Overview)
+  const kv = [['P/E of its holdings', num(q.trailing_pe, 1)], ['Distribution yield', isNum(q.dividend_yield) ? `${num(q.dividend_yield * 100, 2)}%` : 'n/a'], ['52-week range', `${num(q.fifty_two_low)} to ${num(q.fifty_two_high)}`],
+    ['Volume', compact(q.volume)], ['Average volume', compact(q.avg_volume)], ['Category', prof.category || 'n/a']];
   const items = [
-    ['Key figures', html`<dl class="kv">${kv.map(([k, v]) => html`<div><dt>${k}</dt><dd>${v}</dd></div>`)}</dl>`, ''],
-    ...(tradeNow(sym) ? [['Short-term trade setup', tradeNow(sym), 'Swing grade']] : []),
-    ...(cases.available ? [['Bull case and bear case', html`<div class="cases"><div><h3 class="case-h up">Bull case</h3><ul class="plain">${(cases.bull || []).map((c) => html`<li><b>${clean(c.claim)}.</b> ${clean(c.detail)}</li>`)}</ul></div><div><h3 class="case-h down">Bear case</h3><ul class="plain">${(cases.bear || []).map((c) => html`<li><b>${clean(c.claim)}.</b> ${clean(c.detail)}</li>`)}</ul></div></div>`, `${(cases.bull || []).length} for, ${(cases.bear || []).length} against`]] : []),
+    ...(fund ? [['Key figures', html`<dl class="kv">${kv.map(([k, v]) => html`<div><dt>${k}</dt><dd>${v}</dd></div>`)}</dl>`, '']] : []),
     ...(fil.length ? [['Recent SEC filings', html`<ul class="plain">${fil.slice(0, 5).map((f) => html`<li><a href="${f.url}" target="_blank" rel="noopener">${f.form}</a> ${clean(f.what)}, filed ${fullDate(f.filed)}</li>`)}</ul>`, `${Math.min(5, fil.length)} newest`]] : []),
   ];
   return html`<section class="section" aria-labelledby="mr-h"><h2 class="t-h2" id="mr-h">More on ${name}</h2>
     <div class="more">${items.map(([t1, b, hint]) => html`<details><summary>${t1}<span>${hint ? html`<small>${hint}</small>` : ''}${icon('chev')}</span></summary><div class="inner">${b}</div></details>`)}</div></section>`;
 }
 
-/* ---------------- the deeper research (Classic parity B6a) ---------------- */
-const RUNG = { simple: 0, literate: 1, advanced: 2, professional: 3, adaptive: 1 };
-function researchCtx(sym) {
-  const t = D.ticker || null, fund = isFundHere(sym), lt = D.longterm || null;
-  const ms = String((D.quote || {}).market_state || '').toUpperCase();
-  const pr = t ? OR.priceRead(series()) : null;
-  return { t, lt, D, fund, advanced: (RUNG[knowledge()] ?? 1) >= 2, session: ms === 'REGULAR' ? 'regular' : /POST/.test(ms) ? 'after' : 'closed',
-    f: t ? OR.factors(t, { lt, stars: (D.fairValue || {}).stars, price: pr, fund }) : { pos: [], neg: [] } };
-}
-/** The Weinstein stage as a text label in the header line (owner's amendment: no chip), on the Overview alone as
- *  in Classic; what it means for this symbol opens from the label. */
-function stageLabel(sym) {
-  const r = D.stage;
-  if (!r || r.available !== true) return '';
+/** The Weinstein stage for the header, Classic's reading and words; what it means for this symbol opens from it. */
+function stageFor(sym) {
+  const st = OR.stageWords(D.stage);
+  // what it means opens from the label, with the stage rule's replay on history (Classic parity B6c)
   const tested = TR.historyLine('stage');
-  defineLive(`stage:${sym}`, [r.explain, r.transition, r.limits, tested ? `Replayed on history: ${tested}` : ''].filter(Boolean).join(' '));
-  return `Stage ${r.stage}, ${String(r.name || '').toLowerCase()}${r.transition_short ? `, ${String(r.transition_short).toLowerCase()}` : ''}`;
+  if (st) defineLive(`stage:${sym}`, [st.about, tested ? `Replayed on history: ${tested}` : ''].filter(Boolean).join(' '));
+  return st;
 }
+/** The session's phase, for "High today" against "High last session". */
+const phase = () => ((D.session || {}).prices || {}).phase || ((D.session || {}).session || {}).phase || '';
 
 /* ---------------- page ---------------- */
 function paint(main, sym) {
   if (!live) return;
+  const advChanged = advMoved; advMoved = false;
   const keepFocus = document.activeElement && main.contains(document.activeElement) ? document.activeElement : null;
-  const key = keepFocus && (keepFocus.dataset.v2Answer || keepFocus.dataset.v2Range || keepFocus.dataset.v2Watch);
-  // what the reader opened stays open while later data arrives
+  const key = keepFocus && (keepFocus.dataset.v2Answer || keepFocus.dataset.v2Range || keepFocus.dataset.v2Watch || (keepFocus.hasAttribute('data-v2-adv-toggle') ? 'adv' : ''));
+  // what the reader opened stays open while later data arrives, and a fold the switch opened that the reader shut
+  // stays shut; when the switch itself moves, its folds follow it
   const openDetails = $$('details[open] summary', main).map((x) => x.textContent.trim());
+  const shutAdv = $$('details[data-adv]:not([open]) summary', main).map((x) => x.textContent.trim());
   const openEvs = $$('[data-v2-ev][aria-expanded="true"]', main).map((x) => x.getAttribute('aria-controls'));
   const scrollY = window.scrollY;
-  const rc = researchCtx(sym);
-  draw(main, html`<div class="dstick">${frameHeader(sym, D, 'overview', { stage: stageLabel(sym) })}${frameTabs(sym, 'overview', { fund: isFund(D) })}</div>
+  const fund = isFundHere(sym);
+  const c = OR.context({ sym, t: D.ticker || null, fw: D.fwRaw, fwError: D.fwNetError, lt: D.longterm || null, stars: (D.fairValue || {}).stars, fund, advanced: prefs.advancedOn(), phase: phase() });
+  draw(main, html`<div class="dstick has-tools">${frameHeader(sym, D, 'overview', { stage: () => stageFor(sym) })}${frameTabs(sym, 'overview', { fund: isFund(D) })}<div class="dh-tools">${advSwitch()}</div></div>
     ${D.quoteError && !D.quote ? (D.quoteError.kind === 'notfound' ? empty(`Optic has no listing for ${sym}`, 'No quote came back for this symbol. It may be misspelled, delisted, or listed outside the US under another form.', html`<button type="button" class="btn btn-sm" data-v2-open-palette>Search for the company</button>`) : failed(`${sym}'s quote`, D.quoteError, { retry: 'dossier' })) : ''}
     ${((D.framework || {}).freshness || {}).state === 'stale' ? staleLine({ text: clean(D.framework.freshness.text) }) : ''}
     ${about(sym)}
-    <section class="section dchart" aria-label="Price chart">${D.tickerError ? failed('The price history', D.tickerError, { retry: 'dossier' }) : chartBlock(sym)}</section>
-    ${D.fwError && D.fvError && D.earnError ? failed('The four answers', D.fwError, { retry: 'dossier' }) : answers(sym)}${rc.fund ? OR.fundRisk(sym, rc.f) : ''}
-    ${longViews(sym)}${combined()}${digest(sym)}${isFundHere(sym) ? '' : html`<div data-tc-slot></div>`}${OR.nextSection(sym, rc)}${D.ticker ? more(sym) : ''}${OR.advancedSection(sym, rc)}
+    <section class="section dchart" aria-labelledby="py-h">${D.tickerError ? failed('The price history', D.tickerError, { retry: 'dossier' }) : chartBlock(sym)}</section>
+    ${fund ? (D.fwError && D.fvError && D.earnError ? failed('The four answers', D.fwError, { retry: 'dossier' }) : answers(sym)) : OR.fourQuestions(c)}${fund ? OR.fundRisk(sym, c.f) : ''}
+    ${OR.scoreSection(c)}${fund ? '' : OR.keyFigures(c)}${OR.casesSection(c)}
+    ${fund ? fundRecord(sym) : ''}${combined()}${digest(sym)}${fund ? '' : html`<div data-tc-slot></div>`}${OR.nextSection(c)}${D.ticker ? more(sym) : ''}${OR.advancedSection(c)}
     <p class="asof disclaimer">${clean((D.ticker || {}).disclaimer || 'Not financial advice. For research and education only.')}</p>`);
   mountThesis(main, sym, () => D);   // the thesis check: one node for the visit, so a half-typed note survives this redraw
   if (D.ticker) mountChart(main, sym);
-  $$('details summary', main).forEach((x) => { if (openDetails.includes(x.textContent.trim())) x.parentElement.open = true; });
+  $$('details summary', main).forEach((x) => {
+    const d = x.parentElement, t = x.textContent.trim();
+    if (d.hasAttribute('data-adv')) { if (!advChanged) { if (openDetails.includes(t)) d.open = true; else if (shutAdv.includes(t)) d.open = false; } return; }
+    if (openDetails.includes(t)) d.open = true;
+  });
   openEvs.forEach((id) => { const b = $(`[aria-controls="${id}"]`, main); const body = document.getElementById(id); if (b && body) { b.setAttribute('aria-expanded', 'true'); body.hidden = false; } });
   if (Math.abs(window.scrollY - scrollY) > 2) window.scrollTo(0, scrollY);
-  if (key) { const el = $(`[data-v2-answer="${key}"],[data-v2-range="${key}"],[data-v2-watch="${key}"]`, main); if (el) el.focus(); }
+  if (key) { const el = key === 'adv' ? $('[data-v2-adv-toggle]', main) : $(`[data-v2-answer="${key}"],[data-v2-range="${key}"],[data-v2-watch="${key}"]`, main); if (el) el.focus(); }
 }
 
 export async function render(main, route) {
@@ -473,10 +360,13 @@ export async function render(main, route) {
   const sym = route.symbol;
   D = { sym };
   store.pushRecent(sym);
-  provideContext(() => ({ view: 'overview', ticker: sym, quote: D.quote, verdict: (D.ticker || {}).verdict, company: (D.ticker || {}).company, news: (D.ticker || {}).news, framework: D.framework, fair_value: D.fairValue, earnings: D.earnings, digest: D.digest, thesis_check: thesisContext() }));
+  provideContext(() => ({ view: 'overview', ticker: sym, quote: D.quote, verdict: (D.ticker || {}).verdict, company: (D.ticker || {}).company, news: (D.ticker || {}).news, framework: D.framework, fair_value: D.fairValue, earnings: D.earnings, digest: D.digest, stage: D.stage && D.stage.available ? { stage: D.stage.stage, name: D.stage.name, transition: D.stage.transition_short } : null, thesis_check: thesisContext() }));
   document.title = `${sym} Dossier, Optic`;
   if (lp) lp.stop();
-  lp = livePrice(main, route.symbol, () => D, 'overview', { stage: () => stageLabel(sym) });
+  lp = livePrice(main, route.symbol, () => D, 'overview', { stage: () => stageFor(sym) });
+  if (unPrefs) unPrefs();
+  // "Show advanced analysis" here, in Settings or in Classic: the Overview's folds follow it at once
+  unPrefs = prefs.onChange((what) => { if (what === 'knowledge' && D.sym === sym) { advMoved = true; paint(main, sym); } });
   paint(main, sym);
   wire(main, sym);
   sections(main, 'overview', { levels: { 'advanced research': 2 }, norm: (t) => { const n = ((main.querySelector('.dhead .name span') || {}).textContent || '').trim(); return n ? t.split(n).join('the company') : t; } });   // folds, Expand all, Panels (Classic parity B3)
@@ -488,30 +378,36 @@ export async function render(main, route) {
     D.ticker = d; if (d.quote) D.quote = fresher(D.quote, d.quote);
     if (d.data_caveat) D.freshText = clean(String(d.data_caveat).split(/(?<=\.)\s/)[0]);   // the delay; Greeks and Black-Scholes belong to Options
   }, (e) => { D.tickerError = e; });
-  step(api.get(`/api/framework/${enc}?mode=combined`, { ttl: 300000, timeout: 60000 }), (d) => { D.framework = d.available === false ? null : d; if (d.available === false) D.fwError = new api.ApiError('notfound', 404, d.reason || 'No framework read'); }, (e) => { D.fwError = e; D.framework = {}; });
+  step(api.get(`/api/framework/${enc}?mode=combined`, { ttl: 300000, timeout: 60000 }), (d) => { D.fwRaw = d; D.framework = d.available === false ? null : d; if (d.available === false) D.fwError = new api.ApiError('notfound', 404, d.reason || 'No framework read'); }, (e) => { D.fwError = e; D.fwNetError = e; D.fwRaw = null; D.framework = {}; });
   step(api.get(`/api/fair-value/${enc}`, { ttl: 600000, timeout: 30000 }), (d) => { D.fairValue = d; }, (e) => { D.fvError = e; D.fairValue = {}; });
   step(api.get(`/api/longterm/${enc}?indices=false`, { ttl: 600000, timeout: 45000 }), (d) => { D.longterm = d; }, () => { D.longterm = {}; });
   step(api.get(`/api/earnings/${enc}`, { ttl: 600000, timeout: 45000 }), (d) => { D.earnings = d; }, (e) => { D.earnError = e; D.earnings = {}; });
   step(api.get(`/api/digest/${enc}`, { ttl: 300000, timeout: 30000 }), (d) => { D.digest = d; }, () => { D.digest = null; });
   step(api.get(`/api/segments/${enc}`, { ttl: 600000, timeout: 60000 }), (d) => { D.segments = d; }, () => { D.segments = null; });
-  step(api.get(`/api/stage?symbol=${enc}`, { ttl: 3600000, timeout: 45000 }), (d) => { D.stage = d; }, () => { D.stage = null; });
-  TR.load().then(() => { if (D.sym === sym && D.stage) stageLabel(sym); });   // the stage's explanation adds what history says
+  // the chart's ex-dividend and split marks (Classic's extras), and the header's Weinstein stage: both free reads
+  step(api.get(`/api/extras/${enc}?benchmark=SPY`, { ttl: 600000, timeout: 30000 }), (d) => { D.extras = d; }, () => { D.extras = null; });
+  // a failed stage read is asked once more after half a minute, as Classic asks again on its next paint: a missing
+  // stage is otherwise silent, where a missing grade says so
+  const stageRead = (tries) => step(api.get(`/api/stage?symbol=${enc}`, { ttl: 1800000, timeout: 45000 }), (d) => { D.stage = d; },
+    () => { D.stage = null; if (tries > 0) setTimeout(() => { if (live && D.sym === sym) stageRead(tries - 1); }, 30000); });
+  stageRead(1);
+  TR.load().then(() => { if (D.sym === sym && D.stage) stageFor(sym); });   // the stage's explanation adds what history says (B6c)
 }
 
-export function dispose() { if (lp) { lp.stop(); lp = null; } live = false; disposeThesis(); drawer.close({ silent: true }); }
+export function dispose() { if (lp) { lp.stop(); lp = null; } if (unPrefs) { unPrefs(); unPrefs = null; } live = false; disposeThesis(); drawer.close({ silent: true }); }
 
 function wire(main, sym) {
   main.addEventListener('click', (e) => {
     const r = e.target.closest('[data-v2-range]');
     if (r) { range = r.dataset.v2Range; paint(main, sym); return; }
+    if (e.target.closest('[data-v2-adv-toggle]')) { prefs.setAdvanced(!prefs.advancedOn()); return; }   // the repaint follows from prefs.onChange
     const a = e.target.closest('[data-v2-answer]');
-    if (a) {
+    if (a) {   // a fund's answers (a company's four questions carry their own folds)
       const k = a.dataset.v2Answer;
-      const titles = { quality: 'How is the business doing?', price: PRICE_Q, trend: 'How has the share price moved?', next: "What's next?" };
-      const asks = { quality: `How is ${sym}'s business doing?`, price: `How is ${sym} priced against its own history?`, trend: `How has ${sym}'s share price moved?`, next: `What's next for ${sym}?` };
+      const titles = { trend: 'How has the share price moved?' };
       if (isFundHere(sym)) Object.assign(titles, { quality: 'What is it?', price: 'What do its holdings cost?', next: 'What does it pay?' });
       drawer.open({ kicker: `${sym}, evidence and method`, title: titles[k], opener: a,
-        body: html`${evidence(k, sym)}${miloButton('Ask Milo about this', { ask: isFundHere(sym) ? `${titles[k].replace('?', '')}, for ${sym}?` : asks[k], context: `${sym}, ${titles[k]}`, symbol: sym })}` });
+        body: html`${evidence(k, sym)}${miloButton('Ask Milo about this', { ask: k === 'trend' ? `How has ${sym}'s share price moved?` : `${titles[k].replace('?', '')}, for ${sym}?`, context: `${sym}, ${titles[k]}`, symbol: sym })}` });
       return;
     }
     const evb = e.target.closest('[data-v2-ev]');

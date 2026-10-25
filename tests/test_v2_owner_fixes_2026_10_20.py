@@ -41,7 +41,7 @@ def test_what_the_company_does_and_its_headlines_come_first():
 
 
 def test_bull_and_bear_case_titles_in_the_markets_colours():
-    for src in (DOSSIER, PANELS):
+    for src in ((JS / "pages/overview-research.js").read_text(), PANELS):   # the Overview's case moved there (2026-10-25)
         assert 'class="case-h up">Bull case<' in src and 'class="case-h down">Bear case<' in src
         assert ">For<" not in src and ">Against<" not in src
 

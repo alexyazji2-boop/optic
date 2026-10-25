@@ -20199,19 +20199,49 @@ footer.legal > .legal-full {
 .tk-sizing > summary:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: var(--r-xs); }
 .chat-desc { margin: 0; padding: var(--space-1) var(--space-4) var(--space-2); font-size: var(--t-caption); line-height: 1.45; color: var(--ink-muted); border-bottom: 1px solid var(--border); }
 
-/* The Optic Score: short- and long-term conviction on one 0-100 scale. */
-.osc-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: var(--space-4); }
-.osc-tile { padding: var(--space-3) var(--space-4); background: var(--raised); border: 1px solid var(--border); border-radius: var(--r-md); min-width: 0; }
+/* The Optic Score (owner's refinement, 2026-10-25): one column per horizon,
+   divided by a rule rather than boxed, each its span, its score on a 0 to 100
+   track with the model's own neutral band shaded, what it means, what moved
+   it, and one "How this is calculated" fold. The numbers take their colour
+   from their own model's bands. */
+.osc-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.osc-tile { display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; padding: var(--space-1) var(--space-5) var(--space-2) 0; }
+.osc-tile + .osc-tile { padding: var(--space-1) 0 var(--space-2) var(--space-5); border-left: 1px solid var(--border); }
+.osc-tile p { margin: 0; }
 .osc-label { margin: 0; font-size: var(--t-micro); font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-2); font-family: var(--label-face); }
-.osc-horizon { margin-left: var(--space-1); font-weight: 400; text-transform: none; letter-spacing: 0; color: var(--ink-muted); }
-.osc-num { margin: var(--space-1) 0 0; font: 600 var(--t-d1)/1.1 var(--display); font-variant-numeric: tabular-nums; color: var(--ink); }
-.osc-num.up { color: var(--pos); }
-.osc-num.down { color: var(--neg); }
-.osc-of { margin-left: 2px; font-size: var(--t-base); font-weight: 500; color: var(--ink-muted); }
-.osc-none { color: var(--ink-muted); }
-.osc-words { margin: var(--space-1) 0 0; font-size: var(--t-base); font-weight: 600; color: var(--ink); }
-.osc-basis { margin: var(--space-2) 0 0; font-size: var(--t-small); line-height: 1.5; color: var(--ink-muted); }
-.osc .lt-conflict { margin-top: var(--space-4); }
+.osc-num { font: 600 var(--t-d1)/1.05 var(--display); font-variant-numeric: tabular-nums; color: var(--ink); }
+.osc-num.pos { color: var(--pos); }
+.osc-num.neg { color: var(--neg); }
+.osc-num.osc-none { color: var(--ink-muted); font-size: var(--t-d3); }
+.osc-of { margin-left: 6px; font-size: var(--t-base); font-weight: 500; color: var(--ink-muted); }
+.osc-scale { position: relative; display: block; height: 6px; max-width: 320px; border-radius: 2px; background: var(--surface-2); }
+.osc-band { position: absolute; top: 0; bottom: 0; background: var(--border-strong); }
+.osc-mid { position: absolute; left: 50%; top: -3px; width: 1px; height: 12px; background: var(--ink-muted); }
+.osc-dot { position: absolute; top: -4px; width: 4px; height: 14px; margin-left: -2px; border-radius: 2px; background: var(--ink); }
+.osc-dot.pos { background: var(--pos); }
+.osc-dot.neg { background: var(--neg); }
+.osc-ends { display: flex; justify-content: space-between; max-width: 320px; margin-top: calc(-1 * var(--space-1)); font-size: var(--t-micro); color: var(--ink-muted); font-variant-numeric: tabular-nums; }
+.osc-words { font-size: var(--t-base); font-weight: 600; color: var(--ink); }
+.osc-meta { font-weight: 400; color: var(--ink-2); }
+.osc-line { font-size: var(--t-small); line-height: 1.5; color: var(--ink-2); max-width: 60ch; }
+.osc-drv { list-style: none; margin: 0; padding: 0; }
+.osc-drv li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0 var(--space-3); padding: 6px 0; border-top: 1px solid var(--border); }
+.osc-drv-l { font-size: var(--t-small); font-weight: 600; color: var(--ink); }
+.osc-drv-v { font-size: var(--t-small); font-weight: 600; text-align: right; font-variant-numeric: tabular-nums; }
+.osc-drv-v.pos { color: var(--pos); }
+.osc-drv-v.neg { color: var(--neg); }
+.osc-drv-d { grid-column: 1 / -1; font-size: var(--t-caption); line-height: 1.45; color: var(--ink-muted); }
+.osc-note { padding-left: var(--space-2); border-left: 2px solid var(--border); font-size: var(--t-caption); line-height: 1.5; color: var(--ink-2); }
+.osc-both { margin: var(--space-4) 0 0; max-width: 80ch; font-size: var(--t-small); line-height: 1.55; color: var(--ink); }
+.osc-how { margin-top: auto; }
+.osc-how-body { display: grid; gap: var(--space-2); padding: var(--space-1) 0 var(--space-2); font-size: var(--t-small); line-height: 1.5; color: var(--ink-2); }
+.osc-how-body p { margin: 0; }
+.osc-t { width: 100%; }
+@media (max-width: 760px) {
+  .osc-grid { grid-template-columns: minmax(0, 1fr); }
+  .osc-tile { padding: var(--space-1) 0 var(--space-3); }
+  .osc-tile + .osc-tile { padding: var(--space-4) 0 var(--space-2); border-left: 0; border-top: 1px solid var(--border); }
+}
 
 /* Research framework (2026-10-14): four separate conclusions on the Overview,
    one tile each, the answer in a word first and the evidence folded. No

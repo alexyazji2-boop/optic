@@ -1718,9 +1718,10 @@ async def indices_panel() -> Dict[str, Any]:
     return await _run(longterm.analyse_indices, YF_PROVIDER)
 
 
-# Company logos for the search rows (owner, 2026-10-21: "include the logo as well, make it similar to the
-# tradingview screenshots"). Fetched by Optic, not by the reader's browser, so the two logo services never learn which
-# reader looked at which symbol, and kept on disk: a logo is asked for once a fortnight, and a symbol with none once
+# Company logos for the search rows and the Dossier header (owner, 2026-10-21: "include the logo as well, make it
+# similar to the tradingview screenshots"; on the Dossier header since 2026-10-25, as in Classic). Fetched by Optic, not
+# by the reader's browser, so the two logo services never learn which reader looked at which symbol, and kept on disk:
+# a logo is asked for once a fortnight, and a symbol with none once
 # every two days. Only images are kept; an SVG is served under a sandboxing policy, so one opened on its own cannot
 # run anything on Optic's address. A reader's browser draws the symbol's initial when there is no logo.
 _LOGO_DIR = os.path.join(os.path.dirname(screen_mod.CACHE_PATH), "logos")

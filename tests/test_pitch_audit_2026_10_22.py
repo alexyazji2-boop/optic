@@ -9,34 +9,19 @@ OV = (JS / "pages/dossier.js").read_text()
 
 # ---------------------------------------------------------------- 1. the valuation answer and its question
 
-def test_every_valuation_state_is_described_not_answered_yes_or_no(tmp_path):
-    got = _run(tmp_path, f"""
-      const O = await import('{(JS / "pages/dossier.js").as_posix()}');
-      const st = (n) => ({{ stars: {{ available: true, stars: n }}, fair_value: {{ available: true }} }});
-      print(JSON.stringify({{
-        q: O.PRICE_Q,
-        s: [1, 2, 3, 4, 5].map((n) => O.priceAnswer(st(n))),
-        wide: O.priceAnswer({{ stars: {{ available: false }}, fair_value: {{ available: true, wide: true }} }}),
-        none: O.priceAnswer({{ stars: {{ available: false }}, fair_value: {{ available: false }} }}),
-        failed: O.priceAnswer({{}}, new Error('x')),
-        loading: O.priceAnswer(undefined),
-      }}));
-    """)
-    assert got["q"] == "How is it priced against its own history?"
-    assert got["s"] == ["Above its usual valuation range.", "Inside its usual range, in the upper half.",
-                        "Near the middle of its usual range.", "Inside its usual range, in the lower half.",
-                        "Below its usual valuation range."]
-    for a in got["s"]:
-        assert not a.lower().startswith(("yes", "no", "not especially")), a
-    assert got["wide"] == "Its usual range is too wide to place the price in."
-    assert got["none"] == "No valuation range for this company."
-    assert got["failed"] == "Not available right now." and got["loading"] is None
-    assert "q: 'Is the share price expensive?'" not in OV and "q: PRICE_Q, a: priceA" in OV
+OVR = (JS / "pages/overview-research.js").read_text()
+
+
+def test_every_valuation_state_is_described_not_answered_yes_or_no():
+    # Since 2026-10-25 a company's price question is Classic's "Is the price attractive?" (the owner's screenshots),
+    # answered by the framework's own valuation label or "Insufficient Data", never yes or no.
+    assert "tile('price', 'Is the price attractive?', v.status === 'scored' ? v.label : 'Insufficient Data', sub, more, c)" in OVR
+    assert "'Is the share price expensive?'" not in OV + OVR and "Yes, " not in OVR.split("function tile(")[1].split("function businessTile")[0]
 
 
 def test_quality_answers_describe_the_grade():
-    assert "Yes, high quality." not in OV and "Yes, good quality." not in OV
-    assert "A: \"Strong on Optic's quality measures.\"" in OV
+    assert "Yes, high quality." not in OV + OVR and "Yes, good quality." not in OV + OVR
+    assert "const value = q.status === 'scored' ? `Quality ${q.grade}` : 'Insufficient Data';" in OVR
 
 
 def test_four_stars_is_not_called_below_the_range(tmp_path):
@@ -66,7 +51,19 @@ def test_the_one_year_chart_starts_on_the_close_the_answer_measures_from(tmp_pat
       print(JSON.stringify({{ first: w[0].d, from: t.from.d, last: w[w.length - 1].d, to: t.to.d, n: w.length }}));
     """)
     assert got["first"] == got["from"] and got["last"] == got["to"] and got["n"] == 253
-    assert "Daily closes from ${fullDate(first.d)} through ${fullDate(last.d)}." in OV
+    # Classic's year (2026-10-25) starts on the same close: 252 sessions of change, so the chart's headline and the
+    # trade question's "up N% over the past year" agree
+    yr = _run(tmp_path, f"""
+      const R = await import('{(JS / "pages/overview-research.js").as_posix()}');
+      const O = await import('{(JS / "pages/dossier.js").as_posix()}');
+      const n = 400, dates = Array.from({{ length: n }}, (_, i) => new Date(Date.UTC(2025, 0, 1) + i * 864e5).toISOString().slice(0, 10));
+      const close = dates.map((_, i) => 100 + i);
+      const t = {{ technicals: {{ price_series: {{ dates, close }} }}, quote: {{}} }};
+      const w = O.windowOf(dates.map((d, i) => ({{ d, c: close[i] }})), '1Y');
+      print(JSON.stringify({{ first: R.series(t).close[0], chart: w[0].c, title: R.chartTitle('X', w.map((p) => p.c)), read: R.priceRead(t).text }}));
+    """)
+    assert yr["first"] == yr["chart"]
+    assert yr["title"].startswith("X is up 102% over the past year") and "up 102% over the past year" in yr["read"], (yr["title"], yr["read"])
 
 
 # ---------------------------------------------------------------- 2. catalyst timing: one event, one state

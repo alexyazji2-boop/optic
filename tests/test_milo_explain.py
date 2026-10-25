@@ -28,7 +28,8 @@ def test_it_is_offered_where_a_reader_meets_a_reading():
     for where in ("miloExplainButton('RSI (14)'", "miloExplainButton('MACD (12, 26, 9)'",
                   "miloExplainButton('Trend Strength Oscillator (14, 14, 5)'",
                   "return miloExplainButton('MA Trend Identifier', words, 'Chart');",
-                  "miloExplainButton(`Optic Score, ${label.toLowerCase()} (${horizon})`",
                   "host.insertAdjacentHTML('afterend', miloExplainButton('Weinstein stage',",
                   "ask.className = 'ov-linkbtn gloss-milo';"):
         assert where in APP, where
+    # The Optic Score's tiles traded Explain for an inline "How this is calculated" fold (owner, 2026-10-25)
+    assert "miloExplainButton(`Optic Score" not in APP and "How this is calculated" in APP

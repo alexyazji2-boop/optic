@@ -129,11 +129,16 @@ The owner's mapping (2026-10-24): VWAP the one cool hue (the indicator exception
 
 ### Headers
 Every dossier tab uses the Chart page's one-line header (`dossier-frame.js` `header()` now defaults to `bar`):
+- the company's logo (`/api/logo`, over the symbol's initial; `ui/symbols.js`), as in Classic's header (2026-10-25);
 - the ticker and name;
 - the price and the day's move;
 - the extended-hours price;
 - on the Overview only, the Weinstein stage as a text label in the same line ("Stage 2, advancing"), never a chip; what it means for the symbol opens from the label (Classic parity B6a);
 - Alert, Compare, Watch and Ask about at the right.
+
+The Overview adds two of Classic's controls (owner's screenshots, 2026-10-25):
+- the Weinstein stage in Classic's words ("Stage 3 · Topping breakdown") as a text label, never a chip, coloured by its stage, opening what it means for the symbol, with Explain beside it, which drafts the question for Milo. With the stage the header takes a second line, and the actions sit on it at the right;
+- "Show advanced analysis" at the end of the tab row (under the tabs on a phone): a squared switch on Classic's knowledge keys, so it, Settings and Classic never disagree. It opens Advanced research and the full case for and against.
 
 The account button never wraps (`white-space: nowrap; flex: none`).
 

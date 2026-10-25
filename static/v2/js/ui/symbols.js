@@ -22,10 +22,11 @@ export function marked(text, query) {
   if (at < 0) return esc(t);
   return `${esc(t.slice(0, at))}<b>${esc(t.slice(at, at + q.length))}</b>${esc(t.slice(at + q.length))}`;
 }
-/** The logo, over the symbol's initial. */
-export function logoHTML(symbol) {
+/** The logo, over the symbol's initial. `lazy: false` for one above the fold, such as the Dossier header's (on every
+ *  tab since 2026-10-25, as Classic's header has it), which a repaint draws afresh and a lazy load could leave waiting. */
+export function logoHTML(symbol, { lazy = true } = {}) {
   const sym = String(symbol || '').toUpperCase(), first = (sym.match(/[A-Z0-9]/) || [''])[0];
-  return `<span class="sym-logo" aria-hidden="true" data-l="${esc(first)}">${LOGO_SYM.test(sym) ? `<img src="/api/logo/${encodeURIComponent(sym)}" alt="" loading="lazy" decoding="async">` : ''}</span>`;
+  return `<span class="sym-logo" aria-hidden="true" data-l="${esc(first)}">${LOGO_SYM.test(sym) ? `<img src="/api/logo/${encodeURIComponent(sym)}" alt=""${lazy ? ' loading="lazy"' : ''} decoding="async">` : ''}</span>`;
 }
 /** One result: the logo, the symbol and the name with what was typed marked, and the kind of listing. */
 export function rowHTML(r, query, { kind = true } = {}) {

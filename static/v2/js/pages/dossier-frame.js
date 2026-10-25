@@ -3,7 +3,7 @@
 // the only place the Dossier's pages are listed. Each tab module renders its
 // own body under it and loads the core quote through core(), which the API
 // cache shares across tabs so switching tabs does not refetch.
-import { html, render as draw } from '../core/dom.js';
+import { html, raw, render as draw } from '../core/dom.js';
 import * as api from '../core/api.js';
 import { num, signed, dir, clean, capFirst, isNum } from '../core/format.js';
 import { watchButton, tickerMenu } from '../ui/company.js';
@@ -15,6 +15,8 @@ import { learn, kindOf, can, onLearn } from '../core/instrument.js';
 import { etStamp, etDay, sessionWord, tradeTime, sessionFreshness } from '../core/marketTime.js';
 import { poll } from '../core/poll.js';
 import { term } from '../ui/term.js';
+import { logoHTML } from '../ui/symbols.js';
+import { advancedOn } from '../core/prefs.js';
 
 // The price's session and time in words: the close it is, or the trade time when the session is open, and any
 // extended print with the moment it was struck (core/marketTime.js).
@@ -110,22 +112,38 @@ function actions(sym, label, sm) {
   </div>`;
 }
 
-export function header(sym, D, view = 'overview', { compact = false, bar = true, stage = '' } = {}) {
+/* "Show advanced analysis", Classic's one control for how much of the specialist research shows open (owner's
+ * screenshots, 2026-10-25), at the end of the tab row as in Classic. It is the reader's knowledge level read as a
+ * switch, on Classic's keys (core/prefs.js), so this switch, Settings' and Classic's never disagree. Only where it
+ * changes something: the Overview. */
+export function advSwitch() {
+  const on = advancedOn();
+  return html`<button type="button" class="adv-switch" role="switch" aria-checked="${on}" data-v2-adv-toggle title="Opens Advanced research and the full case for and against on this page, and has Milo answer at the Advanced level"><span class="adv-track" aria-hidden="true"><span class="adv-knob"></span></span><span class="adv-label">Show advanced analysis</span></button>`;
+}
+/* The Weinstein stage, on the Overview alone as in Classic: its reading in Classic's words ("Stage 3 · Topping",
+ * "breakdown") as a label that opens what it means for this symbol, and Explain, which drafts the question for Milo. */
+function stageLine(sym, st) {
+  if (!st) return '';
+  return html`<p class="dh-stage stage-${st.stage}">${term(`stage:${sym}`, html`<i class="stage-dot" aria-hidden="true"></i>${st.main}${st.tag ? html` <span class="dh-stage-tag">${st.tag}</span>` : ''}`)}
+    ${miloButton('Explain', { ask: st.ask(sym), context: `${sym} Dossier, Overview: Weinstein stage`, symbol: sym, cls: 'btn-sm dh-explain' })}</p>`;
+}
+
+export function header(sym, D, view = 'overview', { compact = false, bar = true, stage = null } = {}) {
   const q = D.quote || {};
   const s = (D.session && D.session.prices) || {};
   const name = q.name || (D.session && D.session.name) || '';
   const ext = s.extended && isNum(s.extended.price) ? s.extended : null;
   const label = (pageOf(view) || {}).label || 'Overview';
-  stage = typeof stage === 'function' ? stage() : stage;   // a function for livePrice's redraws, which pass these options on
+  const st = typeof stage === 'function' ? stage() : stage;   // a function for livePrice's redraws, which pass these options on
   // One line, so the research gets the screen: the Chart page's header (owner, 2026-10-18 second review), on every
   // dossier tab since the design standard of 2026-10-19. The tall header below is kept for a caller that asks.
   if (bar) {
-    return html`<header class="dhead bar">
+    return html`<header class="dhead bar${st ? ' is-wide' : ''}">${raw(logoHTML(sym, { lazy: false }))}
       <h1 class="name"><b class="tick">${sym}</b>${name && name !== sym ? html`<span>${name}</span>` : ''}<span class="sr">, ${label}</span></h1>
       <p class="dh-price">${isNum(q.price) ? html`<span class="dh-px">${num(q.price)}</span>` : D.quoteError ? '' : html`<span class="sk dh-sk dh-sk-sm" role="status" aria-label="Loading the price"></span>`}
         <span class="dh-chg ${dir(q.change_pct)}">${isNum(q.change_pct) ? html`${signed(q.change, 2, '')} (${signed(q.change_pct)})` : ''}</span>
-        ${isNum(q.price) ? html`<span class="dh-ext">${priceWhen(D)}</span>` : ''}${ext ? html`<span class="dh-ext">${capFirst(ext.kind)} ${num(ext.price)} <span class="${dir(ext.change_pct)}">${signed(ext.change_pct)}</span>${ext.as_of ? ` at ${etStamp(ext.as_of)}` : ''}</span>` : ''}${stage ? html`<span class="dh-ext dh-stage">${term(`stage:${sym}`, stage)}</span>` : ''}</p>
-      ${actions(sym, label, true)}
+        ${isNum(q.price) ? html`<span class="dh-ext">${priceWhen(D)}</span>` : ''}${ext ? html`<span class="dh-ext">${capFirst(ext.kind)} ${num(ext.price)} <span class="${dir(ext.change_pct)}">${signed(ext.change_pct)}</span>${ext.as_of ? ` at ${etStamp(ext.as_of)}` : ''}</span>` : ''}</p>
+      ${stageLine(sym, st)}${actions(sym, label, true)}
     </header>`;
   }
   return html`<header class="dhead ${compact ? 'compact' : ''}">

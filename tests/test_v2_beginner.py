@@ -71,9 +71,14 @@ def test_overview_opens_on_what_the_company_does():
     for want in ("What ${name} does", "<dt>${fund ? 'Kind of fund' : 'Industry'}</dt>", "Where its revenue comes from", "US dollars; quotes delayed about 15 minutes", "replace(/^The Company\\b/, name)"):
         assert want in ab, want
     assert "String(d.data_caveat).split(" in OV, "the chart's footer is the delay, not Greeks and Black-Scholes"
+    # A company's four answers are Classic's four questions since 2026-10-25 (owner's screenshots; the owner chose to
+    # replace v2's set rather than show both): the share price's trend is said inside "Is there a trade?", beside the
+    # setup. A fund keeps its four, with the price trend in place of a trade setup.
     ans = OV[OV.index("function answers(sym) {"):OV.index("function answerGrid(out) {")]
-    assert "out.push(trendItem(sym));" in ans and "out.push(tradeItem);" not in ans, "the price trend in place of the trade setup"
-    assert "['Short-term trade setup', tradeNow(sym), 'Swing grade']" in OV, "the trade setup kept, one step away"
+    assert "return answerGrid(fundAnswers(sym, trendItem(sym)));" in ans
+    assert "${fund ? (D.fwError && D.fvError && D.earnError ? failed('The four answers', D.fwError, { retry: 'dossier' }) : answers(sym)) : OR.fourQuestions(c)}" in OV
+    ovr = (JS / "pages/overview-research.js").read_text()
+    assert "This describes the stock, not the business." in ovr and "tile('trade', 'Is there a trade?', value, sw.why" in ovr
 
 
 def test_the_long_term_views_are_told_apart_and_summed_up(tmp_path):
@@ -91,10 +96,11 @@ def test_the_long_term_views_are_told_apart_and_summed_up(tmp_path):
     assert " but " not in got["allGood"] and got["allGood"].startswith("The business grades A")
     assert got["none"] == "Optic's combined long-term case is neutral."
     assert abs(got["trend"]["ch"] - ((249.5 - 123.5) / 123.5 * 100)) < 1e-6 and got["trend"]["span"] == "a year", "a year back: 252 sessions"
-    lv = OV[OV.index("function longViews(sym) {"):OV.index("const trendBand")]
-    assert "Price trend score: how the share price has behaved over about five years" in lv
-    assert "not about the business, its price today or whether it suits you" in lv
-    assert "The trend model's own wording" in lv, "its 'core holding' wording kept, in the details, as the trend model's"
+    # the summing up leads "Taken together"; the trend score itself is the Optic Score's long-term reading (2026-10-25)
+    comb = OV[OV.index("function combined() {"):OV.index("/* ---------------- what changed lately")]
+    assert "const syn = synthesisLine();" in comb and '<p class="synth">${syn}</p>' in comb
+    ovr = (JS / "pages/overview-research.js").read_text()
+    assert "span: 'Long term: several years'" in ovr and "line: clean(h.plan || '')" in ovr, "the trend model's own wording, as its reading"
 
 
 def test_search_can_be_dismissed_on_a_phone_and_leads_with_companies():
