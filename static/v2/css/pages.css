@@ -30,7 +30,9 @@
 @media (max-width: 560px) { .desk-branches div { grid-template-columns: minmax(0, 1fr); gap: 2px; } }
 /* the week as days on What matters today (Classic parity B8.2): a sideways strip (ui/strips.js) of the trading days
    the board looks at; a high-impact item has a warm left edge and a company's report a dashed one, said in the key */
-.cs-strip { display: flex; overflow-x: auto; scrollbar-width: none; margin: 4px 0 6px; border-block: 1px solid var(--c-line-2); }
+/* positioned, so the screen-reader text inside its items (absolutely placed) scrolls with the strip instead of
+   widening the page: at 390 px it pushed Home 45 px sideways (release check, 2026-10-25) */
+.cs-strip { position: relative; display: flex; overflow-x: auto; scrollbar-width: none; margin: 4px 0 6px; border-block: 1px solid var(--c-line-2); }
 .cs-strip::-webkit-scrollbar { display: none; }
 .cs-day { flex: 1 0 128px; min-width: 128px; display: grid; align-content: start; gap: 6px; padding: 10px; }
 .cs-day + .cs-day { border-left: 1px solid var(--c-line-2); } .cs-day.is-today { background: var(--c-sunk); }
