@@ -611,8 +611,17 @@ function pendingLine(pend) {
   const n = pend.count || 1;
   return html`<p class="pl-cat is-pending"><b>A ${(pend.kinds || []).join(' and ')} event is still ahead</b>, flagged by ${n === 1 ? 'one headline' : `${n} headlines`}. Nothing below predicts which way it resolves, so conviction is held short of high until it does.</p>`;
 }
-/** "Read more": what carries the read, what is against it, what its conviction rests on and what it cannot tell you
- *  (Classic's pulseReadMore), every clause a figure already in the payload. */
+/** How far the short-term score sits from its neutral 50, in whole points of the Optic Score's 0 to 100 and rounded
+ *  as that card prints it. Null with no composite in the payload. */
+export const fromNeutral = (p) => { const n = score100((p || {}).composite_score); return n === null ? null : Math.abs(Math.round(n) - 50); };
+/** The meta row's conviction word with the distance it names: on its own beside "80% of inputs agree", "low
+ *  conviction" read as a comment on that figure. v2 only (owner, 2026-10-25): Classic keeps its wording. */
+export function convictionChip(p) {
+  const words = convictionWords((p || {}).conviction), off = fromNeutral(p);
+  return !words || off === null ? words : `${words}, ${off} ${off === 1 ? 'point' : 'points'} from 50`;
+}
+/** "Read more": what carries the read, what is against it, what its conviction word measures and what it cannot tell
+ *  you (Classic's pulseReadMore), every clause a figure already in the payload. */
 export function readMore(p) {
   const live = ((p && p.factors) || []).filter((f) => !f.unavailable && f.score !== null && f.score !== undefined);
   if (!live.length) return '';
@@ -629,14 +638,24 @@ export function readMore(p) {
       ? html`<p><b>Nothing material is pulling the other way.</b> ${weakest.label} is the nearest to it at ${sg(weakest.score)}, which on ${num(weakest.weight_pct, 0)}% of the weight is close to no opinion rather than a disagreement.</p>`
       : html`<p><b>Every input that had data points the same way.</b> The weakest of them is ${weakest.label} at ${sg(weakest.score)} on ${num(weakest.weight_pct, 0)}% of the weight.</p>`);
   } else parts.push(html`<p><b>The inputs do not agree on a direction</b>, which is what a neutral reading is. It is not a forecast of no movement.</p>`);
+  // What the conviction word measures, and agreement beside it. Conviction is only the composite's size in bands
+  // (swing.verdict: 10, 30 and 50 from zero, so 5, 15 and 25 from 50 here), capped at moderate while an event is
+  // pending; agreement (signal_agreement_pct) is a separate figure. This used to call conviction "agreement", as
+  // Classic's pulseReadMore still does (the owner kept Classic as it is).
   const bits = [];
-  if (fin(p.agreement_pct)) bits.push(`${num(p.agreement_pct, 0)}% of the inputs point the same way`);
+  if (fin(p.agreement_pct)) bits.push(`${num(p.agreement_pct, 0)}% of the inputs with a clear lean point the same way`);
   if (p.factors_priced && p.factors_total) bits.push(`${p.factors_priced} of ${p.factors_total} had data`);
-  if (bits.length && p.conviction) {
-    const held = p.pending_catalyst && p.pending_catalyst.pending === true ? ' It is held short of high while a scheduled event is still ahead, because nothing measured here predicts which way that resolves.' : '';
+  if (p.conviction) {
+    // Only where the hold changed the word: on a low read it would suggest the event is why it is low.
+    const capped = !fin(p.composite_score) || Math.abs(Number(p.composite_score)) >= 50;
+    const held = p.pending_catalyst && p.pending_catalyst.pending === true && capped ? ' It is held short of high while a scheduled event is still ahead, because nothing measured here predicts which way that resolves.' : '';
     const chain = live.filter((f) => f.key === 'gamma' || f.key === 'flow');
     const shared = chain.length === 2 ? ` ${chain.map((f) => f.label).join(' and ')} are both read off the same option chain, so those two agreeing is less corroboration than two separate ticks look like.` : '';
-    parts.push(html`<p><b>${capFirst(convictionWords(p.conviction))}</b>: ${bits.join(' and ')}.${held} Conviction is agreement between the inputs, not a probability.${shared}</p>`);
+    const off = fromNeutral(p);
+    const where = off === null ? '. Conviction only sorts how far the short-term score sits from its neutral 50 into bands:'
+      : `: the short-term score is ${num(score100(p.composite_score), 0)} of 100, ${off} ${off === 1 ? 'point' : 'points'} from its neutral 50. Conviction only sorts that distance into bands:`;
+    const agree = bits.length ? ` Agreement is a separate figure: ${bits.join(' and ')}. The two can differ: inputs that all lean slightly one way agree fully and still sit near 50.` : '';
+    parts.push(html`<p><b>${capFirst(convictionWords(p.conviction))}</b>${where} under 5 points none, 5 to 15 low, 15 to 25 moderate, 25 or more high.${held} It is not a probability, and it has not been shown to predict returns.${agree}${shared}</p>`);
   }
   const missing = (p.factors || []).filter((f) => f.unavailable), limits = [];
   (p.conflicts || []).forEach((x) => { const s = typeof x === 'string' ? x : (x && (x.text || x.note)) || ''; if (s) limits.push(clean(s)); });
@@ -660,7 +679,7 @@ export function opticRead(c) {
     <p class="pl-lede is-${stance}">${clean(dg.lede || p.stance_label || stance.toUpperCase())}</p>
     ${catalystLine(p.catalyst)}${pendingLine(p.pending_catalyst)}${readMore(p)}
     ${story && story.title ? html`<p class="pl-story">${tier ? html`<span class="chip-tag pl-tier" title="${story.tier_why || ''}">${tier.label}</span>` : ''}<a class="textlink" href="${story.url || '#'}" target="_blank" rel="noopener noreferrer">${clean(story.title)}</a><span class="t-muted">${[story.publisher, story.age_words, story.catalyst].filter(Boolean).join(', ')}</span></p>` : ''}
-    <div class="pl-meta">${p.conviction ? html`<span>${convictionWords(p.conviction)}</span>` : ''}${fin(p.agreement_pct) ? html`<span>${num(p.agreement_pct, 0)}% of inputs agree</span>` : ''}
+    <div class="pl-meta">${p.conviction ? html`<span>${convictionChip(p)}</span>` : ''}${fin(p.agreement_pct) ? html`<span>${num(p.agreement_pct, 0)}% of inputs agree</span>` : ''}
       ${src.count ? html`<details class="more-inline pl-src"><summary>${src.count} source${src.count === 1 ? '' : 's'}</summary><div class="how-body"><p>${(src.names || []).join(', ')}</p></div></details>` : ''}</div>
     <div class="pl-bars" role="group" aria-label="How the ${p.factors_total || 5} inputs scored">${(p.factors || []).map((f) => html`<div class="pl-factor${f.unavailable ? ' is-none' : ''}">
       <span class="pl-flabel" title="${f.measures || ''}">${f.label}</span>${bar(f.unavailable ? null : f.score, f.direction)}<span class="pl-fval">${f.unavailable ? 'no data' : `${f.score > 0 ? '+' : ''}${num(f.score, 0)}`}</span></div>`)}</div>
