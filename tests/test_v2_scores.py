@@ -26,13 +26,13 @@ def test_the_rules(tmp_path):
     assert got["line"] == '<span class="sline is-up" aria-hidden="true"><i style="width:82.0%"></i></span>'
     assert 'class="sline is-none"' in got["none"] and 'width:68.0%' in got["band68"] and 'width:100.0%' in got["over"]
     assert '<span class="sl-half sl-neg"><i style="width:40.0%"></i></span>' in got["signed"] and 'class="sline sline-signed is-down"' in got["signed"], "from the middle, leftward below zero"
-    assert "n >= 55 ? ' up' : n <= 45 ? ' down' : ''" in CLASSIC, "Classic's own thresholds"
+    # The Optic Score itself is now drawn on a 0 to 100 track coloured by each model's own neutral band, in both apps
+    # (the owner's refinement in the Overview port, 2026-10-25; tests/test_v2_overview_classic_port.py). Every other
+    # 0 to 100 score keeps green from 55 and red to 45.
 
 
 def test_the_pages_use_them():
     uses = {
-        "pages/overview-research.js": "${scoreLine(n)}",
-        "pages/dossier.js": "${scoreLine(s100)}",
         "pages/investing.js": "${scoreLine(s)}",
         "pages/options-panels.js": "${scoreLine(s)}",
         "pages/read.js": "scoreLine(s.score, { tone: toneBand(s.label) })",

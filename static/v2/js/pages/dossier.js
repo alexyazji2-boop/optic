@@ -12,11 +12,10 @@
 import * as FV from '../core/finviz.js';
 import { term } from '../ui/term.js';
 import { $, $$, html, render as draw, raw } from '../core/dom.js';
-import { CLASSIC } from '../core/classic.js';
 import * as api from '../core/api.js';
 import * as store from '../core/store.js';
 import { sections } from '../ui/sections.js';
-import { num, signed, dir, money, compact, clean, longDate, fullDate, shortDate, isNum, score100, inDays, plural } from '../core/format.js';
+import { num, signed, dir, money, compact, clean, longDate, fullDate, shortDate, isNum, score100 } from '../core/format.js';
 import * as RP from '../core/reports.js';
 import { lineChart, mountCharts } from '../ui/chart.js';
 import { skeleton, empty, failed, staleLine, how } from '../ui/states.js';

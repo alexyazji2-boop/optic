@@ -204,6 +204,17 @@ Not tested:
 
 ## B6. Research tools
 ### B6a. The thesis check and the Overview's advanced research
+**Reconciled with the Overview port, 2026-10-25** (`overview-classic-port`, 36b0a00, rebased with B3 to B9 onto main
+for one release). The port answered the owner's screenshots of Classic's Overview and rebuilt most of B6a's research
+module (`pages/overview-research.js`) in the owner's refined design, so where the two overlapped the port's is kept:
+- B6a.2 to B6a.5 and B6a.7 are now the port's rows (OV): Optic's read under Advanced research, the Optic Score on its
+  0 to 100 track, all key statistics, factors and "What should I look at next?", and the stage line with Explain.
+  The stage's explanation still adds its replay on history (B6c).
+- Kept from B6a: the thesis check (B6a.1, `pages/thesis.js`, in its slot after the digest) and a fund's risk card
+  (B6a.6, `fundRisk`, now in the port's module).
+- The stage is a line with Explain, as the owner's screenshot shows, not B6a's plain text label.
+- "How the long-term views fit together" is gone, as the owner chose in the port.
+
 Evidence:
 - `b6a_thesis_check.py`: 19 of 19 in headless Chrome at 1440 (a guest, with Classic's records seeded) and 390 (the local owner account; real writes to the local test database, deleted at the end). A source held back in the browser makes the page redraw while a note is typed.
 - `b6a_research_check.py`: 21 of 21 at 1440, 1024, 390 and 360, a guest, on the preview's own data, with one fixture: a later quote, to make the header redraw.
