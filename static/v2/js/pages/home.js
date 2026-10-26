@@ -174,7 +174,7 @@ function reportBody(res) {
   const missing = (d.missing || []).map((m) => { const i = String(m).indexOf(':'); return i > 0 ? [m.slice(0, i), m.slice(i + 1).trim()] : [m, '']; });
   return html`<p class="ev-result">${d.fiscal ? `${clean(d.fiscal)}: ` : ''}${clean(res.text || '')}</p>
     ${facts.length ? html`<dl class="ev-facts">${facts.map(([k, v]) => html`<div><dt>${k}</dt><dd>${clean(v)}</dd></div>`)}</dl>` : ''}
-    ${missing.length ? html`<details class="more-inline ev-missing"><summary>Not in Optic's data yet: ${missing.map(([k]) => k.charAt(0).toLowerCase() + k.slice(1)).join('; ')}</summary><ul class="plain">${missing.map(([k, v]) => html`<li><b>${clean(k)}</b>${v ? `: ${clean(v)}` : ''}</li>`)}</ul></details>` : ''}
+    ${missing.length ? html`<details class="ev-missing"><summary>${icon('chev')}Not in Optic's data yet: ${missing.map(([k]) => k.charAt(0).toLowerCase() + k.slice(1)).join('; ')}</summary><ul class="plain">${missing.map(([k, v]) => html`<li><b>${clean(k)}</b>${v ? `: ${clean(v)}` : ''}</li>`)}</ul></details>` : ''}
     <p><small class="t-muted">${clean(d.sources || res.source || '')}</small></p>`;
 }
 const shortResult = (r) => (r.result && !r.result.pending ? r.result.short || '' : '');

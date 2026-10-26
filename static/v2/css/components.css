@@ -203,8 +203,16 @@ body.drawer-open .rows:has([aria-expanded="true"]) .row:not([aria-expanded="true
 .ev-facts dt { font: 500 var(--t-sm)/1.5 var(--f-label); color: var(--c-ink-3); }
 .ev-facts dd { margin: 0; color: var(--c-ink-2); font-size: var(--t-base); font-variant-numeric: tabular-nums; }
 @media (max-width: 560px) { .ev-facts > div { grid-template-columns: 1fr; gap: 0; } }
+/* What the read lacks: in view, and quiet. The shared fold's gold summary is for a section's method. */
 .ev-missing { color: var(--c-ink-3); font-size: var(--t-base); max-width: 74ch; }
-.ev-missing ul { display: grid; gap: 4px; margin-top: 6px; }
+.ev-missing > summary { cursor: pointer; min-height: var(--tap); display: flex; align-items: flex-start; gap: 6px; padding: 10px 0; box-sizing: border-box; list-style: none; }
+.ev-missing > summary::-webkit-details-marker { display: none; }
+.ev-missing > summary .ic { flex: none; width: 16px; height: 16px; margin-top: 3px; transition: transform .15s; }
+.ev-missing[open] > summary .ic { transform: rotate(90deg); }
+.ev-missing > summary:hover { color: var(--c-ink-2); }
+.ev-missing ul { display: grid; gap: 6px; margin: 0 0 4px 22px; padding: 0; list-style: none; }
+.ev-missing b { font-weight: 500; color: var(--c-ink-2); }
+@media (prefers-reduced-motion: reduce) { .ev-missing > summary .ic { transition: none; } }
 .quiet { color: var(--c-ink-3); font-size: var(--t-base); padding: 16px 8px 0; }
 
 /* ---------- questions: answer first ---------- */
