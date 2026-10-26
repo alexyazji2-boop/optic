@@ -161,11 +161,12 @@ def test_a_reported_name_reads_in_the_past_tense(monkeypatch):
     monkeypatch.setattr(priority.weekly_mod, "earnings_this_week", lambda provider, now: block)
     p = _Provider([{"date": "2026-10-13", "eps_reported": 4.60, "eps_estimate": 4.52, "surprise_pct": 1.77}])
     titles = {r["ticker"]: r["title"] for r in priority._earnings(p, THU)}
-    assert titles["GS"] == "GS reported Tuesday"
-    assert titles["PEP"] == "PEP reports Friday"
+    # No source here gives a time, so each title says so (tests/test_report_timing.py has the rest).
+    assert titles["GS"] == "GS reported Tuesday, time not known"
+    assert titles["PEP"] == "PEP reports Friday, time not set"
     p.rows = []
     titles = {r["ticker"]: r["title"] for r in priority._earnings(p, THU)}
-    assert titles["UNH"] == "UNH reports Tuesday", "no figures yet, so no claim it reported"
+    assert titles["UNH"] == "UNH reports Tuesday, time not set", "no figures yet, so no claim it reported"
 
 
 # ------------------------------------------------------------------ the page

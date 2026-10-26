@@ -27,6 +27,7 @@ from typing import Any, Dict, List, Optional
 
 from datetime import timedelta
 
+from . import earnings_result as result_mod
 from . import events as events_mod
 from . import session as session_mod
 from . import weekly as weekly_mod
@@ -201,14 +202,17 @@ def _events(now: Optional[datetime] = None) -> List[Dict[str, Any]]:
     return rows[:MAX_PER_COLUMN]
 
 
-def _earnings_result(provider, symbol: str, day: Optional[str], now: Optional[datetime]) -> Optional[Dict[str, Any]]:
+def _earnings_result(provider, symbol: str, day: Optional[str], now: Optional[datetime],
+                     cal: Optional[Dict[str, Any]] = None) -> Optional[Dict[str, Any]]:
     """Reported EPS against the estimate for a report already out this week,
-    from the same surprise table the Earnings tab reads."""
+    from the same surprise table the Earnings tab reads, with the deeper read
+    (revenue, growth, the record, the reaction) app/earnings_result.py adds."""
     today = (now or datetime.now(timezone.utc)).astimezone(session_mod.ET).date().isoformat()
     if not day or day > today:
         return None
     try:
-        rows = provider.earnings_history(symbol, limit=6) or []
+        # ten, for the eight-report record and the same quarter a year before
+        rows = provider.earnings_history(symbol, limit=10) or []
     except Exception:                                                      # noqa: BLE001
         return None
     row = next((r for r in rows if str(r.get("date")) == day), None)
@@ -224,12 +228,33 @@ def _earnings_result(provider, symbol: str, day: Optional[str], now: Optional[da
     if sur is None and est:
         sur = (eps - est) / abs(est) * 100.0
     verdict = ("in line" if sur is not None and abs(sur) <= 1.0 else "beat" if (sur or 0) > 0 else "missed")
-    return {"short": {"beat": "Beat", "missed": "Missed", "in line": "In line"}[verdict],
-            "eps": eps, "estimate": est, "surprise_pct": round(sur, 1) if sur is not None else None,
-            "verdict": verdict, "source": "Yahoo Finance surprise table (adjusted EPS)",
-            "text": "EPS {:.2f} against {} expected: {}{}.".format(
-                eps, "{:.2f}".format(est) if est is not None else "no estimate",
-                verdict, " by {:.1f}%".format(abs(sur)) if sur is not None and verdict != "in line" else "")}
+    out = {"short": {"beat": "Beat", "missed": "Missed", "in line": "In line"}[verdict],
+           "eps": eps, "estimate": est, "surprise_pct": round(sur, 1) if sur is not None else None,
+           "verdict": verdict, "source": "Yahoo Finance surprise table (adjusted EPS)",
+           "text": "EPS {:.2f} against {} expected: {}{}.".format(
+               eps, "{:.2f}".format(est) if est is not None else "no estimate",
+               verdict, " by {:.1f}%".format(abs(sur)) if sur is not None and verdict != "in line" else "")}
+    cal = cal or {}
+    out["session"] = result_mod.released_session(row, cal, day)
+    try:
+        out["detail"] = result_mod.build(provider, symbol, day, row, rows, cal, out["session"], now)
+    except Exception as exc:                                               # noqa: BLE001
+        log.warning("priority: result detail for %s failed: %s", symbol, exc)
+        out["detail"] = None
+    combined = (out["detail"] or {}).get("combined")
+    if combined:
+        # The cell's word says both when both are known; "Beat" alone is EPS's.
+        out["short"] = {"double beat": "Double beat", "double miss": "Double miss", "mixed": "Mixed"}[combined["kind"]]
+    return out
+
+
+def _session_words(side: Optional[str], done: bool) -> str:
+    """After the day in a report's title: "FCX reports Tuesday before the open"."""
+    if side == "before_open":
+        return " before the open"
+    if side == "after_close":
+        return " after the close"
+    return ", time not known" if done else ", time not set"
 
 
 def _earnings(provider, now: Optional[datetime] = None) -> List[Dict[str, Any]]:
@@ -247,8 +272,25 @@ def _earnings(provider, now: Optional[datetime] = None) -> List[Dict[str, Any]]:
         except ValueError:
             days_away = None
         for symbol in day.get("symbols", []):
-            result = _earnings_result(provider, symbol, day.get("date"), now)
+            try:
+                cal = provider.earnings_calendar(symbol) or {}
+            except Exception:                                              # noqa: BLE001
+                cal = {}
+            result = _earnings_result(provider, symbol, day.get("date"), now, cal)
             done = bool(result) and not result.get("pending")
+            if done:
+                side = result.get("session")
+            elif result:
+                # out, figures late: the quote's time for that day, as for a released report
+                side = result_mod.released_session(None, cal, day.get("date") or "")
+            else:
+                side = result_mod.scheduled_session(cal, day.get("date") or "")
+                # Yahoo's consensus for this report, kept before it lands: once
+                # it is out Yahoo shows the next quarter's.
+                try:
+                    result_mod.record_consensus(symbol, day.get("date") or "", cal, side, now)
+                except Exception as exc:                                   # noqa: BLE001
+                    log.warning("priority: could not record %s's consensus: %s", symbol, exc)
             rows.append({
                 "kind": "earnings",
                 # High for a report that moves the index, medium for the rest.
@@ -259,8 +301,15 @@ def _earnings(provider, now: Optional[datetime] = None) -> List[Dict[str, Any]]:
                 "ticker": symbol,
                 # Past tense once the figures are in: "GS reports Tuesday" on a
                 # Thursday read as a report still to come.
-                "title": "{} {} {}".format(symbol, "reported" if done else "reports", day["day"]),
+                "title": "{} {} {}{}".format(symbol, "reported" if done else "reports", day["day"],
+                                             _session_words(side, done)),
                 "when": day["day"],
+                # Before the open or after the close, or None when no source
+                # Optic trusts says (app/earnings_result.py). `time` is the
+                # strip cell's short form, and absent rather than a guess.
+                "session": side,
+                "session_label": result_mod.LABEL.get(side) if side else None,
+                "time": result_mod.SHORT.get(side) if side else None,
                 "date": day.get("date"),
                 # Negative for a report earlier this week, as the calendar's
                 # rows count it, so a page can tell what is out from what is
@@ -360,6 +409,22 @@ def _closed_days(now: Optional[datetime] = None) -> Dict[str, str]:
     return out
 
 
+# How Home's earnings rows are timed and read; shown in the board's method note.
+EARNINGS_METHOD = (
+    "Before the open or after the close comes from Yahoo's quote for a date Yahoo has confirmed, "
+    "used only when the report's time falls outside the session and the call's time agrees; for a "
+    "report that is out, from the time Yahoo's surprise table stamps on it. Where neither says, the "
+    "report reads \"time not set\" rather than taking the company's habit as this quarter's time. "
+    "A result is EPS against its estimate from Yahoo's surprise table (adjusted EPS). Revenue comes "
+    "from Yahoo's quarterly statement or the SEC filing, which arrive a day to a few weeks after the "
+    "press release, and its estimate is the Yahoo consensus Optic "
+    "recorded before the report, because Yahoo replaces it with the next quarter's once a company "
+    "reports. For both, within 1% either way is in line, and a double beat needs both above. Growth "
+    "compares the same quarter a year earlier. The reaction is the session that "
+    "traded the report: that day's for a report before the open, the next one's after the close."
+)
+
+
 def build(provider, scanners_mod, ranking: Dict[str, Any],
           now: Optional[datetime] = None) -> Dict[str, Any]:
     """The four columns, each with a preview and its full list."""
@@ -395,4 +460,5 @@ def build(provider, scanners_mod, ranking: Dict[str, Any],
             "a name appears on, which is a statement about the filters rather than "
             "a claim about the stock. Research context only."
         ),
+        "earnings_method": EARNINGS_METHOD,
     }

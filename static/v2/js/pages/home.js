@@ -152,7 +152,30 @@ function bucket(r) {
 function resultBody(res) {
   if (!res) return '';
   if (res.pending) return html`<p class="ev-result is-pending">${clean(res.text || '')}</p>`;
+  if (res.detail) return reportBody(res);
   return html`<p class="ev-result">${clean(res.text || '')}${res.headline ? html` <span class="ev-src">${clean(res.headline_source || 'Agency')}: \u201c${clean(res.headline)}\u201d${res.headline_url ? html` <a class="textlink" href="${res.headline_url}" target="_blank" rel="noopener">Release</a>` : ''}</span>` : ''}${res.source ? html` <small class="t-muted">${clean(res.source)}.</small>` : ''}</p>`;
+}
+/* A company's released result, read past its EPS line (owner, 2026-10-26): revenue against its estimate, the
+ * two together, growth on a year earlier, the record and the reaction, each only where Optic has the figure.
+ * What it does not have is named, and why is one press away (app/earnings_result.py says where each comes from). */
+function reportBody(res) {
+  const d = res.detail, rev = d.revenue || {}, g = d.growth || {};
+  const pct = (x) => `${num(Math.abs(x), 1)}%`;
+  const revText = rev.available ? (rev.estimate
+    ? `${rev.reported_label} against ${rev.estimate_label} expected${rev.verdict ? `: ${rev.verdict}${rev.verdict === 'in line' ? '' : ` by ${pct(rev.surprise_pct)}`}` : ''}.`
+    : `${rev.reported_label} reported, with no estimate to set it against.`) : '';
+  const facts = [
+    d.combined ? ['Together', d.combined.text] : null,
+    revText ? ['Revenue', revText] : null,
+    g.revenue_text || g.eps_text ? ['Year on year', [g.revenue_text, g.eps_text].filter(Boolean).join(' ')] : null,
+    d.record && d.record.available ? ['Record', d.record.text] : null,
+    d.reaction && d.reaction.available ? ['Reaction', d.reaction.text] : null,
+  ].filter(Boolean);
+  const missing = (d.missing || []).map((m) => { const i = String(m).indexOf(':'); return i > 0 ? [m.slice(0, i), m.slice(i + 1).trim()] : [m, '']; });
+  return html`<p class="ev-result">${d.fiscal ? `${clean(d.fiscal)}: ` : ''}${clean(res.text || '')}</p>
+    ${facts.length ? html`<dl class="ev-facts">${facts.map(([k, v]) => html`<div><dt>${k}</dt><dd>${clean(v)}</dd></div>`)}</dl>` : ''}
+    ${missing.length ? html`<details class="more-inline ev-missing"><summary>Not in Optic's data yet: ${missing.map(([k]) => k.charAt(0).toLowerCase() + k.slice(1)).join('; ')}</summary><ul class="plain">${missing.map(([k, v]) => html`<li><b>${clean(k)}</b>${v ? `: ${clean(v)}` : ''}</li>`)}</ul></details>` : ''}
+    <p><small class="t-muted">${clean(d.sources || res.source || '')}</small></p>`;
 }
 const shortResult = (r) => (r.result && !r.result.pending ? r.result.short || '' : '');
 
@@ -182,7 +205,9 @@ export function catalystDays(p, todayIso) {
     const res = shortResult(row);
     // a report by its ticker (the cell is headed with its day); a release that is out says what it printed, or
     // Out while its figures are on their way
-    day.items.push({ kind, key: evKey(row), title: row.short || (kind === 'earnings' && row.ticker) || row.title, time: res || (row.released ? 'Out' : row.time || ''), result: !!res, impact: row.impact, row });
+    // a report says before the open or after the close where a source Optic trusts does (row.time), and under
+    // its result once it is out; nothing where none does
+    day.items.push({ kind, key: evKey(row), title: row.short || (kind === 'earnings' && row.ticker) || row.title, time: res || (row.released ? 'Out' : row.time || ''), sess: res && kind === 'earnings' ? row.time || '' : '', result: !!res, impact: row.impact, row });
   };
   ((cols.events || {}).rows || []).forEach((r) => place(r, 'event'));
   ((cols.earnings || {}).rows || []).forEach((r) => place(r, 'earnings'));
@@ -195,7 +220,7 @@ function csNote(days) {
   const [kind, what] = [csOpen.slice(0, 4), csOpen.slice(5)];
   if (kind === 'more') {
     const day = days.find((x) => x.iso === what); if (!day) return html`<div class="cs-note" id="cs-note" hidden></div>`;
-    return html`<div class="cs-note" id="cs-note"><p class="cs-note-h">${day.name}, the rest</p><ul class="plain">${day.items.slice(CATALYST_SHOWN).map((it) => html`<li><b>${clean(it.row.title || it.title)}</b>${it.time ? html` <span class="t-muted">${it.time}</span>` : ''}${it.impact === 'high' ? html` <span class="t-muted">High impact</span>` : ''}</li>`)}</ul></div>`;
+    return html`<div class="cs-note" id="cs-note"><p class="cs-note-h">${day.name}, the rest</p><ul class="plain">${day.items.slice(CATALYST_SHOWN).map((it) => html`<li><b>${clean(it.row.title || it.title)}</b>${it.time && (it.result || it.kind !== 'earnings') ? html` <span class="t-muted">${it.time}</span>` : ''}${it.impact === 'high' ? html` <span class="t-muted">High impact</span>` : ''}</li>`)}</ul></div>`;
   }
   const it = days.flatMap((x) => x.items).find((x) => x.key === what);
   if (!it) return html`<div class="cs-note" id="cs-note" hidden></div>`;
@@ -211,7 +236,7 @@ export function catalystStrip(p, todayIso) {
   if (!placed) return '';
   if (csOpen && !days.some((x) => (csOpen === `more:${x.iso}`) || x.items.some((it) => `item:${it.key}` === csOpen))) csOpen = null;   // gone from the board
   const item = (it) => {
-    const inner = html`<span class="cs-what">${clean(it.title)}</span>${it.time ? html`<span class="cs-time${it.result ? ' is-result' : ''}">${it.time}</span>` : ''}${it.impact === 'high' ? html`<span class="sr"> (high impact)</span>` : ''}`;
+    const inner = html`<span class="cs-what">${clean(it.title)}</span>${it.time ? html`<span class="cs-time${it.result ? ' is-result' : ''}">${it.time}</span>` : ''}${it.sess ? html`<span class="cs-time">${it.sess}</span>` : ''}${it.impact === 'high' ? html`<span class="sr"> (high impact)</span>` : ''}`;
     const cls = `cs-item is-${it.kind}${it.impact === 'high' ? ' is-high' : ''}`;
     if (!String(it.row.why || '').trim() && !it.row.result && !it.row.ticker) return html`<li class="${cls}">${inner}</li>`;
     const open = csOpen === `item:${it.key}`;
@@ -243,7 +268,7 @@ export function eventsBlock(pr, followed, filter) {
   const item = (r) => {
     const key = evKey(r), id = evId(key), open = EV_OPEN.has(key), res = shortResult(r);
     const title = clean(r.title), when = r.when && title.toLowerCase().includes(String(r.when).toLowerCase()) ? '' : r.when;
-    const meta = [when, res ? '' : r.time, r.impact ? `${r.impact} impact` : '', r.ticker && followed.includes(r.ticker) ? 'on your list' : ''].filter(Boolean).join(', ');
+    const meta = [when, res || r.kind === 'earnings' ? '' : r.time, r.impact ? `${r.impact} impact` : '', r.ticker && followed.includes(r.ticker) ? 'on your list' : ''].filter(Boolean).join(', ');
     return html`<div class="ev">
         <button type="button" class="ev-head" aria-expanded="${open}" aria-controls="${id}" data-v2-ev="${key}">
           <span class="who">${r.kind === 'sector' ? 'Sector' : r.ticker || r.short || ''}</span>
@@ -261,7 +286,7 @@ export function eventsBlock(pr, followed, filter) {
         <button type="button" class="textlink ev-more" aria-expanded="${more}" aria-controls="evmore-${b.replace(/\s/g, '')}" data-v2-evmore="${list.length - 3}" data-v2-evgroup="${b}">${more ? 'Show fewer' : `Show ${list.length - 3} more`}</button>` : ''}`; })
       : html`<p class="quiet">None of your names has an event in the next ${pr.horizon_days || 5} days.</p>`}
     <p class="asof">Updated ${ago(pr.generated_at)}.</p>
-    <details class="method" data-v2-fold="pr-method"><summary>How this is sorted</summary><p>${clean(pr.method || '')}</p></details>`;
+    <details class="method" data-v2-fold="pr-method"><summary>How this is sorted and timed</summary><p>${clean(pr.method || '')}</p>${pr.earnings_method ? html`<p>${clean(pr.earnings_method)}</p>` : ''}</details>`;
 }
 /** A press inside what matters today, from Home's workspace or this page; true when it was one. Toggles in place
  *  and records it, so a later repaint draws it the same way. */

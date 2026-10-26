@@ -197,6 +197,14 @@ body.drawer-open .rows:has([aria-expanded="true"]) .row:not([aria-expanded="true
 .ev-result.is-pending { color: var(--c-ink-2); }
 .ev-src { color: var(--c-ink-2); }
 .ev-body .ev-why { color: var(--c-ink-3); font-size: var(--t-base); }
+/* A released report's deeper read: one row per figure, the label a step down. */
+.ev-facts { display: grid; gap: 6px; margin: 0; max-width: 74ch; }
+.ev-facts > div { display: grid; grid-template-columns: 7.5rem minmax(0, 1fr); gap: 12px; }
+.ev-facts dt { font: 500 var(--t-sm)/1.5 var(--f-label); color: var(--c-ink-3); }
+.ev-facts dd { margin: 0; color: var(--c-ink-2); font-size: var(--t-base); font-variant-numeric: tabular-nums; }
+@media (max-width: 560px) { .ev-facts > div { grid-template-columns: 1fr; gap: 0; } }
+.ev-missing { color: var(--c-ink-3); font-size: var(--t-base); max-width: 74ch; }
+.ev-missing ul { display: grid; gap: 4px; margin-top: 6px; }
 .quiet { color: var(--c-ink-3); font-size: var(--t-base); padding: 16px 8px 0; }
 
 /* ---------- questions: answer first ---------- */

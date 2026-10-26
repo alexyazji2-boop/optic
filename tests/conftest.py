@@ -66,6 +66,7 @@ from app import paper
 from app import segment_store
 from app import weekly_store
 from app.analytics import sec_facts
+from app import earnings_result
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -141,6 +142,12 @@ def _real_data_out_of_the_way(tmp_path_factory):
         patch.setattr(feeds, "CACHE_PATH",
                       str(tmp_path_factory.mktemp("feeds") / "feed_cache.json"))
         patch.setattr(sec_facts, "CACHE_DIR", str(tmp_path_factory.mktemp("sec_facts")))
+        # The revenue estimates Home records before each report.
+        patch.setattr(earnings_result, "STORE_PATH",
+                      str(tmp_path_factory.mktemp("earnings_consensus") / "earnings_consensus.json"))
+        # The released result falls back to SEC's filed quarters, which is a
+        # fetch; a test that wants them hands them in.
+        patch.setattr(earnings_result, "sec_history", lambda symbol: {})
         yield
 
 

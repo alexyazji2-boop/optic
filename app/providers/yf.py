@@ -669,6 +669,18 @@ def _report_timing(stamp: Any) -> Optional[str]:
     return "after_close" if minutes >= 16 * 60 else "before_open"
 
 
+def _stamp_iso(stamp: Any) -> Optional[str]:
+    """A report's time as ISO in New York, or None at midnight (no time given)."""
+    try:
+        ts = pd.Timestamp(stamp)
+    except (TypeError, ValueError):
+        return None
+    if ts.tzinfo is None:
+        return None
+    ts = ts.tz_convert("America/New_York")
+    return None if ts.hour == 0 and ts.minute == 0 else ts.isoformat()
+
+
 def _iso_from_epoch(value: Any) -> Optional[str]:
     """Yahoo's extended-hours timestamps are unix seconds. Kept so the UI can say
     *when* an after-hours price was last struck — a quote from 4:05pm and one from
@@ -1584,6 +1596,10 @@ class YFinanceProvider(MarketDataProvider):
                     {
                         "date": str(pd.Timestamp(stamp).date()),
                         "timing": _report_timing(stamp),
+                        # The time itself, so a page can refuse one that falls
+                        # inside the session: _report_timing counts a midday
+                        # stamp as early, and Yahoo's placeholder is 3 PM.
+                        "at": _stamp_iso(stamp),
                         "eps_estimate": _f(row.get("EPS Estimate")),
                         "eps_reported": _f(row.get("Reported EPS")),
                         "surprise_pct": _f(row.get("Surprise(%)")),
@@ -1694,15 +1710,30 @@ class YFinanceProvider(MarketDataProvider):
             # from the quote's cached document, so it costs no extra request
             # when the quote was just read.
             flag = None
+            info: Dict[str, Any] = {}
             try:
-                flag = (self._info(ticker) or {}).get("isEarningsDateEstimate")
+                info = self._info(ticker) or {}
+                flag = info.get("isEarningsDateEstimate")
             except Exception:                                   # noqa: BLE001
                 flag = None
             by_flag = isinstance(flag, bool) and bool(dates)
+            # The report's and the call's times, from the same document. Read
+            # by app/earnings_result.py, which uses them only on a confirmed
+            # date and only outside the session: Yahoo stamps an unscheduled
+            # report 3 PM (AAPL, NVDA, AMD on 2026-10-26). `earningsTimestamp`
+            # is the last report once one is out, Start and End the next one,
+            # and a Start that differs from End is a window, not a time.
+            start, end = info.get("earningsTimestampStart"), info.get("earningsTimestampEnd")
+            times = [_iso_from_epoch(info.get("earningsTimestamp"))]
+            if start and (not end or start == end):
+                times.append(_iso_from_epoch(start))
             return {
                 "dates": [str(d) for d in dates],
                 "confirmed": (not flag) if by_flag else len(dates) == 1,
                 "confirmed_basis": "yahoo_flag" if by_flag else "date_count",
+                "date_is_estimate": flag if isinstance(flag, bool) else None,
+                "report_times": sorted({t for t in times if t}),
+                "call_at": _iso_from_epoch(info.get("earningsCallTimestampStart")),
                 "eps_avg": _f(cal.get("Earnings Average")),
                 "eps_low": _f(cal.get("Earnings Low")),
                 "eps_high": _f(cal.get("Earnings High")),
