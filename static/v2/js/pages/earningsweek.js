@@ -1,7 +1,8 @@
 // Earnings this week, at #/earnings (the classic app's address for the same page). Who reports, by day, among
 // the widely followed names the server checks (/api/earnings-week), with the analysts' EPS and revenue
-// consensus, and the reader's own followed names marked. Grouped by day only: the feed publishes a date and no
-// session, so a "before the open" column would be invented (the API's own session_note says so).
+// consensus, and the reader's own followed names marked. Grouped by day, each row saying before the open or after
+// the close where the server trusts the time (the API's session_note says how); a report already out shows that
+// quarter's estimates, never the next quarter's Yahoo moves to.
 import { html, render as draw } from '../core/dom.js';
 import * as api from '../core/api.js';
 import * as store from '../core/store.js';
@@ -13,11 +14,15 @@ let offset = 0, D = null, err = null, live = true, mainEl = null, seq = 0;
 
 function row(r) {
   const mine = store.isFollowed(r.ticker);
-  const eps = isNum(r.eps_consensus) ? html`EPS <b>${num(r.eps_consensus)}</b>` : html`<span class="t-muted">No EPS estimate</span>`;
-  const rev = isNum(r.revenue_consensus) ? html`, revenue <b>$${compact(r.revenue_consensus)}</b>` : '';
+  const out = r.reported && isNum(r.eps_reported);
+  const eps = out ? html`EPS <b>${num(r.eps_reported)}</b>${isNum(r.eps_consensus) ? ` against ${num(r.eps_consensus)} expected` : ''}${r.result_short ? `: ${r.result_short.toLowerCase()}` : ''}`
+    : isNum(r.eps_consensus) ? html`${r.reported ? 'Expected EPS' : 'EPS'} <b>${num(r.eps_consensus)}</b>`
+    : html`<span class="t-muted">${r.reported ? 'Reported' : 'No EPS estimate'}</span>`;
+  const rev = isNum(r.revenue_consensus) ? html`, revenue ${r.reported ? 'expected ' : ''}<b>$${compact(r.revenue_consensus)}</b>` : '';
+  const when = r.session_label || (r.reported ? 'Time not known' : 'Time not set');
   return html`<li class="ew-row"><a class="ew-name" href="#/${encodeURIComponent(r.ticker)}/earnings"><b class="ew-tick">${r.ticker}</b> <span>${r.name || ''}</span></a>
     <span class="ew-est">${eps}${rev}</span>
-    <span class="ew-meta">${r.major ? html`<span>Index-moving</span>` : ''}${mine ? html`<span>You follow it</span>` : ''}${r.confirmed === false ? html`<span class="ew-unconf">Date not confirmed</span>` : ''}</span></li>`;
+    <span class="ew-meta"><span>${when}</span>${r.estimate_note ? html`<span title="${r.estimate_note}">${isNum(r.eps_consensus) ? 'Revenue estimate not recorded' : 'Estimates not recorded'}</span>` : ''}${r.major ? html`<span>Index-moving</span>` : ''}${mine ? html`<span>You follow it</span>` : ''}${r.confirmed === false ? html`<span class="ew-unconf">Date not confirmed</span>` : ''}</span></li>`;
 }
 
 function body() {
@@ -67,3 +72,4 @@ export async function render(main, route) {
 }
 export function dispose() { live = false; }
 export const retry = { week: () => load() };
+export const _test = { row };

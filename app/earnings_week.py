@@ -5,11 +5,18 @@ stopped. That is a waste of the one question a reader has before they have picke
 a name: *who is reporting this week?* This answers it, and every ticker on it is
 clickable straight into the full analysis.
 
-**Grouped by day, not by session.** The reference terminals split each day into
-"before open" and "after close". yfinance publishes an earnings DATE and no
-session tag, so that column would be invented — and a name filed under the wrong
-session is worse than one filed under neither. The panel says why the split is
-absent rather than guessing at it.
+**Grouped by day, with the time where a source Optic trusts gives one.** The
+reference terminals split each day into "before open" and "after close".
+Yahoo's earnings calendar has a date only; its quote carries the report time,
+which app/earnings_result.py takes on a confirmed date and outside market hours
+only. Anything else reads "time not set", since a name filed under the wrong
+session is worse than one filed under neither.
+
+**A report already out shows its own quarter's estimates.** Once a company
+reports, Yahoo moves its consensus to the next quarter while the calendar still
+shows the report's date, so the panel showed VZ's Q4 consensus against the Q3
+report it had just made (2026-10-26). A released row takes EPS from the
+surprise table and revenue from Optic's record kept before the release.
 
 **Consensus EPS here is real, unlike on the economic calendar.** That distinction
 is worth being precise about: analyst estimates for a *company* come through the
@@ -25,6 +32,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 from zoneinfo import ZoneInfo
 
+from . import earnings_result as result_mod
 from .weekly import WATCHLIST
 
 ET = ZoneInfo("America/New_York")
@@ -92,12 +100,84 @@ def _domain(website: Optional[str]) -> Optional[str]:
     return host if host and "." in host else None
 
 
+SESSION_NOTE = (
+    "Grouped by day, with each report's time where Optic can trust it: before the "
+    "open or after the close comes from the report time in Yahoo's quote, used "
+    "only when the company has confirmed the date and the time falls outside "
+    "market hours. Unscheduled reports carry a placeholder time inside the "
+    "session, so those read \"time not set\" rather than a guess. Once a company "
+    "has reported, Yahoo's estimates move to the next quarter, so a reported row "
+    "shows the EPS estimate from Yahoo's surprise table for that report and the "
+    "revenue estimate only if Optic recorded it before the release."
+)
+
+# A confirmed report this many minutes past its session's edge is out even if
+# the surprise table has not caught up, and Yahoo's consensus may have moved.
+OUT_AFTER = {"before_open": 9 * 60 + 30, "after_close": 16 * 60 + 30}
+
+
+def _this_report(provider, symbol: str, day: str, cal: Dict[str, Any],
+                 now: datetime) -> Dict[str, Any]:
+    """Estimates and timing for one row. Still to come: Yahoo's live consensus,
+    kept in Optic's record until the cutoff. Out: that report's own estimates
+    (earnings_result.released_estimates), never the next quarter's."""
+    today = now.date().isoformat()
+    hist = None
+    if day <= today:
+        try:
+            rows = provider.earnings_history(symbol, limit=10) or []
+        except Exception:                                                  # noqa: BLE001
+            rows = []
+        hist = next((r for r in rows if str(r.get("date")) == day
+                     and r.get("eps_reported") is not None), None)
+    side = result_mod.scheduled_session(cal, day)
+    released = day < today or hist is not None or (
+        day == today and side in OUT_AFTER and now.hour * 60 + now.minute >= OUT_AFTER[side])
+    if released:
+        side = result_mod.released_session(hist, cal, day)
+        est = result_mod.released_estimates(symbol, day, hist)
+        out: Dict[str, Any] = {
+            "reported": True,
+            "eps_consensus": est["eps"],
+            "eps_consensus_source": est["eps_source"],
+            # the range is Yahoo's live one, so it belongs to the next quarter now
+            "eps_low": None, "eps_high": None,
+            "revenue_consensus": est["revenue"],
+            "estimate_note": est["note"],
+        }
+        if hist is not None:
+            out["eps_reported"] = _num(hist.get("eps_reported"))
+            sur = _num(hist.get("surprise_pct"))
+            out["surprise_pct"] = round(sur, 1) if sur is not None else None
+            # the same 1% in-line rule as Home's result cell
+            out["result_short"] = (None if sur is None else "In line" if abs(sur) <= result_mod.IN_LINE_PCT
+                                   else "Beat" if sur > 0 else "Missed")
+    else:
+        out = {
+            "reported": False,
+            "eps_consensus": _num(cal.get("eps_avg")),
+            "eps_consensus_source": "consensus" if cal.get("eps_avg") is not None else None,
+            "eps_low": _num(cal.get("eps_low")),
+            "eps_high": _num(cal.get("eps_high")),
+            "revenue_consensus": _num(cal.get("revenue_avg")),
+            "estimate_note": None,
+        }
+        try:
+            result_mod.record_consensus(symbol, day, cal, side, now)
+        except Exception as exc:                                           # noqa: BLE001
+            log.warning("earnings week: could not record %s's consensus: %s", symbol, exc)
+    out.update(session=side, session_label=result_mod.LABEL.get(side) if side else None,
+               time=result_mod.SHORT.get(side) if side else None)
+    return out
+
+
 def build(provider, offset: int = 0, now: Optional[datetime] = None,
           watchlist: Optional[List[str]] = None) -> Dict[str, Any]:
     """Watchlist names reporting in one week, grouped by day."""
     start, end = week_bounds(offset, now)
     names = watchlist if watchlist is not None else WATCHLIST
-    today = (now or datetime.now(timezone.utc)).astimezone(ET).date()
+    when_now = (now or datetime.now(timezone.utc)).astimezone(ET)
+    today = when_now.date()
 
     by_day: Dict[str, List[Dict[str, Any]]] = {}
     checked = failed = 0
@@ -126,13 +206,10 @@ def build(provider, offset: int = 0, now: Optional[datetime] = None,
         # provider call per name and the window is usually small.
         try:
             cal = provider.earnings_calendar(symbol) or {}
-            row["eps_consensus"] = _num(cal.get("eps_avg"))
-            row["eps_low"] = _num(cal.get("eps_low"))
-            row["eps_high"] = _num(cal.get("eps_high"))
-            row["revenue_consensus"] = _num(cal.get("revenue_avg"))
             row["confirmed"] = bool(cal.get("confirmed"))
         except Exception:
-            pass
+            cal = {}
+        row.update(_this_report(provider, symbol, row["date"], cal, when_now))
         try:
             prof = provider.profile(symbol) or {}
             row["name"] = prof.get("name")
@@ -175,12 +252,7 @@ def build(provider, offset: int = 0, now: Optional[datetime] = None,
         "checked": checked,
         "failed": failed,
         "universe": len(names),
-        "session_note": (
-            "Grouped by day rather than by trading session. The provider publishes "
-            "an earnings date and no before-open or after-close tag, so a session "
-            "column here would be invented, and a name filed under the wrong "
-            "session is worse than one filed under neither."
-        ),
+        "session_note": SESSION_NOTE,
         "method": (
             "Scanned {} widely-followed names, not the whole market: a complete "
             "earnings calendar is a licensed product and free data gives one date "

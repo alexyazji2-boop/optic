@@ -30943,10 +30943,10 @@ const EARN_STANCE_CLASS = {
  * answer it with "no ticker loaded", which is a dead end where a calendar
  * belongs.
  *
- * Grouped by day and not by session: the provider gives a date with no
- * before-open or after-close tag, and a name filed under the wrong session is
- * worse than one filed under neither. Every ticker is a link into the full
- * analysis, so the calendar is also the way in. */
+ * Grouped by day, each row saying before the open or after the close only
+ * where the server trusts the time (its session_note says how), since a name
+ * filed under the wrong session is worse than one filed under neither. Every
+ * ticker is a link into the full analysis, so the calendar is also the way in. */
 /* Side-by-side comparison.
  *
  * Its own tab because it answers a question no per-ticker page can: "which of
@@ -31899,7 +31899,7 @@ function renderEarningsWeek(w) {
     ? '<span class="ew-major">major</span>' : ''}${mine.has(String(r.ticker).toUpperCase())
     ? '<span class="ew-mine">watching</span>' : ''}</span>
           <span class="ew-name">${esc(r.name || '')}</span>
-          <span class="ew-eps">${r.eps_consensus === null || r.eps_consensus === undefined
+          <span class="ew-eps">${r.time ? `${esc(r.time)} · ` : ''}${r.eps_consensus === null || r.eps_consensus === undefined
     ? '<i>no estimate</i>'
     : `street <b>${fmt(r.eps_consensus, 2)}</b>${r.revenue_consensus
       ? ` · rev $${fmtCompact(r.revenue_consensus)}` : ''}`}</span>
@@ -37353,7 +37353,7 @@ const PULSE_TOPICS = {
   global: 'Explain the overnight worldwide panel. Why are the markets ordered by session, what does the correlation to the S&P actually tell me, and should I read across from a big move in Korea or China to the US open?',
   patterns: 'Explain the chart patterns panel in plain language. What does it mean that a pattern is confirmed or not, what is a supply or demand zone as opposed to support, and how should I read the fact that most of these patterns measure close to a coin toss?',
   calendar: 'Explain the economic calendar in plain language. What do prev, est and actual mean, why is the estimate column always empty, and which of the releases showing here actually moves the market?',
-  earningsweek: "Explain the earnings week calendar. What does the street's consensus EPS mean, why is there no before-open or after-close split, and which of these reports actually moves the index?",
+  earningsweek: "Explain the earnings week calendar. What does the street's consensus EPS mean, how does Optic know whether a report lands before the open or after the close, and which of these reports actually moves the index?",
   books: 'Explain the three books. What actually differs between conservative, balanced and aggressive, and what does comparing them tell me that one book alone would not?',
   priority: 'Explain the priority board. What are the four columns, how is the ordering decided, and which column should I actually look at first?',
   revmultiple: 'Explain the revenue-and-multiple panel for {t} in plain language. What does it mean when revenue is growing but the P/E is falling, and which one should I pay more attention to?',

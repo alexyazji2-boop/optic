@@ -184,6 +184,43 @@ def recorded_consensus(symbol: str, day: str, path: Optional[str] = None) -> Opt
 # ------------------------------------------------------------- the result
 
 
+def _matches(rec_eps: Optional[float], est: Optional[float]) -> bool:
+    """A recorded consensus is this quarter's when its EPS sits on the surprise
+    table's estimate for the report."""
+    return (rec_eps is not None and est is not None
+            and (abs(rec_eps - est) <= MATCH_ABS or abs(rec_eps - est) / abs(est) * 100.0 <= MATCH_PCT))
+
+
+def released_estimates(symbol: str, day: str, row: Optional[Dict[str, Any]],
+                       path: Optional[str] = None) -> Dict[str, Any]:
+    """The street's estimates for a report already out, never Yahoo's live
+    consensus, which has moved to the next quarter by then. EPS is the surprise
+    table's for that report, or Optic's record from before it when the table
+    is late; revenue only from that record. `note` says what is missing."""
+    est = _num((row or {}).get("eps_estimate"))
+    rec = recorded_consensus(symbol, day, path)
+    rec_eps = _num((rec or {}).get("eps_avg"))
+    rec_rev = _num((rec or {}).get("revenue_avg"))
+    # With no table row yet the record stands alone; it was kept for this date,
+    # before its cutoff, so it is this report's.
+    usable = rec is not None and (_matches(rec_eps, est) if est is not None else rec_eps is not None)
+    out: Dict[str, Any] = {
+        "eps": est if est is not None else (rec_eps if usable else None),
+        "eps_source": "surprise_table" if est is not None else ("recorded" if usable else None),
+        "revenue": rec_rev if usable else None,
+        "note": None,
+    }
+    if out["eps"] is None:
+        out["note"] = ("Reported. Yahoo has moved its estimates to the next quarter and Optic had not "
+                       "recorded this quarter's before the release.")
+    elif out["revenue"] is None:
+        out["note"] = ("Revenue estimate not recorded before the release; Yahoo's current one is the "
+                       "next quarter's." if not usable else "Yahoo had no revenue estimate for this quarter.")
+    return out
+
+
+
+
 def _num(v: Any) -> Optional[float]:
     try:
         x = float(v)
@@ -395,8 +432,7 @@ def build(provider, symbol: str, day: str, row: Dict[str, Any], rows: List[Dict[
                    "period_end": rev["period_end"], "source": rev["source"]}
     rec = recorded_consensus(symbol, day, path)
     rec_eps = _num((rec or {}).get("eps_avg"))
-    matches = (rec is not None and rec_eps is not None and est is not None
-               and (abs(rec_eps - est) <= MATCH_ABS or abs(rec_eps - est) / abs(est) * 100.0 <= MATCH_PCT))
+    matches = rec is not None and _matches(rec_eps, est)
     rev_est = _num((rec or {}).get("revenue_avg")) if matches else None
     if rec is None or (rec_eps is None and _num(rec.get("revenue_avg")) is not None):
         missing.append("Revenue estimate: not available. Yahoo moves its consensus to the next quarter once a "
