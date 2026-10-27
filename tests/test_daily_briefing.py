@@ -193,7 +193,7 @@ def test_setups_on_one_close_are_one_item_and_older_ones_are_not_news():
     ]
     out = B.setup_checks("X", {"available": True, "rows": rows}, "2026-10-05")
     fired = [i for i in out["items"] if "triggered" in i["headline"]][0]
-    assert fired["headline"] == "X 2 setups triggered on the close"
+    assert fired["headline"] == "X: 2 setups triggered on the close"
     assert "Trend pullback" not in fired["detail"]
     assert "Invalidated by a close below 219.61." in fired["detail"]
     assert fired["link"] == {"view": "swing", "panel": "Swing setups"}

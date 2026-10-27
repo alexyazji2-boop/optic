@@ -27,6 +27,15 @@ from . import fundamentals as fundamentals_mod
 from .. import session as session_mod
 
 
+
+def _article(number: str) -> str:
+    """"a" or "an" before a number as it is read aloud: "an 8.7% move", "an 11% move", "a 6.2% move" (investor
+    audit, 2026-10-27, where the Earnings tab printed "a 8.7% move")."""
+    whole = number.lstrip("+-\u2212").split(".")[0].replace(",", "")
+    if whole.startswith("8") or (len(whole) % 3 == 2 and whole[:2] in ("11", "18")):
+        return "an"
+    return "a"
+
 def _f(value: Any, digits: int = 4) -> Optional[float]:
     try:
         if value is None:
@@ -803,8 +812,9 @@ def _event_pricing(implied: Dict[str, Any], surprise: Dict[str, Any],
         stance = "fair"
         tail = "Options are priced about in line with this comparison's history."
 
+    shown = f"{imp:.1f}"
     note = (
-        f"The {dte}-day straddle prices a {imp:.1f}% move, against {baseline:.1f}% actual on average "
+        f"The {dte}-day straddle prices {_article(shown)} {shown}% move, against {baseline:.1f}% actual on average "
         f"across {window}, about {ratio:.1f}x. {tail}"
     )
 
@@ -1142,7 +1152,7 @@ def analyse(provider, yf_provider, ticker: str, quote: Dict[str, Any], rate: flo
         "verdict": _verdict(next_report, surprise, revisions, pricing, growth, latest),
         "disclaimer": legal_mod.AREAS["earnings"],
         "data_caveat": (
-            "Estimates, surprise history and analyst data come from yfinance and can lag or "
+            "Estimates, surprise history and analyst data come from Yahoo Finance and can lag or "
             "occasionally misstate a fiscal period. Company guidance text is not available in free data."
         ),
     }

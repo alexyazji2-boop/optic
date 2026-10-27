@@ -136,7 +136,7 @@ def _rotation(spread_fast: Optional[float],
 
     if fast >= band and slow >= band:
         state, label = "in", "Rotating in"
-        note = ("Ahead of the index over both the past week and the past month . "
+        note = ("Ahead of the index over both the past week and the past month. "
                 "Money has been moving here, not just visiting.")
     elif fast <= -band and slow <= -band:
         state, label = "out", "Rotating out"

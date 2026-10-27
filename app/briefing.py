@@ -496,7 +496,8 @@ def setup_checks(symbol: str, result: Optional[Dict[str, Any]], latest: str) -> 
     if fired:
         items.append({
             "kind": "setup", "rank": 1,
-            "headline": "{} {} triggered on the close".format(
+            # "SPY: a setup triggered", not "SPY a setup triggered" (investor audit, 2026-10-27)
+            "headline": "{}: {} triggered on the close".format(
                 symbol, "a setup" if len(fired) == 1 else "{} setups".format(len(fired))),
             "detail": names(fired) + "." + stops(fired),
             "why": "A rule's trigger on a completed candle, with its invalidation level already "

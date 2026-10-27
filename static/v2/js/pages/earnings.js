@@ -169,7 +169,7 @@ function analysts(sym) {
   return html`<section class="section" aria-labelledby="an-h"><div class="section-head"><h2 class="t-h2" id="an-h">Analyst view</h2>${ask(sym, 'Ask Milo about the analysts', `How much weight should I give analysts' view of ${sym}?`)}</div>
     ${kv([['Average target', html`${num(a.target_mean)} <span class="t-muted">${signed(a.upside_pct, 1)}</span>`], ['Range', `${num(a.target_low)} to ${num(a.target_high)}`], ['Ratings', `${a.buys} buy, ${a.holds} hold, ${a.sells} sell`], ['Analysts', a.analyst_count]], 4)}
     <div class="tscroll"><table class="t"><thead><tr><th>Month</th><th>Strong buy</th><th>Buy</th><th>Hold</th><th>Sell</th><th>Strong sell</th></tr></thead>
-      <tbody>${(a.ratings || []).map((r) => html`<tr><td>${r.period === '0m' ? 'This month' : `${r.period.replace('-', '').replace('m', '')} months ago`}</td><td>${num(r.strong_buy, 0)}</td><td>${num(r.buy, 0)}</td><td>${num(r.hold, 0)}</td><td>${num(r.sell, 0)}</td><td>${num(r.strong_sell, 0)}</td></tr>`)}</tbody></table></div>
+      <tbody>${(a.ratings || []).map((r) => html`<tr><td>${r.period === '0m' ? 'This month' : ((n) => `${n} month${n === '1' ? '' : 's'} ago`)(r.period.replace('-', '').replace('m', ''))}</td><td>${num(r.strong_buy, 0)}</td><td>${num(r.buy, 0)}</td><td>${num(r.hold, 0)}</td><td>${num(r.sell, 0)}</td><td>${num(r.strong_sell, 0)}</td></tr>`)}</tbody></table></div>
     <ul class="plain">${(a.notes || []).map((n) => html`<li>${clean(n)}</li>`)}</ul></section>`;
 }
 

@@ -556,17 +556,19 @@ def analyse(provider) -> Dict[str, Any]:
     # the instruction to the reader does not.
     # The inputs' lean, not a behaviour: there are no measured outcomes behind
     # "breakouts often fail" or "moves fade faster" (pitch audit, 2026-10-22).
+    # "The regime's inputs", not "the inputs above": Macro quotes this line as
+    # the first point of its brief, with nothing above it (investor audit, 2026-10-27).
     if score >= 35:
-        regime, stance = "risk-on", "The inputs above, taken together, lean toward risk."
+        regime, stance = "risk-on", "The regime's inputs, taken together, lean toward risk."
     elif score >= 12:
-        regime, stance = "mildly risk-on", "The inputs above lean mildly toward risk: supportive, not strong."
+        regime, stance = "mildly risk-on", "The regime's inputs lean mildly toward risk: supportive, not strong."
     elif score <= -35:
-        regime, stance = "risk-off", ("The inputs above lean toward caution: the readings that signal "
+        regime, stance = "risk-off", ("The regime's inputs lean toward caution: the readings that signal "
                                       "stress are elevated.")
     elif score <= -12:
-        regime, stance = "mildly risk-off", "The inputs above, taken together, lean mildly toward caution."
+        regime, stance = "mildly risk-off", "The regime's inputs, taken together, lean mildly toward caution."
     else:
-        regime, stance = "neutral / mixed", ("The inputs above are mixed, so the market read says little "
+        regime, stance = "neutral / mixed", ("The regime's inputs are mixed, so the market read says little "
                                              "about any one stock.")
 
     grouped: Dict[str, List[Dict[str, Any]]] = {}

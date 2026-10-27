@@ -17,7 +17,7 @@ export function sectorBoard(board, readLabel) {
         <td>${num(r.price)} <small class="t-muted">${r.price_kind || ''}</small></td><td>${capFirst(r.trend)}${r.changed ? html` <small class="t-muted">changed</small>` : ''}</td>
         <td>${num(r.bull_above)} <small class="t-muted">${signed(r.to_break_pct)}</small></td><td>${num(r.bear_below)} <small class="t-muted">${signed(r.to_breakdown_pct)}</small></td>
         <td>${(r.rotation || {}).label || ''}</td><td><button type="button" class="btn btn-sm" data-v2-sread="${r.symbol}" aria-label="${readLabel} for ${r.symbol}">${readLabel}</button></td></tr>`)}</tbody></table></div>
-    <p class="asof">Levels from the prior session's range. A ${readLabel} is written by an AI model when you ask for it, and kept for an hour.</p>`;
+    <p class="asof">Levels from the prior session's range. ${/^[aeiou]/i.test(readLabel) ? 'An' : 'A'} ${readLabel} is written by an AI model when you ask for it, and kept for an hour.</p>`;
 }
 
 export function sectorReadBlock(sread) {

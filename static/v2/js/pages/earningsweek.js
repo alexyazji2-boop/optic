@@ -39,9 +39,14 @@ function body() {
     ${how(html`<p>${clean(D.session_note || '')}</p><p>${clean(D.method || '')}</p>`)}`;
 }
 
+const WEEK_WORDS = { '-1': 'last week', 0: 'this week', 1: 'next week' };
+
 function paint() {
   if (!live || !mainEl) return;
-  draw(mainEl, html`<header class="page-head"><h1 class="t-display-m">Earnings this week</h1>
+  // the heading names the week on screen: it said "this week" over next week's reports (investor audit, 2026-10-27)
+  const which = WEEK_WORDS[offset] || WEEK_WORDS[0];
+  document.title = `Earnings ${which}, Optic`;
+  draw(mainEl, html`<header class="page-head"><h1 class="t-display-m">Earnings ${which}</h1>
       <div class="seg" role="group" aria-label="Week">${[[-1, 'Last week'], [0, 'This week'], [1, 'Next week']].map(([k, l]) => html`<button type="button" data-v2-ew="${k}" aria-pressed="${offset === k}">${l}</button>`)}</div></header>
     <div aria-live="polite" aria-busy="${D ? 'false' : 'true'}">${body()}</div>`);
 }

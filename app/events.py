@@ -170,7 +170,7 @@ WHY_IT_MATTERS = {
     ),
     "fomc": (
         "The rate decision itself, plus the statement and, at four of the eight "
-        "meetings. The projections and a press conference. The decision is "
+        "meetings, the projections and a press conference. The decision is "
         "usually priced well in advance, so the move tends to come from the "
         "language and the dot plot rather than the number, and often from the "
         "press conference rather than the statement."
