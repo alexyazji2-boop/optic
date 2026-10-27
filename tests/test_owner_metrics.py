@@ -127,3 +127,28 @@ def test_the_page_sits_with_the_owners_reports_in_v2():
     assert "{ view: 'metrics', label: 'Metrics', slug: 'metrics', v2: true }" in group[:group.index("] }")]
     assert "{ view: 'metrics', label: 'Metrics', owner: true," in palette
     assert "metrics: P.reports" in app_js and "api.get('/api/admin/metrics'" in reports
+
+
+def test_the_records_behind_metrics_end_after_the_stated_period(accounts):
+    """Plain account ids with no end date, which the privacy policy did not describe
+    (readiness audit 2026-10-23, F-43). The sweep ends them at METRICS_KEEP_DAYS, and
+    the policy states the same figure."""
+    uid = auth_store.create_user("kept@example.com", "Kept")["id"]
+    now = datetime.now(timezone.utc)
+    old, recent = now - timedelta(days=accounts.METRICS_KEEP_DAYS + 2), now - timedelta(days=3)
+    accounts.execute("INSERT INTO activity_days (user_id, day) VALUES (?, ?)", (uid, old.date().isoformat()))
+    accounts.execute("INSERT INTO activity_days (user_id, day) VALUES (?, ?)", (uid, recent.date().isoformat()))
+    accounts.execute("INSERT INTO milo_questions (at, user_id, kind) VALUES (?, ?, 'chat')", (_iso(old), uid))
+    accounts.execute("INSERT INTO milo_questions (at, user_id, kind) VALUES (?, ?, 'chat')", (_iso(recent), uid))
+    removed = accounts.sweep()
+    assert removed["activity_days"] >= 1 and removed["milo_questions"] >= 1
+    assert [r["day"] for r in accounts.rows("SELECT day FROM activity_days WHERE user_id = ?", (uid,))] \
+        == [recent.date().isoformat()]
+    assert len(accounts.rows("SELECT 1 FROM milo_questions WHERE user_id = ?", (uid,))) == 1
+
+
+def test_the_privacy_policy_states_the_metrics_records_and_their_period():
+    from app import db
+    src = (ROOT / "static/v2/js/pages/legalpages.js").read_text()
+    assert "{} days".format(db.METRICS_KEEP_DAYS) in src
+    assert "days you use Optic while signed in" in src

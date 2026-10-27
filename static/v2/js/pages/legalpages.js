@@ -32,6 +32,7 @@ const PRIVACY = [
       'Each signed-in session: when it started and was last used, your browser\'s description of itself (its user agent) and the IP address it connected from. Settings, Security lists them and signs any of them out. Sign-in, password reset and email confirmation links are stored only as one-way hashes.',
       'What you save to your account: watchlists, saved research, watches and the alerts they raise, theses, valuation scenarios and saved models, signal history, and portfolio alert settings.',
       'A count of the Milo questions you ask, kept under a hashed identifier, so your plan\'s daily allowance can be applied.',
+      'The days you use Optic while signed in, and when and from which part of Optic you ask Milo a question (not what you asked), recorded against your account so the operator can count active readers and questions.',
       'Problem reports you send: your message, the page you were on, your browser\'s description and your email address, so a reply can reach you.',
     ),
     p('Kept only in your browser, never on Optic\'s servers: your Milo conversations, paper trades, chart drawings and notes, recent searches, and display settings such as the theme and layouts. They are kept separately for each account on that browser, and clearing the site\'s data in your browser removes them.'),
@@ -40,8 +41,12 @@ const PRIVACY = [
     p('To run the account you asked for and the features you use; to keep Optic secure, including limiting repeated sign-in attempts and signing out sessions; to apply your plan\'s limits; and to answer you when you write to us. A linked brokerage is used only to show you your own accounts, and only because you agreed to it when you linked it. We do not sell your personal information, and we do not use it or share it for advertising.'),
   ]],
   ['Cookies and tracking', [
-    p('Optic sets three cookies of its own. ', html`<b>optic_session</b>`, ' keeps you signed in: for 30 days of use if you choose "Keep me signed in", otherwise until you close the browser and at most a day unused. ', html`<b>optic_csrf</b>`, ' stops other sites acting as you. ', html`<b>optic_ui</b>`, ' remembers, for a year, whether you chose the new design or the classic app. There are no advertising or analytics cookies and no tracking scripts.'),
+    p('Optic sets three cookies of its own. ', html`<b>optic_session</b>`, ' keeps you signed in: for 30 days of use if you choose "Keep me signed in", otherwise until you close the browser and at most a day unused. ', html`<b>optic_csrf</b>`, ' stops other sites acting as you. ', html`<b>optic_ui</b>`, ' remembers, for a year, whether you chose the new design or the classic app. Optic sets no advertising or analytics cookies and adds no tracking scripts of its own.'),
     p('The page\'s fonts are loaded from jsDelivr, a public content network, which receives your IP address as part of that request, as any web server would.'),
+    // Seen on the live site on 2026-10-26: Cloudflare's automatic Web Analytics adds this script to HTML it serves to
+    // browsers (not in Optic's source). The owner may switch it off in Cloudflare instead; then this paragraph goes.
+    p('The site is served through Cloudflare, which adds its Web Analytics script to the pages it serves, loaded from static.cloudflareinsights.com. It sends Cloudflare information about each page visit. Cloudflare describes what it collects in its own privacy policy.'),
+    p('In the classic app, company logos are loaded from Google, unavatar.io, favicone.com, Parqet and Financial Modeling Prep, which receive your IP address and the company being shown in the same way.'),
   ]],
   ['Milo, the assistant', [
     p('Milo\'s answers are written by Anthropic\'s Claude models. When you send Milo a question, Optic sends Anthropic your question, the conversation so far, a summary of the page you are on and any file you attach. Your name and email address are not sent.'),
@@ -60,7 +65,7 @@ const PRIVACY = [
     p('When paid plans are on sale, payments are handled by Stripe. Optic gives Stripe your account identifier and, the first time, your email address; you give your card details to Stripe directly. Optic keeps only your plan, its status, Stripe\'s customer and subscription identifiers and the renewal date. Optic never sees your card number.'),
   ]],
   ['Email', [
-    p('Optic emails you to confirm your address, reset your password and deliver the alerts you set. Email delivery is not switched on yet: until it is, nothing is emailed, and the address and the link an email would have carried are written to the server log instead, which only the operator can read. When a delivery service is switched on, this page will name it before it is used.'),
+    p('Optic emails you to confirm your address, reset your password and deliver the alerts you set. Email delivery is not switched on yet: until it is, nothing is emailed, and confirmation and reset links cannot reach you. The server log records that a message was attempted, with your address shortened (for example r***@example.com) and without the link. When a delivery service is switched on, this page will name it before it is used.'),
   ]],
   ['Market data sources', [
     p('Prices, filings and economic figures come from Yahoo Finance, the SEC, FRED, the Bureau of Labor Statistics and other public sources. Optic asks them for tickers and data series, never for anything about you.'),
@@ -70,12 +75,14 @@ const PRIVACY = [
     ul(
       'Expired sessions and links are deleted within the hour; counts used to limit sign-in attempts within a day; the monthly Milo count within 31 days.',
       'Records of model calls, which do not say who made them: 92 days.',
+      'The record of the days you used Optic while signed in and of when you asked Milo questions: 400 days.',
+      'Daily copies of the accounts database, kept for 7 days to recover from a fault. A deleted account is gone from them within 7 days. They hold no brokerage encryption keys, so linked brokerage data in them cannot be read.',
       'Server logs, which record each request (the IP address it came from, what it asked for and when): kept by Railway for up to 90 days, then deleted.',
       'Everything else saved to your account: until you delete it or the account.',
     ),
   ]],
   ['Deleting your account', [
-    p('Settings, Delete account, removes your account and everything saved to it. It cancels any subscription and deletes linked brokerage data, including SnapTrade\'s copy. Problem reports you sent are kept for the problem they describe, without your email address or your account.'),
+    p('Settings, Delete account, removes your account and everything saved to it. It cancels any subscription and deletes linked brokerage data, including SnapTrade\'s copy. Problem reports you sent are kept for the problem they describe, without your email address or your account. The daily recovery copies described above keep the account for up to 7 days more.'),
   ]],
   ['Your choices and rights', [
     p('You can correct your name in Settings, sign out any session, disconnect a brokerage, and delete your account at any time. You can also write to us at ', mail, ' to ask for a copy of the information we hold about you, or to have it corrected or deleted. We answer within 30 days.'),

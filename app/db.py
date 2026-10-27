@@ -1042,7 +1042,19 @@ def sweep() -> Dict[str, int]:
         cur = conn.execute("DELETE FROM webhook_events WHERE received_at < ?",
                            (in_seconds(-30 * 86400),))
         counts["webhook_events"] = cur.rowcount or 0
+        # The owner's Metrics records (migration 18) hold plain account ids and
+        # had no end date, which the privacy policy did not describe (readiness
+        # audit 2026-10-23, F-43). 400 days covers a year of cohorts with room to
+        # read them; the policy states the same figure, so change both together.
+        cutoff = in_seconds(-METRICS_KEEP_DAYS * 86400)
+        cur = conn.execute("DELETE FROM activity_days WHERE day < ?", (cutoff[:10],))
+        counts["activity_days"] = cur.rowcount or 0
+        cur = conn.execute("DELETE FROM milo_questions WHERE at < ?", (cutoff,))
+        counts["milo_questions"] = cur.rowcount or 0
     return counts
+
+
+METRICS_KEEP_DAYS = 400
 
 
 if __name__ == "__main__":                      # python -m app.db migrate

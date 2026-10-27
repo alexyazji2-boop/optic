@@ -58,3 +58,14 @@
   - There is no download of a reader's data.
   - Session IP addresses are stored in plain text, which is common, and the draft says so.
   - `accounts.db` has no backup (DEPLOY.md), which is operational rather than a policy matter.
+
+## Changed 2026-10-23 (readiness audit P0s, branch p0-readiness)
+- **Metrics records named.** `activity_days` and `milo_questions` (migration 18) keep account ids. The policy now describes them, and they end after 400 days (`app/db.py` `METRICS_KEEP_DAYS`, swept hourly).
+- **Logo hosts named.** The classic app's logo hosts are named under Cookies and tracking (`static/app.js` `LOGO_SOURCES`, `TICKER_LOGO_SOURCES`).
+- **Email.** On a host, a reader's link and full address are no longer logged; only `ADMIN_EMAILS` links are (`app/auth/mailer.py` `_log_link_for`). The policy now says so.
+- **Recovery copies.** Daily copies of `accounts.db` are kept for 7 days, with brokerage data keys blanked (`app/snapshots.py` `take_accounts`). They are listed under retention and in the deletion paragraph.
+- **`EFFECTIVE` is still October 19, 2026.** The owner sets the new date when this ships. Whether the change counts as significant, and so is announced first, is the owner's call.
+
+## Changed 2026-10-27 (VC demo readiness, branch vc-demo-readiness)
+- **Cloudflare Web Analytics.** The live site's HTML, as served to a browser, carries Cloudflare's beacon (`static.cloudflareinsights.com/beacon.min.js`, `data-cf-beacon` with a site token), added by Cloudflare's automatic setup; it is not in Optic's source and a plain `curl` does not get it. The policy said "no tracking scripts". It now says Optic adds none of its own and names Cloudflare's, without describing what it collects beyond "information about each page visit". **Owner decision:** keep it and this paragraph, or switch Web Analytics off in the Cloudflare dashboard and remove the paragraph. **Legal review:** whether the wording is enough, and whether the change is significant enough to announce first. The report-only CSP (`script-src 'self'`) does not allow this script, so enforcing that CSP would block it.
+- The p0 changes above (logo hosts, email, recovery copies, metrics records) ship with this branch. `EFFECTIVE` is still October 19, 2026, for the owner to set.
