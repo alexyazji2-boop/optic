@@ -138,7 +138,7 @@ function connections() {
       ${ent.can_link && canAdd ? consent(st.consent || {}) : ''}
       <p class="section-sub">${ent.can_link ? `Your plan links up to ${ent.max_connections} connection${ent.max_connections === 1 ? '' : 's'} and ${ent.max_accounts} accounts. Accounts sync on their own once a day; Sync now is limited to ${ent.manual_syncs_per_day} a day.` : 'Linking and syncing are part of the paid plan. Your stored data stays until you delete it or the retention period ends.'}</p>
       ${conns.length ? conns.map(connCard) : html`<p class="quiet">Nothing linked yet. Connect a brokerage to see your holdings here.</p>`}
-      ${conns.length ? '' : html`<p class="asof">After you finish at the provider, it returns you to Brokerage in the classic app.</p>`}</section>
+      ${conns.length ? '' : html`<p class="asof">After you finish at the provider, it brings you back to this page.</p>`}</section>
     ${permissions(st, !conns.length)}
     ${conns.length ? html`<section class="section set-danger" aria-labelledby="bd-h"><h2 class="t-h2" id="bd-h">Delete all brokerage data</h2><p>Disconnects every brokerage at the provider and deletes everything Optic stored about them, including the encryption key, so backups cannot be read either. Your Optic account stays.</p>
       ${S.armed === 'all' ? html`<div class="cluster"><button type="button" class="btn btn-danger" data-v2-bk-delete="confirm">Yes, delete all brokerage data</button><button type="button" class="btn" data-v2-bk-disarm>Keep it</button></div>` : html`<button type="button" class="btn btn-danger" data-v2-bk-delete>Delete all brokerage data</button>`}</section>` : ''}`;
