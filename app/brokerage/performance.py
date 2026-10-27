@@ -1012,8 +1012,29 @@ def _group(ccy: str, accts: List[Dict[str, Any]], rows: Dict[str, List[Dict[str,
         lim.append("{} of a type Optic does not recognise ({}) {} not counted.".format(
             _plural(n, "transaction"), ", ".join(unknown_types), "is" if n == 1 else "are"))
 
-    attribution = _attribution(ccy, accts, snapshots, tflows, start, today, not missing_txn)
+    # Over the return's own measured dates when there is one. Attribution read
+    # every collected snapshot in the requested period, so the page explained a
+    # return measured 22 to 27 October with contributions from 16 to 27 October
+    # (2026-10-26). A window that still differs (no snapshot on a measured date)
+    # says so, and the page labels it a separate measurement.
+    measured = not reasons and measured_start is not None and measured_end is not None
+    attribution = _attribution(ccy, accts, snapshots, tflows,
+                               measured_start if measured else start,
+                               measured_end if measured else today, not missing_txn)
     lim.extend(attribution.pop("_limitations", []))
+    if attribution.get("available"):
+        w = attribution["window"]
+        same = bool(measured and w["start"] == measured_start.isoformat() and w["end"] == measured_end.isoformat())
+        attribution["return_window"] = ({"start": measured_start.isoformat(), "end": measured_end.isoformat()}
+                                        if measured else None)
+        attribution["matches_return"] = same
+        if not same:
+            attribution["window_note"] = (
+                "These contributions cover {} to {}{}, so they are a separate measurement and do not "
+                "explain that return.".format(
+                    w["start"], w["end"],
+                    ", and the return {} to {}".format(measured_start.isoformat(), measured_end.isoformat())
+                    if measured else "; no return could be measured for this period"))
 
     counts: Dict[str, int] = {}
     for r in all_rows:
@@ -1065,6 +1086,7 @@ def _attribution(ccy: str, accts: List[Dict[str, Any]], snapshots: Any, tflows: 
     used = 0
     unpriced = other_ccy = 0
     skipped = []
+    first_used = last_used = None
     for (d0, s0), (d1, s1) in zip(days, days[1:]):
         b0 = s0.get("by_account") if isinstance(s0.get("by_account"), dict) else {}
         b1 = s1.get("by_account") if isinstance(s1.get("by_account"), dict) else {}
@@ -1124,6 +1146,8 @@ def _attribution(ccy: str, accts: List[Dict[str, Any]], snapshots: Any, tflows: 
         net += sum(r["value"] for r in inside if r["value"] is not None) if txn_known else 0.0
         capital_sum += v0
         used += 1
+        first_used = first_used or d0
+        last_used = d1
     base["skipped_pairs"] = skipped
     if not used:
         base["reason"] = "No two consecutive collected days in this period could be compared: {}.".format(
@@ -1142,7 +1166,9 @@ def _attribution(ccy: str, accts: List[Dict[str, Any]], snapshots: Any, tflows: 
         lims.append("Holdings priced in a currency other than {} are left out of attribution.".format(ccy))
     base.update({
         "available": True, "reason": None,
-        "window": {"start": days[0][0].isoformat(), "end": days[-1][0].isoformat(), "pairs": used,
+        # The days the contributions were measured over: the first and last pair used, not the first and
+        # last snapshot, which a skipped pair at either end would widen.
+        "window": {"start": first_used.isoformat(), "end": last_used.isoformat(), "pairs": used,
                    "snapshots": len(days)},
         "positions": [dict(meta[k], key=k, contribution=_money(v),
                            contribution_pct=round(100.0 * v / avg, 2) if avg > 0 else None)

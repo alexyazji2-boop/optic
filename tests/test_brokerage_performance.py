@@ -547,3 +547,34 @@ def test_classification_covers_every_snaptrade_type():
               "OPTIONEXPIRATION": "trade", "OPTIONASSIGNMENT": "trade", "OPTIONEXERCISE": "trade",
               "SPLIT": "other", "ADJUSTMENT": "other", "SOMETHING_NEW": "unrecognised"}
     assert {k: P.classify(k) for k in expect} == expect
+
+
+# ------------------------------------------------- the return's own dates
+#
+# Seen on Brokerage on 26 October 2026: the headline return was measured 22 to
+# 27 October, and "What drove it" listed contributions from 16 to 27 October.
+
+
+def test_attribution_covers_the_returns_own_dates():
+    days = ["2026-10-16", "2026-10-19", "2026-10-20", "2026-10-21", "2026-10-22", "2026-10-23", "2026-10-26"]
+    snaps = [snap(d, {"equity:AAPL:USD": stock(10, 100 + i)}, 500) for i, d in enumerate(days)]
+    out = run([acct("a")], {"a": []}, {}, "2026-10-26", period="1m", snapshots=snaps)
+    per, a = out["period"], out["attribution"]
+    assert a["available"] is True
+    assert (a["window"]["start"], a["window"]["end"]) == (per["measured_start"], per["measured_end"])
+    assert a["matches_return"] is True and "window_note" not in a
+
+
+def test_a_skipped_pair_does_not_widen_the_stated_window():
+    snaps = [snap("2026-10-16", {"equity:AAPL:USD": stock(10, 100)}, 500, complete=False),
+             snap("2026-10-22", {"equity:AAPL:USD": stock(10, 101)}, 500),
+             snap("2026-10-23", {"equity:AAPL:USD": stock(10, 103)}, 500)]
+    a = P._attribution("USD", [acct("a")], snaps, [], P.date(2026, 10, 1), P.date(2026, 10, 23), True)
+    assert a["available"] is True and a["skipped_pairs"][0]["from"] == "2026-10-16"
+    assert (a["window"]["start"], a["window"]["end"]) == ("2026-10-22", "2026-10-23"), "the skipped pair is not in it"
+
+
+def test_the_page_labels_attribution_on_other_dates_as_separate():
+    from pathlib import Path
+    src = (Path(__file__).parent.parent / "static/v2/js/pages/brokerage.js").read_text()
+    assert "att.matches_return === false" in src and "the same dates as the return above" in src
