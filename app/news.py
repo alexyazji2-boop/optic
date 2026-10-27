@@ -1194,9 +1194,12 @@ def analyse(provider, ticker: str, limit: int = 12) -> Dict[str, Any]:
         # judgement about the items.
         "fetched_at": (datetime.fromtimestamp(held_at, timezone.utc).isoformat() if held_at
                        else datetime.now(timezone.utc).isoformat()),
+        # The fetch time is its own field, for the page to format in New York
+        # time. The sentence used to end "The list was fetched at fetched_at.",
+        # and NVDA's News tab printed exactly that (2026-10-26).
         "times_note": ("Each time is when the story was published, as the feed gives it. "
                        "An event can be earlier (a report covered the next morning) or later "
-                       "(a preview of a date ahead). The list was fetched at fetched_at."),
+                       "(a preview of a date ahead)."),
         "dropped": {"filler": dropped["filler"],
                     "off_topic": dropped["off-topic"],
                     "landing": dropped["landing"],

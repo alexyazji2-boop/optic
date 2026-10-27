@@ -9,6 +9,7 @@ import { signed, num, clean, capFirst, esc, isNum } from '../core/format.js';
 import { skeleton, empty, failed, how } from '../ui/states.js';
 import { button as miloButton, provideContext } from '../ui/milo.js';
 import { core, header, tabs, isFund, livePrice } from './dossier-frame.js';
+import { etStamp } from '../core/marketTime.js';
 let lp = null;   // the header's price refresh (dossier-frame livePrice), stopped in dispose()
 
 let D = {}, live = true, mainEl = null, filter = null;
@@ -61,7 +62,7 @@ function body(sym) {
     ${(n.catalyst_summary || []).length ? html`<h3>Catalyst types found</h3><div class="chips" role="group" aria-label="Show headlines by catalyst">${n.catalyst_summary.map((c) => html`<button type="button" class="chip" data-v2-cat="${c.type}" aria-pressed="${filter === c.type}">${capFirst(c.type)} <span class="t-muted">${c.mentions}, ${c.lean}</span></button>`)}${filter ? html`<button type="button" class="textlink" data-v2-cat="">Show all</button>` : ''}</div>` : ''}
     <h3>About ${sym} <span class="t-muted">${about.length}</span></h3>${about.length ? html`<ul class="nw-list">${about.map(row)}</ul>` : html`<p class="quiet">None ${filter ? 'with this catalyst' : ''}.</p>`}
     ${ctx.length ? html`<h3>Market context <span class="t-muted">${ctx.length}</span></h3><ul class="nw-list">${ctx.map(row)}</ul>` : ''}
-    <p class="asof">${(n.dropped || {}).total ? `Left out: ${n.dropped.filler || 0} filler, ${n.dropped.off_topic || 0} off-topic and ${n.dropped.landing || 0} site index pages. ` : ''}${clean(n.times_note || '')}</p>
+    <p class="asof">${(n.dropped || {}).total ? `Left out: ${n.dropped.filler || 0} filler, ${n.dropped.off_topic || 0} off-topic and ${n.dropped.landing || 0} site index pages. ` : ''}${clean(n.times_note || '')}${etStamp(n.fetched_at) ? ` Optic fetched this list at ${etStamp(n.fetched_at)}.` : ''}</p>
     <details class="more-inline"><summary>How these are ranked</summary><ul class="plain">${(n.tiers || []).map((t) => html`<li><b>${t.label}</b> (${tc[t.id] || 0}): ${clean(t.rule)}</li>`)}</ul>
       <p>Matched on ${(n.matched_on || []).join(', ')}. A catalyst type has no direction of its own; its lean is the average tone of its headlines. These rules cannot read sarcasm, judge a source or know what the market already priced.</p><p class="asof">${clean(n.method || '')}</p></details>
   </section>`;
