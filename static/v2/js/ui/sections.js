@@ -75,6 +75,20 @@ function apply(root) {
   bar(root, list, opts);
 }
 
+// A jump chip's own words where the heading is longer than a chip holds. Chips cut at 28 characters, and the VC audit
+// of 2026-10-26 found seven reading "What options price for the…" and the like. The heading, the section's id and its
+// saved fold state are the full title, untouched; only the chip is shorter, and its title attribute keeps the heading.
+const CHIP = {
+  'Four questions, answered separately': 'Four questions',
+  'Long-term trend score, from price history': 'Long-term trend score',
+  'The multiple against its own history': 'Against its own history',
+  'Fair-value model, discounted cash flow': 'Fair-value model',
+  'Valuation and accumulation levels': 'Valuation and accumulation',
+  'The business behind the reports': 'Business behind the reports',
+  'What options price for the report': 'What options price',
+};
+export const chipLabel = (t) => CHIP[t] || (t.length > 28 ? `${t.slice(0, 27).trimEnd()}…` : t);
+
 function bar(root, list, opts) {
   const shown = list.filter((x) => !x.off), strip = opts.strip !== false && shown.length >= (opts.min || 6), bulk = list.length >= 4;
   let nav = root.querySelector(':scope > .sec-index');
@@ -82,7 +96,7 @@ function bar(root, list, opts) {
   const sig = JSON.stringify([strip, list.map((x) => [x.s.id, x.title, x.off])]);
   if (!nav || nav.dataset.sig !== sig) {
     const open = nav ? !!nav.querySelector('details.sec-panels[open]') : false;
-    const html = `${strip ? `<div class="sec-list">${shown.map((x) => `<button type="button" class="sec-chip" data-sec-jump="${esc(x.s.id)}" title="${esc(x.title)}">${esc(x.title.length > 28 ? `${x.title.slice(0, 27).trimEnd()}…` : x.title)}</button>`).join('')}</div>` : ''}
+    const html = `${strip ? `<div class="sec-list">${shown.map((x) => `<button type="button" class="sec-chip" data-sec-jump="${esc(x.s.id)}" title="${esc(x.title)}">${esc(chipLabel(x.title))}</button>`).join('')}</div>` : ''}
       <div class="sec-bulk"><button type="button" class="btn btn-sm btn-quiet" data-sec-bulk="open">Expand all</button><button type="button" class="btn btn-sm btn-quiet" data-sec-bulk="close">Collapse all</button>
       <details class="menu sec-panels"><summary class="btn btn-sm btn-quiet">Panels${list.some((x) => x.off) ? ` <span class="ch-count">${list.filter((x) => x.off).length} off</span>` : ''}</summary><div class="menu-body menu-end">
         <p class="menu-help">Which sections this page shows. Kept in this browser.</p>

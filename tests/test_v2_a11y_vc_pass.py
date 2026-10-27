@@ -53,3 +53,15 @@ def test_the_classic_milo_box_is_labelled():
     page = (ROOT / "static" / "index.html").read_text()
     assert '<textarea id="chat-input" aria-label="Ask Milo"' in page
     assert 'id="chat-file" aria-label="Attach an image or PDF"' in page
+
+
+def test_no_section_chip_is_cut_mid_word(tmp_path):
+    """Seven jump chips read "What options price for the…" and the like (VC audit, 2026-10-26)."""
+    from tests.test_frontend_v2_stage0 import _run
+    got = _run(tmp_path, f"""
+      const s = await import('{(V2 / "js/ui/sections.js").as_posix()}');
+      const titles = ['Four questions, answered separately', 'Long-term trend score, from price history', 'The multiple against its own history',
+        'Fair-value model, discounted cash flow', 'Valuation and accumulation levels', 'The business behind the reports', 'What options price for the report'];
+      print(JSON.stringify(titles.map(s.chipLabel)));
+    """)
+    assert all(len(t) <= 28 and not t.endswith("…") for t in got), got
