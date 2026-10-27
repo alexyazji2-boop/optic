@@ -1,0 +1,311 @@
+{
+ "available": true,
+ "tickers": [
+  "NVDA",
+  "MSFT"
+ ],
+ "rows": [
+  {
+   "price": 216.0,
+   "change_pct": 2.38908,
+   "rsi": 44.117796,
+   "atr_pct": 2.83058,
+   "iv_pct": 34.35,
+   "hv_pct": 29.496512,
+   "rs_vs_spy": -3.25,
+   "vs_sma20": -3.956675,
+   "vs_sma50": -2.833746,
+   "vs_sma200": 5.975757,
+   "composite": 13.0,
+   "pe_percentile": 0.0,
+   "pe_read": "cheap versus its own history",
+   "forward_pe": 13.572443,
+   "drawdown_pct": -9.71,
+   "cagr_5y_pct": 57.59,
+   "excess_cagr_5y_pct": 46.24,
+   "beta_vs_spy": 1.757,
+   "annual_vol_pct": 47.73,
+   "max_drawdown_pct": -66.36,
+   "vol_5y_pct": 51.85,
+   "cagr_per_vol_5y": 1.11,
+   "history_years": 11.97,
+   "kind": "stock",
+   "vs_sma40w": 5.66,
+   "trend_phase": "secular uptrend",
+   "sector": "Technology",
+   "name": "NVIDIA Corporation",
+   "ticker": "NVDA",
+   "is_benchmark": false,
+   "why_na": {},
+   "scores": {
+    "swing": 35.8,
+    "position": 55.7,
+    "longterm": 73.8
+   },
+   "score_inputs": {
+    "swing": [
+     5,
+     5
+    ],
+    "position": [
+     4,
+     4
+    ],
+    "longterm": [
+     6,
+     6
+    ]
+   }
+  },
+  {
+   "price": 532.6,
+   "change_pct": 1.54239,
+   "rsi": 57.238968,
+   "atr_pct": 2.121342,
+   "iv_pct": 50.47,
+   "hv_pct": 19.104208,
+   "rs_vs_spy": 3.96,
+   "vs_sma20": 0.895857,
+   "vs_sma50": 4.601273,
+   "vs_sma200": 21.935816,
+   "composite": 46.7,
+   "pe_percentile": 50.0,
+   "pe_read": "mid-range versus its own history",
+   "forward_pe": 22.482325,
+   "drawdown_pct": -2.0,
+   "cagr_5y_pct": 11.63,
+   "excess_cagr_5y_pct": 0.28,
+   "beta_vs_spy": 1.176,
+   "annual_vol_pct": 27.44,
+   "max_drawdown_pct": -37.56,
+   "vol_5y_pct": 28.16,
+   "cagr_per_vol_5y": 0.41,
+   "history_years": 11.97,
+   "kind": "stock",
+   "vs_sma40w": 21.81,
+   "trend_phase": "secular uptrend",
+   "sector": "Technology",
+   "name": "Microsoft Corporation",
+   "ticker": "MSFT",
+   "is_benchmark": false,
+   "why_na": {},
+   "scores": {
+    "swing": 51.7,
+    "position": 67.1,
+    "longterm": 65.2
+   },
+   "score_inputs": {
+    "swing": [
+     5,
+     5
+    ],
+    "position": [
+     4,
+     4
+    ],
+    "longterm": [
+     6,
+     6
+    ]
+   }
+  }
+ ],
+ "ranks": {
+  "swing": [
+   {
+    "ticker": "MSFT",
+    "score": 51.7,
+    "rank": 1,
+    "standing": "best",
+    "inputs": [
+     5,
+     5
+    ]
+   },
+   {
+    "ticker": "NVDA",
+    "score": 35.8,
+    "rank": 2,
+    "standing": "#2",
+    "inputs": [
+     5,
+     5
+    ]
+   }
+  ],
+  "position": [
+   {
+    "ticker": "MSFT",
+    "score": 67.1,
+    "rank": 1,
+    "standing": "best",
+    "inputs": [
+     4,
+     4
+    ]
+   },
+   {
+    "ticker": "NVDA",
+    "score": 55.7,
+    "rank": 2,
+    "standing": "#2",
+    "inputs": [
+     4,
+     4
+    ]
+   }
+  ],
+  "longterm": [
+   {
+    "ticker": "NVDA",
+    "score": 73.8,
+    "rank": 1,
+    "standing": "best",
+    "inputs": [
+     6,
+     6
+    ]
+   },
+   {
+    "ticker": "MSFT",
+    "score": 65.2,
+    "rank": 2,
+    "standing": "#2",
+    "inputs": [
+     6,
+     6
+    ]
+   }
+  ]
+ },
+ "horizons": [
+  {
+   "id": "swing",
+   "name": "Swing setup",
+   "horizon": "1\u20138 weeks",
+   "basis": "14-session RSI, implied against 20-session realised volatility, 21-session relative strength versus SPY, and where price sits against its 20- and 50-day averages. Today's tape is context only."
+  },
+  {
+   "id": "position",
+   "name": "Position setup",
+   "horizon": "several weeks to several months",
+   "basis": "Price against its 50- and 200-day averages, 21-session relative strength, and valuation against the company's own history. Today's change does not materially influence this."
+  },
+  {
+   "id": "longterm",
+   "name": "Long-term trend",
+   "horizon": "multi-year",
+   "basis": "Five-year annualised price return and that rate per unit of the same five years' volatility, how far it sits below its high and its worst fall (both over up to 12 years of daily closes), position against the 200-day average, and valuation against the company's own multi-year range. Not driven by today's move."
+  }
+ ],
+ "performance": {
+  "dates": [
+   "2025-10-23",
+   "2025-10-30",
+   "2025-11-06",
+   "2025-11-13",
+   "2025-11-20"
+  ],
+  "start": "2025-10-23",
+  "end": "2026-10-26",
+  "sessions": 252,
+  "series": [
+   {
+    "ticker": "NVDA",
+    "values": [
+     100.0,
+     111.38,
+     103.25,
+     102.58,
+     99.17
+    ],
+    "change_pct": 18.6
+   },
+   {
+    "ticker": "MSFT",
+    "values": [
+     100.0,
+     101.0,
+     95.49,
+     96.68,
+     91.91
+    ],
+    "change_pct": 2.3
+   }
+  ]
+ },
+ "leaders": {
+  "rs_vs_spy": "MSFT",
+  "cagr_5y_pct": "NVDA",
+  "excess_cagr_5y_pct": "NVDA",
+  "cagr_per_vol_5y": "NVDA",
+  "drawdown_pct": "MSFT",
+  "max_drawdown_pct": "MSFT",
+  "annual_vol_pct": "MSFT",
+  "forward_pe": "NVDA",
+  "pe_percentile": "NVDA",
+  "composite": "MSFT"
+ },
+ "tie_points": 5.0,
+ "failed": [],
+ "method": "Every figure is computed the same way at the same moment for each name, which is the point. Comparing a number from one tab against a same-named number from another risks comparing different lookbacks. The three horizons are ranked separately because a name can be the best swing setup and the worst multi-year hold; that is not a contradiction. Today's price change is shown as context and deliberately does not drive the position or long-term ranks. Research context, not instructions to buy or sell.",
+ "take": {
+  "available": true,
+  "headline": "No name leads throughout: MSFT on the swing setup, MSFT on the position setup, NVDA on the long-term trend.",
+  "agreement": "The horizons name different leaders.",
+  "overall": "MSFT",
+  "unanimous": false,
+  "winners": {
+   "swing": {
+    "ticker": "MSFT",
+    "score": 51.7,
+    "gap": 15.9,
+    "decisive": true,
+    "name": "Swing setup"
+   },
+   "position": {
+    "ticker": "MSFT",
+    "score": 67.1,
+    "gap": 11.4,
+    "decisive": true,
+    "name": "Position setup"
+   },
+   "longterm": {
+    "ticker": "NVDA",
+    "score": 73.8,
+    "gap": 8.6,
+    "decisive": true,
+    "name": "Long-term trend"
+   }
+  },
+  "standouts": [
+   {
+    "ticker": "MSFT",
+    "phrase": "the strongest relative strength against SPY",
+    "metric": "rs_vs_spy",
+    "value": 3.96
+   },
+   {
+    "ticker": "NVDA",
+    "phrase": "the best five-year compound growth",
+    "metric": "cagr_5y_pct",
+    "value": 57.59
+   },
+   {
+    "ticker": "NVDA",
+    "phrase": "the most return per unit of volatility",
+    "metric": "cagr_per_vol_5y",
+    "value": 1.11
+   },
+   {
+    "ticker": "MSFT",
+    "phrase": "the smallest drawdown from its high",
+    "metric": "drawdown_pct",
+    "value": -2.0
+   }
+  ],
+  "close_calls": [],
+  "method": "Leaders are read off the same three scores the table below shows. A horizon whose top two are within five points is flagged as a close call rather than a ranking: the scores are built from a handful of inputs each and do not resolve that finely."
+ },
+ "generated_at": "2026-10-27T02:44:13.292346+00:00"
+}

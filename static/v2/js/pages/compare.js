@@ -96,6 +96,52 @@ export function rankRead(ranks) {
   return gap < TIE ? `${a.ticker} and ${b.ticker} are level here (${num(a.score, 0)} against ${num(b.score, 0)}). Too close to separate.` : `${a.ticker} leads, ${num(gap, 0)} points clear of ${b.ticker}.`;
 }
 
+// The unit each figure is in, for Milo: by row where the kind alone does not say it.
+const UNIT_OF = { price: 'US dollars', change_pct: 'percent, one session', rsi: '0 to 100', rs_vs_spy: 'percentage points against SPY',
+  vs_sma20: 'percent from the average', vs_sma50: 'percent from the average', vs_sma200: 'percent from the average', vs_sma40w: 'percent from the average',
+  forward_pe: 'times expected earnings', pe_percentile: 'percentile of its own history', beta_vs_spy: 'ratio to SPY', cagr_per_vol_5y: 'ratio',
+  composite: 'signed score points', trend_phase: 'words' };
+const KIND_UNIT = { pct: 'percent', pct_plain: 'percent', pct_neutral: 'percent', num0: 'number', num1: 'number', num2: 'number', signed: 'points', usd: 'US dollars', pctile: 'percentile', text: 'words' };
+const fig = (v) => (typeof v === 'number' && Number.isFinite(v) ? Math.round(v * 1000) / 1000 : v);
+/** What Milo reads about the comparison on screen: every compared name's figures as the table shows them, with
+ * units, lookbacks (in each label), the reason a figure is missing, the horizon scores with what each is built from,
+ * and the time it was computed. The same for every name, from the result already on screen, so nothing is fetched
+ * again. It sent only the tickers, the headline and the ranks, and Milo said it lacked MSFT's figures while the
+ * table beside it showed them (audit 2026-10-26). Measured 9,400 characters for two names and 10,600 for four, most
+ * of it the metric definitions, inside Milo's 14,000 a section. */
+export function miloCompare(c) {
+  if (!c || !c.available) return null;
+  const t = c.take || {};
+  const metrics = GROUPS.flatMap((g) => g.rows.map((m) => ({ key: m.key, label: m.note ? `${m.label}, ${m.note}` : m.label, group: g.title,
+    unit: UNIT_OF[m.key] || KIND_UNIT[m.kind] || 'number', better: m.lead === 'high' ? 'higher' : m.lead === 'low' ? 'lower' : null, means: m.means })));
+  const rows = (c.rows || []).map((r) => {
+    const values = {}, notAvailable = {};
+    metrics.forEach((m) => { const v = r[m.key]; if (v === null || v === undefined || v === '') notAvailable[m.key] = clean((r.why_na || {})[m.key] || 'not reported by the feed'); else values[m.key] = fig(v); });
+    return { ticker: r.ticker, name: r.name || null, kind: r.is_benchmark ? 'benchmark' : r.kind || null, sector: r.sector || null,
+      values, not_available: notAvailable, pe_read: r.pe_read ? clean(r.pe_read) : null, history_years: fig(r.history_years) };
+  });
+  const scores = {};
+  (c.horizons || []).forEach((h) => {
+    const rk = ((c.ranks || {})[h.id] || []).slice().sort((a, b) => b.score - a.score), st = standing(rk);
+    scores[h.id] = rk.map((x) => ({ ticker: x.ticker, score: fig(x.score), standing: st[x.ticker], inputs: x.inputs ? `${x.inputs[0]} of ${x.inputs[1]}` : null }));
+  });
+  const p = c.performance || {};
+  return {
+    tickers: c.tickers, computed_at: c.generated_at || null,
+    headline: t.headline ? clean(t.headline) : null, agreement: t.agreement ? clean(t.agreement) : null,
+    winners: Object.fromEntries(Object.entries(t.winners || {}).map(([k, w]) => [k, { ticker: w.decisive ? w.ticker : null, gap: fig(w.gap), level: !w.decisive }])),
+    standouts: (t.standouts || []).map((x) => `${x.ticker} has ${clean(x.phrase)}`),
+    horizons: (c.horizons || []).map((h) => ({ id: h.id, name: h.name, horizon: h.horizon, built_from: clean(h.basis || '') })),
+    score_scale: `Each horizon score runs 0 to 100 and is computed the same way for every name. Two scores within ${TIE} points are level, not a ranking.`,
+    scores, leaders: c.leaders || {},
+    metrics, rows,
+    performance: (p.series || []).length ? { start: p.start, end: p.end, sessions: p.sessions, basis: 'price only, dividends not included', change_pct: Object.fromEntries(p.series.map((x) => [x.ticker, fig(x.change_pct)])) } : null,
+    failed: (c.failed || []).map((f) => `${f.ticker}: ${clean(f.reason || '')}`),
+    method: c.method ? clean(c.method) : null,
+    limits: 'These scores describe present readings. Optic has not shown that they predict future returns.',
+  };
+}
+
 // kept for the session, as the classic page keeps STATE.compare
 let inputs = ['', ''], result = null, running = false, seq = 0, live = true, mainEl = null, showMeans = false;
 const wanted = () => [...new Set(inputs.map((x) => x.trim().toUpperCase()).filter(Boolean))];
@@ -215,7 +261,7 @@ export async function render(main, route) {
   // a result is for the tickers it was asked for: another set in the address clears it
   if (pre.length) { if (result && result.tickers && result.tickers.join(',') !== pre.join(',')) { result = null; seq++; running = false; } inputs = pre.length >= 2 ? pre : [pre[0], '']; }
   else if (inputs.every((x) => !x)) { const r = store.openedNow(); if (r) inputs[0] = r; }
-  provideContext(() => ({ view: 'compare', compare: result && result.available ? { tickers: result.tickers, take: (result.take || {}).headline, ranks: result.ranks } : null }));
+  provideContext(() => ({ view: 'compare', compare: miloCompare(result) }));
   main.addEventListener('submit', (e) => { if (e.target.closest('[data-v2-cmp-form]')) { e.preventDefault(); run(); } });
   main.addEventListener('input', (e) => {
     const i = e.target.dataset.v2CmpInput; if (i === undefined) return;

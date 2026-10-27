@@ -6983,6 +6983,12 @@ async def _augment_chat_context_lookups(history: List[Dict[str, Any]],
         block = (context or {}).get(key)
         if isinstance(block, dict):
             already.add((block.get("ticker") or "").upper())
+    # Every name on a Compare page arrives with its figures (compare.js, miloCompare). Looking one of them up
+    # again made the context lopsided: one name with its whole snapshot, the other with nothing but a rank,
+    # and an answer that said it lacked MSFT's figures while the table showed them (audit 2026-10-26).
+    cmp = (context or {}).get("compare")
+    if isinstance(cmp, dict) and isinstance(cmp.get("rows"), list):
+        already.update(str((r or {}).get("ticker") or "").upper() for r in cmp["rows"] if isinstance(r, dict))
 
     text = last.get("content") or ""
     named = _symbols_in(text)
