@@ -15,7 +15,12 @@ export function render_(main, route) {
   if (route.view === 'brokerage' && route.section) href = `${CLASSIC}#/brokerage/${route.section}`;
   if (route.view === 'instrument') href = `${CLASSIC}#/instrument/${encodeURIComponent(route.symbol || '')}`;
   if (route.view === 'notfound') {
-    render(main, html`<div class="state"><p class="t-h3">That address is not a page</p><p>Check the ticker, or search for the company.</p><button type="button" class="btn" data-v2-open-palette>Search</button></div>`);
+    // a heading and a title of its own: with neither, a screen reader landed on nothing and the tab kept the
+    // previous page's name (investor audit, 2026-10-27)
+    render(main, html`<header class="page-head"><h1 class="t-display-m">Page not found</h1></header>
+      <div class="state"><p class="t-h3">That address is not a page</p><p>Check the ticker, or search for the company.</p>
+      <div class="cluster"><button type="button" class="btn btn-primary" data-v2-open-palette>Search</button><a class="btn" href="#/">Go to Home</a></div></div>`);
+    document.title = 'Page not found, Optic';
     return;
   }
   render(main, html`<header class="page-head">${g && g.symbol && route.symbol ? html`<p class="name"><b class="tick">${route.symbol}</b></p>` : ''}

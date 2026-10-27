@@ -333,6 +333,15 @@ function paint(main, sym) {
   const scrollY = window.scrollY;
   const fund = isFundHere(sym);
   const c = OR.context({ sym, t: D.ticker || null, fw: D.fwRaw, fwError: D.fwNetError, lt: D.longterm || null, stars: (D.fairValue || {}).stars, fund, advanced: prefs.advancedOn(), phase: phase() });
+  // No quote and no price history, both "not found": the symbol is not listed, and the page says that once. Drawn in
+  // full it went on to a red "price history did not load, Try again" and four "Insufficient Data" verdicts for a
+  // symbol that does not exist (investor audit, 2026-10-27).
+  const unlisted = !!(D.quoteError && !D.quote && D.quoteError.kind === 'notfound' && D.tickerError && D.tickerError.kind === 'notfound' && !D.ticker);
+  if (unlisted) {
+    draw(main, html`<div class="dstick has-tools">${frameHeader(sym, D, 'overview', { stage: () => stageFor(sym) })}${frameTabs(sym, 'overview', { fund: isFund(D) })}</div>
+      ${empty(`Optic has no listing for ${sym}`, 'No quote and no price history came back for this symbol. It may be misspelled, delisted, or listed outside the US under another form.', html`<div class="cluster"><button type="button" class="btn btn-primary btn-sm" data-v2-open-palette>Search for the company</button><a class="btn btn-sm" href="#/">Go to Home</a></div>`)}`);
+    return;
+  }
   draw(main, html`<div class="dstick has-tools">${frameHeader(sym, D, 'overview', { stage: () => stageFor(sym) })}${frameTabs(sym, 'overview', { fund: isFund(D) })}<div class="dh-tools">${advSwitch()}</div></div>
     ${D.quoteError && !D.quote ? (D.quoteError.kind === 'notfound' ? empty(`Optic has no listing for ${sym}`, 'No quote came back for this symbol. It may be misspelled, delisted, or listed outside the US under another form.', html`<button type="button" class="btn btn-sm" data-v2-open-palette>Search for the company</button>`) : failed(`${sym}'s quote`, D.quoteError, { retry: 'dossier' })) : ''}
     ${((D.framework || {}).freshness || {}).state === 'stale' ? staleLine({ text: clean(D.framework.freshness.text) }) : ''}
@@ -358,7 +367,6 @@ export async function render(main, route) {
   live = true;
   const sym = route.symbol;
   D = { sym };
-  store.pushRecent(sym);
   provideContext(() => ({ view: 'overview', ticker: sym, quote: D.quote, verdict: (D.ticker || {}).verdict, company: (D.ticker || {}).company, news: (D.ticker || {}).news, framework: D.framework, fair_value: D.fairValue, earnings: D.earnings, digest: D.digest, stage: D.stage && D.stage.available ? { stage: D.stage.stage, name: D.stage.name, transition: D.stage.transition_short } : null, thesis_check: thesisContext() }));
   document.title = `${sym} Dossier, Optic`;
   if (lp) lp.stop();
@@ -371,7 +379,10 @@ export async function render(main, route) {
   sections(main, 'overview', { levels: { 'advanced research': 2 }, norm: (t) => { const n = ((main.querySelector('.dhead .name span') || {}).textContent || '').trim(); return n ? t.split(n).join('the company') : t; } });   // folds, Expand all, Panels (Classic parity B3)
   const enc = encodeURIComponent(sym);
   const step = (p, ok, bad) => { p.then((d) => { if (D.sym === sym) ok(d); }, (e) => { if (D.sym === sym) bad(e); }).finally(() => { if (D.sym === sym) paint(main, sym); }); };
-  step(api.get(`/api/quote/${enc}`, { ttl: 20000, timeout: 15000 }), (d) => { if (d && d.available !== false) D.quote = fresher(D.quote, d.quote || d); else { D.quoteError = new api.ApiError('notfound', 404, `No quote for ${sym}`); store.forgetRecent(sym); } }, (e) => { D.quoteError = e; });
+  // `unreachable` is the source failing, not the symbol being unknown: read as one, a feed outage said "Optic has no
+  // listing for NVDA" (investor audit, 2026-10-27). The symbol joins the recents once a quote confirms it: kept from
+  // the first paint, a mistyped ZZZZQ whose quote timed out stayed, and a guest's Home linked its panels to it.
+  step(api.get(`/api/quote/${enc}`, { ttl: 20000, timeout: 15000 }), (d) => { if (d && d.available !== false) { D.quote = fresher(D.quote, d.quote || d); store.pushRecent(sym); } else if (d && d.unreachable) D.quoteError = new api.ApiError('server', 503, `The quote source did not answer for ${sym}`); else { D.quoteError = new api.ApiError('notfound', 404, `No quote for ${sym}`); store.forgetRecent(sym); } }, (e) => { D.quoteError = e; });
   step(api.get(`/api/session/${enc}`, { ttl: 60000 }), (d) => { D.session = d; learn(sym, { session: d, quote: D.quote }); }, () => {});
   step(api.get(`/api/ticker/${enc}?max_expiries=4&macro=true`, { ttl: 120000, timeout: 60000 }), (d) => {
     D.ticker = d; if (d.quote) D.quote = fresher(D.quote, d.quote);

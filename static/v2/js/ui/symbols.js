@@ -14,6 +14,9 @@ export const KIND = { stock: 'stock', etf: 'fund etf', index: 'index', crypto: '
 export const filterOf = (kind) => (kind === 'commodity' || kind === 'future' ? 'futures' : kind === 'rate' ? 'index' : kind || 'stock');
 export const FILTERS = [['all', 'All'], ['stock', 'Stocks'], ['etf', 'Funds'], ['index', 'Indices'], ['futures', 'Futures'], ['crypto', 'Crypto'], ['fx', 'Currencies']];
 const LOGO_SYM = /^[A-Z][A-Z0-9.-]{0,9}$/;
+// symbols whose logo answered with an error on this visit: a repaint draws the initial at once instead of asking
+// again (an unlisted symbol's Overview asked four times, one 404 per redraw: investor audit, 2026-10-27)
+const NO_LOGO = new Set();
 
 /** The text with the first match of the query marked, escaped. */
 export function marked(text, query) {
@@ -26,7 +29,7 @@ export function marked(text, query) {
  *  tab since 2026-10-25, as Classic's header has it), which a repaint draws afresh and a lazy load could leave waiting. */
 export function logoHTML(symbol, { lazy = true } = {}) {
   const sym = String(symbol || '').toUpperCase(), first = (sym.match(/[A-Z0-9]/) || [''])[0];
-  return `<span class="sym-logo" aria-hidden="true" data-l="${esc(first)}">${LOGO_SYM.test(sym) ? `<img src="/api/logo/${encodeURIComponent(sym)}" alt=""${lazy ? ' loading="lazy"' : ''} decoding="async">` : ''}</span>`;
+  return `<span class="sym-logo" aria-hidden="true" data-l="${esc(first)}">${LOGO_SYM.test(sym) && !NO_LOGO.has(sym) ? `<img src="/api/logo/${encodeURIComponent(sym)}" alt=""${lazy ? ' loading="lazy"' : ''} decoding="async">` : ''}</span>`;
 }
 /** One result: the logo, the symbol and the name with what was typed marked, and the kind of listing. */
 export function rowHTML(r, query, { kind = true } = {}) {
@@ -36,6 +39,11 @@ export function rowHTML(r, query, { kind = true } = {}) {
 
 // a logo that did not load leaves the initial showing (one listener for the page)
 if (typeof document !== 'undefined' && document.addEventListener) {
-  document.addEventListener('error', (e) => { const t = e.target; if (t && t.tagName === 'IMG' && t.parentElement && t.parentElement.classList.contains('sym-logo')) t.remove(); }, true);
+  document.addEventListener('error', (e) => {
+    const t = e.target;
+    if (!(t && t.tagName === 'IMG' && t.parentElement && t.parentElement.classList.contains('sym-logo'))) return;
+    const m = /\/api\/logo\/([^/?#]+)/.exec(t.getAttribute('src') || ''); if (m) NO_LOGO.add(decodeURIComponent(m[1]).toUpperCase());
+    t.remove();
+  }, true);
   document.addEventListener('load', (e) => { const t = e.target; if (t && t.tagName === 'IMG' && t.parentElement && t.parentElement.classList.contains('sym-logo')) t.parentElement.classList.add('has-img'); }, true);
 }
