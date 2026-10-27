@@ -479,7 +479,11 @@ export const PANELS = {
     body: ({ q, c }, P, link) => {
       const qq = (q || {}).quote || {};
       if (!q || q.available === false || !isNum(qq.price)) return html`<p class="ws-note">No quote for ${link}. Check the ticker.</p>`;
-      return html`<div class="ws-quote"><div><a class="ws-sym" href="#/${enc(link)}">${link}</a> <span class="ws-name">${qq.name || ''}</span></div><div class="ws-px">${num(qq.price)} <span class="${dir(qq.change_pct)}">${signed(qq.change, 2, '')} (${signed(qq.change_pct)})</span></div></div>
+      // one plain line when the feed sent a price without its change, never "n/a (n/a)" (SPY, 2026-10-26); the change
+      // is the regular session's, as the watchlist's is, and an extended-hours move is never put in its place
+      const chg = isNum(qq.change_pct) ? html`<span class="${dir(qq.change_pct)}">${signed(qq.change, 2, '')} (${signed(qq.change_pct)})</span>` : html`<span class="ws-rule">Day's change not reported yet</span>`;
+      return html`<div class="ws-quote"><div><a class="ws-sym" href="#/${enc(link)}">${link}</a> <span class="ws-name">${qq.name && qq.name !== link ? qq.name : ''}</span></div><div class="ws-px">${num(qq.price)} ${chg}</div></div>
+        ${qq.partial ? html`<p class="ws-note">The full quote did not answer, so this is the last daily close and its change from the close before. Reload for the rest.</p>` : ''}
         <div class="seg ws-seg" role="group" aria-label="Range">${['3m', '6m', '1y'].map((k) => html`<button type="button" data-ws-set="quote:span:${k}" aria-pressed="${P.span === k}">${k.toUpperCase()}</button>`)}</div>
         ${(c && c.available && ((c.chart || {}).close || []).length > 1) ? html`<div class="chart-slot" data-chart="ws-quote"></div>` : html`<p class="ws-note">No price history for ${link}.</p>`}`;
     },

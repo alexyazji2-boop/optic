@@ -863,10 +863,26 @@ class YFinanceProvider(MarketDataProvider):
                 info = {}
 
             price = _f(info.get("regularMarketPrice"))
+            # When the quote document does not answer, the price is the last
+            # daily bar's close, and the day's change is measured against the
+            # bar before it: both regular-session closes, never an
+            # extended-hours print. Without the second, Home's quote panel read
+            # "SPY 765.37 n/a (n/a)" beside a watchlist row saying +0.71% for
+            # the same close (2026-10-26), until the next load found the quote.
+            bar_prev = None
+            partial = False
             if price is None:
                 hist = self.history(ticker, period="5d")
                 if not hist.empty:
                     price = _f(hist["Close"].iloc[-1])
+                    partial = price is not None
+                    # Not for anything that trades around the clock: a future's,
+                    # a currency's or a coin's daily bars do not break at its
+                    # settlement (tests/test_live_quote_change.py), so the change
+                    # stays unreported rather than wrong.
+                    sym = ticker.upper()
+                    if len(hist) >= 2 and "=" not in sym and not sym.endswith("-USD"):
+                        bar_prev = _f(hist["Close"].iloc[-2])
 
             # yfinance 1.x reports dividendYield in percent (1.01 means 1.01%),
             # so it always needs scaling. Getting this wrong silently corrupts
@@ -886,7 +902,7 @@ class YFinanceProvider(MarketDataProvider):
             # Dossier showed none and Optic's read said NVIDIA "has not printed
             # a change today" while it was up 1.36%. Yahoo's figure wins when
             # it is there, and this is Yahoo's own formula when it is not.
-            prev_close = _f(info.get("regularMarketPreviousClose"))
+            prev_close = _f(info.get("regularMarketPreviousClose")) or (bar_prev if partial else None)
             change = _f(info.get("regularMarketChange"))
             change_pct = _f(info.get("regularMarketChangePercent"))
             if price is not None and prev_close:
@@ -898,6 +914,10 @@ class YFinanceProvider(MarketDataProvider):
             return {
                 "ticker": ticker.upper(),
                 "name": info.get("longName") or info.get("shortName") or ticker.upper(),
+                # True when the quote document did not answer and the price and
+                # change are from the daily bars; name, ranges and ratios are
+                # then missing, and the reader is told so once.
+                "partial": partial,
                 "price": price,
                 "prev_close": prev_close,
                 "change": change,
