@@ -7940,7 +7940,7 @@ def _ws_spot(sym: str) -> Optional[Dict[str, Any]]:
 def _ws_div(sym: str) -> Dict[str, Any]:
     q = YF_PROVIDER.quote(sym) or {}
     ex = _ex_dividend(sym)
-    upcoming = ex if ex and ex >= datetime.now(timezone.utc).date().isoformat() else None
+    upcoming = ex if ex and ex >= session_mod.market_today().isoformat() else None
     return {"yield": q.get("dividend_yield"), "next_ex_date": upcoming}
 
 

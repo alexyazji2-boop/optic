@@ -24,6 +24,7 @@ from typing import Any, Dict, Optional
 
 from .. import horizon as horizon_mod
 from ..desk import research as desk_research
+from .. import session as session_mod
 
 MODES = ("long_term", "swing", "pre_earnings", "post_earnings", "combined")
 
@@ -95,7 +96,7 @@ def resolve(question: str, ticker: Optional[str], *, next_report: Optional[str] 
             explicit: Optional[str] = None, today: Optional[date] = None,
             pre_window: int = 21, post_window: int = 10) -> Dict[str, Any]:
     """{mode, source, depth, why, timing} for one question."""
-    today = today or date.today()
+    today = today or session_mod.market_today()
     q = question or ""
     words = len(q.split())
     depth = "quick" if (_NARROW.search(q) and not _JUDGE.search(q) and words <= 20) else "full"

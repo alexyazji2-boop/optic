@@ -6,6 +6,7 @@ from typing import List, Tuple
 
 import numpy as np
 import pandas as pd
+from .. import session as session_mod
 
 
 def pick_swing_expiries(available: List[str], max_expiries: int) -> List[str]:
@@ -16,7 +17,7 @@ def pick_swing_expiries(available: List[str], max_expiries: int) -> List[str]:
     """
     if not available:
         return []
-    today = pd.Timestamp.today().normalize()
+    today = pd.Timestamp(session_mod.market_today())
     dated: List[Tuple[str, int]] = [(e, int((pd.Timestamp(e) - today).days)) for e in available]
     usable = [(e, d) for e, d in dated if d >= 2] or dated
 

@@ -31,6 +31,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import numpy as np
 import pandas as pd
 import requests
+from .. import session as session_mod
 
 FINRA_URL = "https://cdn.finra.org/equity/regsho/daily/CNMSshvol{}.txt"
 FNG_URL = "https://api.alternative.me/fng/?limit={}"
@@ -159,7 +160,7 @@ def short_volume(ticker: str, days: int = 20) -> Dict[str, Any]:
 
     def build() -> Dict[str, Any]:
         rows: List[Dict[str, Any]] = []
-        cursor = datetime.now(timezone.utc).date()
+        cursor = session_mod.market_today()
         # Walk back over calendar days, skipping weekends and any day with no
         # file (holidays, or a publication lag of a day or two).
         looked = 0

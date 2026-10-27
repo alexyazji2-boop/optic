@@ -10,6 +10,7 @@
 // /api/fair-value, /api/extras) by fixed rules. Nothing calls a model; an Ask Milo entry only drafts a question.
 import { html } from '../core/dom.js';
 import { num, signed, money, clean, capFirst, shortDate, fullDate, ago, score100 } from '../core/format.js';
+import { daysUntil } from '../core/marketTime.js';
 import { how } from '../ui/states.js';
 import { term } from '../ui/term.js';
 import { hrefFor } from '../nav.js';
@@ -120,10 +121,10 @@ export function earningsNext(t, today = new Date()) {
   const news = g(t, 'news') || {};
   if (news.earnings_date && fin(news.days_to_earnings)) return { date: news.earnings_date, days: news.days_to_earnings };
   const up = (g(t, 'company', 'earnings_history', 'upcoming') || [])[0];
-  const m = up && String(up.date || '').match(/^(\d{4})-(\d{2})-(\d{2})/);
-  if (!m) return null;
-  const then = Date.UTC(+m[1], +m[2] - 1, +m[3]), now = Date.UTC(today.getFullYear(), today.getMonth(), today.getDate());
-  return { date: up.date.slice(0, 10), days: Math.round((then - now) / 86400000) };
+  // counted from New York's date, as the server counts it, not the viewer's own (2026-10-26)
+  const days = up ? daysUntil(up.date, today) : null;
+  if (days === null) return null;
+  return { date: up.date.slice(0, 10), days };
 }
 
 /** What is working for the company and against it (Classic's ovFactors): only what the payload shows, never ranked by

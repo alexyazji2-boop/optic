@@ -30,6 +30,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
+from .. import session as session_mod
 
 LEANS = ("better than expected", "in line", "worse than expected", "no clear lean")
 
@@ -684,7 +685,7 @@ def release_recency(lr: Dict[str, Any], nr: Dict[str, Any], today: Optional[date
     newest result is a quarter old, or the next date is more than a quarter
     after it, a release in between is probably missing, and the read says so
     instead of passing the old quarter off as the latest."""
-    today = today or datetime.now(timezone.utc).date()
+    today = today or session_mod.market_today()
     try:
         last = date.fromisoformat(str(lr.get("date"))[:10])
     except (TypeError, ValueError):
@@ -728,7 +729,7 @@ def reaction(daily: Optional[pd.DataFrame], bench: Optional[pd.DataFrame], relea
              today: Optional[date] = None) -> Dict[str, Any]:
     """The first reaction session: gap, continuation or fade, relative volume,
     against SPY, and which kind of observation it is."""
-    today = today or datetime.now(timezone.utc).date()
+    today = today or session_mod.market_today()
     out: Dict[str, Any] = {"available": False}
     if daily is None or daily.empty:
         return out

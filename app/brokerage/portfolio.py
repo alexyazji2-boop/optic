@@ -31,6 +31,7 @@ from __future__ import annotations
 import math
 from datetime import date, datetime, timezone
 from typing import Any, Callable, Dict, Iterable, List, Optional
+from .. import session as session_mod
 
 PRICE_GAP_PCT = 2.0          # broker price vs Optic's delayed quote, worth a word
 BROKER_TOTAL_GAP_PCT = 1.0   # broker's account total vs the sum of the lines we got
@@ -81,7 +82,7 @@ def build(accounts: List[Dict[str, Any]],
           today: Optional[date] = None) -> Dict[str, Any]:
     """`accounts` is a list of {row fields..., "payload": {...} | None}.
     Only selected accounts with a payload count towards anything."""
-    today = today or datetime.now(timezone.utc).date()
+    today = today or session_mod.market_today()
     notes: List[str] = []
     acct_out: List[Dict[str, Any]] = []
     lines: Dict[str, Dict[str, Any]] = {}

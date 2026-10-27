@@ -22,6 +22,7 @@ from __future__ import annotations
 
 from datetime import date, datetime
 from typing import Any, Callable, Dict, Iterable, List, Optional
+from .. import session as session_mod
 
 VERSION = "desk-portfolio-2026-10-15.1"
 SECTOR_ETF = {
@@ -70,7 +71,7 @@ def build(served: Dict[str, Any], holdings: Iterable[Dict[str, Any]],
         return {"available": False, "version": VERSION,
                 "reason": (served or {}).get("reason") or "No Optic Desk edition has been published yet."}
     ed = served.get("edition") or {}
-    today = today or date.today()
+    today = today or session_mod.market_today()
     held: Dict[str, float] = {}
     sectors: Dict[str, List[str]] = {}
     for h in holdings or []:

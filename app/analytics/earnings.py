@@ -24,6 +24,7 @@ import pandas as pd
 
 from .greeks import implied_vol
 from . import fundamentals as fundamentals_mod
+from .. import session as session_mod
 
 
 def _f(value: Any, digits: int = 4) -> Optional[float]:
@@ -65,7 +66,7 @@ def _next_report(history: List[Dict[str, Any]], calendar: Dict[str, Any],
     report that had already happened — pricing a forward straddle for an event
     that was over, while the surprise table two panels down showed the result.
     """
-    today = pd.Timestamp.today().normalize()
+    today = pd.Timestamp(session_mod.market_today())
     already_reported = reported_dates or set()
     future = [
         r for r in history
@@ -342,7 +343,7 @@ def _latest_result(surprise: Dict[str, Any],
 
     rows.sort(key=lambda r: str(r.get("date") or ""), reverse=True)
     row = rows[0]
-    today = pd.Timestamp.today().normalize()
+    today = pd.Timestamp(session_mod.market_today())
     try:
         age_days = int((today - pd.Timestamp(row["date"])).days)
     except (TypeError, ValueError):
@@ -696,7 +697,7 @@ def _implied_move(provider, ticker: str, spot: Optional[float], report_date: Opt
         return out
 
     straddle = call_px + put_px
-    dte = max(int((pd.Timestamp(expiry) - pd.Timestamp.today().normalize()).days), 1)
+    dte = max(int((pd.Timestamp(expiry) - pd.Timestamp(session_mod.market_today())).days), 1)
     out.update({
         "available": True,
         "expiry": expiry,

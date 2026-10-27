@@ -33,6 +33,7 @@ from . import briefing as briefing_mod
 from . import desk_section
 from . import events as events_mod
 from . import portfolio, service, store
+from .. import session as session_mod
 
 log = logging.getLogger("optic.brokerage")
 
@@ -248,7 +249,7 @@ def overview(user: Dict[str, Any], account_ids: Optional[List[str]] = None,
              today: Optional[date] = None) -> Dict[str, Any]:
     """What do I own, what changed, what deserves attention."""
     core = _core(user, account_ids)
-    today = today or date.today()
+    today = today or session_mod.market_today()
     holdings = core.get("holdings") or []
     quotes = _quotes([h.get("symbol") for h in holdings if h.get("kind") in ("equity", "etf", "fund", "crypto")])
     ev = events(user, account_ids, today=today, core=core)
@@ -361,7 +362,7 @@ def scorecard(user: Dict[str, Any], account_ids: Optional[List[str]] = None,
               today: Optional[date] = None) -> Dict[str, Any]:
     from . import scorecard as scorecard_mod
     core = _core(user, account_ids)
-    today = today or date.today()
+    today = today or session_mod.market_today()
     held = core.get("holdings") or []
     syms = [str(h["symbol"]).upper() for h in held if h.get("symbol")][:30]
     exp = exposure(user, account_ids, core=core)
@@ -468,7 +469,7 @@ def performance(user: Dict[str, Any], account_ids: Optional[List[str]] = None, p
                 benchmark: str = "SPY", today: Optional[date] = None) -> Dict[str, Any]:
     from . import performance as perf_mod
     uid = user["id"]
-    today = today or date.today()
+    today = today or session_mod.market_today()
     accts, chosen = service.scoped(uid, account_ids)
     scope = [a for a in accts if a["id"] in chosen]
     rows = {a["id"]: store.account(uid, a["id"]) or {} for a in scope}
@@ -502,7 +503,7 @@ def performance(user: Dict[str, Any], account_ids: Optional[List[str]] = None, p
 def events(user: Dict[str, Any], account_ids: Optional[List[str]] = None, today: Optional[date] = None,
            core: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     core = core or _core(user, account_ids)
-    today = today or date.today()
+    today = today or session_mod.market_today()
     key = "{}:events:{}:{}".format(user["id"], _version(user["id"], core.get("scope") or []), today.isoformat())
     return _cached(key, lambda: events_mod.build(core.get("holdings") or [], core.get("options") or [], today,
                                                  earnings_of=_budgeted(_m("earnings_calendar_of"), LOOKUP_BUDGET),
@@ -549,7 +550,7 @@ def thesis_news(user: Dict[str, Any], symbols: List[str], since: Optional[Dict[s
 def events_research(user: Dict[str, Any], account_ids: Optional[List[str]] = None,
                     today: Optional[date] = None) -> Dict[str, Any]:
     core = _core(user, account_ids)
-    today = today or date.today()
+    today = today or session_mod.market_today()
     ev = events(user, account_ids, today=today, core=core)
     th = theses(user, core)
     since = {t["symbol"]: (t.get("saved_at") or "") for t in th["theses"]}
@@ -593,7 +594,7 @@ def facts_key(brief: Dict[str, Any]) -> str:
 def refresh_alerts(user: Dict[str, Any], today: Optional[date] = None) -> int:
     """Evaluate the reader's alerts on their counted accounts (not a narrowed
     view: alerts are about the portfolio) and store the new ones."""
-    today = today or date.today()
+    today = today or session_mod.market_today()
     core = _core(user, None)
     ev = events(user, None, today=today, core=core)
     th = theses(user, core)

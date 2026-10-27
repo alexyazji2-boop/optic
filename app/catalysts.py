@@ -63,6 +63,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 from . import catalyst_rules, feeds
+from . import session as session_mod
 
 log = logging.getLogger(__name__)
 
@@ -1011,7 +1012,7 @@ def _ticker_catalysts(provider, sym: str) -> Dict[str, Any]:
     from . import news                      # local: avoids an import cycle
     from .analytics import filings
 
-    today = datetime.now(timezone.utc).date()
+    today = session_mod.market_today()
     edgar_name = ticker_directory().get(sym) or ""
     name, sector = edgar_name or sym, ""
     try:

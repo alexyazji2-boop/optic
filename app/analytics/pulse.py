@@ -24,6 +24,7 @@ from __future__ import annotations
 
 from datetime import date, datetime, timezone
 from typing import Any, Dict, List, Optional
+from .. import session as session_mod
 
 # Display order, loosely by how directly each speaks to this one ticker. Macro
 # is last because it describes the whole market, not this name.
@@ -342,7 +343,7 @@ def whats_next(
     Presenting those as things to watch is honest; presenting them as things that
     will happen is not, so the copy stays on the first side of that line.
     """
-    now = today or datetime.now(timezone.utc).date()
+    now = today or session_mod.market_today()
     technicals = (payload or {}).get("technicals") or {}
     gex = (payload or {}).get("gex") or {}
     company = (payload or {}).get("company") or {}

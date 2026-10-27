@@ -29,6 +29,7 @@ import logging
 import re
 from datetime import date, datetime
 from typing import Any, Dict, List, Optional
+from .. import session as session_mod
 
 log = logging.getLogger(__name__)
 
@@ -168,7 +169,7 @@ def rate_path(quote: Optional[Dict[str, Any]], effective: Optional[float],
     # decision would already be lifting October's whole average and the method
     # would read its effect as post-meeting tightening. Measured on 2026-09-17,
     # that mistake turned 27bp priced into 46.5bp and a probability at the cap.
-    now = _as_date(today) or date.today()
+    now = _as_date(today) or session_mod.market_today()
     if (cm.year, cm.month) != (now.year, now.month):
         out["limit"] = ("The front contract delivers in {}, which is not the "
                         "current month, so the rate in force before the meeting "
@@ -531,7 +532,7 @@ def build(macro: Optional[Dict[str, Any]] = None,
     Assembled from panels the rest of the app already builds, so the desk cannot
     disagree with the strip above it. Nothing here fetches.
     """
-    today = today or date.today()
+    today = today or session_mod.market_today()
     tape = _tape(macro)
     releases = _today_releases(events, today)
     catalyst = _next_catalyst(events)

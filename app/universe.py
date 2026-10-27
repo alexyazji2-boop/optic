@@ -26,6 +26,7 @@ import urllib.error
 import urllib.request
 from datetime import date
 from typing import Any, Dict, List, Optional
+from . import session as session_mod
 
 # NASDAQ's own symbol directory. Public, keyless, no terms beyond attribution;
 # it's the same file their FTP server has served for years.
@@ -130,7 +131,7 @@ def nasdaq_symbols(force: bool = False) -> Dict[str, Any]:
     80 names we fall back to" are very different claims, and the difference has
     to be visible downstream rather than inferred from a count.
     """
-    today = date.today().isoformat()
+    today = session_mod.market_today().isoformat()
     with _LOCK:
         cached = _read_cache()
         if cached and not force and cached.get("fetched_on") == today:
@@ -235,7 +236,7 @@ def _fetch(url: str) -> str:
 
 def search_index(force: bool = False) -> Dict[str, Any]:
     """Every US-listed symbol with a readable company name, cached for the day."""
-    today = date.today().isoformat()
+    today = session_mod.market_today().isoformat()
     with _LOCK:
         cached: Optional[Dict[str, Any]] = None
         try:
@@ -386,7 +387,7 @@ def _company_aliases() -> Dict[str, str]:
 
 def _rows_today() -> Dict[str, Any]:
     """The directory, read from disk once a day rather than on every keystroke."""
-    today = date.today().isoformat()
+    today = session_mod.market_today().isoformat()
     memo = _MEMO.get("index")
     if memo and memo.get("fetched_on") == today and memo.get("rows"):
         return memo

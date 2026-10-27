@@ -25,6 +25,7 @@ import threading
 import urllib.parse
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional
+from .. import session as session_mod
 
 
 class ProviderError(RuntimeError):
@@ -559,7 +560,7 @@ class SandboxProvider(Provider):
         if not flows:
             return {"currency": "USD", "points": []}
         start = date.fromisoformat(flows[0][0])
-        end = date.today() - timedelta(days=1)
+        end = session_mod.market_today() - timedelta(days=1)
         points = []
         day = start
         while day <= end:

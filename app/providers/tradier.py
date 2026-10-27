@@ -28,6 +28,7 @@ import requests
 
 from .base import MarketDataProvider
 from .common import clean_iv, period_to_days, pick_swing_expiries
+from .. import session as session_mod
 
 PRODUCTION_BASE = "https://api.tradier.com/v1"
 SANDBOX_BASE = "https://sandbox.tradier.com/v1"
@@ -255,7 +256,7 @@ class TradierProvider(MarketDataProvider):
 
         def build() -> pd.DataFrame:
             frames: List[pd.DataFrame] = []
-            today = pd.Timestamp.today().normalize()
+            today = pd.Timestamp(session_mod.market_today())
 
             for exp in wanted:
                 data = self._get(

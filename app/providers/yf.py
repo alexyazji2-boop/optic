@@ -33,6 +33,7 @@ except Exception:                       # noqa: BLE001
 
 from .base import MarketDataProvider
 from .common import clean_iv, pick_swing_expiries
+from .. import session as session_mod
 
 
 def _persist_timezones(data_dir: Optional[str]) -> Optional[str]:
@@ -1431,7 +1432,7 @@ class YFinanceProvider(MarketDataProvider):
 
         def build() -> pd.DataFrame:
             frames: List[pd.DataFrame] = []
-            today = pd.Timestamp.today().normalize()
+            today = pd.Timestamp(session_mod.market_today())
             try:
                 t = self._options_ticker(ticker)
             except Exception as exc:                            # noqa: BLE001

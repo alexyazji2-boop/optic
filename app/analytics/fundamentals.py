@@ -12,6 +12,7 @@ import datetime as dt
 from typing import Any, Dict, List, Optional
 
 import numpy as np
+from .. import session as session_mod
 
 # yfinance's statement row labels. Kept as tuples of aliases because the exact
 # label varies by filer and by statement vintage.
@@ -463,7 +464,7 @@ def _six_month_trades(trades: List[Dict[str, Any]], now: Optional[dt.date] = Non
     exercises included: Microsoft's said 16 purchases against 10 sales and "net buying" when its rows held
     2 purchases, 28 sales and 60 awards and grants (audit 2026-10-20). An award is not a decision to buy.
     The signal is read from purchases and sales only; the rest are counted and named."""
-    today = now or dt.date.today()
+    today = now or session_mod.market_today()
     cutoff = (today - dt.timedelta(days=182)).isoformat()
     rows = [r for r in trades if str(r.get("date") or "") >= cutoff]
     buys = [r for r in rows if r.get("action") == "purchase"]

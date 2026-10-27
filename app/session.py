@@ -128,6 +128,21 @@ FUTURES_LIMITS = ("The futures week is modelled from the CME schedule. Holiday s
                   "those as ordinary.")
 
 
+def market_today(now: Optional[datetime] = None) -> date:
+    """New York's calendar date: the one every market countdown counts from.
+
+    The server runs on UTC, so `date.today()` turns over at 8pm New York time
+    in summer and 7pm in winter. Measured on Monday 26 October 2026 after
+    10pm ET: Brokerage called Tuesday's events "today" and Wednesday's "in 1
+    day", and NVDA's 17 November report was 21 days away on the Earnings tab
+    and 22 on the Overview. A reader's own display timezone is a separate
+    matter; it never moves the trading date. A naive `now` is read as UTC."""
+    now = now or datetime.now(timezone.utc)
+    if now.tzinfo is None:
+        now = now.replace(tzinfo=timezone.utc)
+    return now.astimezone(ET).date()
+
+
 def futures_phase(when: datetime) -> str:
     """open, break or weekend, for CME equity index futures."""
     weekday = when.weekday()                                # Mon=0 .. Sun=6

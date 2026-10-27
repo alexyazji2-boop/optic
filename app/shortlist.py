@@ -33,6 +33,7 @@ from typing import Any, Dict, List, Optional
 
 import numpy as np
 import pandas as pd
+from . import session as session_mod
 
 # .1 let in any armed setup still waiting (up to 5 sessions old): 42 of 86 names qualified on the
 # 2026-10-22 close, half the universe, which is not a shortlist. .2 keeps only what changed on the last
@@ -211,7 +212,7 @@ def catalysts(provider, sym: str, news_for=None, as_of: Optional[str] = None) ->
         ed = None
     if ed:
         # counted from the evaluation date, the one the setup is read on, not from today
-        days = (date.fromisoformat(str(ed)[:10]) - (date.fromisoformat(as_of) if as_of else date.today())).days
+        days = (date.fromisoformat(str(ed)[:10]) - (date.fromisoformat(as_of) if as_of else session_mod.market_today())).days
         if 0 <= days <= 21:
             items.append({"kind": "earnings", "date": str(ed)[:10], "text": "Reports {} ({} days), inside the horizon.".format(str(ed)[:10], days)})
             conflicting.append("A report in {} days can move the stock either way, whatever the chart says.".format(days))

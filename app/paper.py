@@ -37,6 +37,7 @@ import pandas as pd
 from . import legal, universe
 from .analytics import screen
 from .analytics.greeks import bs_price, implied_vol
+from . import session as session_mod
 
 # --------------------------------------------------------------- configuration
 
@@ -626,7 +627,7 @@ def mark_option(provider, pos: Dict[str, Any], spot: float, rate: float) -> Dict
     """
     expiry = pos["expiry"]
     is_call = pos["option_type"] == "call"
-    dte = (pd.Timestamp(expiry) - pd.Timestamp.today().normalize()).days
+    dte = (pd.Timestamp(expiry) - pd.Timestamp(session_mod.market_today())).days
 
     if dte < 0:
         # Expired: worth only whatever it's in the money by.
@@ -717,7 +718,7 @@ def _exit_check(pos: Dict[str, Any], price: float, spot: float,
     held = (datetime.now(timezone.utc) - datetime.fromisoformat(pos["entry_at"])).days
 
     if pos["instrument"] == "option":
-        dte = (pd.Timestamp(pos["expiry"]) - pd.Timestamp.today().normalize()).days
+        dte = (pd.Timestamp(pos["expiry"]) - pd.Timestamp(session_mod.market_today())).days
         if dte <= 0:
             return "Expiry reached"
         # Premium-based exits: an option's stop has to be on its own price, since

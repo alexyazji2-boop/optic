@@ -32,6 +32,7 @@ from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
 from .. import feeds
 from ..analytics import sec_facts
+from .. import session as session_mod
 
 SUBMISSIONS_URL = "https://data.sec.gov/submissions/CIK{cik}.json"
 SUBMISSIONS_TTL = 86400
@@ -879,7 +880,7 @@ def gather(provider, ticker: str, today: Optional[date] = None, force: bool = Fa
     """Everything the models need for one company, sourced. Returns
     {"available": False, "reason": ...} when a model cannot honestly be built."""
     sym = (ticker or "").upper().strip()
-    today = today or datetime.now(timezone.utc).date()
+    today = today or session_mod.market_today()
     try:
         quote = provider.quote(sym) or {}
     except Exception as exc:                                                               # noqa: BLE001

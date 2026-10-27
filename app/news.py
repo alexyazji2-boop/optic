@@ -767,11 +767,8 @@ def material_catalyst(news: Dict[str, Any]) -> Dict[str, Any]:
 # other kind stays a headline-dated reading, and says so.
 
 def _today_et() -> date:
-    try:
-        from zoneinfo import ZoneInfo
-        return datetime.now(ZoneInfo("America/New_York")).date()
-    except Exception:
-        return datetime.now(timezone.utc).date()
+    from . import session as session_mod      # local: one definition of the market date
+    return session_mod.market_today()
 
 
 def _as_date(value: Any) -> Optional[date]:
