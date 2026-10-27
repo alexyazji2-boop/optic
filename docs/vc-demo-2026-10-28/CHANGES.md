@@ -45,6 +45,8 @@ off a live data feed. That is the owner's call.
 - Seven section chips have their own short labels instead of being cut mid-phrase.
 - Classic's Milo box and file input have accessible names.
 - Sandbox brokerage data says on every section that it is test data.
+- Text fields and selects are 16px on touch screens, so iOS Safari does not zoom into them on focus
+  (Home's ticker box was 13px, the Chart selects 14px).
 
 Proposed, not applied: control edges (input borders) at `--c-line` measure about 1.5:1 against
 their panels, under the 3:1 non-text minimum. The nearest passing values are `#847f76` (light)
