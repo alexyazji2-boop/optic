@@ -74,3 +74,11 @@ def test_sandbox_brokerage_data_says_it_is_test_data_on_every_section():
     paint = src[src.index("function paint(focusSel)"):]
     assert "const sandbox = (S.status || {}).mode === 'sandbox';" in paint
     assert "Sandbox: test data only. These accounts, holdings and values are made up for demonstration and belong to no one." in paint
+
+
+def test_touch_screen_fields_are_at_least_16px_so_ios_does_not_zoom_on_focus():
+    """Measured at 390 wide: Home's linked-ticker box 13px, the Chart tab's selects 14px."""
+    css = (V2 / "css" / "pages.css").read_text()
+    block = css[css.index("VC demo pass (2026-10-27, mobile-native)"):]
+    assert "@media (pointer: coarse) {\n  html input:not([type=checkbox]):not([type=radio]):not([type=range]), html select, html textarea { font-size: max(16px, 1em); }" in block
+    assert "@media (pointer: coarse) and (min-width: 375px) { html .chart-page .ctools .select select { font-size: max(16px, 1em); } }" in block
