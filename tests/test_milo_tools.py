@@ -447,3 +447,9 @@ def test_a_slow_named_ticker_does_not_hold_the_answer(monkeypatch):
     assert ctx["auto_load_skipped"]["symbols"] == ["NVDA"] and "auto_loaded" not in ctx
     assert "Use the tools" in ctx["auto_load_skipped"]["note"]
     assert took < 1.2, took
+
+
+def test_a_share_class_as_people_write_it_reaches_the_feeds_symbol():
+    """Asked about BRK.B, every tool looked up 'BRK.B', which Yahoo does not know (investor audit, 2026-10-27)."""
+    assert milo_tools.validate("get_quote", {"ticker": "brk.b"})["ticker"] == "BRK-B"
+    assert milo_tools.validate("get_quote", {"ticker": "SHOP.TO"})["ticker"] == "SHOP.TO"

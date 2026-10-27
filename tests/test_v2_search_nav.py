@@ -133,6 +133,17 @@ def test_a_malformed_address_still_renders(tmp_path):
     assert got[2]["symbol"] == "BRK-B" and got[2]["view"] == "swing"
 
 
+def test_a_share_class_address_opens_the_feeds_symbol(tmp_path):
+    """#/BRK.B rendered "No price data found for 'BRK.B'" on every panel (investor audit, 2026-10-27): Yahoo's
+    symbol is BRK-B, and search already answers BRK.B with it. Exchange suffixes are left alone."""
+    got = _run(tmp_path, f"""
+      const r = await import('{(JS / "core/router.js").as_posix()}');
+      print(JSON.stringify(['#/BRK.B', '#/brk.b/chart', '#/BF%2FB', '#/SHOP.TO', '#/VOD.L', '#/BRK-B'].map((h) => r.parse(h))));
+    """)
+    assert [g["symbol"] for g in got] == ["BRK-B", "BRK-B", "BF-B", "SHOP.TO", "VOD.L", "BRK-B"]
+    assert got[1]["view"] == "chart"
+
+
 def test_the_instrument_page_paints_only_its_newest_answer():
     src = (JS / "pages/instrument.js").read_text()
     assert "if (my !== gen || !live || D.sym !== sym) return;" in src

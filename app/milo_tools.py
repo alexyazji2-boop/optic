@@ -208,6 +208,10 @@ class InvalidInput(ValueError):
 
 def _ticker(raw: Any) -> str:
     sym = str(raw or "").strip().upper()
+    # A share class as people write it (BRK.B) is Yahoo's BRK-B; asked as written, every tool answered that the
+    # feed had no data for one of the largest companies listed (investor audit, 2026-10-27). Suffixes such as
+    # SHOP.TO are not a class and are left alone.
+    sym = re.sub(r"^([A-Z]{1,5})[./]([AB])$", r"\1-\2", sym)
     if not TICKER.match(sym):
         raise InvalidInput("Not a symbol: {!r}.".format(str(raw)[:40]))
     return sym
