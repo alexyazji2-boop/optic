@@ -341,7 +341,7 @@ async function boot() {
   scrollmem.start();
   router.onRoute(show);
   if (link && link.reset) { startReset(link.reset); history.replaceState(history.state, '', `${location.pathname}${location.search}#/signin?mode=reset`); }
-  else if (link && link.signin && !store.signedIn()) history.replaceState(history.state, '', `${location.pathname}${location.search}#/signin`);
+  else if (link && link.signin && !store.signedIn()) history.replaceState(history.state, '', `${location.pathname}${location.search}#/signin${link.mode ? `?mode=${link.mode}` : ''}`);
   else if (link && link.signedIn && link.hash) history.replaceState(history.state, '', `${location.pathname}${location.search}${link.hash}`);
   router.start();
   if (link && link.signedIn && store.state.user) toast(`Signed in as ${store.state.user.email}.`);

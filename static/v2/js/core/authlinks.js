@@ -31,7 +31,7 @@ function scrub(keys) {
   keys.forEach((k) => url.searchParams.delete(k));
   history.replaceState(history.state, '', url.pathname + (url.search || '') + url.hash);
 }
-/** Returns what the app should do next: { reset: token } | { signedIn: true, hash } | { signin: true } | null. */
+/** Returns what the app should do next: { reset: token } | { signedIn: true, hash } | { signin: true, mode? } | null. */
 export async function handleAuthLinks() {
   const p = new URLSearchParams(location.search);
   const verify = p.get('verify');
@@ -47,7 +47,9 @@ export async function handleAuthLinks() {
     try { check = await api.get(`/api/auth/reset/check?token=${encodeURIComponent(reset)}`, { force: true }); } catch (e) { check = { valid: false, reason: e.message }; }
     if (check && check.valid) return { reset };
     toast((check && check.reason) || 'That reset link is no longer valid.', { kind: 'bad' });
-    return null;
+    // the form that sends a new link, which the toast tells them to use: it used to leave them on Home (investor
+    // audit, 2026-10-27)
+    return { signin: true, mode: 'forgot' };
   }
   if (p.get('auth') === 'ok') {
     const next = p.get('next') || '';
