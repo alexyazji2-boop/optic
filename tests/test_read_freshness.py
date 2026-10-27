@@ -10,7 +10,9 @@ because the figure it was handed was the share of sectors up that day (7 of
 from __future__ import annotations
 
 import json
+from datetime import datetime
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import pytest
 
@@ -31,7 +33,10 @@ ROOT = Path(__file__).parent.parent
     ("2026-11-27:close", "2026-11-27", "today"),           # the early close after it
 ])
 def test_the_covered_session_and_its_words(edition, date, words):
-    got = brief.covered_session(edition)
+    # Pinned to 7 AM New York on the edition's day: on the real clock the 27 October morning case failed
+    # every 27 October after 9:30 ET, when a morning edition correctly covers "today so far".
+    day = datetime.strptime(edition.split(":")[0], "%Y-%m-%d")
+    got = brief.covered_session(edition, now=day.replace(hour=7, tzinfo=ZoneInfo("America/New_York")))
     assert (got["date"], got["words"]) == (date, words)
     assert words in got["rule"]
 
