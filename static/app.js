@@ -33485,7 +33485,7 @@ function accountPanels() {
     verified ? 'Confirmed' : 'Not confirmed'}</span></span>
           <span class="set-row-note">${esc(user.email)}${verified ? ''
     : mail.available === false
-      ? '. Email is not configured on this deployment, so the confirmation link goes to the server log rather than an inbox.'
+      ? '. Email is not switched on yet, so no confirmation email can be sent.'
       : '. Check your inbox for the confirmation link.'}</span>
         </div>
         <div class="set-row-act">${verified ? ''
@@ -33760,7 +33760,7 @@ document.addEventListener('click', async (evt) => {
       const reply = await authApi('/api/auth/resend-verification', { method: 'POST' });
       window.OpticAuth.toast(reply.sent
         ? 'A new confirmation link is on its way.'
-        : 'Email is not configured here, so the link went to the server log.',
+        : 'Email is not switched on here yet, so no link could be sent.',
       reply.sent ? '' : 'warn');
     } catch (err) { window.OpticAuth.toast(err.message, 'bad'); }
     return;

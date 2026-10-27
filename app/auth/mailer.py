@@ -45,14 +45,50 @@ SMTP_TIMEOUT = float(os.environ.get("SMTP_TIMEOUT") or "10")
 
 def available() -> Dict[str, Any]:
     if not SMTP_HOST:
+        # Two readers. On the hosted site a reader's link is no longer logged
+        # (see `_log_link_for`), so telling them it "went to the server log"
+        # would be a promise about a line that does not exist.
+        from ..runtime import for_reader
         return {"available": False, "backend": "log",
-                "reason": "No SMTP_HOST is set, so verification and reset links are "
-                          "written to the server log instead of being emailed."}
+                "reason": for_reader(
+                    "Email is not switched on here yet, so confirmation and reset "
+                    "emails cannot be sent.",
+                    "No SMTP_HOST is set, so verification and reset links are "
+                    "written to the server log instead of being emailed.")}
     if not EMAIL_FROM:
         return {"available": False, "backend": "log",
                 "reason": "SMTP_HOST is set but EMAIL_FROM is not, and a message with "
                           "no From address is rejected by every relay."}
     return {"available": True, "backend": "smtp", "host": SMTP_HOST}
+
+
+def _log_link_for(to: str) -> bool:
+    """Whether the log backend may write this recipient's link and address.
+
+    Locally, always: that is what the log backend is for. On a host, only for an
+    address in ADMIN_EMAILS, unless MAIL_LOG_LINKS says otherwise. A reset link
+    in the log is a sign-in for whoever can read the log, kept as long as the
+    platform keeps logs (Railway: up to 90 days), so the readiness audit of
+    2026-10-23 (P0, F-42) found every reader's account open to anyone with
+    dashboard access. The owner's own address stays logged on purpose: with no
+    relay it is the only way to confirm it, and `is_admin` needs it confirmed
+    (tests/test_log_config.py records the outage that came from losing this)."""
+    override = (os.environ.get("MAIL_LOG_LINKS") or "").strip().lower()
+    if override in ("1", "true", "yes", "on"):
+        return True
+    if override in ("0", "false", "no", "off"):
+        return False
+    from ..runtime import is_hosted
+    if not is_hosted():
+        return True
+    from . import admin
+    return (to or "").strip().lower() in admin.emails()
+
+
+def _masked(to: str) -> str:
+    """`r***@example.test`: enough to match a report to a message, not to harvest."""
+    local, _, domain = (to or "").partition("@")
+    return "{}***@{}".format(local[:1], domain) if domain else "***"
 
 
 def _send_smtp(message: EmailMessage) -> None:
@@ -88,8 +124,12 @@ def send(to: str, subject: str, body: str, link: Optional[str] = None) -> bool:
     if not status["available"]:
         # The link, not the whole body: it is the only part anyone needs from the
         # log, and a wall of copy makes it harder to find.
-        log.info("[mail:log] to=%s subject=%s%s", to, subject,
-                 ("\n           link=" + link) if link else "")
+        if _log_link_for(to):
+            log.info("[mail:log] to=%s subject=%s%s", to, subject,
+                     ("\n           link=" + link) if link else "")
+        else:
+            log.info("[mail:log] to=%s subject=%s%s", _masked(to), subject,
+                     "\n           link withheld: set SMTP_HOST, or MAIL_LOG_LINKS=true" if link else "")
         return False
 
     message = EmailMessage()

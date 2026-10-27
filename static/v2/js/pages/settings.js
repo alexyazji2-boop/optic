@@ -49,7 +49,7 @@ function account() {
       <form class="set-row" data-v2-set-profile><div class="set-row-main"><p class="set-row-title">Name</p><p class="set-row-note">Used to address you, nothing else.</p></div>
         <div class="set-row-act set-name"><label class="field field-sm"><span class="sr">First name</span><input name="first_name" value="${u.first_name || ''}" placeholder="First" autocomplete="given-name"></label>
           <label class="field field-sm"><span class="sr">Last name</span><input name="last_name" value="${u.last_name || ''}" placeholder="Last" autocomplete="family-name"></label><button type="submit" class="btn btn-sm">Save</button></div></form>
-      ${row('Email address', `${u.email}${u.email_verified ? '' : (m.mail || {}).available === false ? '. Email is not switched on yet, so the confirmation link goes to the server log rather than an inbox.' : '. Check your inbox for the confirmation link.'}`,
+      ${row('Email address', `${u.email}${u.email_verified ? '' : (m.mail || {}).available === false ? '. Email is not switched on yet, so no confirmation email can be sent.' : '. Check your inbox for the confirmation link.'}`,
         u.email_verified ? '' : html`<button type="button" class="btn btn-sm" data-v2-set-resend>Resend link</button>`, tag(u.email_verified, u.email_verified ? 'Confirmed' : 'Not confirmed'))}
     </section>
     <section class="section" aria-labelledby="ss-h"><h2 class="t-h2" id="ss-h">Security</h2>
@@ -248,7 +248,7 @@ function wire(main) {
     if ((b = t('[data-v2-scale]'))) { prefs.setScale(b.dataset.v2Scale); paint(); const again = mainEl.querySelector(`[data-v2-scale="${b.dataset.v2Scale}"]`); if (again) again.focus(); return; }
     if (t('[data-v2-report]')) { openReport(t('[data-v2-report]')); return; }
     if (t('[data-v2-set-recheck]')) { await store.loadMe(); if (appRef) appRef.settleAuth(); return; }
-    if (t('[data-v2-set-resend]')) { await act(() => api.post('/api/auth/resend-verification', {}), (r) => (r && r.already_verified ? 'This address is already confirmed.' : r && r.mail && r.mail.available === false ? 'Email is not configured here, so the link went to the server log.' : 'A new confirmation link is on its way.')); return; }
+    if (t('[data-v2-set-resend]')) { await act(() => api.post('/api/auth/resend-verification', {}), (r) => (r && r.already_verified ? 'This address is already confirmed.' : r && r.mail && r.mail.available === false ? 'Email is not switched on here yet, so no link could be sent.' : 'A new confirmation link is on its way.')); return; }
     if ((b = t('[data-v2-billing]'))) {
       const r = await act(() => api.post(`/api/billing/${b.dataset.v2Billing === 'portal' ? 'portal' : 'checkout'}`, {}));
       if (r && r.url && SAFE.test(r.url)) location.href = r.url; else if (r) toast('Billing is not available right now.', { kind: 'bad' });
