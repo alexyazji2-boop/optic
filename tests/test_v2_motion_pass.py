@@ -68,7 +68,7 @@ def test_the_owners_indicator_mapping():
 def test_indicator_colours_read_as_text_and_differ_from_the_candles():
     light = TOK[:TOK.index(':root[data-theme="charcoal"]')]
     dark = TOK[TOK.index(':root[data-theme="charcoal"]'):TOK.index("@media (prefers-color-scheme: dark)")]
-    for block, panel, pos, neg in ((light, "#fffcf6", "#0d7a42", "#b43a25"), (dark, "#161614", "#4cc38a", "#f07a66")):
+    for block, panel, pos, neg in ((light, "#fffcf6", "#0c743f", "#b43a25"), (dark, "#161614", "#4cc38a", "#f07a66")):
         for name in ("c-ind-ema21", "c-ind-ema50", "c-ind-vwap"):
             h = _hex(name, block)
             assert h and h.startswith("#"), name

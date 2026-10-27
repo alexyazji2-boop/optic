@@ -26,7 +26,7 @@
   --c-gold-ink: #74580c;
   --c-gold-light: #d4b144;
   --c-gold-wash: rgba(212, 177, 68, .14);
-  --c-pos: #0d7a42;
+  --c-pos: #0c743f;   /* from #0d7a42: 4.20:1 on --c-sunk failed AA text (VC audit 2026-10-27); 4.54:1 now, 5.24:1 on the plane */
   --c-neg: #b43a25;
   --c-warn: #8a5a00;
   --c-proposed: #6c43c9;

@@ -10,6 +10,21 @@
 import { $, html, render, trapFocus, announce } from '../core/dom.js';
 import { icon } from './icons.js';
 
+// Where focus goes back to when the control that opened a drawer is gone: the page redrew while the drawer was open
+// (Compare finishing its run under Milo's drawer sent focus to the body, VC audit 2026-10-27). The same control drawn
+// again (its id, or its tag, data attributes and text), else the page's heading, never nowhere.
+function twinOf(el) {
+  if (!el || !el.tagName) return null;
+  if (el.id) { const byId = document.getElementById(el.id); if (byId) return byId; }
+  const data = [...el.attributes].filter((a) => a.name.startsWith('data-')).map((a) => `[${a.name}="${CSS.escape(a.value)}"]`).join('');
+  const text = (el.textContent || '').trim();
+  const same = data ? [...document.querySelectorAll(`${el.tagName.toLowerCase()}${data}`)].find((c) => (c.textContent || '').trim() === text) : null;
+  if (same) return same;
+  const h = document.querySelector('#main h1');
+  if (h && !h.hasAttribute('tabindex')) h.setAttribute('tabindex', '-1');
+  return h;
+}
+
 export function makeDrawer({ cls = '', titleId = 'drawer-title' } = {}) {
   let root, panel, from, untrap, onClose, sticky = false, vvOff = null, docked = false, offEsc = null, titleText = '';
   let shown = false, hideT = 0, leaving = null;
@@ -97,7 +112,7 @@ export function makeDrawer({ cls = '', titleId = 'drawer-title' } = {}) {
     if (untrap) { untrap(); untrap = null; }
     if (offEsc) { offEsc(); offEsc = null; }
     if (from && from.setAttribute && from.hasAttribute('aria-expanded')) from.setAttribute('aria-expanded', 'false');
-    if (!silent && from && document.contains(from)) from.focus();
+    if (!silent && from) { const back = document.contains(from) ? from : twinOf(from); if (back) back.focus(); }
     from = null;
     const done = onClose, vv = vvOff;
     onClose = null; vvOff = null;

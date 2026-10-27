@@ -2148,3 +2148,18 @@ html[data-motion="reduce"] .adv-track, html[data-motion="reduce"] .adv-knob { tr
   .ovx-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 16px; }
   .dh-stage { flex-wrap: wrap; }
 }
+
+/* VC demo pass (2026-10-27): on a phone the Chart tab's header took its actions on a row of their own, and the chart
+   began at y=398 of an 844px screen. Here the actions share the ticker's line (Watch keeps its word, Ask about the
+   ticker keeps its name for a screen reader and shows Milo's icon, the menu stays), so the chart starts about 52px
+   higher. The price, the session and its time keep their own line. Other tabs keep the full row. */
+@media (max-width: 559px) {
+  .dhead.bar.dhead-chart { flex-wrap: wrap; }
+  .dhead.bar.dhead-chart .name { flex: 1 1 0; min-width: 0; }
+  .dhead.bar.dhead-chart .name > span:not(.sr) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .dhead.bar.dhead-chart .dh-price { order: 3; flex-basis: 100%; }
+  .dhead.bar.dhead-chart .acts { order: 2; width: auto; flex: none; gap: 4px; margin-left: 0; }
+  .dhead.bar.dhead-chart .acts > .btn, .dhead.bar.dhead-chart .acts > .menu > summary { flex: none; min-width: var(--tap); min-height: var(--tap); padding: 0 10px; }
+  .dhead.bar.dhead-chart .acts-milo-t { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; }
+}
+

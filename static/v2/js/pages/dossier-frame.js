@@ -107,7 +107,7 @@ function actions(sym, label, sm) {
   const s = sm ? 'btn-sm' : '';
   return html`<div class="acts" role="group" aria-label="${sym} actions">
     <span class="acts-2"><a class="btn btn-quiet ${s}" href="#/alerts?symbol=${sym}">Alert</a><a class="btn btn-quiet ${s}" href="#/compare?t=${sym}">Compare</a><a class="btn btn-quiet ${s}" href="#/${encodeURIComponent(sym)}/sheet" title="A printable research sheet">Export</a></span>
-    ${watchButton(sym, { compact: sm })}${miloButton(`Ask about ${sym}`, { ask: `What is the case for ${sym} right now?`, context: `${sym} Dossier, ${label}`, symbol: sym, cls: `${s} acts-milo` })}
+    ${watchButton(sym, { compact: sm })}${miloButton(html`<span class="acts-milo-t">Ask about ${sym}</span>`, { ask: `What is the case for ${sym} right now?`, context: `${sym} Dossier, ${label}`, symbol: sym, cls: `${s} acts-milo` })}
     <details class="menu acts-more"><summary class="btn btn-quiet ${s}" aria-label="More actions for ${sym}">${icon('more')}</summary><div class="menu-body menu-end">${tickerMenu(sym)}</div></details>
   </div>`;
 }
@@ -138,7 +138,7 @@ export function header(sym, D, view = 'overview', { compact = false, bar = true,
   // One line, so the research gets the screen: the Chart page's header (owner, 2026-10-18 second review), on every
   // dossier tab since the design standard of 2026-10-19. The tall header below is kept for a caller that asks.
   if (bar) {
-    return html`<header class="dhead bar${st ? ' is-wide' : ''}">${raw(logoHTML(sym, { lazy: false }))}
+    return html`<header class="dhead bar${st ? ' is-wide' : ''}${view === 'chart' ? ' dhead-chart' : ''}">${raw(logoHTML(sym, { lazy: false }))}
       <h1 class="name"><b class="tick">${sym}</b>${name && name !== sym ? html`<span>${name}</span>` : ''}<span class="sr">, ${label}</span></h1>
       <p class="dh-price">${isNum(q.price) ? html`<span class="dh-px">${num(q.price)}</span>` : D.quoteError ? '' : html`<span class="sk dh-sk dh-sk-sm" role="status" aria-label="Loading the price"></span>`}
         <span class="dh-chg ${dir(q.change_pct)}">${isNum(q.change_pct) ? html`${signed(q.change, 2, '')} (${signed(q.change_pct)})` : ''}</span>

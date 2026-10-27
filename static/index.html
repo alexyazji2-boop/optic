@@ -443,7 +443,7 @@
     <div class="pulse-modes-host" id="pulse-modes"></div>
     <!-- Chips for staged files, cleared once the message is sent. -->
     <div class="chat-attachments" id="chat-attachments"></div>
-    <textarea id="chat-input" placeholder="Ask about the market or any company, e.g. &quot;What is moving the market today?&quot;"></textarea>
+    <textarea id="chat-input" aria-label="Ask Milo" placeholder="Ask about the market or any company, e.g. &quot;What is moving the market today?&quot;"></textarea>
     <div class="chat-actions">
       <button class="btn primary" id="chat-send">Send</button>
       <button type="button" class="btn" id="chat-stop" hidden aria-label="Stop Milo's answer">Stop</button>
@@ -451,7 +451,7 @@
       <!-- Screenshots of someone else's chart and PDF research notes are the two
            things a reader actually has to hand, so both are accepted. -->
       <button class="btn" id="chat-attach" title="Attach an image or PDF">Attach</button>
-      <input type="file" id="chat-file" multiple hidden
+      <input type="file" id="chat-file" aria-label="Attach an image or PDF" multiple hidden
              accept="image/png,image/jpeg,image/gif,image/webp,application/pdf">
       <!-- Checked by default. Unchecked, the Send path had no web access at all,
            so Pulse correctly refused anything needing a fact it had not been
