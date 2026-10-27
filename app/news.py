@@ -267,6 +267,10 @@ def mentions_company(text: str, ticker: str, name: str) -> bool:
     blob = text or ""
     symbol = (ticker or "").strip().upper()
     for term in _match_terms(ticker, name):
+        if term == symbol and is_word_symbol(symbol):
+            if symbol_written_as_ticker(blob, symbol):
+                return True
+            continue
         # The symbol as headlines write it, in capitals. Matched in any case,
         # COIN's page took "October Rate Hike Odds Fell Below a Coin Flip" for a
         # story about Coinbase, and ALL, NOW, ON and F are words the same way.
@@ -274,6 +278,47 @@ def mentions_company(text: str, ticker: str, name: str) -> bool:
         if re.search(r"\b" + re.escape(term) + r"\b", blob, flags):
             return True
     return False
+
+
+# Symbols that are also ordinary words, and every one-letter symbol.
+#
+# Capitals alone were the test for these, and capitals are not enough: an
+# all-caps headline ("WATCH NOW: STOCKS EXTEND RALLY") or a summary that opens
+# "A ..." names ServiceNow and Agilent on that rule. Brokerage's briefing put
+# gas-price and index stories under NOW on 26 October 2026 because it had no
+# relevance test at all; this is the part of the fix that keeps the word from
+# coming back through the one that exists. For these the symbol counts only
+# where it is written as a ticker, and the company's name counts as before.
+WORD_SYMBOLS = frozenset({
+    "AI", "ALL", "AM", "AN", "ARE", "ARM", "AT", "BE", "BIG", "BOX", "CAN", "CAR",
+    "CARS", "CASH", "CAT", "COIN", "DO", "EAT", "EYE", "FAST", "FUN", "GO", "GOLD",
+    "GOOD", "HAS", "HOME", "HOOD", "IT", "KEY", "LIFE", "LOVE", "LOW", "MAIN", "MAN",
+    "NICE", "NOW", "ON", "ONE", "OPEN", "OUT", "PATH", "PEAK", "PLAY", "REAL",
+    "ROOT", "RUN", "SAFE", "SEE", "SHOP", "SNOW", "SO", "SPOT", "TEAM", "TRUE",
+    "UP", "WELL", "WORK",
+})
+
+_EXCHANGE = r"(?:NYSE(?:\s+American|\s*Arca)?|NASDAQ|Nasdaq(?:GS|GM|CM)?|AMEX|OTC|CBOE|Cboe)"
+
+
+def is_word_symbol(symbol: str) -> bool:
+    s = (symbol or "").strip().upper()
+    return len(s) == 1 or s in WORD_SYMBOLS
+
+
+def symbol_written_as_ticker(text: str, symbol: str) -> bool:
+    """`$NOW`, `(NOW)`, `NYSE: NOW`, `NOW stock`, or a list of symbols
+    ("XYZ, COIN, MSTR Stocks Get Target Hikes"), in capitals."""
+    s = re.escape((symbol or "").strip().upper())
+    if not s:
+        return False
+    pattern = (r"\$" + s + r"\b"
+               r"|\(\s*(?:" + _EXCHANGE + r"\s*:\s*)?" + s + r"\s*\)"
+               r"|\b" + _EXCHANGE + r"\s*:\s*" + s + r"\b"
+               r"|\b" + s + r"\s+(?i:stock|shares|options)\b"
+               r"|\b[A-Z]{2,5},\s*" + s + r"\b"
+               r"|\b" + s + r",\s*[A-Z]{2,5}\b")
+    return bool(re.search(pattern, text or ""))
 
 
 def _name_words(name: str) -> List[str]:
@@ -440,6 +485,27 @@ def keep_article(about: bool, text: str, catalysts: List[Dict[str, str]],
     if is_market_context(text, sector, industry):
         return True, ""
     return False, "off-topic"
+
+
+def relevance(item: Dict[str, Any], ticker: str, name: str = "", sector: str = "",
+              industry: str = "") -> Tuple[str, str]:
+    """("company" | "market" | "drop", why dropped) for one feed item.
+
+    The same tests `analyse` applies, as one call for pages that show a few
+    headlines per holding rather than a news page (Brokerage's briefing). A
+    feed served under a symbol is not news about the company: NVDA's carried
+    BlackBerry, Costco and Nike stories on 26 October 2026, and the briefing
+    listed them as possibly related to NVDA's move."""
+    title, url = str(item.get("title") or ""), str(item.get("url") or "")
+    if is_landing_page(title, url):
+        return "drop", "landing"
+    blob = "{} {}".format(title, item.get("summary") or "")
+    about = (mentions_company(blob, ticker, name)
+             or tagged_about(item, ticker, blob, _name_words(name)))
+    keep, why = keep_article(about, blob, _catalysts(blob), sector, industry)
+    if not keep:
+        return "drop", why
+    return ("company" if about else "market"), ""
 
 
 def _importance_rank(catalysts: List[Dict[str, str]]) -> int:

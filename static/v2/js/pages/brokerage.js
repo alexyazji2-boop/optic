@@ -205,6 +205,7 @@ function overview(d) {
       <p class="asof">Milo reads only your own linked accounts, read-only, and describes rather than advises. Each question uses one Milo message when you send it.</p></section>
     ${limits(d.notes)}`;
 }
+const newsItem = (h) => html`<li><a href="${h.url || '#'}" target="_blank" rel="noopener">${h.title || ''}</a> <small class="t-muted">${h.publisher || ''} ${h.published ? ago(h.published) : ''}</small></li>`;
 function briefing() {
   const b = W.extra.briefing;
   if (!b) return html`<section class="section"><h2 class="t-h2">Briefing</h2><p class="t-muted" role="status">Measuring what moved...</p></section>`;
@@ -214,8 +215,9 @@ function briefing() {
     <div class="grid2"><div><h3>Measured: what moved today ${src('market')}</h3>
         ${rows.length ? html`<div class="tscroll"><table class="t"><thead><tr><th scope="col">Holding</th><th scope="col">Today</th><th scope="col">Contribution</th></tr></thead><tbody>${rows.map((r) => html`<tr><td>${r.symbol}</td><td>${sPct(r.change_pct)}</td><td>${signedMoney(r.contribution, 'USD')}</td></tr>`)}</tbody></table></div>` : html`<p class="t-muted">No quotes to measure with just now.</p>`}</div>
       <div><h3>Possibly related: headlines published around the move</h3>
-        ${(b.drivers || []).length ? b.drivers.map((x) => html`<div class="bk-driver"><p><b>${x.symbol}</b> ${sPct(x.change_pct)}</p>${(x.headlines || []).length ? html`<ul class="plain">${x.headlines.map((h) => html`<li><a href="${h.url || '#'}" target="_blank" rel="noopener">${h.title || ''}</a> <small class="t-muted">${h.publisher || ''} ${h.published ? ago(h.published) : ''}</small></li>`)}</ul>` : ''}${x.note ? html`<p class="asof">${clean(x.note)}</p>` : ''}</div>`) : html`<p class="t-muted">No large movers to look for headlines about.</p>`}
-        <p class="asof">Matched by when they were published. That is not evidence that they caused the move.</p></div></div>
+        ${(b.drivers || []).length ? b.drivers.map((x) => html`<div class="bk-driver"><p><b>${x.symbol}</b> ${sPct(x.change_pct)}</p>${(x.headlines || []).length ? html`<ul class="plain">${x.headlines.map(newsItem)}</ul>` : ''}${x.note ? html`<p class="asof">${clean(x.note)}</p>` : ''}</div>`) : html`<p class="t-muted">No large movers to look for headlines about.</p>`}
+        ${(b.market_context || []).length ? html`<div class="bk-driver"><h4>Market context, not about one holding</h4><ul class="plain">${b.market_context.map(newsItem)}</ul></div>` : ''}
+        <p class="asof">Only stories that name the company are listed under it. They are matched by when they were published, which is not evidence that they caused the move.</p></div></div>
     ${w ? html`<div class="bk-written"><p><b>${w.headline}</b></p>${['what_changed', 'drivers', 'ahead', 'attention'].map((k) => (w[k] ? html`<p>${clean(w[k])}</p>` : ''))}<p class="asof">Written by Milo from the measured figures on this page, ${ago(w.written_at)}.</p></div>`
       : html`<p class="cluster">${earlier ? html`<span class="t-muted">An earlier write-up (${ago(earlier.written_at)}) was from different figures.</span>` : ''}<button type="button" class="btn btn-milo" data-v2-bk-write ${S.writing ? 'disabled' : ''}>${S.writing ? 'Writing...' : 'Write it up'}</button><span class="t-muted">Uses one Milo message. The same figures are kept and not charged again.</span></p>`}</section>`;
 }

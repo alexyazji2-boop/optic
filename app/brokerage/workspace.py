@@ -569,7 +569,7 @@ def briefing(user: Dict[str, Any], account_ids: Optional[List[str]] = None) -> D
     core = _core(user, account_ids)
     quotes = _quotes([h.get("symbol") for h in core.get("holdings") or []])
     ev = events(user, account_ids, core=core)
-    out = briefing_mod.build(core, ev, quotes, news_of=_m("news_of"))
+    out = briefing_mod.build(core, ev, quotes, news_of=_m("news_of"), company_of=_m("company_of"))
     out["section"] = "briefing"
     out["freshness"] = _freshness(core, quotes)
     out["facts_key"] = facts_key(out)

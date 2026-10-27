@@ -22,7 +22,9 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Dict, Iterable, List, Optional
 
-VERSION = "briefing-2026-10-15.1"
+from .. import news as news_mod
+
+VERSION = "briefing-2026-10-27.1"
 MAX_HEADLINE_NAMES = 4
 HEADLINE_WINDOW_HOURS = 36
 BIG_MOVE_PCT = 3.0
@@ -103,36 +105,86 @@ def since_sync(changes: Optional[Dict[str, Any]]) -> Dict[str, Any]:
 
 
 def headlines_for(rows: List[Dict[str, Any]], news_of: Optional[Callable[[str], List[Dict[str, Any]]]],
-                  now: datetime) -> List[Dict[str, Any]]:
-    """For the biggest movers, headlines published in the last
-    HEADLINE_WINDOW_HOURS: candidates, never causes."""
-    out = []
+                  now: datetime,
+                  company_of: Optional[Callable[[str], Dict[str, Any]]] = None) -> List[Dict[str, Any]]:
+    """For the biggest movers, headlines about the company published in the
+    last HEADLINE_WINDOW_HOURS: candidates, never causes.
+
+    The provider's feed for a symbol is not news about that company. On
+    26 October 2026 NVDA's carried BlackBerry, Costco and Nike stories and
+    NOW's carried gas prices, and all of them were listed as possibly related
+    to the holding's move. So each item passes the News page's relevance test
+    first (`app/news.py`, with the company's name from `company_of`): a story
+    that names the company is a candidate, a market-wide story is kept apart
+    as market context, and the rest is counted and left out."""
+    out: List[Dict[str, Any]] = []
     if news_of is None:
         return out
     since = now - timedelta(hours=HEADLINE_WINDOW_HOURS)
     for r in rows[:MAX_HEADLINE_NAMES]:
+        sym = r["symbol"]
         try:
-            items = news_of(r["symbol"]) or []
+            items = news_of(sym) or []
         except Exception:                                       # noqa: BLE001
             items = []
-        recent = []
+        try:
+            co = (company_of(sym) if company_of else None) or {}
+        except Exception:                                       # noqa: BLE001
+            co = {}
+        name, sector, industry = (str(co.get(k) or "") for k in ("name", "sector", "industry"))
+        recent, market, set_aside = [], [], 0
         for n in items:
             at = _parse(n.get("published"))
-            if at and since <= at <= now + timedelta(minutes=5):
-                recent.append({"title": n.get("title"), "publisher": n.get("publisher"),
-                               "published": n.get("published"), "url": n.get("url")})
+            if not (at and since <= at <= now + timedelta(minutes=5)):
+                continue
+            kind, _why = news_mod.relevance(n, sym, name, sector, industry)
+            row = {"title": n.get("title"), "publisher": n.get("publisher"),
+                   "published": n.get("published"), "url": n.get("url")}
+            if kind == "company":
+                recent.append(row)
+            elif kind == "market":
+                market.append(row)
+            else:
+                set_aside += 1
+        big = abs(r.get("change_pct") or 0) >= BIG_MOVE_PCT
+        if recent:
+            note = ("Published around the move. Optic matched these by timing only and has not established "
+                    "that any of them caused it.")
+        else:
+            note = "No headline about {} in the last {} hours.".format(sym, HEADLINE_WINDOW_HOURS)
+            if big:
+                note = "A move of {:.1f}% with no headline about {} in the last {} hours.".format(
+                    r.get("change_pct") or 0, sym, HEADLINE_WINDOW_HOURS)
+        others = set_aside + len(market)
+        if others and not recent:
+            note += " The feed's other {} {} about other companies or the wider market.".format(
+                others, "story was" if others == 1 else "stories were")
         out.append({
-            "symbol": r["symbol"], "change_pct": r.get("change_pct"), "contribution": r.get("contribution"),
+            "symbol": sym, "change_pct": r.get("change_pct"), "contribution": r.get("contribution"),
             "headlines": recent[:3],
-            "status": ("possibly_related" if recent else
-                       ("no_headline" if abs(r.get("change_pct") or 0) >= BIG_MOVE_PCT else "quiet")),
-            "note": ("Published around the move. Optic matched these by timing only and has not established "
-                     "that any of them caused it." if recent else
-                     "A move of {:.1f}% with no headline about {} in the last {} hours.".format(
-                         r.get("change_pct") or 0, r["symbol"], HEADLINE_WINDOW_HOURS)
-                     if abs(r.get("change_pct") or 0) >= BIG_MOVE_PCT else None),
+            "market_context": market,
+            "set_aside": set_aside,
+            "status": "possibly_related" if recent else ("no_headline" if big else "quiet"),
+            "note": note,
         })
     return out
+
+
+def market_context(drivers: List[Dict[str, Any]], limit: int = 3) -> List[Dict[str, Any]]:
+    """Market-wide stories that arrived under the holdings' feeds, once each
+    and newest first, kept apart from any one holding's headlines."""
+    seen: Dict[str, Dict[str, Any]] = {}
+    for d in drivers:
+        for h in d.pop("market_context", None) or []:
+            key = str(h.get("url") or h.get("title") or "").strip().lower()
+            if not key:
+                continue
+            if key in seen:
+                seen[key]["under"].append(d["symbol"])
+            else:
+                seen[key] = dict(h, under=[d["symbol"]])
+    rows = sorted(seen.values(), key=lambda h: str(h.get("published") or ""), reverse=True)
+    return rows[:limit]
 
 
 def observations(overview: Dict[str, Any], events: Dict[str, Any], moves: Dict[str, Any],
@@ -180,21 +232,25 @@ def observations(overview: Dict[str, Any], events: Dict[str, Any], moves: Dict[s
 
 def build(overview: Dict[str, Any], events: Dict[str, Any], quotes: Dict[str, Dict[str, Any]],
           news_of: Optional[Callable[[str], List[Dict[str, Any]]]] = None,
-          now: Optional[datetime] = None) -> Dict[str, Any]:
+          now: Optional[datetime] = None,
+          company_of: Optional[Callable[[str], Dict[str, Any]]] = None) -> Dict[str, Any]:
     now = now or datetime.now(timezone.utc)
     moves = today_moves(overview.get("holdings") or [], quotes or {})
+    drivers = headlines_for(moves.get("rows") or [], news_of, now, company_of)
     return {
         "version": VERSION,
         "generated_at": _iso(now),
         "today": moves,
         "since_sync": since_sync(overview.get("changes")),
-        "drivers": headlines_for(moves.get("rows") or [], news_of, now),
+        "drivers": drivers,
+        "market_context": market_context(drivers),
         "upcoming": [e for e in (events or {}).get("events") or [] if e.get("days_away", 99) <= 14][:8],
         "observations": observations(overview, events, moves),
         "limitations": [
             "Today's contributions use today's quantities and the quotes shown with their times; a position "
             "bought or sold today is not separated out, and options are not included.",
-            "Headlines are matched to a move by when they were published. That is not evidence of cause.",
+            "Headlines are matched to a move by when they were published. That is not evidence of cause. "
+            "Only stories that name the company are listed under it; market-wide stories are listed apart.",
             "Since-last-sync figures compare two stored snapshots; deposits, withdrawals and trades sit in "
             "the part that is not price effect.",
         ],

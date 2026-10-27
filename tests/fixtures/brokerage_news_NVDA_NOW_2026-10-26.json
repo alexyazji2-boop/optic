@@ -1,0 +1,274 @@
+{
+ "recorded": "2026-10-27T02:30:00Z",
+ "source": "Yahoo Finance per-symbol news feed via app/providers/yf.py, headline metadata only",
+ "feeds": {
+  "NVDA": {
+   "company": {
+    "name": "NVIDIA Corporation",
+    "sector": "Technology",
+    "industry": "Semiconductors"
+   },
+   "news": [
+    {
+     "title": "BB Stock Rises Overnight: BlackBerry CEO Says QNX’s Alloy Kore Expanding Market— 'The Products We Sell Are Pervasive Around You'",
+     "publisher": "Stocktwits",
+     "published": "2026-10-27T01:53:08+00:00",
+     "url": "https://finance.yahoo.com/technology/articles/bb-stock-rises-overnight-blackberry-015308152.html",
+     "tickers": [
+      "BB",
+      "NVDA"
+     ]
+    },
+    {
+     "title": "Own Costco Stock by Oct. 30 to Qualify for Its Nov. 13 Dividend. Here's How Many Shares You'd Need for $1,000 in Yearly Dividends.",
+     "publisher": "Motley Fool",
+     "published": "2026-10-27T01:50:00+00:00",
+     "url": "https://finance.yahoo.com/markets/stocks/articles/own-costco-stock-oct-30-015000041.html",
+     "tickers": [
+      "COST",
+      "NVDA"
+     ]
+    },
+    {
+     "title": "Should You Forget Nike Stock Near a 52-Week Low?",
+     "publisher": "Motley Fool",
+     "published": "2026-10-27T01:40:45+00:00",
+     "url": "https://finance.yahoo.com/markets/stocks/articles/forget-nike-stock-near-52-014045514.html",
+     "tickers": [
+      "NKE",
+      "NVDA"
+     ]
+    },
+    {
+     "title": "JPMorgan Predicts Bitcoin Will Outpace Stocks, Bonds, and Gold Over the Next Decade. Is Bitcoin Now a Screaming Buy?",
+     "publisher": "Motley Fool",
+     "published": "2026-10-27T01:29:00+00:00",
+     "url": "https://finance.yahoo.com/markets/crypto/articles/jpmorgan-predicts-bitcoin-outpace-stocks-012900317.html",
+     "tickers": [
+      "BTC-USD",
+      "JPM",
+      "NVDA"
+     ]
+    },
+    {
+     "title": "Alphabet Must Show This on Oct. 28 or the Stock Could Stall",
+     "publisher": "Motley Fool",
+     "published": "2026-10-27T01:20:00+00:00",
+     "url": "https://finance.yahoo.com/markets/stocks/articles/alphabet-must-show-oct-28-012000802.html",
+     "tickers": [
+      "GOOG",
+      "NVDA"
+     ]
+    },
+    {
+     "title": "Prediction: 3 Stocks That Will Be Worth More Than Apple 5 Years From Now",
+     "publisher": "Motley Fool",
+     "published": "2026-10-27T01:20:00+00:00",
+     "url": "https://finance.yahoo.com/markets/stocks/articles/prediction-3-stocks-worth-more-012000673.html",
+     "tickers": [
+      "AAPL",
+      "NVDA",
+      "GOOG",
+      "SPCX"
+     ]
+    },
+    {
+     "title": "Why Intel Stock Popped Today",
+     "publisher": "Motley Fool",
+     "published": "2026-10-27T00:57:59+00:00",
+     "url": "https://finance.yahoo.com/markets/stocks/articles/why-intel-stock-popped-today-005759902.html",
+     "tickers": [
+      "INTC",
+      "NVDA"
+     ]
+    },
+    {
+     "title": "Anthropic's Billions in Microsoft Commitments Add to Its Mounting Compute Bill",
+     "publisher": "Motley Fool",
+     "published": "2026-10-27T00:50:00+00:00",
+     "url": "https://finance.yahoo.com/technology/ai/articles/anthropics-billions-microsoft-commitments-add-005000563.html",
+     "tickers": [
+      "ANTH.PVT",
+      "NVDA",
+      "MSFT"
+     ]
+    },
+    {
+     "title": "What a $1,000 Investment in Micron Could Be Worth by the End of 2027",
+     "publisher": "Motley Fool",
+     "published": "2026-10-27T00:36:00+00:00",
+     "url": "https://finance.yahoo.com/markets/stocks/articles/1-000-investment-micron-could-003600000.html",
+     "tickers": [
+      "MU",
+      "NVDA",
+      "^GSPC"
+     ]
+    },
+    {
+     "title": "BlackBerry CEO Sees Physical AI, Robotics As Major Growth Opportunity, CNBC Reports",
+     "publisher": "MT Newswires",
+     "published": "2026-10-27T00:01:06+00:00",
+     "url": "https://finance.yahoo.com/technology/ai/articles/blackberry-ceo-sees-physical-ai-000106408.html",
+     "tickers": [
+      "BB",
+      "NVDA"
+     ]
+    },
+    {
+     "title": "SpaceX's Adjusted Earnings Quadrupled in Q3. Is the Stock Heading Back to $200?",
+     "publisher": "Motley Fool",
+     "published": "2026-10-26T23:40:02+00:00",
+     "url": "https://finance.yahoo.com/markets/stocks/articles/spacexs-adjusted-earnings-quadrupled-q3-234002547.html",
+     "tickers": [
+      "SPCX",
+      "NVDA"
+     ]
+    },
+    {
+     "title": "Here's Exactly What Investors Should Look for From the Federal Reserve's October Meeting",
+     "publisher": "Motley Fool",
+     "published": "2026-10-26T23:20:00+00:00",
+     "url": "https://finance.yahoo.com/economy/policy/articles/heres-exactly-investors-look-federal-232000309.html",
+     "tickers": [
+      "NVDA"
+     ]
+    }
+   ]
+  },
+  "NOW": {
+   "company": {
+    "name": "ServiceNow, Inc.",
+    "sector": "Technology",
+    "industry": "Software - Application"
+   },
+   "news": [
+    {
+     "title": "Stocks higher by year-end: George Seay on where to deploy cash now",
+     "publisher": "TheStreet",
+     "published": "2026-10-26T23:30:02+00:00",
+     "url": "https://finance.yahoo.com/markets/stocks/articles/stocks-higher-end-george-seay-233002594.html",
+     "tickers": []
+    },
+    {
+     "title": "Gas Prices Now More Expensive Under Trump Than Under Biden",
+     "publisher": "The Fiscal Times",
+     "published": "2026-10-26T22:43:10+00:00",
+     "url": "https://finance.yahoo.com/energy/articles/gas-prices-now-more-expensive-224310197.html",
+     "tickers": []
+    },
+    {
+     "title": "Why Did Microsoft Stock Beat UiPath Over Five Years?",
+     "publisher": "Trefis",
+     "published": "2026-10-26T20:08:15+00:00",
+     "url": "https://finance.yahoo.com/markets/stocks/articles/why-did-microsoft-stock-beat-200815181.html",
+     "tickers": [
+      "PATH",
+      "MSFT",
+      "FTNT",
+      "SSNC",
+      "PEGA",
+      "APPN",
+      "NOW"
+     ]
+    },
+    {
+     "title": "ServiceNow AI Demand Builds Ahead of Earnings",
+     "publisher": "GuruFocus.com",
+     "published": "2026-10-26T17:30:54+00:00",
+     "url": "https://finance.yahoo.com/technology/ai/articles/servicenow-ai-demand-builds-ahead-173054957.html",
+     "tickers": [
+      "NOW",
+      "BNP.PA"
+     ]
+    },
+    {
+     "title": "ServiceNow (NOW) Rallies as Investors Reassess the Value of Enterprise AI Software",
+     "publisher": "Insider Monkey",
+     "published": "2026-10-26T17:26:14+00:00",
+     "url": "https://finance.yahoo.com/technology/ai/articles/servicenow-now-rallies-investors-reassess-172614893.html",
+     "tickers": [
+      "NOW",
+      "^GSPC"
+     ]
+    },
+    {
+     "title": "ServiceNow Q3 Earnings Loom: Hold or Fold NOW Stock Ahead of Results?",
+     "publisher": "Zacks",
+     "published": "2026-10-26T17:03:00+00:00",
+     "url": "https://finance.yahoo.com/markets/stocks/articles/servicenow-q3-earnings-loom-hold-170300623.html",
+     "tickers": [
+      "NOW",
+      "MSFT",
+      "CRM",
+      "ORCL"
+     ]
+    },
+    {
+     "title": "Information Technology (IT) Resilience Orchestration Market 2026-2030 | Capitalize on 14.2% CAGR as Microsoft, IBM, Broadcom and ServiceNow Scale AI and Hybrid Cloud",
+     "publisher": "GlobeNewswire",
+     "published": "2026-10-26T14:41:00+00:00",
+     "url": "https://finance.yahoo.com/technology/articles/information-technology-resilience-orchestration-market-144100159.html",
+     "tickers": [
+      "MSFT",
+      "IBM",
+      "AVGO",
+      "NOW"
+     ]
+    },
+    {
+     "title": "ServiceNow (NOW) Continues to Benefit from Mission-Critical Software",
+     "publisher": "Insider Monkey",
+     "published": "2026-10-26T13:54:40+00:00",
+     "url": "https://finance.yahoo.com/markets/stocks/articles/servicenow-now-continues-benefit-mission-135440720.html",
+     "tickers": [
+      "NOW"
+     ]
+    },
+    {
+     "title": "Got $5,000? 3 Growth Stocks to Buy and Hold Through 2030.",
+     "publisher": "Motley Fool",
+     "published": "2026-10-26T09:54:00+00:00",
+     "url": "https://finance.yahoo.com/markets/stocks/articles/got-5-000-3-growth-095400378.html",
+     "tickers": [
+      "NVDA",
+      "SPOT",
+      "NOW"
+     ]
+    },
+    {
+     "title": "Bank Of America Raises ServiceNow Price Target Ahead Of Q3 Earnings",
+     "publisher": "TIKR",
+     "published": "2026-10-26T06:56:15+00:00",
+     "url": "https://finance.yahoo.com/markets/stocks/articles/bank-america-raises-servicenow-price-065615736.html",
+     "tickers": [
+      "NOW"
+     ]
+    },
+    {
+     "title": "The Enterprise Agent Price Nobody Will Show You",
+     "publisher": "Forkast News",
+     "published": "2026-10-25T09:59:24+00:00",
+     "url": "https://finance.yahoo.com/technology/ai/articles/enterprise-agent-price-nobody-show-095924809.html",
+     "tickers": [
+      "OPAI.PVT",
+      "ANTH.PVT",
+      "GOOG",
+      "MSFT",
+      "META",
+      "NOW",
+      "CRM"
+     ]
+    },
+    {
+     "title": "ServiceNow Wants to Be No. 1 in Security. Here’s What Its $7.75 Billion Armis Bet Must Show on October 28",
+     "publisher": "TIKR",
+     "published": "2026-10-24T20:28:20+00:00",
+     "url": "https://finance.yahoo.com/markets/stocks/articles/servicenow-wants-no-1-security-202820736.html",
+     "tickers": [
+      "NOW"
+     ]
+    }
+   ]
+  }
+ }
+}

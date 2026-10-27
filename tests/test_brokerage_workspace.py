@@ -188,9 +188,9 @@ def test_headlines_are_candidates_by_timing_and_a_big_quiet_move_says_so():
     rows = [{"symbol": "NVDA", "change_pct": 10.0, "contribution": 200.0},
             {"symbol": "JNJ", "change_pct": -6.25, "contribution": -120.0}]
     news = {"NVDA": [{"title": "Old", "published": "2026-10-10T10:00:00Z"},
-                     {"title": "Chip rally", "published": "2026-10-15T14:00:00Z"}], "JNJ": []}
+                     {"title": "NVDA leads a chip rally", "published": "2026-10-15T14:00:00Z"}], "JNJ": []}
     got = briefing.headlines_for(rows, lambda s: news[s], now)
-    assert got[0]["status"] == "possibly_related" and [h["title"] for h in got[0]["headlines"]] == ["Chip rally"]
+    assert got[0]["status"] == "possibly_related" and [h["title"] for h in got[0]["headlines"]] == ["NVDA leads a chip rally"]
     assert "timing only" in got[0]["note"]
     assert got[1]["status"] == "no_headline" and "no headline" in got[1]["note"]
 

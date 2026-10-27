@@ -7980,6 +7980,9 @@ brokerage_workspace.set_market(
     dividend_of=_ws_dividend,
     quotes_of=_ws_quotes,
     news_of=lambda s: YF_PROVIDER.news(s, limit=12) or [],
+    # The name, sector and industry the briefing's relevance test reads, from
+    # the cached quote the holdings were already priced with.
+    company_of=lambda s: YF_PROVIDER.quote(s) or {},
     closes_of=_ws_closes,
     benchmark_of=_ws_benchmark,
     spot_of=_ws_spot,
