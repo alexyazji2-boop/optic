@@ -65,3 +65,12 @@ def test_no_section_chip_is_cut_mid_word(tmp_path):
       print(JSON.stringify(titles.map(s.chipLabel)));
     """)
     assert all(len(t) <= 28 and not t.endswith("…") for t in got), got
+
+
+def test_sandbox_brokerage_data_says_it_is_test_data_on_every_section():
+    """Rehearsing the demo on the sandbox, Overview showed $79,117.31 of holdings and nothing said they were made up;
+    only Connections named the sandbox."""
+    src = (V2 / "js" / "pages" / "brokerage.js").read_text()
+    paint = src[src.index("function paint(focusSel)"):]
+    assert "const sandbox = (S.status || {}).mode === 'sandbox';" in paint
+    assert "Sandbox: test data only. These accounts, holdings and values are made up for demonstration and belong to no one." in paint

@@ -414,7 +414,11 @@ function paint(focusSel) {
   const y = window.scrollY, a = document.activeElement;
   const keepSel = focusSel || (a && mainEl.contains(a) ? (a.id ? `#${a.id}` : [...a.attributes].filter((x) => x.name.startsWith('data-v2-')).map((x) => `[${x.name}="${CSS.escape(x.value)}"]`).join('') || null) : null);
   const fl = S.flash ? FLASH[S.flash] : null; // kept until the reader moves to another section
-  draw(mainEl, html`<header class="page-head"><h1 class="t-display-m">Brokerage</h1>${linked() ? html`<p class="section-sub">Your own linked accounts, read-only. Optic cannot place, cancel or move anything.</p>` : ''}</header>
+  // the sandbox's holdings read like a real portfolio on every section but Connections (VC demo rehearsal, 2026-10-27):
+  // each section says they are test data, so a demonstration on them cannot be taken for someone's accounts
+  const sandbox = (S.status || {}).mode === 'sandbox';
+  draw(mainEl, html`<header class="page-head"><h1 class="t-display-m">Brokerage</h1>${linked() ? html`<p class="section-sub">${sandbox ? 'Demonstration accounts from Optic\'s sandbox brokerage, read-only.' : 'Your own linked accounts, read-only.'} Optic cannot place, cancel or move anything.</p>` : ''}
+      ${sandbox && linked() ? html`<p class="stale bk-sandbox" role="note">Sandbox: test data only. These accounts, holdings and values are made up for demonstration and belong to no one.</p>` : ''}</header>
     ${fl ? html`<p class="bk-flash ${fl[0]}" role="status">${fl[1]}</p>` : ''}${body()}`);
   if (Math.abs(window.scrollY - y) > 2) window.scrollTo(0, y);
   if (keepSel) { try { const el = mainEl.querySelector(keepSel); if (el) el.focus({ preventScroll: true }); } catch (e) { /* a selector the page no longer has */ } }
