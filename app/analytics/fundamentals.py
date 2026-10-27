@@ -31,6 +31,10 @@ ROW_ALIASES = {
     ),
     "diluted_eps": ("Diluted EPS",),
     "cash": ("Cash And Cash Equivalents", "Cash Cash Equivalents And Short Term Investments"),
+    # cash plus the short-term investments (Treasury bills, marketable securities) held in place of it: what net
+    # cash is measured with. Cash alone made NVIDIA, $62.6B of the two against $11.0B of debt, read "Net debt
+    # $435.0M" (investor audit, 2026-10-27)
+    "cash_and_short_term": ("Cash Cash Equivalents And Short Term Investments",),
     "total_debt": ("Total Debt",),
     "total_assets": ("Total Assets",),
     "total_equity": ("Stockholders Equity", "Total Equity Gross Minority Interest"),
@@ -311,9 +315,12 @@ def analyse_financials(raw: Dict[str, Any]) -> Dict[str, Any]:
     shares_a = _pick_row(annual, "diluted_shares")
     shares_q = _pick_row(quarterly, "diluted_shares")
 
+    liquid = _pick_row(balance, "cash_and_short_term")
+    liquid0 = liquid[0] if liquid and liquid[0] is not None else None
+    held = liquid0 if liquid0 is not None else (cash_bal[0] if cash_bal else None)
     net_cash = None
-    if cash_bal and total_debt and cash_bal[0] is not None and total_debt[0] is not None:
-        net_cash = _f(cash_bal[0] - total_debt[0], 0)
+    if held is not None and total_debt and total_debt[0] is not None:
+        net_cash = _f(held - total_debt[0], 0)
 
     debt_to_equity = None
     if total_debt and equity and total_debt[0] is not None and equity[0] not in (None, 0):
@@ -377,6 +384,8 @@ def analyse_financials(raw: Dict[str, Any]) -> Dict[str, Any]:
         },
         "balance_sheet": {
             "cash": cash_bal[0] if cash_bal else None,
+            # what net_cash was measured with: cash and short-term investments when the statement has the line
+            "cash_and_short_term": liquid0,
             "total_debt": total_debt[0] if total_debt else None,
             "net_cash": net_cash,
             "total_equity": equity[0] if equity else None,

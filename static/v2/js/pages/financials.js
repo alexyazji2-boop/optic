@@ -96,7 +96,7 @@ function readings() {
     ['Net income', usd(latest('net_income')), isNum(g.net_income_yoy_pct) ? (latest('net_income') < 0 ? `swung to a loss from a profit the year before (${signed(g.net_income_yoy_pct, 0)})` : `${signed(g.net_income_yoy_pct)} on the year before`) : noRate(latest('net_income'))],
     ['Free cash flow', usd(latest('free_cash_flow')), isNum(latest('free_cash_flow')) && latest('revenue') ? `${num((latest('free_cash_flow') / latest('revenue')) * 100, 1)}% of revenue` : ''],
     ['Operating margin', pct(m.operating_pct), `Gross ${pct(m.gross_pct)}, net ${pct(m.net_pct)}`],
-    [isNum(bs.net_cash) && bs.net_cash < 0 ? 'Net debt' : 'Net cash', usd(isNum(bs.net_cash) ? Math.abs(bs.net_cash) : null), `Cash ${usd(bs.cash)}, debt ${usd(bs.total_debt)}`],
+    [isNum(bs.net_cash) && bs.net_cash < 0 ? 'Net debt' : 'Net cash', usd(isNum(bs.net_cash) ? Math.abs(bs.net_cash) : null), isNum(bs.cash_and_short_term) ? `Cash and short-term investments ${usd(bs.cash_and_short_term)}, debt ${usd(bs.total_debt)}` : `Cash ${usd(bs.cash)}, debt ${usd(bs.total_debt)}`],
   ] : [];
   return html`<section class="section fin-sum" id="fin-summary" aria-labelledby="fr-h"><h2 class="t-h2" id="fr-h">Summary${yr ? `, ${/^FY/.test(yr) ? yr : `fiscal ${yr}`}` : ''}</h2>${per[0] ? html`<p class="section-sub">The fiscal year to ${fullDate(per[0])}.</p>` : ''}
     ${cells.length ? html`<div class="readings fin-figs" style="--rn:${cells.length}">${cells.map(([k, v, d]) => html`<div class="rd"><span class="k">${k}</span><span class="v">${v}</span><span class="d">${d}</span></div>`)}</div>` : ''}
@@ -180,7 +180,7 @@ function statements(sym) {
         <tbody>${rows.filter(([, k]) => (a[k] || []).some(isNum)).map(([l, k]) => html`<tr><th scope="row">${l}</th>${per.map((pe, i) => html`<td>${cell(k, (a[k] || [])[i])}</td>`)}</tr>`)}
           ${!V.q && hasBal ? html`<tr><th scope="row">Cash and equivalents</th>${per.map((pe, i) => html`<td>${usd((bh.cash || [])[i])}</td>`)}</tr><tr><th scope="row">Total debt</th>${per.map((pe, i) => html`<td>${usd((bh.total_debt || [])[i])}</td>`)}</tr>` : ''}</tbody></table></div>
       <p class="asof">${clean(f.eps_basis || '')} Earnings uses analysts' basis for EPS, usually adjusted, so the two can differ. Margins are each line over revenue in the same period. ${V.q ? 'Cash flow and the balance sheet are yearly only here.' : ''}</p>
-      <h3>Balance sheet and margins, latest</h3>${kv([['Cash', usd(bs.cash)], ['Debt', usd(bs.total_debt)], [isNum(bs.net_cash) && bs.net_cash < 0 ? 'Net debt' : 'Net cash', usd(isNum(bs.net_cash) ? Math.abs(bs.net_cash) : null)], ['Debt to equity', num(bs.debt_to_equity, 2)], ['Gross margin', pct(m.gross_pct)], ['Operating margin', pct(m.operating_pct)], ['EBITDA margin', pct(m.ebitda_pct)], ['Net margin', pct(m.net_pct)]], 4)}
+      <h3>Balance sheet and margins, latest</h3>${kv([['Cash', usd(bs.cash)], ...(isNum(bs.cash_and_short_term) ? [['Cash and short-term investments', usd(bs.cash_and_short_term)]] : []), ['Debt', usd(bs.total_debt)], [isNum(bs.net_cash) && bs.net_cash < 0 ? 'Net debt' : 'Net cash', usd(isNum(bs.net_cash) ? Math.abs(bs.net_cash) : null)], ['Debt to equity', num(bs.debt_to_equity, 2)], ['Gross margin', pct(m.gross_pct)], ['Operating margin', pct(m.operating_pct)], ['EBITDA margin', pct(m.ebitda_pct)], ['Net margin', pct(m.net_pct)]], 4)}
       <ul class="plain">${(f.notes || []).map((n) => html`<li>${clean(ccy === 'USD' ? n : n.replace(/\$/g, `${ccy} `))}</li>`)}</ul></details></section>`;
 }
 function statementCharts() {

@@ -383,3 +383,20 @@ def test_the_insider_tables_value_is_not_a_moving_averages():
     # Two tables say "Shares", and each means its own.
     shares = [d for label, d in _terms(out["company"]) if label == "Shares"]
     assert len(shares) == 2 and any("Form 4" in d for d in shares) and any("quarterly" in d for d in shares)
+
+
+def test_net_cash_counts_short_term_investments():
+    """NVIDIA's FY26 balance sheet: $10.6B of cash and equivalents, $62.6B with its short-term investments, $11.0B
+    of debt. Cash alone read "Net debt $435.0M" for one of the most cash-rich companies listed (investor audit,
+    2026-10-27)."""
+    income = {"periods": ["2026-01-31"], "rows": {"Total Revenue": [215.9e9], "Net Income": [120.1e9]}}
+    raw = {"income_annual": income, "balance_annual": {"periods": ["2026-01-31"], "rows": {
+        "Cash And Cash Equivalents": [10.605e9], "Cash Cash Equivalents And Short Term Investments": [62.556e9],
+        "Total Debt": [11.04e9], "Stockholders Equity": [157.293e9]}}}
+    bs = fundamentals.analyse_financials(raw)["balance_sheet"]
+    assert bs["net_cash"] == pytest.approx(51.516e9)
+    assert bs["cash"] == pytest.approx(10.605e9) and bs["cash_and_short_term"] == pytest.approx(62.556e9)
+    only_cash = {"income_annual": income, "balance_annual": {"periods": ["2026-01-31"], "rows": {
+        "Cash And Cash Equivalents": [3e8], "Total Debt": [1e8]}}}
+    bs2 = fundamentals.analyse_financials(only_cash)["balance_sheet"]
+    assert bs2["net_cash"] == pytest.approx(2e8) and bs2["cash_and_short_term"] is None, "cash alone when that is all there is"
