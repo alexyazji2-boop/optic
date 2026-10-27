@@ -136,3 +136,16 @@ def test_the_page_gives_no_shares_unless_the_parts_add_up(tmp_path):
 def test_the_financials_tab_prints_the_tables_notes():
     src = (Path(__file__).parent.parent / "static" / "v2" / "js" / "pages" / "financials.js").read_text()
     assert "(t.notes || [])" in src
+
+
+def test_a_small_filers_genuine_corporate_line_is_not_taken_for_a_subtotal():
+    labels = {"o|segment|A": {"metric": "o", "axis": "segment", "member": "A"},
+              "o|segment|B": {"metric": "o", "axis": "segment", "member": "B"},
+              "o|segment|Corporate, not in a segment": {"metric": "o", "axis": "segment",
+                                                        "member": "Corporate, not in a segment"}}
+    near = {("o|segment|A", "year", "2026-06-30"): 300e3, ("o|segment|B", "year", "2026-06-30"): 100e3,
+            ("o|segment|Corporate, not in a segment", "year", "2026-06-30"): 120e3}
+    assert segments._drop_segment_subtotals(near, labels) == [] and len(near) == 3, "120k is not the 400k sum"
+    total = {("o|segment|A", "year", "2026-06-30"): 300e3, ("o|segment|B", "year", "2026-06-30"): 100e3,
+             ("o|segment|Corporate, not in a segment", "year", "2026-06-30"): 400e3}
+    assert len(segments._drop_segment_subtotals(total, labels)) == 1 and len(total) == 2

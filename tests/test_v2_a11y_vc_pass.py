@@ -51,7 +51,7 @@ def test_the_phone_chart_header_shares_the_tickers_line_and_keeps_44px_targets()
 
 def test_the_classic_milo_box_is_labelled():
     page = (ROOT / "static" / "index.html").read_text()
-    assert '<textarea id="chat-input" aria-label="Ask Milo"' in page
+    assert re.search(r'<textarea id="chat-input" placeholder="[^"]*" aria-label="Ask Milo">', page)
     assert 'id="chat-file" aria-label="Attach an image or PDF"' in page
 
 

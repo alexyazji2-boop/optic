@@ -483,7 +483,10 @@ def _drop_segment_subtotals(cells: Dict[Tuple[str, str, str], float],
             continue
         total = sum(g["parts"])
         for slot, member, value in g["recon"]:
-            if total and abs(value - total) <= max(abs(total) * 0.005, 0.5e6):
+            # Relative only. NVIDIA's lines match to the dollar; an absolute floor
+            # (it was 0.5M) would take a small filer's genuine corporate line
+            # within that of its segments' sum for a subtotal.
+            if total and abs(value - total) <= max(abs(total) * 0.002, 1.0):
                 del cells[slot]
                 removed.append({"metric": metric, "member": member, "kind": kind, "end": end,
                                 "value": value, "segments_total": round(total, 2)})

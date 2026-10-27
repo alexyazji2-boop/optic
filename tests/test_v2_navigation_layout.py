@@ -86,7 +86,8 @@ def test_a_destination_is_headed_by_the_name_that_opened_it():
 def test_ticker_actions_are_grouped_and_milo_names_the_ticker():
     frame = _src("pages/dossier-frame.js")
     acts = _fn(frame, "function actions(")
-    assert "`Ask about ${sym}`" in acts, "the contextual Milo differs from the top bar's Ask Milo"
+    # in a span since 2026-10-27, so the phone Chart header can show Milo's icon and keep the name for a screen reader
+    assert '<span class="acts-milo-t">Ask about ${sym}</span>' in acts, "the contextual Milo differs from the top bar's Ask Milo"
     assert acts.count("btn-quiet") >= 2 and "acts-more" in acts
     assert "'Ask Milo', { ask: `What is the case" not in frame
     assert "details.menu[open]" in _src("app.js"), "an open menu closes on a click elsewhere"
