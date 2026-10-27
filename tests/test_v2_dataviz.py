@@ -88,7 +88,7 @@ def test_a_total_line_among_its_parts_is_left_out_not_counted_twice(tmp_path):
     """)
     assert got["dropped"] == ["Product"] and got["labels"][0] == "iPhone" and got["rec"] is True and abs(got["sum"] - 416161e6) < 1e6
     assert got["line"] == "iPhone was the largest, $209.6B or 50% of revenue in FY25. The parts add to the $416.2B reported."
-    assert got["short"][0] is False and got["short"][1] == 10 and "against $100 reported; the $10 difference is not assigned to a part" in got["short"][2]
+    assert got["short"][0] is False and got["short"][1] == 10 and "against $100 reported; the $10 difference is not in any line shown here, so no shares of the total are shown." in got["short"][2]
     assert got["neg"] == [False, True], "a negative part: no shares of a whole"
 
 

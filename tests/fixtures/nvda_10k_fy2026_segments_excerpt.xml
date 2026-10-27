@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Excerpt of NVIDIA Corporation 10-K for the fiscal year ended 2026-01-25, accession 0001045810-26-000021,
+     https://www.sec.gov/Archives/edgar/data/1045810/000104581026000021/nvda-20260125_htm.xml
+     Only the fiscal-year contexts and the revenue, operating income and segment reconciliation facts; values as filed. -->
+<xbrli:xbrl xmlns:xbrli="http://www.xbrl.org/2003/instance" xmlns:xbrldi="http://xbrl.org/2006/xbrldi" xmlns:us-gaap="http://fasb.org/us-gaap/2025" xmlns:nvda="http://www.nvidia.com/20260125" xmlns:iso4217="http://www.xbrl.org/2003/iso4217">
+<xbrli:unit id="usd"><xbrli:measure>iso4217:USD</xbrli:measure></xbrli:unit>
+<xbrli:context id="c-1"><xbrli:entity><xbrli:identifier scheme="http://www.sec.gov/CIK">0001045810</xbrli:identifier></xbrli:entity><xbrli:period><xbrli:startDate>2025-01-27</xbrli:startDate><xbrli:endDate>2026-01-25</xbrli:endDate></xbrli:period></xbrli:context>
+<xbrli:context id="c-193"><xbrli:entity><xbrli:identifier scheme="http://www.sec.gov/CIK">0001045810</xbrli:identifier><xbrli:segment><xbrldi:explicitMember dimension="srt:ConsolidationItemsAxis">us-gaap:OperatingSegmentsMember</xbrldi:explicitMember><xbrldi:explicitMember dimension="us-gaap:StatementBusinessSegmentsAxis">nvda:ComputeAndNetworkingSegmentMember</xbrldi:explicitMember></xbrli:segment></xbrli:entity><xbrli:period><xbrli:startDate>2025-01-27</xbrli:startDate><xbrli:endDate>2026-01-25</xbrli:endDate></xbrli:period></xbrli:context>
+<xbrli:context id="c-194"><xbrli:entity><xbrli:identifier scheme="http://www.sec.gov/CIK">0001045810</xbrli:identifier><xbrli:segment><xbrldi:explicitMember dimension="srt:ConsolidationItemsAxis">us-gaap:OperatingSegmentsMember</xbrldi:explicitMember><xbrldi:explicitMember dimension="us-gaap:StatementBusinessSegmentsAxis">nvda:GraphicsSegmentMember</xbrldi:explicitMember></xbrli:segment></xbrli:entity><xbrli:period><xbrli:startDate>2025-01-27</xbrli:startDate><xbrli:endDate>2026-01-25</xbrli:endDate></xbrli:period></xbrli:context>
+<xbrli:context id="c-195"><xbrli:entity><xbrli:identifier scheme="http://www.sec.gov/CIK">0001045810</xbrli:identifier><xbrli:segment><xbrldi:explicitMember dimension="srt:ConsolidationItemsAxis">us-gaap:OperatingSegmentsMember</xbrldi:explicitMember></xbrli:segment></xbrli:entity><xbrli:period><xbrli:startDate>2025-01-27</xbrli:startDate><xbrli:endDate>2026-01-25</xbrli:endDate></xbrli:period></xbrli:context>
+<xbrli:context id="c-208"><xbrli:entity><xbrli:identifier scheme="http://www.sec.gov/CIK">0001045810</xbrli:identifier><xbrli:segment><xbrldi:explicitMember dimension="srt:ConsolidationItemsAxis">us-gaap:CorporateNonSegmentMember</xbrldi:explicitMember></xbrli:segment></xbrli:entity><xbrli:period><xbrli:startDate>2025-01-27</xbrli:startDate><xbrli:endDate>2026-01-25</xbrli:endDate></xbrli:period></xbrli:context>
+<us-gaap:Revenues contextRef="c-1" unitRef="usd" decimals="-6">215938000000</us-gaap:Revenues>
+<us-gaap:OperatingIncomeLoss contextRef="c-1" unitRef="usd" decimals="-6">130387000000</us-gaap:OperatingIncomeLoss>
+<us-gaap:AllocatedShareBasedCompensationExpense contextRef="c-1" unitRef="usd" decimals="-6">6386000000</us-gaap:AllocatedShareBasedCompensationExpense>
+<us-gaap:Revenues contextRef="c-193" unitRef="usd" decimals="-6">193479000000</us-gaap:Revenues>
+<us-gaap:Revenues contextRef="c-194" unitRef="usd" decimals="-6">22459000000</us-gaap:Revenues>
+<us-gaap:Revenues contextRef="c-195" unitRef="usd" decimals="-6">215938000000</us-gaap:Revenues>
+<us-gaap:OperatingIncomeLoss contextRef="c-193" unitRef="usd" decimals="-6">130141000000</us-gaap:OperatingIncomeLoss>
+<us-gaap:OperatingIncomeLoss contextRef="c-194" unitRef="usd" decimals="-6">9156000000</us-gaap:OperatingIncomeLoss>
+<us-gaap:OperatingIncomeLoss contextRef="c-195" unitRef="usd" decimals="-6">139297000000</us-gaap:OperatingIncomeLoss>
+<us-gaap:OperatingIncomeLoss contextRef="c-208" unitRef="usd" decimals="-6">139297000000</us-gaap:OperatingIncomeLoss>
+<us-gaap:AllocatedShareBasedCompensationExpense contextRef="c-208" unitRef="usd" decimals="-6">6386000000</us-gaap:AllocatedShareBasedCompensationExpense>
+<us-gaap:UnallocatedCorporateOperatingExpendituresAndOtherExpenses contextRef="c-208" unitRef="usd" decimals="-6">1997000000</us-gaap:UnallocatedCorporateOperatingExpendituresAndOtherExpenses>
+<us-gaap:AcquisitionRelatedAndOtherCosts contextRef="c-208" unitRef="usd" decimals="-6">527000000</us-gaap:AcquisitionRelatedAndOtherCosts>
+<us-gaap:Revenues contextRef="c-1" unitRef="usd" decimals="-6">215938000000</us-gaap:Revenues>
+<us-gaap:Revenues contextRef="c-1" unitRef="usd" decimals="-6">215938000000</us-gaap:Revenues>
+</xbrli:xbrl>

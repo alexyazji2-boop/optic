@@ -101,25 +101,43 @@ export function perShareLine(eps, shares, labels, back = 1, against = '') {
 
 /** The parts of a total for one period, as filed: rows with no figure dropped; an aggregate line (Apple files
  * "Product", the sum of iPhone, Mac, iPad and Wearables, beside them) left out when removing it brings the parts to
- * the reported total, so nothing is counted twice; never scaled to 100. `canShare`: every part at or above zero. */
+ * the reported total, so nothing is counted twice; never scaled to 100. `canShare`: the parts reconcile to the reported
+ * total and every part is at or above zero. */
+function sumOfOthers(hit, rows) {
+  const others = rows.filter((r) => r !== hit && r.v > 0);
+  if (others.length < 2) return false;
+  if (others.length > 14) return hit.v >= Math.max(...others.map((r) => r.v));
+  for (let m = 1; m < (1 << others.length); m++) {
+    if ((m & (m - 1)) === 0) continue;   // one line alone is not a sum of lines
+    let t = 0; for (let i = 0; i < others.length; i++) if (m & (1 << i)) t += others[i].v;
+    if (Math.abs(t - hit.v) <= Math.abs(hit.v) * 0.01) return true;
+  }
+  return false;
+}
 export function composition(members, values, total = null) {
   let rows = (members || []).map((m, i) => ({ label: m, v: (values || [])[i] })).filter((r) => isFig(r.v));
   let sum = rows.reduce((a, r) => a + r.v, 0);
   const dropped = [];
   if (isFig(total) && total > 0 && sum > total * 1.02) {
-    const hit = rows.find((r) => Math.abs(sum - r.v - total) <= total * 0.01);
+    // an aggregate is the sum of two or more of the other lines (Apple's Product); being the line whose removal
+    // lands near the total is not enough: NVDA's Graphics did that by chance, Compute and Networking alone being
+    // within 1% of operating income (FY2026)
+    const hit = rows.find((r) => Math.abs(sum - r.v - total) <= total * 0.01 && sumOfOthers(r, rows));
     if (hit) { dropped.push(hit.label); rows = rows.filter((r) => r !== hit); sum -= hit.v; }
   }
   rows.sort((a, b) => b.v - a.v);
   const gap = isFig(total) ? total - sum : null;
-  return { rows, dropped, sum, total: isFig(total) ? total : null, gap, reconciles: isFig(total) && total !== 0 && Math.abs(gap) <= Math.abs(total) * 0.01, canShare: rows.length > 0 && rows.every((r) => r.v >= 0) };
+  const reconciles = isFig(total) && total !== 0 && Math.abs(gap) <= Math.abs(total) * 0.01;
+  // shares only of a total the parts add up to: NVDA's operating income by segment was given percentages of a
+  // 278.6B sum against 130.4B reported (2026-10-26), which no reader can use
+  return { rows, dropped, sum, total: isFig(total) ? total : null, gap, reconciles, canShare: reconciles && rows.length > 0 && rows.every((r) => r.v >= 0) };
 }
 export function compositionLine(c, metric, label, usd = moneyIn('USD')) {
   if (!c.rows.length) return '';
   const top = c.rows[0], base = c.reconciles ? c.total : c.sum;
   const sh = c.canShare ? share(top.v, base) : null;
   const lead = `${top.label} was the largest${sh === null ? `, at ${usd(top.v)}` : `, ${usd(top.v)} or ${num(sh, 0)}% of ${metric.toLowerCase()}`} in ${label}.`;
-  const recon = c.total === null ? `The parts add to ${usd(c.sum)}.` : c.reconciles ? `The parts add to the ${usd(c.total)} reported.` : `The parts add to ${usd(c.sum)}, against ${usd(c.total)} reported; the ${usd(Math.abs(c.gap))} difference is not assigned to a part in the filing.`;
+  const recon = c.total === null ? `The parts add to ${usd(c.sum)}.` : c.reconciles ? `The parts add to the ${usd(c.total)} reported.` : `The parts add to ${usd(c.sum)}, against ${usd(c.total)} reported; the ${usd(Math.abs(c.gap))} difference is not in any line shown here, so no shares of the total are shown.`;
   return `${lead} ${recon}`;
 }
 

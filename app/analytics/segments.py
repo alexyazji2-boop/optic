@@ -441,6 +441,56 @@ def _fill_fourth_quarters(cells: Dict[Tuple[str, str, str], float], made: Option
     return cells, derived
 
 
+# The reconciling members as the table labels them ("Corporate, not in a segment").
+RECONCILING_LABELS = frozenset(_tidy(_member(m)) for m in RECONCILING_MEMBERS)
+SUBTOTAL_NOTE = ("The filing tags the segments' own total under \"{member}\". Optic leaves that line out "
+                 "rather than count the segments twice. Anything between the segments and the reported total "
+                 "is filed under other tags and is not a line here.")
+
+
+def _drop_segment_subtotals(cells: Dict[Tuple[str, str, str], float],
+                            labels: Dict[str, Dict[str, str]]) -> List[Dict[str, Any]]:
+    """Remove a reconciling line that is the segments' own sum.
+
+    Measured on NVIDIA's FY2026 10-K and its July 2026 10-Q: operating income
+    under ConsolidationItemsAxis=CorporateNonSegmentMember is 139,297M for the
+    year and 66,595M for the quarter, exactly Compute & Networking plus
+    Graphics in each period. It is the first line of the filing's
+    reconciliation table, "total segment operating income", tagged with the
+    corporate member; the items that take it down to the reported 130,387M
+    (stock-based compensation 6,386M, unallocated costs 1,997M, acquisition
+    costs 527M) are filed under their own concepts, not as operating income.
+    Read as a row it put a positive 139.3B "corporate" line on the Financials
+    tab, the parts added to 278.6B against 130.4B reported, and the panel still
+    gave each part a percentage of that sum.
+
+    A genuine reconciling line (Intel's eliminations, Meta's none) does not
+    equal the sum of the segments, and is kept, negative or not."""
+    groups: Dict[Tuple[str, str, str], Dict[str, list]] = {}
+    for slot, value in cells.items():
+        series, kind, end = slot
+        meta = labels.get(series) or {}
+        if meta.get("axis") != "segment":
+            continue
+        g = groups.setdefault((meta["metric"], kind, end), {"parts": [], "recon": []})
+        if meta["member"] in RECONCILING_LABELS:
+            g["recon"].append((slot, meta["member"], value))
+        else:
+            g["parts"].append(value)
+    removed: List[Dict[str, Any]] = []
+    for (metric, kind, end), g in groups.items():
+        if not g["parts"] or not g["recon"]:
+            continue
+        total = sum(g["parts"])
+        for slot, member, value in g["recon"]:
+            if total and abs(value - total) <= max(abs(total) * 0.005, 0.5e6):
+                del cells[slot]
+                removed.append({"metric": metric, "member": member, "kind": kind, "end": end,
+                                "value": value, "segments_total": round(total, 2)})
+    removed.sort(key=lambda x: (x["metric"], x["end"], x["kind"]))
+    return removed
+
+
 # Where the shared feed cache kept these: parses under the first prefix, the raw
 # megabyte documents under the second.
 SHARED_PREFIX = "seg:parsed:"
@@ -549,6 +599,7 @@ def build(ticker: str, force: bool = False, budget: int = PARSE_BUDGET,
 
     made: set = set()
     cells, derived = _fill_fourth_quarters(cells, made)
+    subtotals = _drop_segment_subtotals(cells, labels)
 
     quarters = sorted({k[2] for k in cells if k[1] == "quarter"})
     tables = []
@@ -578,11 +629,14 @@ def build(ticker: str, force: bool = False, budget: int = PARSE_BUDGET,
                 vals = [cells.get((s, "year", e)) for e in year_ends]
                 if any(v is not None for v in vals):
                     annual.append({"member": labels[s]["member"], "values": vals})
+            gone = [x for x in subtotals if x["metric"] == metric["id"] and axis["id"] == "segment"]
             tables.append({
                 "axis": axis["id"], "axis_label": axis["label"],
                 "metric": metric["id"], "metric_label": metric["label"],
                 "rows": body,
                 "annual": {"ends": year_ends, "rows": annual},
+                "subtotals_removed": gone,
+                "notes": ([SUBTOTAL_NOTE.format(member=gone[0]["member"])] if gone else []),
             })
 
     return {

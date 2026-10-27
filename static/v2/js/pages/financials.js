@@ -323,7 +323,8 @@ function segments() {
     const label = name(v.ends[v.latest]), base = c.reconciles ? c.total : c.sum;
     const pos = c.rows.filter((r) => r.v >= 0), neg = c.rows.filter((r) => r.v < 0);
     return html`<figure class="fv"><figcaption><h3>${t.metric_label}, ${t.axis_label.toLowerCase()}</h3><p class="fv-take">${FV.compositionLine(c, t.metric_label, label, susd)}</p>
-        <p class="fv-unit">${label}, US dollars, as filed${c.dropped.length ? html`. ${c.dropped.join(', ')} is a total of other lines here, so it is left out rather than counted twice` : ''}</p></figcaption>
+        <p class="fv-unit">${label}, US dollars, as filed${c.dropped.length ? html`. ${c.dropped.join(', ')} is a total of other lines here, so it is left out rather than counted twice` : ''}</p>
+        ${(t.notes || []).map((n) => html`<p class="fv-unit">${clean(n)}</p>`)}</figcaption>
       ${raw(hbars(pos.map((r) => ({ label: r.label, v: r.v, text: c.canShare && base > 0 ? `${susd(r.v)}, ${num((r.v / base) * 100, 0)}%` : susd(r.v) })), { fmt: (x) => susd(x) }))}
       ${neg.length ? html`<p class="fv-unit">${neg.map((r) => `${r.label}: ${susd(r.v)}`).join('; ')}. Costs or income the filing does not assign to a segment.</p>` : ''}
       ${years && c.canShare && v.ends.length > 1 ? html`<p class="t-label fv-bridge-h">Over the fiscal years</p>${key([...c.rows.slice(0, 3).map((r, i) => [SEG_CLS[i], r.label]), ...(c.rows.length > 3 ? [['s0', 'Other']] : [])])}<div class="chart-slot" data-chart="segmix${k}"></div>` : ''}</figure>`;

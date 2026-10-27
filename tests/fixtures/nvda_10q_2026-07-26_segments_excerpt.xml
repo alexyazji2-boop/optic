@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Excerpt of NVIDIA Corporation 10-Q for the quarter ended 2026-07-26, accession 0001045810-26-000075,
+     https://www.sec.gov/Archives/edgar/data/1045810/000104581026000075/nvda-20260726_htm.xml
+     Only the three-month contexts and the revenue and operating income facts; values as filed. -->
+<xbrli:xbrl xmlns:xbrli="http://www.xbrl.org/2003/instance" xmlns:xbrldi="http://xbrl.org/2006/xbrldi" xmlns:us-gaap="http://fasb.org/us-gaap/2026" xmlns:nvda="http://www.nvidia.com/20260726" xmlns:iso4217="http://www.xbrl.org/2003/iso4217">
+<xbrli:unit id="usd"><xbrli:measure>iso4217:USD</xbrli:measure></xbrli:unit>
+<xbrli:context id="c-239"><xbrli:entity><xbrli:identifier scheme="http://www.sec.gov/CIK">0001045810</xbrli:identifier><xbrli:segment><xbrldi:explicitMember dimension="srt:ConsolidationItemsAxis">us-gaap:OperatingSegmentsMember</xbrldi:explicitMember><xbrldi:explicitMember dimension="us-gaap:StatementBusinessSegmentsAxis">nvda:ComputeAndNetworkingSegmentMember</xbrldi:explicitMember></xbrli:segment></xbrli:entity><xbrli:period><xbrli:startDate>2026-04-27</xbrli:startDate><xbrli:endDate>2026-07-26</xbrli:endDate></xbrli:period></xbrli:context>
+<xbrli:context id="c-240"><xbrli:entity><xbrli:identifier scheme="http://www.sec.gov/CIK">0001045810</xbrli:identifier><xbrli:segment><xbrldi:explicitMember dimension="srt:ConsolidationItemsAxis">us-gaap:OperatingSegmentsMember</xbrldi:explicitMember><xbrldi:explicitMember dimension="us-gaap:StatementBusinessSegmentsAxis">nvda:GraphicsSegmentMember</xbrldi:explicitMember></xbrli:segment></xbrli:entity><xbrli:period><xbrli:startDate>2026-04-27</xbrli:startDate><xbrli:endDate>2026-07-26</xbrli:endDate></xbrli:period></xbrli:context>
+<xbrli:context id="c-241"><xbrli:entity><xbrli:identifier scheme="http://www.sec.gov/CIK">0001045810</xbrli:identifier><xbrli:segment><xbrldi:explicitMember dimension="srt:ConsolidationItemsAxis">us-gaap:OperatingSegmentsMember</xbrldi:explicitMember></xbrli:segment></xbrli:entity><xbrli:period><xbrli:startDate>2026-04-27</xbrli:startDate><xbrli:endDate>2026-07-26</xbrli:endDate></xbrli:period></xbrli:context>
+<xbrli:context id="c-259"><xbrli:entity><xbrli:identifier scheme="http://www.sec.gov/CIK">0001045810</xbrli:identifier><xbrli:segment><xbrldi:explicitMember dimension="srt:ConsolidationItemsAxis">us-gaap:CorporateNonSegmentMember</xbrldi:explicitMember></xbrli:segment></xbrli:entity><xbrli:period><xbrli:startDate>2026-04-27</xbrli:startDate><xbrli:endDate>2026-07-26</xbrli:endDate></xbrli:period></xbrli:context>
+<xbrli:context id="c-3"><xbrli:entity><xbrli:identifier scheme="http://www.sec.gov/CIK">0001045810</xbrli:identifier></xbrli:entity><xbrli:period><xbrli:startDate>2026-04-27</xbrli:startDate><xbrli:endDate>2026-07-26</xbrli:endDate></xbrli:period></xbrli:context>
+<us-gaap:Revenues contextRef="c-3" unitRef="usd" decimals="-6">96221000000</us-gaap:Revenues>
+<us-gaap:OperatingIncomeLoss contextRef="c-3" unitRef="usd" decimals="-6">63734000000</us-gaap:OperatingIncomeLoss>
+<us-gaap:Revenues contextRef="c-239" unitRef="usd" decimals="-6">88299000000</us-gaap:Revenues>
+<us-gaap:Revenues contextRef="c-240" unitRef="usd" decimals="-6">7922000000</us-gaap:Revenues>
+<us-gaap:Revenues contextRef="c-241" unitRef="usd" decimals="-6">96221000000</us-gaap:Revenues>
+<us-gaap:OperatingIncomeLoss contextRef="c-239" unitRef="usd" decimals="-6">62696000000</us-gaap:OperatingIncomeLoss>
+<us-gaap:OperatingIncomeLoss contextRef="c-240" unitRef="usd" decimals="-6">3899000000</us-gaap:OperatingIncomeLoss>
+<us-gaap:OperatingIncomeLoss contextRef="c-241" unitRef="usd" decimals="-6">66595000000</us-gaap:OperatingIncomeLoss>
+<us-gaap:OperatingIncomeLoss contextRef="c-259" unitRef="usd" decimals="-6">66595000000</us-gaap:OperatingIncomeLoss>
+</xbrli:xbrl>
