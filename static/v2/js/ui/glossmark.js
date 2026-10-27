@@ -10,6 +10,10 @@
 // marks nothing, as Classic's "off"; every other level marks. Applied again after every redraw, by one observer on
 // the page, so a refresh keeps the marks.
 import { GLOSSARY, LABEL_DEFS, TH_HINTS } from '../core/glossary.js';
+// The marks' press, hover and Escape handlers are term.js's, registered when it loads. Only pages that make a term by
+// hand imported it, so on a first visit to Macro, Read, Scan or Compare every marked word was a button that did
+// nothing (investor audit, 2026-10-27). Loaded here, wherever a word can be marked.
+import './term.js';
 
 // words whose everyday sense is the common one on these pages ("the model on screen"); still available by hand
 const AUTO_SKIP = new Set(['screen', 'universe', 'surprise', 'support']);   // "likely to support estimates" is not a price level

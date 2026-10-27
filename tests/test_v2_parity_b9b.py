@@ -58,3 +58,13 @@ def test_classics_header_labels_and_its_milo_question(tmp_path):
     glossary = (JS / "core/glossary.js").read_text()
     for line in re.search(r"const LABEL_DEFS = \{\n(.*?)\n\};", CLASSIC, re.S).group(1).split("\n"):
         assert line in glossary, line[:60]
+
+
+def test_the_shell_that_marks_terms_also_loads_their_handlers():
+    """The marks are made by ui/glossmark.js, in the shell; what a press does is ui/term.js's document listeners.
+    Only pages that build a term by hand imported term.js, so on a first visit to Macro (or Read, Scan, Compare)
+    every marked word took the click and did nothing (investor audit, 2026-10-27)."""
+    from pathlib import Path
+    from app import frontend
+    shell = frontend.static_graph(Path(__file__).resolve().parent.parent / "static/v2")
+    assert "/v2/js/ui/glossmark.js" in shell and "/v2/js/ui/term.js" in shell
