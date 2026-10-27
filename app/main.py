@@ -1374,6 +1374,8 @@ def _options_frame(ticker: str, expiries: Optional[List[str]], max_expiries: int
         raise HTTPException(status_code=404, detail="No quote for '{}'.".format(ticker))
     chain = PROVIDER.options_chain(ticker, expiries=expiries, max_expiries=max_expiries)
     if chain is None or chain.empty:
+        if chain is not None and chain.attrs.get("unread"):
+            raise HTTPException(status_code=503, detail=_UNREAD_OPTIONS.format(ticker))
         raise HTTPException(status_code=404, detail="No options chain for '{}'.".format(ticker))
     div = quote.get("dividend_yield") or 0.0
     rate_info = rates_mod.risk_free(YF_PROVIDER)
@@ -1430,11 +1432,25 @@ async def raw_chain(
     return await _run(build)
 
 
+# A failed read of the options feed, said as one: "No listed options" for NVDA
+# after a refused request told the reader a liquid name has no options.
+_UNREAD_OPTIONS = ("The options data for '{}' did not come back from the data source just now. "
+                   "Try again in a minute.")
+
+
 def _listed_expiries(ticker: str) -> List[str]:
     got = PROVIDER.expirations(ticker)
     if isinstance(got, dict):
         got = got.get("available") or []
-    return sorted(str(e) for e in (got or []))
+    listed = sorted(str(e) for e in (got or []))
+    # the provider's marked empty list, kept, so the caller can say which kind of nothing it is
+    return listed if listed or not getattr(got, "unread", False) else got
+
+
+def _no_listed_options(sym: str, listed: List[str]) -> HTTPException:
+    if getattr(listed, "unread", False):
+        return HTTPException(status_code=503, detail=_UNREAD_OPTIONS.format(sym))
+    return HTTPException(status_code=404, detail="No listed options for '{}'.".format(sym))
 
 
 def _default_expiry(listed: List[str], target_days: int = 30) -> Optional[str]:
@@ -1464,7 +1480,7 @@ async def options_picker(
     def build() -> Dict[str, Any]:
         listed = _listed_expiries(sym)
         if not listed:
-            raise HTTPException(status_code=404, detail="No listed options for '{}'.".format(sym))
+            raise _no_listed_options(sym, listed)
         usable = [e for e in listed if vol_surface_mod.expiry_dte(e) >= hold_days + contract_picker_mod.EXPIRY_BUFFER_DAYS][:3]
         plan = {"thesis": thesis, "hold_days": hold_days, "max_premium": max_premium, "target": target,
                 "invalidation": invalidation, "through_event": through_event}
@@ -1519,7 +1535,7 @@ async def options_research(
     def build() -> Dict[str, Any]:
         listed = _listed_expiries(sym)
         if not listed:
-            raise HTTPException(status_code=404, detail="No listed options for '{}'.".format(sym))
+            raise _no_listed_options(sym, listed)
         exp = expiry if expiry in listed else _default_expiry(listed)
         quote, spot, div, rate_info, frame = _options_frame(sym, [exp], 1)
         partial = _chain_unusable(frame, spot)

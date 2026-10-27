@@ -392,6 +392,21 @@ def _session_hours(meta: Dict[str, Any]) -> Dict[str, Any]:
     return out
 
 
+class Unread(list):
+    """An empty expiry list that is a failed read rather than the fact that a
+    symbol has no options. Falsy like any empty list, so every caller that
+    tests for "nothing listed" still works; `unread` lets the ones that speak
+    to a reader say which kind of nothing it is."""
+    unread = True
+
+
+def _unread_frame() -> pd.DataFrame:
+    """An empty chain that is a failed read, marked the same way."""
+    frame = pd.DataFrame()
+    frame.attrs["unread"] = True
+    return frame
+
+
 class _Failed:
     """A producer's answer when its request failed: handed to the caller and
     never kept.
@@ -1400,17 +1415,26 @@ class YFinanceProvider(MarketDataProvider):
         """
         def build() -> List[str]:
             try:
-                return list(self._options_ticker(ticker).options or [])
+                t = self._options_ticker(ticker)
+                listed = list(t.options or [])
             except Exception as exc:
                 if _is_rate_limit(exc):
                     note_throttle(exc)
                     raise
-                return []
+                return _Failed(Unread())
+            # yfinance answers a refused read (a 401 "Invalid Crumb") with an
+            # empty list rather than raising, and only a read Yahoo answered
+            # fills the Ticker's underlying quote; a symbol with no options
+            # still gets one. Kept for TTL_EXPIRIES, a refused read was half an
+            # hour of "No listed options for 'NVDA'" (investor audit, 2026-10-27).
+            if not listed and not getattr(t, "_underlying", None):
+                return _Failed(Unread())
+            return listed
 
         try:
             return _cached("exp:" + ticker, self.TTL_EXPIRIES, build, gate=False)
         except Exception:
-            return []
+            return Unread()
 
     def _options_ticker(self, ticker: str):
         """One yf.Ticker per symbol for the option endpoints, its expiry list read.
@@ -1438,7 +1462,7 @@ class YFinanceProvider(MarketDataProvider):
         """
         available = self.expirations(ticker)
         if not available:
-            return pd.DataFrame()
+            return _unread_frame() if getattr(available, "unread", False) else pd.DataFrame()
 
         if expiries:
             wanted = [e for e in expiries if e in available]
@@ -1458,7 +1482,7 @@ class YFinanceProvider(MarketDataProvider):
             except Exception as exc:                            # noqa: BLE001
                 if _is_rate_limit(exc):
                     note_throttle(exc)
-                return pd.DataFrame()
+                return _Failed(_unread_frame())
 
             def one(exp: str):
                 try:
@@ -1515,7 +1539,12 @@ class YFinanceProvider(MarketDataProvider):
                     frames.append(part)
 
             if not frames:
-                return pd.DataFrame()
+                # Listed expiries and no contracts is a read that failed (a
+                # refused one comes back from yfinance as calls=None, not an
+                # exception), so it is handed back unkept and marked: cached,
+                # it was a minute of "No options chain for 'NVDA'" on the
+                # Options tab of the most liquid chain there is.
+                return _Failed(_unread_frame())
 
             chain = pd.concat(frames, ignore_index=True)
             chain["mid"] = np.where(
