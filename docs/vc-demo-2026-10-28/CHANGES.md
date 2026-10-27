@@ -52,6 +52,16 @@ Proposed, not applied: control edges (input borders) at `--c-line` measure about
 their panels, under the 3:1 non-text minimum. The nearest passing values are `#847f76` (light)
 and `#6a6966` (dark); every input in the app would change, so it waits for the owner.
 
+## An independent review of the branch
+
+A second reader went through the server changes and found eight problems, all fixed in
+`57e48dc`: a reader was charged a Milo message when the daily ceiling or a write already in
+flight then refused them; an accounts snapshot briefly existed unscrubbed under its final name;
+the ticker-list rule matched "IT, AI" and shouted headlines; a morning Read retried after the
+open would have called today "yesterday"; attribution with a skipped pair inside the window
+claimed the return's dates; the briefing's name lookup was an unbudgeted quote scrape; a kept
+brief said it was written "just now"; and write-lock eviction could let two writers run at once.
+
 ## Owner decisions
 
 1. Keep or revert `0a77d41`, the regime breadth input (it moves the index read).
