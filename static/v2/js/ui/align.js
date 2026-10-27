@@ -23,9 +23,17 @@ export function alignTable(t) {
 }
 
 /** Align every shared table under root now, and any drawn later. */
+/** Mark a table's sideways scroller when the table is wider than it, so the scroller can say so (components.css). */
+export function markWide(root) {
+  // only a box that scrolls: Compare's phone table lets its box overflow visibly, and "scroll sideways" would be wrong
+  root.querySelectorAll('.tscroll').forEach((sc) => { const wide = /(auto|scroll)/.test(getComputedStyle(sc).overflowX) && sc.scrollWidth > sc.clientWidth + 4; if (wide !== sc.hasAttribute('data-wide')) sc.toggleAttribute('data-wide', wide); });
+}
+
 export function watchTables(root) {
-  const run = () => root.querySelectorAll('table.t:not([data-aligned])').forEach(alignTable);
+  const run = () => { root.querySelectorAll('table.t:not([data-aligned])').forEach(alignTable); markWide(root); };
   run();
   let queued = false;
   new MutationObserver(() => { if (queued) return; queued = true; setTimeout(() => { queued = false; run(); }, 0); }).observe(root, { childList: true, subtree: true });
+  let rz = 0;
+  window.addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(() => markWide(root), 150); });
 }
