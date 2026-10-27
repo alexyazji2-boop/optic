@@ -64,11 +64,15 @@ brief said it was written "just now"; and write-lock eviction could let two writ
 
 ## Owner decisions
 
-1. Keep or revert `0a77d41`, the regime breadth input (it moves the index read).
-2. Cloudflare Web Analytics: keep (and the policy paragraph) or switch off.
-3. The policy's `EFFECTIVE` date, and whether the change is announced first.
-4. The overnight feed (F-02), not in this branch.
-5. The control-edge contrast proposal above.
+Decided on 27 October 2026: `0a77d41`, the regime breadth input, stays in the branch. On 26
+October's data the index read moves from 33.7 to 18.6 with the same stance, "leaning supportive".
+
+Still open:
+
+1. Cloudflare Web Analytics: keep (and the policy paragraph) or switch off.
+2. The policy's `EFFECTIVE` date, and whether the change is announced first.
+3. The overnight feed (F-02), not in this branch.
+4. The control-edge contrast proposal above.
 
 ## Deploying and rolling back
 
