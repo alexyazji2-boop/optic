@@ -344,7 +344,13 @@ def test_the_chat_route_gives_milo_its_tools(monkeypatch):
     # one tool that reads them is not offered (2026-10-15); every other tool is.
     assert isinstance(box, milo_tools.Toolbox)
     assert set(box.runners) == set(milo_tools.TOOL_NAMES) - {"get_my_portfolio"}
+    # With context on, the portfolio tool is offered only for a question about the
+    # reader's own portfolio (2026-10-27): offered for "hi", it was there to be called
+    # for any question, and a Compare answer pulled the owner's holdings in unasked.
     TestClient(m.app).post("/api/chat", json={"messages": [{"role": "user", "content": "hi"}],
+                                              "context": {"focus": {"scope": "auto"}}})
+    assert set(seen["toolbox"].runners) == set(milo_tools.TOOL_NAMES) - {"get_my_portfolio"}
+    TestClient(m.app).post("/api/chat", json={"messages": [{"role": "user", "content": "What do I own in energy?"}],
                                               "context": {"focus": {"scope": "auto"}}})
     assert set(seen["toolbox"].runners) == set(milo_tools.TOOL_NAMES)
 

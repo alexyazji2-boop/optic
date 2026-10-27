@@ -914,6 +914,88 @@ def test_milo_is_told_a_portfolio_is_linked_even_when_not_attached(monkeypatch):
     assert "brokerage_portfolio" not in seen["context"]
 
 
+# Company and Compare questions that used to match the portfolio words. The first is the
+# live one (2026-10-27): "position setup" is a Compare horizon, and the answer quoted the
+# owner's MSFT weight and tech share. The second is Compare's own drafted question.
+NOT_ABOUT_THEM = [
+    "Why does MSFT lead the position setup, and how far should I trust that?",
+    "Compare AAPL, MSFT. MSFT leads the position setup; the swing setup and the long-term trend are level. "
+    "Which would you look at first for my timeframe, and what is each one's biggest risk?",
+    "What's NVDA's exposure to China?",
+    "Is AAPL too concentrated in iPhone revenue?",
+    "How is the allocation of capex changing at MSFT?",
+    "What are QQQ's top holdings?",
+    "Should I hold a position through earnings?",
+    "Microsoft develops a portfolio of technology solutions. What is its biggest segment?",
+    "Explain to my dad how options work.",
+]
+ABOUT_THEM = [
+    "Where is my portfolio concentrated?", "my portfolio?", "Which earnings affect my holdings?",
+    "Which earnings affect me this week?", "How exposed am I to technology?", "What do I own in energy?",
+    "Do I own anything that reports this week?", "I own 40 AAPL, what should I watch?",
+    "How did my tech exposure change since the last sync?", "Is my Roth account diversified?",
+]
+
+
+def _chat_seen(monkeypatch, me, question, context=None):
+    seen = {}
+
+    async def fake_stream(history, context=None, toolbox=None, **kw):
+        seen["context"], seen["tools"] = context or {}, [d["name"] for d in toolbox.definitions()]
+        yield "event: done\ndata: {}\n\n"
+    async def same(history, context, *a, **k):
+        return context
+    monkeypatch.setattr(main.ai, "stream_chat", fake_stream)
+    monkeypatch.setattr(main, "_spend_guard", lambda request: None)
+    # These questions name real tickers; the research steps would fetch them, and only the portfolio is tested here.
+    for step in ("_augment_chat_context", "_with_research", "_with_framework", "_with_take_levels"):
+        monkeypatch.setattr(main, step, same)
+    me.post("/api/chat", json={"messages": [{"role": "user", "content": question}], "context": context or {}})
+    return seen
+
+
+@pytest.mark.parametrize("question", NOT_ABOUT_THEM)
+def test_a_question_about_companies_neither_attaches_nor_offers_the_portfolio(monkeypatch, question):
+    me, mine = reader()
+    paid(mine)
+    link(me)
+    seen = _chat_seen(monkeypatch, me, question, {"focus": {"view": "compare", "scope": "auto"}})
+    assert "brokerage_portfolio" not in seen["context"]
+    assert seen["context"]["brokerage_linked"] is True       # Milo still knows something is linked
+    assert "get_my_portfolio" not in seen["tools"]
+    assert "get_quote" in seen["tools"]
+
+
+@pytest.mark.parametrize("question", ABOUT_THEM)
+def test_a_question_about_their_own_portfolio_attaches_it_and_offers_the_tool(monkeypatch, question):
+    me, mine = reader()
+    paid(mine)
+    link(me)
+    seen = _chat_seen(monkeypatch, me, question, {"focus": {"view": "overview", "scope": "auto"}})
+    assert "brokerage_portfolio" in seen["context"]
+    assert "get_my_portfolio" in seen["tools"]
+
+
+def test_the_brokerage_page_offers_the_tool_and_market_scope_never_does(monkeypatch):
+    me, mine = reader()
+    paid(mine)
+    link(me)
+    seen = _chat_seen(monkeypatch, me, "What deserves more research?", {"focus": {"view": "brokerage", "scope": "auto"}})
+    assert "get_my_portfolio" in seen["tools"]
+    seen = _chat_seen(monkeypatch, me, "Where is my portfolio concentrated?", {"focus": {"scope": "market"}})
+    assert "get_my_portfolio" not in seen["tools"] and "brokerage_portfolio" not in seen["context"]
+
+
+def test_a_follow_up_in_a_portfolio_thread_can_still_fetch_it():
+    import types
+    hist = [{"role": "user", "content": "Where is my portfolio concentrated?"},
+            {"role": "assistant", "content": "Mostly technology."},
+            {"role": "user", "content": "And which of those report this week?"}]
+    names = [d["name"] for d in main._milo_toolbox(types.SimpleNamespace(), {"focus": {"scope": "auto"}},
+                                                   hist).definitions()]
+    assert "get_my_portfolio" in names
+
+
 def test_portfolio_as_of_prefers_the_brokers_time():
     c, user = reader()
     paid(user)

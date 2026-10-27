@@ -7735,13 +7735,16 @@ def _milo_portfolio(user: Optional[Dict[str, Any]], part: str, scope: Optional[L
     return milo_tools.shrink(out, optional, limit=PORTFOLIO_TOOL_LIMIT)
 
 
-def _milo_toolbox(request: Request, context: Optional[Dict[str, Any]] = None) -> milo_tools.Toolbox:
+def _milo_toolbox(request: Request, context: Optional[Dict[str, Any]] = None,
+                  history: Optional[List[Dict[str, Any]]] = None) -> milo_tools.Toolbox:
     """The tools for one answer, bound to the asking reader for the tools that are theirs.
 
-    The portfolio tool follows the same rule as the CONTEXT block
-    (`_with_linked_portfolio`): with Milo set to the market only, or to no
-    context, it is not offered at all, so the model cannot pull holdings into
-    an answer the reader scoped away from them."""
+    The portfolio tool follows the CONTEXT block's rule (`_with_linked_portfolio`):
+    offered only from the Brokerage page or in a thread where the reader asked
+    about their own portfolio, and never with Milo set to the market only or to
+    no context. Offered everywhere, it let the model add the owner's weights to
+    a Compare answer about two public stocks (live, 2026-10-27), so the
+    instruction in its description was not enough of a fence."""
     try:
         user = auth_deps.current_user(request)
     except Exception as exc:                                        # noqa: BLE001 - as _spend_guard
@@ -7773,18 +7776,36 @@ def _milo_toolbox(request: Request, context: Optional[Dict[str, Any]] = None) ->
         "get_assessment": _tool_assessment, "screen_stocks": _tool_screen, "get_my_watchlists": watchlists,
         "get_my_portfolio": portfolio,
     }
-    if focus.get("scope") in ("none", "market"):
+    if focus.get("scope") in ("none", "market") or not (
+            focus.get("view") == "brokerage" or any(_asks_about_own_portfolio(t) for t in (history or [])
+                                                    if t.get("role") != "assistant")):
         runners.pop("get_my_portfolio")
     return milo_tools.Toolbox(runners=runners)
 
 
 # Narrowed after review (M5): a bare "earnings" or "sync" sent a reader's
 # holdings to the model for questions that were about a company, not them.
-# Earnings counts only alongside "my", "I own/hold" or "holdings".
+# Narrowed again 2026-10-27: bare "position", "exposure", "concentrated",
+# "allocation" and "I hold" matched company questions too. "Position setup" is
+# a Compare horizon, and Compare's own drafted question carries it, so every
+# comparison a linked reader sent attached their whole portfolio (seen live: a
+# Compare answer quoted the owner's MSFT weight and tech share). Only the
+# reader's own ownership counts now: "my holdings", "what do I own", "how
+# exposed am I", "affects me".
+_MINE_NOUNS = (r"portfolios?|positions?|holdings?|accounts?|brokerage|stocks|shares|options|book|cash|money|"
+               r"exposure|allocation|weights?|weighting|returns?|performance|gains?|losses|dividends")
 _LINKED_WORDS = re.compile(
-    r"\b(portfolio|positions?|holdings?|exposure|exposed|concentrat\w*|diversif\w*|allocation|"
-    r"my (?:account|accounts|brokerage|stocks|shares|options|book|cash|money)|what do i (?:own|hold)|"
-    r"i (?:own|hold)|last sync|since (?:my|the) last)\b", re.I)
+    r"\b(?:my|our)\s+(?:[\w-]+\s+)?(?:" + _MINE_NOUNS + r")\b"   # one word between: "my tech exposure"
+    r"|\b(?:do|did) (?:i|we) (?:own|hold)\b"
+    r"|(?<!should )(?<!would )(?<!could )\b(?:i|we) (?:own|hold|bought|sold)\b"
+    r"|\b(?:affects?|hits?|hurts?|touch(?:es)?) (?:me|us)\b"
+    r"|\b(?:am i|are we) (?:exposed|concentrated|diversified|overweight|underweight)\b"
+    r"|\b(?:exposed|concentrated|diversified|overweight|underweight) (?:am i|are we)\b"
+    r"|\blast sync\b|\bsince (?:my|the) last\b", re.I)
+
+
+def _asks_about_own_portfolio(turn: Optional[Dict[str, Any]]) -> bool:
+    return bool(turn and _LINKED_WORDS.search(str(turn.get("content") or "")))
 
 # Context keys only the server writes: the reader's linked brokerage, read from
 # their own session. The model trusts `brokerage_portfolio` as the reader's real
@@ -7807,8 +7828,9 @@ async def _with_linked_portfolio(request: Request, history: List[Dict[str, Any]]
     Built on the server from the caller's own session: the browser cannot send
     a portfolio, name another reader's, or widen this. It reaches Milo through
     the CONTEXT turn, which stays first in the thread through every round of
-    the tool loop (ai.stream_chat); no tool fetches it, so the model cannot
-    pull holdings into a question that was not about them. The context budget
+    the tool loop (ai.stream_chat). get_my_portfolio can fetch it too, and is
+    offered under the same rule (`_milo_toolbox`), so the model cannot pull
+    holdings into a question that was not about them. The context budget
     keeps it ahead of everything else (ai._ORDER_BASE)."""
     context = _without_linked_keys(context)
     focus = (context or {}).get("focus") if isinstance((context or {}).get("focus"), dict) else {}
@@ -7821,7 +7843,7 @@ async def _with_linked_portfolio(request: Request, history: List[Dict[str, Any]]
     if not user or not brokerage_service.open_to(user):
         return context
     last = next((t for t in reversed(history or []) if t.get("role") != "assistant"), None)
-    asked = bool(last and _LINKED_WORDS.search(str(last.get("content") or "")))
+    asked = _asks_about_own_portfolio(last)
     try:
         linked = bool(brokerage_store.link(user["id"]) and brokerage_store.accounts(user["id"]))
     except (sqlite3.Error, OSError):
@@ -7889,7 +7911,7 @@ async def chat(request: Request,
     return StreamingResponse(
         ai.stream_chat(history, context=context, use_web=use_web,
                        attachments=attachments, persona=persona, mode=mode,
-                       horizon=horizon, toolbox=_milo_toolbox(request, context)),
+                       horizon=horizon, toolbox=_milo_toolbox(request, context, history)),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
