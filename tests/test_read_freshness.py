@@ -81,3 +81,12 @@ def test_a_figure_inside_a_releases_text_counts():
     out = brief.check_figures(["CPI rose **0.6%** in September."],
                               {"official_releases": [{"summary": "The CPI rose 0.6 percent in September."}]})
     assert out["unmatched"] == []
+
+
+def test_a_morning_edition_written_after_the_open_covers_today_so_far():
+    """Found in review, 2026-10-27: a retried morning write at 11 AM has today's forming bar."""
+    from datetime import datetime, timezone
+    early = brief.covered_session("2026-10-27:morning", datetime(2026, 10, 27, 13, 0, tzinfo=timezone.utc))
+    late = brief.covered_session("2026-10-27:morning", datetime(2026, 10, 27, 15, 0, tzinfo=timezone.utc))
+    assert (early["date"], early["words"]) == ("2026-10-26", "yesterday")
+    assert (late["date"], late["words"]) == ("2026-10-27", "today so far")

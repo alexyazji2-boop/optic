@@ -1024,11 +1024,20 @@ def _group(ccy: str, accts: List[Dict[str, Any]], rows: Dict[str, List[Dict[str,
     lim.extend(attribution.pop("_limitations", []))
     if attribution.get("available"):
         w = attribution["window"]
-        same = bool(measured and w["start"] == measured_start.isoformat() and w["end"] == measured_end.isoformat())
+        # A pair skipped inside the window leaves its days out of the contributions and the change, so the
+        # same end dates are not the same measurement (review, 2026-10-27).
+        skipped_n = len(attribution.get("skipped_pairs") or [])
+        same = bool(measured and not skipped_n and w["start"] == measured_start.isoformat()
+                    and w["end"] == measured_end.isoformat())
         attribution["return_window"] = ({"start": measured_start.isoformat(), "end": measured_end.isoformat()}
                                         if measured else None)
         attribution["matches_return"] = same
-        if not same:
+        if not same and skipped_n and measured and w["start"] == measured_start.isoformat() \
+                and w["end"] == measured_end.isoformat():
+            attribution["window_note"] = (
+                "These contributions leave out {} inside {} to {}, so they do not add up to the return for "
+                "those dates.".format(_plural(skipped_n, "pair of days", "pairs of days"), w["start"], w["end"]))
+        elif not same:
             attribution["window_note"] = (
                 "These contributions cover {} to {}{}, so they are a separate measurement and do not "
                 "explain that return.".format(

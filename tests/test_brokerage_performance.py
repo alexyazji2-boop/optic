@@ -578,3 +578,17 @@ def test_the_page_labels_attribution_on_other_dates_as_separate():
     from pathlib import Path
     src = (Path(__file__).parent.parent / "static/v2/js/pages/brokerage.js").read_text()
     assert "att.matches_return === false" in src and "the same dates as the return above" in src
+
+
+def test_a_pair_skipped_inside_the_window_is_not_the_same_measurement():
+    """Found in review, 2026-10-27: same end dates, a gap inside, and the page said the same dates."""
+    snaps = [snap("2026-10-20", {"equity:AAPL:USD": stock(10, 100)}, 500),
+             snap("2026-10-21", {"equity:AAPL:USD": stock(10, 101)}, 500),
+             snap("2026-10-22", {"equity:AAPL:USD": stock(10, 102)}, 500, complete=False),
+             snap("2026-10-23", {"equity:AAPL:USD": stock(10, 103)}, 500),
+             snap("2026-10-24", {"equity:AAPL:USD": stock(10, 104)}, 500)]
+    out = run([acct("a")], {"a": []}, {}, "2026-10-24", period="1m", snapshots=snaps)
+    a, per = out["attribution"], out["period"]
+    assert a["available"] is True and len(a["skipped_pairs"]) == 2
+    assert (a["window"]["start"], a["window"]["end"]) == (per["measured_start"], per["measured_end"])
+    assert a["matches_return"] is False and "leave out 2 pairs of days" in a["window_note"]

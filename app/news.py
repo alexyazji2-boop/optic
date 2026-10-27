@@ -312,13 +312,28 @@ def symbol_written_as_ticker(text: str, symbol: str) -> bool:
     s = re.escape((symbol or "").strip().upper())
     if not s:
         return False
-    pattern = (r"\$" + s + r"\b"
-               r"|\(\s*(?:" + _EXCHANGE + r"\s*:\s*)?" + s + r"\s*\)"
-               r"|\b" + _EXCHANGE + r"\s*:\s*" + s + r"\b"
-               r"|\b" + s + r"\s+(?i:stock|shares|options)\b"
-               r"|\b[A-Z]{2,5},\s*" + s + r"\b"
-               r"|\b" + s + r",\s*[A-Z]{2,5}\b")
-    return bool(re.search(pattern, text or ""))
+    blob = text or ""
+    # Unmistakable anywhere, shouted or not: a cashtag, a symbol in brackets,
+    # an exchange prefix.
+    exact = (r"\$" + s + r"\b"
+             r"|\(\s*(?:" + _EXCHANGE + r"\s*:\s*)?" + s + r"\s*\)"
+             r"|\b" + _EXCHANGE + r"\s*:\s*" + s + r"\b")
+    if re.search(exact, blob):
+        return True
+    # The softer forms ("NOW stock", a list of symbols) only in a headline that
+    # is not written in capitals, and a list only when its neighbour is not a
+    # word too: "STOCKS RALLY, NOW WHAT FOR THE FED" and "Enterprises boost IT,
+    # AI and cloud budgets" named ServiceNow and C3.ai (review of 2026-10-27).
+    letters = [c for c in blob if c.isalpha()]
+    if letters and sum(c.isupper() for c in letters) / len(letters) > 0.6:
+        return False
+    if re.search(r"\b" + s + r"\s+(?i:stock|shares|options)\b", blob):
+        return True
+    for m in re.finditer(r"\b([A-Z]{2,5}),\s*" + s + r"\b|\b" + s + r",\s*([A-Z]{2,5})\b", blob):
+        other = m.group(1) or m.group(2)
+        if other and other not in WORD_SYMBOLS:
+            return True
+    return False
 
 
 def _name_words(name: str) -> List[str]:

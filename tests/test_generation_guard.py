@@ -142,3 +142,44 @@ def test_the_pages_read_free_and_write_on_a_press():
     assert "b.error.kind === 'auth'" in v2 and "b.error.kind === 'limit'" in v2
     classic = (root / "static/app.js").read_text()
     assert "data-earn-brief-write" in classic and "method: 'POST'" in classic
+
+
+# ---------------------------------------------- the review's findings, 2026-10-27
+
+
+def test_a_full_ceiling_refuses_before_the_readers_allowance_is_touched(monkeypatch):
+    guarded = []
+    monkeypatch.setattr(m, "_spend_guard", lambda request: guarded.append(1))
+    monkeypatch.setattr(ai, "available", lambda: {"enabled": True})
+    monkeypatch.setitem(ai.OPEN_WRITE_LIMITS, "earnings", 0)
+    got = client.post("/api/earnings/ZQRA/brief").json()
+    assert got["refused"] == "daily_ceiling" and guarded == [], "no Milo message spent on a refusal"
+    view = client.get("/api/earnings/ZQRA/brief").json()
+    assert view["can_write"] is False and "switched off" in view["reason"], "the page offers no button to press"
+
+
+def test_a_brief_being_written_is_waited_for_not_charged_twice(monkeypatch):
+    guarded = []
+    monkeypatch.setattr(m, "_spend_guard", lambda request: guarded.append(1))
+    lock = ai._write_lock("earnings:" + ai.earnings_brief_key("ZQRB", FACTS))
+    lock.acquire()
+
+    def finish():
+        time.sleep(0.3)
+        ai._EARNINGS_CACHE[ai.earnings_brief_key("ZQRB", FACTS)] = {"at": time.time(), "brief": dict(BRIEF, available=True)}
+        lock.release()
+    threading.Thread(target=finish).start()
+    got = client.post("/api/earnings/ZQRB/brief").json()
+    assert got["headline"] == "Into the report" and guarded == []
+
+
+def test_a_kept_brief_says_when_it_was_written(monkeypatch):
+    from app import ai_store
+    key = ai.earnings_brief_key("ZQRC", FACTS)
+    ai_store.keep("earnings", key, dict(BRIEF, available=True))
+    monkeypatch.setattr(ai, "_EARNINGS_CACHE", {})
+    monkeypatch.setattr(ai_store, "kept", lambda kind, k, ttl=None: (dict(BRIEF, available=True), time.time() - 5 * 3600))
+    got = client.get("/api/earnings/ZQRC/brief").json()
+    from datetime import datetime, timezone
+    age = datetime.now(timezone.utc) - datetime.fromisoformat(got["generated_at"])
+    assert 4.9 * 3600 < age.total_seconds() < 5.1 * 3600, "not stamped with the time it was read"

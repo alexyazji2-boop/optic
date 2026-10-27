@@ -107,19 +107,40 @@ def take_accounts() -> Optional[str]:
     with secure_delete so the old bytes are not left in free pages. The cost is
     on restore: accounts, watchlists and plans come back, and a linked reader
     reconnects their broker. A copy that cannot be scrubbed is deleted, not kept."""
-    path = _copy(accounts_db.DB_PATH, _accounts_dir(), "accounts")
-    if not path:
+    # Written and scrubbed under a name no listing matches, then renamed: a
+    # process killed between the copy and the scrub (a deploy's SIGTERM, and
+    # the first loop tick after every start takes a snapshot) left a copy with
+    # every data key under its final name (review of 2026-10-27). A leftover
+    # partial is removed by the next snapshot.
+    _clear_partials(_accounts_dir())
+    partial = _copy(accounts_db.DB_PATH, _accounts_dir(), ".accounts", suffix=".partial")
+    if not partial:
         return None
     try:
-        _blank_data_keys(path)
+        _blank_data_keys(partial)
+        path = partial[:-len(".partial")].replace(os.sep + ".accounts-", os.sep + "accounts-")
+        os.replace(partial, path)
     except Exception:
         try:
-            os.remove(path)
+            os.remove(partial)
         except OSError:
             pass
         raise
     _prune_listing(existing_accounts(), _accounts_dir(), KEEP_ACCOUNTS)
     return path
+
+
+def _clear_partials(directory: str) -> None:
+    try:
+        names = os.listdir(directory)
+    except OSError:
+        return
+    for name in names:
+        if name.startswith(".accounts-") and name.endswith(".partial"):
+            try:
+                os.remove(os.path.join(directory, name))
+            except OSError:
+                pass
 
 
 def _blank_data_keys(path: str) -> None:
@@ -135,12 +156,12 @@ def _blank_data_keys(path: str) -> None:
         conn.close()
 
 
-def _copy(source: str, directory: str, prefix: str) -> Optional[str]:
+def _copy(source: str, directory: str, prefix: str, suffix: str = "") -> Optional[str]:
     if not os.path.exists(source):
         return None
     os.makedirs(directory, exist_ok=True)
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    path = os.path.join(directory, "{}-{}.db".format(prefix, stamp))
+    path = os.path.join(directory, "{}-{}.db{}".format(prefix, stamp, suffix))
 
     src = sqlite3.connect(source, timeout=15)
     try:

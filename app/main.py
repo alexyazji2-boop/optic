@@ -1303,8 +1303,10 @@ async def earnings_brief(ticker: str) -> Dict[str, Any]:
         if kept and kept.get("available") is True:
             return _served_brief(kept, ticker_u)
         enabled = ai.available().get("enabled") is True
-        return {"available": False, "written": False, "can_write": enabled, "ticker": ticker_u,
-                "reason": ("No brief has been written for this report yet. Writing one uses one "
+        full = ai.open_write_full("earnings") if enabled else None
+        return {"available": False, "written": False, "can_write": enabled and not full, "ticker": ticker_u,
+                "reason": (full if full else
+                           "No brief has been written for this report yet. Writing one uses one "
                            "Milo message, and it is then kept for six hours for every reader."
                            if enabled else
                            "The assistant is not configured, so there is no written brief. "
@@ -1317,16 +1319,31 @@ async def write_earnings_brief(ticker: str, request: Request) -> Dict[str, Any]:
     """Write the pre-earnings brief, when the reader asks.
 
     In this order, so a refused request spends nothing: a brief already kept is
-    served without touching the allowance; then the reader's assistant
-    allowance (`_spend_guard`: an account, its daily messages, the hourly
-    burst cap); then, inside the writer, one write per report at a time and the
-    server's daily ceiling on new briefs (ai.OPEN_WRITE_LIMITS)."""
+    served without touching the allowance; a write of the same brief already in
+    flight is waited for and served; the server's daily ceiling on new briefs
+    (ai.OPEN_WRITE_LIMITS) is checked; only then the reader's assistant
+    allowance (`_spend_guard`: an account, its daily messages, the hourly burst
+    cap), and inside the writer one write per report at a time. Two requests
+    arriving in the same instant can still both pass the in-flight check; the
+    second then waits on the writer's lock and is served the first's brief."""
     ticker_u = _brief_symbol(ticker)
     auth_deps.csrf_guard(request)
     facts = await _run(_earnings_brief_facts, ticker_u)
     kept = ai.kept_earnings_brief(ticker_u, facts)
     if kept and kept.get("available") is True:
         return _served_brief(kept, ticker_u)
+    # Another reader's write of this brief in flight: wait for it rather than
+    # charge this reader for the same piece.
+    if ai.earnings_write_in_flight(ticker_u, facts):
+        kept = await _run(ai.wait_for_earnings_write, ticker_u, facts)
+        if kept and kept.get("available") is True:
+            return _served_brief(kept, ticker_u)
+    # The server's daily ceiling, before the reader's allowance: a refusal
+    # here used to cost them a Milo message for nothing.
+    full = ai.open_write_full("earnings")
+    if full:
+        return {"available": False, "written": False, "ticker": ticker_u, "refused": "daily_ceiling",
+                "reason": full}
     _spend_guard(request)
     _count_question(request, "earnings_brief")
     brief = await _run(ai.write_earnings_brief, ticker_u, facts)
@@ -8049,9 +8066,10 @@ brokerage_workspace.set_market(
     dividend_of=_ws_dividend,
     quotes_of=_ws_quotes,
     news_of=lambda s: YF_PROVIDER.news(s, limit=12) or [],
-    # The name, sector and industry the briefing's relevance test reads, from
-    # the cached quote the holdings were already priced with.
-    company_of=lambda s: YF_PROVIDER.quote(s) or {},
+    # The name, sector and industry the briefing's relevance test reads: the
+    # profile, kept a day, rather than the 30-second quote scrape (the holdings
+    # are priced from session quotes, so that would be a fresh request each).
+    company_of=lambda s: YF_PROVIDER.profile(s) or {},
     closes_of=_ws_closes,
     benchmark_of=_ws_benchmark,
     spot_of=_ws_spot,

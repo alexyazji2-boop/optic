@@ -82,3 +82,13 @@ def test_the_page_shows_market_context_apart_and_says_the_rule():
     src = (Path(__file__).parent.parent / "static" / "v2" / "js" / "pages" / "brokerage.js").read_text()
     assert "b.market_context" in src and "Market context, not about one holding" in src
     assert "Only stories that name the company are listed under it." in src
+
+
+def test_a_shouted_headline_or_a_list_of_words_is_not_a_ticker():
+    """Found in review, 2026-10-27: the list rule matched "IT, AI" and "RALLY, NOW"."""
+    assert not news.mentions_company("Enterprises boost IT, AI and cloud budgets", "AI", "C3.ai, Inc.")
+    assert not news.mentions_company("Spending on IT, AI rises", "IT", "Gartner, Inc.")
+    assert not news.mentions_company("STOCKS RALLY, NOW WHAT FOR THE FED", "NOW", "ServiceNow, Inc.")
+    assert not news.mentions_company("NOW, THE FED DECIDES", "NOW", "ServiceNow, Inc.")
+    assert news.mentions_company("WHY $NOW IS UP", "NOW", "ServiceNow, Inc."), "a cashtag counts even shouted"
+    assert news.mentions_company("CRM, NOW, ADBE lead software lower", "NOW", "ServiceNow, Inc.")

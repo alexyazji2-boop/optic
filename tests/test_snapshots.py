@@ -179,3 +179,19 @@ def test_a_copy_that_cannot_be_scrubbed_is_not_kept(accounts, monkeypatch):
     with pytest.raises(sqlite3.OperationalError):
         snapshots.take_accounts()
     assert snapshots.existing_accounts() == []
+
+
+
+def test_an_accounts_copy_is_never_listed_before_it_is_scrubbed(accounts, monkeypatch):
+    """Found in review, 2026-10-27: killed between the copy and the scrub, the copy kept every key under its
+    final name. It is written as a hidden partial and renamed once scrubbed; a leftover partial goes next time."""
+    seen = []
+
+    def watch(path):
+        seen.append((path.endswith(".partial"), [r["name"] for r in snapshots.existing_accounts()]))
+        raise KeyboardInterrupt("killed mid-scrub")
+    monkeypatch.setattr(snapshots, "_blank_data_keys", watch)
+    with pytest.raises(KeyboardInterrupt):
+        snapshots.take_accounts()
+    assert seen == [(True, [])], "the unscrubbed copy is a partial nobody lists"
+    monkeypatch.undo()

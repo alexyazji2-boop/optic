@@ -1776,6 +1776,26 @@ _OPEN_WRITES: Dict[str, List[float]] = {}
 _OPEN_WRITES_LOCK = threading.Lock()
 
 
+def open_write_full(feature: str) -> Optional[str]:
+    """Why a new piece of this kind would be refused now, without counting a
+    call: the route asks this before charging the reader's allowance, so a
+    refusal costs them nothing (VC audit review, 2026-10-27)."""
+    limit = OPEN_WRITE_LIMITS.get(feature)
+    if limit is None:
+        return None
+    if limit <= 0:
+        return "Written pieces of this kind are switched off on this server. The figures on the page are unaffected."
+    now = time.time()
+    used = ai_store.calls_since(feature, now - 86400)
+    if used is None:
+        with _OPEN_WRITES_LOCK:
+            used = len([t for t in _OPEN_WRITES.get(feature, []) if t >= now - 86400])
+    if used >= limit:
+        return ("Today's allowance of new written pieces of this kind has been used. Ones already "
+                "written are still shown, and the figures on the page are unaffected.")
+    return None
+
+
 def _open_write_refused(feature: str) -> Optional[str]:
     """Why an open writer may not make a call now, or None when it may."""
     limit = OPEN_WRITE_LIMITS.get(feature)
@@ -1967,9 +1987,27 @@ def kept_earnings_brief(ticker: str, facts: Dict[str, Any]) -> Optional[Dict[str
     stored = ai_store.kept("earnings", key, EARNINGS_TTL)
     if stored:
         brief, written = stored
+        # the time it was written, for the page's "written ... ago": stamped at
+        # read time, a six-hour-old brief said "just now"
+        if isinstance(brief, dict) and not brief.get("generated_at"):
+            brief = dict(brief, generated_at=datetime.fromtimestamp(written, timezone.utc).isoformat())
         _EARNINGS_CACHE[key] = {"at": written, "brief": brief}
         return brief
     return None
+
+
+def earnings_write_in_flight(ticker: str, facts: Dict[str, Any]) -> bool:
+    """Whether another request is writing this report's brief right now."""
+    lock = _WRITE_LOCKS.get("earnings:" + earnings_brief_key(ticker, facts))
+    return bool(lock and lock.locked())
+
+
+def wait_for_earnings_write(ticker: str, facts: Dict[str, Any], timeout: float = 120.0) -> Optional[Dict[str, Any]]:
+    """Wait for the write in flight and return what it kept, without writing."""
+    lock = _WRITE_LOCKS.get("earnings:" + earnings_brief_key(ticker, facts))
+    if lock and lock.acquire(timeout=timeout):
+        lock.release()
+    return kept_earnings_brief(ticker, facts)
 
 
 _WRITE_LOCKS: Dict[str, threading.Lock] = {}
@@ -1977,12 +2015,12 @@ _WRITE_LOCKS_GUARD = threading.Lock()
 
 
 def _write_lock(key: str) -> threading.Lock:
+    # Never evicted. A lock per piece ever asked for is a few hundred bytes, and
+    # the process restarts on every deploy; evicting could drop one another
+    # thread had been handed but not yet taken, and two would write at once.
     with _WRITE_LOCKS_GUARD:
         lock = _WRITE_LOCKS.get(key)
         if lock is None:
-            if len(_WRITE_LOCKS) > 2000:          # a lock per brief ever asked for is a slow leak
-                for k in [k for k, v in _WRITE_LOCKS.items() if not v.locked()][:1000]:
-                    _WRITE_LOCKS.pop(k, None)
             lock = _WRITE_LOCKS[key] = threading.Lock()
         return lock
 
@@ -2076,6 +2114,7 @@ def _write_earnings_brief(ticker: str, facts: Dict[str, Any], key: str) -> Optio
     if len(_EARNINGS_CACHE) >= EARNINGS_CACHE_MAX:
         oldest = min(_EARNINGS_CACHE, key=lambda k: _EARNINGS_CACHE[k]["at"])
         _EARNINGS_CACHE.pop(oldest, None)
+    brief["generated_at"] = datetime.now(timezone.utc).isoformat()
     _EARNINGS_CACHE[key] = {"at": time.time(), "brief": brief}
     ai_store.keep("earnings", key, brief)
     return brief

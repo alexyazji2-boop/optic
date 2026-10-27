@@ -830,20 +830,30 @@ def _last_session_before(day) -> Any:
     return probe
 
 
-def covered_session(edition: str) -> Dict[str, Any]:
+def covered_session(edition: str, now: Optional[datetime] = None) -> Dict[str, Any]:
     """The trading session an edition's figures describe, and the words for it.
 
     The close edition covers its own day's session; every other edition
     (overnight, morning, a closed day) covers the last session before its day.
     "today" for the same day, "yesterday" for the calendar day before, and the
-    weekday otherwise, so a Monday morning note says "on Friday"."""
+    weekday otherwise, so a Monday morning note says "on Friday".
+
+    One exception, by the clock: a morning edition written after the 9:30 open
+    (its first attempt failed and the retry came an hour later) has today's
+    forming bar in its figures, so it covers today, "so far"; told "yesterday"
+    it would have called this morning's move yesterday's (review, 2026-10-27)."""
     day_s, _, name = (edition or "").partition(":")
     try:
         day = datetime.strptime(day_s, "%Y-%m-%d").date()
     except ValueError:
         return {"date": None, "words": None, "edition": name or None}
-    covered = day if (name == "close" and session_mod.regular_close(day) is not None) else _last_session_before(day)
-    if covered == day:
+    trading = session_mod.regular_close(day) is not None
+    et = (now or datetime.now(timezone.utc)).astimezone(ET)
+    opened = trading and et.date() == day and et.hour * 60 + et.minute >= 9 * 60 + 30
+    covered = day if ((name == "close" and trading) or (name == "morning" and opened)) else _last_session_before(day)
+    if covered == day and name == "morning":
+        words = "today so far"
+    elif covered == day:
         words = "today"
     elif covered == day - timedelta(days=1):
         words = "yesterday"
