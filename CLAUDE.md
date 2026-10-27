@@ -58,7 +58,10 @@ an account changes is where the watchlist and saved research are *kept*.
 the test that will catch somebody wrapping the wrong router in a login check.
 
 The exception is Pulse — `/api/chat` and `/api/research`, which share
-`_spend_guard`. They are the only endpoints that spend the operator's money per
+`_spend_guard` — and writing a pre-earnings brief, `POST
+/api/earnings/{T}/brief`, which uses it too. Reading a brief already written
+stays open (`GET`, which never writes); the GET used to write one on a cache
+miss for anyone who opened an Earnings tab. They are the only endpoints that spend the operator's money per
 call, and metered by address they were also the easiest thing here to get more
 of, because a new address is a new allowance. A guest gets 401 and a sentence
 naming the way in; an account gets its plan's allowance, Free being three a day

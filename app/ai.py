@@ -1743,6 +1743,62 @@ The headline is one short clause in sentence case, no markdown. stance is exactl
 of "leaning bullish", "leaning bearish", or "two-sided". Paragraphs may use **bold** and \
 "## Heading" lines."""
 
+# Writers any visitor can set off, with no account and no `_spend_guard`: the
+# earnings brief, the sector read and the catalyst read. Their caches bound what
+# one ticker costs, not how many tickers are asked for, so the readiness audit of
+# 2026-10-23 (P0, F-23) found the earnings brief open to one Opus call per
+# resolvable ticker every six hours. These are ceilings on billed calls over a
+# rolling day, counted from the on-disk ledger so a deploy does not reset them.
+#
+# Global rather than per address: per address is what `_spend_guard` used to do
+# for Milo, and a new address is a new allowance. The cost of a global ceiling is
+# that one visitor walking tickers can use up the day's briefs for everyone else;
+# the panel's own numbers are unaffected, and that trade was preferred to an
+# unbounded bill. At the default token limits a call costs at most about $0.14
+# (brief), $0.07 (sector) and $0.10 (catalyst) at Opus 5.5 list prices, so the
+# defaults below cap the three at roughly $9 a day together.
+#
+# Checked after the cache, so a kept piece is always served. Two cache misses at
+# the same moment can both pass a nearly spent budget; one or two over is the
+# accepted error for not holding a lock across a model call.
+OPEN_WRITE_LIMITS = {
+    "earnings": int(os.environ.get("EARNINGS_BRIEFS_PER_DAY", "30")),
+    "sector": int(os.environ.get("SECTOR_READS_PER_DAY", "30")),
+    "catalyst_read": int(os.environ.get("CATALYST_READS_PER_DAY", "24")),
+}
+
+
+# Calls this process let through, per feature, for when the ledger cannot be
+# read. An unreadable ledger cannot record the call either, so counting only
+# from it would leave that one case with no ceiling. Same fallback as the store's
+# own: an unmounted volume costs the saving across restarts, never the bound.
+_OPEN_WRITES: Dict[str, List[float]] = {}
+_OPEN_WRITES_LOCK = threading.Lock()
+
+
+def _open_write_refused(feature: str) -> Optional[str]:
+    """Why an open writer may not make a call now, or None when it may."""
+    limit = OPEN_WRITE_LIMITS.get(feature)
+    if limit is None:
+        return None
+    if limit <= 0:
+        return "Written pieces of this kind are switched off on this server. The figures on the page are unaffected."
+    now = time.time()
+    with _OPEN_WRITES_LOCK:
+        mine = [t for t in _OPEN_WRITES.get(feature, []) if t >= now - 86400]
+        _OPEN_WRITES[feature] = mine
+    used = ai_store.calls_since(feature, now - 86400)
+    if used is None:
+        used = len(mine)
+    if used >= limit:
+        log.warning("%s write refused: %d of %d in the last 24 hours", feature, used, limit)
+        return ("Today's allowance of new written pieces of this kind has been used. Ones already "
+                "written are still shown, and the figures on the page are unaffected.")
+    with _OPEN_WRITES_LOCK:
+        _OPEN_WRITES.setdefault(feature, []).append(now)
+    return None
+
+
 # One brief per ticker per report date. The earnings payload behind it moves
 # slowly — consensus and revisions shift over days, not minutes — so a short TTL
 # would buy nothing but API spend. Keyed on the report date as well as the
@@ -1880,8 +1936,29 @@ def write_earnings_brief(ticker: str, facts: Dict[str, Any]) -> Optional[Dict[st
     reader nothing, while a wrong one costs them the trust that makes the rest of
     the panel worth reading.
     """
-    key = "{}:{}".format((ticker or "").upper(),
-                         ((facts or {}).get("next_report") or {}).get("date") or "-")
+    hit = kept_earnings_brief(ticker, facts)
+    if hit:
+        return hit
+    key = earnings_brief_key(ticker, facts)
+    # One write per brief at a time. Two readers pressing Write on the same
+    # report at once each missed the cache and paid for the same brief; the
+    # second now waits for the first and is served what it wrote.
+    with _write_lock("earnings:" + key):
+        hit = kept_earnings_brief(ticker, facts)
+        if hit:
+            return hit
+        return _write_earnings_brief(ticker, facts, key)
+
+
+def earnings_brief_key(ticker: str, facts: Dict[str, Any]) -> str:
+    return "{}:{}".format((ticker or "").upper(),
+                          ((facts or {}).get("next_report") or {}).get("date") or "-")
+
+
+def kept_earnings_brief(ticker: str, facts: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """The brief already written for this report, from memory or disk, or None.
+    Never calls a model: the Earnings tab reads through this on every visit."""
+    key = earnings_brief_key(ticker, facts)
     hit = _EARNINGS_CACHE.get(key)
     if hit and (time.time() - hit["at"]) < EARNINGS_TTL:
         return hit["brief"]
@@ -1892,7 +1969,25 @@ def write_earnings_brief(ticker: str, facts: Dict[str, Any]) -> Optional[Dict[st
         brief, written = stored
         _EARNINGS_CACHE[key] = {"at": written, "brief": brief}
         return brief
+    return None
 
+
+_WRITE_LOCKS: Dict[str, threading.Lock] = {}
+_WRITE_LOCKS_GUARD = threading.Lock()
+
+
+def _write_lock(key: str) -> threading.Lock:
+    with _WRITE_LOCKS_GUARD:
+        lock = _WRITE_LOCKS.get(key)
+        if lock is None:
+            if len(_WRITE_LOCKS) > 2000:          # a lock per brief ever asked for is a slow leak
+                for k in [k for k, v in _WRITE_LOCKS.items() if not v.locked()][:1000]:
+                    _WRITE_LOCKS.pop(k, None)
+            lock = _WRITE_LOCKS[key] = threading.Lock()
+        return lock
+
+
+def _write_earnings_brief(ticker: str, facts: Dict[str, Any], key: str) -> Optional[Dict[str, Any]]:
     try:
         from anthropic import Anthropic
     except ImportError:
@@ -1903,6 +1998,9 @@ def write_earnings_brief(ticker: str, facts: Dict[str, Any]) -> Optional[Dict[st
         log.warning("earnings brief skipped: assistant not enabled (source=%s)",
                     status.get("credential_source"))
         return None
+    refused = _open_write_refused("earnings")
+    if refused:
+        return {"available": False, "reason": refused, "refused": "daily_ceiling"}
 
     try:
         client = Anthropic(max_retries=3)
@@ -2026,6 +2124,13 @@ SECTOR_MAX_TOKENS = int(os.environ.get("SECTOR_READ_TOKENS", "1600"))
 
 
 def write_sector_read(symbol: str, facts: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """The read below, written once per symbol at a time: a second reader asking
+    while it is being written waits and is served the same one."""
+    with _write_lock("sector:" + (symbol or "").upper()):
+        return _write_sector_read(symbol, facts)
+
+
+def _write_sector_read(symbol: str, facts: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     """A short written read on one sector or index ETF.
 
     Returns the read, or {"available": False, "reason": ...} explaining why not.
@@ -2063,6 +2168,9 @@ def write_sector_read(symbol: str, facts: Dict[str, Any]) -> Optional[Dict[str, 
         return {"available": False, "reason": "The assistant is not configured, so "
                                               "there is no written read. The levels and "
                                               "rotation on the board are unaffected."}
+    refused = _open_write_refused("sector")
+    if refused:
+        return {"available": False, "reason": refused, "refused": "daily_ceiling"}
     try:
         client = Anthropic(max_retries=3)
     except Exception as exc:
@@ -2507,7 +2615,13 @@ def kept_catalyst_read(key: str) -> Optional[Dict[str, Any]]:
 
 
 def write_catalyst_read(key: str, facts: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-    """The desk note on the release currently in catalyst mode, or None."""
+    """The desk note on the release currently in catalyst mode, or None, written
+    once per release at a time."""
+    with _write_lock("catalyst:" + str(key)):
+        return _write_catalyst_read(key, facts)
+
+
+def _write_catalyst_read(key: str, facts: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     hit = _CATREAD_CACHE.get(key)
     if hit and (time.time() - hit["at"]) < CATREAD_TTL:
         return hit["read"]
@@ -2526,6 +2640,9 @@ def write_catalyst_read(key: str, facts: Dict[str, Any]) -> Optional[Dict[str, A
     if available().get("enabled") is not True:
         log.warning("catalyst read skipped: assistant not enabled")
         return None
+    refused = _open_write_refused("catalyst_read")
+    if refused:
+        return {"available": False, "reason": refused, "refused": "daily_ceiling"}
     try:
         client = Anthropic(max_retries=3)
     except Exception as exc:

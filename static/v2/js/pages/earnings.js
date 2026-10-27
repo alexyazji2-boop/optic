@@ -113,11 +113,14 @@ function pricing(sym) {
 }
 function brief(sym) {
   const b = D.brief;
-  return html`<section class="section" aria-labelledby="br-h"><div class="section-head"><div><h2 class="t-h2" id="br-h">Pre-earnings brief</h2><p class="section-sub">A short summary of this page's figures, written by an AI model when you ask. Kept for six hours per report date.</p></div></div>
-    ${b === undefined ? html`<button type="button" class="btn" data-v2-brief>Write the pre-earnings brief</button><p class="asof">Written only when you ask.</p>`
+  return html`<section class="section" aria-labelledby="br-h"><div class="section-head"><div><h2 class="t-h2" id="br-h">Pre-earnings brief</h2><p class="section-sub">A short summary of this page's figures, written by an AI model when a reader asks, then kept for six hours per report date for everyone.</p></div></div>
+    ${b === undefined ? html`<p class="t-muted" role="status">Looking for a brief already written...</p>`
     : b === 'loading' ? skeleton('lines', 4, 'Writing the brief')
-      : b.error ? failed('The brief', b.error, { retry: 'brief' })
-        : !b.available ? html`<p class="t-muted">${clean(b.reason || 'No brief right now.')}</p>`
+      : b.error && b.error.kind === 'auth' ? html`<p>Writing a brief uses one Milo message, so it needs a free account. A brief someone has already written shows here for everyone.</p><a class="btn btn-primary" href="#/signin">Sign in or create an account</a>`
+        : b.error && b.error.kind === 'limit' ? html`<p class="stale" role="status">${clean(b.error.message || 'Your Milo messages for today are used.')} A brief someone else writes for this report will show here.</p>`
+          : b.error ? failed('The brief', b.error, { retry: 'brief' })
+            : !b.available && b.written === false && b.can_write ? html`<p class="t-muted">${clean(b.reason || '')}</p><button type="button" class="btn" data-v2-brief>Write the pre-earnings brief</button>`
+              : !b.available ? html`<p class="${b.refused ? 'stale' : 't-muted'}" role="status">${clean(b.reason || 'No brief right now.')}</p>`
           : html`<p class="t-label">${capFirst(b.stance || '')}</p><p class="t-h3">${clean(b.headline || '')}</p>${(b.paragraphs || []).map((p) => html`<p>${raw(bolded(p))}</p>`)}${generated(b.written_by ? b : Object.assign({ written_by: 'model' }, b), { at: b.generated_at })}<p class="asof">${clean(b.method || '')} ${clean(b.disclaimer || '')}</p>`}
   </section>`;
 }
@@ -203,14 +206,21 @@ function paint() {
   if (Math.abs(window.scrollY - y) > 2) window.scrollTo(0, y);
 }
 
+// A brief already written is read for free when the page opens; writing one is a POST, metered like Milo, only when
+// the reader presses Write (the GET used to write one on a cache miss for anyone who opened the tab).
+async function keptBrief(box) {
+  try { box.brief = await api.get(`/api/earnings/${encodeURIComponent(box.sym)}/brief`, { ttl: 300000, timeout: 60000 }); }
+  catch (e) { box.brief = { available: false, reason: api.explain(e, 'The brief'), written: false, can_write: true }; }
+  if (D === box) paint();
+}
 async function loadBrief() {
   const box = D;
   box.brief = 'loading'; paint();
-  try { box.brief = await api.get(`/api/earnings/${encodeURIComponent(box.sym)}/brief`, { ttl: 3600000, timeout: 90000 }); }
+  try { box.brief = await api.post(`/api/earnings/${encodeURIComponent(box.sym)}/brief`, {}, { timeout: 90000 }); api.invalidate(`/api/earnings/${encodeURIComponent(box.sym)}/brief`); }
   catch (e) { box.brief = { error: e }; }
   if (D !== box) return;
   paint();
-  const b = mainEl.querySelector('#br-h'); if (b) b.setAttribute('tabindex', '-1');
+  const b = mainEl.querySelector('#br-h'); if (b) { b.setAttribute('tabindex', '-1'); b.focus({ preventScroll: true }); }
 }
 
 export async function render(main, route) {
@@ -233,6 +243,7 @@ export async function render(main, route) {
   try { D.e = await api.get(`/api/earnings/${encodeURIComponent(sym)}`, { ttl: 600000, timeout: 60000 }); }
   catch (e) { if (D.sym === sym) D.err = e; }
   if (D.sym === sym) paint();
+  if (D.sym === sym && D.e && !D.e.not_applicable && D.brief === undefined) keptBrief(D);
 }
 export function dispose() { if (lp) { lp.stop(); lp = null; } live = false; }
 export const retry = { earnings: (m, r) => { api.invalidate('/api/earnings'); render(m, r); }, brief: () => loadBrief() };

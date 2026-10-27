@@ -383,6 +383,22 @@ def _add(bucket: Dict[str, Any], row: sqlite3.Row) -> None:
         bucket["cost_usd"] += usd
 
 
+def calls_since(feature: str, since: float) -> Optional[int]:
+    """Billed calls for one feature at or after `since`, or None if the ledger can't be read.
+
+    Billed means anything but an "error" row: the API does not charge a request it
+    refused, so counting those against a budget would spend the budget on outages."""
+    try:
+        with closing(_connect()) as conn:
+            row = conn.execute(
+                "SELECT COUNT(*) AS n FROM calls WHERE feature = ? AND at >= ? "
+                "AND (stop_reason IS NULL OR stop_reason != 'error')", (feature, since)).fetchone()
+    except (sqlite3.Error, OSError) as exc:
+        log.warning("ai ledger unreadable: %s: %s", type(exc).__name__, exc)
+        return None
+    return int(row["n"] or 0)
+
+
 def calls_by_feature(now: Optional[float] = None) -> Dict[str, Any]:
     """Model calls by feature over seven and thirty days, for the owner's Metrics page.
 

@@ -1235,64 +1235,116 @@ async def framework_policy() -> Dict[str, Any]:
             "rules": [research_policy.describe(k, cur["values"]) for k in research_policy.RULES]}
 
 
+def _earnings_brief_facts(ticker_u: str) -> Dict[str, Any]:
+    """The figures a pre-earnings brief is written from: the panel's own, the
+    company's recent filings, and its sector and industry. Free: no model."""
+    quote = PROVIDER.quote(ticker_u)
+    facts = earnings_mod.analyse(PROVIDER, YF_PROVIDER, ticker_u, quote, rate=_rate())
+
+    # What the company has actually filed. This is the only source here for
+    # corporate events, and it is a primary one — an 8-K item code is the
+    # filer's own classification. Without it the brief could only discuss
+    # estimates, which is not "what the company has been doing".
+    try:
+        facts["filings"] = filings_mod.recent(ticker_u, limit=8)
+    except Exception as exc:
+        logging.getLogger("uvicorn.error").warning(
+            "earnings brief: filings unavailable for %s: %s", ticker_u, exc)
+
+    # Sector and industry, so the brief can place the company. Explicitly not
+    # the business summary: it is marketing copy of unknown vintage, and a
+    # model handed it will paraphrase it as though it were current fact.
+    try:
+        prof = YF_PROVIDER.profile(ticker_u) or {}
+        facts["profile"] = {k: prof.get(k) for k in
+                            ("name", "sector", "industry", "employees", "country", "kind_label")
+                            if prof.get(k) is not None}
+    except Exception as exc:
+        logging.getLogger("uvicorn.error").warning(
+            "earnings brief: profile unavailable for %s: %s", ticker_u, exc)
+    return facts
+
+
+def _brief_symbol(ticker: str) -> str:
+    sym = (ticker or "").upper().strip()
+    if not re.fullmatch(r"[A-Z0-9.\-^=]{1,12}", sym):
+        raise HTTPException(status_code=400, detail="Not a ticker symbol.")
+    return sym
+
+
+def _served_brief(brief: Dict[str, Any], ticker_u: str) -> Dict[str, Any]:
+    out = dict(brief)
+    out["ticker"] = ticker_u
+    out["generated_at"] = out.get("generated_at") or datetime.now(timezone.utc).isoformat()
+    return out
+
+
 @app.get("/api/earnings/{ticker}/brief")
 async def earnings_brief(ticker: str) -> Dict[str, Any]:
-    """A written pre-earnings brief for one name.
+    """The pre-earnings brief already written for this report, or why there is none.
+
+    Reads only. It wrote one on a cache miss for anyone who opened an Earnings
+    tab, with no account and no allowance, so every resolvable ticker was one
+    paid call every six hours to whoever asked (readiness audits of 2026-10-23
+    and 2026-10-26). Writing is POST below, behind the assistant's allowance.
 
     Split from /api/earnings deliberately. The panel's own numbers are computed
     locally in well under a second; a model call is neither that fast nor that
     reliable, and blocking the whole panel on it would mean a slow assistant makes
-    the fast data look slow too. The panel renders first and this arrives after.
-
-    Every number the brief discusses is already visible above it, so when this
-    returns unavailable the reader loses commentary, not information.
+    the fast data look slow too. Every number the brief discusses is already
+    visible above it, so when there is none the reader loses commentary, not
+    information.
     """
-    def build() -> Dict[str, Any]:
-        ticker_u = ticker.upper().strip()
-        quote = PROVIDER.quote(ticker_u)
-        facts = earnings_mod.analyse(PROVIDER, YF_PROVIDER, ticker_u, quote, rate=_rate())
+    ticker_u = _brief_symbol(ticker)
 
-        # What the company has actually filed. This is the only source here for
-        # corporate events, and it is a primary one — an 8-K item code is the
-        # filer's own classification. Without it the brief could only discuss
-        # estimates, which is not "what the company has been doing".
-        try:
-            facts["filings"] = filings_mod.recent(ticker_u, limit=8)
-        except Exception as exc:
-            logging.getLogger("uvicorn.error").warning(
-                "earnings brief: filings unavailable for %s: %s", ticker_u, exc)
+    def read() -> Dict[str, Any]:
+        facts = _earnings_brief_facts(ticker_u)
+        kept = ai.kept_earnings_brief(ticker_u, facts)
+        if kept and kept.get("available") is True:
+            return _served_brief(kept, ticker_u)
+        enabled = ai.available().get("enabled") is True
+        return {"available": False, "written": False, "can_write": enabled, "ticker": ticker_u,
+                "reason": ("No brief has been written for this report yet. Writing one uses one "
+                           "Milo message, and it is then kept for six hours for every reader."
+                           if enabled else
+                           "The assistant is not configured, so there is no written brief. "
+                           "Every figure it would discuss is on the panel above.")}
+    return await _run(read)
 
-        # Sector and industry, so the brief can place the company. Explicitly not
-        # the business summary: it is marketing copy of unknown vintage, and a
-        # model handed it will paraphrase it as though it were current fact.
-        try:
-            prof = YF_PROVIDER.profile(ticker_u) or {}
-            facts["profile"] = {k: prof.get(k) for k in
-                                ("name", "sector", "industry", "employees", "country", "kind_label")
-                                if prof.get(k) is not None}
-        except Exception as exc:
-            logging.getLogger("uvicorn.error").warning(
-                "earnings brief: profile unavailable for %s: %s", ticker_u, exc)
 
-        brief = ai.write_earnings_brief(ticker_u, facts)
-        # `available is not True`, not `not brief`. These writers now return a
-        # dict explaining a failure instead of None, and a dict is truthy — a
-        # falsiness check would sail past the guard and return the failure
-        # payload with a ticker and a timestamp attached to it.
-        if not brief or brief.get("available") is not True:
-            status = ai.available()
-            return {"available": False,
-                    "reason": ("The assistant is not configured, so there is no written "
-                               "brief. Every figure it would discuss is on the panel above."
-                               if status.get("enabled") is not True else
-                               (brief or {}).get("reason")
-                               or "The brief could not be written on this attempt. The "
-                                  "panel's own numbers are unaffected.")}
-        brief["ticker"] = ticker_u
-        brief["generated_at"] = datetime.now(timezone.utc).isoformat()
-        return brief
+@app.post("/api/earnings/{ticker}/brief")
+async def write_earnings_brief(ticker: str, request: Request) -> Dict[str, Any]:
+    """Write the pre-earnings brief, when the reader asks.
 
-    return await _run(build)
+    In this order, so a refused request spends nothing: a brief already kept is
+    served without touching the allowance; then the reader's assistant
+    allowance (`_spend_guard`: an account, its daily messages, the hourly
+    burst cap); then, inside the writer, one write per report at a time and the
+    server's daily ceiling on new briefs (ai.OPEN_WRITE_LIMITS)."""
+    ticker_u = _brief_symbol(ticker)
+    auth_deps.csrf_guard(request)
+    facts = await _run(_earnings_brief_facts, ticker_u)
+    kept = ai.kept_earnings_brief(ticker_u, facts)
+    if kept and kept.get("available") is True:
+        return _served_brief(kept, ticker_u)
+    _spend_guard(request)
+    _count_question(request, "earnings_brief")
+    brief = await _run(ai.write_earnings_brief, ticker_u, facts)
+    # `available is not True`, not `not brief`. These writers now return a
+    # dict explaining a failure instead of None, and a dict is truthy — a
+    # falsiness check would sail past the guard and return the failure
+    # payload with a ticker and a timestamp attached to it.
+    if not brief or brief.get("available") is not True:
+        status = ai.available()
+        return {"available": False, "written": False, "ticker": ticker_u,
+                "refused": (brief or {}).get("refused"),
+                "reason": ("The assistant is not configured, so there is no written "
+                           "brief. Every figure it would discuss is on the panel above."
+                           if status.get("enabled") is not True else
+                           (brief or {}).get("reason")
+                           or "The brief could not be written on this attempt. The "
+                              "panel's own numbers are unaffected.")}
+    return _served_brief(brief, ticker_u)
 
 
 def _options_frame(ticker: str, expiries: Optional[List[str]], max_expiries: int):

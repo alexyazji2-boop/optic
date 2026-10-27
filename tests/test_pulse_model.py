@@ -45,8 +45,10 @@ def test_pulse_asks_its_own_model_and_nothing_else_does():
     for fn in ("stream_chat", "deep_research"):
         names = _names_in(fn)
         assert "PULSE_MODEL" in names and "MODEL" not in names, fn
-    for fn in ("write_earnings_brief", "write_sector_read", "_write_weekly",
-               "extract_catalysts", "write_catalyst_read", "write_morning_desk",
+    # The earnings, sector and catalyst writers ask from inside the function
+    # their once-per-key lock wraps.
+    for fn in ("_write_earnings_brief", "_write_sector_read", "_write_weekly",
+               "extract_catalysts", "_write_catalyst_read", "write_morning_desk",
                "write_morning_read"):
         names = _names_in(fn)
         assert "MODEL" in names and "PULSE_MODEL" not in names, fn

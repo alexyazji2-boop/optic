@@ -31951,8 +31951,12 @@ function renderEarningsBrief(b) {
   const host = document.getElementById('earnBriefHost');
   if (!host) return;
   if (!b || !b.available) {
+    // Not written yet: the GET only reads a kept brief now, and writing one is
+    // a POST metered like a Milo message (readiness audit, 2026-10-26).
+    const canWrite = b && b.written === false && b.can_write;
     host.innerHTML = `<h2>${hg('Pre-earnings brief')}</h2>
-      <p class="sub">${esc((b && b.reason) || 'No written brief for this ticker.')}</p>`;
+      <p class="sub">${esc((b && b.reason) || 'No written brief for this ticker.')}</p>${canWrite
+  ? '<button type="button" class="btn" data-earn-brief-write>Write the pre-earnings brief</button>' : ''}`;
     host.classList.add('brief-empty');
     return;
   }
@@ -31969,6 +31973,26 @@ function renderEarningsBrief(b) {
     <p class="caveat">${gloss(b.method || '')}</p>
     <p class="caveat">${esc(b.disclaimer || '')}</p>`;
 }
+
+document.addEventListener('click', async (evt) => {
+  const btn = evt.target && evt.target.closest && evt.target.closest('[data-earn-brief-write]');
+  if (!btn) return;
+  const ticker = STATE.ticker;
+  if (!ticker) return;
+  btn.disabled = true;
+  btn.textContent = 'Writing the brief…';
+  let b;
+  try {
+    b = await authApi(`/api/earnings/${encodeURIComponent(ticker)}/brief`, { method: 'POST', body: {} });
+  } catch (err) {
+    b = { available: false, reason: err.status === 401
+      ? 'Writing a brief uses one Milo message, so it needs a free account. Sign in from the top bar.'
+      : err.message };
+  }
+  b.ticker = ticker;
+  STATE.earningsBrief = b;
+  if (STATE.ticker === ticker) renderEarningsBrief(b);
+});
 
 async function loadEarningsBrief(ticker) {
   const host = document.getElementById('earnBriefHost');

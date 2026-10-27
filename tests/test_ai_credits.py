@@ -315,6 +315,78 @@ def test_a_read_outlives_a_deploy_for_its_lifetime_and_no_longer(claude, monkeyp
     assert len(claude.asked) == 2, "kept for as long as memory kept it, and no longer"
 
 
+# ------------------------------------------- the writers any visitor can set off
+#
+# The suite shares one ledger across tests, so each ceiling here is set relative
+# to what is already in it, and the symbols are ones no other test asks for.
+
+BRIEF = {"headline": "h", "stance": "two-sided", "paragraphs": ["p"]}
+
+
+def _brief(ticker):
+    return ai.write_earnings_brief(ticker, {"next_report": {"date": "2026-10-20"}})
+
+
+def _ceiling(monkeypatch, feature, extra):
+    """Allow `extra` more billed calls of `feature` than the ledger already holds."""
+    monkeypatch.setattr(ai, "_OPEN_WRITES", {})
+    used = ai_store.calls_since(feature, time.time() - 86400) or 0
+    monkeypatch.setitem(ai.OPEN_WRITE_LIMITS, feature, used + extra)
+
+
+def test_open_writers_stop_at_their_daily_ceiling_and_keep_serving_what_is_written(claude, monkeypatch):
+    """Readiness audit 2026-10-23, F-23: one Opus brief per resolvable ticker every
+    six hours, for anyone. The cache bounded a ticker; nothing bounded the tickers."""
+    monkeypatch.setattr(ai, "_EARNINGS_CACHE", {})
+    _ceiling(monkeypatch, "earnings", 2)
+    claude.default = _msg(json.dumps(BRIEF))
+    assert _brief("ZQA")["headline"] == "h"
+    assert _brief("ZQB")["headline"] == "h"
+    refused = _brief("ZQC")
+    assert refused["available"] is False and "allowance" in refused["reason"]
+    assert len(claude.asked) == 2, "the third ticker must not reach the model"
+    assert _brief("ZQA")["headline"] == "h", "a brief already written is still served"
+    assert len(claude.asked) == 2
+
+
+def test_the_ceiling_counts_from_the_ledger_so_a_deploy_does_not_reset_it(claude, monkeypatch):
+    monkeypatch.setattr(ai, "_SECTOR_CACHE", {})
+    _ceiling(monkeypatch, "sector", 1)
+    claude.default = _msg(json.dumps({"headline": "h", "stance": "cautious", "paragraphs": ["p"]}))
+    assert ai.write_sector_read("ZQS1", {"row": {}})["headline"] == "h"
+    monkeypatch.setattr(ai, "_OPEN_WRITES", {})            # a new process
+    assert ai.write_sector_read("ZQS2", {"row": {}})["available"] is False
+    assert len(claude.asked) == 1
+
+
+def test_a_failed_call_does_not_spend_the_ceiling(claude, monkeypatch):
+    """The API does not bill a request it refused, so neither does the budget."""
+    monkeypatch.setattr(ai, "_CATREAD_CACHE", {})
+    _ceiling(monkeypatch, "catalyst_read", 1)
+    ai_store.record("catalyst_read", ai.MODEL, None, stop_reason="error", note="overloaded")
+    claude.default = _msg(json.dumps({"headline": "h", "paragraphs": ["p"]}))
+    assert ai.write_catalyst_read("https://example.test/zq-release", {})["headline"] == "h"
+
+
+def test_an_unreadable_ledger_falls_back_to_the_process_count(claude, monkeypatch):
+    monkeypatch.setattr(ai_store, "DB_PATH", "/dev/null/not-a-directory/ai.db")
+    monkeypatch.setattr(ai, "_EARNINGS_CACHE", {})
+    monkeypatch.setattr(ai, "_OPEN_WRITES", {})
+    monkeypatch.setitem(ai.OPEN_WRITE_LIMITS, "earnings", 1)
+    claude.default = _msg(json.dumps(BRIEF))
+    assert _brief("ZQD")["headline"] == "h"
+    assert _brief("ZQE")["available"] is False
+    assert len(claude.asked) == 1
+
+
+def test_a_ceiling_of_zero_switches_the_writer_off(claude, monkeypatch):
+    monkeypatch.setattr(ai, "_EARNINGS_CACHE", {})
+    monkeypatch.setattr(ai, "_OPEN_WRITES", {})
+    monkeypatch.setitem(ai.OPEN_WRITE_LIMITS, "earnings", 0)
+    assert _brief("ZQF")["available"] is False
+    assert claude.asked == []
+
+
 # ------------------------------------------------------------------ the ledger
 
 
