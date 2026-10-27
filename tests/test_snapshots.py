@@ -100,3 +100,82 @@ def test_a_missing_ledger_is_not_an_error(tmp_path, monkeypatch):
     """A fresh volume has no ledger yet; the loop must not crash on the first pass."""
     monkeypatch.setattr(snapshots.paper, "DB_PATH", str(tmp_path / "absent.db"))
     assert snapshots.take() is None
+
+
+# ------------------------------------------------------------ accounts.db
+#
+# Readiness audit 2026-10-23 (F-40): accounts.db, holding every account, plan and
+# the sealed brokerage data, had no copy at all.
+
+
+# Large enough to spill onto an overflow page, which is where an UPDATE leaves the
+# old bytes behind in a free page unless secure_delete or VACUUM clears them. A
+# real wrapped key is small and lives in-row; the test needs the harder case.
+KEY = b"WRAPPED-DATA-KEY-BYTES" * 400
+
+
+@pytest.fixture
+def accounts(tmp_path, monkeypatch):
+    """A small accounts.db in WAL mode with one linked reader, at a temporary path."""
+    db = tmp_path / "accounts.db"
+    conn = sqlite3.connect(str(db))
+    conn.execute("pragma journal_mode=wal")
+    conn.execute("create table users (id text primary key, email text)")
+    conn.execute("create table brokerage_users (user_id text primary key, provider text not null, "
+                 "provider_user_id text not null, secret blob, dek blob not null, created_at text not null)")
+    conn.execute("insert into users values ('u1', 'reader@example.test')")
+    conn.execute("insert into brokerage_users values ('u1', 'snaptrade', 'p1', ?, ?, '2026-10-23')",
+                 (b"sealed-secret", KEY))
+    conn.commit()
+    conn.close()
+    monkeypatch.setattr(snapshots.accounts_db, "DB_PATH", str(db))
+    return db
+
+
+def test_accounts_are_copied(accounts):
+    path = snapshots.take_accounts()
+    assert path and os.path.basename(path).startswith("accounts-")
+    got = sqlite3.connect(path).execute("select email from users").fetchall()
+    assert got == [("reader@example.test",)]
+    assert [r["name"] for r in snapshots.existing_accounts()] == [os.path.basename(path)]
+
+
+def test_an_accounts_copy_holds_no_brokerage_data_key(accounts):
+    """Deleting the wrapped key is the deletion (app/vault.py), and the consent
+    text promises backups cannot be read either. A copy with the key would break
+    that for a week, so the key is blanked and its bytes are not left behind."""
+    path = snapshots.take_accounts()
+    row = sqlite3.connect(path).execute("select dek, secret from brokerage_users").fetchone()
+    assert row[0] == b"", "the data key must not survive into the copy"
+    assert row[1] == b"sealed-secret", "the ciphertext stays; without the key it is unreadable"
+    assert b"WRAPPED-DATA-KEY-BYTES" not in open(path, "rb").read(), "old key bytes left in free pages"
+    live = sqlite3.connect(str(accounts)).execute("select dek from brokerage_users").fetchone()
+    assert live[0] == KEY, "only the copy is scrubbed, never the live file"
+
+
+def test_accounts_and_ledger_snapshots_are_pruned_separately(accounts, ledger, monkeypatch):
+    """They share a directory when both files share a volume; one's retention
+    must not delete the other's copies."""
+    monkeypatch.setattr(snapshots, "KEEP_ACCOUNTS", 2)
+    d = os.path.join(os.path.dirname(str(accounts)), "snapshots")
+    os.makedirs(d, exist_ok=True)
+    for i in range(4):
+        sqlite3.connect(os.path.join(d, "accounts-202609%02dT120000Z.db" % (i + 1))).close()
+        sqlite3.connect(os.path.join(d, "tracker-202609%02dT120000Z.db" % (i + 1))).close()
+    snapshots.take_accounts()
+    assert len(snapshots.existing_accounts()) == 2
+    assert len(snapshots.existing()) == 4
+
+
+def test_accounts_snapshots_are_not_listed_by_the_open_endpoint(accounts):
+    snapshots.take_accounts()
+    assert all(not str(r["name"]).startswith("accounts-") for r in snapshots.existing())
+
+
+def test_a_copy_that_cannot_be_scrubbed_is_not_kept(accounts, monkeypatch):
+    def broken(path):
+        raise sqlite3.OperationalError("disk I/O error")
+    monkeypatch.setattr(snapshots, "_blank_data_keys", broken)
+    with pytest.raises(sqlite3.OperationalError):
+        snapshots.take_accounts()
+    assert snapshots.existing_accounts() == []

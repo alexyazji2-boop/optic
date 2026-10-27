@@ -46,6 +46,7 @@ resets on every deploy — a tracker that silently forgets.
 | `FEED_CONTACT` | Yes | Any contact email. SEC EDGAR returns 403 without a User-Agent that has one. |
 | `ANTHROPIC_API_KEY` | Optional | Only Pulse needs it. Leave it unset and everything else works; Pulse reports it needs a key. |
 | `AI_CALLS_PER_HOUR` | Optional | Per-visitor cap on assistant messages. Defaults to 30. `0` disables it. |
+| `EARNINGS_BRIEFS_PER_DAY` / `SECTOR_READS_PER_DAY` / `CATALYST_READS_PER_DAY` | Optional | Ceilings on new model-written earnings briefs, sector reads and catalyst reads over a rolling 24 hours, counted from the ledger. Defaults 30 / 30 / 24. Writing an earnings brief also needs an account and spends one of its assistant messages (`POST /api/earnings/{T}/brief`); reading a written one is free. Kept pieces are always served; `0` switches a writer off. |
 | `OPTIC_WRITE_TOKEN` | **Yes, in practice** | Gates the four endpoints that change the record, and `force` on the weekly update. Unset on a hosting platform, they refuse with 503 rather than accepting anonymous writes. Generate with `openssl rand -hex 24`. |
 | `TRADIER_ACCESS_TOKEN` | Optional | Real-time chains instead of the ~15-min-delayed feed. |
 | `LEDGER_SNAPSHOT_HOURS` | Optional | Ledger snapshot interval, default 24. `0` disables. |
@@ -69,7 +70,8 @@ hidden until it has it, the same contract `ANTHROPIC_API_KEY` already uses.
 | `ADMIN_EMAILS` | For the owner | Comma-separated addresses that own this deployment. A listed account whose address is **confirmed** may run the four write endpoints without `OPTIC_WRITE_TOKEN`, and is not metered against the assistant's daily cap. The confirmation half is the security: anyone can type any address into the signup form, so without it the first stranger to register with your address would own the deployment. Not a column on `users`, so a restored backup cannot mint an owner. Unset, nothing changes. |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | For Google | Cloud console, OAuth client ID, Web application. Authorised redirect URI must be exactly `https://theopticterminal.com/api/auth/google/callback`. |
 | `APPLE_CLIENT_ID` / `APPLE_TEAM_ID` / `APPLE_KEY_ID` / `APPLE_PRIVATE_KEY` | For Apple | Needs a paid Apple Developer membership. `APPLE_CLIENT_ID` is the **Service ID**, not the App ID. The private key is the whole `.p8` contents; a literal `\n` from a dashboard paste is accepted and converted, which is the most common reason the token exchange fails with an unhelpful `invalid_client`. |
-| `SMTP_HOST` / `SMTP_PORT` / `SMTP_USERNAME` / `SMTP_PASSWORD` / `EMAIL_FROM` | For email | Verification and reset links. Unset, they are written to the server log and the UI says so rather than claiming mail was sent. Port 465 is implicit TLS; anything else opens in the clear and upgrades with STARTTLS. |
+| `SMTP_HOST` / `SMTP_PORT` / `SMTP_USERNAME` / `SMTP_PASSWORD` / `EMAIL_FROM` | **Yes, before inviting readers** | Verification and reset links. When these are unset, nothing is emailed and the UI says so instead of claiming mail was sent. On a host, only links for `ADMIN_EMAILS` addresses are written to the server log, so the owner can still confirm their own address; other readers' links and addresses are withheld, because a logged reset link is a sign-in for anyone who can read the log. Locally every link is logged. Port 465 is implicit TLS; anything else opens in the clear and upgrades with STARTTLS. `EMAIL_FROM` must be an address on a domain the relay is allowed to send for (SPF and DKIM set up at the provider), or messages land in spam or are refused. |
+| `MAIL_LOG_LINKS` | Rarely | `true` logs every reader's link on a host as well; `false` logs none, including the owner's. Unset follows the rule in the row above. |
 | `GUEST_AI_CALLS_PER_DAY` | Optional | Assistant messages a guest gets per day. Default **0**, which means Pulse takes a free account. Set it above zero to re-open Pulse to guests. Signing in gives the plan's allowance (Free is 5). |
 | `WEBAUTHN_RP_ID` / `WEBAUTHN_ORIGIN` | Rarely | Both derive from `APP_URL`. Set `RP_ID` only to bind passkeys to a parent domain; `WEBAUTHN_ORIGIN` takes extra comma-separated origins, which is what a DNS move needs so assertions from the old domain still verify. |
 | `SESSION_TTL_SECONDS` | Optional | Default 30 days, slid forward on use. |
@@ -194,17 +196,55 @@ background loop, so the record keeps building whether or not a token is set.
     /app/data/tracker.db     the shared paper-trading ledger
     /app/data/alerts.db      the alert inbox
     /app/data/accounts.db    accounts, sessions, passkeys, watchlists, saved research
-    /app/data/snapshots/     dated copies of the ledger
+    /app/data/snapshots/     dated copies of the ledger and of accounts.db
 
 `accounts.db` is a separate file from the ledger on purpose. The ledger is the
 *system's* record, identical for every visitor; `accounts.db` is *people's* data.
 Different blast radius, different backup story, and a migration that takes a write
 lock on one must not stall the other.
 
-**The daily snapshot covers the ledger only.** `accounts.db` is not backed up, and
-that is a real gap rather than an oversight: the snapshots live on the same volume as
-the original, so they cover corruption and an accidental wipe but not loss of the
-volume. Off-host backup needs somewhere to put it and is a separate job.
+**Both are snapshotted daily, on the same volume.** `accounts.db` gained its copy in
+the readiness work of 2026-10-23 (F-40) and 2026-10-27: `accounts-<stamp>.db`, the
+last 7 kept (`ACCOUNTS_SNAPSHOT_KEEP`), on the ledger's schedule
+(`LEDGER_SNAPSHOT_HOURS`). They are not listed by the open `GET /api/snapshots`.
+
+Each accounts copy has every brokerage data key blanked and is vacuumed, because
+deleting a reader's wrapped key is how their brokerage data is deleted, backups
+included (`app/vault.py`). Restoring one brings back accounts, plans, watchlists and
+saved research. Linked readers then reconnect their broker; the provider user ids
+are kept, so the old provider users can be removed. An account deleted before a
+snapshot is not in it; one deleted after stays in the older copies until they are
+pruned, at most `ACCOUNTS_SNAPSHOT_KEEP` days later.
+
+**Check a restore, without touching the live file**, from a shell on the running
+service, where the volume is mounted (`railway ssh`, or the service's shell in the
+dashboard; `railway run` executes on your own machine and cannot see the volume):
+
+    python -m app.snapshots verify            # the newest accounts snapshot
+    python -m app.snapshots verify /app/data/snapshots/accounts-<stamp>.db
+
+It copies the snapshot to a temporary directory, runs SQLite's integrity check,
+confirms every accounts migration this code knows is already applied, counts users,
+sessions, watchlists and the rest, confirms the brokerage data keys are blank, and
+deletes the copy. Exit status 0 means it would restore. Tested locally in
+`tests/test_accounts_restore.py`; it has not been run against production's files.
+
+**Still missing: an off-host copy, and it is the owner's to set up.** These snapshots
+cover corruption and an accidental wipe, not loss of the volume or the Railway
+project. What it needs:
+
+1. A destination the owner controls and pays for (an S3-compatible bucket such as
+   Cloudflare R2 or Backblaze B2, with versioning or object lock on).
+2. A scheduled copy of the newest `snapshots/accounts-*.db` and `snapshots/tracker-*.db`
+   there, daily, encrypted at rest. A Railway cron service running
+   `rclone copy /app/data/snapshots remote:optic-backups` is one way; it needs the
+   bucket's credentials as Railway variables.
+3. `OPTIC_DATA_KEY` (and `OPTIC_WRITE_TOKEN`) stored somewhere else again, such as a
+   password manager. Never in the bucket beside the files. Without the key a restored
+   copy still has accounts and watchlists but no brokerage data, by design.
+4. A restore drill into a separate Railway environment or a laptop, using the command
+   above, once after setup and then on a schedule. Until one has succeeded, this is
+   not disaster recovery.
 
 ## Ledger snapshots
 

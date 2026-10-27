@@ -3666,6 +3666,14 @@ async def _tracker_loop() -> None:
                     app.state.last_snapshot = now
                 except Exception as exc:
                     log.warning("ledger snapshot failed: %s", exc)
+            # accounts.db on its own clock, so a failure in one copy never
+            # skips the other (readiness audit 2026-10-23, F-40).
+            if snapshots.due(getattr(app.state, "last_accounts_snapshot", None), now):
+                try:
+                    await _run(snapshots.take_accounts)
+                    app.state.last_accounts_snapshot = now
+                except Exception as exc:
+                    log.warning("accounts snapshot failed: %s", exc)
 
             # Keep the daily brief's archive complete — before the market-hours
             # gate below, deliberately.
