@@ -34,7 +34,7 @@ export function sheetFacts(d) {
     business: { summary: firstSentences(clean(((d.session || {}).profile || {}).summary || '').replace(/^The Company\b/, q.name || d.sym)), industry: ((d.session || {}).profile || {}).industry, sector: ((d.session || {}).profile || {}).sector, market_cap: q.market_cap },
     financials: f.available ? { period: per[0] || null, fiscal: (f.annual_fiscal || [])[0] || null, revenue: (a.revenue || [])[0], net_income: (a.net_income || [])[0],
       fcf: (a.free_cash_flow || [])[0], revenue_yoy: g.revenue_yoy_pct, income_yoy: g.net_income_yoy_pct, op_margin: m.operating_pct, net_margin: m.net_pct,
-      net_cash: bs.net_cash, cash: bs.cash, debt: bs.total_debt } : null,
+      net_cash: bs.net_cash, cash: bs.cash, liquid: bs.cash_and_short_term, debt: bs.total_debt } : null,
     valuation: { available: !!(fv.available && st.available), low: fv.low, mid: fv.mid, high: fv.high, stars: st.stars, word: st.word, basis: fv.basis, reason: st.reason || fv.reason,
       pe: q.trailing_pe, fwd_pe: q.forward_pe },
     earnings: { date: nr.date || null, days: nr.days_away, confirmed: nr.confirmed, timing: nr.timing, eps: nr.eps_consensus, eps_low: nr.eps_low, eps_high: nr.eps_high,
@@ -67,7 +67,7 @@ function page1(F) {
         <tr><th>Net income</th><td>${na(fi.net_income, usd)}</td><td>${na(fi.income_yoy, (x) => `${signed(x)} on the year before`)}</td></tr>
         <tr><th>Free cash flow</th><td>${na(fi.fcf, usd)}</td><td>${isNum(fi.fcf) && fi.revenue ? `${num((fi.fcf / fi.revenue) * 100, 1)}% of revenue` : ''}</td></tr>
         <tr><th>Margins</th><td>${na(fi.op_margin, (x) => `${num(x, 1)}% operating`)}</td><td>${na(fi.net_margin, (x) => `${num(x, 1)}% net`)}</td></tr>
-        <tr><th>${isNum(fi.net_cash) && fi.net_cash < 0 ? 'Net debt' : 'Net cash'}</th><td>${na(isNum(fi.net_cash) ? Math.abs(fi.net_cash) : null, usd)}</td><td>${isNum(fi.cash) ? `cash ${usd(fi.cash)}, debt ${usd(fi.debt) || 'n/a'}` : ''}</td></tr>
+        <tr><th>${isNum(fi.net_cash) && fi.net_cash < 0 ? 'Net debt' : 'Net cash'}</th><td>${na(isNum(fi.net_cash) ? Math.abs(fi.net_cash) : null, usd)}</td><td>${isNum(fi.liquid) ? `cash and short-term investments ${usd(fi.liquid)}, debt ${usd(fi.debt) || 'n/a'}` : isNum(fi.cash) ? `cash ${usd(fi.cash)}, debt ${usd(fi.debt) || 'n/a'}` : ''}</td></tr>
       </tbody></table>` : html`<p class="sh-na">No annual statements in the feed for ${id.sym}.</p>`}
     <h2>Valuation ${tag('optic')}</h2>
     ${v.available ? html`<p><b>${clean(v.word || '')}.</b> The usual range from its own five-year P/E is ${money(v.low, 0)} to ${money(v.high, 0)} (middle ${money(v.mid, 0)}); the price is ${money(id.price)}. ${v.stars} of 5 stars, where more stars means cheaper against its own past.</p>
@@ -102,7 +102,7 @@ function page2(F) {
       ${F.valuation.available && F.valuation.stars <= 2 ? html`<li>The price is ${F.valuation.stars === 1 ? 'above' : 'in the upper half of'} its usual valuation range, so results have less room to disappoint. ${tag('optic')}</li>` : ''}
       <li>Delayed and free data: figures can be revised or wrong, and nothing here is a recommendation.</li></ul>
     <h2>Sources</h2>
-    <p class="sh-sub">Quotes, fundamentals, estimates and option chains from Yahoo Finance (delayed); filings from SEC EDGAR; ranges, levels, gamma estimates and the evidence lists from Optic's published rules. Generated ${new Date().toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short', timeZoneName: 'short' })}. Not financial advice. For research and education only.</p>
+    <p class="sh-sub">Quotes, fundamentals, estimates and option chains from Yahoo Finance (delayed); filings from SEC EDGAR; ranges, levels, gamma estimates and the evidence lists from Optic's published rules. Generated ${new Date().toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' })}. Not financial advice. For research and education only.</p>
   </section>`;
 }
 
