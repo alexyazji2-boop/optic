@@ -244,3 +244,22 @@ def test_options_draws_its_term_structure():
     pc = (JS / "pages/options-panels.js").read_text()
     assert "export function pricingCharts(t)" in pc and "sub: i === firstEvent ? 'Report' : ''" in pc and "zero: false" in pc
     assert "['What options are pricing', (t, s) => P.pricing(t, s), (t) => P.pricingCharts(t)]," in (JS / "pages/options.js").read_text()
+
+
+def test_a_thinned_axis_labels_its_own_values(tmp_path):
+    """SPY's implied volatility by expiry (13.3% to 14.7%) under a 0-decimal axis format: the half-point gridlines
+    were thinned to 12.5, 13.5 and 14.5 and printed as 13%, 14% and 15%, so every point read half a point high
+    against its gridline (investor audit, 2026-10-27). The axis now steps to round values its format can print."""
+    got = _run(tmp_path, f"""
+      const b = await import('{(V2 / "js/ui/bars.js").as_posix()}');
+      const r = b.periodLines([{{ x: 'Oct 30' }}, {{ x: 'Nov 3' }}, {{ x: 'Nov 20' }}, {{ x: 'Dec 31' }}], [{{ name: 'IV', cls: 's1', values: [12.8, 13.3, 14.2, 14.7] }}],
+        {{ w: 360, h: 190, zero: false, fmt: (v) => v.toFixed(1) + '%', axisFmt: (v) => v.toFixed(0) + '%' }});
+      const labs = [...r.html.matchAll(/<text class="ax"[^>]*y="([\\d.]+)"[^>]*text-anchor="end">([^<]+)</g)].map((m) => [m[2], Number(m[1]) - 4]);
+      const dots = [...r.html.matchAll(/<circle class="pdot[^"]*"[^>]*cy="([\\d.]+)"/g)].map((m) => Number(m[1]));
+      print(JSON.stringify({{ labs, dots }}));
+    """)
+    at = {t: y for t, y in got["labs"]}
+    assert set(at) >= {"13%", "14%", "15%"}, got
+    # 14.7 sits 30% of the way down from the 15% gridline to the 14% one; 13.3 sits 30% of the way up from 13%
+    assert abs((got["dots"][3] - at["15%"]) / (at["14%"] - at["15%"]) - 0.3) < 0.05, got
+    assert abs((at["13%"] - got["dots"][1]) / (at["13%"] - at["14%"]) - 0.3) < 0.05, got

@@ -108,8 +108,12 @@ function frame(groups, opts, lo, hi, H, W, pad) {
   let ticks = niceTicks(lo, hi, opts.tickCount || 4);
   const y0 = Math.min(lo, ticks[0]), y1 = Math.max(hi, ticks[ticks.length - 1]);
   const fmt = opts.axisFmt || opts.fmt || ((v) => compact(v));
-  // every axis label different: where the format rounds two steps together ("5.1B", "5.1B"), every other tick goes
+  // every axis label different: where the format rounds two steps together ("5.1B", "5.1B"), a coarser round step
+  // first, so each label still sits on its own value. Thinning alone kept the half-steps: implied volatility's
+  // gridlines at 12.5, 13.5 and 14.5 were labelled 13%, 14% and 15% under a 0-decimal format, half a point off the
+  // points they measured (investor audit, 2026-10-27). Every other tick goes only when no coarser step helps.
   const dup = (ts) => new Set(ts.map((t) => String(fmt(t)))).size < ts.length;
+  for (let n = (opts.tickCount || 4) - 1; n >= 1 && dup(ticks); n--) { const c = niceTicks(lo, hi, n); if (c.length >= 2) ticks = c; }
   while (ticks.length > 2 && dup(ticks)) { const z = ticks.indexOf(0); ticks = ticks.filter((t, i) => (i - (z >= 0 ? z : 0)) % 2 === 0); }
   // the axis is as wide as its widest label ("−TWD 1.00T" was cut to "WD 1.00T")
   pad.l = Math.max(pad.l, Math.max(...ticks.map((t) => String(fmt(t)).length)) * 6.6 + 10);
