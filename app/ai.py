@@ -2588,6 +2588,12 @@ Structure it in short paragraphs under a few plain headings, in this order:
 
 Hard rules, because this is published unedited:
 - Use ONLY the figures in the DATA block. Every number you write must appear there.
+- DATA.session_covered says which trading session the figures describe and how to refer \
+to it for someone reading now: use its words ("today", "yesterday", "on Friday"), never \
+your own guess. The note may be read after the close, not only before the open.
+- Two breadths are in DATA, and they are different things: sectors_up_today_pct is the \
+share of sector funds that rose in that session, sectors_above_200d_pct the share above \
+their own 200-day average. Name the one you use for what it measures.
 - Do not invent an inflation print, an earnings result, a Fed comment or an analyst \
 quote. If the data does not include something, do not mention it.
 - No price targets of your own, no telling the reader what to buy, sell, size or when \

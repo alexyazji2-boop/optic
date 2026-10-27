@@ -82,7 +82,8 @@ function readHero() {
         ${ask('Ask Milo about the Read', 'What matters most in today\'s Read, and what period does it cover?')}</div>
       <div class="read-prose">${(s.paragraphs || []).map((p) => (String(p).startsWith('## ') ? html`<h3>${raw(bolded(p.slice(3)))}</h3>` : html`<p>${raw(bolded(p))}</p>`))}</div>
       <!-- two clocks, said apart (design review, 2026-10-19): the data refresh above and when this text was written -->
-      ${generated(s, { at: s.written_at })}${s.written_at && Date.parse(b.built_at) - Date.parse(s.written_at) > 1800000 ? html`<p class="asof">The text was written from the figures at that time; the prices above are newer.</p>` : ''}
+      ${generated(s, { at: s.written_at })}${s.covers_words ? html`<p class="asof">The text covers the session of ${s.covers_words}.</p>` : ''}${s.written_at && Date.parse(b.built_at) - Date.parse(s.written_at) > 1800000 ? html`<p class="asof">The text was written from the figures at that time; the prices above are newer.</p>` : ''}
+      ${((s.figure_check || {}).unmatched || []).length ? html`<p class="stale">Optic could not match ${s.figure_check.unmatched.length === 1 ? 'one figure' : `${s.figure_check.unmatched.length} figures`} in this text to the data it was written from: ${s.figure_check.unmatched.map((u) => `${u.figure} (${clean(u.why)})`).join('; ')}. The figures in the panels are computed, not written by the model.</p>` : ''}
       ${s.method || (b.overview || {}).note ? html`<details class="more-inline"><summary>How the Read is made</summary><p class="asof">${clean(s.method || '')} ${clean((b.overview || {}).note || '')}</p></details>` : ''}
       <form class="read-search" role="search" data-v2-read-search><label class="field">${icon('search')}<span class="sr">Search the headlines</span><input name="q" placeholder="Search the headlines" autocomplete="off" value="${D.q || ''}"></label></form>
       <div id="read-results" aria-live="polite">${searchResults()}</div>

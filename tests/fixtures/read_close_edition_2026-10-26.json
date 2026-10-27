@@ -1,0 +1,276 @@
+{
+ "recorded": "2026-10-27T02:45:00Z",
+ "source": "/api/brief?cached=true on theopticterminal.com, the 2026-10-26 close edition",
+ "day": "2026-10-26",
+ "built_at": "2026-10-27T02:41:36.043699+00:00",
+ "paragraphs": [
+  "## What happened, and what it means",
+  "Chips pulled the market up yesterday. Semiconductors rose **2.7%** and tech **1.7%**, which lifted the Nasdaq 100 **1.1%** and the S&P **0.7%**, and the VIX eased to about **18.4**, down **5.4%**. Before reading too much into it, though, remember this came after a rough month for the same names. Semis are still down **10.7%** over the month and the Nasdaq 100 **4.3%**. So far this is a bounce inside a pullback, not a turn.",
+  "The bigger story sits on Wednesday. The FOMC decision lands at **2:00 PM ET**, and the Fed walks into it with an awkward mix. The last CPI rose **0.6%** in September, with gasoline rising. PPI jumped **1.3%**, and goods were up **2.6%**. Meanwhile September payrolls added just **29,000**, with unemployment at **4.2%**. That's prices running hot while hiring stalls... the uncomfortable combination where neither of the Fed's two jobs points clearly one way. The decision itself is usually priced ahead of time, so the reaction tends to come from the language and the press conference.",
+  "There's an energy thread running through all of it. Energy is up **12.3%** on the month and oil & gas producers **12.9%**. Gasoline drove the CPI print, goods drove PPI, and after the close JetBlue reported a bigger loss on fuel costs. Higher energy prices are showing up in the stock leaders and in the inflation numbers at the same time.",
+  "## The data",
+  "Nothing market-moving came out yesterday. The ECB's survey of business financing said lending conditions tightened. That's a Europe story, but worth knowing.",
+  "On this week's calendar, the Employment Cost Index (the Fed's preferred wage gauge) comes Friday at **8:30 AM ET**, and its last quarterly reading was **0.89%**. After that come JOLTS on Tue Nov 3 (last reading **7.08m** openings), the jobs report on Fri Nov 6 and CPI on Tue Nov 10. So the Fed speaks first, and then the data gets its turn to agree or disagree.",
+  "Overnight, Europe was firmer. The DAX rose **0.91%** and the Euro Stoxx 50 **0.79%**, and both have tracked the S&P closely. Bitcoin slipped **0.4%**.",
+  "## Where the tape stands",
+  "The index read is **33.7**, which counts as leaning supportive. In plain terms: drifting higher, without much conviction behind it. The S&P is still **-0.8%** on the month and **-0.1%** on the week, so the trend hasn't turned. Breadth is the strong part, with **64%** of sectors above their 200-day average. Small caps are the weak part, trailing the S&P by **1.0** points over the month, even though the Russell 2000 gained **2.1%** this week.",
+  "Leadership looks split. Yesterday was a growth day, but the month belongs to defence. Utilities are up **7.7%**, staples **7.2%** and health care **5.0%** over the month. Communication services is the soft spot: down **1.6%** yesterday, **5.7%** on the week and **8.1%** on the month, with Meta off **16.1%** over the month and Alphabet down **8.0%** on the week. Tesla's **5.2%** jump shows the megacaps are trading on their own news rather than moving together.",
+  "The thing to watch is the regime score. It sits below the **+40** line where the read turns strongly supportive. Clearing that would take the S&P actually turning its weekly and monthly trend positive, and small caps starting to keep pace. Until that happens, the bounce counts as a modest tailwind, not a trend."
+ ],
+ "sector_breadth_pct": 63.6,
+ "sectors": [
+  {
+   "symbol": "XLK",
+   "name": "Technology",
+   "last": 186.32000732421875,
+   "day": 1.6864114330245927,
+   "week": 0.19359034058623603,
+   "month": -5.069545387297014
+  },
+  {
+   "symbol": "XLF",
+   "name": "Financials",
+   "last": 56.02000045776367,
+   "day": 0.2146671352579732,
+   "week": 1.7435507819263174,
+   "month": 2.151714627812784
+  },
+  {
+   "symbol": "XLV",
+   "name": "Health Care",
+   "last": 179.27999877929688,
+   "day": 0.0,
+   "week": 2.066612586933392,
+   "month": 5.0263632011992465
+  },
+  {
+   "symbol": "XLY",
+   "name": "Consumer Discretionary",
+   "last": 114.26000213623047,
+   "day": 1.0256442774177366,
+   "week": -0.17473086654018477,
+   "month": 3.3466033460029854
+  },
+  {
+   "symbol": "XLP",
+   "name": "Consumer Staples",
+   "last": 87.95999908447266,
+   "day": -0.33990827611215524,
+   "week": 0.8599931290832252,
+   "month": 7.189863150636944
+  },
+  {
+   "symbol": "XLE",
+   "name": "Energy",
+   "last": 69.63999938964844,
+   "day": 0.44713334834343144,
+   "week": 2.7138587832894245,
+   "month": 12.250158546046963
+  },
+  {
+   "symbol": "XLI",
+   "name": "Industrials",
+   "last": 166.9600067138672,
+   "day": 1.421462559887643,
+   "week": 0.16799499063491208,
+   "month": -2.0360183717869518
+  },
+  {
+   "symbol": "XLB",
+   "name": "Materials",
+   "last": 51.380001068115234,
+   "day": 0.13642504960185153,
+   "week": 0.8439652575796597,
+   "month": 3.1726944884747477
+  },
+  {
+   "symbol": "XLU",
+   "name": "Utilities",
+   "last": 42.54999923706055,
+   "day": -0.02350125918169077,
+   "week": 2.877172652679194,
+   "month": 7.6942572631559125
+  },
+  {
+   "symbol": "XLRE",
+   "name": "Real Estate",
+   "last": 42.79999923706055,
+   "day": 0.5402855153515462,
+   "week": 2.7117857397876532,
+   "month": 2.9836328748690244
+  },
+  {
+   "symbol": "XLC",
+   "name": "Communication Services",
+   "last": 103.8499984741211,
+   "day": -1.5733140256845468,
+   "week": -5.668087992861393,
+   "month": -8.06480230540637
+  }
+ ],
+ "indices": [
+  {
+   "symbol": "SPY",
+   "name": "S&P 500",
+   "last": 765.3699951171875,
+   "day": 0.7105576038835215,
+   "week": -0.14481596125754947,
+   "month": -0.775261639725533
+  },
+  {
+   "symbol": "QQQ",
+   "name": "Nasdaq 100",
+   "last": 712.2000122070312,
+   "day": 1.107323611957134,
+   "week": -0.8575050490203129,
+   "month": -4.338480563192581
+  },
+  {
+   "symbol": "DIA",
+   "name": "Dow 30",
+   "last": 522.969970703125,
+   "day": 0.3068791071449972,
+   "week": 0.7804647973385093,
+   "month": 1.058953906773752
+  },
+  {
+   "symbol": "IWM",
+   "name": "Russell 2000",
+   "last": 276.989990234375,
+   "day": 0.44967914211242466,
+   "week": 2.1048331910837215,
+   "month": -1.7661492232395992
+  },
+  {
+   "symbol": "^VIX",
+   "name": "VIX",
+   "last": 18.389999389648438,
+   "day": -5.449878312142642,
+   "week": -0.27115587289072707,
+   "month": 23.671819308538012
+  }
+ ],
+ "themes": [
+  {
+   "symbol": "SMH",
+   "name": "Semiconductors",
+   "last": 541.6199951171875,
+   "day": 2.735201550885691,
+   "week": -1.2471331695001364,
+   "month": -10.706278472499008
+  },
+  {
+   "symbol": "XBI",
+   "name": "Biotech",
+   "last": 150.47000122070312,
+   "day": 0.6219125159319772,
+   "week": 1.7651836869861492,
+   "month": -2.9413646355538114
+  },
+  {
+   "symbol": "KRE",
+   "name": "Regional Banks",
+   "last": 72.7300033569336,
+   "day": 0.3726252772183525,
+   "week": 5.010108451740769,
+   "month": 1.6491967223567938
+  },
+  {
+   "symbol": "XRT",
+   "name": "Retail",
+   "last": 87.41999816894531,
+   "day": -0.26241112713007997,
+   "week": 0.6910832483645546,
+   "month": 6.0021788225699035
+  },
+  {
+   "symbol": "ITB",
+   "name": "Homebuilders",
+   "last": 89.87000274658203,
+   "day": -0.772879486144229,
+   "week": 5.804097202112302,
+   "month": 0.49200764833363664
+  },
+  {
+   "symbol": "GDX",
+   "name": "Gold Miners",
+   "last": 81.0199966430664,
+   "day": 1.0224435486617445,
+   "week": -6.3027691693056775,
+   "month": -12.759777918658187
+  },
+  {
+   "symbol": "JETS",
+   "name": "Airlines",
+   "last": 26.43000030517578,
+   "day": 1.2643675052983694,
+   "week": 3.322910023475001,
+   "month": -8.799169348999126
+  },
+  {
+   "symbol": "IGV",
+   "name": "Software",
+   "last": 111.38999938964844,
+   "day": 0.7233954952973631,
+   "week": 5.094821808393291,
+   "month": 5.074990232057797
+  },
+  {
+   "symbol": "XOP",
+   "name": "Oil & Gas E&P",
+   "last": 204.86000061035156,
+   "day": 1.5717180477828885,
+   "week": 2.702160403400544,
+   "month": 12.87052375225981
+  },
+  {
+   "symbol": "ARKK",
+   "name": "Disruptive Growth",
+   "last": 81.83999633789062,
+   "day": -0.18295100596068536,
+   "week": -0.571013527692732,
+   "month": -9.838052919943463
+  }
+ ],
+ "index_regime": {
+  "available": true,
+  "score": 33.7,
+  "regime": "supportive",
+  "stance": "leaning supportive",
+  "plain": "Drifting higher, without much conviction behind it",
+  "effect": "Mildly favours buyers, but not enough to carry a weak setup on its own.",
+  "components": {
+   "trend": -9.2,
+   "breadth": 90.7,
+   "volatility": 74.0,
+   "participation": -24.8,
+   "leadership": 27.3
+  },
+  "weights": {
+   "trend": 30.0,
+   "breadth": 25.0,
+   "volatility": 20.0,
+   "participation": 15.0,
+   "leadership": 10.0
+  },
+  "agreement_pct": 80.0,
+  "conflicts": [],
+  "scales": {
+   "trend": "0 when the S&P is flat over a week and a month on average; +100 at a 5% gain, -100 at a 5% loss",
+   "breadth": "0 when 50% of sectors are above their 200-day average; +100 at 65%, -100 at 35%",
+   "volatility": "0 at a VIX of 23; +100 at 16, -100 at 30, less 1.5 points for each 1% the VIX rose today",
+   "participation": "0 when small caps match the S&P over a month; +100 at 4 points ahead, -100 at 4 behind",
+   "leadership": "0 when half the sectors are up today; +100 when all are, -100 when none are"
+  },
+  "clipped": [],
+  "notes": [
+   "S&P -0.8% over a month and -0.1% over a week",
+   "64% of sectors above their 200-day",
+   "VIX 18.4 (-5.4% today)",
+   "small caps lagging the S&P by 1.0 points over a month",
+   "7 of 11 sectors higher today"
+  ],
+  "scale_note": "Supportive above +12, strongly so above +40, and the mirror image below. An index moves less than a single stock, so these bands are wider than the per-ticker composite's.",
+  "method": "Index trend, sector breadth, the VIX level and its move, whether small caps are confirming, and how many sectors are participating today. Each scored -100 to +100 and weighted. Weights renormalise over whatever is available, so a missing input redistributes rather than counting as zero. This is an index and breadth read; the Macro tab's risk score is a separate cross-asset instrument built from credit, rates, the dollar and commodities. Where the two disagree, that is worth knowing rather than averaging away. \"Supportive\" and \"defensive\" are what a desk would call risk-on and risk-off."
+ }
+}

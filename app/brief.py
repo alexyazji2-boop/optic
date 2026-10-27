@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sqlite3
 import logging
 import threading
@@ -780,9 +781,18 @@ def _morning_read(overview: Dict[str, Any], macro: Dict[str, Any],
         "sectors": (overview.get("groups") or {}).get("sectors"),
         "themes": (overview.get("groups") or {}).get("themes"),
         "megacaps": (overview.get("groups") or {}).get("mag7"),
-        # Up today, and above the 200-day: two different breadths, named apart.
-        "sector_breadth_pct": overview.get("sector_breadth_pct"),
+        # Up today, and above the 200-day: two different breadths, named apart,
+        # by what each measures. The writer read `sector_breadth_pct` (up today)
+        # as the 200-day share and published "64% of sectors above their 200-day
+        # average" beside Macro's 55% (26 October 2026, 7 of 11 up that day).
+        "sectors_up_today_pct": overview.get("sector_breadth_pct"),
         "sectors_above_200d_pct": overview.get("sectors_above_200d_pct"),
+        # Which session these figures describe and how a reader reading now
+        # should hear it. The close edition of 26 October called that day's
+        # rally "yesterday": the note is written as a morning note and nobody
+        # told it which session it covered.
+        "session_covered": covered_session(read_edition()),
+        "figures_as_of": datetime.now(timezone.utc).isoformat(),
         "leaders": overview.get("leaders"),
         "laggards": overview.get("laggards"),
         "official_releases": (macro or {}).get("entries"),
@@ -809,6 +819,96 @@ def _morning_read(overview: Dict[str, Any], macro: Dict[str, Any],
 
     written = _edition_read(read_edition(), facts)
     return written or mechanical
+
+
+def _last_session_before(day) -> Any:
+    probe = day - timedelta(days=1)
+    for _ in range(10):
+        if session_mod.regular_close(probe) is not None:
+            return probe
+        probe -= timedelta(days=1)
+    return probe
+
+
+def covered_session(edition: str) -> Dict[str, Any]:
+    """The trading session an edition's figures describe, and the words for it.
+
+    The close edition covers its own day's session; every other edition
+    (overnight, morning, a closed day) covers the last session before its day.
+    "today" for the same day, "yesterday" for the calendar day before, and the
+    weekday otherwise, so a Monday morning note says "on Friday"."""
+    day_s, _, name = (edition or "").partition(":")
+    try:
+        day = datetime.strptime(day_s, "%Y-%m-%d").date()
+    except ValueError:
+        return {"date": None, "words": None, "edition": name or None}
+    covered = day if (name == "close" and session_mod.regular_close(day) is not None) else _last_session_before(day)
+    if covered == day:
+        words = "today"
+    elif covered == day - timedelta(days=1):
+        words = "yesterday"
+    else:
+        words = "on " + covered.strftime("%A")
+    return {"date": covered.isoformat(), "weekday": covered.strftime("%A, %B %-d"), "words": words,
+            "edition": name or None,
+            "rule": "Refer to the session these figures describe as \"{}\" ({}).".format(
+                words, covered.strftime("%A, %B %-d"))}
+
+
+# A bolded percentage in the written text, and the breadth sentence the
+# 26 October edition got wrong. Percentages only: counts ("29,000" payrolls) and
+# thresholds ("+40") are written in other units than the data carries them.
+_BOLD_PCT = re.compile(r"\*\*([-+\u2212]?\d+(?:\.\d+)?)%\*\*")
+_ABOVE_200D = re.compile(r"\*\*(\d+(?:\.\d+)?)%\*\*\s+of\s+(?:the\s+)?(?:\w+\s+)?sectors?\s+"
+                         r"(?:are\s+|were\s+|is\s+|sit\s+|sat\s+)?(?:still\s+)?above\s+(?:their|its)\s+200", re.I)
+
+
+_NUM_IN_TEXT = re.compile(r"-?\d[\d,]*(?:\.\d+)?")
+
+
+def _numbers(value: Any, out: List[float]) -> List[float]:
+    if isinstance(value, bool):
+        return out
+    if isinstance(value, (int, float)):
+        out.append(abs(float(value)))
+    elif isinstance(value, str):
+        # A release's figure often arrives inside its text ("rose 0.6 percent"),
+        # and the writer's rule is that every number it uses appears in DATA.
+        out.extend(abs(float(n.replace(",", ""))) for n in _NUM_IN_TEXT.findall(value))
+    elif isinstance(value, dict):
+        for v in value.values():
+            _numbers(v, out)
+    elif isinstance(value, list):
+        for v in value:
+            _numbers(v, out)
+    return out
+
+
+def check_figures(paragraphs: List[str], facts: Dict[str, Any]) -> Dict[str, Any]:
+    """Each bolded percentage in a written Read, matched against the figures it
+    was written from. A figure that matches no figure in the data at its own
+    rounding, and a 200-day breadth that is not the data's 200-day share, are
+    listed so the page can say so. A match is a number, not proof the sentence
+    around it is right; the 200-day rule is the one sentence checked for meaning."""
+    known = _numbers(facts, [])
+    checked, unmatched = 0, []
+    for para in paragraphs or []:
+        text = str(para)
+        for m in _BOLD_PCT.finditer(text):
+            raw_n = m.group(1).replace("\u2212", "-")
+            x = abs(float(raw_n))
+            places = len(raw_n.split(".")[1]) if "." in raw_n else 0
+            checked += 1
+            if not any(abs(v - x) <= 0.5 * 10 ** (-places) + 1e-9 for v in known):
+                unmatched.append({"figure": raw_n.lstrip("+") + "%", "why": "not in the data this was written from"})
+        for m in _ABOVE_200D.finditer(text):
+            said = float(m.group(1))
+            real = facts.get("sectors_above_200d_pct")
+            if real is None or abs(float(real) - said) > 0.5 + 1e-9:
+                unmatched.append({"figure": m.group(1) + "%",
+                                  "why": ("the data's share of sectors above their 200-day average is {:g}%".format(float(real))
+                                          if real is not None else "the data has no 200-day breadth")})
+    return {"checked": checked, "unmatched": unmatched}
 
 
 def read_edition(now: Optional[datetime] = None) -> str:
@@ -849,6 +949,11 @@ def _edition_read(edition: str, facts: Dict[str, Any]) -> Optional[Dict[str, Any
             return None
         written["edition"] = edition.split(":", 1)[1]
         written["written_at"] = datetime.now(timezone.utc).isoformat()
+        cover = facts.get("session_covered") or {}
+        written["covers_session"] = cover.get("date")
+        written["covers_words"] = cover.get("weekday")
+        written["figures_as_of"] = facts.get("figures_as_of")
+        written["figure_check"] = check_figures(written.get("paragraphs") or [], facts)
         ai_store.keep("read", edition, written)
         return _served(written)
     finally:
