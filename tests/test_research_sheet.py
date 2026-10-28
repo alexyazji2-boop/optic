@@ -57,3 +57,16 @@ def test_each_section_says_what_kind_of_figure_it_is_and_no_holdings_are_read():
     assert "brokerage" not in SHEET and "optic.paper" not in SHEET and "reader_holdings" not in SHEET
     assert "Private holdings are never included." in SHEET
     assert ".sh-cont { break-before: page; }" in CSS and "never smaller reading type" in CSS
+
+
+def test_a_decimal_does_not_end_a_sentence(tmp_path):
+    """The sheet's evidence line printed "Trading above the 200-day average. 99 .": its sentence split took every
+    full stop as an end, so "$217.94 ... at $187.99. The line ..." came back as "99." (investor audit, 2026-10-27).
+    The Overview's company summary used the same split."""
+    got = _run(tmp_path, f"""
+      const S = await import('{(JS / "pages/sheet.js").as_posix()}');
+      const O = await import('{(JS / "pages/dossier.js").as_posix()}');
+      const t = '$217.94 is 16.2% above the 200-day at $187.99. The line most long-term trend followers watch.';
+      print(JSON.stringify([S.firstSentences(t, 1), O.firstSentences(t, 1)]));
+    """)
+    assert got == ["$217.94 is 16.2% above the 200-day at $187.99."] * 2

@@ -18,7 +18,9 @@ const tag = (k) => html`<span class="sh-tag sh-${k}">${TAG[k]}</span>`;
 const na = (v, f = (x) => x) => (isNum(v) ? f(v) : html`<span class="sh-na">Not reported</span>`);
 const usd = (v) => (isNum(v) ? `$${compact(Math.abs(v))}` : null);
 const one = (t) => firstSentences(clean(t || ''), 1);
-const firstSentences = (t, n = 2) => (String(t || '').match(/[^.!?]+[.!?]+(\s|$)/g) || [String(t || '')]).slice(0, n).join('').trim();
+// a full stop ends a sentence only before a space or the end: split at every one, "$217.94 ... at $187.99. The
+// line ..." came back as "99." and the sheet printed "Trading above the 200-day average. 99 ." (investor audit, 2026-10-27)
+export const firstSentences = (t, n = 2) => (String(t || '').match(/(?:[^.!?]|[.!?](?!\s|$))+[.!?]+(?:\s+|$)/g) || [String(t || '')]).slice(0, n).join('').trim();
 
 /** The sheet's rows from the payloads, so what it says can be checked without a browser. */
 export function sheetFacts(d) {

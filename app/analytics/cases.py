@@ -126,7 +126,7 @@ def build(payload: Dict[str, Any]) -> Dict[str, Any]:
         if gap > 0:
             bull.append(_arg(
                 "Trading above the 200-day average",
-                f"{_usd(spot)} is {_pct(gap)} above the 200-day at {_usd(sma200)} . "
+                f"{_usd(spot)} is {_pct(gap)} above the 200-day at {_usd(sma200)}. "
                 "The line most long-term trend followers watch.",
                 MEDIUM, "Technicals"))
         else:

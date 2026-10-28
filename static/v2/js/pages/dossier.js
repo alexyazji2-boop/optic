@@ -249,8 +249,9 @@ function digest(sym) {
 }
 
 /* ---------------- what the company is, and its latest news: first on the page (owner, 2026-10-20) ---------------- */
-function firstSentences(t, n = 2, max = 320) {
-  const parts = String(t || '').match(/[^.!?]+[.!?]+(\s|$)/g) || [String(t || '')];
+export function firstSentences(t, n = 2, max = 320) {
+  // a full stop ends a sentence only before a space or the end, so a decimal ("$187.99") does not split one
+  const parts = String(t || '').match(/(?:[^.!?]|[.!?](?!\s|$))+[.!?]+(?:\s+|$)/g) || [String(t || '')];
   let out = ''; for (const x of parts.slice(0, n)) { if ((out + x).length > max && out) break; out += x; }
   return out.trim();
 }
