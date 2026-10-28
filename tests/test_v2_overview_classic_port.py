@@ -246,7 +246,7 @@ def test_the_case_for_and_against_and_what_to_look_at_next(tmp_path):
     pos, neg = [x["text"] for x in got["f"]["pos"]], [x["text"] for x in got["f"]["neg"]]
     assert pos == ["Beat analysts' earnings estimates in 6 of the last 8 quarters", "Company insiders bought more shares than they sold over six months"]
     assert neg == ["Earnings report on Oct 29, in 4 days", "The company lost money over the latest period", "Owes $32.3B more than it holds in cash while losing money"]
-    assert got["ev"][0] == {"date": "2026-10-29", "label": "Earnings report", "detail": "in 4 days, analysts expect EPS of 0.40", "view": "earnings"}, "no time of day for a report not yet made"
+    assert next(e for e in got["ev"] if e["label"] == "Earnings report") == {"date": "2026-10-29", "label": "Earnings report", "detail": "in 4 days, analysts expect EPS of 0.40", "view": "earnings"}, "no time of day for a report not yet made"
     assert len(got["ev"]) == 2 and got["adv"] == 3, "the options expiry only at the Advanced level, as in Classic"
     assert [s["text"] for s in got["steps"]] == ["Review past results before the report on Oct 29", "Check the statements behind the weaker figures",
                                                  "See how the price compares with its own valuation history", "Read the 12 latest headlines"]
@@ -344,3 +344,18 @@ def test_only_images_are_kept(monkeypatch):
     import urllib.request
     monkeypatch.setattr(urllib.request, "urlopen", lambda req, timeout=6: answers.pop(0))
     assert m._logo_fetch("NVDA") == (b"\x89PNG..", "image/png"), "a web page from the first service is skipped for the second's image"
+
+
+def test_coming_up_lists_what_it_keeps_by_date(tmp_path):
+    """NVDA's Nov 17 report was listed above three Oct 28 events; the report is still never cut (investor audit,
+    2026-10-27)."""
+    from tests.test_frontend_v2_stage0 import V2, _run
+    got = _run(tmp_path, f"""
+      const R = await import('{(V2 / "js/pages/overview-research.js").as_posix()}');
+      const t = {{ news: {{ earnings_date: '2026-11-17', days_to_earnings: 21 }}, whats_next: {{ this_week: [
+        {{ date: '2026-10-28', label: 'Fed decision' }}, {{ date: '2026-10-29', label: 'GDP' }}, {{ date: '2026-10-28', label: 'Home sales' }},
+        {{ date: '2026-10-30', label: 'PCE prices' }}, {{ date: '2026-10-31', label: 'Payrolls' }}] }} }};
+      print(JSON.stringify(R.events(t, false, '2026-10-27').map((e) => [e.date, e.label])));
+    """)
+    assert got[-1] == ["2026-11-17", "Earnings report"] and len(got) == 4
+    assert [d for d, _ in got] == sorted(d for d, _ in got)

@@ -194,7 +194,9 @@ export function events(t, advanced, today) {
     if (special && !advanced) return;
     out.push({ date: e.date, label: String(e.label || '').replace(/\s*\(([^)]*)\)\s*$/, (m, inner) => (String(e.label).toLowerCase().includes(inner.toLowerCase()) ? '' : ` (${inner})`)), detail: e.detail || '' });
   });
-  return out.slice(0, advanced ? 8 : 4);
+  // the report goes in first so the cut cannot drop it, and what is kept is then listed by date: NVDA's Nov 17 report
+  // sat above three Oct 28 events (investor audit, 2026-10-27)
+  return out.slice(0, advanced ? 8 : 4).map((e, i) => ({ e, i })).sort((a, b) => (String(a.e.date || '9999') < String(b.e.date || '9999') ? -1 : String(a.e.date || '9999') > String(b.e.date || '9999') ? 1 : a.i - b.i)).map((x) => x.e);
 }
 /** Where to go next, from what the page found (Classic's ovNextSteps): each step a link to a tab. */
 export function nextSteps(sym, t, f, fund, today) {

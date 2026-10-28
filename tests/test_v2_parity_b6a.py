@@ -135,8 +135,9 @@ def test_the_case_for_and_against_follows_classics_rules(tmp_path):
     assert all(x.get("view") for x in f["neg"]) and f["neg"][0]["why"].startswith("Results and guidance")
     assert not any("Priced above" in x for x in got["fundNeg"]), "a fund's price is not read against a P/E history"
     ev = got["ev"]
-    assert ev[0] == {"date": "2026-11-02", "label": "Earnings report", "detail": "in 12 days, analysts expect EPS of 1.98", "view": "earnings"}, "the date alone: no time of day (B1 rule)"
-    assert [e["label"] for e in ev] == ["Earnings report", "FOMC statement and rate decision"] and "CFTC Commitments of Traders" in got["evAdv"], "positioning reports at Advanced (the abbreviation dropped, as Classic does)"
+    assert next(e for e in ev if e["label"] == "Earnings report") == {"date": "2026-11-02", "label": "Earnings report", "detail": "in 12 days, analysts expect EPS of 1.98", "view": "earnings"}, "the date alone: no time of day (B1 rule)"
+    # by date since the investor audit (2026-10-27): the Fed on Oct 28 before the Nov 2 report
+    assert [e["label"] for e in ev] == ["FOMC statement and rate decision", "Earnings report"] and "CFTC Commitments of Traders" in got["evAdv"], "positioning reports at Advanced (the abbreviation dropped, as Classic does)"
     assert [s.get("view") or "compare" for s in got["steps"]] == ["earnings", "financials", "long", "news"] and got["steps"][1]["text"] == "Check the statements behind the weaker figures"
     assert "financials" not in got["fsteps"]
     assert got["drv"] == ["Market and sector", "Optic's short-term signals", "Options positioning"]
