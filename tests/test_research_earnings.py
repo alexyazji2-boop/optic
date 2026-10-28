@@ -316,3 +316,10 @@ def test_an_old_newest_result_is_flagged_as_probably_not_the_latest():
     ea["next_report"]["date"] = "2027-01-15"
     post = E.post_earnings("BAC", ea, 1.0, today=date(2026, 10, 15))
     assert post["release"]["recency"]["state"] == "probably_missing"
+
+
+def test_the_view_gives_its_evidence_a_subject():
+    """NVDA's view read "because beat EPS consensus in 100% of 8 quarters" (investor audit, 2026-10-27)."""
+    from app.research.earnings_view import _clause
+    assert _clause("Beat EPS consensus in 100% of 8 quarters, by +5.8% on average", "NVDA").startswith("NVDA beat EPS")
+    assert _clause("Estimates are rising into the release", "NVDA") == "estimates are rising into the release"

@@ -24,6 +24,7 @@ output rather than filled in.
 
 from __future__ import annotations
 
+import re
 from datetime import date, datetime, timedelta, timezone
 from statistics import mean
 from typing import Any, Dict, List, Optional, Tuple
@@ -469,6 +470,19 @@ def predict_reaction(ea: Dict[str, Any], hurdle: Dict[str, Any], results: Dict[s
                                            "options already assume, and if guidance does not undercut it."}
 
 
+# Evidence lines that start with the company's verb ("Beat EPS consensus in 100% of 8 quarters") need the company
+# as their subject after "because": joined as they were, NVDA's view read "because beat EPS consensus" (investor
+# audit, 2026-10-27).
+_SUBJECTLESS = re.compile(r"^(beat|beats|missed|misses|met|meets|matched|topped|raised|cut|lowered|reported|guided|"
+                          r"grew|fell|rose|has|had|is|was)\b", re.I)
+
+
+def _clause(text: str, ticker: str) -> str:
+    if _SUBJECTLESS.match(text):
+        return "{} {}".format(ticker, text[0].lower() + text[1:])
+    return text[0].lower() + text[1:]
+
+
 def best_view(ticker: str, results: Dict[str, Any], guidance: Dict[str, Any], reaction: Dict[str, Any],
               hurdle: Dict[str, Any], opts: Dict[str, Any], nr: Dict[str, Any], spot: Optional[float],
               sur: Dict[str, Any]) -> Dict[str, Any]:
@@ -487,7 +501,7 @@ def best_view(ticker: str, results: Dict[str, Any], guidance: Dict[str, Any], re
                 else "guidance is an open question")
     head = ("My best-supported pre-earnings view is that ${} reports {}, {}, and the reaction is {}{}.".format(
                 ticker, r_phrase, g_phrase, reaction["lean"],
-                ", because " + "; and ".join(b[0].lower() + b[1:] for b in because) if because else ""))
+                ", because " + "; and ".join(_clause(b, ticker) for b in because) if because else ""))
     rng = opts.get("range") or {}
     cases = {
         "base": "Results {}; guidance {}; {}.".format(
