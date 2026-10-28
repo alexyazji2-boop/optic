@@ -147,6 +147,31 @@ FLOWS = {"revenue", "operating_income", "gross_profit", "cost_of_revenue", "pret
          "acquisitions"}
 UNITS = {"dps": "USD/shares", "eps_diluted": "USD/shares", "diluted_shares_avg": "shares",
          "basic_shares_avg": "shares", "shares_outstanding": "shares"}
+# The statement lines as a reader names them, for the notes that list them. The keys themselves were printed:
+# NVIDIA's DCF said "Restated in a later filing: basic_shares_avg, diluted_shares_avg, dps, eps_diluted"
+# (investor audit, 2026-10-27).
+FLOW_WORDS = {"revenue": "revenue", "operating_income": "operating income", "gross_profit": "gross profit",
+              "cost_of_revenue": "cost of revenue", "pretax_income": "pretax income", "income_tax": "income tax",
+              "net_income": "net income", "net_income_common": "net income to common shareholders",
+              "da": "depreciation and amortization", "depreciation": "depreciation", "amortization": "amortization",
+              "capex": "capital spending", "cfo": "operating cash flow", "sbc": "stock-based pay",
+              "interest_expense": "interest expense", "interest_income": "interest income",
+              "dividends_paid": "dividends paid", "dps": "dividends per share", "buybacks": "buybacks",
+              "diluted_shares_avg": "diluted share count", "basic_shares_avg": "basic share count",
+              "eps_diluted": "diluted EPS", "gain_real_estate": "gains on real estate",
+              "impairment_real_estate": "real estate impairments", "restructuring": "restructuring",
+              "goodwill_impairment": "goodwill impairment", "intangible_impairment": "intangible impairment",
+              "asset_impairment": "asset impairment", "contingent_consideration": "contingent consideration",
+              "acquisitions": "acquisitions"}
+
+
+def _usd_short(value: float) -> str:
+    """$33.4B, $8.5B, $420.0M: how the rest of the terminal writes a dollar amount."""
+    a = abs(value)
+    for div, unit in ((1e12, "T"), (1e9, "B"), (1e6, "M"), (1e3, "K")):
+        if a >= div:
+            return "{}${:,.1f}{}".format("-" if value < 0 else "", a / div, unit)
+    return "{}${:,.0f}".format("-" if value < 0 else "", a)
 
 
 def _num(value: Any) -> Optional[float]:
@@ -952,9 +977,9 @@ def gather(provider, ticker: str, today: Optional[date] = None, force: bool = Fa
                         "missing from the filings feed.".format(age))
     d_now, d_fy = _v(bal["debt"]), _v(fy0["balance"]["debt"])
     if bal_date != fy0["fy_end"] and d_now is not None and d_fy and abs(d_now / d_fy - 1.0) > 0.4:
-        warnings.append("Debt on {} ({:,.0f}) differs from the last annual report ({:,.0f}) by {:+.0%}. "
+        warnings.append("Debt on {} ({}) differs from the last annual report ({}) by {:+.0%}. "
                         "Check whether the quarter's filing tags debt differently before relying on "
-                        "the bridge.".format(bal_date, d_now, d_fy, d_now / d_fy - 1.0))
+                        "the bridge.".format(bal_date, _usd_short(d_now), _usd_short(d_fy), d_now / d_fy - 1.0))
     if sh.get("cross_check"):
         warnings.append(sh["cross_check"])
     if big or sum(a for a in acq3 if a) > 0.15:
@@ -966,7 +991,7 @@ def gather(provider, ticker: str, today: Optional[date] = None, force: bool = Fa
     restated = sorted({c for y in hist[:3] for c, f in y["flows"].items() if f and f.get("restated")})
     if restated:
         warnings.append("Restated in a later filing (the latest figures are used): {}.".format(
-            ", ".join(restated)))
+            ", ".join(FLOW_WORDS.get(c, c.replace("_", " ")) for c in restated)))
 
     return {
         "available": True, "ticker": sym, "cik": cik,

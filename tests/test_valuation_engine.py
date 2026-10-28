@@ -445,3 +445,12 @@ def test_revenue_multiplying_is_flagged():
     d["growth"]["y1"] = 0.6
     r = engine.run_dcf(base_case(), d, 0.12)
     assert any(c["code"] == "revenue_multiplies" for c in r["checks"])
+
+
+def test_the_data_notes_speak_in_words_and_dollars():
+    """NVIDIA's DCF printed "Restated in a later filing: basic_shares_avg, diluted_shares_avg, dps, eps_diluted"
+    and debt as "33,366,000,000" (investor audit, 2026-10-27)."""
+    from app.valuation import inputs
+    assert inputs._usd_short(33_366_000_000) == "$33.4B" and inputs._usd_short(-1_200_000) == "-$1.2M"
+    assert not (inputs.FLOWS - set(inputs.FLOW_WORDS)), "every statement line has words"
+    assert inputs.FLOW_WORDS["eps_diluted"] == "diluted EPS"
