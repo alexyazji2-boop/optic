@@ -301,6 +301,8 @@ def test_a_searched_name_is_read_with_the_pages_filters(store):
 
 def test_the_endpoint_passes_the_filters(store, monkeypatch):
     monkeypatch.setattr(main, "YF_PROVIDER", store)
+    # the book is dated from NOW; on the real clock the 30-day window lost Citigroup's row on 28 October 2026
+    monkeypatch.setattr(analysts, "time", types.SimpleNamespace(time=lambda: NOW))   # only this module's clock
     client = TestClient(main.app)
     out = client.get("/api/analysts/INTC", params={"days": 30, "show": "upgrades",
                                                    "rating": "hold"}).json()
