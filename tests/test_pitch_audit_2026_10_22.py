@@ -594,3 +594,16 @@ def test_the_earnings_history_is_asked_for_only_when_a_headline_needs_it():
 def test_a_missing_estimate_range_is_left_out_not_printed_as_n_a():
     earn = (JS / "pages/earnings.js").read_text()
     assert "${isNum(nr.eps_low) && isNum(nr.eps_high) ? `, within a range of $${num(nr.eps_low)} to $${num(nr.eps_high)}` : ''}" in earn
+
+
+def test_one_stray_weekend_bar_does_not_make_a_coin(tmp_path):
+    """Detection needs most weekends present: a weekday series with one Sunday-dated bar keeps its sessions."""
+    got = _run(tmp_path, f"""
+      const R = await import('{(JS / "pages/overview-research.js").as_posix()}');
+      const day = (k) => new Date(Date.UTC(2026, 8, 1) + k * 864e5).toISOString().slice(0, 10);
+      const every = Array.from({{ length: 60 }}, (_, k) => day(k));
+      const weekdays = every.filter((d) => new Date(d + 'T12:00:00Z').getUTCDay() % 6);
+      const stray = [...weekdays.slice(0, -1), '2026-10-25', weekdays[weekdays.length - 1]];
+      print(JSON.stringify([R.tradesDaily(every), R.tradesDaily(weekdays), R.tradesDaily(stray)]));
+    """)
+    assert got == [True, False, False]

@@ -27,10 +27,12 @@ const tabLink = (sym, view, text, label) => html`<a class="textlink" href="${hre
 
 /* ---------------- the readings (Classic's ov* functions) ---------------- */
 const OV_SESSIONS = 252;
-/** A market that trades every day: weekend bars among the last month's. Yahoo dates a futures Sunday-evening session
- *  with the Monday, so only a coin's series (and anything else open seven days a week) carries them. */
+/** A market that trades every day: most weekends present among the last 30 distinct dates (a coin has eight or nine
+ *  weekend days in any 30; six allows for a missing day). Yahoo dates a futures Sunday-evening session with the
+ *  Monday, so a stock's or a future's series has none, and one stray weekend-dated bar does not turn it into a coin. */
 export function tradesDaily(dates) {
-  return (dates || []).slice(-30).some((d) => { const w = new Date(`${String(d).slice(0, 10)}T12:00:00Z`).getUTCDay(); return w === 0 || w === 6; });
+  const last = [...new Set((dates || []).map((d) => String(d).slice(0, 10)))].slice(-30);
+  return last.filter((d) => { const w = new Date(`${d}T12:00:00Z`).getUTCDay(); return w === 0 || w === 6; }).length >= 6;
 }
 /** Where a window of `sessions` of change starts: the index of the close it is measured from. A count of sessions
  *  (252 a year, 126, 63) for a market with sessions; for one that trades every day, the last close on or before the
