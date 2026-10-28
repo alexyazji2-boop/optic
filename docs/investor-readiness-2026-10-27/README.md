@@ -1,8 +1,7 @@
 # Investor readiness audit, 27 October 2026
 
 Audit and repair of the terminal investors will be shown on Wednesday 28 October, done the evening before on
-branch `investor-readiness`, cut from production `a783dc5` (live build `a783dc562dcc`). **Not pushed, not
-deployed.** Coverage is in `MATRIX.md`, every defect with its cause and verification in `DEFECTS.md`.
+branch `investor-readiness`, cut from production `a783dc5` (live build `a783dc562dcc`). **Deployed to production on 28 October 2026 on the owner's go, as a fast-forward from `a783dc5`, which is the rollback target.** Coverage is in `MATRIX.md`, every defect with its cause and verification in `DEFECTS.md`.
 
 ## The judgement
 
