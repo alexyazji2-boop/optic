@@ -54,6 +54,15 @@ How things were checked (column "Method"):
 | S18 | Unknown address | `pages/bridge.js` | says so with Search and Home | none | guest | Crawl, live | Failed | D09 | Fixed and verified | Live until deploy |
 | S19 | Share-class addresses (`#/BRK.B`) | `core/router.js` | open BRK-B | none | guest | Crawl, live | Failed | D03 | Fixed and verified | Live until deploy |
 
+## Click pass
+
+Run on 14 pages signed in at 1440, up to 45 distinct controls each, every control found afresh before it was
+pressed: Home 28, Overview 32, Options 23, Investing 27, Earnings 25, Financials 31, News 23, Compare 9, Read 12,
+Macro 13, Scan 39, Insiders 5, Watchlist 17, Alerts 10 controls with an effect. Controls that did nothing: each
+page's own current tab (expected), Scan's empty "Find symbols now" (D23, fixed), and two glossary terms that open
+on a real click (harness artefact, checked by hand). Destructive, sending and paid controls were skipped by label.
+Not run on the other pages; Insiders reached only 5 of its 83 controls before its rows redrew.
+
 ## Pages (v2)
 
 | # | Page, address | Implementation | Primary actions and expected result | Needs | States | Method | Initial | Issue, fix | Retest | Limits |
@@ -78,7 +87,7 @@ How things were checked (column "Method"):
 | P18 | Indices `#/indices` | `pages/indices.js` | index funds, regime | none | | Crawl, live | Failed | D13 ("A Index Read") | Fixed and verified | |
 | P19 | Earnings week `#/earnings` | `pages/earningsweek.js` | last, this, next week | none | | Crawl | Failed | D13 (heading) | Fixed and verified | open O09 |
 | P20 | Explore `#/explore` | `pages/explore.js` | sectors, themes, lists | none | | Crawl, live | Passed | | | |
-| P21 | Scan `#/scan` | `pages/scan.js` | choose a scan, rows open chart, watch, compare | none | | Suite scan 16/18 (stale selector), crawl, live | Passed | | | |
+| P21 | Scan `#/scan` | `pages/scan.js` | choose a scan, rows open chart, watch, compare; Find stocks in plain words | none | | Suite scan 16/18 (stale selector), crawl, click pass (39 controls), live | Failed | D23 | Fixed and verified | Plain-words requests that need Milo not run (paid) |
 | P22 | Insiders `#/insiders` | `pages/insiders.js` | House trades, Form 4s, federal contracts | SEC, House Clerk, USAspending | | Suite ownership 13/14, crawl, live | Passed | D12; open O10 | Fixed and verified (D12) | 1 ownership check not re-traced |
 | P23 | Analysts `#/analysts` | `pages/analysts.js` | rating changes feed | feed | | Crawl, live | Passed | D12 | Fixed and verified | |
 | P24 | Optic Portfolio `#/portfolio` | `pages/tracker.js` | three simulated books, hypothetical notice | none | | Crawl, suite positions (stale), live | Passed | | | |

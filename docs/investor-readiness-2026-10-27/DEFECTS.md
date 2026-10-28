@@ -34,6 +34,7 @@ feature, stalled section, failure without recovery; **P2** polish.
 | D20 | P1 | Research sheet evidence; Overview company summary | "Trading above the 200-day average. 99 ." | The first-sentence split ended a sentence at every full stop, so a decimal cut it; a stray space at source. | Decimal-safe split in both pages; source space removed (bb77a7a). | `tests/test_research_sheet.py`. |
 | D21 | P2 | Overview, Coming up | NVDA's Nov 17 report listed above three Oct 28 events. | Report added first so the cut keeps it, never sorted. | Kept items listed by date (1280797). | `tests/test_v2_overview_classic_port.py`, `test_v2_parity_b6a.py` updated. |
 | D22 | P2 | Overview of a coin | "More on Bitcoin USD": a heading over nothing. | Section drawn with no items. | Left out when empty (1280797). | Code; recrawl. |
+| D23 | P2 | Scan, Find stocks | "Find symbols now" with nothing typed did nothing at all. | An empty request returned silently. | Focuses the box and says what goes in it (4d88a1e). | Click pass; browser: message shown, focus in the box. |
 
 ## Found, not fixed (with the reason)
 
@@ -65,6 +66,9 @@ feature, stalled section, failure without recovery; **P2** polish.
   is there on reopening. The box is not focused on touch screens, so the keyboard does not cover the answer.
 - Insiders "Insider filings Loading": the SEC index was cold on a fresh server; warm it answers in milliseconds,
   and the view says "Failed" after 60 s if it never does.
+- Click pass "dead" results that were the harness: the current tab's own link (expected); "guidance" on News and
+  "Spread" on Options (both open their definitions on a real click, checked by hand); and every result of the first
+  run after a navigation, when the pass pressed stale list positions (rerun with each control found afresh).
 - Browser suite failures traced to checks written before later redesigns: search row markup (`b.tick`),
   scan's `.sc-next`, the Optic Portfolio's hypothetical notice moved to the legal notice, Milo's Compare context
   renamed `ranks` to `scores`, the Earnings quarters table moved under View data.

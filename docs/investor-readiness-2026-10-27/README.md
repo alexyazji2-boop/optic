@@ -38,13 +38,13 @@ missing headings, failed and duplicate requests; three reviewers read every full
 their findings was checked against the page or the code before it was logged. A click pass pressed every visible
 control on the busiest pages to find controls that do nothing. Details in `MATRIX.md`.
 
-## What was fixed (22 defects, 16 commits)
+## What was fixed (23 defects, 17 commits)
 
 | | Defects |
 |---|---|
 | Misleading financial data | D04 net cash without short-term investments (NVIDIA "Net debt $435.0M" instead of $51.5B net cash); D11 chart gridlines labelled half a point off; D01 a refused feed read reported as "No options chain for 'NVDA'" and cached |
 | Broken pages and states | D02 research sheet never rendered in any browser; D03 `#/BRK.B` found nothing; D05 an unknown ticker's Overview drew an error and four verdicts under "no listing"; D06 a feed outage would have said "no listing"; D09 not-found page without a heading |
-| Dead or misleading controls | D10 glossary terms did nothing on a first visit to Macro, Read, Scan, Compare; D16 an expired reset link left the reader on Home; D17 Brokerage said linking returns you to the classic app |
+| Dead or misleading controls | D10 glossary terms did nothing on a first visit to Macro, Read, Scan, Compare; D23 Scan's "Find symbols now" did nothing with an empty box; D16 an expired reset link left the reader on Home; D17 Brokerage said linking returns you to the classic app |
 | Reader text | D18 "because beat EPS consensus" on NVDA's Overview; D19 code keys and raw integers in DCF notes; D20 "Trading above the 200-day average. 99 ." on the sheet; D13 nine copy errors; D14 Compare explains why its scores differ from a Dossier's |
 | Layout and data hygiene | D12 wide phone tables say they scroll; D21 Coming up in date order; D22 no empty "More on" section; D07 mistyped symbols kept out of recents; D08 failed logos not re-requested |
 | Tests | D15 a date-dependent test that failed on production's commit every 27 October after 9:30 ET |
