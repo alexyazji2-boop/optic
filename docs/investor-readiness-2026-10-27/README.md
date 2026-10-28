@@ -38,16 +38,16 @@ missing headings, failed and duplicate requests; three reviewers read every full
 their findings was checked against the page or the code before it was logged. A click pass pressed every visible
 control on the busiest pages to find controls that do nothing. Details in `MATRIX.md`.
 
-## What was fixed (23 defects, 17 commits)
+## What was fixed (25 defects, 19 commits)
 
 | | Defects |
 |---|---|
-| Misleading financial data | D04 net cash without short-term investments (NVIDIA "Net debt $435.0M" instead of $51.5B net cash); D11 chart gridlines labelled half a point off; D01 a refused feed read reported as "No options chain for 'NVDA'" and cached |
+| Misleading financial data | D04 net cash without short-term investments (NVIDIA "Net debt $435.0M" instead of $51.5B net cash); D24 futures' evening change shown without its base (WTI "−0.02%" on a day it fell 1.83%); D11 chart gridlines labelled half a point off; D01 a refused feed read reported as "No options chain for 'NVDA'" and cached |
 | Broken pages and states | D02 research sheet never rendered in any browser; D03 `#/BRK.B` found nothing; D05 an unknown ticker's Overview drew an error and four verdicts under "no listing"; D06 a feed outage would have said "no listing"; D09 not-found page without a heading |
 | Dead or misleading controls | D10 glossary terms did nothing on a first visit to Macro, Read, Scan, Compare; D23 Scan's "Find symbols now" did nothing with an empty box; D16 an expired reset link left the reader on Home; D17 Brokerage said linking returns you to the classic app |
 | Reader text | D18 "because beat EPS consensus" on NVDA's Overview; D19 code keys and raw integers in DCF notes; D20 "Trading above the 200-day average. 99 ." on the sheet; D13 nine copy errors; D14 Compare explains why its scores differ from a Dossier's |
 | Layout and data hygiene | D12 wide phone tables say they scroll; D21 Coming up in date order; D22 no empty "More on" section; D07 mistyped symbols kept out of recents; D08 failed logos not re-requested |
-| Tests | D15 a date-dependent test that failed on production's commit every 27 October after 9:30 ET |
+| Tests | D15 and D25: two date-dependent tests that failed on production's commit (one every 27 October after 9:30 ET, one from 28 October) |
 
 ## Validation
 
@@ -75,17 +75,15 @@ control on the busiest pages to find controls that do nothing. Details in `MATRI
 
 ## Outstanding
 
-Not fixed, with the reason, in `DEFECTS.md` (O01 to O15). The ones an investor could notice:
+Not fixed, with the reason, in `DEFECTS.md` (O02 to O15; O01 was fixed as D24). The ones an investor could notice:
 
-1. **O01** In the evening, futures (WTI, gold) show the change since today's settlement: crude read "−0.02%"
-   tonight on a day it fell 1.8%. Affects Home's Markets at a glance after 6 PM ET; correct during the session.
-2. **O02** Bitcoin's "past year" covers about eight months.
-3. **O03** Milo is offered the portfolio tool on every page; on the owner's account a Compare question can quote
+1. **O02** Bitcoin's "past year" covers about eight months.
+2. **O03** Milo is offered the portfolio tool on every page; on the owner's account a Compare question can quote
    real holdings. The fix is on `milo-portfolio-privacy` (2236205), held by the owner. Investors' accounts have
    no brokerage linked, so they cannot see this; present from an ordinary account, never the owner's.
-4. **O04** The Overview's pre-earnings view still says rising estimates "tend to precede results above them",
+3. **O04** The Overview's pre-earnings view still says rising estimates "tend to precede results above them",
    which the validation program did not support (open owner decision).
-5. **O06, O07, O08** Vocabulary and rounding: "Tight 3.2%" beside "Fair 0.3%" on Options; Overview and Compare
+4. **O06, O07, O08** Vocabulary and rounding: "Tight 3.2%" beside "Fair 0.3%" on Options; Overview and Compare
    score the same horizon differently (Compare now says so); a few figures rounded two ways.
 
 ## Investor demonstration checklist
@@ -100,7 +98,6 @@ Not fixed, with the reason, in `DEFECTS.md` (O01 to O15). The ones an investor c
 - [ ] Present from an ordinary account in a fresh browser profile, not the owner's (owner menus, real brokerage,
       O03).
 - [ ] Warm the path 30 minutes ahead: Home, NVDA Overview, Chart, Options, Compare NVDA and MSFT.
-- [ ] Present during market hours if possible (O01 is an evening effect).
 
 **On the path:**
 - [ ] Home: every panel names its source and time.
