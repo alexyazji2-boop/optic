@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import logging
+from datetime import date, datetime, time, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 import numpy as np
 import pandas as pd
 
+from .. import session as session_mod
 from .technicals import atr, bollinger, ema, rsi, sma
 
 log = logging.getLogger(__name__)
@@ -52,7 +54,67 @@ def live_quotes(provider, symbols: List[str]) -> Dict[str, Dict[str, Any]]:
     return out if isinstance(out, dict) else {}
 
 
-def apply_quote(snap: Dict[str, Any], quote: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+def _trading(day: date) -> bool:
+    return session_mod.regular_close(day) is not None
+
+
+def _step(day: date, sign: int) -> date:
+    day += timedelta(days=sign)
+    while not _trading(day):
+        day += timedelta(days=sign)
+    return day
+
+
+def futures_basis(now: Optional[datetime] = None) -> Dict[str, Any]:
+    """Which settlement a futures quote's change is measured from, and whether
+    that change covers a different day from the stock market's.
+
+    A futures trade date runs from the 6 PM ET reopen on the evening before it
+    to 5 PM ET; the quote's previous close is the settlement of the trade date
+    before it, which is the exchange's own convention and the figure
+    `apply_quote` keeps. From the reopen to the 9:30 AM stock open, then, the
+    two disagree about which day "today" is: at 7 PM on Tuesday 27 October 2026
+    WTI read -0.02% (Wednesday's session so far, since Tuesday's settle) beside
+    a stock market still showing Tuesday, on a day crude had fallen 1.83%
+    (investor audit). `split` marks that window so the page can say so.
+
+    NYSE trading days stand in for the exchange's: CME holiday sessions are
+    shortened rather than closed, and are not modelled here."""
+    et = (now or datetime.now(timezone.utc)).astimezone(session_mod.ET)
+    today, clock = et.date(), et.time()
+    after = _step(today, 1)
+    # the evening before a trading day carries that day's session; Friday's and a holiday eve's do not reopen
+    if clock >= time(18, 0) and after == today + timedelta(days=1):
+        trade = after
+    elif _trading(today):
+        trade = today
+    else:
+        trade = _step(today, -1)
+    settle = _step(trade, -1)
+    stocks = today if (_trading(today) and clock >= time(9, 30)) else _step(today, -1)
+    return {"trade_date": trade, "settle_date": settle, "split": trade != stocks}
+
+
+def _settle_before(frame: Optional[pd.DataFrame], day: date) -> Optional[float]:
+    """The close of the last daily bar dated before `day`: a settlement, read by
+    date rather than by position, because after the reopen Yahoo can date the
+    new evening session's bar with the day that just settled."""
+    if frame is None or frame.empty or "Close" not in frame:
+        return None
+    try:
+        closes = frame["Close"].astype(float)
+        days = [pd.Timestamp(i).date() for i in closes.index]
+    except Exception:                                           # noqa: BLE001
+        return None
+    for d, v in zip(reversed(days), reversed(list(closes))):
+        if d < day and np.isfinite(v):
+            return float(v)
+    return None
+
+
+def apply_quote(snap: Dict[str, Any], quote: Optional[Dict[str, Any]],
+                frame: Optional[pd.DataFrame] = None, symbol: Optional[str] = None,
+                now: Optional[datetime] = None) -> Dict[str, Any]:
     """Take the one-day change from the quote instead of from the bars.
 
     `chg_1d` was the last daily close over the one before it. That is the
@@ -108,6 +170,17 @@ def apply_quote(snap: Dict[str, Any], quote: Optional[Dict[str, Any]]) -> Dict[s
     snap["prev_close"] = _f(prev)
     snap["chg_1d_source"] = "quote"
     snap["quote_as_of"] = quote.get("as_of")
+    if symbol and str(symbol).upper().endswith("=F"):
+        b = futures_basis(now)
+        settle = b["settle_date"]
+        snap["chg_1d_basis"] = {"since": "settle", "settle_date": settle.isoformat(),
+                                "settle_day": settle.strftime("%a"), "split": b["split"]}
+        # the session that settled, while the change beside the price is already the next one's: its own
+        # change, from two settlements the feed has (the quote's previous close and the one before it)
+        prior = _settle_before(frame, settle) if b["split"] else None
+        if prior:
+            snap["session_chg"] = _f((float(prev) / prior - 1.0) * 100.0, 3)
+            snap["session_date"] = settle.isoformat()
     return snap
 
 

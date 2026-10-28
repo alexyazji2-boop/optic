@@ -6268,7 +6268,7 @@ async def instrument_chart(
         # row the reader clicked to get here.
         snap = series_stats_mod.apply_quote(
             macro_mod.snapshot(stats, meta.get("label") or sym),
-            series_stats_mod.live_quotes(YF_PROVIDER, [sym]).get(sym))
+            series_stats_mod.live_quotes(YF_PROVIDER, [sym]).get(sym), frame=stats, symbol=sym)
         close = frame["Close"].astype(float)
         wanted = [i for i in (ids or "").replace(" ", "").split(",") if i]
         extras = {}

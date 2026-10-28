@@ -20,17 +20,21 @@ function paint() {
   const d = D.d, sym = D.sym;
   if (chart) { chart.destroy(); chart = null; }
   const sn = (d || {}).snapshot || {}, dp = Math.abs(sn.last) < 10 ? 4 : 2;
+  // a futures change is from the last settlement; after the 6 PM reopen that is today's, and the session that settled
+  // gets its own tile (investor audit, 2026-10-27: WTI read -0.02% on a day it fell 1.83%)
+  const basis = sn.chg_1d_basis || null;
   const rsiWord = !isNum(sn.rsi) ? 'Not enough history' : sn.rsi >= 70 ? 'Overbought territory' : sn.rsi <= 30 ? 'Oversold territory' : 'Mid-range';
   draw(mainEl, html`<header class="page-head">${backLink()}<p class="t-label">${d ? (d.group === 'fx' ? 'FX' : (d.group || 'Instrument')) : 'Instrument'}</p><div class="split"><h1 class="t-display-m">${d ? `${d.name || d.label} (${d.label && d.label !== (d.name || d.label) ? d.label : sym})` : sym}</h1>
       ${miloButton('Ask Milo what this is', { ask: `What is ${d ? d.label || sym : sym}, and why does it matter for markets right now?`, context: `Instrument, ${sym}` })}</div>${d && (d.about || d.note) ? html`<p class="section-sub">${clean(d.about || d.note)}</p>` : ''}</header>
     ${D.err ? failed('This instrument', D.err, { retry: 'instrument' }) : !d ? skeleton('chart', 1, 'Loading the history') : html`
-      <dl class="kv" style="--kv:5"><div><dt>Last</dt><dd>${num(sn.last, dp)} <small class="${dir(sn.chg_1d)}">${signed(sn.chg_1d)}</small></dd></div>
+      <dl class="kv" style="--kv:${isNum(sn.session_chg) ? 6 : 5}"><div><dt>Last</dt><dd>${num(sn.last, dp)} <small class="${dir(sn.chg_1d)}">${signed(sn.chg_1d)}</small>${basis ? html`<small class="t-muted kv-sub">since ${basis.settle_day}'s settle</small>` : ''}</dd></div>
+        ${isNum(sn.session_chg) ? html`<div><dt>${basis.settle_day}'s session</dt><dd><span class="${dir(sn.session_chg)}">${signed(sn.session_chg)}</span> <small class="t-muted">settled ${num(sn.prev_close, dp)}</small></dd></div>` : ''}
         <div><dt>20 days</dt><dd>${signed(sn.chg_20d)}</dd></div><div><dt>Against the 200-day</dt><dd>${signed(sn.vs_sma200)} <small class="t-muted">${num(sn.sma200, dp)}</small></dd></div>
         <div><dt>RSI</dt><dd>${num(sn.rsi, 0)} <small class="t-muted">${rsiWord}</small></dd></div><div><dt>From the 52-week high</dt><dd>${signed(sn.pct_from_52w_high)}</dd></div></dl>
       <div class="ctools" style="margin-top:18px"><div class="seg" role="group" aria-label="Range">${RANGES.map(([k, l]) => html`<button type="button" data-v2-inst-range="${k}" aria-pressed="${range === k}">${l}</button>`)}</div>
         <div class="seg" role="group" aria-label="Style">${[['line', 'Line'], ['candles', 'Candles'], ['area', 'Area']].map(([k, l]) => html`<button type="button" data-v2-inst-style="${k}" aria-pressed="${style === k}">${l}</button>`)}</div></div>
       <div class="pc-host" id="inst-chart"></div>
-      <p class="asof">A reference series, not a price you could deal at. Source: Yahoo Finance. Tiles use a year of bars whatever the range.</p>`}`);
+      <p class="asof">A reference series, not a price you could deal at. Source: Yahoo Finance. Tiles use a year of bars whatever the range.${basis ? ` A futures trading day runs from 6 PM to 5 PM ET, and the change beside the price is from the last settlement. After the 6 PM reopen the feed's last daily bar can be the new evening session, so the chart's own day change can differ from it.` : ''}</p>`}`);
   if (d && (d.dates || []).length > 4) {
     const bars = d.dates.map((t, i) => ({ t: Date.parse(t), o: (d.open || [])[i] ?? d.close[i], h: (d.high || [])[i] ?? d.close[i], l: (d.low || [])[i] ?? d.close[i], c: d.close[i], v: (d.volume || [])[i] || 0 })).filter((b) => isNum(b.c));
     chart = createPriceChart(mainEl.querySelector('#inst-chart'), { bars, style, overlays: { events: false }, panes: { volume: !!d.volume, rsi: false, macd: false }, window: bars.length, label: d.label || sym, height: Math.max(240, Math.min(400, Math.round(window.innerHeight * 0.62))) });   // a landscape phone keeps the whole chart in view

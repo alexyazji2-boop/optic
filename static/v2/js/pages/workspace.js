@@ -245,6 +245,14 @@ const PLAIN_REGIME = { 'risk-on': 'Investors are leaning toward risk', 'mildly r
 const STANCE = { 'risk-on': 'Volatility, credit, the dollar, rates and oil, taken together, lean toward risk.', 'mildly risk-on': 'Volatility, credit, the dollar, rates and oil lean mildly toward risk: supportive, not strong.', 'neutral / mixed': 'Volatility, credit, the dollar, rates and oil are mixed, so the market read says little about any one company.', 'mildly risk-off': 'Volatility, credit, the dollar, rates and oil, taken together, lean mildly toward caution.', 'risk-off': 'Volatility, credit, the dollar, rates and oil lean toward caution: the readings that signal stress are elevated.' };
 const STRIP = [['equity', 'S&P 500'], ['equity', 'Nasdaq 100'], ['equity', 'Russell 2000'], ['volatility', 'VIX'], ['rates', 'US 10Y'], ['commodities', 'WTI Crude'], ['commodities', 'Gold'], ['crypto', 'Bitcoin']];
 const inst = (d, g, l) => ((((d || {}).macro || {}).groups || {})[g] || []).find((r) => r.label === l) || null;
+// From the 6 PM ET reopen to the 9:30 stock open a futures move is the new session's, since that day's settle, beside
+// stocks still showing the session that closed; the tile says so and gives the settled session's move (investor audit,
+// 2026-10-27: WTI read -0.02% at 7 PM on a day it fell 1.83%)
+function basisLine(i) {
+  const b = i.chg_1d_basis;
+  if (!b || !b.split) return '';
+  return html`<span class="u ws-basis">Since ${b.settle_day}'s settle${isNum(i.session_chg) ? html`; <span class="ws-nw">${b.settle_day} <span class="${dir(i.session_chg)}">${signed(i.session_chg)}</span></span>` : ''}</span>`;
+}
 function moveText(i) {
   if (!isNum(i.chg_1d)) return '';
   if (i.group === 'rates' && isNum(i.last)) { const bp = Math.round((i.last - i.last / (1 + i.chg_1d / 100)) * 100); return `${bp > 0 ? '+' : bp < 0 ? '−' : ''}${Math.abs(bp)} bp`; }
@@ -338,7 +346,7 @@ export const PANELS = {
       if (!cells.length) return html`<p class="ws-note">No index readings came back from the feed.</p>`;
       // each figure with its unit, and each move coloured by its direction only, as Classic coloured its strip (owner,
       // 2026-10-21): green up, red down, the VIX and the 10-year included; the colour says which way, not good or bad
-      return html`<div class="ws-strip">${cells.map((i) => html`<a class="ws-cell" href="#/instrument/${enc(i.symbol)}"><span class="k">${i.label}</span><span class="v">${num(i.last, i.last < 20 ? 2 : i.last > 1000 ? 0 : 2)}${i.group === 'rates' ? '%' : ''}</span><span class="d ${dir(i.chg_1d)}">${moveText(i)}</span><span class="u">${UNIT[i.label] || ''}</span></a>`)}</div>`;
+      return html`<div class="ws-strip">${cells.map((i) => html`<a class="ws-cell" href="#/instrument/${enc(i.symbol)}"><span class="k">${i.label}</span><span class="v">${num(i.last, i.last < 20 ? 2 : i.last > 1000 ? 0 : 2)}${i.group === 'rates' ? '%' : ''}</span><span class="d ${dir(i.chg_1d)}">${moveText(i)}</span><span class="u">${UNIT[i.label] || ''}</span>${basisLine(i)}</a>`)}</div>`;
     },
     foot: (d) => ({ source: 'Yahoo Finance via Optic', at: d.generated_at, note: ((d.session || {}).is_regular ? '' : 'Outside the regular session, equities are at the last close; futures and crypto keep trading.'), stale: (d.degraded || []).length ? 'Some missing' : '', staleWhy: (d.degraded || []).length ? `Not available: ${d.degraded.join(', ')}.` : '' }),
     milo: 'What do today\'s index, volatility, yield and commodity moves say together?',

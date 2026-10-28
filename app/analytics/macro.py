@@ -342,7 +342,7 @@ def analyse(provider) -> Dict[str, Any]:
             snaps[item["symbol"]] = dict(item, error="no data")
             continue
         snap = apply_quote(snapshot(frame, item["label"]),
-                           quotes.get(item["symbol"]))
+                           quotes.get(item["symbol"]), frame=frame, symbol=item["symbol"])
         snap["symbol"] = item["symbol"]
         snap["group"] = item["group"]
         snap["note"] = item["note"]

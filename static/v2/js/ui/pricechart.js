@@ -703,7 +703,7 @@ export function createPriceChart(host, opts) {
     }
     const prev = bars[i - 1], chg = prev ? (b.c / prev.c - 1) * 100 : null;
     const filed = fileMarks.filter((m) => m.i === i).map((m) => m.f.form);
-    read.innerHTML = `${S.title ? `<b class="pc-sym">${esc(S.title.sym)}</b> <span class="pc-what">${esc(S.title.what)}</span> ` : ''}<b>${esc(fmtT(b.t))}</b> <span>O ${num(b.o)}</span> <span>H ${num(b.h)}</span> <span>L ${num(b.l)}</span> <span>C ${num(b.c)}</span>${chg !== null ? ` <span class="${chg >= 0 ? 'up' : 'down'}">${chg >= 0 ? '+' : '−'}${num(Math.abs(chg))}%</span>` : ''}${b.v ? ` <span class="t-muted">Vol ${num(b.v / 1e6, 1)}M</span>` : ''}${filed.length ? ` <span class="pc-fil">${esc(filed.join(', '))} filed</span>` : ''}`;
+    read.innerHTML = `${S.title ? `<b class="pc-sym">${esc(S.title.sym)}</b> <span class="pc-what">${esc(S.title.what)}</span> ` : ''}<b>${esc(fmtT(b.t))}</b> <span>O ${num(b.o)}</span> <span>H ${num(b.h)}</span> <span>L ${num(b.l)}</span> <span>C ${num(b.c)}</span>${chg !== null ? ` <span class="${chg >= 0 ? 'up' : 'down'}">${chg >= 0 ? '+' : '−'}${num(Math.abs(chg))}%</span>` : ''}${b.v ? ` <span class="t-muted">Vol ${compact(b.v)}</span>` : ''}${filed.length ? ` <span class="pc-fil">${esc(filed.join(', '))} filed</span>` : ''}`;
   }
   function summary() {
     const a = bars[from], b = bars[to]; if (!a || !b) return 'Price chart';
