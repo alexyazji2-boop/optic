@@ -155,6 +155,7 @@ def test_scan_keeps_what_is_on_screen_and_runs_once():
     again (it can use a Milo question). scan_check.py: 45/45 at five widths."""
     src = (JS / "pages/scan.js").read_text()
     assert "remember(`id=${encodeURIComponent(id)}`)" in src and "remember('mode=build')" in src
-    assert "if (q && ASKED.has(q))" in src and "if (!text || S.asking) return;" in src
+    # one request at a time; an empty request says what goes in the box instead of doing nothing (investor audit, 2026-10-27)
+    assert "if (q && ASKED.has(q))" in src and "if (S.asking) return;" in src and "Describe the stocks you want first" in src
     assert "if (S.screening && !again) return;" in src
     assert "Compare the first" in src and "watchButton(sym, { compact: true })" in src

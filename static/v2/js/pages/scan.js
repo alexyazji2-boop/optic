@@ -208,7 +208,11 @@ async function runScreen(again) {
   S.screening = false; remember('mode=build'); paint(); whenBuilt(S.screen && S.screen.building, () => runScreen(true));
 }
 async function runAsk(text) {
-  text = String(text || '').trim(); if (!text || S.asking) return;   // one request at a time: a second click does not ask twice
+  text = String(text || '').trim();
+  if (S.asking) return;   // one request at a time: a second click does not ask twice
+  // nothing typed: the box is focused and the reader told what goes in it. The button did nothing at all, and the
+  // grey example in the box is a placeholder, not a request (investor audit, 2026-10-27)
+  if (!text) { const box = document.getElementById('sc-ask'); if (box) box.focus(); toast('Describe the stocks you want first, in a few words.'); return; }
   S.askText = text; S.asking = true; S.ask = null; paint();
   try {
     S.ask = await api.post('/api/screener/ask', { text }, { timeout: 60000 });
