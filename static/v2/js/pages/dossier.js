@@ -41,7 +41,8 @@ let range = '1Y';
 // close the one-year answer measures from: the chart started a session later and read 33.7% against the
 // answer's 31.5% (pitch audit, 2026-10-22).
 const RANGES = { '3M': 63, '6M': 126, '1Y': 252 };
-export const windowOf = (pts, r) => pts.slice(-(RANGES[r] + 1));
+// sessions for a market that has them; calendar months for one that trades every day (OR.windowStart)
+export const windowOf = (pts, r) => pts.slice(OR.windowStart(pts.map((p) => p.d), RANGES[r]).i);
 
 // A fund's four answers (a company's are Classic's four questions, overview-research.js).
 const stanceWord = { fair: 'priced about in line with that history', expensive: 'priced above that history', cheap: 'priced below that history' };
@@ -72,7 +73,7 @@ function chartBlock(sym) {
   const up = ((((D.ticker || {}).company || {}).earnings_history || {}).upcoming || [])[0] || {};
   const next = String(((D.earnings || {}).next_report || {}).date || up.date || '').slice(0, 10);
   return html`${head(html`<div class="seg" role="group" aria-label="Chart range">${Object.keys(RANGES).map((r) => html`<button type="button" data-v2-range="${r}" aria-pressed="${r === range}">${r}</button>`)}</div>`)}
-    <p class="py-title">${OR.chartTitle(sym, shown.map((p) => p.c))}</p>
+    <p class="py-title">${OR.chartTitle(sym, shown.map((p) => p.c), OR.tradesDaily(pts.map((p) => p.d)) ? { year: range === '1Y' && OR.windowStart(pts.map((p) => p.d), RANGES['1Y']).full } : {})}</p>
     <p class="section-sub">${OR.chartSource(D.ticker, last.d, next)}${im ? html` The gold cone is the ±${num(im.pct)}% range options price through the ${shortDate(im.expiry)} expiry.` : ''}</p>
     <div class="chart-slot" data-chart="price"></div>
     ${OR.marksFold(chartEvents(shown))}
@@ -119,9 +120,12 @@ const clip = (t, n) => (t.length > n ? `${t.slice(0, t.lastIndexOf(' ', n))}…`
 export function trendFinding(pts, sma200) {
   const closes = (pts || []).filter((p) => isNum(p.c));
   if (closes.length < 60) return null;
-  const last = closes[closes.length - 1], back = closes[Math.max(0, closes.length - 253)];
+  // the year's close as windowOf finds it, so the trend answer and the 1Y chart start on the same close
+  const w = OR.windowStart(closes.map((p) => p.d), 252), daily = OR.tradesDaily(closes.map((p) => p.d));
+  const last = closes[closes.length - 1], back = closes[w.i];
   const ch = FV.pctChange(last.c, back.c), vsAvg = isNum(sma200) && sma200 > 0 ? ((last.c - sma200) / sma200) * 100 : null;
-  return { ch, from: back, to: last, vsAvg, span: closes.length >= 253 ? 'a year' : `${Math.round((closes.length - 1) / 21)} months` };
+  const months = daily ? Math.round((Date.parse(last.d) - Date.parse(back.d)) / 2629746000) : Math.round((closes.length - 1) / 21);
+  return { ch, from: back, to: last, vsAvg, span: w.full ? 'a year' : `${months} months` };
 }
 function trendItem(sym) {
   const ps = ((D.ticker || {}).technicals || {}).price_series || {}, sma = (ps.sma200 || []).filter(isNum);

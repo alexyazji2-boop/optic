@@ -27,14 +27,35 @@ const tabLink = (sym, view, text, label) => html`<a class="textlink" href="${hre
 
 /* ---------------- the readings (Classic's ov* functions) ---------------- */
 const OV_SESSIONS = 252;
+/** A market that trades every day: weekend bars among the last month's. Yahoo dates a futures Sunday-evening session
+ *  with the Monday, so only a coin's series (and anything else open seven days a week) carries them. */
+export function tradesDaily(dates) {
+  return (dates || []).slice(-30).some((d) => { const w = new Date(`${String(d).slice(0, 10)}T12:00:00Z`).getUTCDay(); return w === 0 || w === 6; });
+}
+/** Where a window of `sessions` of change starts: the index of the close it is measured from. A count of sessions
+ *  (252 a year, 126, 63) for a market with sessions; for one that trades every day, the last close on or before the
+ *  same calendar date that many months back, since 252 bars of a coin is about eight months: BTC-USD's "past year"
+ *  began in mid-February and disagreed with its own 52-week high (investor audit, 2026-10-27). `full` says the
+ *  history reaches back that far. */
+export function windowStart(dates, sessions) {
+  const n = (dates || []).length;
+  if (!tradesDaily(dates)) return { i: Math.max(0, n - 1 - sessions), full: n > sessions };
+  const end = new Date(`${String(dates[n - 1]).slice(0, 10)}T12:00:00Z`);
+  const from = new Date(end); from.setUTCMonth(from.getUTCMonth() - Math.round(sessions / 21));
+  const iso = from.toISOString().slice(0, 10);
+  let i = -1; for (let k = n - 1; k >= 0; k--) { if (String(dates[k]).slice(0, 10) <= iso) { i = k; break; } }
+  return i < 0 ? { i: 0, full: false } : { i, full: true };
+}
 /** The past year of daily closes (Classic's overviewSeries), with the close before it: 252 sessions of change, so the
  *  year's change here starts on the same close as the chart's (the pitch audit's rule of 2026-10-22, dossier.js
- *  windowOf). Classic counts 252 closes, one session fewer. */
+ *  windowOf). Classic counts 252 closes, one session fewer. A market that trades every day is cut by the calendar
+ *  instead (windowStart). */
 export function series(t) {
   const ps = g(t, 'technicals', 'price_series') || {};
   const dates = (ps.dates || []).map((x) => String(x).slice(0, 10)), close = ps.close || [];
-  const rows = dates.map((d, i) => [d, Number(close[i])]).filter(([d, v]) => d && fin(v) && v > 0).slice(-(OV_SESSIONS + 1));
-  return { dates: rows.map((r) => r[0]), close: rows.map((r) => r[1]) };
+  const all = dates.map((d, i) => [d, Number(close[i])]).filter(([d, v]) => d && fin(v) && v > 0);
+  const rows = all.slice(windowStart(all.map((r) => r[0]), OV_SESSIONS).i);
+  return { dates: rows.map((r) => r[0]), close: rows.map((r) => r[1]), full: windowStart(all.map((r) => r[0]), OV_SESSIONS).full };
 }
 function move(x, up = 'grew', down = 'fell', flat = 'was roughly flat') { return !fin(x) ? '' : x >= 1 ? up : x <= -1 ? down : flat; }
 
@@ -78,8 +99,9 @@ export function priceRead(t, { index = false } = {}) {
   const { dates, close } = series(t);
   if (close.length < 20) return null;
   const last = close[close.length - 1], yr = (last / close[0] - 1) * 100;
-  const span = close.length >= OV_SESSIONS - 12 ? 'over the past year' : `over the last ${num(close.length, 0)} sessions`;
-  const m3 = close.length > 64 ? (last / close[close.length - 64] - 1) * 100 : null;
+  const daily = tradesDaily(dates), q3 = windowStart(dates, 63);
+  const span = (daily ? series(t).full : close.length >= OV_SESSIONS - 12) ? 'over the past year' : `over the last ${num(close.length, 0)} ${daily ? 'days' : 'sessions'}`;
+  const m3 = (daily ? q3.full : close.length > 64) ? (last / close[q3.i] - 1) * 100 : null;
   const off = (last / Math.max(...close) - 1) * 100;
   const yrWords = Math.abs(yr) < 2 ? `little changed ${span}` : `${yr >= 0 ? 'up' : 'down'} ${num(Math.abs(yr), 0)}% ${span}`;
   const subj = index ? 'The index' : 'The share price';
@@ -241,10 +263,11 @@ const statList = (rows, ids) => html`<dl class="ovx-stats">${ids.filter((id) => 
 
 /* ---------------- the past year's chart: its line, its marks and its source ---------------- */
 /** "INTC is up 128% over the past year, 38% below its highest close" (Classic's overviewChartTitle). */
-export function chartTitle(sym, close) {
+export function chartTitle(sym, close, { year = null } = {}) {
   if (close.length < 2) return '';
   const chg = (close[close.length - 1] / close[0] - 1) * 100;
-  const span = close.length >= OV_SESSIONS - 12 ? 'over the past year' : `over the ${num(close.length, 0)} sessions shown`;
+  // `year`: the caller knows the window is a full calendar year (a market that trades every day has more bars in one)
+  const span = (year !== null ? year : close.length >= OV_SESSIONS - 12) ? 'over the past year' : `over the ${num(close.length, 0)} sessions shown`;
   const mv = `${sym} is ${chg >= 0 ? 'up' : 'down'} ${num(Math.abs(chg), 0)}% ${span}`;
   const off = (close[close.length - 1] / Math.max(...close) - 1) * 100;
   return off > -1 ? `${mv}, at its highest close of it` : `${mv}, ${num(Math.abs(off), 0)}% below its highest close`;

@@ -56,14 +56,38 @@ def test_the_one_year_chart_starts_on_the_close_the_answer_measures_from(tmp_pat
     yr = _run(tmp_path, f"""
       const R = await import('{(JS / "pages/overview-research.js").as_posix()}');
       const O = await import('{(JS / "pages/dossier.js").as_posix()}');
-      const n = 400, dates = Array.from({{ length: n }}, (_, i) => new Date(Date.UTC(2025, 0, 1) + i * 864e5).toISOString().slice(0, 10));
-      const close = dates.map((_, i) => 100 + i);
+      // a stock's history: weekdays only (a series with weekend bars is a coin's, cut by the calendar: below)
+      const days = []; for (let k = 0; days.length < 400; k++) {{ const d = new Date(Date.UTC(2025, 0, 1) + k * 864e5); if (d.getUTCDay() % 6) days.push(d.toISOString().slice(0, 10)); }}
+      const dates = days, close = dates.map((_, i) => 100 + i);
       const t = {{ technicals: {{ price_series: {{ dates, close }} }}, quote: {{}} }};
       const w = O.windowOf(dates.map((d, i) => ({{ d, c: close[i] }})), '1Y');
       print(JSON.stringify({{ first: R.series(t).close[0], chart: w[0].c, title: R.chartTitle('X', w.map((p) => p.c)), read: R.priceRead(t).text }}));
     """)
     assert yr["first"] == yr["chart"]
     assert yr["title"].startswith("X is up 102% over the past year") and "up 102% over the past year" in yr["read"], (yr["title"], yr["read"])
+
+
+def test_a_coins_year_is_twelve_calendar_months(tmp_path):
+    """BTC-USD trades every day, so 252 bars were about eight months: its "past year" began in mid-February and
+    disagreed with its own 52-week high (investor audit, 2026-10-27). A series with weekend bars is cut by the
+    calendar; the chart, its headline, the trade answer and the trend answer still start on one close."""
+    got = _run(tmp_path, f"""
+      const R = await import('{(JS / "pages/overview-research.js").as_posix()}');
+      const O = await import('{(JS / "pages/dossier.js").as_posix()}');
+      const n = 400, dates = Array.from({{ length: n }}, (_, i) => new Date(Date.UTC(2025, 0, 1) + i * 864e5).toISOString().slice(0, 10));
+      const close = dates.map((_, i) => 100 + i);
+      const t = {{ technicals: {{ price_series: {{ dates, close }} }}, quote: {{}} }};
+      const pts = dates.map((d, i) => ({{ d, c: close[i] }}));
+      const w = O.windowOf(pts, '1Y'), w3 = O.windowOf(pts, '3M'), tf = O.trendFinding(pts, null);
+      const pr = R.priceRead(t);
+      print(JSON.stringify({{ daily: R.tradesDaily(dates), first: w[0].d, last: w[w.length - 1].d, n: w.length, series: R.series(t).close[0], chart: w[0].c,
+        trend: [tf.from.d, tf.span], title: R.chartTitle('BTC-USD', w.map((p) => p.c), {{ year: true }}), read: pr.text, m3: pr.m3, w3: w3[0].d }}));
+    """)
+    assert got["daily"] is True
+    assert (got["first"], got["last"], got["n"]) == ("2025-02-04", "2026-02-04", 366), "the close a calendar year back, and every day since"
+    assert got["series"] == got["chart"] and got["trend"] == ["2025-02-04", "a year"], "one start for the chart and the answers"
+    assert got["title"].startswith("BTC-USD is up 272% over the past year") and "up 272% over the past year" in got["read"]
+    assert got["w3"] == "2025-11-04" and abs(got["m3"] - ((499 / 407 - 1) * 100)) < 0.01, "three calendar months, not 63 bars"
 
 
 # ---------------------------------------------------------------- 2. catalyst timing: one event, one state
