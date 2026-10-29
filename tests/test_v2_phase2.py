@@ -57,24 +57,24 @@ WS = (JS / "pages/workspace.js").read_text()
 PAGES_CSS = (V2 / "css/pages.css").read_text()
 
 
-def test_a_linked_panel_says_what_it_follows_and_can_be_unlinked():
-    chip = WS[WS.index("function linkChip(id)"):WS.index("function panelShell(")]
-    assert "Follows ${S.link}" in chip and "Kept on ${own}" in chip and 'data-ws-pin="${id}"' in chip
-    assert "${p.linked ? linkChip(x.id) :" in WS
-    assert "data-ws-pin=\"${x.id}\"" in WS, "the panel's menu offers it too"
+def test_a_linked_panel_names_its_ticker_and_can_keep_its_own():
+    # The "Follows <ticker>" button was removed in the post-demo overhaul (Phase 03, 2026-10-29): a company panel
+    # names its ticker as plain text, and keeping its own ticker is in the panel's menu.
+    label = WS[WS.index("const linkLabel = (id) =>"):WS.index("const pinWords = (id) =>")]
+    assert '<span class="ws-scope" data-ws-sym="${id}">' in label and ", kept here" in label
+    assert "${p.linked ? linkLabel(x.id) :" in WS
+    assert "data-ws-pin=\"${x.id}\"" in WS, "the panel's menu offers it"
 
 
 def test_a_kept_panel_loads_its_own_ticker_and_keeps_it():
     assert "const symOf = (id) => (PANELS[id] && PANELS[id].linked && ps(id).pin) || S.link;" in WS
-    assert "const linkAt = symOf(id);" in WS and "const d = await p.load(linkAt, P);" in WS
+    assert "const linkAt = symOf(id), mine = (SEQ[id] = (SEQ[id] || 0) + 1);" in WS and "const d = await p.load(linkAt, P);" in WS
     assert "PANELS[x.id].linked && !ps(x.id).pin).forEach" in WS, "a new link leaves kept panels alone"
     assert "...(PANELS[id] && PANELS[id].linked ? ['pin'] : [])" in WS, "the kept ticker is saved with the layout"
 
 
-def test_the_marker_is_a_squared_control_not_a_pill():
-    rule = PAGES_CSS[PAGES_CSS.index(".ws-linkchip {"):]
-    rule = rule[:rule.index("}")]
-    assert "var(--r-xs)" in rule and "--r-pill" not in rule
+def test_the_ticker_reads_like_a_market_panels_scope_not_a_control():
+    assert ".ws-linkchip" not in PAGES_CSS and ".ws-scope" in PAGES_CSS
 
 
 # ------------------------------------------------------------ the ticker More menu

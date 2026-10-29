@@ -88,3 +88,28 @@ The column is gone in v2 and Classic and the server no longer computes it; the e
 one phrase at a time and caught 5 of 15 held-out advice sentences. It was rebuilt as one action vocabulary over five
 sentence shapes, and its rates are measured on a set written by a separate agent that was told not to read the code.
 Sets used for tuning become regression tests and are never reported as a measure.
+
+**D-016 (Phase 03) One precedence for "which symbol", and where pages keep their own.** Wherever a page needs a
+symbol the reader did not give: (1) the address's symbol; (2) the company opened on this visit (memory only:
+`store.openedNow()`), for the palette's places and the sidebar's Dossier link; (3) the reader's saved choice where a
+page keeps one, which today is only Home's linked panels; (4) SPY (`store.DEFAULT_SYMBOL`). The Recent list and the
+watchlist never choose a symbol on their own: they outlive the visit. Intentional exceptions, each with its own
+selection: Home's linked panels (the reader's choice, else SPY; they do not follow the Dossier); Compare (its `?t=`
+list); the Chart's compare overlay; Watchlist, Alerts and Paper Desk (their own records); Macro, Indices and the
+market pages (the whole market, no symbol). Milo takes the page's symbol (`provideContext`) and any symbol the
+question names. The palette's Dossier row with no company open goes to the Dossier start page, as the sidebar does
+(owner, 2026-10-21).
+
+**D-017 (Phase 03) "Follows <ticker>" is removed; a saved Home ticker is kept only if it was chosen.** The chip on
+each linked panel is gone, and so is the behaviour behind it: Home's ticker fell back to the watchlist's first name
+or the last company opened, and that fallback was then saved, so Home showed it on every later visit. A company panel
+now names its ticker as plain text, keeping a panel on its own ticker stays in the panel's menu, and a ticker is
+saved only when the reader chooses it (the box above the panels, a ticker pressed on Home, "Show on Home"), marked
+`linkChosen`. Saved workspaces from before carry no such mark, so every reader's Home shows SPY once, including a
+reader who had chosen a ticker on purpose; that is the price of telling the two apart, and choosing again keeps it.
+
+**D-018 (Phase 03) One resolver for typed text.** `core/resolve.js` decides what typed text names for the palette,
+Home's search box, the Dossier start page and Home's linked-panel box: an exact symbol (share classes in their dashed
+form), else a name people use, else a company whose name starts with the word typed; an index, rate, currency,
+future or crypto opens its instrument page. A text that names nothing opens the search with it (Home did nothing
+before), and a navigation after an awaited search only happens while the reader is still where they typed it.

@@ -71,6 +71,11 @@ export async function signOut() {
 }
 
 /* ---------------- recent symbols ---------------- */
+// The market's default symbol: Home's company panels show it, and a place that needs a company opens it, until the
+// reader chooses another (Phase 03, 2026-10-29). Precedence, everywhere a page needs one: the address's symbol, the
+// company opened on this visit (openedNow, for the palette and the Dossier link), the reader's saved choice where a
+// page keeps one (Home's linked panels), then this. Never the Recent list or the watchlist on their own.
+export const DEFAULT_SYMBOL = 'SPY';
 export function recent() {
   const r = readJSON(RECENT_KEY, []);
   return Array.isArray(r) ? r.map((x) => String(typeof x === 'string' ? x : x && x.symbol || '').toUpperCase()).filter(Boolean).slice(0, 8) : [];

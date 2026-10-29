@@ -239,6 +239,8 @@ function wireGlobal() {
     if ((b = t('[data-v2-shortcuts]'))) { openShortcuts(b); return; }
     if ((b = t('[data-v2-copy]')) || (b = t('[data-v2-copy-price]'))) { copyFrom(b); return; }
     if ((b = t('[data-v2-open-palette]'))) { e.preventDefault(); palette.open(b, { symbol: current && current.route.symbol }); return; }
+    // Skip to content moves focus, not the address: "#main" read as a route opened the ticker MAIN (BUG-044)
+    if (t('a.skip')) { e.preventDefault(); const m = $('#main'); if (m) { m.focus(); m.scrollIntoView({ block: 'start' }); } return; }
     if ((b = t('[data-v2-milo]'))) {
       // the panel's own figures go with it (B4a.3); the top bar's Ask Milo sits in no panel and sends none
       openMilo({ question: b.dataset.v2Milo || '', opener: b, about: b.dataset.v2MiloCtx || '', symbol: b.dataset.v2MiloSym || '', figures: panelFigures(b) });
@@ -248,7 +250,7 @@ function wireGlobal() {
     if ((b = t('[data-v2-homelink]'))) {
       const sym = b.dataset.v2Homelink, onHome = current && current.route.view === 'home';
       drawer.close({ silent: true });
-      if (linkHome(sym)) { toast(`Home's linked panels now follow ${sym}.`); if (!onHome) router.go('#/'); }
+      if (linkHome(sym)) { toast(`Home's company panels now show ${sym}.`); if (!onHome) router.go('#/'); }
       return;
     }
     if ((b = t('[data-v2-account]'))) { drawer.open({ kicker: 'Account', title: store.state.user ? (store.state.user.first_name || 'Your account') : 'Not signed in', body: accountBody(), opener: b }); return; }

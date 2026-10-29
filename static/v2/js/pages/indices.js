@@ -11,6 +11,7 @@ import { button as miloButton, provideContext } from '../ui/milo.js';
 import { sectionHead } from './tabs.js';
 import { sectorBoard, sectorReadBlock, loadSectorRead } from './market-shared.js';
 
+let sreadSeq = 0;
 let D = {}, live = true, mainEl = null;
 
 function readings(x) {
@@ -57,7 +58,8 @@ export async function render(main) {
   paint();
   main.addEventListener('click', async (e) => {
     const b = e.target.closest('[data-v2-sread]');
-    if (b) { D.sread = { loading: b.dataset.v2Sread }; paint(); D.sread = await loadSectorRead(b.dataset.v2Sread); paint(); return; }
+    // the newest sector chosen wins: a read for one chosen before lands nowhere (BUG-040)
+    if (b) { D.sread = { loading: b.dataset.v2Sread }; paint(); const box = D, mine = (sreadSeq += 1), r = await loadSectorRead(b.dataset.v2Sread); if (mine !== sreadSeq || D !== box) return; D.sread = r; paint(); return; }
     if (e.target.closest('[data-v2-sread-close]')) { D.sread = null; paint(); }
   });
   api.get('/api/indices/board', { ttl: 120000 }).then((d) => { D.board = d; }, () => { D.board = null; }).finally(() => { if (live) paint(); });

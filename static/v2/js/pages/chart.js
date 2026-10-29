@@ -108,7 +108,7 @@ async function loadBars() {
   // 2026-10-24): no blank skeleton between bar sizes, and nothing on it can be read as the new bars meanwhile
   D.pending = chart ? `Loading ${iv.label} bars` : '';
   D.bars = null; D.barsErr = null; paintChart();
-  let note = '';
+  let note = '', intra = null;
   try {
     let bars;
     if (iv.intraday) {
@@ -116,8 +116,9 @@ async function loadBars() {
       try { d = await api.get(`/api/intraday/${enc}?range=${iv.key}&window=${iv.history}&session=${V.session}`, { ttl: 60000, timeout: 45000 }); } catch (e) { if (e.kind !== 'notfound') throw e; }
       if (d && d.available) {
         bars = intradayBars(d);
-        // the intraday answer's own Fibonacci, levels and patterns, read from these bars, and which bars are pre- or post-market
-        D.intra = { fib: d.fibonacci, sr: d.support_resistance, patterns: d.patterns, extended: Array.isArray(d.extended) && d.extended.some(Boolean) ? d.extended : null };
+        // the intraday answer's own Fibonacci, levels and patterns, read from these bars, and which bars are pre- or post-market;
+        // kept aside until the answer is known to be for the bars still wanted
+        intra = { fib: d.fibonacci, sr: d.support_resistance, patterns: d.patterns, extended: Array.isArray(d.extended) && d.extended.some(Boolean) ? d.extended : null };
         note = d.session_note;
       } else {
         // a symbol with no intraday feed (a mutual fund, a thin listing): its daily bars, said plainly, without changing the saved bar size
@@ -149,7 +150,7 @@ async function loadBars() {
     bars = clip(bars);
     if (bars.length < 5) throw new api.ApiError('notfound', 404, 'Not enough bars to draw.');
     if (!current()) return;
-    if (!iv.intraday) D.intra = null;
+    D.intra = iv.intraday ? intra : null;
     D.bars = bars; D.note = note; D.noVolume = !bars.some((b) => b.v > 0);
   } catch (e) { if (!current()) return; D.barsErr = e; }
   paintChart();
@@ -295,7 +296,7 @@ const cmpStartT = () => { if (!D.bars || !isNum(V.cmpAnchor)) return null; const
 function cmpBody() {
   const ok = V.compare.length, st = cmpStartT(), start = st !== null ? cmpWhen(st) : '';
   const sug = ['SPY', 'QQQ', 'IWM'].filter((x) => x !== D.sym && !V.compare.includes(x));
-  return html`<form class="cmp-form" data-v2-ch-cmpform><label class="field field-sm"><span class="sr">Symbol to compare with ${D.sym}</span><input name="s" placeholder="Add a symbol, such as SPY" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="12"></label><button type="submit" class="btn btn-sm">Add</button></form>
+  return html`<form class="cmp-form" data-v2-ch-cmpform><label class="field field-sm"><span class="sr">Symbol to compare with ${D.sym}</span><input name="s" placeholder="Add a symbol, such as SPY" data-v2-ta="submit" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="40"></label><button type="submit" class="btn btn-sm">Add</button></form>
     ${D.cmpErr ? html`<p class="menu-help ch-cannot" role="alert">${D.cmpErr}</p>` : ''}
     ${ok < CMP_MAX && sug.length ? html`<div class="cluster cmp-sug">${sug.map((x) => html`<button type="button" class="btn btn-sm btn-quiet" data-v2-ch-cmpadd="${x}">${x}</button>`)}</div>` : ''}
     ${ok ? html`<ul class="cmp-list">${V.compare.map((sym, i) => { const c = CMP[sym] || {}; return html`<li><i class="cmp-key ${CMP_CLS[i]}" aria-hidden="true"></i><b>${sym}</b><span class="t-muted">${c.err ? c.err : c.loading || !c.at ? 'Loading' : ''}</span><button type="button" class="textlink" data-v2-ch-cmprm="${sym}" aria-label="Remove ${sym} from the comparison">Remove</button></li>`; })}</ul>

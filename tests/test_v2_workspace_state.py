@@ -39,7 +39,10 @@ def test_a_changed_layout_survives_a_version_change(tmp_path):
     moved = MARKET[1:] + MARKET[:1]                       # Indices moved to the end
     got = load_with(tmp_path, v4(layouts={"market": [{"id": i, "span": 6, "h": "m", "hidden": False} for i in moved]}))
     assert got["v"] == 5 and got["market"] == moved and got["custom"].get("market") is True
-    assert got["link"] == "NVDA" and got["fold"] == {"market": {"news": False}}   # before: all thrown away
+    assert got["fold"] == {"market": {"news": False}}   # before: all thrown away
+    # a saved ticker carries over only when the reader chose it (Phase 03, 2026-10-29); this v4 state did not say so
+    assert got["link"] == "SPY"
+    assert load_with(tmp_path, v4(linkChosen=True))["link"] == "NVDA"
 
 
 def test_a_layout_nobody_changed_follows_the_standard(tmp_path):
@@ -58,7 +61,7 @@ def test_an_unknown_layout_name_falls_back_without_wiping_my_desk(tmp_path):
 
 def test_my_desk_from_the_oldest_versions_still_comes_through(tmp_path):
     got = load_with(tmp_path, {"v": 2, "preset": "mine", "link": "AMD", "layouts": {"mine": [{"id": "indices", "span": 12}, {"id": "news", "span": 6}]}})
-    assert got["preset"] == "mine" and got["mine"] == ["indices", "news"] and got["link"] == "AMD"
+    assert got["preset"] == "mine" and got["mine"] == ["indices", "news"] and got["link"] == "SPY"   # not chosen, so SPY
 
 
 def test_a_broken_saved_layout_is_made_safe(tmp_path):

@@ -125,7 +125,8 @@ export async function render(main, route) {
   live = true; mainEl = main; const sym = route.symbol; D = { sym };
   document.title = `${sym} research sheet, Optic`;
   paint();
-  const enc = encodeURIComponent(sym), step = (p, k) => p.then((d) => { D[k] = d; }, (e) => { if (k === 'ticker') D.err = e; else D[k] = D[k] || {}; }).finally(paint);
+  // each answer goes into this render's own record: a late one for the sheet opened before lands nowhere (BUG-066)
+  const box = D, enc = encodeURIComponent(sym), step = (p, k) => p.then((d) => { box[k] = d; }, (e) => { if (k === 'ticker') box.err = e; else box[k] = box[k] || {}; }).finally(() => { if (D === box) paint(); });
   step(api.get(`/api/ticker/${enc}?max_expiries=4&macro=true`, { ttl: 120000, timeout: 60000 }), 'ticker');
   step(api.get(`/api/session/${enc}`, { ttl: 60000 }), 'session');
   step(api.get(`/api/quote/${enc}`, { ttl: 20000, timeout: 15000 }).then((d) => d.quote || d), 'quote');

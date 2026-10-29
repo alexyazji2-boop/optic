@@ -86,21 +86,22 @@ export async function knownSymbol(sym) {
     return q && q.available === true ? true : q && q.unreachable ? null : false;
   } catch (e) { return null; }
 }
-export async function get(path, { ttl = 60000, force = false, onUpdate, timeout } = {}) {
+// `keep(data)` returning false keeps an answer out of the cache (search: a directory outage is not an answer to keep).
+export async function get(path, { ttl = 60000, force = false, onUpdate, timeout, keep } = {}) {
   const hit = cache.get(path);
   const now = Date.now();
   if (hit && hit.data !== undefined && !force) {
     if (now - hit.at < ttl) return hit.data;
     // stale: return it now, refresh in the background
     if (!hit.promise) {
-      hit.promise = request('GET', path, { timeout }).then((d) => { cache.set(path, { at: Date.now(), data: d }); if (onUpdate) onUpdate(d); return d; })
+      hit.promise = request('GET', path, { timeout }).then((d) => { if (keep && !keep(d)) { hit.promise = null; return hit.data; } cache.set(path, { at: Date.now(), data: d }); if (onUpdate) onUpdate(d); return d; })
         .catch(() => { hit.promise = null; });
     }
     return hit.data;
   }
   if (hit && hit.promise && !force) return hit.promise;
   // An answer that says it is still being built is never cached: the next ask goes to the server.
-  const p = request('GET', path, { timeout }).then((d) => { if (d && d.building) cache.delete(path); else cache.set(path, { at: Date.now(), data: d }); return d; })
+  const p = request('GET', path, { timeout }).then((d) => { if ((d && d.building) || (keep && !keep(d))) cache.delete(path); else cache.set(path, { at: Date.now(), data: d }); return d; })
     .catch((e) => { cache.delete(path); throw e; });
   cache.set(path, { at: 0, data: undefined, promise: p });
   return p;

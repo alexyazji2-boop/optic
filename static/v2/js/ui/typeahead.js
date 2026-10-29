@@ -22,7 +22,9 @@ export function typedNamePick(items, listedFor, typed) {
   const upper = q.toUpperCase();
   if (items.some((r) => String(r.symbol || '').toUpperCase() === upper)) return -1;
   const lower = q.toLowerCase();
-  return items.findIndex((r) => String(r.name || '').toLowerCase().includes(lower));
+  // a word of the name starts with what was typed, as the palette requires ("app" is Apple, never Snapple)
+  return items.findIndex((r) => String(r.name || '').toLowerCase().split(/[\s,.&()-]+/).some((w) => w && w.startsWith(lower))
+    || String(r.name || '').toLowerCase().startsWith(lower));
 }
 let uid = 0;
 export function wire(root, onChoose = null) {

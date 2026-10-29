@@ -4,13 +4,26 @@ Read this and [REQUIREMENTS_MATRIX.md](REQUIREMENTS_MATRIX.md) before changing a
 
 ## Current state
 
-- **Current phase:** 03 search, ticker state and navigation (next). Phases 01 and 02 complete (reports below).
+- **Current phase:** 04 radical simplicity (next). Phases 01 to 03 complete (reports below).
 - **Branch / worktree:** `post-demo-ultra` in `~/Optic/wt-ultra`, from `9fa0f36` (tag `post-demo-ultra-baseline`). Upstream unset; nothing pushed or deployed.
 - **Commits:** `fce3e71` setup; `8040f8a` and `795325a` Phase 01; `d4a2b1a` Phase 01 report; `ce60b16` Phase 02 policy module (WIP); `c6724ff` Milo portfolio privacy (cherry-pick of 2236205); `a76916b` Phase 02.
 - **Local server:** launch config `optic-ultra` (:8250, stand-in model :8251 from `tools/milo_standin_ultra.py`, which adds an `ADVISE` keyword that makes the answer break the policy; data `~/Optic/ultra-data`, sandbox brokerage, jobs off, no real model key). Seed password in `~/Optic/ultra-data/seed-output.txt` (never print it). The server does not reload: restart it after editing static files, or the browser keeps the old `?v=` copies.
 - **Working folder (outside the repo):** `~/Optic/work/post-demo-ultra-2026-10-29/` (tools/, crawl1/, dead/, sheets/, baseline/, milo/, registry/, phase02/).
 - **Resource rule:** at most two subagents at a time (DECISIONS D-007).
-- **Next action:** Phase 03 (search, ticker state, SPY default, "Follows <TICKER>", navigation): read `directives/03-search-ticker-navigation.md` and the R03 rows, then BUG-003, 038, 044, 050, 066 in BUG_REGISTER.
+- **Next action:** Phase 04 (radical simplicity): read `directives/04-radical-simplicity.md`, the R04 rows and the Phase 04 rows of BUG_REGISTER (BUG-004, 005, 009, 010, 076, 077 and the registry's simplicity findings), then write SIMPLICITY_AUDIT.md before changing pages.
+
+## Phase 03 report (directive 03; reporting format of directive 00)
+
+1. **Inspected.** Every search box in v2 (the palette, the typeahead and the 16 boxes in FEATURE_REGISTRY A14), the resolver logic in each, the API client's cache, Home's linked-ticker state and the "Follows" chip with everything that reads them, the router and shell, and every Dossier tab's loads for identity checks after an await.
+2. **Problems discovered.** "Follows <ticker>" came from Home falling back to the watchlist or the last company opened and then saving it (BUG-003). The palette's places fell back to the Recent list; Enter on an empty box opened the first row; a failed search was cached for 5 minutes and let a page that only shared letters take Enter from a typed ticker; Home and the Dossier start opened indices as company Dossiers and could navigate after the reader had left; Home's box did nothing when it found nothing; three symbol boxes had no suggestions; the printable sheet and the Chart's intraday levels could take a previous company's late answer; Home, Macro, Indices and Read let an earlier answer win; Skip to content opened the ticker MAIN; Home's sector-board link opened the ticker MARKET.
+3. **Root causes.** No single rule for "which symbol" (D-016); each box with its own resolver; module-level state written after an await without checking it was still the same render.
+4. **Fixes implemented.** `store.DEFAULT_SYMBOL` and one precedence; the chip and fallback removed, a chosen ticker kept (`linkChosen`); `core/resolve.js` for typed text with a navigation ticket; palette fixes (this visit or SPY, nothing chosen until the reader moves, honest `aria-expanded`, the stale-list note, saved questions without a reload, word-start page matching, a typed symbol keeps Enter when search is down, This week's earnings); suggestions and room for names on the symbol boxes; identity guards on the sheet, Chart, Home, Macro, Indices and Read; the skip link and the Macro link.
+5. **Files changed.** `static/v2/js/core/resolve.js` (new), `core/api.js`, `core/store.js`, `core/homelink.js`, `core/research.js`, `ui/palette.js`, `ui/typeahead.js`, `app.js`, `pages/workspace.js`, `pages/home.js`, `pages/dossierstart.js`, `pages/sheet.js`, `pages/chart.js`, `pages/macro.js`, `pages/indices.js`, `pages/read.js`, `pages/paper.js`, `pages/alerts.js`, `pages/watchlist.js`, `pages/chart-widgets.js`, `pages/insiders.js`, `css/pages.css`; tests `tests/test_v2_ticker_state.py` (new), `test_v2_phase2.py`, `test_v2_workspace_state.py`.
+6. **Tests executed.** Full suite twice; the design-standard and checklist tests; 27 interaction scenarios in headless Chrome (TEST_RESULTS, Phase 03); screenshots of Home's quote panel at 1440 and 390.
+7. **Passed / failed.** Suite 7486 passed, 1 skipped, 0 failed. Scenarios 27 of 27 (run 1 found two real faults, fixed). R03-01 to R03-11 PASS.
+8. **Browser verification.** Headless Chrome for every scenario; the browser pane for the palette's rows under each typed word, the search queueing measurement and Home at 375 px. The pane's partly drawn chart was its stalled draw-in animation; headless Chrome draws it in full.
+9. **Outstanding.** None in Phase 03's scope. Noted for later phases: locally a search typed during a cold Dossier load waits for a free connection (HTTP/1.1; production is HTTP/2); `/api/search` re-reads the ranking file on each request and is unmetered (R-S-2, Phase 10).
+10. **Commit and next phase.** The Phase 03 commit (log below); next is Phase 04.
 
 ## Phase 02 report (directive 02; reporting format of directive 00)
 
@@ -48,3 +61,6 @@ Read this and [REQUIREMENTS_MATRIX.md](REQUIREMENTS_MATRIX.md) before changing a
 
 ### 2026-10-29 Phase 02 (05:00 to 06:55 ET)
 - Policy module, wiring, prompts, rule-written research in v2 and Classic, disclosure registry, Milo and Classic notice and note, alerts, scan consent; output check rebuilt twice on held-out sets written by separate agents; COMPLIANCE_REVIEW.md; suite green (run 7); committed (not pushed).
+
+### 2026-10-29 Phase 03
+- Ticker precedence and SPY default, "Follows" removed, one resolver, palette and typeahead fixes, identity guards, 27 scenarios passed, suite green; committed (not pushed).

@@ -149,7 +149,7 @@ function ticketForm() {
   const prompt = !t.ticker ? 'Type a symbol above' : chainState === 'failed' ? `Could not read ${s}'s chain` : chainState === 'empty' ? `${s} has no listed options` : `Reading ${s}'s chain…`;
   return html`<section class="section ${book.open.length ? '' : 'first'}" aria-labelledby="pt-h"><h2 class="t-h2" id="pt-h">Open a trade</h2>
     <form class="pt-form" data-v2-pt-form novalidate>
-      <div class="pt-row"><div class="pt-f pt-sym"><label class="t-label" for="pt-ticker">Symbol</label><span class="field"><input id="pt-ticker" name="ticker" value="${t.ticker}" placeholder="NVDA" maxlength="12" spellcheck="false" autocomplete="off" autocapitalize="characters"></span></div>
+      <div class="pt-row"><div class="pt-f pt-sym"><label class="t-label" for="pt-ticker">Symbol</label><span class="field"><input id="pt-ticker" name="ticker" value="${t.ticker}" placeholder="NVDA" data-v2-ta maxlength="40" spellcheck="false" autocomplete="off" autocapitalize="characters"></span></div>
         <div class="pt-f"><span class="t-label" id="pt-dir">Direction</span><div class="seg" role="group" aria-labelledby="pt-dir"><button type="button" data-v2-pt-dir="long" aria-pressed="${t.direction === 'long'}">Long</button><button type="button" data-v2-pt-dir="short" aria-pressed="${t.direction === 'short'}">Short</button></div></div>
         <div class="pt-f"><span class="t-label" id="pt-inst">Instrument</span><div class="seg" role="group" aria-labelledby="pt-inst"><button type="button" data-v2-pt-inst="shares" aria-pressed="${!isOpt}">Shares</button><button type="button" data-v2-pt-inst="option" aria-pressed="${isOpt}">Option</button></div></div></div>
       ${isOpt ? html`<div class="pt-row"><div class="pt-f"><span class="t-label" id="pt-ot">Call or put</span><div class="seg" role="group" aria-labelledby="pt-ot"><button type="button" data-v2-pt-ot="call" aria-pressed="${t.optionType === 'call'}">Call</button><button type="button" data-v2-pt-ot="put" aria-pressed="${t.optionType === 'put'}">Put</button></div></div>
@@ -349,6 +349,8 @@ export async function render(main, route) {
     if (e.target.name === 'ticker') return;
     const pv = mainEl.querySelector('[data-v2-pt-preview]'); if (pv) draw(pv, preview());
   });
+  // a suggestion picked under the symbol box (ui/typeahead.js) is a change of symbol, like typing one and leaving
+  main.addEventListener('v2:ta-pick', (e) => { if (e.target && e.target.name === 'ticker') e.target.dispatchEvent(new Event('change', { bubbles: true })); });
   main.addEventListener('change', (e) => {
     const t = e.target;
     if (t.dataset.v2PtRev) {

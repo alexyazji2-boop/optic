@@ -298,10 +298,15 @@ function paintMore() {
   draw(h, ts.html); ts.wire(h);
 }
 
+let catSeq = 0;
 async function loadCats() {
-  const q = new URLSearchParams({ limit: 30, status: cat.status });
+  // the newest filter wins: an answer for filters changed since is dropped (BUG-040)
+  const q = new URLSearchParams({ limit: 30, status: cat.status }), mine = (catSeq += 1), box = D;
   ['category', 'sector', 'theme', 'q'].forEach((k) => { if (cat[k]) q.set(k, cat[k]); });
-  try { D.cats = await api.get(`/api/catalysts?${q}`, { ttl: 60000 }); } catch (e) { D.cats = null; }
+  let got;
+  try { got = await api.get(`/api/catalysts?${q}`, { ttl: 60000 }); } catch (e) { got = null; }
+  if (mine !== catSeq || D !== box) return;
+  D.cats = got;
   if (live) paintMore();
 }
 

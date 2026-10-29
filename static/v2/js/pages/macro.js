@@ -17,6 +17,15 @@ import { sectorBoard, sectorReadBlock, loadSectorRead } from './market-shared.js
 import { poll } from '../core/poll.js';
 
 let D = {}, live = true, mainEl = null, tabState = { g: 0, s: {} }, refresh = null;
+// The newest choice wins (BUG-040): a series, map, sector read or currency chosen before the current one, answering
+// later, is dropped instead of drawing over it. Resolves to {data} or {err}, or null when superseded.
+const LATEST = {};
+async function newest(key, make) {
+  const mine = (LATEST[key] = (LATEST[key] || 0) + 1), box = D;
+  let out;
+  try { out = { data: await make() }; } catch (err) { out = { err }; }
+  return live && D === box && mine === LATEST[key] ? out : null;
+}
 const kv = (rows, n = 3) => html`<dl class="kv" style="--kv:${n}">${rows.filter(Boolean).map(([k, v]) => html`<div><dt>${k}</dt><dd>${v}</dd></div>`)}</dl>`;
 const ask = (label, q) => miloButton(label, { ask: q, context: 'Markets, Macro' });
 const pct = (v, dp = 1) => (isNum(v) ? `${num(v, dp)}%` : 'n/a');
@@ -279,13 +288,13 @@ function wire(main) {
     // click the charts here, load a subchart like i used to on the classic version"); its name and its sparkline are
     // links to the same page, so the keyboard reaches it by the name
     if ((b = t('tr[data-v2-inst]')) && !t('a, button, input, select, summary')) { location.hash = `#/instrument/${encodeURIComponent(b.dataset.v2Inst)}`; return; }
-    if ((b = t('[data-v2-econ]'))) { D.econCode = b.dataset.v2Econ; D.econ = null; paintMore(); try { D.econ = await api.get(`/api/econ/${encodeURIComponent(D.econCode)}?years=12`, { ttl: 3600000 }); } catch (err) { D.econ = { error: err.message }; } paintMore(); return; }
-    if ((b = t('[data-v2-map]'))) { D.map = undefined; paintMore(); try { D.map = await api.get(`/api/stockmap?template=${encodeURIComponent(b.dataset.v2Map)}`, { ttl: 600000 }); } catch (err) { D.map = null; } paintMore(); return; }
-    if ((b = t('[data-v2-map-sector]'))) { const tpl = (D.map.template || {}).id; D.map = undefined; paintMore(); try { D.map = await api.get(`/api/stockmap?template=${encodeURIComponent(tpl)}&sector=${encodeURIComponent(b.dataset.v2MapSector)}`, { ttl: 600000 }); } catch (err) { D.map = null; } paintMore(); return; }
-    if (t('[data-v2-map-back]')) { const tpl = (D.map.template || {}).id; D.map = undefined; paintMore(); try { D.map = await api.get(`/api/stockmap?template=${encodeURIComponent(tpl)}`, { ttl: 600000 }); } catch (err) { D.map = null; } paintMore(); return; }
-    if ((b = t('[data-v2-sread]'))) { D.sread = { loading: b.dataset.v2Sread }; paintMore(); D.sread = await loadSectorRead(b.dataset.v2Sread); paintMore(); return; }
+    if ((b = t('[data-v2-econ]'))) { D.econCode = b.dataset.v2Econ; D.econ = null; paintMore(); const code = D.econCode, r = await newest('econ', () => api.get(`/api/econ/${encodeURIComponent(code)}?years=12`, { ttl: 3600000 })); if (!r) return; D.econ = r.err ? { error: r.err.message } : r.data; paintMore(); return; }
+    if ((b = t('[data-v2-map]'))) { D.map = undefined; paintMore(); const r = await newest('map', () => api.get(`/api/stockmap?template=${encodeURIComponent(b.dataset.v2Map)}`, { ttl: 600000 })); if (!r) return; D.map = r.err ? null : r.data; paintMore(); return; }
+    if ((b = t('[data-v2-map-sector]'))) { const tpl = (D.map.template || {}).id; D.map = undefined; paintMore(); const r = await newest('map', () => api.get(`/api/stockmap?template=${encodeURIComponent(tpl)}&sector=${encodeURIComponent(b.dataset.v2MapSector)}`, { ttl: 600000 })); if (!r) return; D.map = r.err ? null : r.data; paintMore(); return; }
+    if (t('[data-v2-map-back]')) { const tpl = (D.map.template || {}).id; D.map = undefined; paintMore(); const r = await newest('map', () => api.get(`/api/stockmap?template=${encodeURIComponent(tpl)}`, { ttl: 600000 })); if (!r) return; D.map = r.err ? null : r.data; paintMore(); return; }
+    if ((b = t('[data-v2-sread]'))) { D.sread = { loading: b.dataset.v2Sread }; paintMore(); const r = await newest('sread', () => loadSectorRead(b.dataset.v2Sread)); if (!r) return; D.sread = r.err ? null : r.data; paintMore(); return; }
     if (t('[data-v2-sread-close]')) { D.sread = null; paintMore(); }
   });
   main.addEventListener('keydown', (e) => { const g = e.target.closest('[data-v2-map-sector]'); if (g && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); g.dispatchEvent(new MouseEvent('click', { bubbles: true })); } });
-  main.addEventListener('submit', async (e) => { const f = e.target.closest('[data-v2-fx]'); if (!f) return; e.preventDefault(); D.fx = undefined; paintMore(); try { D.fx = await api.get(`/api/forex?q=${encodeURIComponent(f.q.value.trim())}`, { ttl: 600000 }); } catch (err) { D.fx = null; } paintMore(); });
+  main.addEventListener('submit', async (e) => { const f = e.target.closest('[data-v2-fx]'); if (!f) return; e.preventDefault(); D.fx = undefined; paintMore(); const q = f.q.value.trim(), r = await newest('fx', () => api.get(`/api/forex?q=${encodeURIComponent(q)}`, { ttl: 600000 })); if (!r) return; D.fx = r.err ? null : r.data; paintMore(); });
 }

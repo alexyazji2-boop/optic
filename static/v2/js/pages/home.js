@@ -18,6 +18,8 @@ import { row as watchRow, openCompany } from '../ui/company.js';
 import { button as miloButton, provideContext } from '../ui/milo.js';
 import { art } from '../ui/art.js';
 import { go } from '../core/router.js';
+import { resolve, ticket } from '../core/resolve.js';
+import * as palette from '../ui/palette.js';
 
 const STRIP = [
   { group: 'equity', label: 'S&P 500', overnight: { group: 'futures', label: 'S&P 500 futures' } },
@@ -445,7 +447,7 @@ export function trendsBlock(d) {
   const main = (d.basis || {}).price_kind, line = trendBasis(d.basis);
   const group = (name, rows) => (rows && rows.length ? html`<h3 class="t-label tr-group">${name}</h3><ul class="tr-grid">${rows.map((r) => trendCell(r, main))}</ul>` : '');
   return html`${line ? html`<p class="ws-sub">${line}</p>` : ''}${group('Indices', d.indices)}${group('Sectors', d.sectors)}
-    <p><a class="textlink" href="#/market">The full sector board ${icon('arrow')}</a></p>
+    <p><a class="textlink" href="#/macro">The full sector board ${icon('arrow')}</a></p>
     ${d.method ? html`<details class="more-inline" data-v2-fold="tr-method"><summary>How the levels are set</summary><p>${clean(d.method)}</p></details>` : ''}`;
 }
 
@@ -667,17 +669,13 @@ export { wireForms };
 function wireForms(main) {
   $$('[data-v2-search-form]', main).forEach((f) => f.addEventListener('submit', async (e) => {
     e.preventDefault();
-    const q = String(new FormData(f).get('q') || '').trim();
-    if (!q) return;
-    const typed = /^[A-Za-z0-9.^=-]{1,12}$/.test(q) ? q.toUpperCase() : null;
-    let sym = typed;
-    try {
-      const r = await api.get(`/api/search?q=${encodeURIComponent(q)}&limit=5`, { ttl: 300000, timeout: 8000 });
-      const res = r.results || [];
-      // an exact ticker wins; otherwise the best match for the words typed
-      if (!(typed && res.some((x) => x.symbol === typed)) && res[0]) sym = res[0].symbol;
-    } catch (err) { /* fall back to what was typed */ }
-    if (sym) location.hash = `#/${sym}`;
+    const box = f.querySelector('input[name="q"]'), q = String(new FormData(f).get('q') || '').trim();
+    if (!q) { if (box) box.focus(); return; }
+    // the palette's rule (core/resolve.js): an index opens its instrument page, and a text that names nothing opens
+    // the search with it instead of doing nothing (R-A14-1 to 3); a slow answer never moves a reader who has left
+    const t = ticket(), r = await resolve(q);
+    if (!t.stillHere()) return;
+    if (r.hit) t.go(r.hit.href); else palette.open(box, { seed: q });
   }));
 }
 

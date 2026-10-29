@@ -103,3 +103,69 @@ Other checks:
 | Version 4 on stored real text (544 sentences) and Optic's own research text (2,361 sentences, 4 tickers) | 0 flagged on either, after fixing the 1 and 5 false alarms found | |
 | Output check speed | 0.14 ms per sentence; 4.3 ms for a 30-sentence answer | |
 | The seven named prompts with the real model | NOT TESTED: the key is refused (BL-01) | |
+
+
+## Phase 03 (search, ticker state, navigation), 2026-10-29, working tree on 6f2e814
+
+### Interaction scenarios (headless Chrome, `tools/phase03_scenarios.py`, raw `phase03/phase03-all.json`)
+
+The search provider was slowed or failed by pausing `/api/search` (or one company's `/api/ticker` or
+`/api/take-chart`) in the browser tab only, never on the server. Run 1 found two failures (S5, S12), both real:
+see "Found by the scenarios" below. After the fixes every scenario passed.
+
+| ID | Scenario | Result |
+|---|---|---|
+| S1 | First visit: Home shows SPY | PASS |
+| S2 | No "Follows <ticker>" on Home | PASS |
+| S3 | Opening AMD then Home keeps SPY | PASS |
+| S4 | An explicit choice (a name typed) is used, kept on reload; a bad one is said | PASS |
+| S5 | 20 sequential ticker changes through the search | PASS |
+| S6 | 10 rapid ticker changes, twice: the page shows only the last one | PASS |
+| S7 | 10 invalid or unsupported searches get feedback; an invalid address says so | PASS |
+| S8 | 10 direct-link, back, forward and refresh sequences | PASS |
+| S9 | Keyboard only: / opens, arrows move, Escape closes, Enter opens | PASS |
+| S10 | Enter on an empty search opens nothing | PASS |
+| S11 | Slow search (2.5 s): typing on and pressing Enter opens what was typed last | PASS |
+| S12 | Search provider failing (503): said plainly; a typed symbol still opens; a name opens the search | PASS |
+| S13 | Dossier start: names, cases, a share class and an index each open the right page; no match opens the search | PASS |
+| S14 | A slow answer does not move a reader who has gone elsewhere | PASS |
+| S15 | Skip to content moves focus, not the address | PASS |
+| S16 | The sidebar marks the current section | PASS |
+| S17 | Home's sector-board link goes to Macro | PASS |
+| S18 | Phone width: search opens and selects; no sideways overflow | PASS |
+| S19 | Signed out and signed in: an owner page refuses a guest and opens for the owner; a Dossier opens either way | PASS |
+| S20 | Clicking a result opens it | PASS |
+| S21 | Clearing the search returns the empty list and throws nothing | PASS |
+| S22 | A suggestion list draws above the page and a pick fills the box | PASS |
+| S23 | An empty Dossier search stays put and puts focus in the box | PASS |
+| S24 | Sidebar: Dossier opens the start page until a company is opened, then that company; Markets reaches Macro | PASS |
+| S25 | Phone bar: Markets (its first page, Read, on a fresh visit), Watchlist and Home each open their page | PASS |
+| S26 | Printable sheet: a slow answer for the sheet opened first never fills the next one | PASS |
+| S27 | Home: picking another company while a panel loads, the late answer for the first never draws | PASS |
+
+### The sixteen failure modes (directive 03, section 1)
+
+| Failure mode | What was found | Evidence |
+|---|---|---|
+| Input not accepting text | Not reproduced in any box | S4, S5, S9, S13, S22 |
+| Results failing to load | A failed answer was cached for 5 minutes (R-PAL-6): no longer cached | S12; `core/api.js` `keep` |
+| Incorrect symbol resolution | With search down, a page whose search words contained the letters took Enter ("ko" opened Scan, "dis" Explore, "spy" Indices); pages now match by the start of a word and a symbol-shaped word keeps Enter. Home and the Dossier start opened an index as a company Dossier: now one resolver | S5, S12, S13 |
+| Results too slow | Server answers in about 25 ms; locally a search typed while a cold Dossier loads waited 3.25 s for a free browser connection (HTTP/1.1, six per host). Production is HTTP/2 (checked 2026-10-29), which shares one connection | measured in the browser pane |
+| Input losing focus | Not reproduced; the typeahead keeps focus on a pick | S9, S22 |
+| Submitting twice | Not reproduced: one navigation per Enter in 20 changes | S5 |
+| Enter failing | Enter on an empty box opened the first row (R-PAL-3): now opens nothing | S10 |
+| Clicking a result doing nothing | Not reproduced | S20 |
+| Results disappearing | Not reproduced | S9, S11 |
+| Dropdown behind other elements | Not reproduced: the list is the topmost element at its own position | S22 |
+| Closing before selection | Not reproduced | S20, S22 |
+| State resetting on navigation | The palette closes on navigation by design; nothing else resets | S8 |
+| Selection not updating downstream data | Not reproduced; Home's box now takes a name too | S4, S5, S6 |
+| Failure after refresh | Not reproduced | S8 |
+| Mobile | Not reproduced at 390 px; no sideways overflow | S18, S25 |
+| Stale responses overwriting newer ones | Palette and typeahead already dropped them; found and fixed on the printable sheet (BUG-066), the Chart's intraday levels, Home panels (BUG-040), Macro, Indices and Read | S6, S11, S26, S27 |
+
+### Suite
+
+| Run | Outcome |
+|---|---|
+| After the main Phase 03 changes | **7486 passed, 1 skipped, 0 failed** (`phase03/pytest-run1.txt`) |

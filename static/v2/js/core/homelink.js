@@ -10,7 +10,8 @@ export function linkHome(sym) {
   if (!window.dispatchEvent(ev)) return true;
   try {
     const v = JSON.parse(localStorage.getItem(KEY) || 'null');
-    localStorage.setItem(KEY, JSON.stringify(Object.assign(v && typeof v === 'object' ? v : {}, { link: sym })));
+    // a choice, so it is kept between visits (pages/workspace.js reads a saved ticker only when it was chosen)
+    localStorage.setItem(KEY, JSON.stringify(Object.assign(v && typeof v === 'object' ? v : {}, { link: sym, linkChosen: true })));
     return true;
   } catch (e) { return false; }
 }
