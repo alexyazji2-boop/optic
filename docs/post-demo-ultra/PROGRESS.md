@@ -6,7 +6,7 @@ Read this and [REQUIREMENTS_MATRIX.md](REQUIREMENTS_MATRIX.md) before changing a
 
 - **Current phase:** 04 radical simplicity (next). Phases 01 to 03 complete (reports below).
 - **Branch / worktree:** `post-demo-ultra` in `~/Optic/wt-ultra`, from `9fa0f36` (tag `post-demo-ultra-baseline`). Upstream unset; nothing pushed or deployed.
-- **Commits:** `fce3e71` setup; `8040f8a` and `795325a` Phase 01; `d4a2b1a` Phase 01 report; `ce60b16` Phase 02 policy module (WIP); `c6724ff` Milo portfolio privacy (cherry-pick of 2236205); `a76916b` Phase 02.
+- **Commits:** `fce3e71` setup; `8040f8a` and `795325a` Phase 01; `d4a2b1a` Phase 01 report; `ce60b16` Phase 02 policy module (WIP); `c6724ff` Milo portfolio privacy (cherry-pick of 2236205); `a76916b` Phase 02; `6f2e814` its commit id; `7b14b56` Phase 03.
 - **Local server:** launch config `optic-ultra` (:8250, stand-in model :8251 from `tools/milo_standin_ultra.py`, which adds an `ADVISE` keyword that makes the answer break the policy; data `~/Optic/ultra-data`, sandbox brokerage, jobs off, no real model key). Seed password in `~/Optic/ultra-data/seed-output.txt` (never print it). The server does not reload: restart it after editing static files, or the browser keeps the old `?v=` copies.
 - **Working folder (outside the repo):** `~/Optic/work/post-demo-ultra-2026-10-29/` (tools/, crawl1/, dead/, sheets/, baseline/, milo/, registry/, phase02/).
 - **Resource rule:** at most two subagents at a time (DECISIONS D-007).
@@ -23,7 +23,7 @@ Read this and [REQUIREMENTS_MATRIX.md](REQUIREMENTS_MATRIX.md) before changing a
 7. **Passed / failed.** Suite 7486 passed, 1 skipped, 0 failed. Scenarios 27 of 27 (run 1 found two real faults, fixed). R03-01 to R03-11 PASS.
 8. **Browser verification.** Headless Chrome for every scenario; the browser pane for the palette's rows under each typed word, the search queueing measurement and Home at 375 px. The pane's partly drawn chart was its stalled draw-in animation; headless Chrome draws it in full.
 9. **Outstanding.** None in Phase 03's scope. Noted for later phases: locally a search typed during a cold Dossier load waits for a free connection (HTTP/1.1; production is HTTP/2); `/api/search` re-reads the ranking file on each request and is unmetered (R-S-2, Phase 10).
-10. **Commit and next phase.** The Phase 03 commit (log below); next is Phase 04.
+10. **Commit and next phase.** `7b14b56`; next is Phase 04.
 
 ## Phase 02 report (directive 02; reporting format of directive 00)
 
