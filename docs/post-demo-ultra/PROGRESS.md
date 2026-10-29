@@ -4,9 +4,9 @@ Read this and [REQUIREMENTS_MATRIX.md](REQUIREMENTS_MATRIX.md) before changing a
 
 ## Current state
 
-- **Current phase:** 02 advice safeguards and legal consistency, closing (report below). Phase 01 complete.
+- **Current phase:** 03 search, ticker state and navigation (next). Phases 01 and 02 complete (reports below).
 - **Branch / worktree:** `post-demo-ultra` in `~/Optic/wt-ultra`, from `9fa0f36` (tag `post-demo-ultra-baseline`). Upstream unset; nothing pushed or deployed.
-- **Commits:** `fce3e71` setup; `8040f8a` and `795325a` Phase 01; `d4a2b1a` Phase 01 report; `ce60b16` Phase 02 policy module (WIP); `c6724ff` Milo portfolio privacy (cherry-pick of 2236205); then the Phase 02 commit.
+- **Commits:** `fce3e71` setup; `8040f8a` and `795325a` Phase 01; `d4a2b1a` Phase 01 report; `ce60b16` Phase 02 policy module (WIP); `c6724ff` Milo portfolio privacy (cherry-pick of 2236205); `a76916b` Phase 02.
 - **Local server:** launch config `optic-ultra` (:8250, stand-in model :8251 from `tools/milo_standin_ultra.py`, which adds an `ADVISE` keyword that makes the answer break the policy; data `~/Optic/ultra-data`, sandbox brokerage, jobs off, no real model key). Seed password in `~/Optic/ultra-data/seed-output.txt` (never print it). The server does not reload: restart it after editing static files, or the browser keeps the old `?v=` copies.
 - **Working folder (outside the repo):** `~/Optic/work/post-demo-ultra-2026-10-29/` (tools/, crawl1/, dead/, sheets/, baseline/, milo/, registry/, phase02/).
 - **Resource rule:** at most two subagents at a time (DECISIONS D-007).
@@ -23,7 +23,7 @@ Read this and [REQUIREMENTS_MATRIX.md](REQUIREMENTS_MATRIX.md) before changing a
 7. **Passed / failed.** Final suite 7471 passed, 1 skipped, 0 failed (run 7). Output check on unseen sentences: 10 of 40 advice caught and 2 of 40 research wrongly flagged (set A, version 2); 27 of 50 and 1 of 50 (set B, version 3); version 4 not yet measured on unseen sentences. 0 false alarms on 544 sentences of stored real-model text and 2,361 of Optic's own research text. Requirements R02-01 to R02-13: 12 PASS, R02-11 BLOCKED. The seven named prompts with the real model: NOT TESTED (BL-01).
 8. **Browser verification.** Milo panel (policy line, removal note, both kept in history); Overview, Options, Investing, Retirement (v2 and Classic), Macro pairs, Alerts, Compare, Paper Desk, Scan; notices on 20 routes; no console errors.
 9. **Outstanding.** R02-11 BLOCKED on BL-01; counsel questions Q1 to Q12 (BL-02); owner decisions BL-07 (model-based check), BL-08 (brokerage consent version), BL-09 (overnight feed and Yahoo data); BUG-032's cost part (Phase 10).
-10. **Commit and next phase.** The Phase 02 commit (log below); next is Phase 03.
+10. **Commit and next phase.** `a76916b`; next is Phase 03. To continue in another session: open `~/Optic/wt-ultra`, read this file, REQUIREMENTS_MATRIX.md and `directives/03-search-ticker-navigation.md`, then start the `optic-ultra` server.
 
 ## Phase 01 report (directive 01; reporting format of directive 00)
 
