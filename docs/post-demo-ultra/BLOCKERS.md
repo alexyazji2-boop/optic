@@ -10,3 +10,4 @@ it. Expected blockers from earlier work are listed as "to confirm" until Phase 0
 | BL-03 | A live SnapTrade connection with real credentials | live brokerage linking | expected | the sandbox brokerage provider with synthetic holdings | owner-approved sandbox or test credentials |
 | BL-04 | Stripe, SMTP | billing and real email | expected | none needed for this overhaul's scope | owner configuration |
 | BL-05 | Market hours (9:30 to 16:00 ET) | checks of live quotes, quoted option chains and intraday freshness | time-dependent | fixtures and a fake clock; live-hours checks scheduled when the session reaches them | the clock |
+| BL-06 | Docker on this machine | building the production image (`Dockerfile`, python:3.12-slim) locally; the suite runs on the venv's Python 3.9 instead | confirmed 2026-10-29 (`docker` not found) | Railway builds the image on deploy; the suite covers the code | Docker Desktop installed, or a CI build |

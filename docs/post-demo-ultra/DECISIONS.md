@@ -35,3 +35,9 @@ is merged wholesale, and nothing leaves this machine.
 **D-004 (setup) One phase at a time, nothing left behind.** The owner's sequencing instruction (directive 13)
 makes every phase a gate: the next phase starts only when the previous one's requirements are PASS or
 BLOCKED / UNVERIFIED for a named external reason.
+
+**D-007 (Phase 01) Visual review done in the main session.** Six subagents running at once hit the account's
+session limit at about 02:00 ET; the four still running stopped and nothing ran until 04:50 ET. The registry
+agents' files were nearly complete (C's counts and D's Classic map were finished by hand); the two screenshot
+reviewers had written nothing, so the visual audit was done here from labelled contact sheets and the crawl's
+measurements (FEATURE_REGISTRY Part 8). From now on at most two subagents run at a time.

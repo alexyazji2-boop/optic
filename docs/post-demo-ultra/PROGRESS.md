@@ -9,7 +9,7 @@ Read this and [REQUIREMENTS_MATRIX.md](REQUIREMENTS_MATRIX.md) before changing a
 - **Commits on the branch:** `fce3e71` setup (directives, tracking files, CLAUDE.md section).
 - **Local server:** launch config `optic-ultra` (:8250, stand-in model :8251, data `~/Optic/ultra-data`, sandbox brokerage, jobs off, no real model key). Seed password in `~/Optic/ultra-data/seed-output.txt` (never print it).
 - **Working folder (outside the repo):** `~/Optic/work/post-demo-ultra-2026-10-29/` (tools/, crawl1/, baseline/, milo/, registry/).
-- **Next action:** merge registry agents A-D and visual agents V1-V2 into FEATURE_REGISTRY/BUG_REGISTER; summarise the dead-click runs (guest 1440, signed in 1440, guest 390, running in the background since 01:47); set R01 statuses; commit; then Phase 02.
+- **Next action:** registry A and B merged into `registry/` and BUG-032..055 (verified the top claims: Macro pair setups, Scan trigger levels, `#/market` link, login CSRF BUG-043, skip link BUG-044, sizing persona BUG-045). Waiting on registry C (Dossier), D (tracking/owner/Classic), visual V1 and V2, and the dead-click chain; then merge, set R01 statuses, commit, Phase 02.
 
 ## Phase 01 so far
 

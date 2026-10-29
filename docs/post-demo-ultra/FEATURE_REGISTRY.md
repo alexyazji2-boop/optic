@@ -27,7 +27,7 @@ server (`optic-ultra`, :8250) at a stated size, in the crawl of 2026-10-29 (`~/O
 | Area | What exists | Notes |
 |---|---|---|
 | Service | One FastAPI app, one uvicorn worker (`Dockerfile`: yfinance access is serialised in-process). 241 routes, 231 under `/api`; `app/main.py` (8,336 lines) defines 141, routers add auth 32, account 29, brokerage 25, valuation store 5, billing 4. A static mount at `/` serves the front ends. 189 Python modules, about 94,600 lines. | `baseline/api-routes.json` |
-| Guards | Called inside handlers, not FastAPI dependencies: `require_user` (60 handlers), `csrf_guard` (50), `_write_guard` (10), `_is_owner`/`_owner_session_guard` (7), `_spend_guard` (4: Milo chat, deep research, the pre-earnings brief write, one more), `_is_operator` cooldowns on public scans. | Part 6 |
+| Guards | Called inside handlers, not FastAPI dependencies: `require_user` (60 handlers), `csrf_guard` (50), `_write_guard` (10), `_is_owner`/`_owner_session_guard` (7), `_spend_guard` (4: Milo chat, deep research, the pre-earnings brief write, the plain-English scan `/api/screener/ask`), `_is_operator` cooldowns on public scans. | Part 6 |
 | Background work | In-process loops: tracker (scans every four hours, the morning Read at 09:00 ET), watch runner, catalysts, Desk edition, shortlist, brokerage sync slots. Switches `WATCH_AUTO`, `TRACKER_AUTO`, `BRIEF_AUTO`, `CATALYST_AUTO`, `DESK_EDITION_AUTO`, `SHORTLIST_AUTO`. | |
 | Authentication | `app/auth/`: email and password (Argon2id), Google and Apple sign-in (ID tokens checked against their JWKS), passkeys (py_webauthn), server sessions in SQLite. Cookie `optic_session` HttpOnly, Secure when hosted, SameSite=Lax; CSRF double submit (`optic_csrf` cookie read by the page, `X-Optic-CSRF` header). Admin = `ADMIN_EMAILS` plus a confirmed address. Plans in `app/auth/store.py` (`PLANS`; Free has three Milo questions a day). Guests get 401 on paid endpoints. | CLAUDE.md "Things that will bite you" |
 | Persistence | 18 SQLite files under `TRACKER_DATA_DIR` (a Railway volume): `accounts.db` (users, identities, passwords, sessions, resets, verifications, passkeys, OAuth states, watchlists, saved research, `user_preferences` with time zone / default market / default landing only, subscriptions, sign-in attempts, watches and hits, theses, feedback, signals, valuations, seven brokerage tables, webhook events, valuation models, portfolio alerts and briefings, activity days, `milo_questions` holding time, user and kind only), `ai.db` (call ledger, kept writes), `brief.db`, `catalysts.db`, `desk_editions.db`, the paper ledger, `alerts.db`, `analysts.db`, `observations.db`, `iv_history.db`, `index_daily.db`, `research_forecasts.db`, `segments.db`, `signal_archive.db`, `shortlist.db`, `weekly.db`, `optic.db`, `dolthub_vol.db`; JSON caches (`feed_cache.json`, `symbols.json`, `universe_nasdaq.json`, `screen_ranking.json`, `earnings_consensus.json`, others). Daily scrubbed `accounts.db` snapshots (`app/snapshots.py`). | No server-side store of Milo conversations exists. |
@@ -50,43 +50,40 @@ server (`optic-ultra`, :8250) at a stated size, in the crawl of 2026-10-29 (`~/O
 7. **Abandoned hosting files**: `render.yaml`, `fly.toml`, `netlify.toml`, `run.sh`, `share.sh`, `share-detached.sh`, `stop-share.sh`, `tunnel-watchdog.sh` (last touched 2026-08-01 to 2026-09-02; production is Railway) and `publish.sh` (superseded by worktree pushes; do not use).
 8. **Parallel unshipped implementations** of the same areas on other branches (Part 7).
 
-## Part 6. Security baseline (non-destructive, 2026-10-29)
+## Part 2. Routes and features: the index
 
-Method: read the guards each handler calls (`baseline/route-guards.json`), read every handler the scan could
-not place, read cookie and header code, grep the front end for secrets and the back end for sensitive logging,
-and three read-only GETs against production. No intrusive testing.
+Every route the v2 router accepts (`static/v2/js/core/router.js`) and every global component, with its feature id,
+where its source-level entry is (controls with handlers, inputs, charts, tables, AI sections, tooltips, menus,
+loading/error/empty states, API calls, storage keys, auth needs, risks, all with file:line) and where its rendered
+inventory is (what a guest and a signed-in reader actually see at 1440). Totals: 56 crawled route variants, 31 global
+and account entries, 27 Home panel kinds, 9 Dossier entries, 15 tracking and owner entries, 26 Classic views mapped.
 
-| Area | Finding | Evidence | Status |
-|---|---|---|---|
-| Route authorisation | 232 API routes: 148 open by design (research answers a guest exactly as before accounts existed, `tests/test_auth_authorization.py`), 60 need a session (43 also CSRF), 14 owner/operator, 4 metered spend. 18 handlers had no guard the scan could name; each was read: stateless computations on the posted body (`/api/digest`, `/api/signals/followup`, `/api/paper/mark`, `/api/options/{t}/analyze`, `/api/retirement`, `/api/valuation/{t}/run|sotp`, `/api/screener`, `/valuation-models/replay`), Optic's own shared book (`/api/tracker`, `/api/portfolio-risk`, `/api/portfolio-scenarios`), cooldown-limited public scans (`/api/tracker/mark|scan`, `/api/catalysts/refresh`, which can spend when `CATALYST_READER=model`), signature-checked webhooks (brokerage, Stripe), sandbox-only routes, and `_reader`-guarded brokerage workspace routes. | Source | no unguarded user-data route found |
-| Session cookie | `optic_session`: HttpOnly, Secure when hosted, SameSite=Lax, path `/`. CSRF double submit: `optic_csrf` (readable by the page by design) plus `X-Optic-CSRF`. | app/auth/config.py:73-88, app/auth/deps.py:121 | ok |
-| Security headers | Enforced: `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: strict-origin-when-cross-origin`, CSP `frame-ancestors 'none'; object-src 'none'; base-uri 'self'`. Live adds HSTS 180 days (Cloudflare). The full CSP is report-only and allows `'unsafe-inline'` scripts, so cross-site scripting defence rests on the templates' escaping. | app/main.py:8303-8332; curl -I local and live | P2 hardening (Phase 10) |
-| API schema exposure | `/docs`, `/redoc`, `/openapi.json` served publicly in production. | live GETs 200/200/200 | BUG-006 |
-| Secrets in the browser | None found. `STRIPE_SECRET_KEY` appears in `core/format.js` only as the name of a setting in a comment; non-owners never see setting names (`billingOff`). | grep of static/ | ok |
-| Sensitive logging | OAuth failures log up to 400 characters of the provider's error body (client id at most); mail in log mode writes the recipient, masked unless the address is an admin's, and withholds links unless `MAIL_LOG_LINKS`. Milo's question log stores time, user and kind, never text. | app/auth/oauth.py:195-200, app/auth/mailer.py:69-132, app/db.py:948 | ok |
-| Brokerage data | Read-only provider access; credentials encrypted with `OPTIC_DATA_KEY`; consent and purge records. One exposure path known: Milo's portfolio tool offered on every page (BUG-007, P0). | app/brokerage/, investor-readiness O03 | BUG-007 |
-| Third parties in the page | Fonts from cdn.jsdelivr.net; Cloudflare's analytics beacon injected at the edge (named on the Privacy page). | static/v2/index.html:17-19 | BUG-019 |
-| Data licensing | Unlicensed Yahoo data; undocumented Robinhood overnight endpoint without a switch. | app/providers/yf.py, app/providers/overnight.py | BUG-022, BUG-023 |
-| Repository | Public, no LICENSE file (readiness audit). Local `.git/info/exclude` keeps the owner's private business-model drafts out. | memory, readiness audit | owner decision |
+| Feature id | Route or component | Auth | Source entry | Rendered |
+|---|---|---|---|---|
+| F-SHELL-01..11 | Boot, router and loader, rail, top bar, phone bar and More, drawer, legal footer, not found and failure views, banners and live regions, click and key delegation, scroll memory | all | registry/A A1-A11 | rendered-inventory "App shell"; `#/thisisnotavalidpage` |
+| F-SEARCH-01..04 | Search palette (Ctrl/Cmd K, "/"), shared typeahead (`data-v2-ta`), every other symbol box, search backend (`/api/search`, `/api/logo`, `/api/scanners`) | all | registry/A A12-A15 | `#/dossier`, palette checked by hand (FEATURE_REGISTRY Part 4) |
+| F-MILO-01..05 | Milo panel, answer renderer, Scout, chat and research endpoints, levels/personas/timeframes | guest sees the account prompt; asking needs an account | registry/A A16-A20 | panel opened by hand as a guest |
+| F-ACCT-01..11 | Sign in / up / forgot / reset (`#/signin`), email and provider links and passkeys, Settings (`#/settings`), Terms and Privacy (`#/terms`, `#/privacy`), Dossier start (`#/dossier`), Saved research (`#/research`), device session, preferences/store/API client, auth endpoints, storage key table, synced vs device settings | mixed | registry/A A21-A31 | `#/signin`, `#/settings`, `#/terms`, `#/privacy`, `#/dossier`, `#/research` |
+| F-HOME-00 | Home `#/` (and the old `#/workspace`): layouts, Customize, linked ticker and "Follows" chip, first-visit band, density | all; more panels when signed in | registry/B section 2 | `#/`, `#/workspace` |
+| F-HOME-01..27 | Home panels: portfolio, priority, desk, changes, questions, trends, alerts, indices, regime, expected, sectors, calendar, earnings, movers, watch, quote, cnews, news, economy, contracts, value, vol, gex, tearn, biz, fin, own | per panel | registry/B section 3 | `#/` |
+| F-MKT-01..05 | Read `#/read`, Macro `#/macro`, Indices `#/indices`, Instrument `#/instrument/<SYM>`, Earnings week `#/earnings` (`?week=1`) | all | registry/B 4.1-4.5 | `#/read`, `#/macro`, `#/indices`, `#/instrument/^GSPC`, `^TNX`, `CL=F`, `#/earnings`, `?week=1` |
+| F-DISC-01..04 | Explore `#/explore`, Scan `#/scan` (`?q=`), Insiders `#/insiders`, Analysts `#/analysts` | all | registry/B 4.6-4.9 | same routes |
+| F-CMP-01 | Compare `#/compare`, `?t=A,B` | all | registry/B 4.10 | `#/compare`, `#/compare?t=NVDA,MSFT` |
+| F-DOSSIER-00..08 | Dossier frame; Overview `#/<SYM>`; Chart, Options, Investing, Earnings, Financials, News tabs; printable Sheet `#/<SYM>/sheet`; plus the "Show advanced analysis" trace and the Dossier pipeline map | all | registry/C | NVDA (all tabs), SPY (all tabs), BRK.B, BTC-USD, ZZZZQ |
+| F-POS-01..03 | Optic Portfolio `#/portfolio`, Paper Desk `#/paper` (`?replay=`), Retirement `#/retirement` | all (Paper Desk and Retirement keep data in the browser) | registry/D section 1 | same routes |
+| F-BRK-00..05 | Brokerage gate and frame, Overview, Holdings and exposure, Performance, Events and research, Connections (`#/brokerage/<section>`) | account; linking owner-only in production | registry/D section 2 | `#/brokerage` and its five sections, guest and signed in |
+| F-FOL-01..02 | Watchlist `#/watchlist`, Alerts `#/alerts` | guest lists in the browser; account lists on the server | registry/D section 3 | same routes |
+| F-OWN-01..04 | Problem Reports `#/reports`, Claude usage `#/usage`, Accounts `#/accounts`, Metrics `#/metrics` | owner | registry/D section 4 | guest (refused) and owner |
+| F-CLASSIC | 26 Classic views at `/classic`, each mapped to its v2 page | as v2 | registry/D section 5 | Classic crawl 1440 and 390 |
+| F-API | 232 API routes with method, handler and guards | per route | registry/api-routes.md | n/a |
 
-## Part 7. Unshipped work on other local branches (inputs, not merged; DECISIONS D-006)
+## Part 3. API (Source)
 
-Counted with `git cherry origin/main <branch>` (patch-equivalent commits already on main do not count), 2026-10-29.
-
-| Branch | Unshipped commits | What it holds | Relevant to |
-|---|---|---|---|
-| milo-portfolio-privacy | 1 (2236205) | Milo offers or attaches the linked portfolio only for questions about the reader's own portfolio; tests NOT_ABOUT_THEM / ABOUT_THEM. Owner held it ("don't push"). | Phase 02, 08 (BUG-007) |
-| milo-upgrade | 8 (to 55721f6) | Milo knowledge base (`app/guide/`), grounded data tools (`app/milo_data.py`, freshness envelope), context fixes, playbooks, and a 215-case evaluation harness (`tests/milo_eval`) whose answer checks were blocked by the refused key. From 9a40c55, owner-staged. | Phase 08 |
-| milo-reasoning | 18 | Portfolio views, `get_returns` / `get_correlations`, concept cards, caret symbols; needs a rebase. | Phase 08 |
-| milo-voice, validation | 32, 19 | Older Milo evaluation and track-record work; superseded in part. | Phase 08 (reference only) |
-| polish-rebased (stack of 8 passes) | 11 | Interface-audit remediation of 2026-10-24: research consistency, content accuracy (session-aware Desk), navigation (renames the owner approved: Scan to Screener, Positions to Portfolios, My Desk to My layout), Home simplification, Overview consolidation, chart defaults, Milo simplification, polish. Owner reviewing. | Phase 04, 06, 07 |
-| source-foundation | 15 | Provenance states, Yahoo refusal handling, SEC pacing, Treasury curve, P/E guards; owner approval pending. | Phase 09 |
-| p0-readiness | 1 (rest shipped in a783dc5) | F-02: `OPTIC_OVERNIGHT_FEED`, default off. | Phase 02 (BUG-022) |
-| earnings-view-wording | 2 | Earnings view wording and a clock-pinned test. | Phase 02 (BUG-008) |
-| input-defects | 2 | Report time of day reaching the volatility surface (regime breadth part shipped). | Phase 09 |
-| portfolio-triggers | 6 | Portfolio rule repairs, research watch, SEC release clock. | Phase 09 |
-| ios-app | 6 | The iPhone app (bundles v2). Owner rule: web and app changes ship together. | All front-end phases (note only) |
-| others (home-declutter, plate-system, desk-redesign, simplify-pass, hig-pass, ux-redesign, paywall, pulse-phone, motion-video, v2-viz-rest, v2-refine, v2-dark-workspace, brokerage-link, chart-clarity, home-simplify, milo-simplify, nav-clarity, overview-consolidate, research-consistency, content-accuracy, overview-classic-port, read-conviction-wording, polish) | 1 to 16 each | Superseded drafts, stacked copies of polish-rebased, rejected designs (desk-redesign), or work already folded into later releases. | reference only |
+[registry/api-routes.md](registry/api-routes.md) lists all 232 routes (231 under `/api` plus `/healthz`) with method,
+handler (file:line) and the guard calls its body makes. Summary: 148 open by design, 43 need a session and CSRF, 17 a
+session, 14 owner or operator, 6 CSRF only (sign-in steps), 4 metered spend (`POST /api/chat`, `POST /api/research`,
+`POST /api/earnings/{ticker}/brief`, `POST /api/screener/ask`), 2 streaming (`/api/chat`, `/api/research`). Each page's own calls are in its
+registry entry and its rendered-inventory block.
 
 ## Part 4. Core journeys as they work at 9fa0f36 (Rendered on :8250 unless marked Source)
 
@@ -126,3 +123,65 @@ Where context should persist and does not, today: the market context on Home (sh
 the last company opened); the presentation choice on the Dossier (should be its own state, not the knowledge
 level); a Milo conversation across closing and reopening the panel (Phase 07 verifies); the knowledge level for a
 signed-in reader across devices (no server column; Phase 05).
+
+## Part 6. Security baseline (non-destructive, 2026-10-29)
+
+Method: read the guards each handler calls (`baseline/route-guards.json`), read every handler the scan could
+not place, read cookie and header code, grep the front end for secrets and the back end for sensitive logging,
+and three read-only GETs against production. No intrusive testing.
+
+| Area | Finding | Evidence | Status |
+|---|---|---|---|
+| Route authorisation | 232 API routes: 148 open by design (research answers a guest exactly as before accounts existed, `tests/test_auth_authorization.py`), 60 need a session (43 also CSRF), 14 owner/operator, 4 metered spend. 18 handlers had no guard the scan could name; each was read: stateless computations on the posted body (`/api/digest`, `/api/signals/followup`, `/api/paper/mark`, `/api/options/{t}/analyze`, `/api/retirement`, `/api/valuation/{t}/run|sotp`, `/api/screener`, `/valuation-models/replay`), Optic's own shared book (`/api/tracker`, `/api/portfolio-risk`, `/api/portfolio-scenarios`), cooldown-limited public scans (`/api/tracker/mark|scan`, `/api/catalysts/refresh`, which can spend when `CATALYST_READER=model`), signature-checked webhooks (brokerage, Stripe), sandbox-only routes, and `_reader`-guarded brokerage workspace routes. | Source | no unguarded user-data route found |
+| Session cookie | `optic_session`: HttpOnly, Secure when hosted, SameSite=Lax, path `/`. CSRF double submit: `optic_csrf` (readable by the page by design) plus `X-Optic-CSRF`. | app/auth/config.py:73-88, app/auth/deps.py:121 | ok |
+| Security headers | Enforced: `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: strict-origin-when-cross-origin`, CSP `frame-ancestors 'none'; object-src 'none'; base-uri 'self'`. Live adds HSTS 180 days (Cloudflare). The full CSP is report-only and allows `'unsafe-inline'` scripts, so cross-site scripting defence rests on the templates' escaping. | app/main.py:8303-8332; curl -I local and live | P2 hardening (Phase 10) |
+| API schema exposure | `/docs`, `/redoc`, `/openapi.json` served publicly in production. | live GETs 200/200/200 | BUG-006 |
+| Secrets in the browser | None found. `STRIPE_SECRET_KEY` appears in `core/format.js` only as the name of a setting in a comment; non-owners never see setting names (`billingOff`). | grep of static/ | ok |
+| Sensitive logging | OAuth failures log up to 400 characters of the provider's error body (client id at most); mail in log mode writes the recipient, masked unless the address is an admin's, and withholds links unless `MAIL_LOG_LINKS`. Milo's question log stores time, user and kind, never text. | app/auth/oauth.py:195-200, app/auth/mailer.py:69-132, app/db.py:948 | ok |
+| Brokerage data | Read-only provider access; credentials encrypted with `OPTIC_DATA_KEY`; consent and purge records. One exposure path known: Milo's portfolio tool offered on every page (BUG-007, P0). | app/brokerage/, investor-readiness O03 | BUG-007 |
+| Third parties in the page | Fonts from cdn.jsdelivr.net; Cloudflare's analytics beacon injected at the edge (named on the Privacy page). | static/v2/index.html:17-19 | BUG-019 |
+| Data licensing | Unlicensed Yahoo data; undocumented Robinhood overnight endpoint without a switch. | app/providers/yf.py, app/providers/overnight.py | BUG-022, BUG-023 |
+| Repository | Public, no LICENSE file (readiness audit). Local `.git/info/exclude` keeps the owner's private business-model drafts out. | memory, readiness audit | owner decision |
+
+## Part 7. Unshipped work on other local branches (inputs, not merged; DECISIONS D-006)
+
+Counted with `git cherry origin/main <branch>` (patch-equivalent commits already on main do not count), 2026-10-29.
+
+| Branch | Unshipped commits | What it holds | Relevant to |
+|---|---|---|---|
+| milo-portfolio-privacy | 1 (2236205) | Milo offers or attaches the linked portfolio only for questions about the reader's own portfolio; tests NOT_ABOUT_THEM / ABOUT_THEM. Owner held it ("don't push"). | Phase 02, 08 (BUG-007) |
+| milo-upgrade | 8 (to 55721f6) | Milo knowledge base (`app/guide/`), grounded data tools (`app/milo_data.py`, freshness envelope), context fixes, playbooks, and a 215-case evaluation harness (`tests/milo_eval`) whose answer checks were blocked by the refused key. From 9a40c55, owner-staged. | Phase 08 |
+| milo-reasoning | 18 | Portfolio views, `get_returns` / `get_correlations`, concept cards, caret symbols; needs a rebase. | Phase 08 |
+| milo-voice, validation | 32, 19 | Older Milo evaluation and track-record work; superseded in part. | Phase 08 (reference only) |
+| polish-rebased (stack of 8 passes) | 11 | Interface-audit remediation of 2026-10-24: research consistency, content accuracy (session-aware Desk), navigation (renames the owner approved: Scan to Screener, Positions to Portfolios, My Desk to My layout), Home simplification, Overview consolidation, chart defaults, Milo simplification, polish. Owner reviewing. | Phase 04, 06, 07 |
+| source-foundation | 15 | Provenance states, Yahoo refusal handling, SEC pacing, Treasury curve, P/E guards; owner approval pending. | Phase 09 |
+| p0-readiness | 1 (rest shipped in a783dc5) | F-02: `OPTIC_OVERNIGHT_FEED`, default off. | Phase 02 (BUG-022) |
+| earnings-view-wording | 2 | Earnings view wording and a clock-pinned test. | Phase 02 (BUG-008) |
+| input-defects | 2 | Report time of day reaching the volatility surface (regime breadth part shipped). | Phase 09 |
+| portfolio-triggers | 6 | Portfolio rule repairs, research watch, SEC release clock. | Phase 09 |
+| ios-app | 6 | The iPhone app (bundles v2). Owner rule: web and app changes ship together. | All front-end phases (note only) |
+| others (home-declutter, plate-system, desk-redesign, simplify-pass, hig-pass, ux-redesign, paywall, pulse-phone, motion-video, v2-viz-rest, v2-refine, v2-dark-workspace, brokerage-link, chart-clarity, home-simplify, milo-simplify, nav-clarity, overview-consolidate, research-consistency, content-accuracy, overview-classic-port, read-conviction-wording, polish) | 1 to 16 each | Superseded drafts, stacked copies of polish-rebased, rejected designs (desk-redesign), or work already folded into later releases. | reference only |
+
+## Part 8. First-pass visual audit (Rendered; no UI changed)
+
+Evidence: every route captured at 1440x900, 1280x800, 768x1024 and 390x844 for a guest and a signed-in reader
+(`crawl1/<state>-<size>/<label>.png` and `-full.png`), Classic at 1440 and 390; reviewed in the main session as
+labelled contact sheets (`sheets/guest-w390-*.jpg`, `sheets/guest-w1440-*.jpg`, `sheets/full1440-*.jpg`, the last
+for Home, NVDA Overview, Options, Investing, Financials, Read, Compare, Scan, Analysts), plus the measurements of
+the crawl (overflow, clipped text, contrast, unnamed controls and small targets from `audit.js`, word and control
+counts). The two screenshot-review agents stopped at the usage limit before writing anything (DECISIONS D-007).
+
+| # | Finding | Where (size) | P | Bug |
+|---|---|---|---|---|
+| V-01 | Competing elements on the first screen: welcome card with 8 actions, 4 layout tabs and Customize, then 12 panels whose headers each carry About, Ask Milo, options and Refresh (about 48 icon buttons) | Home (1440, 1280; on 390 the welcome card fills most of the first screen) | P1 | BUG-005 |
+| V-02 | Very long pages with sections of equal weight: NVDA Overview about 6,000 px, Investing and Financials past the 6,000 px capture cap, Analysts 2,648 words, Compare's side-by-side table | 1440 full pages | P1 | BUG-004 |
+| V-03 | Jargon on first screens without a plain lead: "VIX 16.91 ÷ 16, about ±82 points", "14-day ATR 0.90% ÷ 1.6", "Priced against typical 1.89×" (Home Expected move); implied move, delta, open interest, gamma (Options); "Stage 2 · Advancing", "Grade B", scores 50 and 87 (Overview) | Home, Options, Overview | P1 | BUG-004/005 (Phase 04) |
+| V-04 | The same explanatory sentence repeated on every row: each of the Read's 20 earnings rows ends "An earnings report resets the estimate the price is built on, which is why the option market charges more into it" | Read (1440) | P1 | BUG-076 |
+| V-05 | Notices placed after the content they qualify: Options' "Not a recommendation. The strikes, limit prices, stops and targets ... are model output" sits at the foot of a long page | Options (1440) | P1 | BUG-063 |
+| V-06 | Loud colour where no direction is implied: the saturated green and red sector heatmap is the strongest element on Home; coloured analyst ratings (Buy green, Underweight red) in a long table | Home, Analysts (1440) | P2 | BUG-077 |
+| V-07 | Several empty panels at once on a fresh server ("Today's Read is not ready yet", "The first build scans about 150 companies and takes a minute or two", "No wire headlines"): honest wording, but a first visitor after a deploy sees a page of waiting boxes (locally the jobs are off, so this is exaggerated here) | Home, Read (1440) | P2 | BUG-016 |
+| V-08 | Header while loading: placeholder logo and a lone ticker at the right edge | cold Dossier (800) | P2 | BUG-031 |
+| V-09 | No sideways overflow on any route at any size; 13 ellipsis truncations on Compare and 8 to 12 on Home (labels in tiles) | all | ok / P2 | |
+| V-10 | Small touch targets at 390: 30 on NVDA Overview and Investing, 24 on BRK-B, 12 on BTC (audit script) | phone | P2 | BUG-014 |
+| V-11 | Consistent shell, type and card chrome across every v2 route; the dark theme and gold accents read as one product; contrast and unnamed-control checks were 0 on every load | all | ok | |
+

@@ -44,9 +44,9 @@ personalised investment advice.
 
 | Phase | Directive | Deliverables beyond the shared files | Status |
 |---|---|---|---|
-| Setup | 00, 12, 13 | branch, saved directives, tracking files, CLAUDE.md section | in progress |
-| 01 Discovery and baseline | [01](directives/01-discovery-baseline.md) | FEATURE_REGISTRY, initial TEST_RESULTS, BUG_REGISTER | not started |
-| 02 Advice safeguards and legal consistency | [02](directives/02-advice-elimination-legal.md) | COMPLIANCE_REVIEW.md, central AI policy, disclaimer registry | not started |
+| Setup | 00, 12, 13 | branch, saved directives, tracking files, CLAUDE.md section | done (fce3e71) |
+| 01 Discovery and baseline | [01](directives/01-discovery-baseline.md) | FEATURE_REGISTRY, initial TEST_RESULTS, BUG_REGISTER | done (11 PASS, R01-05 PARTIAL: image build blocked) |
+| 02 Advice safeguards and legal consistency | [02](directives/02-advice-elimination-legal.md) | COMPLIANCE_REVIEW.md, central AI policy, disclaimer registry | in progress |
 | 03 Search, ticker state, SPY default, navigation | [03](directives/03-search-ticker-navigation.md) | precedence rules, regression scenarios | not started |
 | 04 Radical simplicity | [04](directives/04-radical-simplicity.md) | SIMPLICITY_AUDIT.md, before/after shots | not started |
 | 05 Knowledge-level slider | [05](directives/05-knowledge-level.md) | one preference, one prompt contract | not started |
@@ -61,7 +61,10 @@ personalised investment advice.
 
 Each phase keeps its directive's full scope; these are the confirmed starting points, highest priority first.
 
-- **Phase 02 (advice, legal).** P0: Milo's portfolio tool on every page (BUG-007; take the reviewed fix from
+- **Phase 02 (advice, legal).** P0 found later in Phase 01: the Overview trade plan (BUG-056), the Options entry order
+  (BUG-057), the sizing persona (BUG-045), the contract picker and Retirement allocation (BUG-024, BUG-025); P1 wording in
+  Macro pairs (BUG-033), Scan triggers (BUG-034), verdict labels (BUG-058), earnings stance (BUG-059), options ideas
+  (BUG-060), DCF upside (BUG-061), chart sizing tools (BUG-062), the portfolio brief (BUG-069). P0: Milo's portfolio tool on every page (BUG-007; take the reviewed fix from
   milo-portfolio-privacy 2236205 per D-006); the overnight Robinhood feed without a switch (BUG-022; flag,
   default decided with the licensing note for counsel); unlicensed Yahoo data disclosed consistently
   (BUG-023, BLOCKED for a fix). Then every AI prompt in `app/ai.py` (12 features, several written "for a
@@ -88,7 +91,8 @@ Each phase keeps its directive's full scope; these are the confirmed starting po
   milo-upgrade harness is an input); real-model runs BLOCKED on a working key (BL-01).
 - **Phase 09 (data integrity).** Score models that disagree (BUG-011), rounding (BUG-012), calendar names
   (BUG-013), unused locals that may hide logic (BUG-017), reconciliation against Yahoo for a fixed set.
-- **Phase 10 (performance, security, accessibility).** `/docs` exposure (BUG-006), CSP report-only, fonts
+- **Phase 10 (performance, security, accessibility).** P0 login CSRF in provider sign-in (BUG-043, live), the skip link
+  opening MAIN (BUG-044), `/docs` exposure (BUG-006), CSP report-only, fonts
   from a CDN (BUG-019), duplicate brokerage status requests, cold first builds (BUG-016), small touch targets
   (up to 30 on a page at 390), phone layout items (BUG-014, BUG-015), cost model for 100/1,000/10,000 users.
 - **Phase 11.** Independent re-verification of everything above.
