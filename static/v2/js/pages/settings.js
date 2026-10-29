@@ -30,6 +30,7 @@ const tag = (on, text) => html` <span class="set-tag ${on ? 'on' : 'off'}">${tex
 const seg = (label, items, cur, attr) => html`<div class="seg" role="group" aria-label="${label}">${items.map(([v, l]) => (attr === 'theme'
   ? html`<button type="button" data-v2-theme="${v}" aria-pressed="${cur === v}">${l}</button>`
   : attr === 'motion' ? html`<button type="button" data-v2-motion="${v}" aria-pressed="${cur === v}">${l}</button>`
+  : attr === 'density' ? html`<button type="button" data-v2-density="${v}" aria-pressed="${cur === v}">${l}</button>`
   : html`<button type="button" data-v2-scale="${v}" aria-pressed="${cur === v}">${l}</button>`))}</div>`;
 
 /* ---------------- account ---------------- */
@@ -138,11 +139,14 @@ function preferences() {
       ${row('Size', 'Default is 15% larger than the terminal shipped with. Compact is that original density, for a small screen or a reader who wants more on it at once.', seg('Text size', [['compact', 'Compact'], ['default', 'Default'], ['large', 'Large']], prefs.scale(), 'scale'))}</section>
     <section class="section" aria-labelledby="kb-h"><h2 class="t-h2" id="kb-h">Keyboard</h2>
       ${row('Shortcuts', 'Every key the terminal answers to, in one list. Press ? anywhere outside a field to open it.', html`<button type="button" class="btn btn-sm" data-v2-shortcuts>Show the shortcuts</button>`)}</section>
-    <!-- the level changes Milo's answers and nothing on the pages; it was described as changing every page (beginner audit, 2026-10-20) -->
+    <!-- two settings, kept apart (Phase 04, D-019): what a page shows, and how Milo explains it -->
+    <section class="section" aria-labelledby="dn-h"><h2 class="t-h2" id="dn-h">How much each page shows</h2>
+      <p class="section-sub">Simple leads with each page's main finding and folds the specialist research one press away. Advanced opens it, and Home shows every panel of its layout.</p>
+      ${row('View', 'The Dossier\'s "Show advanced analysis" switch is the same setting. It does not change how Milo explains things.', seg('View', [['simple', 'Simple'], ['advanced', 'Advanced']], prefs.density(), 'density'))}</section>
     <section class="section" aria-labelledby="hm-h"><h2 class="t-h2" id="hm-h">How Milo explains things</h2>
-      <p class="section-sub">This sets the level Milo pitches its answers at, the Level in Milo's Response settings. The pages are the same at every level: each leads with a plain finding, then its figures, with methods one step away.</p>
-      ${row('Advanced answers', 'On is Advanced or Professional, off is Simple, Financially Literate or Adaptive. Turning it off returns Milo to the level you had chosen. On also opens the paper portfolio\'s risk rules by default.',
-        html`<label class="switch"><input type="checkbox" role="switch" data-v2-adv ${prefs.advancedOn() ? 'checked' : ''}> <span>Advanced answers from Milo</span></label>`)}</section>
+      <p class="section-sub">This sets the level Milo pitches its answers at, the Level in Milo's Response settings. It does not change what a page shows.</p>
+      ${row('Advanced answers', 'On is Advanced or Professional, off is Simple, Financially Literate or Adaptive. Turning it off returns Milo to the level you had chosen.',
+        html`<label class="switch"><input type="checkbox" role="switch" data-v2-adv ${prefs.advancedLanguageOn() ? 'checked' : ''}> <span>Advanced answers from Milo</span></label>`)}</section>
     <section class="section" aria-labelledby="tz-h"><h2 class="t-h2" id="tz-h">Time zone</h2>
       <p class="section-sub"><b>US market hours are defined in Eastern Time and don't move.</b> This setting only changes the clock they're displayed against, so you can see when the open and close land where you are.</p>
       ${row('Show times in', `Currently ${z} (${prefs.zoneAbbrev(z)})${onMarket ? '. The same as market time, so nothing is converted.' : '.'}`,
@@ -246,6 +250,7 @@ function wire(main) {
     if ((b = t('[data-v2-theme]'))) { prefs.setTheme(b.dataset.v2Theme); paint(); return; }
     if ((b = t('[data-v2-motion]'))) { prefs.setMotion(b.dataset.v2Motion); paint(); const again = mainEl.querySelector(`[data-v2-motion="${b.dataset.v2Motion}"]`); if (again) again.focus(); return; }
     if ((b = t('[data-v2-scale]'))) { prefs.setScale(b.dataset.v2Scale); paint(); const again = mainEl.querySelector(`[data-v2-scale="${b.dataset.v2Scale}"]`); if (again) again.focus(); return; }
+    if ((b = t('[data-v2-density]'))) { prefs.setDensity(b.dataset.v2Density); paint(); const again = mainEl.querySelector(`[data-v2-density="${b.dataset.v2Density}"]`); if (again) again.focus(); return; }
     if (t('[data-v2-report]')) { openReport(t('[data-v2-report]')); return; }
     if (t('[data-v2-set-recheck]')) { await store.loadMe(); if (appRef) appRef.settleAuth(); return; }
     if (t('[data-v2-set-resend]')) { await act(() => api.post('/api/auth/resend-verification', {}), (r) => (r && r.already_verified ? 'This address is already confirmed.' : r && r.mail && r.mail.available === false ? 'Email is not switched on here yet, so no link could be sent.' : 'A new confirmation link is on its way.')); return; }
@@ -285,7 +290,7 @@ function wire(main) {
   main.addEventListener('change', (e) => {
     const t = e.target;
     if (t.matches('[data-v2-tz]')) { prefs.setTimezone(t.value); paint(); const s = mainEl.querySelector('[data-v2-tz]'); if (s) s.focus(); return; }
-    if (t.matches('[data-v2-adv]')) { prefs.setAdvanced(t.checked); toast(t.checked ? 'Milo will give advanced answers.' : 'Milo will explain at your chosen level.'); }
+    if (t.matches('[data-v2-adv]')) { prefs.setAdvancedLanguage(t.checked); toast(t.checked ? 'Milo will give advanced answers.' : 'Milo will explain at your chosen level.'); }
   });
   main.addEventListener('submit', async (e) => {
     const f = e.target; e.preventDefault();

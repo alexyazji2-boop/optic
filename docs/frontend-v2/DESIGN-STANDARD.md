@@ -122,6 +122,13 @@ The owner's mapping (2026-10-24): VWAP the one cool hue (the indicator exception
 - **Folded:** methods, formulas, conventions and caveats go behind one shared fold, "How this works" (`ui/states.js` `how()`), under those words everywhere.
 - **Where it's applied:** the Options contracts table and the dealer gamma panel. The table's report-inside-the-expiry note stays in view, because it is a finding.
 
+### Density and times (post-demo Phase 04, 2026-10-29)
+- **Two settings, never one.** What a page shows is density, Simple or Advanced (`prefs.density()`, on Classic's key `optic.mode.v1`). How things are explained is the knowledge level (`prefs.knowledge()`), which only Milo's words follow. A control changes one of them, never both.
+- **Supporting detail one press away.** A table or list that supports a finding, rather than being one, sits in `simpleFold(id, summary, ...)` from `ui/states.js`. It is closed under Simple and open under Advanced, and it keeps the reader's own open or close through redraws. Its section heading and one line stay outside it, so the reader knows what is inside. Home's Simple panel sets follow the same setting.
+- **Every page with market figures says when they are from**, once, with `asOfLine(at, { what, note })` or `whenText(at)` from `ui/states.js`: "Prices as of 10:05 AM EDT", "Weekly closes through Oct 23". A bare date is a close. A bar labelled with a period's end that has not come yet is not a time: name the last finished period.
+- **Colour carries direction, not opinion.** A firm's rating is ink. A heatmap's tint is scaled to a fixed size of move for its period, at most 28%, so a quiet day looks quiet.
+- **Long lists start short.** A list of more than a screen or two of rows shows the first rows of the sorted whole, then "Show all N" (`table(..., { limit })` in `ui/table.js`).
+
 ### Long pages and sideways strips (Classic parity B3, 2026-10-21)
 - **Sections fold.** Every top-level section with a heading folds by its heading or its chevron button (`ui/sections.js`). A folded section is its heading line alone. Sections above the reader's knowledge level start folded and say "Advanced".
 - **The section strip.** A page with six or more sections gets a strip of their names with Expand all, Collapse all and Panels. It is sticky under the header on a desktop and scrolls away on a phone, like the header. The section on screen is lit like a tab: ink with the gold bar.
@@ -171,7 +178,7 @@ The account button never wraps (`white-space: nowrap; flex: none`).
 - **Chart:** Explain and full screen no longer sit on the readout when a side panel narrows the plot.
 
 ## Remaining inconsistencies
-1. **Spacing:** 52 distinct gap values and 125 distinct paddings remain. The 4px scale (`--s-1` to `--s-10`) is defined, but most page CSS still uses literal values, including off-scale 6, 10 and 14px.
+1. **Spacing:** 52 distinct gap values and 125 distinct paddings remain. The 4px scale (`--s-1` to `--s-10`) is defined, but most page CSS still uses literal values, including off-scale 6, 10 and 14px. Counted again on 2026-10-29: 1,844 spacing literals in pages.css, components.css and base.css, 835 of them off the 4px scale. This is the post-demo overhaul's Phase 10 work (D-025).
 2. **Headline figure sizes** are literal per component (22 to 40px) rather than two or three named steps.
 3. **Explanations:** only Options is folded. Inline method text remains in several places:
    - the Overview chart's footnote about Greeks, which does not belong under a price chart;
@@ -180,9 +187,9 @@ The account button never wraps (`white-space: nowrap; flex: none`).
    - several Home panels' sub-lines;
    - the Options group sub-lines.
 4. **Filter chips** use an inverted ink fill when pressed. That is a third selection look, for multi-select filters, and it should be decided deliberately.
-5. **Text glyphs:** three "×" remove buttons (Compare, Scan, Milo history) and five "→" in copy remain.
+5. **Text glyphs:** the "×" remove buttons now use `icon('close')` and the Overview's next-step arrows `icon('arrow')` (Phase 04). Scan's funnel keeps "→" as notation between two counts.
 6. **Unused code:** the tall dossier header code path still exists but no caller uses it.
 7. **The light theme** was not re-screenshotted in this pass. Its ink-3 was deepened, but nothing else was checked.
 8. **Classic is untouched.** It still has its own sizes, gold buttons and pills.
 9. **Gold declarations in the CSS** still number about 120, most of them chart encodings and focus rings. The on-screen count above is the measure that matters.
-10. **Home's starter cards** label "Follow" in gold, which is outside the list of gold uses. This was found by the optic-frontend skill's test run, and the label should be ink.
+10. **Home's starter cards** labelled "Follow" in gold. They belonged to the unrouted Home page, which Phase 04 removed (D-021). The first-visit card's Follow buttons are ink, and the unused `.starter` styles remain in components.css.

@@ -6,7 +6,7 @@ import { html, render as draw } from '../core/dom.js';
 import * as api from '../core/api.js';
 import { num, signed, clean, capFirst, isNum } from '../core/format.js';
 import { lineChart, mountCharts } from '../ui/chart.js';
-import { skeleton, failed } from '../ui/states.js';
+import { skeleton, failed, asOfLine } from '../ui/states.js';
 import { button as miloButton, provideContext } from '../ui/milo.js';
 import { sectionHead } from './tabs.js';
 import { sectorBoard, sectorReadBlock, loadSectorRead } from './market-shared.js';
@@ -27,11 +27,18 @@ function readings(x) {
     ['Furthest from a high', `${worst.name}, ${signed(worst.current_drawdown_pct)}`, worst.current_drawdown_pct <= -20 ? 'down' : ''],
     ['Style', isNum(g) ? (g > 2 ? `Growth ahead, ${signed(g)} over 3 months` : g < -2 ? `The broad market ahead, ${signed(g)} for growth over 3 months` : 'Growth and the broad market together') : 'n/a', ''],
   ];
-  return html`<section class="section" aria-labelledby="iw-h"><h2 class="t-h2" id="iw-h">What the indices say</h2><dl class="reads-dl">${rows.map(([k, v, c]) => html`<div><dt>${k}</dt><dd class="${c}">${v}</dd></div>`)}</dl></section>`;
+  // the readings are built from weekly closes, so that is their time (X-10). The current week's bar is labelled with
+  // its Friday but holds the latest price, so "through Oct 30" on a Thursday named a day still to come: name the last
+  // finished week instead, and say the current one counts at the latest price.
+  const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+  const tails = ix.map((i) => (i.weekly_dates || []).slice(-2).map((x) => String(x).slice(0, 10))).filter((a) => a.length);
+  const newest = tails.map((a) => a[a.length - 1]).sort().slice(-1)[0] || '';
+  const open = newest > today, through = open ? tails.map((a) => (a.length > 1 ? a[a.length - 2] : '')).filter(Boolean).sort().slice(-1)[0] || '' : newest;
+  return html`<section class="section" aria-labelledby="iw-h"><h2 class="t-h2" id="iw-h">What the indices say</h2><dl class="reads-dl">${rows.map(([k, v, c]) => html`<div><dt>${k}</dt><dd class="${c}">${v}</dd></div>`)}</dl>${asOfLine(through, { what: 'Weekly closes', note: open ? 'This week counts at the latest price.' : '' })}</section>`;
 }
 
 function regime(x) {
-  return html`<section class="section" aria-labelledby="ir-h"><div class="section-head"><div><h2 class="t-h2" id="ir-h">Index regime</h2><p class="section-sub">${clean(x.regime_summary || '')}</p></div>${miloButton('Ask Milo about the indices', { ask: 'What do the major indices say about the market cycle right now?', context: 'Markets, Indices' })}</div>
+  return html`<section class="section" aria-labelledby="ir-h"><div class="section-head"><div><h2 class="t-h2" id="ir-h">Where each index stands</h2><p class="section-sub">${clean(x.regime_summary || '')}</p></div>${miloButton('Ask Milo about the indices', { ask: 'What do the major indices say about the market cycle right now?', context: 'Markets, Indices' })}</div>
     <div class="tscroll"><table class="t"><thead><tr><th>Index</th><th>Last</th><th>1 year</th><th>3 years a year</th><th>5 years a year</th><th>10 years a year</th><th>Against 40-week</th><th>Against 200-week</th><th>Weekly RSI</th><th>From the high</th><th>Phase</th></tr></thead>
       <tbody>${(x.indices || []).map((i) => html`<tr><td><a href="#/instrument/${encodeURIComponent(i.symbol)}">${i.name}</a><br><small class="t-muted">${clean(i.note || '')}</small></td><td>${num(i.last, 0)}</td><td>${signed(i.return_1y_pct)}</td><td>${signed(i.cagr_3y_pct)}</td><td>${signed(i.cagr_5y_pct)}</td><td>${signed(i.cagr_10y_pct)}</td><td>${signed(i.vs_40w_sma)}</td><td>${signed(i.vs_200w_sma)}</td><td>${num(i.weekly_rsi, 0)}</td><td>${signed(i.current_drawdown_pct)}</td><td style="text-align:left">${capFirst(i.phase || '')}</td></tr>`)}</tbody></table></div></section>
     ${(x.growth_vs_market || {}).series ? html`<section class="section" aria-labelledby="gv-h"><h2 class="t-h2" id="gv-h">Growth against the broad market (QQQ / SPY)</h2>

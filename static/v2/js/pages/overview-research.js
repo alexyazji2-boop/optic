@@ -12,6 +12,7 @@ import { html } from '../core/dom.js';
 import { num, signed, money, clean, capFirst, shortDate, fullDate, ago, score100 } from '../core/format.js';
 import { daysUntil } from '../core/marketTime.js';
 import { how } from '../ui/states.js';
+import { icon } from '../ui/icons.js';
 import { term } from '../ui/term.js';
 import { hrefFor } from '../nav.js';
 import { setupGrade, convictionPhrase, valuationWord } from '../core/research-words.js';
@@ -444,7 +445,8 @@ export function fourQuestions(c) {
     const gaps = g(out, 'data', 'gaps') || [];
     // The combined verdict is said once, under "Taken together" further down, with its reasons beside it.
     body = html`${qgrid([businessTile(out.long_term, c), priceTile(out.long_term, c), tradeTile(out.swing, c), earningsTile(out.earnings, c)])}
-      <p class="asof">The Optic Score below summarises trend and signals. These four are graded separately, each by its own stated rules (method ${out.method_version || ''}, policy ${g(out, 'policy', 'version') || ''}), and none has been shown to predict returns. "Insufficient Data" means evidence is missing, not that the answer is bad.${g(out, 'freshness', 'text') ? ` ${clean(out.freshness.text)}` : ''}${gaps.length ? ` Not loaded: ${clean(gaps.join('; '))}.` : ''}</p>`;
+      <p class="asof">These four are graded separately, each by its own stated rules, and none has been shown to predict returns.${g(out, 'freshness', 'text') ? ` ${clean(out.freshness.text)}` : ''}${gaps.length ? ` Not loaded: ${clean(gaps.join('; '))}.` : ''}</p>
+      ${how(html`<p>The Optic Score below summarises trend and signals; these four questions are graded apart from it. "Insufficient Data" means evidence is missing, not that the answer is bad.</p><p class="t-muted">Method ${out.method_version || 'not stated'}, policy ${g(out, 'policy', 'version') || 'not stated'}.</p>`)}`;
   }
   return html`<section class="section qsec" aria-labelledby="qs-h"><h2 class="t-h2" id="qs-h">Four questions, answered separately</h2>${body}</section>`;
 }
@@ -485,9 +487,9 @@ export function nextSection(c) {
           <p class="asof">Scheduled dates only. A date is not a forecast of what happens on it.</p>`
           : html`<p class="t-muted">No scheduled company events or economic releases in the data for the coming days.</p>`}</div>
       <div><h3 class="t-label nx-h">Research steps</h3>
-        <ul class="nx-steps">${steps.map((s) => html`<li>${s.compare ? html`<a class="nx-step" href="#/compare?t=${encodeURIComponent(sym)}"><span>${s.text}</span><span class="nx-to">Compare ${'→'}</span></a>`
-          : html`<a class="nx-step" href="${hrefFor(s.view, sym)}"><span>${s.text}</span><span class="nx-to">${TAB[s.view] || ''} ${'→'}</span></a>`}</li>`)}
-          <li><button type="button" class="nx-step" data-v2-milo="Using the figures Optic has for ${sym}, what are the main things a long-term investor should understand about it, and what would change that picture?" data-v2-milo-ctx="${sym} Dossier, Overview: what to look at next" data-v2-milo-sym="${sym}"><span>Ask Milo a question about ${sym}</span><span class="nx-to">Ask Milo ${'→'}</span></button></li></ul>
+        <ul class="nx-steps">${steps.map((s) => html`<li>${s.compare ? html`<a class="nx-step" href="#/compare?t=${encodeURIComponent(sym)}"><span>${s.text}</span><span class="nx-to">Compare ${icon('arrow')}</span></a>`
+          : html`<a class="nx-step" href="${hrefFor(s.view, sym)}"><span>${s.text}</span><span class="nx-to">${TAB[s.view] || ''} ${icon('arrow')}</span></a>`}</li>`)}
+          <li><button type="button" class="nx-step" data-v2-milo="Using the figures Optic has for ${sym}, what are the main things a long-term investor should understand about it, and what would change that picture?" data-v2-milo-ctx="${sym} Dossier, Overview: what to look at next" data-v2-milo-sym="${sym}"><span>Ask Milo a question about ${sym}</span><span class="nx-to">Ask Milo ${icon('arrow')}</span></button></li></ul>
         <p class="asof">Ask Milo writes a question for you to edit. Nothing is sent until you press Send.</p></div>
     </div></section>`;
 }

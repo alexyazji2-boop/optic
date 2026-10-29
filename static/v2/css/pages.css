@@ -1189,7 +1189,8 @@ html.ch-max .ch-side, html.ch-max .ch-wrail { max-height: min(calc(100vh - 16px)
 .tl-bar { grid-column: 2; height: 4px; width: var(--w); background: var(--c-gold); border-radius: var(--r-pill); }
 /* Analysts */
 .an-filters { gap: 10px 16px; margin: 12px 0 16px; }
-.rt { font: 600 var(--t-sm)/1 var(--f-label); } .rt-buy { color: var(--c-pos); } .rt-sell { color: var(--c-neg); } .rt-hold { color: var(--c-ink-2); }
+/* a firm's rating is its opinion, not a direction of anything: one ink for Buy, Hold and Sell (BUG-077); the Action column carries the change */
+.rt { font: 600 var(--t-sm)/1 var(--f-label); color: var(--c-ink); }
 /* Instrument */
 #inst-chart { margin-top: 10px; }
 @media (max-width: 860px) {
@@ -1550,7 +1551,8 @@ html[data-milo="off"] .ws-ask { opacity: .55; }
 .ws-kv dd { margin: 4px 0 0; font: 600 var(--t-lead)/1.15 var(--f-sans); font-variant-numeric: tabular-nums; }
 .ws-kv small { display: block; margin-top: 3px; font: 400 var(--t-xs)/1.3 var(--f-sans); color: var(--c-ink-3); }
 
-/* sector heatmap: colour carries direction and size, the figure carries the value */
+/* sector heatmap: colour carries direction and size, the figure carries the value. The tint is at most 28% and is
+   scaled to a fixed size of move for the period, not to the day's largest, so a quiet day looks quiet (BUG-077). */
 .ws-heat { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 6px; }
 .ws-heat-t { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; min-height: 64px; padding: 8px 10px; border: 1px solid var(--c-line); border-radius: var(--r-md); text-align: left; cursor: pointer; color: var(--c-ink); font-size: var(--t-sm);
   background: color-mix(in srgb, var(--c-raised) calc(100% - var(--mix, 10%)), var(--hue, var(--c-ink-3))); }
@@ -2083,7 +2085,7 @@ html[data-motion="reduce"] .adv-track, html[data-motion="reduce"] .adv-knob { tr
 .nx-what { display: grid; gap: 2px; min-width: 0; } .nx-what .t-muted { font-size: var(--t-md); }
 .nx-step { display: flex; width: 100%; justify-content: space-between; align-items: center; gap: 12px; min-height: var(--tap); padding: 8px 10px; margin: 0 -10px; border: 0; border-bottom: 1px solid var(--c-line-2); border-radius: 0; background: none; color: var(--c-ink); font: inherit; text-align: left; text-decoration: none; cursor: pointer; box-sizing: content-box; }
 .nx-step:hover { background: var(--c-sunk); } .nx-step:focus-visible { outline: 2px solid var(--c-focus); outline-offset: -2px; }
-.nx-to { flex: none; color: var(--c-ink-3); font-size: var(--t-sm); }
+.nx-to { flex: none; display: inline-flex; align-items: center; gap: 4px; color: var(--c-ink-3); font-size: var(--t-sm); } .nx-to .ic { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.7; }
 /* the Optic Score: one column per horizon, divided, no boxes inside the panel */
 .osc-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .osc-card { display: flex; flex-direction: column; gap: 8px; min-width: 0; padding: 4px 24px 6px 0; }

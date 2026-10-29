@@ -9,7 +9,7 @@ import { $, html, raw, render as draw } from '../core/dom.js';
 import * as api from '../core/api.js';
 import { num, signed, compact, clean, capFirst, shortDate, isNum, esc, dir } from '../core/format.js';
 import { lineChart, spark, mountCharts } from '../ui/chart.js';
-import { skeleton, empty, failed, how } from '../ui/states.js';
+import { skeleton, empty, failed, how, asOfLine } from '../ui/states.js';
 import { groupedTabs } from '../ui/grouptabs.js';
 import { button as miloButton, provideContext } from '../ui/milo.js';
 import { sectionHead } from './tabs.js';
@@ -43,8 +43,8 @@ function regimeBlock(m) {
   const x = m.macro || {}, inst = x.instruments || {};
   const facs = (x.factors || []).slice().sort((a, b) => Math.abs(b.contribution) - Math.abs(a.contribution));
   const peak = Math.max(...facs.map((f) => Math.abs(f.contribution)), 1);
-  return html`<section class="section" aria-labelledby="mr-h"><div class="section-head"><div><p class="t-label">Macro regime</p><h2 class="t-display-m" id="mr-h">${capFirst(x.regime || '')}</h2></div>${ask('Ask Milo about the regime', 'What is driving the macro regime right now, and what would change it?')}</div>
-    ${kv([['Risk score', html`<b>${signed(x.risk_score, 1, '')}</b>`], ['3-month to 10-year curve', html`<span class="${x.curve_3m10y < 0 ? 'down' : ''}">${signed(x.curve_3m10y, 2, ' pts')}</span>`], ['VIX', num((inst['^VIX'] || {}).last, 2)]], 3)}
+  return html`<section class="section" aria-labelledby="mr-h"><div class="section-head"><div><p class="t-label">Optic's market score</p><h2 class="t-display-m" id="mr-h">${capFirst(x.regime || '')}</h2></div>${ask('Ask Milo about the market score', 'What is driving Optic\'s market score right now, and what would change it?')}</div>
+    ${kv([['Market score, −100 to +100', html`<b>${signed(x.risk_score, 1, '')}</b>`], ['3-month to 10-year curve', html`<span class="${x.curve_3m10y < 0 ? 'down' : ''}">${signed(x.curve_3m10y, 2, ' pts')}</span>`], ['VIX', num((inst['^VIX'] || {}).last, 2)]], 3)}
     <p>${clean(x.stance || '')}</p><ul class="plain">${(x.notes || []).map((n) => html`<li>${clean(n)}</li>`)}</ul>
     <details class="more-inline"><summary>How the score is built, ${facs.length} terms</summary><ul class="factor-bars">${facs.map((f) => html`<li><span class="fb-l">${f.factor} <small class="t-muted">${clean(f.rule || '')}</small></span><span class="fb-track"><span class="fb-bar ${f.contribution >= 0 ? 'pos' : 'neg'}" style="width:${(Math.abs(f.contribution) / peak) * 50}%"></span></span><span class="fb-v">${signed(f.contribution, 1, '')}</span></li>`)}</ul>
     <p class="asof">${facs.length} terms add to ${signed(x.risk_score, 1, '')}.${x.score_unattributed ? ` ${signed(x.score_unattributed, 1, '')} is not attributed to a term.` : ''}</p></details>
@@ -53,7 +53,7 @@ function regimeBlock(m) {
 function expected(em) {
   if (!em || !isNum(em.implied_pct)) return '';
   return html`<h3>Expected S&amp;P move, from the VIX</h3><p>${clean(em.reading || '')}</p>
-    ${kv([['Options price, as one day', html`±${num(em.implied_pct, 2)}% <small class="t-muted">±${num(em.implied_points, 0)} points, VIX ÷ 16</small>`], ['Its typical day lately', html`±${num(em.realized_pct, 2)}% <small class="t-muted">14-day ATR ${num(em.atr_pct, 2)}% (${num(em.atr14, 0)} points) ÷ 1.6</small>`], ['Priced against typical', isNum(em.ratio) ? html`${num(em.ratio, 2)}× <small class="t-muted">±${num(em.implied_pct, 2)} ÷ ±${num(em.realized_pct, 2)}</small>` : 'n/a']], 3)}
+    ${kv([['Move priced by options, one day', html`±${num(em.implied_pct, 2)}% <small class="t-muted">±${num(em.implied_points, 0)} points, VIX ÷ 16</small>`], ['Typical day lately', html`±${num(em.realized_pct, 2)}% <small class="t-muted">14-day ATR ${num(em.atr_pct, 2)}% (${num(em.atr14, 0)} points) ÷ 1.6</small>`], ['Priced against typical', isNum(em.ratio) ? html`${num(em.ratio, 2)}× <small class="t-muted">±${num(em.implied_pct, 2)} ÷ ±${num(em.realized_pct, 2)}</small>` : 'n/a']], 3)}
     ${how(html`<p>${clean(em.implied_basis || '')} ${clean(em.realized_basis || '')} The ratio divides the first by the second.</p>`)}`;
 }
 
@@ -247,7 +247,7 @@ function paint() {
   const y = window.scrollY;
   draw(mainEl, html`<header class="page-head">${sectionHead('market', 'market')}</header>
     ${D.err ? failed('The macro picture', D.err, { retry: 'market' }) : !D.m ? html`${skeleton('lines', 5, 'Loading about 40 instruments')}<p class="asof" role="status">Loading about 40 instruments. This can take up to 30 seconds.</p>`
-    : html`<section class="section" aria-label="The market today"><h2 class="t-h2">The market today, in brief</h2>${plain(D.m)}</section>${regimeBlock(D.m)}`}
+    : html`<section class="section" aria-label="The market today"><h2 class="t-h2">The market today, in brief</h2>${plain(D.m)}${asOfLine(D.m.generated_at, { note: 'From delayed quotes and daily closes.' })}</section>${regimeBlock(D.m)}`}
     <section class="section" aria-labelledby="mc-more-h"><h2 class="t-h2" id="mc-more-h">In depth</h2><div id="mc-more"></div></section>`);
   paintMore();
   if (Math.abs(window.scrollY - y) > 2) window.scrollTo(0, y);

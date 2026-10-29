@@ -122,7 +122,9 @@ def test_milo_tells_a_guest_what_needs_an_account():
 
 
 def test_the_level_is_labelled_as_milos():
-    assert "How Milo explains things" in SET and "The pages are the same at every level" in SET
+    assert "How Milo explains things" in SET and "It does not change what a page shows." in SET
+    # what a page shows is its own setting since Phase 04 (D-019), and says it leaves Milo alone
+    assert "How much each page shows" in SET and "It does not change how Milo explains things." in SET
     assert "every page leads with plain-language summaries and the specialist panels start folded" not in SET, "it never did that"
 
 

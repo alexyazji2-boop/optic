@@ -381,8 +381,8 @@ export async function render(main, route) {
   if (lp) lp.stop();
   lp = livePrice(main, route.symbol, () => D, 'overview', { stage: () => stageFor(sym) });
   if (unPrefs) unPrefs();
-  // "Show advanced analysis" here, in Settings or in Classic: the Overview's folds follow it at once
-  unPrefs = prefs.onChange((what) => { if (what === 'knowledge' && D.sym === sym) { advMoved = true; paint(main, sym); } });
+  // "Show advanced analysis" here or Settings' "How much each page shows" (density): the Overview's folds follow it at once
+  unPrefs = prefs.onChange((what) => { if (what === 'density' && D.sym === sym) { advMoved = true; paint(main, sym); } });
   paint(main, sym);
   wire(main, sym);
   sections(main, 'overview', { levels: { 'advanced research': 2 }, norm: (t) => { const n = ((main.querySelector('.dhead .name span') || {}).textContent || '').trim(); return n ? t.split(n).join('the company') : t; } });   // folds, Expand all, Panels (Classic parity B3)

@@ -113,3 +113,61 @@ Home's search box, the Dossier start page and Home's linked-panel box: an exact 
 form), else a name people use, else a company whose name starts with the word typed; an index, rate, currency,
 future or crypto opens its instrument page. A text that names nothing opens the search with it (Home did nothing
 before), and a navigation after an awaited search only happens while the reader is still where they typed it.
+*Correction, Phase 04:* the "Home's search box" this names was in a Home page that had not been routed since the
+workspace became Home; no reader could reach it. Home's search is the top bar's palette, which this resolver also
+serves. The unrouted page was removed (D-021), and the test that pinned its search box now checks the Dossier start.
+
+**D-019 (Phase 04) What a page shows and how it is explained are two settings.** Density is Simple or Advanced, one
+state of its own (`prefs.density()`), stored on Classic's key `optic.mode.v1` with Classic's values (`simple`,
+`pro`); Classic declares that key and no longer reads it, so nothing conflicts. The Dossier's "Show advanced analysis",
+the sections' folds (`ui/sections.js`) and Home's panel set follow density; the knowledge level (`optic.knowledge.v1`)
+sets Milo's language only, through Settings' "Advanced answers from Milo" until Phase 05's slider. A reader who never
+set density gets it once from the knowledge level (Advanced or above means Advanced), so anyone who had turned on
+"Show advanced analysis" (which used to write the knowledge level) keeps the sections they saw; after that the two
+never move each other (BUG-002). Directive 04 section 7 allowed per-feature disclosure instead if a global mode would
+complicate the architecture; it did not, because the folds already had one switch point.
+
+**D-020 (Phase 04) Home opens a smaller set of panels in Simple.** Each preset has a Simple set: Market Overview shows
+the index strip, the linked quote, the watchlist, What matters today, the Desk and the portfolio (6 of 13); Options
+Research shows the quote, watchlist, contracts and volatility (4 of 7); Long-Term Investing shows the quote,
+watchlist, business, valuation and portfolio (5 of 8); My Desk starts as Market Overview. The other panels are hidden, not removed: Add panel brings each back, Advanced shows the whole
+preset, and a layout the reader has changed is kept in either view. Chosen by what a first visit needs (what moved,
+what is scheduled, one company, the reader's own names) against BUG-005's first visit: 12 panels, 187 controls.
+
+**D-021 (Phase 04) The unrouted Home page is removed, not kept as a fallback.** `pages/home.js` still held the
+standalone Home page from before the workspace became Home: its render, loaders, handlers, welcome card, starters,
+market strip and expected-move scene, about 330 lines no route reached. It had been edited as if live (Phase 03
+changed its search box), which is the risk registry B X-2 named. Every piece a reader can see lives in the workspace
+already (greeting, What matters today, the Desk, the portfolio, the starters in the first-visit card, the index strip
+panel, the expected-move panel), so nothing visible was lost. The workspace's handlers for controls nothing draws
+(the knowledge-level buttons, "See your Home", the knowledge select and the loader that fetched their choices on
+every first visit and repainted every panel) went with it. Their styles in pages.css remain; removing unused CSS is
+left for a separate pass because selectors are shared.
+
+**D-022 (Phase 04) Measurements count only what a reader can see.** Chrome 152 gives the contents of a closed fold a
+layout box (`::details-content` is `content-visibility: hidden`), so the first version of the Phase 04 density and
+dead-click tools counted folded text as visible and pressed folded controls (SPY's key-figure terms, the Dossier's
+More menu). Both tools now also require `checkVisibility()`. The "before" measurement was taken again with the
+corrected probe; the first run is kept, marked superseded, to show the size of the error (NVDA's visible words: 4,749
+counted, 1,417 visible). No figure from the flawed run is reported.
+
+**D-023 (Phase 04) In-page names follow the writing guidelines; navigation names wait for the owner.** Section
+headings, in-page tabs, labels and help text were changed where WRITING_GUIDELINES.md calls for it (one model, one
+name; a word that describes the whole grade). The rail's sections and items, their fly-outs and the phone bar were
+reviewed and left as they are: SIMPLICITY_AUDIT.md lists proposed renames for the owner's yes (the owner's standing
+rule; a rename was reverted on 2026-10-11 for lack of one).
+
+**D-024 (Phase 04) The liquidity words change on the server, so Classic shows them too.** The grade's words come from
+`app/analytics/liquidity.py` and both apps read them from the same API. "Tight" and "Wide" named the spread when the
+grade also weighs open interest and volume; "Liquid" and "Thin" describe the whole grade in either app. The grade
+keys (`good`, `fair`, `poor`, `not_tradable`) and every threshold are unchanged.
+
+**D-025 (Phase 04) Spacing and headline sizes are normalised in Phase 10, not here.** Directive 04 section 9 asks for
+an audit and for shared components and tokens. Directive 10 section 4 names "inconsistent padding", "uneven
+margins" and "inconsistent text sizes" for every route. Phase 04 audited them and uses the tokens in everything it
+added. It did not snap the existing literals: 1,844 spacing values in pages.css, components.css and base.css, 835 of
+them off the 4px scale (6, 10, 14 and 18 px most often), and the headline figures' per-component sizes. Snapping them
+re-spaces every page, which then needs a visual review of every route at four sizes. Doing that here and again in
+Phase 10 would review the same pages twice. The counts and the design standard's list are Phase 10's input
+(SIMPLICITY_AUDIT.md section 9).
+

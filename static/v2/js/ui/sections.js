@@ -1,6 +1,6 @@
 // Long pages (Classic parity B3, 2026-10-21): fold any section, a sticky "Jump to a section" strip where a page has
-// six or more, Expand all and Collapse all, a Panels chooser, and the knowledge level folding the specialist
-// sections. Classic's makePanelsCollapsible, buildSectionIndex and the panel chooser (app.js:50058-50914).
+// six or more, Expand all and Collapse all, a Panels chooser, and the density setting (Simple or Advanced) folding the
+// specialist sections. Classic's makePanelsCollapsible, buildSectionIndex and the panel chooser (app.js:50058-50914).
 //
 // - What persists is Classic's, in its keys and formats: optic.panels.open {"view|title": true or false} for a
 //   section the reader opened or folded, optic.panels.hidden.v1 {"view|title": true} for one they took off. A
@@ -14,10 +14,9 @@
 //   short hop, instant for a long one or with reduced motion, focus on its heading. Sticky under the header on a
 //   desktop; it scrolls away on a phone, as the header does (B1.8).
 import { icon } from './icons.js';
-import { knowledge, onChange as onPrefs } from '../core/prefs.js';
+import { density, onChange as onPrefs } from '../core/prefs.js';
 
 const OPEN_KEY = 'optic.panels.open', HIDDEN_KEY = 'optic.panels.hidden.v1';
-const RUNG = { simple: 0, literate: 1, advanced: 2, professional: 3, adaptive: 1 };
 const LEVEL_WORD = { 2: 'Advanced', 3: 'Professional' };
 
 const read = (k) => { try { const v = JSON.parse(localStorage.getItem(k) || '{}'); return v && typeof v === 'object' ? v : {}; } catch (e) { return {}; } };
@@ -50,7 +49,9 @@ function find(root) {
   return [...root.querySelectorAll('section.section')].filter((s) => !(s.parentElement && s.parentElement.closest('section.section')) && !s.closest('.dstick, .legal-area') && s.dataset.fixed !== '1')
     .map((s) => ({ s, h: s.querySelector(':scope > h2, :scope > .section-head h2') })).filter((x) => x.h);
 }
-const rung = () => (RUNG[knowledge()] !== undefined ? RUNG[knowledge()] : 1);
+// a specialist section (level 2 or 3) starts open under Advanced and folded under Simple (density, core/prefs.js);
+// the knowledge level changes the words, not what is open (Phase 04, D-019)
+const rung = () => (density() === 'advanced' ? 3 : 1);
 
 function apply(root) {
   const c = CONF.get(root); if (!c || !root.isConnected) return;
@@ -230,5 +231,5 @@ export function sections(root, view, opts = {}) {
   window.removeEventListener('storage', onStorage); window.addEventListener('storage', onStorage);
 }
 // the level set in this tab (the Milo panel's selector, Settings): the same
-onPrefs((what) => { if (what === 'knowledge' && active && active.isConnected) apply(active); });
-function onStorage(e) { if (active && active.isConnected && (e.key === OPEN_KEY || e.key === HIDDEN_KEY || e.key === 'optic.knowledge.v1')) apply(active); }
+onPrefs((what) => { if (what === 'density' && active && active.isConnected) apply(active); });
+function onStorage(e) { if (active && active.isConnected && (e.key === OPEN_KEY || e.key === HIDDEN_KEY || e.key === 'optic.mode.v1')) apply(active); }

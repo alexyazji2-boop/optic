@@ -56,7 +56,7 @@ def test_the_saved_data_is_classics_keys_and_shapes():
 
 def test_refreshing_never_resets_what_the_reader_folded_hid_or_jumped_to():
     assert "conf.mo = new MutationObserver(" in SEC and "apply(root); measure(root);" in SEC, "applied again after every redraw"
-    assert "onPrefs((what) => { if (what === 'knowledge'" in SEC, "the level set elsewhere in this tab"
+    assert "onPrefs((what) => { if (what === 'density'" in SEC, "Simple or Advanced set elsewhere in this tab (D-019; it was the knowledge level)"
     assert "const open = nav ? !!nav.querySelector('details.sec-panels[open]') : false;" in SEC, "an open Panels menu stays open"
 
 

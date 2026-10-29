@@ -91,13 +91,17 @@ def test_one_resolver_picks_the_listing_the_palette_would(tmp_path):
     assert got["idx"] == "#/instrument/%5EGSPC" and got["guess"] == "#/instrument/BTC-USD" and got["stock"] == "#/NVDA"
 
 
-def test_home_and_the_dossier_start_use_it_and_never_move_a_reader_who_left():
-    home = (JS / "pages/home.js").read_text()
+def test_the_dossier_start_uses_it_and_never_moves_a_reader_who_left():
     start = (JS / "pages/dossierstart.js").read_text()
-    for src in (home, start):
-        assert "const t = ticket(), r = await resolve(q);" in src and "if (!t.stillHere()) return;" in src
-        assert "if (r.hit) t.go(r.hit.href); else palette.open(" in src
-        assert "location.hash = `#/" not in src
+    assert "const t = ticket(), r = await resolve(q);" in start and "if (!t.stillHere()) return;" in start
+    assert "if (r.hit) t.go(r.hit.href); else palette.open(" in start
+    assert "location.hash = `#/" not in start
+    # Home's search is the top bar's palette: the search box this test also checked lived in a Home page that had not
+    # been routed since the workspace became Home, and was removed in Phase 04 (registry B X-2)
+    home = (JS / "pages/home.js").read_text()
+    assert "data-v2-search-form" not in home and "export async function render" not in home
+    app = (JS / "app.js").read_text()
+    assert "home: P.workspace" in app
     resolve = (JS / "core/resolve.js").read_text()
     assert "return { stillHere: () => location.hash === at && mine === tickets," in resolve
 

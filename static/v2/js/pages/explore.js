@@ -5,7 +5,7 @@
 import { html, render as draw } from '../core/dom.js';
 import * as api from '../core/api.js';
 import { num, signed, compact, clean, isNum, dir } from '../core/format.js';
-import { skeleton, empty } from '../ui/states.js';
+import { skeleton, empty, asOfLine, simpleFold } from '../ui/states.js';
 import { icon } from '../ui/icons.js';
 import { button as miloButton, provideContext } from '../ui/milo.js';
 import { sectionHead } from './tabs.js';
@@ -60,8 +60,9 @@ function screens() {
   const sc = D.scans, gr = D.groups;
   if (sc === undefined) return html`<section class="section">${skeleton('rows', 3, 'Loading the screens')}</section>`;
   const groups = (gr && gr.groups) || (sc && sc.scans ? [{ id: 'all', name: 'Screens', scans: sc.scans }] : []);
+  const total = groups.reduce((n, g) => n + (g.scans || []).length, 0);
   return html`<section class="section" aria-labelledby="ex-s"><div class="section-head"><div><h2 class="t-h2" id="ex-s">Every screen</h2><p class="section-sub">${sc && sc.ready ? `${sc.considered} names pass the price and volume filters. Each screen asks one question of them and opens its results on Scan.` : sc && (sc.scans || []).length ? 'The ranking is still loading. The screens open now and fill when it finishes.' : 'The scanner catalogue is unavailable right now.'}</p></div></div>
-    <div class="scan-groups">${groups.map((g) => html`<div class="sg"><h3>${g.name}</h3>${g.blurb ? html`<p class="t-muted">${clean(g.blurb)}</p>` : ''}<ul class="plain">${(g.scans || []).map((s) => html`<li><a href="#/scan?id=${encodeURIComponent(s.id)}"><b>${s.name}</b></a><br><small class="t-muted">${clean(s.looks_for || '')}</small></li>`)}</ul></div>`)}</div>
+    ${total ? simpleFold('explore-screens', `All ${total} screens, in ${groups.length} ${groups.length === 1 ? 'group' : 'groups'}`, html`<div class="scan-groups">${groups.map((g) => html`<div class="sg"><h3>${g.name}</h3>${g.blurb ? html`<p class="t-muted">${clean(g.blurb)}</p>` : ''}<ul class="plain">${(g.scans || []).map((s) => html`<li><a href="#/scan?id=${encodeURIComponent(s.id)}"><b>${s.name}</b></a><br><small class="t-muted">${clean(s.looks_for || '')}</small></li>`)}</ul></div>`)}</div>`) : ''}
     ${gr && gr.note ? html`<p class="asof">${clean(gr.note)}</p>` : ''}</section>`;
 }
 
@@ -72,7 +73,7 @@ function sectors() {
   if (!rows.length) return '';
   return html`<section class="section" aria-labelledby="ex-c"><h2 class="t-h2" id="ex-c">Sectors</h2><p class="section-sub">Each sector's return against ${b.benchmark || 'SPY'} over the past week. Rotation shows where money moved, not where it sits.</p>
     <div class="tscroll"><table class="t"><thead><tr><th>Sector</th><th>Week</th><th>Month</th><th>Read</th></tr></thead><tbody>${rows.map((r) => html`<tr><td><a href="#/${r.symbol}">${r.symbol}</a> ${r.name}</td><td class="${dir(r.rel_week_pct)}">${signed(r.rel_week_pct)}</td><td class="${dir(r.rel_month_pct)}">${signed(r.rel_month_pct)}</td><td title="${(r.rotation || {}).note || ''}">${(r.rotation || {}).label || ''}</td></tr>`)}</tbody></table></div>
-    <p><a class="textlink" href="#/macro">The sector board and rotation are on Macro ${icon('arrow')}</a></p></section>`;
+    ${asOfLine((b.basis || {}).price_as_of, { what: 'Prices' })}<p><a class="textlink" href="#/macro">The sector board and rotation are on Macro ${icon('arrow')}</a></p></section>`;
 }
 
 function crossAsset() {
@@ -80,7 +81,7 @@ function crossAsset() {
   if (!mv.length) return '';
   return html`<section class="section" aria-labelledby="ex-x"><div class="section-head"><div><h2 class="t-h2" id="ex-x">Cross-asset</h2><p class="section-sub">Today's move against each instrument's typical day, largest first; 1.0× is an ordinary day.</p></div>
       ${miloButton('Ask Milo about the biggest move', { ask: `Why is ${mv[0].label} moving ${signed(mv[0].chg)} today, and does it matter for stocks?`, context: 'Discover, Explore' })}</div>
-    <ul class="xa">${mv.map((r) => html`<li><a href="#/instrument/${encodeURIComponent(r.symbol)}"><span>${r.label}</span><b class="${dir(r.chg)}">${signed(r.chg)}</b><small class="t-muted">${isNum(r.rel) ? `${num(r.rel, 1)}×` : ''}</small></a></li>`)}</ul></section>`;
+    <ul class="xa">${mv.map((r) => html`<li><a href="#/instrument/${encodeURIComponent(r.symbol)}"><span>${r.label}</span><b class="${dir(r.chg)}">${signed(r.chg)}</b><small class="t-muted">${isNum(r.rel) ? `${num(r.rel, 1)}×` : ''}</small></a></li>`)}</ul>${asOfLine((D.home || {}).generated_at, { what: 'Moves', note: 'From delayed quotes.' })}</section>`;
 }
 
 function paint() {

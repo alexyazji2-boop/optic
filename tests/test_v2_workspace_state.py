@@ -21,7 +21,7 @@ def load_with(tmp_path, stored):
       const ids = (k) => S.layouts[k].filter((x) => !x.hidden).map((x) => x.id);
       print(JSON.stringify({{ v: S.v, preset: S.preset, link: S.link, custom: S.custom, fold: S.fold,
         market: ids('market'), options: ids('options'), mine: ids('mine'), spans: S.layouts.market.map((x) => x.span),
-        std: w._test.defaults('market').map((x) => x.id), settings: S.settings }}));
+        std: w._test.defaults('market').filter((x) => !x.hidden).map((x) => x.id), settings: S.settings }}));
     """)
 
 
@@ -52,6 +52,8 @@ def test_a_layout_nobody_changed_follows_the_standard(tmp_path):
     got = load_with(tmp_path, stored)
     assert "market" not in got["custom"]                  # so a panel added to the standard later reaches it
     assert got["market"] == got["std"]
+    # and under Simple, the default since Phase 04 (D-020), the standard opens six panels, the rest one Add panel away
+    assert got["std"] == ["indices", "quote", "watch", "priority", "desk", "portfolio"]
 
 
 def test_an_unknown_layout_name_falls_back_without_wiping_my_desk(tmp_path):

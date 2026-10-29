@@ -113,12 +113,12 @@ function actions(sym, label, sm) {
 }
 
 /* "Show advanced analysis", Classic's one control for how much of the specialist research shows open (owner's
- * screenshots, 2026-10-25), at the end of the tab row as in Classic. It is the reader's knowledge level read as a
- * switch, on Classic's keys (core/prefs.js), so this switch, Settings' and Classic's never disagree. Only where it
+ * screenshots, 2026-10-25), at the end of the tab row as in Classic. It is the density setting (core/prefs.js,
+ * Settings' "How much each page shows"); since Phase 04 it no longer changes Milo's level (BUG-002). Only where it
  * changes something: the Overview. */
 export function advSwitch() {
   const on = advancedOn();
-  return html`<button type="button" class="adv-switch" role="switch" aria-checked="${on}" data-v2-adv-toggle title="Opens Advanced research and the full case for and against on this page, and has Milo answer at the Advanced level"><span class="adv-track" aria-hidden="true"><span class="adv-knob"></span></span><span class="adv-label">Show advanced analysis</span></button>`;
+  return html`<button type="button" class="adv-switch" role="switch" aria-checked="${on}" data-v2-adv-toggle title="Opens Advanced research and the full case for and against on this page. Milo's level is set in Settings."><span class="adv-track" aria-hidden="true"><span class="adv-knob"></span></span><span class="adv-label">Show advanced analysis</span></button>`;
 }
 /* The Weinstein stage, on the Overview alone as in Classic: its reading in Classic's words ("Stage 3 · Topping",
  * "breakdown") as a label that opens what it means for this symbol, and Explain, which drafts the question for Milo. */

@@ -40,7 +40,7 @@ DELTA_LO, DELTA_HI = 0.25, 0.80
 # decay and sensitivity to the stock speed up most.
 EXPIRY_BUFFER_DAYS = 7
 MAX_PICKS = 3
-# Grades a pick may have. "Wide" (over 25% of the mid) and no usable quote are out.
+# Grades a pick may have. "Thin" (the poor grade, such as a spread over 25% of the mid) and no usable quote are out.
 TRADABLE = ("good", "fair")
 # Scenario sizes, stated with the result
 VOL_CRUSH_EVENT = 0.30     # implied volatility falls by 30% of itself after a report held through

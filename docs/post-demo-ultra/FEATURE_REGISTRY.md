@@ -50,6 +50,11 @@ server (`optic-ultra`, :8250) at a stated size, in the crawl of 2026-10-29 (`~/O
 7. **Abandoned hosting files**: `render.yaml`, `fly.toml`, `netlify.toml`, `run.sh`, `share.sh`, `share-detached.sh`, `stop-share.sh`, `tunnel-watchdog.sh` (last touched 2026-08-01 to 2026-09-02; production is Railway) and `publish.sh` (superseded by worktree pushes; do not use).
 8. **Parallel unshipped implementations** of the same areas on other branches (Part 7).
 
+*Phase 04 updates:* item 2's density switch is now a setting of its own, apart from the knowledge level (D-019). A
+ninth item was found and resolved: an unrouted second Home page in `pages/home.js` (welcome card, starters, strip,
+scene, loaders, its own search box), kept alive only as an import for its blocks and edited as if live. It was
+removed with the workspace's handlers for controls nothing draws (D-021, SIMPLICITY_AUDIT.md section 8).
+
 ## Part 2. Routes and features: the index
 
 Every route the v2 router accepts (`static/v2/js/core/router.js`) and every global component, with its feature id,

@@ -74,7 +74,7 @@ const FRESH = {
   expected: 'From the delayed VIX and index; refreshed every minute while the market is open.',
   sectors: 'Fund prices delayed about 15 minutes; refreshed every minute while the market is open.',
   calendar: 'Schedule from the last built Read (built every 20 minutes); actual and prior from FRED, re-read at most every 6 hours.',
-  desk: 'Written before the open and after the close; this is the latest edition.',
+  desk: 'Written from the day\'s figures once a day, and again when the market moves away from what it says; until then a version compiled by fixed rules shows. The time under the panel is when the version shown was written or compiled.',
   earnings: 'Rebuilt at most once an hour; report dates move on the scale of days.',
   movers: 'From Optic\'s nightly universe scan.',
   news: 'From the last built Read, built every 20 minutes.',
@@ -138,7 +138,18 @@ const BLURB = {
 
 /* ---------------- state, persisted ---------------- */
 let S = null;
-function defaults(preset) { const p = PRESETS[preset].panels || PRESETS.market.panels; return p.map(([id, span, h]) => ({ id, span, h, hidden: false })); }
+// What a layout opens with under Simple (Phase 04, D-020): the day's market, one company or fund (SPY until the reader
+// chooses), their own names, what matters today and Optic's note, and a linked portfolio when there is one. Every other
+// panel of the layout is in it, hidden, one Add panel away in Customize; Advanced (Settings) shows the whole layout.
+// A layout the reader changed is theirs and is never touched.
+const SIMPLE = { market: ['indices', 'quote', 'watch', 'priority', 'desk', 'portfolio'], options: ['quote', 'watch', 'contracts', 'vol'],
+  longterm: ['quote', 'watch', 'biz', 'value', 'portfolio'] };
+function defaultsFor(preset, dens) {
+  const p = PRESETS[preset].panels || PRESETS.market.panels;
+  const keep = dens === 'advanced' ? null : SIMPLE[preset] || SIMPLE.market;
+  return p.map(([id, span, h]) => ({ id, span, h, hidden: !!keep && !keep.includes(id) }));
+}
+const defaults = (preset) => defaultsFor(preset, prefs.density());
 const snap = (n) => SPANS.reduce((best, c) => (Math.abs(c - n) < Math.abs(best - n) ? c : best), 6);
 /** A saved layout made safe to use: known panels once each, a span on the grid's steps, a height. */
 function norm(list) {
@@ -153,9 +164,12 @@ function norm(list) {
   return out.length ? out : null;
 }
 /** Whether a saved layout is still the standard one (panels the standard lacks, appended hidden, aside). */
+// A layout nobody changed is the standard under either view, Simple or Advanced, so it follows the view (D-020)
 function standard(list, preset) {
-  const d = defaults(preset), shown = list.filter((x) => !(x.hidden && !d.some((y) => y.id === x.id)));
-  return shown.length === d.length && shown.every((x, i) => x.id === d[i].id && x.span === d[i].span && x.h === d[i].h && !x.hidden);
+  return ['simple', 'advanced'].some((dens) => {
+    const d = defaultsFor(preset, dens), shown = list.filter((x) => !(x.hidden && !d.some((y) => y.id === x.id)));
+    return shown.length === d.length && shown.every((x, i) => x.id === d[i].id && x.span === d[i].span && x.h === d[i].h && !!x.hidden === !!d[i].hidden);
+  });
 }
 // Panel settings worth keeping between visits (a heatmap's period, a chart's range, a chain's side and
 // sort, a calendar's impact, an economy series). Per-ticker ones (an expiry, implied moves) are not kept.
@@ -231,7 +245,7 @@ const econVal = (v, unit, code) => {
   return `${unit === '$' ? '$' : ''}${num(x, Math.abs(x) >= 100 ? 0 : Math.abs(x) >= 10 ? 1 : 2)}${suf}`;
 };
 const econChg = (v, unit, code) => (isNum(v) ? `${v > 0 ? '+' : v < 0 ? '−' : ''}${unit === '%' ? `${num(Math.abs(v), 2)} pp` : econVal(Math.abs(v), unit, code)}` : '');
-const asof = (iso) => {
+const asof = (iso, verb = 'Updated') => {
   if (!iso) return '';
   // a bare date (a daily close) has no time to show, and read as a moment it lands on the evening before
   if (/^\d{4}-\d{2}-\d{2}$/.test(String(iso))) return `Through ${shortDate(iso)}`;
@@ -239,7 +253,7 @@ const asof = (iso) => {
   const t = new Date(iso); if (!Number.isFinite(t.getTime())) return '';
   const z = prefs.zone(), day = (d) => d.toLocaleDateString('en-US', { timeZone: z, year: 'numeric', month: 'short', day: 'numeric' });
   const today = day(new Date()) === day(t);
-  return `Updated ${today ? '' : `${t.toLocaleDateString('en-US', { timeZone: z, month: 'short', day: 'numeric' })}, `}${t.toLocaleTimeString('en-US', { timeZone: z, hour: 'numeric', minute: '2-digit' })} ${prefs.zoneAbbrev(z, t)}`;
+  return `${verb} ${today ? '' : `${t.toLocaleDateString('en-US', { timeZone: z, month: 'short', day: 'numeric' })}, `}${t.toLocaleTimeString('en-US', { timeZone: z, hour: 'numeric', minute: '2-digit' })} ${prefs.zoneAbbrev(z, t)}`;
 };
 
 /* ---------------- the panels ---------------- */
@@ -299,7 +313,8 @@ export const PANELS = {
       if (!md || !md.available) return html`<p class="ws-note">${clean((md && md.reason) || 'No Desk edition is available right now.')}</p>`;
       return deskBody(md);   // Classic's Desk in full (parity B8.1), in pages/home.js
     },
-    foot: (d) => ({ source: 'Optic Desk', at: (d || {}).generated_at }),
+    // the time the shown words were written (a model's) or compiled (the rules'), not when the page was assembled (H-2)
+    foot: (d) => { const md = (d || {}).morning_desk || {}, written = md.voice === 'written' && md.written_at; return { source: 'Optic Desk', at: written ? md.written_at : (d || {}).generated_at, verb: written ? 'Written' : 'Compiled' }; },
     milo: 'Walk me through today\'s Desk.',
   },
   changes: {
@@ -359,7 +374,7 @@ export const PANELS = {
   },
   regime: {
     title: 'Market conditions', span: 6,
-    how: 'Two separate reads. The regime score adds up named rules (VIX level and change, trend, credit, the curve): each factor shows how much it moved the score. The sentiment gauge averages several market inputs into 0 to 100, where low is fear. When they disagree, the factors say why.',
+    how: 'Two separate reads. The market score adds up named rules (VIX level and change, trend, credit, the curve): each factor shows how much it moved the score. The sentiment gauge averages several market inputs into 0 to 100, where low is fear. When they disagree, the factors say why.',
     load: async () => { const [h, s] = await Promise.all([get('/api/home'), get('/api/sentiment', { ttl: 120000 }).catch((e) => ({ available: false, reason: api.explain(e, 'Sentiment') }))]); return { h, s }; },
     body: ({ h, s }) => {
       const m = (h || {}).macro || {};
@@ -374,11 +389,11 @@ export const PANELS = {
           <div><dt>Sentiment gauge</dt><dd>${sent ? html`<span class="${toneBand(s.label)}">${num(s.score, 0)}</span> <span class="ws-word ${toneBand(s.label)}">${s.label}</span>${scoreLine(s.score, { tone: toneBand(s.label) })}<small>0 is extreme fear, 100 extreme greed</small>` : html`<small>${(s && s.reason) || 'Not available right now.'}</small>`}</dd></div></dl>
         <details class="ws-more"><summary>How these readings are built</summary>
           <p class="ws-rule">The market score adds up named rules (volatility, trend, credit, the yield curve); each factor shows how much it moved the score. The sentiment gauge averages several market inputs. When they disagree, the factors say why.</p>
-          <table class="ws-t"><caption class="sr">The regime factors, largest first</caption><thead><tr><th scope="col">Factor</th><th scope="col" class="n">Reading</th><th scope="col" class="n">Effect on the score</th></tr></thead><tbody>${all.map(frow)}</tbody></table>
+          <table class="ws-t"><caption class="sr">The market score's factors, largest first</caption><thead><tr><th scope="col">Factor</th><th scope="col" class="n">Reading</th><th scope="col" class="n">Effect on the score</th></tr></thead><tbody>${all.map(frow)}</tbody></table>
           ${sent ? html`<p class="ws-k">The sentiment gauge's ${(s.components || []).length} inputs</p><ul class="ws-bars">${(s.components || []).map((c) => html`<li><span>${c.label}</span><span class="ws-gauge is-${toneBand(c.label_text) || 'flat'}" aria-hidden="true"><i style="width:${Math.max(2, Math.min(100, c.score || 0))}%"></i></span><b class="${toneBand(c.label_text)}">${num(c.score, 0)}</b></li>`)}</ul>` : ''}</details>`;
     },
-    foot: ({ h, s }) => ({ source: 'Optic regime rules; Optic sentiment gauge', at: (s && s.generated_at) || (h || {}).generated_at }),
-    milo: 'Where do the regime factors and the sentiment components agree or conflict right now?',
+    foot: ({ h, s }) => ({ source: 'Optic market score rules; Optic sentiment gauge', at: (s && s.generated_at) || (h || {}).generated_at }),
+    milo: 'Where do the market score\'s factors and the sentiment components agree or conflict right now?',
   },
   expected: {
     title: 'Expected move', span: 6,
@@ -388,7 +403,7 @@ export const PANELS = {
       const em = ((d || {}).macro || {}).expected_move || {};
       if (!isNum(em.implied_pct)) return html`<p class="ws-note">Expected move unavailable: the VIX or the S&P 500 quote did not load.</p>`;
       // the three figures on one footing, so the ratio is the first divided by the second (pitch audit, 2026-10-22)
-      return html`<dl class="ws-kv"><div><dt>Priced, as one day</dt><dd>±${num(em.implied_pct)}%<small>VIX ${num(em.vix)} ÷ 16, about ±${num(em.implied_points, 0)} points</small></dd></div>
+      return html`<dl class="ws-kv"><div><dt>Move priced by options, one day</dt><dd>±${num(em.implied_pct)}%<small>VIX ${num(em.vix)} ÷ 16, about ±${num(em.implied_points, 0)} points</small></dd></div>
         <div><dt>Typical day lately</dt><dd>±${num(em.realized_pct)}%<small>14-day ATR ${num(em.atr_pct)}% ÷ 1.6</small></dd></div>
         <div><dt>Priced against typical</dt><dd>${num(em.ratio, 2)}×<small>±${num(em.implied_pct)} ÷ ±${num(em.realized_pct)}</small></dd></div></dl>
         <p class="ws-read">${clean(em.reading || '')}</p>`;
@@ -398,14 +413,14 @@ export const PANELS = {
   },
   sectors: {
     title: 'Sector heatmap', span: 6, state: { period: 'chg_1d' },
-    how: 'The 11 sector funds, coloured by their move over the chosen period: green rose, red fell, and the stronger the colour the larger the move. Choose a tile to link its fund to the linked panels. The colour never carries meaning alone: every tile shows its figure.',
+    how: 'The 11 sector funds, coloured by their move over the chosen period: green rose, red fell, and the stronger the colour the larger the move, up to full colour at 2% in a day, 4% in a week or 8% in a month. Choose a tile to link its fund to the linked panels. The colour never carries meaning alone: every tile shows its figure.',
     load: () => get('/api/market', { ttl: 60000 }),
     body: (d, P) => {
       const rows = (((d || {}).sectors || {}).sectors || []).filter((r) => isNum(r[P.period]));
       if (!rows.length) return html`<p class="ws-note">No sector readings came back from the feed.</p>`;
-      const max = Math.max(...rows.map((r) => Math.abs(r[P.period]))) || 1;
+      const full = { chg_1d: 2, chg_5d: 4, chg_20d: 8 }[P.period] || 2; // a move this large, in percent, gets the full tint
       return html`<div class="seg ws-seg" role="group" aria-label="Period">${[['chg_1d', '1 day'], ['chg_5d', '1 week'], ['chg_20d', '1 month']].map(([k, l]) => html`<button type="button" data-ws-set="sectors:period:${k}" aria-pressed="${P.period === k}">${l}</button>`)}</div>
-        <div class="ws-heat">${rows.sort((a, b) => b[P.period] - a[P.period]).map((r) => { const v = r[P.period], a = Math.round(10 + 45 * Math.abs(v) / max);
+        <div class="ws-heat">${rows.sort((a, b) => b[P.period] - a[P.period]).map((r) => { const v = r[P.period], a = Math.round(6 + 22 * Math.min(1, Math.abs(v) / full));
           return html`<button type="button" class="ws-heat-t" data-ws-pick="${r.symbol}" aria-pressed="${S.link === r.symbol}" style="--mix:${a}%" data-dir="${dir(v)}"><span>${r.label || r.name}</span><b>${r.symbol}</b><span class="${dir(v)}">${signed(v)}</span></button>`; })}</div>`;
     },
     foot: (d) => ({ source: 'Sector SPDR funds, Yahoo Finance', at: (d || {}).generated_at }),
@@ -477,6 +492,8 @@ export const PANELS = {
     how: 'Your open watchlist, with the day\'s move and what changed. Choose a ticker to link it to the chart, news and options panels.',
     load: async () => { const syms = (store.activeList() || {}).symbols || []; if (!syms.length) return { empty: true }; const d = await get(`/api/watchlist?symbols=${enc(syms.slice(0, 30).join(','))}`, { ttl: 30000 }); return Object.assign({}, d, { total: syms.length }); },
     body: (d) => {
+      // while the first-visit card is up it carries the same four Follow buttons; one set on the first screen, not two
+      if (d.empty && showOnboard()) return html`<p class="ws-note">Your open watchlist is empty. Follow a company from the card above, or press Watch on any company.</p>`;
       if (d.empty) return html`<p class="ws-note">Your open watchlist is empty. Follow a few names to start, or press Watch on any company.</p>
         <div class="ws-starters" role="group" aria-label="Follow a company to start">${STARTERS.map((sym) => followBtn(sym))}</div>`;
       return html`<table class="ws-t"><caption class="sr">Watchlist</caption><thead><tr><th scope="col">Ticker</th><th scope="col" class="n">Price</th><th scope="col" class="n">Day</th><th scope="col" class="ws-sec">Changed</th></tr></thead><tbody>
@@ -720,7 +737,6 @@ const DATA = {}, ERR = {}, PS = {}, AT = {}, RETRIED = {}, DLINK = {}, ERRLINK =
 const ps = (id) => (PS[id] || (PS[id] = JSON.parse(JSON.stringify(PANELS[id].state || {}))));
 /** The ticker a panel shows: its own when the reader unlinked it, else the linked one (S.link). */
 const symOf = (id) => (PANELS[id] && PANELS[id].linked && ps(id).pin) || S.link;
-const NEW = { starters: undefined, modes: undefined };
 const isNew = () => !store.allSymbols().length && !(DATA.portfolio && !DATA.portfolio.absent);
 
 // Three levels, each in its own place (owner, 2026-10-19): the sidebar holds destinations; this row holds
@@ -802,20 +818,24 @@ function panelShell(x, i, n) {
 // come back once dismissed. The explanation level stays in Settings.
 const ONBOARD_KEY = 'optic.v2.onboard.v1';
 const onboarded = () => { try { return localStorage.getItem(ONBOARD_KEY) === 'done'; } catch (e) { return false; } };
-const showOnboard = () => isNew() && !onboarded();
+// shown to a reader with nothing followed, then kept for the rest of the visit until dismissed: it vanished on the first
+// Follow, so its Done button could never be pressed (BUG-042)
+let obVisit = false;
+const showOnboard = () => !onboarded() && (isNew() || obVisit);
 // a starter as the name a newcomer knows, the symbol beside it; following saves it, it never buys
 function followBtn(sym, cls = 'ws-tick') {
   const on = store.isFollowed(sym);
   return html`<button type="button" class="${cls} ob-follow" data-v2-watch="${sym}" aria-pressed="${on}" title="${STARTER_ABOUT[sym] || ''}">${on ? 'Following' : 'Follow'} ${STARTER_NAMES[sym] || sym} <span class="ob-sym">${sym}</span></button>`;
 }
 function onboard() {
+  obVisit = true;
   const following = store.allSymbols();
   return html`<section class="ws-onboard" id="ws-new" aria-labelledby="ob-h">
-    <div class="ob-text"><h2 class="ws-title" id="ob-h">New to Optic? Three ways to start</h2></div>
+    <div class="ob-text"><h2 class="ws-title" id="ob-h">New to Optic? Three ways to start</h2><p class="ws-sub">Prices, options, financials and filings for US stocks and funds, each figure with its source.</p></div>
     <ul class="ob-ways">
       <li><p><b>Research a company.</b> <span class="ob-more">Search by its name, such as Apple, or by its ${term('ticker', 'ticker')}, the short code it trades under, such as AAPL.</span></p>
         <div class="ob-acts"><button type="button" class="btn btn-sm" data-v2-open-palette>Search for a company</button><a class="textlink ob-wide" href="#/AAPL">Apple · AAPL</a><a class="textlink ob-wide" href="#/NVDA">NVIDIA · NVDA</a></div></li>
-      <li><p><b>Understand today's market.</b> <span class="ob-more">What moved, what is scheduled and what it means, in a few lines; Market conditions below sums it up too.</span></p>
+      <li><p><b>Understand today's market.</b> <span class="ob-more">What moved, what is scheduled and what it means, in a few lines.</span></p>
         <div class="ob-acts"><a class="btn btn-sm" href="#/read">Read today's market</a></div></li>
       <li><p><b>Save a company to follow.</b> Following adds it to your ${term('watchlist', 'watchlist')}; it does not buy shares or spend money. <span class="ob-more">SPY is a fund that tracks the S&P 500. ${store.signedIn() ? '' : 'Kept in this browser until you sign in.'}</span></p>
         <div class="ob-picks" role="group" aria-label="Follow a company">${STARTERS.map((sym) => followBtn(sym))}</div></li>
@@ -854,13 +874,6 @@ function paintAll() {
   provideContext(miloContext);
 }
 
-async function loadNew() {
-  if (NEW.modes === undefined) {
-    NEW.modes = null;
-    get('/api/knowledge/modes', { ttl: 3600000 }).then((r) => { NEW.modes = r.modes || []; if (live && showOnboard() && NEW.modes.length) paintAll(); }, () => {});
-  }
-}
-
 function paintBody(id) {
   const sec = $(`[data-ws-panel="${id}"]`, root), body = $(`#wsb-${id}`, root), foot = $(`#wsf-${id}`, root); if (!body) return;
   const p = PANELS[id], P = ps(id);
@@ -891,7 +904,7 @@ function paintBody(id) {
   const f = p.foot ? p.foot(d, P) : {};
   const old = f.at && CADENCE_MS[id] && Date.now() - Date.parse(f.at) > 3 * CADENCE_MS[id] ? `Built ${ago(f.at)}` : '';
   const st = d && d.building ? 'Building' : d && d.served_stale ? 'Updating' : old ? '' : (f.status || statusOf(id));
-  draw(foot, html`<span class="ws-src">${SRC[id] || f.source || ''}</span>${f.at ? html`<span>${asof(f.at)}</span>` : ''}${st ? html`<span class="ws-state">${st}</span>` : ''}${old ? html`<span class="ws-stale">${old}</span>` : ''}${f.stale ? html`<span class="ws-stale">${f.stale}</span>` : ''}`);
+  draw(foot, html`<span class="ws-src">${SRC[id] || f.source || ''}</span>${f.at ? html`<span>${asof(f.at, f.verb)}</span>` : ''}${st ? html`<span class="ws-state">${st}</span>` : ''}${old ? html`<span class="ws-stale">${old}</span>` : ''}${f.stale ? html`<span class="ws-stale">${f.stale}</span>` : ''}`);
   const dl = $(`#wsd-${id}`, root);
   if (dl) draw(dl, html`<div><dt>Source</dt><dd>${f.source || SRC[id] || ''}</dd></div>${FRESH[id] ? html`<div><dt>How fresh</dt><dd class="ws-fresh">${FRESH[id]}</dd></div>` : ''}${f.note || f.staleWhy ? html`<div><dt>Note</dt><dd>${[f.note, f.staleWhy].filter(Boolean).join(' ')}</dd></div>` : ''}${f.gap ? html`<div><dt>Not in Optic</dt><dd>${f.gap}</dd></div>` : ''}`);
   if (id === 'indices') { const dt = $('#ws-date', root), ses = d.session || {}; if (dt) dt.textContent = `${etDate(ses.now_et)}${ses.label ? `. ${clean(ses.label)}.` : ''}`; }
@@ -1057,13 +1070,6 @@ function wire() {
     if ((b = t('[data-v2-dc]'))) { openChange(b.dataset.v2Dc, b.dataset.v2DcView, b.dataset.v2DcPanel); return; }
     { const ev = evPress(e.target); if (ev) { if (ev.repaint) { paintBody('priority'); const again = $(`[data-v2-cs="${ev.focus}"]`, root); if (again) again.focus(); } return; } }
     if ((b = t('[data-v2-evfilter]'))) { ps('priority').filter = b.dataset.v2Evfilter; save(); paintBody('priority'); const again = $(`[data-v2-evfilter="${ps('priority').filter}"]`, root); if (again) again.focus(); return; }
-    if (t('[data-v2-home-ready]')) { paintAll(); window.scrollTo(0, 0); return; }
-    if ((b = t('[data-v2-mode]'))) {
-      try { if (b.dataset.v2Mode) localStorage.setItem('optic.knowledge.v1', b.dataset.v2Mode); localStorage.setItem('optic.knowledge.asked.v1', '1'); } catch (err) { /* private mode */ }
-      $$('[data-v2-mode]', root).forEach((m) => m.setAttribute('aria-checked', String(m === b && !!b.dataset.v2Mode)));
-      const sec = $('#ws-modes', root); NEW.modes = []; if (sec) setTimeout(() => { sec.hidden = true; }, b.dataset.v2Mode ? 600 : 0);
-      return;
-    }
     if ((b = t('[data-ws-move]'))) { const [id, d] = b.dataset.wsMove.split(':'); move(id, Number(d)); return; }
     if ((b = t('[data-ws-span]'))) { const [id, d] = b.dataset.wsSpan.split(':'); resize(id, Number(d)); return; }
     if ((b = t('[data-ws-h]'))) { const [id, d] = b.dataset.wsH.split(':'); mutate((L) => { const x = L.find((y) => y.id === id); x.h = HEIGHTS[Math.max(0, Math.min(2, HEIGHTS.indexOf(x.h) + Number(d)))]; }, `${PANELS[id].title} is ${HEIGHT_WORDS[layout().find((y) => y.id === id).h]} height.`, id); return; }
@@ -1106,7 +1112,6 @@ function wire() {
     }
   });
   root.addEventListener('change', (e) => {
-    if (e.target.matches('[data-ws-mode]')) { try { if (e.target.value) localStorage.setItem('optic.knowledge.v1', e.target.value); localStorage.setItem('optic.knowledge.asked.v1', '1'); } catch (err) { /* private mode */ } say('Saved. You can change it in Settings.'); return; }
     if (e.target.matches('[data-ws-expiry]')) { ps('contracts').expiry = e.target.value; loadPanel('contracts', { force: true }); }
     // the phone's layout selector: the four tabs did not fit beside Customize and were clipped
     if (e.target.matches('[data-ws-presetsel]')) { const k = e.target.value; if (k === 'mine' && !S.layouts.mine.some((x) => !x.hidden)) S.layouts.mine = JSON.parse(JSON.stringify(S.layouts.market)); S.preset = k; save(); paintAll(); say(`${PRESETS[S.preset].label} layout.`); const again = root.querySelector('[data-ws-presetsel]'); if (again && matchMedia('(pointer: fine)').matches) again.focus(); }   // iOS reopens a select's menu on focus
@@ -1117,6 +1122,7 @@ function wire() {
     const q = String(f.link.value || '').trim(); if (!q) { f.link.focus(); return; }
     const r = await resolve(q);
     if (!live || !root.contains(f)) return;
+    if (r.hit && r.hit.symbol === S.link) { const same = `The linked panels already show ${S.link}.`; toast(same); say(same); return; }   // it pressed to nothing (BUG-075)
     if (r.hit) { setLink(r.hit.symbol); return; }
     const why = r.failed ? 'Company search is not answering right now; type the ticker itself, such as SPY.' : `No company, fund or index matches "${q}".`;
     toast(why); say(why); f.link.focus();
@@ -1179,7 +1185,8 @@ export async function render(main) {
     // what a symbol is, once a panel learns it (the quote says SPY is a fund): the company panels repaint
     onLearn((sym) => { if (!live || !S || sym !== S.link) return; ['biz', 'value', 'fin', 'own'].forEach((id) => { if (DATA[id] !== undefined) paintBody(id); }); });
     // another tab changing the workspace: this one reads it again, unless it is being customized here
-    window.addEventListener('storage', (e) => { if (e.key === KEY && live && !EDIT) { load(); paintAll(); } });
+    // ... and Simple or Advanced changed in another tab: a layout nobody changed follows it (D-020)
+    window.addEventListener('storage', (e) => { if ((e.key === KEY || e.key === 'optic.mode.v1') && live && !EDIT) { load(); paintAll(); } });
   }
   root = main; live = true; load();
   document.title = 'Home, Optic';
@@ -1198,7 +1205,7 @@ export async function render(main) {
 export function dispose() { lastScroll = window.scrollY; live = false; if (timer) { timer.stop(); timer = null; } if (mq) mq.onchange = null; if (mq2) mq2.onchange = null; }
 export function onLists() {
   if (!live) return;
-  if (!!$('#ws-new', root) !== isNew()) { paintAll(); return; }
+  if (!!$('#ws-new', root) !== showOnboard()) { paintAll(); return; }
   const ob = $('#ws-new', root); if (ob) { const tmp = document.createElement('div'); draw(tmp, onboard()); ob.replaceWith(tmp.firstElementChild); }
   if (layout().some((x) => x.id === 'watch' && !x.hidden)) loadPanel('watch', { force: !folded('watch') });
 }

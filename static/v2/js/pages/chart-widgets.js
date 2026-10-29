@@ -750,7 +750,7 @@ export function onSubmit(e) {
   if (f.matches('[data-chw-watchform]')) {
     e.preventDefault();
     const s = String(f.s.value || '').toUpperCase().trim().replace(/[^A-Z0-9.^=-]/g, '');
-    if (s) { follow(s); f.s.value = ''; }
+    if (s) { follow(s); f.s.value = ''; } else { toast('Type a ticker to add, such as SPY.'); f.s.focus(); }   // an empty Add said nothing (BUG-075)
     return true;
   }
   if (f.matches('[data-chw-pairform]')) { e.preventDefault(); setPeer(f.b.value); return true; }

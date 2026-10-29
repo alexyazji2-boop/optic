@@ -12,6 +12,7 @@ import { hbars } from '../ui/bars.js';
 import { button as miloButton, provideContext } from '../ui/milo.js';
 import { icon } from '../ui/icons.js';
 import { scoreLine, tone100 } from '../ui/score.js';
+import { asOfLine } from '../ui/states.js';
 
 const MAX = 4, TIE = 5;
 export const GROUPS = [
@@ -150,12 +151,14 @@ const stale = () => !!(result && result.available && result.tickers && result.ti
 
 function controls() {
   const recent = store.recent().filter((s) => !inputs.map((x) => x.toUpperCase()).includes(s)).slice(0, 6);
+  // with every box filled at the most Compare takes, a chip has nowhere to go, so none is offered (it pressed to nothing, BUG-075)
+  const full = inputs.length >= MAX && inputs.every((x) => x.trim());
   return html`<form class="cmp-form" data-v2-cmp-form aria-label="Tickers to compare">
       <div class="cmp-inputs">${inputs.map((v, i) => html`<div class="cmp-in" data-v2-ta-host><label class="field field-sm"><span class="sr">Ticker ${i + 1}</span><input id="cmp-${i}" data-v2-cmp-input="${i}" data-v2-ta value="${v}" placeholder="Ticker ${i + 1}" title="A ticker, or a company name" maxlength="24" autocomplete="off" autocapitalize="characters" spellcheck="false"></label>
         ${inputs.length > 2 ? html`<button type="button" class="icon-btn" data-v2-cmp-drop="${i}" aria-label="Remove ticker ${i + 1}${v ? ` (${v.toUpperCase()})` : ''}">${icon('close')}</button>` : ''}</div>`)}</div>
       <div class="cluster"><button type="submit" class="btn btn-primary" ${running ? 'disabled' : ''}>${running ? 'Comparing…' : 'Compare'}</button>${inputs.length < MAX ? html`<button type="button" class="btn" data-v2-cmp-add>Add ticker</button>` : ''}</div>
     </form>
-    ${recent.length ? html`<div class="cmp-recent" role="group" aria-labelledby="cmp-recent-h"><p class="t-label" id="cmp-recent-h">Recently viewed</p><div class="chips">${recent.map((s) => html`<button type="button" class="chip" data-v2-cmp-pick="${s}">${s}</button>`)}</div></div>` : result ? '' : html`<p class="asof">Nothing is fetched until you press Compare.</p>`}`;
+    ${recent.length && !full ? html`<div class="cmp-recent" role="group" aria-labelledby="cmp-recent-h"><p class="t-label" id="cmp-recent-h">Recently viewed</p><div class="chips">${recent.map((s) => html`<button type="button" class="chip" data-v2-cmp-pick="${s}">${s}</button>`)}</div></div>` : result ? '' : html`<p class="asof">Nothing is fetched until you press Compare.</p>`}`;
 }
 
 function take(c) {
@@ -231,7 +234,7 @@ function paint() {
         <p class="t-muted cmp-own">These are Compare's own scores, built only from inputs every compared name has. A Dossier's short- and long-term readings weigh more (options activity, news tone, the business's filings), so their numbers differ from these.</p>` : ''}</section>
     <div aria-live="polite">${running ? html`<div class="sk-wrap" role="status" aria-label="Comparing"><p>Pulling ${inputs.filter(Boolean).map((x) => x.toUpperCase()).join(' and ')} in full. The same analysis the Options and Investing tabs run, for each name.</p><div class="sk sk-row"></div><div class="sk sk-row"></div><div class="sk sk-row"></div></div>`
       : !c ? '' : !c.available ? html`<div class="state err" role="alert"><p class="t-h3">Not compared</p><p>${clean(c.reason || 'Not enough names loaded to compare.')}</p>${(c.failed || []).map((f) => html`<p class="t-muted">${f.ticker}: ${clean(f.reason)}</p>`)}${inputs.filter((x) => x.trim()).length >= 2 ? html`<button type="button" class="btn btn-sm" data-v2-cmp-again>Try again</button>` : ''}</div>`
-        : html`${stale() ? html`<div class="stale cmp-stale" role="status"><p>These results are for ${c.tickers.join(', ')}. ${wanted().length >= 2 ? html`Press Compare for ${wanted().join(', ')}.` : 'Add a second name to compare again.'}</p>${wanted().length >= 2 ? html`<button type="button" class="btn btn-sm" data-v2-cmp-again>Compare ${wanted().join(', ')}</button>` : ''}</div>` : ''}<div class="${stale() ? 'cmp-old' : ''}">${take(c)}${perf(c)}${bars(c)}${grid(c)}</div>`}</div>`);
+        : html`${stale() ? html`<div class="stale cmp-stale" role="status"><p>These results are for ${c.tickers.join(', ')}. ${wanted().length >= 2 ? html`Press Compare for ${wanted().join(', ')}.` : 'Add a second name to compare again.'}</p>${wanted().length >= 2 ? html`<button type="button" class="btn btn-sm" data-v2-cmp-again>Compare ${wanted().join(', ')}</button>` : ''}</div>` : ''}<div class="${stale() ? 'cmp-old' : ''}">${take(c)}${perf(c)}${bars(c)}${grid(c)}${asOfLine(c.generated_at, { what: 'Compared', note: 'From delayed quotes and daily closes.' })}</div>`}</div>`);
   // a phone's table header sticks under the top bar, whatever its height
   const bar = document.querySelector('.topbar'); if (bar && mainEl) mainEl.style.setProperty('--cmp-top', `${Math.round(bar.getBoundingClientRect().height)}px`);
   if (c && c.available && ((c.performance || {}).series || []).length >= 2) mountCharts(mainEl, { cmp: perfChart(c) });

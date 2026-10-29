@@ -106,19 +106,46 @@ export function clock(iso, z = zone()) {
   try { return new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: z }).replace(':00 ', ' ').toLowerCase(); } catch (e) { return ''; }
 }
 
-/* ---------------- the advanced switch ---------------- */
+/* ---------------- the knowledge level (how things are explained) ---------------- */
 export function knowledge() { const k = get(KNOW_KEY); return k && k in LEVELS ? k : DEFAULT_MODE; }
-export function advancedOn() { return LEVELS[knowledge()] >= LEVELS.advanced; }
 /** Set the knowledge level directly (the Milo panel's selector), as OpticKnowledge.set does. */
 export function setKnowledge(id) {
   if (!(id in LEVELS) || id === knowledge()) return;
   put(KNOW_KEY, id); put(ASKED_KEY, '1'); emit('knowledge');
 }
-/** The classic switch: on goes to rung 2 and remembers the rung it left; off returns there. */
-export function setAdvanced(on) {
-  if (on === advancedOn()) return;
+/** Milo at the Advanced level or not: on goes to rung 2 and remembers the rung it left; off returns there (Settings'
+ *  "Advanced answers from Milo", until Phase 05's slider). It changes the language only, never what a page shows. */
+export function advancedLanguageOn() { return LEVELS[knowledge()] >= LEVELS.advanced; }
+export function setAdvancedLanguage(on) {
+  if (on === advancedLanguageOn()) return;
   if (on) { put(BASIC_KEY, knowledge()); put(KNOW_KEY, 'advanced'); }
   else { let back = get(BASIC_KEY); if (!back || !(back in LEVELS) || LEVELS[back] >= LEVELS.advanced) back = DEFAULT_MODE; put(KNOW_KEY, back); }
   put(ASKED_KEY, '1');
   emit('knowledge');
 }
+
+/* ---------------- density (what a page shows) ---------------- */
+// Simple or Advanced, one state of its own (post-demo overhaul, Phase 04, D-019). Simple leads with each page's main
+// finding and folds the specialist research; Advanced opens it, and Home shows every panel of its layout. It used to
+// be the knowledge level read as a switch, so "Show advanced analysis" on a Dossier also changed how Milo and every
+// page explained things (BUG-002). Kept on Classic's own key for it, optic.mode.v1, with Classic's values ('simple',
+// 'pro'); Classic now derives its density from its knowledge ladder and does not read the key.
+const DENSITY_KEY = 'optic.mode.v1';
+export function density() {
+  const d = get(DENSITY_KEY);
+  if (d === 'pro') return 'advanced';
+  if (d === 'simple') return 'simple';
+  // never set: taken once from the knowledge level, so a reader who had turned on "Show advanced analysis" (which
+  // wrote the knowledge level) still sees the advanced sections, then kept apart from it
+  const from = LEVELS[knowledge()] >= LEVELS.advanced ? 'advanced' : 'simple';
+  put(DENSITY_KEY, from === 'advanced' ? 'pro' : 'simple');
+  return from;
+}
+export function setDensity(d) {
+  const v = d === 'advanced' ? 'pro' : 'simple';
+  if (get(DENSITY_KEY) === v) return;
+  put(DENSITY_KEY, v); emit('density');
+}
+export function advancedOn() { return density() === 'advanced'; }
+/** "Show advanced analysis": density only. */
+export function setAdvanced(on) { setDensity(on ? 'advanced' : 'simple'); }

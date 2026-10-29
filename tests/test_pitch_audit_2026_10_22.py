@@ -196,9 +196,8 @@ def test_every_surface_shows_the_atr_converted_beside_the_ratio():
     assert "<dt>Typical day lately</dt><dd>±${num(em.realized_pct)}%" in body and "14-day ATR ${num(em.atr_pct)}% ÷ 1.6" in body
     assert "<dt>Recently delivered</dt><dd>${num(em.atr_pct)}%" not in body
     mac = (JS / "pages/macro.js").read_text()
-    assert "html`${num(em.atr_pct, 2)}% a day" not in mac and "['Its typical day lately', html`±${num(em.realized_pct, 2)}%" in mac
-    home = (JS / "pages/home.js").read_text()
-    assert "30-day implied volatility as one day's move, an approximation" in home
+    assert "html`${num(em.atr_pct, 2)}% a day" not in mac and "['Typical day lately', html`±${num(em.realized_pct, 2)}%" in mac   # Home's label too (Phase 04, X-7)
+    # the third surface, the unrouted Home page's expected-move scene, was removed in Phase 04 (registry B X-2)
 
 
 # ---------------------------------------------------------------- 4. the flow proxy claims no buyers or openings

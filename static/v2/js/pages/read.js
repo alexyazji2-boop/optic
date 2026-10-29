@@ -180,9 +180,10 @@ function sentiment() {
 
 function regime() {
   const r = (D.brief || {}).index_regime;
-  if (!r || !r.available) return empty('No regime reading', '');
+  if (!r || !r.available) return empty('No index score', '');
   const comps = Object.entries(r.components || {});
-  return html`<div class="figure"><p class="t-display-m">${signed(r.score, 1, '')}</p><p class="delta"><span><b>${capFirst(r.stance || r.regime)}</b></span><span class="t-muted">${clean(r.plain || '')}</span></p></div>
+  return html`<p class="section-sub">From the indices' own trend, breadth, volatility, participation and leadership, on −100 to +100. A different measure from Optic's market score on Home and Macro, which reads volatility, credit, rates, the dollar and commodities.</p>
+    <div class="figure"><p class="t-display-m">${signed(r.score, 1, '')}</p><p class="delta"><span><b>${capFirst(r.stance || r.regime)}</b></span><span class="t-muted">${clean(r.plain || '')}</span></p></div>
     <p>${clean(r.effect || '')}</p>${TR.historySlot('regime')}
     <div class="tscroll"><table class="t"><thead><tr><th>Input</th><th>Weight</th><th>Reading</th><th>How it is scaled</th></tr></thead><tbody>${comps.map(([k, v]) => html`<tr><td>${capFirst(k)}</td><td>${num((r.weights || {})[k], 0)}%</td><td>${signed(v, 1, '')}</td><td style="text-align:left"><small>${clean((r.scales || {})[k] || '')}</small></td></tr>`)}</tbody></table></div>
     <p>${isNum(r.agreement_pct) ? `${num(r.agreement_pct, 0)}% of the inputs point the same way.` : ''} ${(r.conflicts || []).map(clean).join(' ')}</p>
@@ -219,7 +220,7 @@ export function calendarItems(c, pr, now = new Date()) {
   return { today, tomorrow, items: [...ev, ...reports].sort((a, b) => (a.day < b.day ? -1 : a.day > b.day ? 1 : (a.kind === 'report') - (b.kind === 'report') || String(a.at || '').localeCompare(String(b.at || '')))) };
 }
 function calItem(e) {
-  if (e.kind === 'report') return html`<li class="cal-i ${e.released ? 'is-out' : ''}"><p class="cal-top"><b>${e.released ? 'Reported' : 'Company report'}</b> <a class="textlink" href="#/${e.ticker}/earnings">${e.title}</a> <span class="cal-imp">${IMPACT_WORD[e.impact] || ''}</span></p><p class="t-muted">${clean(e.why || '')}</p></li>`;
+  if (e.kind === 'report') return html`<li class="cal-i ${e.released ? 'is-out' : ''}"><p class="cal-top"><b>${e.released ? 'Reported' : 'Company report'}</b> <a class="textlink" href="#/${e.ticker}/earnings">${e.title}</a> <span class="cal-imp">${IMPACT_WORD[e.impact] || ''}</span></p></li>`;   // the why, the same for every report, is said once under the list (BUG-076)
   const r = e.readings || {};
   const when = e.all_day ? 'All day' : e.time_label || '';
   const status = e.released ? `Released${when ? ` ${when}` : ''}` : when ? `Due ${when}` : 'Due';
@@ -249,11 +250,12 @@ function calendar() {
   const name = (d) => (d === today ? `Today, ${etDay(d)}` : d === tomorrow ? `Tomorrow, ${etDay(d)}` : etDay(d));
   const noted = items.some((e) => (e.readings || {}).forecast_note);
   const reportsIn = !!((((D.priority || {}).columns || []).find((x) => x.id === 'earnings') || {}).rows || []).length;
+  const reportWhy = (shown.find((e) => e.kind === 'report' && e.why) || {}).why || '';
   return html`<div class="chips" role="group" aria-label="Which releases"><button type="button" class="chip" data-v2-cal-impact="all" aria-pressed="${cal.impact === 'all'}">All</button><button type="button" class="chip" data-v2-cal-impact="high" aria-pressed="${cal.impact === 'high'}">High impact</button>${cats.map((k) => html`<button type="button" class="chip" data-v2-cal-impact="${k}" aria-pressed="${cal.impact === k}">${k === 'earnings' ? 'Company reports' : capFirst(k)} <span class="t-muted">${items.filter((e) => e.category === k).length}</span></button>`)}</div>
     <div class="seg" role="group" aria-label="When" style="margin-top:10px">${[['today', 'Today'], ['week', 'This week'], ['all', `Next ${c.horizon_days} days`]].map(([k, l]) => html`<button type="button" data-v2-cal-range="${k}" aria-pressed="${cal.range === k}">${l}</button>`)}</div>
     ${shown.length ? days.map((d) => { const xs = shown.filter((e) => e.day === d); return html`<h3 class="cal-day">${name(d)} <span class="t-muted">${xs.length}</span></h3><ul class="plain cal-list">${xs.map(calItem)}</ul>`; })
     : html`<p class="quiet">${items.length ? `Nothing in this window matches that filter. ${items.length} events scheduled overall.` : `Nothing scheduled in the next ${c.horizon_days} days.`}</p>`}
-    <p class="asof">${(c.degraded || []).length ? `Not available right now: ${c.degraded.join(', ')}. ` : ''}Dates the agencies have published, plus recurring and estimated ones, each marked. Times are Eastern.${reportsIn ? " Company reports are this week's widely followed names, from Today's priority." : D.priority === undefined ? ' Company reports load with Today\'s priority.' : ''}${noted ? ' No consensus forecasts: they are surveyed and licensed, and the free sources publish what was released, not what was expected.' : ''}</p>`;
+    <p class="asof">${(c.degraded || []).length ? `Not available right now: ${c.degraded.join(', ')}. ` : ''}Dates the agencies have published, plus recurring and estimated ones, each marked. Times are Eastern.${reportsIn ? ` Company reports are this week's widely followed names, from Today's priority.${reportWhy ? ` ${clean(reportWhy)}` : ''}` : D.priority === undefined ? ' Company reports load with Today\'s priority.' : ''}${noted ? ' No consensus forecasts: they are surveyed and licensed, and the free sources publish what was released, not what was expected.' : ''}</p>`;
 }
 
 function headlines() {
@@ -273,7 +275,7 @@ function releases() {
 
 const TABS = [
   ['Overnight, worldwide', overnight], ["Today's priority", priority], ['Market catalyst', catalystMode], ['Catalyst library', library],
-  ['Weekly analysis', weekly], ['Fear and Greed', sentiment], ['Market regime', regime], ['On the calendar', calendar], ['Headlines', headlines], ['Official releases and sources', releases],
+  ['Weekly analysis', weekly], ['Fear and Greed', sentiment], ['Index score', regime], ['On the calendar', calendar], ['Headlines', headlines], ['Official releases and sources', releases],
 ];
 
 function paint() {
@@ -289,7 +291,7 @@ function paint() {
 const RGROUPS = [
   ['Today', ["Today's priority", 'Overnight, worldwide', 'Headlines', 'Official releases and sources']],
   ['Catalysts and calendar', ['On the calendar', 'Market catalyst', 'Catalyst library']],
-  ['Sentiment and regime', ['Fear and Greed', 'Market regime', 'Weekly analysis']],
+  ['Sentiment and trend', ['Fear and Greed', 'Index score', 'Weekly analysis']],
 ];
 function paintMore() {
   const h = $('#rd-more', mainEl); if (!h) return;

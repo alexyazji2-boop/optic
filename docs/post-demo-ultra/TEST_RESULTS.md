@@ -169,3 +169,88 @@ see "Found by the scenarios" below. After the fixes every scenario passed.
 | Run | Outcome |
 |---|---|
 | After the main Phase 03 changes | **7486 passed, 1 skipped, 0 failed** (`phase03/pytest-run1.txt`) |
+
+## Phase 04 (radical simplicity), 2026-10-29, working tree on 2f6a548
+
+Raw results under `~/Optic/work/post-demo-ultra-2026-10-29/phase04/`. All runs are guest in a fresh headless Chrome
+152 profile on live delayed data, Thursday 2026-10-29 during the regular session, unless marked.
+
+### Density (`tools/density.py`; SIMPLICITY_AUDIT.md sections 2 and 10)
+
+| Run | Server | Sizes | Routes | Outcome |
+|---|---|---|---|---|
+| Before (first try) | 2f6a548 worktree, :8252 | 1440, 390 | 29 | Superseded: the probe counted the contents of closed folds (D-022); kept as `superseded-before-rectvis` |
+| Before | 2f6a548 worktree, :8252 | 1440, 390 | 29 | `before-2f6a548/` |
+| After (final code) | Phase 04 tree, :8250 | 1440, 1024, 768, 390 | 29 | `after/`; no errors; overflow 0 and overlapping text 0 at every size |
+| Secondary, before | 2f6a548 worktree, :8252 | 1440, 390 | 13 | `before-secondary/` |
+| Secondary, after | Phase 04 tree, :8250 | 1440, 1024, 768, 390 | 13 | `after-secondary/`; no errors; overflow 0 and overlapping text 0 at every size |
+| Home again | Phase 04 tree, :8250 | 1440, 1024, 768, 390 | 1 | `after-home-final/`, folded into `after/`: the first-visit card gained its one-line description after the main run |
+
+| Route, 1440 | Visible words | Controls | Cards | Page height |
+|---|---|---|---|---|
+| Home | 1,872 → 672 | 186 → 71 | 12 → 5 | 3,427 → 2,149 px |
+| Analysts | 2,927 → 701 | 226 → 67 | 1 | 14,629 → 3,729 px |
+| Explore | 1,255 → 619 | 68 → 50 | 8 | 3,776 → 2,678 px |
+| Retirement | 1,631 → 1,171 | 33 → 22 | 18 | 5,026 → 3,903 px |
+| Home, 390 | 390 → 278 | 58 → 37 | 13 → 6 | 3,728 → 2,632 px |
+
+The other routes moved by under 30 words, and the time lines account for most of that. On the secondary routes, `#/workspace` follows Home (1,881 → 678 words) and the instruments gained their time line (+8 words). The rest are unchanged or within data noise (BRK.B and BTC −26 words, from one headline). The Dossier tabs are unchanged in load
+(Phase 06).
+
+### Dead clicks (`tools/deadclicks.py`, corrected probe; `dead-final/`)
+
+Each visible control on the route is pressed with a real mouse event, then the run checks for a DOM change, a route
+change, a request, a focus move or a state attribute flipping. Controls that destroy, send or sign out are skipped,
+never pressed.
+
+| Run | Routes | Presses that answered | Dead controls | Notes |
+|---|---|---|---|---|
+| Guest, 1440 | 21 changed or reported routes | 559 | 0 | 9 presses of the page's own current tab (Options on Options, and so on), which have nothing to do |
+| Guest, 390 | 8 | 236 | 0 | |
+| Signed in, 1440 | Home, `#/workspace`, Settings | 103 | 0 | "Update panels", Phase 01's one signed-in dead control, now answers. Save, Sign out, Revoke, Delete and Report were skipped by design |
+
+### Phase 03 scenarios, run again on the Phase 04 tree (`phase03-regression/`)
+
+`tools/phase03_scenarios.py` against :8250 after every Phase 04 change: **27 of 27 PASS**. That covers the SPY default,
+no "Follows", 20 sequential and 10 rapid ticker changes, invalid input, history, keyboard only, a slow and a failing
+search, the Dossier start, the sidebar and phone bar, the printable sheet, and late answers. Phase 04's changes to
+Home's panel set and the first-visit card did not move any of them.
+
+### Browser checks (the browser pane, :8250)
+
+| Check | Result |
+|---|---|
+| First visit: the card shows "Not now" and one set of Follow buttons; Follow Apple turns it to "Done"; Done removes the card | PASS |
+| A Simple fold the reader opens stays open after the page is rebuilt, and one they close stays closed | PASS |
+| The time lines render on Indices, Explore (two), Macro, Compare, Instrument and the fund boards; no script errors | PASS |
+| Indices names the last finished week ("through Oct 23"), not the current week's Friday | PASS (after the fix) |
+| The Overview's next steps show five line icons and no text arrows | PASS |
+| `/api/options/NVDA/research` grades read Liquid 9, Fair 23, Thin 2, Too wide to trade 13 | PASS |
+| `/api/market` stance reads "The market score's inputs lean mildly toward risk ..." | PASS |
+| Phone 375: the Dossier's ⋯ menu shows six items, and each answers. Copy ticker closes the menu and says the browser did not allow copying (a scripted press); Show on Home goes Home and says so, and the quote panel shows NVDA; Export research sheet opens `#/NVDA/sheet` | PASS |
+| Phone 375: the chart's Line and Area sit in the chart's style menu, and each switches the style | PASS |
+| Phone 375: Scan's "10% pull back after 20% rally" sits in a closed fold. Opened and pressed, it fills the box and runs the screen | PASS |
+| Analysts: 40 rows and "Show all 200"; the press shows all 200 and moves focus to row 41; a sort keeps every row | PASS |
+| Contrast of the changed elements, light (ivory) and dark (charcoal): time lines 7.1 and 8.3:1, fold summaries 6.5 and 10.9:1, rating words 17.0 and 16.0:1, next-step labels 7.1 and 8.3:1, heatmap tile text at least 11.2 (light) and 9.2 (dark) at full tint | PASS (AA is 4.5:1) |
+
+### Found by Phase 04's own checks
+
+- The density and dead-click tools counted folded content as visible (D-022), and were fixed before any figure was
+  reported. Phase 01's 27 guest dead clicks at 1440 break down as follows:
+  - **Real, 7, all fixed:** five Compare chips, the chart watchlist's empty Add and "Update panels".
+  - **SPY, 11:** confirmed inside the closed Advanced research fold (the key-figure terms, "5 sources" and "How this
+    works").
+  - **The other 9:** BTC's terms and fold, the terms on NVDA's Options and News, and Earnings week's "Consensus". The
+    corrected re-run (`dead-after/`) reports none of them, so each was either not visible or answered its press.
+    The fold cause is inferred for these, not confirmed control by control.
+- The Indices time line first named a future day (the current week's bar carries its Friday's date). Fixed.
+- Home's first screen offered two sets of Follow buttons (BUG-079). Fixed.
+- Phase 03 had pinned, and recorded as live, a search box in an unrouted Home page (BUG-082). Corrected.
+
+### Suite
+
+| Run | Outcome |
+|---|---|
+| The final Phase 04 tree, after every change | **7506 passed, 1 skipped, 0 failed** in 229 s (`phase04/pytest-full.txt`) |
+| Phase 04's own tests | `tests/test_v2_density.py` 8 and `tests/test_v2_simplicity.py` 11, plus the design-standard test for "Density and times"; all pass |
+

@@ -144,3 +144,19 @@ def test_one_motion_system_with_tokens_and_a_still_reduced_motion_line():
     motion = (v2 / "js/ui/motion.js").read_text()
     assert "if (!before || reduced()) return;" in motion, "no tab motion under reduced motion"
     assert "export const MILO_STATES" in (v2 / "js/ui/milo.js").read_text()
+
+
+def test_density_and_times_follow_the_standard():
+    """DESIGN-STANDARD.md, "Density and times" (post-demo Phase 04): two settings, a shared fold for supporting detail,
+    one way to say a time, colour for direction only, and long lists that start short."""
+    std = (ROOT / "docs/frontend-v2/DESIGN-STANDARD.md").read_text()
+    assert "### Density and times (post-demo Phase 04, 2026-10-29)" in std
+    states = (JS / "ui/states.js").read_text()
+    for name in ("export const simpleFold = (id, summary, ...body) =>", "export function asOfLine(at, { what = 'Figures', note = '' } = {})", "export function whenText(at)"):
+        assert name in states, name
+    prefs = (JS / "core/prefs.js").read_text()
+    assert "const DENSITY_KEY = 'optic.mode.v1';" in prefs and "export function density()" in prefs
+    assert "limit" in (JS / "ui/table.js").read_text().split("export function table")[1].split("\n}")[0]
+    css = (V2 / "css/pages.css").read_text()
+    assert ".rt { font: 600 var(--t-sm)/1 var(--f-label); color: var(--c-ink); }" in css
+

@@ -3215,6 +3215,9 @@ def _morning_desk(macro: Optional[Dict[str, Any]]) -> Dict[str, Any]:
     if prose:
         desk["voice"] = "written"
         desk["written_by"] = prose.get("written_by")
+        # when these words were written, for the footer: /api/home's own time is when the page was assembled,
+        # which can be hours after the note (post-demo Phase 04, registry B H-2)
+        desk["written_at"] = prose.get("written_at")
         desk["lead"] = prose["lead"]
         for key in ("scenarios", "note", "overall"):
             if prose.get(key):
