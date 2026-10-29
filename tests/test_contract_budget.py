@@ -170,13 +170,13 @@ def test_refit_when_every_top_pick_was_over_says_the_plan_uses_what_fits():
     fitted = [{"strike": 120, "cost_per_contract": 450, "outside_band": False}]
     out = entry._refit_to_budget(report(900, 1200, budget=500), fitted, 500, 450)
     assert out["candidates"] == fitted and out["refit"] is True
-    assert "best that cost $500 or less" in out["note"]
+    assert "the highest-scoring ones that cost $500 or less" in out["note"]
 
 
 def test_refit_when_some_were_over_counts_them():
     fitted = [{"strike": 120, "cost_per_contract": 450, "outside_band": False}]
     out = entry._refit_to_budget(report(400, 900, 1200, budget=500), fitted, 500, 400)
-    assert "2 of the 3 top picks" in out["note"]
+    assert "2 of the 3 highest-scoring contracts" in out["note"]
 
 
 def test_a_stretched_refit_says_why_it_is_cheaper():
@@ -338,7 +338,8 @@ def test_a_debit_spread_narrows_to_fit():
     want = max(w for w, c in widths if 0 < c <= limit)
     assert short_leg["strike"] - long_leg["strike"] == pytest.approx(want), \
         "not the widest spread the limit can buy"
-    assert got["rationale"].startswith("Narrowed to fit your $%s limit" % format(limit, ",.0f"))
+    # the limit is the reader's own setting and the legs are described, not ordered (advice policy, 2026-10-29)
+    assert got["rationale"].startswith("Narrowed to fit the $%s limit you set: a spread long the" % format(limit, ",.0f"))
 
 
 def test_a_debit_spread_moves_out_only_when_no_width_fits():

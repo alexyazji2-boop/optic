@@ -14,7 +14,7 @@ let D = null, err = null, live = true, mainEl = null, seq = 0, wired = null;
 
 // Classic's four ways in, word for word (RESEARCH_ROUTES); each goes where it says, none sends anything
 const ROUTES = [
-  { q: 'Which names look strongest right now?', href: '#/scan', note: 'Named screens over the ranked universe. Each states what it did not search.' },
+  { q: 'What do the named screens find today?', href: '#/scan', note: 'Named screens over the ranked universe. Each states what it did not search.' },
   { q: 'How do two or three names stack up?', href: '#/compare', note: 'Scored across three horizons separately, so a name can lead one and trail another.' },
   { q: 'What is going on with one company?', milo: '', note: 'Search a ticker to open the full read, or ask in plain language.' },
   { q: 'I need sources and citations.', milo: 'deep', note: 'Deep research runs live web sources and cites them. Slower, and rate limited.' },

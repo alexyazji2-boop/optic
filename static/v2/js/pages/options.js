@@ -387,9 +387,9 @@ const OPT_GROUPS = [
     ['Flow', (t, s) => P.flow(t, s), (t) => P.flowCharts(t)],
     ['Delta and gamma', (t, s) => P.greeksPanel(t, s)],
   ] },
-  { id: 'strategy', label: 'Setups and strategy', sub: 'The swing read, the entry it points to and the ideas sized to a budget are model output from these figures, not recommendations.', panels: [
+  { id: 'strategy', label: 'Setups and strategy', sub: 'The swing read, the model\'s levels and the example structures fitted to your limit are model output from these figures, not recommendations.', panels: [
     ['Swing verdict', (t, s) => P.verdict(t, s)],
-    ['Strike and entry', (t, s) => P.entry(t, s)],
+    ['Example contract and levels', (t, s) => P.entry(t, s)],
     ['Ideas', (t, s) => P.ideas(t, s, D.budget), (t) => P.ideaCharts(t, (t.quote || {}).price)],
     ['Price', (t, s) => priceBody(t, s), null, () => mountPrice()],
     ['Levels and momentum', (t, s) => P.levels(t, s), (t) => P.levelCharts(t)],

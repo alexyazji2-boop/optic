@@ -221,8 +221,9 @@ def test_the_four_questions_grade_with_classics_words(tmp_path):
       print(JSON.stringify({{ html, wait, off }}));
     """)
     h = got["html"]
-    for want in ("Is it a strong business?", "Quality F", "Is the price attractive?", "Insufficient Data", "Is there a trade?", "No Setup",
-                 "What about earnings?", "Reports Oct 29", "Quality and price together: Not Investable. Business quality grades F.",
+    # the price and setup questions and the conviction label are said in plain words since 2026-10-29 (advice policy)
+    for want in ("Is it a strong business?", "Quality F", "How is it valued?", "Insufficient Data", "Is there a short-term setup?", "No Setup",
+                 "What about earnings?", "Reports Oct 29", "Quality and price together: fails the long-term rules. Business quality grades F.",
                  "Revenue was roughly flat in the latest fiscal year, and the company is not yet profitable.", "It lost about 1 cents on each dollar of sales.",
                  "Show the figures", "Why", "none has been shown to predict returns"):
         assert want in h, want

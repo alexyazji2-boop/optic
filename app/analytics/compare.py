@@ -386,9 +386,9 @@ def build(snapshot_fn, longterm_fn, tickers: List[str]) -> Dict[str, Any]:
             "Every figure is computed the same way at the same moment for each "
             "name, which is the point. Comparing a number from one tab against a "
             "same-named number from another risks comparing different lookbacks. "
-            "The three horizons are ranked separately because a name can be the "
-            "best swing setup and the worst multi-year hold; that is not a "
-            "contradiction. Today's price change is shown as context and "
+            "The three horizons are ranked separately because a name can score "
+            "highest on the swing setup and lowest on the multi-year trend; that is "
+            "not a contradiction. Today's price change is shown as context and "
             "deliberately does not drive the position or long-term ranks. Research "
             "context, not instructions to buy or sell."
         ),
@@ -402,7 +402,7 @@ def build(snapshot_fn, longterm_fn, tickers: List[str]) -> Dict[str, Any]:
 # actually brings to a comparison; a leader on "beta" is trivia.
 TAKE_METRICS = [
     ("rs_vs_spy", True, "the strongest relative strength against SPY"),
-    ("cagr_5y_pct", True, "the best five-year compound growth"),
+    ("cagr_5y_pct", True, "the highest five-year compound growth"),
     ("cagr_per_vol_5y", True, "the most return per unit of volatility"),
     ("drawdown_pct", True, "the smallest drawdown from its high"),
     ("annual_vol_pct", False, "the calmest price action"),

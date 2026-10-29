@@ -155,7 +155,8 @@ export function greeksPanel(t, sym) {
 /* ---------- ideas: single options and strategies, with the budget ---------- */
 const BUDGETS = [0, 100, 250, 500, 1000, 2500];
 export function ideas(t, sym, budget) {
-  const all = [...(t.naked_ideas || []).map((i) => Object.assign({ group: 'Buy calls or puts' }, i)), ...(t.strategy_ideas || []).map((i) => Object.assign({ group: 'Strategies' }, i))];
+  // "Buy calls or puts" was a group heading worded as an order (advice policy, 2026-10-29)
+  const all = [...(t.naked_ideas || []).map((i) => Object.assign({ group: 'Single calls or puts' }, i)), ...(t.strategy_ideas || []).map((i) => Object.assign({ group: 'Strategies' }, i))];
   const fits = all.filter((i) => i.fits_budget !== false), over = all.filter((i) => i.fits_budget === false);
   return html`<div class="budget"><p class="t-label">Most you'll risk on one contract</p>
       <div class="seg" role="group" aria-label="Budget">${BUDGETS.map((b) => html`<button type="button" data-v2-budget="${b}" aria-pressed="${(budget || 0) === b}">${b ? money(b, 0) : 'No limit'}</button>`)}</div>
@@ -163,7 +164,7 @@ export function ideas(t, sym, budget) {
     ${over.length ? html`<p class="asof">Over your budget: ${over.map((i) => i.name).join(', ')}.</p>` : ''}
     ${fits.length ? fits.map((i, n) => idea(i, n)) : empty('No idea fits', budget ? 'Nothing fits this budget. Raise it or choose No limit.' : 'The setup has no directional idea right now.')}
     <p class="asof">Example structures for this setup, sized to one contract at the mid. Model output, not a recommendation to trade. ${clean(t.disclaimer_area || '')}</p>
-    ${ask(sym, 'Ask Milo about these ideas', `Which of these option ideas for ${sym} fits a two-to-eight-week swing, and why?`)}`;
+    ${ask(sym, 'Ask Milo about these structures', `How do these option structures for ${sym} differ in cost, breakeven, what each needs the stock to do, and risk?`)}`;
 }
 function idea(i, n) {
   if (i.conceptual) return html`<article class="idea"><h3>${i.name}</h3><p>${clean(i.rationale || i.note || '')}</p></article>`;
@@ -173,7 +174,7 @@ function idea(i, n) {
   const ml = usd(i.risk_for_one ?? (isNum(i.max_loss) ? Math.abs(i.max_loss) * 100 : null));
   return html`<article class="idea"><p class="t-label">${i.group}, ${i.structure || ''}${i.expiry ? `, ${shortDate(i.expiry)}, ${dayCount(i.dte)}` : ''}</p><h3>${i.name}</h3>
     <p>${clean(i.rationale || '')}</p>
-    <p class="legs">${(i.legs || []).map((l) => `${l.action === 'SELL' ? 'Sell' : 'Buy'} ${num(l.strike, 0)} ${(l.type || '').toLowerCase()} at ${num(l.mid)}`).join(', ')}.</p>
+    <p class="legs">${(i.legs || []).map((l) => `${l.action === 'SELL' ? 'Short' : 'Long'} ${num(l.strike, 0)} ${(l.type || '').toLowerCase()}, mid ${num(l.mid)}`).join('; ')}.</p>
     ${kv([[debit ? 'Cost for one' : 'Credit for one', usd(i.cost_for_one ?? i.credit_for_one ?? (isNum(i.net_debit) ? i.net_debit * 100 : isNum(i.net_credit) ? i.net_credit * 100 : null))], ['Most it can make', mp], ['Most it can lose', ml], ['Breakeven', be || 'n/a']], 4)}
     <div class="chart-slot" data-chart="idea${n}"></div>
     ${i.assignment_note ? note(i.assignment_note) : ''}${i.risk_plan ? note(`${i.risk_plan.invalidation || ''} ${i.risk_plan.sizing_note || ''}`) : ''}</article>`;
@@ -207,21 +208,22 @@ export function entry(t, sym) {
   }
   const r = ep.recommended || {}, og = ep.order_guidance || {}, tg = ep.target || {}, rk = ep.risk || {};
   return html`<p><b>${clean(ep.headline || '')}</b></p>
-    ${kv([['Contract', `${num(r.strike, 0)} ${ep.direction === 'short' ? 'put' : 'call'}, ${shortDate(r.expiry)} (${dayCount(r.dte)})`], ['Limit price', html`${num(og.limit_price ?? r.entry_mid)}${og.never_pay_more_than ? html` <span class="t-muted">never above ${num(og.never_pay_more_than)}</span>` : ''}`], ['Cost per contract', usd(r.capital_per_contract)], ['Breakeven', num(r.breakeven)], ['If the target is hit', signed(r.return_at_target_pct, 0)], ['If IV drops 20%', signed(r.return_if_iv_drops_20pct, 0)]], 3)}
+    ${kv([['Example contract', `${num(r.strike, 0)} ${ep.direction === 'short' ? 'put' : 'call'}, ${shortDate(r.expiry)} (${dayCount(r.dte)})`], ['Quote', html`mid ${num(r.entry_mid ?? og.limit_price)}${isNum(r.ask) ? html` <span class="t-muted">ask ${num(r.ask)}</span>` : ''}`], ['Cost per contract at the mid', usd(r.capital_per_contract)], ['Breakeven', num(r.breakeven)], ['At the model\'s projected level', signed(r.return_at_target_pct, 0)], ['If IV drops 20%', signed(r.return_if_iv_drops_20pct, 0)]], 3)}
     ${(ep.entry_options || []).length ? html`<h3>Setups and where each stands</h3><ul class="plain">${ep.entry_options.map((o) => html`<li><b>${capFirst(o.style || '')}${o.state ? html` <span class="chip-tag">${capFirst(o.state)}</span>` : ''}.</b> ${clean(o.state_detail || '')} ${clean(o.detail || '')} ${clean(o.confirmation || '')}</li>`)}</ul>${note(ep.ledger_note)}` : ''}
-    <h3>Target and risk</h3>${kv([['Target', html`${num(tg.target_price)} <span class="t-muted">(${signed(tg.move_required_pct)}, ${clean(tg.target_source || '')})</span>`], ['Stock stop', html`${num(rk.underlying_stop)} <span class="t-muted">${clean(rk.stop_basis || '')}</span>`], ['Typical time', isNum(tg.estimated_trading_days) ? `${tg.estimated_trading_days} sessions` : 'n/a']], 3)}
+    <h3>The model's levels for the stock</h3>${kv([['Projected level', html`${num(tg.target_price)} <span class="t-muted">(${signed(tg.move_required_pct)}, ${clean(tg.target_source || '')})</span>`], ['Level that breaks the setup', html`${num(rk.underlying_stop)} <span class="t-muted">${clean(rk.stop_basis || '')}</span>`], ['Typical time', isNum(tg.estimated_trading_days) ? `${tg.estimated_trading_days} sessions` : 'n/a']], 3)}
+    <p class="t-muted">Model output from price history and the chain, for research. Not an order, a forecast or a recommendation to trade.</p>
     <p>${clean(rk.invalidation || '')}</p>
-    ${(ep.candidates || []).length ? html`<details class="more-inline"><summary>Candidate strikes, ranked</summary><div class="tscroll"><table class="t"><thead><tr><th>Rank</th><th>Strike</th><th>Expiry</th><th>Mid</th><th>Cost</th><th>Spread</th><th>Delta</th><th>Breakeven</th><th>At target</th><th>Flat</th></tr></thead>
+    ${(ep.candidates || []).length ? html`<details class="more-inline"><summary>Other strikes the model scored</summary><div class="tscroll"><table class="t"><thead><tr><th>Rank</th><th>Strike</th><th>Expiry</th><th>Mid</th><th>Cost</th><th>Spread</th><th>Delta</th><th>Breakeven</th><th>At projected level</th><th>Flat</th></tr></thead>
       <tbody>${ep.candidates.map((c) => html`<tr><td>${c.rank}</td><td>${num(c.strike, 0)}</td><td>${shortDate(c.expiry)}</td><td>${num(c.entry_mid)}</td><td>${usd(c.cost_per_contract)}</td><td>${pct(c.spread_pct)}</td><td>${num(c.delta, 2)}</td><td>${num(c.breakeven)}</td><td>${signed(c.return_at_target_pct, 0)}</td><td>${signed(c.return_if_flat_pct, 0)}</td></tr>`)}</tbody></table></div></details>` : ''}
     ${(ep.warnings || []).map((w) => html`<p class="stale">${clean(w)}</p>`)}${note(og.note)}${(ep.assumptions || []).map(note)}
-    ${volBlock}${ask(sym, 'Ask Milo about this entry', `Walk me through the suggested ${sym} entry and what would invalidate it.`)}`;
+    ${volBlock}${ask(sym, 'Ask Milo about this setup', `Walk me through how Optic's rules picked this example ${sym} contract, what it assumes, and what would break the setup.`)}`;
 }
 
 /* ---------- swing verdict and Optic's perspective ---------- */
 export function verdict(t, sym) {
   const v = t.verdict || {}, c = t.cases || {};
   const s = score100(v.composite_score);
-  return html`<p><b>${capFirst(v.stance || '')}, ${v.conviction || ''} conviction.</b> ${clean(v.summary || '')}</p>
+  return html`<p><b>${capFirst(v.stance || '')}${v.conviction ? `, ${v.conviction === 'none' ? 'no' : v.conviction} conviction` : ''}.</b> ${clean(v.summary || '')}</p>
     ${kv([['Composite', isNum(s) ? html`<span class="${tone100(s)}">${num(s, 0)} of 100</span>${scoreLine(s)}` : 'n/a'], ['Signal agreement', pct(v.signal_agreement_pct, 0)]], 2)}${note(v.agreement_note)}
     ${TR.slot('composite')}
     <div class="tscroll"><table class="t"><thead><tr><th>Input</th><th>Score</th><th>Weight</th><th>Adds</th><th>Status</th></tr></thead>

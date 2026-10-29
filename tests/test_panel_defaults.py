@@ -107,6 +107,7 @@ def test_the_retirement_page_opens_its_form_and_nothing_else():
     so it used to open nothing (`roth: []`). Nothing included the section
     holding the inputs: the page loaded as seven folded headings with no field
     in sight (2026-10-16). It opens that section, and the two that answer
-    the reader's question once the form is filled: where this year's money
-    goes, and the drift from target."""
-    assert _defaults()["roth"] == ["roth ira model allocation", "where to put this year", "drift from target"]
+    the reader's question once the form is filled: the contribution section
+    (which since 2026-10-29 says Optic does not plan it, under the advice
+    policy) and the drift from target."""
+    assert _defaults()["roth"] == ["roth ira model allocation", "your contribution", "drift from target"]

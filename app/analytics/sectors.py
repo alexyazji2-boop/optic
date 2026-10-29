@@ -232,22 +232,25 @@ def _pair_rows(frames: Dict[str, pd.DataFrame]) -> List[Dict[str, Any]]:
             bool(line.iloc[-1] > sma50.dropna().iloc[-1]) if not sma50.dropna().empty else None
         )
 
-        # Two honest ways to trade a ratio: ride the trend, or fade a stretch.
-        # Say which one the current reading supports instead of picking one.
+        # What the ratio is doing, described: stretched against its own mean, or trending against its 50-day.
+        # It used to be written as a position to take ("Mean-reversion long of the ratio (buy X vs Y)",
+        # "Momentum long X / short Y"), which is an instruction (advice policy, 2026-10-29).
         if z >= 2:
-            setup = "stretched. Mean-reversion short of the ratio (fade {} vs {})".format(
-                spec["long"], spec["short"]
+            setup = "stretched. {} has run well ahead of {}: the ratio is {:.1f} standard deviations above its 60-day mean".format(
+                spec["long"], spec["short"], z
             )
         elif z <= -2:
-            setup = "stretched. Mean-reversion long of the ratio (buy {} vs {})".format(
-                spec["long"], spec["short"]
+            setup = "stretched. {} has fallen well behind {}: the ratio is {:.1f} standard deviations below its 60-day mean".format(
+                spec["long"], spec["short"], abs(z)
             )
         elif above_50 and (trend_20 or 0) > 1:
-            setup = "trending. Momentum long {} / short {}".format(spec["long"], spec["short"])
+            setup = "trending. {} is leading {}: the ratio is above its 50-day average and up over 20 sessions".format(
+                spec["long"], spec["short"])
         elif above_50 is False and (trend_20 or 0) < -1:
-            setup = "trending. Momentum long {} / short {}".format(spec["short"], spec["long"])
+            setup = "trending. {} is leading {}: the ratio is below its 50-day average and down over 20 sessions".format(
+                spec["short"], spec["long"])
         else:
-            setup = "no edge. Ratio is range-bound near its mean"
+            setup = "range-bound. The ratio is near its mean, with no clear trend"
 
         rows.append(
             {

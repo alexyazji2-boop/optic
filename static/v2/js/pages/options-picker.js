@@ -1,8 +1,8 @@
 // Options, Contracts and pricing: the contract picker (roadmap stage 2, 2026-10-22). The reader states a plan
 // (which way, how long, the most premium at risk, an optional target and invalidation, whether to hold through
 // the next report) and gets up to three contracts that fit it, each with its cost, its expiry against the plan,
-// its main risk and why it was chosen, or a plain "none fits" with the reasons. Nothing is sent until "Find
-// contracts" is pressed, and the plan is kept in this browser only (optic.v2.picker.v1, a personal key: a
+// its main risk and why it matched, or a plain "none matches" with the reasons. Nothing is sent until "Screen
+// the chain" is pressed, and the plan is kept in this browser only (optic.v2.picker.v1, a personal key: a
 // trading plan goes with the reader, not the device).
 import { $, html, render as draw } from '../core/dom.js';
 import * as api from '../core/api.js';
@@ -28,15 +28,15 @@ export function pickerQuery(p) {
 function form(S) {
   const p = S.plan, nr = S.nextReport;
   return html`<form class="pk-form" data-pk-form novalidate>
-    <div class="pk-row"><div class="seg" role="group" aria-label="Your view"><button type="button" data-pk-thesis="bull" aria-pressed="${p.thesis !== 'bear'}">Expect a rise</button><button type="button" data-pk-thesis="bear" aria-pressed="${p.thesis === 'bear'}">Expect a fall</button></div>
-      <div class="seg" role="group" aria-label="Holding period">${HOLDS.map((d) => html`<button type="button" data-pk-hold="${d}" aria-pressed="${Number(p.hold_days) === d}">${d} days</button>`)}</div></div>
+    <div class="pk-row"><div class="seg" role="group" aria-label="Direction to screen for"><button type="button" data-pk-thesis="bull" aria-pressed="${p.thesis !== 'bear'}">A rise</button><button type="button" data-pk-thesis="bear" aria-pressed="${p.thesis === 'bear'}">A fall</button></div>
+      <div class="seg" role="group" aria-label="Window">${HOLDS.map((d) => html`<button type="button" data-pk-hold="${d}" aria-pressed="${Number(p.hold_days) === d}">${d} days</button>`)}</div></div>
     <div class="pk-row">
       <label class="pk-in"><span class="t-label">Most premium at risk</span><span class="field pk-field"><span aria-hidden="true">$</span><input name="max_premium" inputmode="decimal" value="${p.max_premium}" aria-label="Most premium at risk, in dollars"></span></label>
       <label class="pk-in"><span class="t-label">Target price <small>optional</small></span><span class="field pk-field"><input name="target" inputmode="decimal" value="${p.target}" placeholder="${S.spot ? num(S.spot * (p.thesis === 'bear' ? 0.93 : 1.07), 0) : ''}" aria-label="Target price for the stock, optional"></span></label>
       <label class="pk-in"><span class="t-label">Invalidation <small>optional</small></span><span class="field pk-field"><input name="invalidation" inputmode="decimal" value="${p.invalidation}" aria-label="Price at which the idea is wrong, optional"></span></label>
     </div>
     <label class="check"><input type="checkbox" name="through_event" ${p.through_event ? 'checked' : ''}> <span>I mean to hold through the next earnings report${nr ? ` (${shortDate(nr)})` : ''}</span></label>
-    <div class="cluster"><button type="submit" class="btn btn-primary" ${S.loading ? 'disabled' : ''}>${S.loading ? 'Finding…' : 'Find contracts'}</button></div></form>`;
+    <div class="cluster"><button type="submit" class="btn btn-primary" ${S.loading ? 'disabled' : ''}>${S.loading ? 'Screening…' : 'Screen the chain'}</button></div></form>`;
 }
 
 function pickRow(c, i, d) {
@@ -44,7 +44,7 @@ function pickRow(c, i, d) {
   const report = (c.events || []).find((e) => e.kind === 'earnings');
   return html`<li class="pk-pick">
     <div class="pk-h"><h3>${num(c.strike, c.strike % 1 ? 1 : 0)} ${c.type}, ${shortDate(c.expiry)} <small class="t-muted">${plural(c.dte, 'day')} left</small></h3>
-      <span class="pk-fit" title="${clean(d.fit_note || '')}">Fit ${num(c.fit.score, 0)} <small>of 100</small></span></div>
+      <span class="pk-fit" title="${clean(d.fit_note || '')}">Match ${num(c.fit.score, 0)} <small>of 100</small></span></div>
     <p class="pk-cost"><b>${usd(c.ask * 100)}</b> for one contract at the ask, which covers 100 shares. <span class="t-muted">Bid ${num(c.bid)}, ask ${num(c.ask)}, mid ${num(c.mid)}: a fill can be worse than the mid.</span></p>
     <p>${clean(c.why.fit)}</p><p class="pk-trade"><b>Main tradeoff.</b> ${clean(c.why.tradeoff)}</p>
     ${report ? html`<p class="stale">${clean(report.text)}</p>` : ''}
@@ -61,21 +61,21 @@ function pickRow(c, i, d) {
       <thead><tr><th scope="col">If</th><th scope="col">Stock</th><th scope="col">Worth at your exit, model</th><th scope="col">Gain or loss</th></tr></thead>
       <tbody>${(sc.before_expiry || []).map((s) => html`<tr><th scope="row">${s.label}<small>${clean(s.why || '')}</small></th><td>${num(s.underlying)}</td><td>${usd(s.value)}</td><td class="${dir(s.pnl)}">${pl(s.pnl)}</td></tr>`)}</tbody></table></div>
     <p class="pk-exp"><b>At expiry</b>, its value is only what it is in the money: ${(sc.at_expiry || []).map((s) => `${s.label.toLowerCase()} (${num(s.underlying)}) ${usd(s.value)}, ${pl(s.pnl)}`).join('; ')}.</p>
-    <div class="cluster"><button type="button" class="btn btn-sm" data-pk-practice="${i}">Practice this trade</button><span class="t-muted">Opens the Paper Desk with this contract and your plan filled in. Nothing is bought.</span></div></li>`;
+    <div class="cluster"><button type="button" class="btn btn-sm" data-pk-practice="${i}">Practice this trade</button><span class="t-muted">Opens the Paper Desk with this contract and these filters filled in. Nothing is bought.</span></div></li>`;
 }
 
 function results(S) {
   // a 404 here is the feed listing no expiries (Yahoo refusing requests did this on 2026-10-22), not a missing page
   if (S.error && S.error.kind === 'notfound') return html`<div class="state err" role="alert"><p class="t-h3">No option expiries came back</p><p>${clean(S.error.message || '')} The data feed may be refusing requests for a moment; nothing is wrong with your plan.</p><button type="button" class="btn btn-sm" data-v2-retry="picker">Try again</button></div>`;
   if (S.error) return failed('The contract picker', S.error, { retry: 'picker' });
-  if (S.loading) return skeleton('lines', 5, 'Reading the chain for contracts that fit');
+  if (S.loading) return skeleton('lines', 5, 'Reading the chain for contracts that match');
   const d = S.data;
-  if (!d) return html`<p class="t-muted">Set your plan and press Find contracts. Nothing is checked until you do.</p>`;
+  if (!d) return html`<p class="t-muted">Set the filters and press Screen the chain. Nothing is checked until you do.</p>`;
   const picks = d.picks || [];
   const meta = html`<p class="asof">${clean(d.quote_note || '')}${d.fetched_at ? ` Read at ${new Date(d.fetched_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}.` : ''} ${plural(d.considered || 0, 'contract')} considered across ${plural((d.expiries || []).length, 'expiry', 'expiries')}.</p>`;
   const method = how(html`<p>${clean(d.rules || '')}</p><p>${clean(d.fit_note || '')}</p><p>${clean(d.model_note || '')}</p><p>${clean(d.fill_note || '')} ${clean(d.oi_note || '')}</p>`);
-  if (!picks.length) return html`${d.earnings_note ? html`<p class="stale">${clean(d.earnings_note)}</p>` : ''}${d.conflict ? html`<p class="pk-lead">${clean(d.conflict)}</p>` : ''}${empty('No contract fits this plan', clean(d.why_none || ''))}${meta}${method}`;
-  return html`${d.earnings_note ? html`<p class="stale">${clean(d.earnings_note)}</p>` : ''}<p class="pk-lead">${picks.length === 1 ? 'One contract fits' : `${picks.length} contracts fit`} your plan${d.event_in_hold ? `, held through the ${shortDate(d.earnings)} report` : ''}.${picks.length < 3 ? ' Nothing else qualified, so no more are shown.' : ''}</p>
+  if (!picks.length) return html`${d.earnings_note ? html`<p class="stale">${clean(d.earnings_note)}</p>` : ''}${d.conflict ? html`<p class="pk-lead">${clean(d.conflict)}</p>` : ''}${empty('No contract matches these filters', clean(d.why_none || ''))}${meta}${method}`;
+  return html`${d.earnings_note ? html`<p class="stale">${clean(d.earnings_note)}</p>` : ''}<p class="pk-lead">${picks.length === 1 ? 'One contract matches' : `${picks.length} contracts match`} these filters${d.event_in_hold ? `, held through the ${shortDate(d.earnings)} report` : ''}.${picks.length < 3 ? ' Nothing else qualified, so no more are shown.' : ''}</p>
     <ol class="pk-list">${picks.map((c, i) => pickRow(c, i, d))}</ol>${meta}${method}`;
 }
 
@@ -87,7 +87,7 @@ export function draftFrom(d, c, sym) {
     // exit if the stock reaches the invalidation (or a one-standard-deviation move against it), per share
     stop: premiumStop(c), target: '', hold_days: p.hold_days,
     invalidation: p.invalidation ? `The stock through ${p.invalidation}` : 'A one-standard-deviation move against the view over the hold',
-    thesis: `${p.thesis === 'bear' ? 'Expect a fall' : 'Expect a rise'} in ${sym}${p.target ? ` toward ${p.target}` : ''} within ${p.hold_days} days.`,
+    thesis: `Screening for a ${p.thesis === 'bear' ? 'fall' : 'rise'} in ${sym}${p.target ? ` toward ${p.target}` : ''} within ${p.hold_days} days.`,
     catalyst: d.event_in_hold ? 'Earnings report' : '', catalyst_date: d.event_in_hold ? d.earnings : '', hold_through: !!p.through_event,
     source: 'the contract picker' };
 }
@@ -107,7 +107,7 @@ export function mountPicker(host, sym, ctx) {
   const S = { plan: readPlan(), data: null, loading: false, error: null, spot: null, nextReport: null, seq: 0 };
   const paint = () => {
     const c = ctx() || {}; S.spot = c.spot || S.spot; S.nextReport = c.nextReport || S.nextReport;
-    draw(host, html`<div class="section-head"><div><h2 class="t-h2" id="pk-h">Pick a contract</h2><p class="section-sub">Say what you expect and for how long; Optic shows up to three contracts that fit, or says none does.</p></div></div>
+    draw(host, html`<div class="section-head"><div><h2 class="t-h2" id="pk-h">Screen contracts</h2><p class="section-sub">Choose a direction, a window and the most premium you would risk; Optic lists up to three contracts on this chain that match those filters, ranked by a stated rule, or says none does. A match is not a recommendation.</p></div></div>
       ${form(S)}<div aria-live="polite">${results(S)}</div>`);
   };
   const read = () => { const f = $('[data-pk-form]', host); if (!f) return; S.plan = { ...S.plan, max_premium: f.max_premium.value, target: f.target.value, invalidation: f.invalidation.value, through_event: f.through_event.checked }; };

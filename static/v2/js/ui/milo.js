@@ -139,7 +139,10 @@ function saveHistory(list) {
 export const titleOf = (messages) => { const first = (messages || []).find((m) => m.role === 'user'); return (first && String(first.content || '').replace(/\s+/g, ' ').trim().slice(0, 70)) || 'Empty conversation'; };
 function persist() {
   if (!S.conv.messages.length) return;
-  const messages = S.conv.messages.slice(-MAX_MESSAGES).map((m) => ({ role: m.role, content: String(m.content || '').slice(0, MAX_CHARS) }));
+  // the advice-policy notes go with their answer, so a reopened conversation still says what was declined or removed
+  const from = Math.max(0, S.conv.messages.length - MAX_MESSAGES);
+  const messages = S.conv.messages.slice(-MAX_MESSAGES).map((m, k) => { const inf = meta.get(from + k) || {}, o = { role: m.role, content: String(m.content || '').slice(0, MAX_CHARS) };
+    if (inf.policyLine) o.policy = String(inf.policyLine).slice(0, 400); if (inf.amended) o.amended = String(inf.amended).slice(0, 400); return o; });
   const list = loadHistory().filter((c) => c.id !== S.conv.id);
   list.unshift({ id: S.conv.id, at: new Date().toISOString(), title: titleOf(messages), ticker: route.symbol || null, messages });
   saveHistory(list.slice(0, MAX_CONVERSATIONS));
@@ -398,7 +401,9 @@ function msgHTML(it) {
     ${info.assumed ? html`<p class="milo-assumed">${info.assumed}</p>` : ''}
     ${info.deep ? html`<p class="milo-assumed">Deep research: read from live web sources.</p>` : info.web ? html`<p class="milo-assumed">Web search was on for this answer.</p>` : ''}
     ${info.notSent && info.notSent.length ? html`<p class="milo-not-sent" role="note"><b>Not sent with this question:</b> ${info.notSent.join('; ')}.</p>` : ''}
+    ${info.policyLine ? html`<p class="milo-policy" role="note">${info.policyLine}</p>` : ''}
     <div class="milo-bubble">${raw(body)}</div>
+    ${info.amended ? html`<p class="milo-amended" role="note">${info.amended}</p>` : ''}
     ${live ? html`<span class="activity" role="progressbar" aria-label="Milo is working on this answer"></span>` : ''}
     ${info.ended || /\[(Stopped by the reader|Cut off): incomplete\]$/.test(m.content || '') ? html`<p class="milo-ended" role="note">${(info.ended || (/Stopped by the reader/.test(m.content) ? 'stopped' : 'cut')) === 'stopped' ? 'Stopped by you. This answer is incomplete.' : 'The connection ended before Milo finished. This answer is incomplete.'}</p>` : ''}
     ${live ? '' : html`${ups.length ? html`<div class="milo-ups" role="group" aria-label="Follow-up questions">${ups.map((q) => html`<button type="button" class="milo-up" data-v2-milo-follow="${q}">${q}</button>`)}</div>` : ''}
@@ -553,7 +558,7 @@ export function exampleAsk(r = route, scope = S.scope) {
 }
 /* Follow-ups above the box once a symbol's options read is on screen, word for word Classic's (app.js:44016); quiet
  * buttons, not chips (owner's amendment 3), and each only drafts, never sends. */
-export const OPTIONS_FOLLOWUPS = ['Why did the ranker pick that strike over a cheaper OTM one?', 'What does the gamma profile imply for a swing long here?', 'Is the flow confirming or fighting the chart?', 'Walk me through the entry zone and what invalidates it.', 'Does the short interest or insider activity change the read?', 'How does the earnings record affect holding through the print?'];
+export const OPTIONS_FOLLOWUPS = ['Why does the model score that strike above a cheaper out-of-the-money one?', 'What does the gamma profile say about how the price may move here?', 'Is the flow confirming or fighting the chart?', "Walk me through the model's trigger zone and what breaks the setup.", 'Does the short interest or insider activity change the read?', 'How has the stock moved after past earnings reports?'];
 function suggestHTML(empty) {
   if (!empty || S.busy || blocked() || !(S.conv.messages || []).length) return '';
   const follow = route.view === 'swing' && onSymbol() && S.scope === 'auto' ? OPTIONS_FOLLOWUPS : [];
@@ -864,6 +869,10 @@ export async function send(text, { deep = false } = {}) {
           else if (ev === 'attachments') { const m = meta.get(ai); if (m && Array.isArray(p.problems)) m.notSent = p.problems.map(String).slice(0, 5); }
           else if (ev === 'assumed') { const hz = (((S.personas || {}).horizons || {}).horizons || []).find((x) => x.id === p.horizon); if (hz && p.horizon_source === 'question' && p.horizon !== horizon()) meta.get(ai).assumed = `Answered for a ${hz.label.toLowerCase()} timeframe, from your question. Your setting is unchanged.`; }
           else if (ev === 'retrieved') { S.live.got = Array.isArray(p.items) ? p.items : []; paintLive(); }
+          // the advice policy (app/ai_policy.py): the server's own line for a question that asked for a personal decision,
+          // and, after the stream, the answer with any sentence that read as personal advice taken out, said in a note
+          else if (ev === 'notice') { if (p.kind === 'policy' && p.text) { meta.get(ai).policyLine = String(p.text); paintLive(); } }
+          else if (ev === 'amend') { if (typeof p.text === 'string') { S.live.text = p.text; S.conv.messages[ai].content = p.text; meta.get(ai).amended = String(p.note || 'Milo removed a sentence that read as personal investment advice.'); paintLive(); } }
           else if (ev === 'error') { finished = true; failed = { text: p.message || 'Milo could not answer.' }; }
           else if (ev === 'done') { finished = true; Object.assign(meta.get(ai), { citations: p.sources || p.citations || [], read: Array.isArray(p.read) ? p.read : [], retrieved: Array.isArray(p.retrieved) ? p.retrieved : [], loaded: Array.isArray(p.loaded) ? p.loaded : [], named: p.named && typeof p.named === 'object' ? p.named : null }); }
         }
@@ -957,7 +966,8 @@ async function runAction(a, card, i) {
   if (a.kind === 'open') { router.go(`#/${a.sym}${slug[a.section]}`); return; }
   if (a.kind === 'compare') { router.go(`#/compare?t=${a.syms.join(',')}`); return; }
   if (a.kind === 'valuation') { if (!sym) { say('Open a company first; the model needs a symbol.', false); return; } router.go(`#/${sym}/investing`); return; }
-  if (a.kind === 'screen') { router.go(`#/scan?q=${encodeURIComponent(a.words)}`); return; }
+  // the card says it may use a Milo message, so pressing it is the go-ahead the Scan page checks for (scan.js, SCAN_GO)
+  if (a.kind === 'screen') { try { sessionStorage.setItem('optic.scan.go.v1', String(a.words || '').trim().slice(0, 300)); } catch (e) { /* private mode */ } router.go(`#/scan?q=${encodeURIComponent(a.words)}`); return; }
   if (a.kind === 'chart' || a.kind === 'indicator') {
     if (!sym) { say('Load a ticker first; the chart needs a symbol.', false); return; }
     if (a.kind === 'chart') { router.go(`#/${sym}/chart?interval=${a.interval}&range=${chartRange[a.range]}`); return; }
@@ -1268,7 +1278,7 @@ function wire(root) {
       const c = loadHistory().find((x) => x.id === b.dataset.v2MiloOpen); if (!c) return;
       S.conv = { id: c.id, messages: (c.messages || []).map((m) => ({ role: m.role, content: m.content })), lastTicker: c.ticker || null };
       meta.clear(); SC.i = null; S.items = S.conv.messages.map((m, i) => ({ kind: 'msg', i }));
-      S.conv.messages.forEach((m, i) => { if (m.role === 'assistant') meta.set(i, { question: (S.conv.messages[i - 1] || {}).content || '', symbol: c.ticker || null }); });
+      S.conv.messages.forEach((m, i) => { if (m.role === 'assistant') { const saved = (c.messages || [])[i] || {}; meta.set(i, { question: (S.conv.messages[i - 1] || {}).content || '', symbol: c.ticker || null, policyLine: saved.policy || '', amended: saved.amended || '' }); } });
       S.showHistory = false; S.toEnd = true; paintChrome(); paintLog(); const ta = $('#milo-q', root); if (ta) ta.focus(); return;
     }
     if ((b = t('[data-v2-milo-del]'))) { const id = b.dataset.v2MiloDel; saveHistory(loadHistory().filter((c) => c.id !== id)); if (S.conv.id === id && !S.busy) { S.conv = blankConv(); S.items = []; meta.clear(); } paintChrome(); paintLog(false); const hd = $('#milo-hist-h', root); if (hd) { hd.setAttribute('tabindex', '-1'); hd.focus({ preventScroll: true }); } return; }

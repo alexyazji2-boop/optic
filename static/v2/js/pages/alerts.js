@@ -1,7 +1,7 @@
 // Alerts. Three kinds, kept apart because they answer to different people:
 //   your alerts     conditions you set on a symbol (watches: /api/watches, or this browser's optic.watches.v1),
 //                   and the signal history of the swing-setup ones that fired (pages/signals.js)
-//   Optic's book    trade ideas and closes from the paper book Optic keeps for its scans (/api/alerts), the same for
+//   Optic's book    simulated opens and closes from the paper book Optic keeps for its scans (/api/alerts), the same for
 //                   everyone, grouped by urgency as Classic does (Classic parity B5); its read state is the owner's
 //   your portfolio  situations in a linked brokerage account, kept on Brokerage
 //
@@ -247,7 +247,7 @@ function ledger() {
   if (!S.alerts) return skeleton('rows', 3, 'Loading Optic\'s book');
   const all = S.alerts.alerts || [], kinds = S.alerts.kinds || {}, owner = isOwner();
   const note = deliveryNote(S.alerts.delivery, owner);
-  if (!all.length) return html`${note}${empty('Nothing from the book yet', 'A new paper trade idea, a closed position, a confirmed pattern or a risk cap appears here when Optic\'s scheduled scan records one. An empty list means nothing crossed a threshold, which is the common case.')}`;
+  if (!all.length) return html`${note}${empty('Nothing from the book yet', 'A position the paper book opens or closes, a confirmed pattern or a risk cap appears here when Optic\'s scheduled scan records one. An empty list means nothing crossed a threshold, which is the common case.')}`;
   const counts = {}; all.forEach((x) => { counts[x.kind] = (counts[x.kind] || 0) + 1; });
   const kindIds = Object.keys(counts), kind = counts[S.bookKind] ? S.bookKind : 'all';
   const unread = all.filter((x) => !x.seen).length;

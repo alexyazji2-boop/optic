@@ -544,6 +544,9 @@ SETTINGS = {
     # Where a reload from "Optic has been updated" returns to: this tab only,
     # in sessionStorage, and removed when the next load reads it.
     "optic.reload.place",
+    # Milo's "Find stocks" card pressed: the Scan page reads it once, this tab only, in sessionStorage, and
+    # removes it, so a shared #/scan?q= link never spends a Milo message without a press (Phase 02, 2026-10-29).
+    "optic.scan.go.v1",
 }
 
 

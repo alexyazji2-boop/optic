@@ -10,6 +10,8 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
+from . import words
+
 
 def _n(x: Any, d: int = 2) -> str:
     try:
@@ -63,7 +65,7 @@ def long_term(lt: Dict[str, Any]) -> str:
             _bul(["{}: {}".format(p["risk"], p["text"]) for p in lt.get("loss_paths") or []])]
     acc = lt.get("accumulation") or {}
     if acc.get("offered"):
-        out += ["**Levels to reassess at (conditional).**", "",
+        out += ["**Price levels the long-term model marks (conditional).**", "",
                 _bul(["{} ({}, {:+.1f}%)".format(_n(z["price"]), z["basis"], z["distance_pct"]) for z in acc["zones"]]),
                 acc["condition"], ""]
     else:
@@ -75,10 +77,10 @@ def long_term(lt: Dict[str, Any]) -> str:
 def swing(sw: Dict[str, Any]) -> str:
     if not sw:
         return ""
-    out = ["## Swing: {}".format(sw.get("grade")), ""]
+    out = ["## Short-term setup: {}".format(words.setup_grade(sw.get("grade"))), ""]
     objs = sorted(sw.get("objections") or [], key=lambda o: -o["severity"])
     if sw.get("plan"):
-        out += ["**Reasons to skip it first.**", "",
+        out += ["**What argues against the setup, strongest first.**", "",
                 _bul([o["text"] for o in objs]) if objs else "No specific objection found in the data.\n"]
     out += ["**Grade.** {}".format(sw.get("why", "")), ""]
     for r in sw.get("rules") or []:
@@ -88,23 +90,20 @@ def swing(sw: Dict[str, Any]) -> str:
     if plan:
         inv = plan["invalidation"]
         sens = plan.get("sensitivity") or {}
-        out += ["", "**The plan, conditionally.**", "",
-                "- Setup: {} ({}). Entry zone {} to {}, representative entry {}.".format(
+        # The model's levels, said as levels: research output, not an order (advice policy, 2026-10-29).
+        out += ["", "**The setup model's levels (model output from price history, not a recommendation).**", "",
+                "- Pattern: {} ({}). Trigger zone {} to {}, the model's reference price {}.".format(
                     plan["kind"], plan["side"], _n(plan["entry_zone"][0]), _n(plan["entry_zone"][1]), _n(plan["entry"])),
-                "- Confirmation: {}".format(plan["confirmation"]),
-                "- Invalidation: {} ({}). {}".format(_n(inv["price"]), inv.get("structure"), inv.get("note")),
-                "- Targets: {} ({}).".format(", ".join(_n(t) for t in plan["targets"]), plan["target_basis"]),
-                "- Reward to risk: {} by {}; {} to {} across fills, spread and slippage.".format(
+                "- Confirmation the model looks for: {}".format(plan["confirmation"]),
+                "- Level that breaks the pattern: {} ({}). {}".format(_n(inv["price"]), inv.get("structure"), inv.get("note")),
+                "- Projected levels: {} ({}). Projections, not forecasts.".format(", ".join(_n(t) for t in plan["targets"]), plan["target_basis"]),
+                "- The model's reward to risk: {} by {}; {} to {} across fills, spread and slippage.".format(
                     _n(plan["reward_to_risk"]), plan["rr_formula"], _n(sens.get("low")), _n(sens.get("high"))),
-                "- Holding: {}".format((plan.get("holding") or {}).get("basis")),
+                "- Typical time to resolve: {}".format((plan.get("holding") or {}).get("basis")),
                 "- Earnings: {}".format((plan.get("earnings") or {}).get("text")),
-                "- Reassess: {}".format(plan.get("reassess"))]
-        se = plan.get("sizing_example") or {}
-        if se.get("available"):
-            out.append("- Sizing arithmetic ({}): {} shares, about {} at risk at the stop. {}".format(
-                se.get("label"), se["shares"], _n(se["planned_loss"], 0), se.get("gap_note", "")))
+                "- Time limit of the model's assumption: {}".format(plan.get("reassess"))]
     elif sw.get("reassess_when"):
-        out += ["", "**What would warrant another look.** {}".format(sw["reassess_when"])]
+        out += ["", "**When the model would grade a setup again.** {}".format(sw["reassess_when"])]
     if rd:
         rs = rd.get("relative_strength") or {}
         out += ["", "**Readings ({}, completed bars).** Daily trend {}, weekly {}{}. 20-day EMA {}, 50-day EMA {}, "

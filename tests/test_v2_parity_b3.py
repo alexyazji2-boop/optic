@@ -17,7 +17,7 @@ def test_a_sections_identity_and_its_default_are_classics(tmp_path):
     got = _run(tmp_path, f"""
       globalThis.localStorage = {{ getItem: () => null, setItem: () => {{}} }};
       const S = await import('{(JS / "ui/sections.js").as_posix()}');
-      const lv = {{ 'the multiple against its own history': 2, 'valuation and accumulation levels': 2 }};
+      const lv = {{ 'the multiple against its own history': 2, 'valuation and long-term price levels': 2 }};
       print(JSON.stringify({{
         id: S.panelId('long', '  The Multiple  against its own   history '), long: S.panelId('x', 'a'.repeat(60)).length,
         adv: S.levelOf(lv, 'The multiple against its own history'), plain: S.levelOf(lv, 'Return and risk'),

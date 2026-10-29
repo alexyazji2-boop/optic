@@ -30,7 +30,7 @@ def test_an_alert_is_recorded_and_read_back():
     rows = alerts.recent()
     assert len(rows) == 1
     assert rows[0]["ticker"] == "NVDA"
-    assert rows[0]["kind_label"] == "New trade idea"
+    assert rows[0]["kind_label"] == "Paper book opened a position"
     assert rows[0]["seen"] == 0
 
 
@@ -219,7 +219,7 @@ def test_a_scan_is_one_email_of_what_fired_and_each_is_sent_once(mail):
     msg = mail["sent"][0]
     assert msg["to"] == "ops@example.test" and msg["subject"] == "Optic alerts: 3 new"
     body = msg["body"]
-    assert body.index("New trade idea: AMD new long shares") < body.index("Position closed: NVDA")
+    assert body.index("Paper book opened a position: AMD new long shares") < body.index("Position closed: NVDA")
     assert "    Composite 64." in body and "Pattern confirmed: PLTR double bottom confirmed" in body
     # Sent once.
     assert alerts.deliver_pending() == {"sent": 0} and len(mail["sent"]) == 1

@@ -230,7 +230,7 @@ def detect_setup(rd: Dict[str, Any]) -> Dict[str, Any]:
                         name, ma, "up" if side == "long" else "down", r)}
     return {"kind": None, "side": side,
             "why": "The trend is {} but price is neither at a level nor back at its averages: no defined "
-                   "entry.".format("up" if side == "long" else "down")}
+                   "setup.".format("up" if side == "long" else "down")}
 
 
 def _earnings_exposure(earn: Dict[str, Any], as_of: str, hold_days: Optional[int]) -> Dict[str, Any]:
@@ -397,7 +397,7 @@ def assess(daily: pd.DataFrame, bench: Optional[pd.DataFrame], values: Dict[str,
     if tg["obstacles"]:
         near_lv = min(tg["obstacles"], key=lambda lv: abs(lv["price"] - entry))
         strong = (near_lv.get("strength") or 0) >= TARGET_MIN_STRENGTH or near_lv.get("kind") == "52-week extreme"
-        obj("A {} at {:.2f} sits less than one ATR beyond entry, so the trade starts into it.".format(
+        obj("A {} at {:.2f} sits less than one ATR beyond the trigger, so the setup starts into it.".format(
             "52-week extreme" if near_lv.get("kind") == "52-week extreme" else
             ("resistance" if side == "long" else "support"), near_lv["price"]), 2 if strong else 1, "levels")
     if tg["projected"]:
@@ -406,7 +406,7 @@ def assess(daily: pd.DataFrame, bench: Optional[pd.DataFrame], values: Dict[str,
     if (side == "long" and r14 > 70) or (side == "short" and r14 < 30):
         obj("RSI {:.0f} is stretched; momentum readings at that level often pause.".format(r14), 1, "momentum")
     if rd.get("macd_hist_rising") is not None and rd["macd_hist_rising"] != (side == "long"):
-        obj("MACD momentum is fading against the trade.", 1, "momentum")
+        obj("MACD momentum is fading against the setup.", 1, "momentum")
     if setup["kind"] == "breakout" and (rd.get("relative_volume") or 0) < 1.0:
         obj("Volume today is {:.2f}x its average: a breakout without volume is unconfirmed.".format(
             rd.get("relative_volume") or 0), 1, "volume")
@@ -444,15 +444,15 @@ def assess(daily: pd.DataFrame, bench: Optional[pd.DataFrame], values: Dict[str,
                        else "(entry - target) / (stop - entry)"),
         "sensitivity": _round_sens(sens),
         "holding": hold, "earnings": exposure,
-        "reassess": ("If neither the first target nor the stop has been reached within about {} trading days, "
-                     "reassess: the setup assumed a move at roughly that pace, and a trade that goes nowhere "
-                     "ties up risk.".format(hold.get("days") or hold_max)),
+        # Said as what the model assumed, not as an instruction: "reassess ... a trade that goes nowhere
+        # ties up risk" told the reader how to manage a position (advice policy, 2026-10-29).
+        "reassess": ("The model's levels assume a move at roughly this pace: if price has reached neither its "
+                     "first projected level nor the level that breaks the pattern within about {} trading days, "
+                     "the setup's own assumption no longer holds.".format(hold.get("days") or hold_max)),
     }
-    if stop.get("stop") is not None:
-        gap = (stop["stop"] - sign * 1.0 * atr)
-        plan["sizing_example"] = trade_math.sizing_example(10000.0, 1.0, entry, stop["stop"], gap_price=gap, side=side)
-        plan["sizing_example"]["label"] = ("Illustration only: a 10,000 account risking 1%. Your own account "
-                                           "size and risk tolerance replace both numbers.")
+    # No sizing example any more (advice policy, 2026-10-29). "N shares risk about $X at the stop" for a
+    # 10,000 account was individual position sizing tied to this setup's levels, however it was labelled;
+    # trade_math.sizing_example stays for the reader's own calculator, which uses only numbers they enter.
     return {"grade": grade, "readings": rd, "setup": setup, "plan": plan, "objections": objections,
             "most_damaging": worst, "criteria": criteria, "rules": rules,
             "why": _grade_why(grade, criteria, meaningful, rr, rules),
@@ -540,14 +540,15 @@ def _grade_why(grade: str, criteria: Dict[str, bool], meaningful: List[Dict[str,
 def _reassess_when(rd: Dict[str, Any], setup: Dict[str, Any]) -> str:
     atr = rd.get("atr14") or 0
     if setup.get("extended"):
-        return ("A pullback toward the 20-day EMA (about {:.2f}) with RSI back under 60 would give a defined "
-                "entry and a nearer invalidation.".format(rd["ema20"]))
+        return ("The model would grade a setup again after a pullback toward the 20-day EMA (about {:.2f}) "
+                "with RSI back under 60, which would put the pattern's trigger nearer the level that breaks "
+                "it.".format(rd["ema20"]))
     if setup.get("side") and setup.get("side") in ("long", "short"):
         lv = rd.get("high_20d") if setup["side"] == "long" else rd.get("low_20d")
-        return ("A pullback to the 20-day EMA near {:.2f}, or a daily close {} the 20-day {} at {:.2f} on "
-                "volume at least 1.5x average, would define a setup.".format(
+        return ("The model would see a defined setup after a pullback to the 20-day EMA near {:.2f}, or a "
+                "daily close {} the 20-day {} at {:.2f} on volume at least 1.5x average.".format(
                     rd["ema20"], "above" if setup["side"] == "long" else "below",
                     "high" if setup["side"] == "long" else "low", lv))
-    return ("A daily close back above the 200-day average (about {:.2f}) with the 50-day turning up, or a clear "
-            "break below it with the 50-day turning down, would give the trend a direction.".format(
+    return ("The trend model would read a direction after a daily close back above the 200-day average (about "
+            "{:.2f}) with the 50-day turning up, or a clear break below it with the 50-day turning down.".format(
                 rd.get("sma200") or 0))

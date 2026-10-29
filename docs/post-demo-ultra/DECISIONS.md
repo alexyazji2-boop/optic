@@ -41,3 +41,50 @@ session limit at about 02:00 ET; the four still running stopped and nothing ran 
 agents' files were nearly complete (C's counts and D's Classic map were finished by hand); the two screenshot
 reviewers had written nothing, so the visual audit was done here from labelled contact sheets and the crawl's
 measurements (FEATURE_REGISTRY Part 8). From now on at most two subagents run at a time.
+
+**D-008 (Phase 02) Earlier owner-requested formats that the advice policy overrides.** Two things the owner had
+asked for are changed because the 2026-10-29 directive forbids what they produced, and both are reversible:
+(1) Milo's "take on a stock" (owner's HOOD-style take, 2026-10-15) kept its shape but no longer lets Milo say "this
+is one I'd happily own for years" or name a peer that "suits the long-term case better": the long-term part is now
+the case for and against, and a peer is a comparison of business models. (2) "Recommend me some swings" no longer
+gets a ranked shortlist with each name's bias; it gets names meeting stated screen criteria, presented as a research
+starting list, with the panel's fixed line that Milo does not pick investments.
+
+**D-009 (Phase 02) Open owner decision O04 resolved conservatively.** The Overview's pre-earnings evidence no longer
+says rising estimates "tend to precede results above them" (unsupported by Optic's validation programme) or that a
+risk-off market "tends to make reactions to good news smaller"; the measured facts stay. Reversible in
+app/research/earnings_view.py.
+
+**D-010 (Phase 02) Deterministic trade plans are kept as research, not deleted.** The swing setup, the options
+entry planner, the contract picker and the long-term levels are core research features. Their data and arithmetic
+stay; what changed is how they are said: model levels with their assumptions instead of entries, stops, targets
+and sizes for the reader, and no sizing outputs at all (the swing plan's share-count example, the options sizing
+sentence, Retirement's per-fund contribution amounts and per-stock suggested weights are withheld). The
+internal labels ("Avoid", "High Conviction", "Attractive") still drive the logic; readers are told what the rules
+found (app/research/words.py, static/v2/js/core/research-words.js). Retirement's contribution plan is kept in
+code (`_rebalance_with_new_money`) so it can return after counsel review.
+
+**D-011 (Phase 02) Classic's copy is changed where it instructs, and nowhere else.** The house rule (D-005) leaves
+Classic's copy alone unless the task is about it; this phase is about every surface that tells a reader what to do,
+and Classic is one press away at `/classic`. So its options entry panel and ideas headings, labels and heading help,
+the Retirement tables, the pre-trade checklist, the stop-loss glossary entry, the breakout heading help, the Options
+follow-up chips, the saved-research starter and the earnings brief's stance label now say what v2 says, and Classic
+renders Milo's policy notice and removal note. Nothing else in Classic was restyled or reworded.
+
+**D-012 (Phase 02) Milo's stream is held back by one sentence.** The end-of-stream amend alone let a reader watch an
+advice sentence appear and then be replaced. The stream gate (`ai_policy.StreamGate`) sends each sentence once its end
+has arrived and never sends one that breaks the policy. The cost is that text arrives a sentence at a time rather than
+word by word; Phase 07 may tune how that looks, but not remove the gate.
+
+**D-013 (Phase 02) The paper book's alerts say they are simulated.** The public inbox called each simulated position
+a "New trade idea" with "Entry, stop, target". It is now "Paper book opened a position", a simulated position in
+Optic's paper book and not a recommendation. Whether the book should be public at all is counsel question Q4.
+
+**D-014 (Phase 02) Retirement shows no dollars of the reader's contribution per fund.** Withholding the contribution
+plan (D-010) left the same plan in the allocation table's "Per year" column (weight times the reader's contribution).
+The column is gone in v2 and Classic and the server no longer computes it; the example's weights stay.
+
+**D-015 (Phase 02) The output check is measured on sentences its author has not seen.** The first version was tuned
+one phrase at a time and caught 5 of 15 held-out advice sentences. It was rebuilt as one action vocabulary over five
+sentence shapes, and its rates are measured on a set written by a separate agent that was told not to read the code.
+Sets used for tuning become regression tests and are never reported as a measure.

@@ -53,9 +53,12 @@ def test_refusals_reach_the_reader_and_nothing_is_kept():
     assert 'yield _sse("attachments", {"problems": meta["problems"][:ATTACH_MAX_FILES + 1]})' in src, "v2 keeps the list under the answer"
     assert "Nothing is written to disk." in src
     assert "else if (ev === 'attachments')" in MILO and "Not sent with this question:" in MILO
-    # the saved conversation is role and content only: no file data, no file names
+    # the saved conversation is role and content only, with the advice-policy notes beside an answer
+    # (Phase 02, 2026-10-29): no file data, no file names
     persist = MILO[MILO.index("function persist()"):MILO.index("/* ---------------- state")]
-    assert "({ role: m.role, content: String(m.content || '').slice(0, MAX_CHARS) })" in persist
+    assert "o = { role: m.role, content: String(m.content || '').slice(0, MAX_CHARS) };" in persist
+    assert "o.policy = String(inf.policyLine).slice(0, 400)" in persist and "o.amended = String(inf.amended).slice(0, 400)" in persist
+    assert not any(w in persist for w in ("files", "thumb", ".data", "name:")), "nothing of an attachment is kept"
     assert "Sent with your next question to Milo's model provider. Optic does not keep them." in MILO
     assert "if (going.length && !S.files.length) S.files = going;" in MILO, "a send that failed gives the files back"
     assert "im.src = f.thumb" in MILO and 'src="${f.thumb}"' not in MILO, "the template turns data: into #, so the thumbnail is set directly"

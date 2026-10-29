@@ -83,7 +83,7 @@ const CHIP = {
   'Long-term trend score, from price history': 'Long-term trend score',
   'The multiple against its own history': 'Against its own history',
   'Fair-value model, discounted cash flow': 'Fair-value model',
-  'Valuation and accumulation levels': 'Valuation and accumulation',
+  'Valuation and long-term price levels': 'Valuation and levels',
   'The business behind the reports': 'Business behind the reports',
   'What options price for the report': 'What options price',
 };

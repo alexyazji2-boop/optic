@@ -25,6 +25,7 @@ import { kindOf, can } from '../core/instrument.js';
 import * as TR from '../core/track.js';
 import { mountDcf, disposeDcf, dcfContext } from './dcf.js';
 import { scoreLine, tone100, toneBand } from '../ui/score.js';
+import { convictionPhrase } from '../core/research-words.js';
 let lp = null;   // the header's price refresh (dossier-frame livePrice), stopped in dispose()
 
 const RANGES = { '1Y': 52, '3Y': 156, '5Y': 260, '10Y': 520, All: Infinity };
@@ -76,7 +77,7 @@ function trend(sym) {
     <div class="section-head"><div><h2 class="t-h2" id="lt-h">Long-term trend score, from price history</h2><p class="section-sub">${scoreScope(h, kindOf(sym, D) === 'fund' ? 'fund' : 'stock')}</p></div>${ask(sym, 'Ask Milo about this score', `What is ${sym}'s long-term trend score built from, and what does it leave out?`)}</div>
     <div class="figure"><p class="t-display-m ${tone100(s)}">${s === null ? 'n/a' : num(s, 0)} <small class="t-muted">of 100</small></p>${scoreLine(s)}<p class="delta"><span>${capFirst(h.conviction || '')} on the trend model</span><span class="t-muted">${capFirst((h.long_trend || {}).phase || '')}</span></p></div>
     <p><b>The model's reading:</b> ${clean(h.plan || '')}</p>${TR.historySlot('long_term')}
-    ${clash ? html`<p class="reconcile"><b>Read it beside the price.</b> The score is built from trend and the five-year record${st.available ? `, while the price earns ${st.stars} of 5 stars against its own usual valuation` : ''}${vh.available ? ` and the P/E sits at the ${ordinal(vh.percentile)} percentile of its own history` : ''}.${conv.label ? ` The business-and-price case on the Overview reads ${conv.label}.` : ''}</p>` : ''}
+    ${clash ? html`<p class="reconcile"><b>Read it beside the price.</b> The score is built from trend and the five-year record${st.available ? `, while the price earns ${st.stars} of 5 stars against its own usual valuation` : ''}${vh.available ? ` and the P/E sits at the ${ordinal(vh.percentile)} percentile of its own history` : ''}.${conv.label ? ` The business-and-price case on the Overview is ${convictionPhrase(conv.label)}.` : ''}</p>` : ''}
     ${(h.data_quality || {}).warnings && h.data_quality.warnings.length ? h.data_quality.warnings.map((w) => html`<p class="stale">${clean(w)}</p>`) : ''}
     <div class="tscroll"><table class="t"><thead><tr><th>Factor</th><th>Type</th><th>Raw points</th><th>Why</th></tr></thead>
       <tbody>${(h.conviction_factors || []).map((f) => html`<tr><td>${f.label}</td><td>${f.kind}</td><td class="${dir(f.points)}">${signed(f.points, 0, '')}</td><td style="text-align:left">${clean(f.detail)}</td></tr>`)}
@@ -264,11 +265,11 @@ function scenarios(sym) {
 function accumulation() {
   const h = (D.lt || {}).holding; if (!h) return '';
   const z = h.accumulation_zones || [], va = h.valuation || {};
-  return html`<section class="section" aria-labelledby="ac-h"><h2 class="t-h2" id="ac-h">Valuation and accumulation levels</h2>
+  return html`<section class="section" aria-labelledby="ac-h"><h2 class="t-h2" id="ac-h">Valuation and long-term price levels</h2>
     ${kv([['Forward P/E', num(va.forward_pe, 1)], ['Trailing P/E', num(va.trailing_pe, 1)], ['Price to book', num(va.price_to_book, 1)], ['Dividend yield', isNum(va.dividend_yield) ? pct(va.dividend_yield * 100, 2) : 'n/a'], ['Analysts\' average target', num(((h.fundamentals || {}).analyst_target))]], 3)}
     <ul class="plain">${(va.notes || []).map((n) => html`<li>${clean(n)}</li>`)}</ul><p class="asof">${clean(va.caveat || '')}</p>
     ${z.length ? html`<div class="tscroll"><table class="t"><thead><tr><th>Level</th><th>Price</th><th>Distance</th><th>Role</th></tr></thead><tbody>${z.map((l) => html`<tr><td>${l.label}${l.is_golden ? ' (golden zone)' : ''}</td><td>${num(l.price)}</td><td>${signed(l.distance_pct)}</td><td>${capFirst(l.kind)}</td></tr>`)}</tbody></table></div>
-      <p class="asof">Levels where long-term buyers have historically stepped in, from the weekly chart. Not targets and not advice.</p>` : ''}
+      <p class="asof">Levels from the weekly chart where the price has turned before. Not targets, not prices to buy at, and not advice.</p>` : ''}
     <p class="asof">${clean(h.disclaimer || '')}</p></section>`;
 }
 
@@ -304,7 +305,7 @@ export async function render(main, route) {
   provideContext(() => ({ view: 'long', ticker: sym, quote: D.quote, track_record: TR.context(), long_term: D.lt, fair_value: D.fv, valuation: dcfContext(), scenarios: D.vsBody }));
   paint(); wire(main);
   // the strip, folds and Panels (Classic parity B3); the two specialist sections open from Advanced, as Classic's did
-  sections(main, 'long', { levels: { 'the multiple against its own history': 2, 'valuation and accumulation levels': 2 }, norm: (t) => { const n = ((main.querySelector('.dhead .name span') || {}).textContent || '').trim(); return n ? t.split(n).join('the company') : t; } });
+  sections(main, 'long', { levels: { 'the multiple against its own history': 2, 'valuation and long-term price levels': 2 }, norm: (t) => { const n = ((main.querySelector('.dhead .name span') || {}).textContent || '').trim(); return n ? t.split(n).join('the company') : t; } });
   const step = (p, ok, bad) => p.then((d) => { if (D.sym === sym) ok(d); }, (e) => { if (D.sym === sym) bad(e); }).finally(() => { if (D.sym === sym) paint(); });
   step(core(sym), (c) => { D.quote = c.quote; D.session = c.session; D.quoteError = c.quoteError; }, () => {});
   step(api.get(`/api/longterm/${enc}?indices=false`, { ttl: 600000, timeout: 60000 }), (d) => { D.lt = d; }, (e) => { D.ltErr = e; });

@@ -97,8 +97,8 @@ def test_the_options_machinery_is_the_analysis_set():
     because "gamma" alone would also catch the close-defence panel's wording."""
     swing = _advanced()["swing"]
     for key in ("delta analysis", "gamma analysis", "dealer gamma (gex)", "dealer vanna (vex)",
-                "call vs put flow", "net premium by strike", "buy calls / puts",
-                "options strategies", "strike & entry recommendation"):
+                "call vs put flow", "net premium by strike", "single calls or puts",
+                "options strategies", "strike & entry model"):   # renamed 2026-10-29 (advice policy)
         assert key in swing, key
     assert len(swing) == 9, swing
 

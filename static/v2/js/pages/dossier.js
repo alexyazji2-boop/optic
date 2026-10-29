@@ -30,6 +30,7 @@ import * as OR from './overview-research.js';
 import * as prefs from '../core/prefs.js';
 import { defineLive } from '../ui/term.js';
 import * as TR from '../core/track.js';
+import { convictionPhrase } from '../core/research-words.js';
 let lp = null;   // the header's price refresh (dossier-frame livePrice), stopped in dispose()
 let unPrefs = null;   // the advanced switch's subscription, ended in dispose()
 let advMoved = false;   // set when the switch moved, so the next paint lets its folds follow it
@@ -216,9 +217,9 @@ export function synthesis(s100, grade, stars, valLabel, convLabel) {
   else if (/stretch|expensive|rich/.test(val)) bad.push(`the valuation reads ${val}`);
   const join = (xs) => (xs.length > 1 ? `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}` : xs[0] || '');
   const cap = (t) => t.charAt(0).toUpperCase() + t.slice(1);
-  if (!good.length && !bad.length) return convLabel ? `Optic's combined long-term case is ${convLabel.toLowerCase()}.` : '';
+  if (!good.length && !bad.length) return convLabel ? `Optic's combined long-term reading: ${convictionPhrase(convLabel)}.` : '';
   const lead = good.length && bad.length ? `${cap(join(good))}, but ${join(bad)}.` : `${cap(join(good.length ? good : bad))}.`;
-  return `${lead}${convLabel ? ` Weighing them, Optic's combined long-term case is ${convLabel.toLowerCase()}.` : ''}`;
+  return `${lead}${convLabel ? ` Weighing them, Optic's combined long-term reading: ${convictionPhrase(convLabel)}.` : ''}`;
 }
 function synthesisLine() {
   const h = (D.longterm || {}).holding, lt = (D.framework || {}).long_term || {}, sc = (h && h.conviction_scale) || {};

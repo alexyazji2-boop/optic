@@ -43,7 +43,7 @@ def test_the_hub_is_routed_linked_and_drafts_only():
     assert "{ view: 'saved', label: 'Saved research', href: '#/research'" in (JS / "ui/palette.js").read_text()
     page = (JS / "pages/saved.js").read_text()
     assert "openMilo({ question: x.question, opener: b, symbol: x.symbol || '', about: 'Saved research' })" in page and "send(" not in page and "sendNow" not in page and "send: true" not in page
-    for phrase in ("Which names look strongest right now?", "Deep research runs live web sources and cites them. Slower, and rate limited."):
+    for phrase in ("What do the named screens find today?", "Deep research runs live web sources and cites them. Slower, and rate limited."):
         assert phrase in page and phrase in CLASSIC
     milo = (JS / "ui/milo.js").read_text()
     assert "const savable = String(m.content || '').trim().length > 12;" in milo and "const savable = role === 'user' && text && text.length > 12;" in CLASSIC

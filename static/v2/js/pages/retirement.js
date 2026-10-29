@@ -41,7 +41,7 @@ function form() {
       <label class="field roth-wide"><span class="t-label">Individual stock candidates (optional)</span><input name="stock_candidates" placeholder="e.g. AAPL, KO, MSFT" value="${i.stock_candidates}" autocapitalize="characters" spellcheck="false"></label></div>
     <label class="field"><span class="t-label">Your current holdings. One per line, symbol then dollar value</span><textarea name="holdings" rows="4" spellcheck="false" placeholder="VTI 12000&#10;VXUS 4000&#10;BND 1500">${i.holdings}</textarea></label>
     <div class="cluster"><button type="submit" class="btn btn-primary" ${D.loading ? 'disabled' : ''}>${D.loading ? 'Calculating…' : 'Recalculate'}</button></div>
-    <p class="asof">Your holdings are saved in this browser. To work out the numbers they are sent to Optic's server, which computes the plan and keeps no copy.</p></form>`;
+    <p class="asof">Your holdings are saved in this browser. To work out the numbers they are sent to Optic's server, which computes the comparison and keeps no copy.</p></form>`;
 }
 
 const BASIS = { total: 'with distributions', price: 'price only', mixed: 'partly price only' };
@@ -56,9 +56,9 @@ function model(d) {
       <div><dt>Blended expense ratio</dt><dd>${pct(bl.expense_ratio_pct, 2)}</dd>${isNum(bl.expense_ratio_pct) ? html`<p class="kv-note">about ${$((bl.expense_ratio_pct / 100) * 100000)} per $100k a year</p>` : ''}</div><div><dt>Blended yield</dt><dd>${pct(bl.yield_pct, 2)}</dd><p class="kv-note">not taxed as it arrives inside a Roth</p></div></dl>
     ${isNum(bl.cagr_long_pct) ? html`<h3>The fund weights as one portfolio, ${w.start ? `${w.start.slice(0, 4)} to ${w.end.slice(0, 4)}` : ''}</h3>
       <dl class="kv" style="--kv:3"><div><dt>Return a year</dt><dd>${pct(bl.cagr_long_pct)}</dd><p class="kv-note">${BASIS[bl.return_basis] || ''}, hypothetical</p></div><div><dt>Volatility</dt><dd>${pct(bl.volatility_pct)}</dd><p class="kv-note">of the combined daily returns</p></div><div><dt>Worst fall</dt><dd class="down">${pct(bl.max_drawdown_pct)}</dd><p class="kv-note">peak to trough in that window</p></div></dl>` : ''}
-    <h3>Target weights</h3>
-    <div class="tscroll"><table class="t"><thead><tr><th scope="col">Fund</th><th scope="col">Weight</th><th scope="col">Per year</th><th scope="col">Expense</th><th scope="col">Yield</th><th scope="col">10y return a year</th><th scope="col">Volatility</th><th scope="col">Worst drawdown</th></tr></thead>
-      <tbody>${(d.rows || []).map((r) => html`<tr><td><a href="#/${r.symbol}">${r.symbol}</a> ${r.name || ''}<br><small class="t-muted">${clean(r.note || '')}</small></td><td>${pct(r.weight_pct)}</td><td>${$(r.annual_dollars)}</td><td>${pct(r.expense_ratio_pct, 2)}</td><td>${pct(r.yield_pct, 2)}</td><td>${pct(r.cagr_10y_pct)}</td><td>${pct(r.volatility_pct)}</td><td class="down">${pct(r.max_drawdown_pct)}</td></tr>`)}</tbody></table></div>
+    <h3>The example's weights</h3>
+    <div class="tscroll"><table class="t"><thead><tr><th scope="col">Fund</th><th scope="col">Weight</th><th scope="col">Expense</th><th scope="col">Yield</th><th scope="col">10y return a year</th><th scope="col">Volatility</th><th scope="col">Worst drawdown</th></tr></thead>
+      <tbody>${(d.rows || []).map((r) => html`<tr><td><a href="#/${r.symbol}">${r.symbol}</a> ${r.name || ''}<br><small class="t-muted">${clean(r.note || '')}</small></td><td>${pct(r.weight_pct)}</td><td>${pct(r.expense_ratio_pct, 2)}</td><td>${pct(r.yield_pct, 2)}</td><td>${pct(r.cagr_10y_pct)}</td><td>${pct(r.volatility_pct)}</td><td class="down">${pct(r.max_drawdown_pct)}</td></tr>`)}</tbody></table></div>
     ${bl.caveat ? html`<p class="asof">${clean(bl.caveat)}</p>` : ''}${d.disclaimer ? html`<p class="stale">${clean(d.disclaimer)}</p>` : ''}`;
 }
 
@@ -83,26 +83,24 @@ function projChart(pr) {
   ], { w, h: Math.max(180, Math.min(300, innerHeight - 190)), label: 'Contribution projection', xfmt: (x) => `yr ${Math.round(x)}`, yfmt: (v) => `$${compact(v)}`, summary: `After ${pr.years} years: ${$(pr.balance_base)} at the historical rate, scenarios ${$(pr.balance_low)} to ${$(pr.balance_high)}, from ${$(pr.total_contributed)} put in.` });
 }
 
+// The long-term trend model's readings in its own words (app/analytics/longterm.py), not as a "conviction"
+// label beside a stock the reader is considering (advice policy, 2026-10-29).
+const TREND_WORDS = { high: 'Strongly positive', moderate: 'Positive', neutral: 'No lean', cautious: 'Mildly negative', low: 'Strongly negative' };
 function sections(d) {
   const dr = d.drift || {}, rb = d.rebalance || {}, ov = d.overlap || {}, sl = d.stock_sleeve || {}, corr = d.correlations || {};
   return html`
-    ${dr.available ? html`<section class="section" aria-labelledby="rd-h"><h2 class="t-h2" id="rd-h">Drift from target</h2><p class="section-sub">Portfolio value ${$(dr.total_value)}. ${clean(dr.summary || '')}</p>
+    ${dr.available ? html`<section class="section" aria-labelledby="rd-h"><h2 class="t-h2" id="rd-h">How your holdings differ from the example</h2><p class="section-sub">Portfolio value ${$(dr.total_value)}. ${clean(dr.summary || '')}</p>
       ${dr.unmapped_note ? html`<p class="stale">${clean(dr.unmapped_note)}</p>` : ''}
-      <div class="tscroll"><table class="t"><thead><tr><th scope="col">Exposure</th><th scope="col">You hold</th><th scope="col">Current</th><th scope="col">Target</th><th scope="col">Drift</th><th scope="col"><span class="sr">Drift drawn</span></th></tr></thead>
+      <div class="tscroll"><table class="t"><thead><tr><th scope="col">Exposure</th><th scope="col">You hold</th><th scope="col">Current</th><th scope="col">Example</th><th scope="col">Difference</th><th scope="col"><span class="sr">Drift drawn</span></th></tr></thead>
         <tbody>${(dr.rows || []).map((r) => html`<tr><td>${r.label}</td><td>${$(r.current_value)}</td><td>${pct(r.current_pct)}</td><td>${pct(r.target_pct)}</td><td class="${r.drift_pct > 0 ? 'up' : r.drift_pct < 0 ? 'down' : ''}">${signed(r.drift_pct, 1)}</td><td class="roth-bar"><span class="rb-track"><span class="rb-fill ${r.drift_pct >= 0 ? 'pos' : 'neg'}" style="width:${Math.min(50, (Math.abs(r.drift_pct) / 25) * 50)}%"></span></span></td></tr>`)}</tbody></table></div>
-      <p class="asof">Funds that track the same thing are counted as one exposure. Holding VOO where the model lists VTI isn't drift, it's the same bet under a different ticker.</p></section>` : ''}
-    <section class="section" aria-labelledby="rc-h"><h2 class="t-h2" id="rc-h">Where to put this year's contribution</h2>
-      ${rb.available ? html`<p class="section-sub">${clean(rb.note || '')}</p>
-        ${(rb.rows || []).length ? html`<div class="tscroll"><table class="t"><thead><tr><th scope="col">Buy</th><th scope="col">Exposure</th><th scope="col">Amount</th><th scope="col">Share of contribution</th><th scope="col"><span class="sr">Share drawn</span></th></tr></thead>
-          <tbody>${rb.rows.map((r) => html`<tr><td>${r.symbol ? html`<a href="#/${r.symbol}">${r.symbol}</a>` : 'Your picks'}</td><td>${r.label}</td><td>${$(r.dollars)}</td><td>${pct(r.pct_of_contribution)}</td><td class="roth-bar"><span class="rb-track"><span class="rb-fill pos one" style="width:${Math.min(100, r.pct_of_contribution)}%"></span></span></td></tr>`)}</tbody></table></div>` : ''}
-        ${rb.overweight_note ? html`<p class="stale">${clean(rb.overweight_note)}</p>` : ''}
-        <p class="asof">Buy-only by design: directing new money at the underweights fixes drift without selling anything. Selling inside a Roth is tax-free, so it's an option, just not the default.</p>`
-        : html`<p class="quiet">${clean(rb.note || 'Enter your current holdings to get a rebalancing plan.')}</p>`}</section>
+      <p class="asof">Funds that track the same thing are counted as one exposure. Holding VOO where the example lists VTI is not a difference: it is the same exposure under a different ticker.</p></section>` : ''}
+    <section class="section" aria-labelledby="rc-h"><h2 class="t-h2" id="rc-h">Your contribution</h2>
+      <p class="quiet">${clean(rb.note || 'Optic does not say where to put your contribution or what to sell: that is a personal allocation decision.')}</p></section>
     ${ov.available ? html`<section class="section" aria-labelledby="ro-h"><h2 class="t-h2" id="ro-h">Overlap in your holdings</h2><p class="section-sub">${clean(ov.note || '')}</p>
       ${(ov.pairs || []).length ? ov.pairs.map((p) => html`<p class="${p.same_role ? 'stale' : ''}"><b>${p.a} + ${p.b}</b>, correlation ${num(p.correlation, 2)}. ${clean(p.note || '')}</p>`) : html`<p class="quiet">Nothing is doubled up.</p>`}</section>` : ''}
-    <section class="section" aria-labelledby="rs-h"><h2 class="t-h2" id="rs-h">Individual stock sleeve</h2><p class="section-sub">${clean(sl.note || '')}</p>
-      ${(sl.rows || []).length ? html`<div class="tscroll"><table class="t"><thead><tr><th scope="col">Stock</th><th scope="col">Conviction</th><th scope="col">Score</th><th scope="col">10y price return a year</th><th scope="col">Worst drawdown</th><th scope="col">History</th><th scope="col">Suggested</th></tr></thead>
-        <tbody>${sl.rows.map((r) => html`<tr class="${r.eligible ? '' : 'is-dim'}"><td><a href="#/${r.symbol}">${r.symbol}</a> ${r.name || ''}</td><td><span class="pill">${r.conviction || 'n/a'}</span></td><td>${num(r.conviction_score, 0)}</td><td>${pct(r.cagr_10y_pct)}</td><td class="down">${pct(r.max_drawdown_pct)}</td><td>${isNum(r.years_of_history) ? `${num(r.years_of_history, 1)} years` : 'n/a'}</td><td>${isNum(r.suggested_pct) && r.eligible ? pct(r.suggested_pct) : 'Not included'}</td></tr>`)}</tbody></table></div>
+    <section class="section" aria-labelledby="rs-h"><h2 class="t-h2" id="rs-h">Your stock candidates on the long-term rules</h2><p class="section-sub">${clean(sl.note || '')}</p>
+      ${(sl.rows || []).length ? html`<div class="tscroll"><table class="t"><thead><tr><th scope="col">Stock</th><th scope="col">Trend model reading</th><th scope="col">Score</th><th scope="col">10y price return a year</th><th scope="col">Worst drawdown</th><th scope="col">History</th></tr></thead>
+        <tbody>${sl.rows.map((r) => html`<tr class="${r.eligible ? '' : 'is-dim'}"><td><a href="#/${r.symbol}">${r.symbol}</a> ${r.name || ''}</td><td>${TREND_WORDS[r.conviction] || r.conviction || 'n/a'}</td><td>${num(r.conviction_score, 0)}</td><td>${pct(r.cagr_10y_pct)}</td><td class="down">${pct(r.max_drawdown_pct)}</td><td>${isNum(r.years_of_history) ? `${num(r.years_of_history, 1)} years` : 'n/a'}</td></tr>`)}</tbody></table></div>
         ${sl.rows.filter((r) => r.reject_reason || r.error).map((r) => html`<p class="t-muted"><b>${r.symbol}</b>: ${clean(r.reject_reason || r.error)}</p>`)}
         ${sl.rows.flatMap((r) => (r.warnings || []).map((w) => html`<p class="stale"><b>${r.symbol}</b>: ${clean(w)}</p>`))}` : ''}
       ${sl.caveat ? html`<p class="stale">${clean(sl.caveat)}</p>` : ''}</section>
@@ -120,7 +118,7 @@ function paint() {
   if (!live) return;
   const d = D.d, y = window.scrollY;
   draw(mainEl, html`<header class="page-head">${sectionHead('portfolio', 'roth')}
-      <p class="section-sub">A rules-based model allocation to compare your own against. Not retirement or tax advice.</p></header>
+      <p class="section-sub">Rules-based example allocations by horizon and risk setting, to compare with your own plan. An example, not a recommendation for you, and not retirement or tax advice.</p></header>
     <section class="section first" aria-labelledby="rm-h"><h2 class="t-h2" id="rm-h">Roth IRA model allocation</h2><p class="section-sub">Set your horizon and risk tolerance. The model is derived from those, not assumed.</p>
       ${form()}${d && d.limit_note ? html`<p class="asof">${clean(d.limit_note)}</p>` : ''}
       ${D.err ? failed('The model', D.err, { retry: 'load' }) : !d ? skeleton('rows', 5, 'Loading ten years of history for the fund universe') : model(d)}</section>

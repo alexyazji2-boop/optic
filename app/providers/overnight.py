@@ -44,6 +44,7 @@ from __future__ import annotations
 import datetime as dt
 import json
 import logging
+import os
 import re
 import threading
 import time
@@ -159,11 +160,24 @@ def _fetch(symbols: List[str]) -> Dict[str, Dict[str, Any]]:
     return out
 
 
+def enabled() -> bool:
+    """Whether the overnight supplement may be read at all.
+
+    On unless OPTIC_OVERNIGHT_FEED is "off", "false" or "0" (post-demo overhaul,
+    2026-10-29). The source is an undocumented endpoint whose terms of use are a
+    question for counsel (docs/post-demo-ultra/COMPLIANCE_REVIEW.md); the switch
+    lets the operator stop reading it with one setting, and the page then shows
+    the regular close with no overnight line, exactly as before this module."""
+    return (os.environ.get("OPTIC_OVERNIGHT_FEED") or "on").strip().lower() not in ("off", "false", "0", "no")
+
+
 def quotes(symbols: Iterable[str]) -> Dict[str, Dict[str, Any]]:
     """Overnight prints for these symbols. Never raises; missing means none.
 
     Cached per symbol rather than per batch, so a watchlist and a single ticker
     page asking for overlapping names share the work."""
+    if not enabled():
+        return {}
     wanted = []
     for raw in symbols or []:
         sym = str(raw or "").strip().upper()

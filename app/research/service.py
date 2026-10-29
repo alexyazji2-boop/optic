@@ -16,6 +16,8 @@ import threading
 import time
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Callable, Dict, List, Optional
+
+from . import words
 from zoneinfo import ZoneInfo
 
 import pandas as pd
@@ -362,7 +364,7 @@ def _long_term(g: _Gather, lt: Optional[Dict[str, Any]], vals: Dict[str, Any]) -
         "quality": q, "valuation": vg, "chart": chart, "conviction": conv,
         "accumulation": zones, "scenarios": {"bull": bull, "bear": bear},
         "loss_paths": quality.loss_paths(data, q, vg, lt or {}, kind),
-        "policy_note": "Business quality below {} caps conviction at Neutral: a configurable rule "
+        "policy_note": "Business quality below {} holds the long-term reading at neutral: a configurable rule "
                        "(quality_cap_grade), not a finding.".format(vals["quality_cap_grade"]),
         "separation_note": "Business quality and valuation are graded separately: a strong business can be an "
                            "expensive stock, and the chart's weakness is not by itself a failed business thesis.",
@@ -500,17 +502,19 @@ def agreement(out: Dict[str, Any]) -> Dict[str, Any]:
     elif lt_good and not sw_good:
         why = (sw.get("most_damaging") or {}).get("text", "").rstrip(".")
         why = (why[0].lower() + why[1:]) if why else ""
-        trade = ("only a viable trade, not a strong one" if grade == "B" else
-                 "a poor trade right now" if grade == "Avoid" else "not a trade right now")
-        verdict = ("They disagree, and that is normal. The long-term view is about years of cash flows at today's "
-                   "valuation; the swing grade is about the next few weeks' reward against risk at today's price. A "
-                   "good company can be {}{}.".format(trade, ": " + why if why else ""))
+        # Said as what the setup model found, never as a judgement on trading it (advice policy, 2026-10-29):
+        # "a poor trade right now" read as an instruction.
+        trade = ("only a weak short-term setup" if grade == "B" else
+                 "no usable short-term setup" if grade == "Avoid" else "no short-term setup")
+        verdict = ("They disagree, and that is normal. The long-term view weighs years of cash flows against today's "
+                   "valuation; the setup model looks at the next few weeks' price pattern. A strong business can "
+                   "show {}{}.".format(trade, ": " + why if why else ""))
     elif sw_good and not lt_good:
-        verdict = ("A tradeable setup in a business the framework would not hold for years ({}). The trade rests on "
-                   "price behaviour, so its stop matters more than the business case, and a weak report could break "
-                   "it.".format(conv.lower()))
+        verdict = ("A defined short-term setup on the price pattern, in a business that is {}. The setup rests on "
+                   "price behaviour rather than the business case, and a weak report could break the pattern.".format(
+                       words.conviction(conv)))
     else:
-        verdict = "Neither the long-term case nor the trade stands out on the evidence here."
+        verdict = "Neither the long-term rules nor the setup model finds a strong reading in the evidence here."
     exp = ((sw.get("plan") or {}).get("earnings") or {})
     if exp.get("in_window"):
         verdict += (" The release on {} falls inside any swing window: event risk a long-term holder can absorb but "

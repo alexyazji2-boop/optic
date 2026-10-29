@@ -369,10 +369,11 @@ def predict_results(ea: Dict[str, Any], traj: Dict[str, Any], hurdle: Dict[str, 
                        br, sur.get("quarters"), _pct(avg, signed=True))))
     if rev.get("direction") in ("rising", "falling"):
         ev.append((1 if rev["direction"] == "rising" else -1,
-                   "Estimates are {} into the release ({} over 90 days), which tends to {}.".format(
-                       rev["direction"], _pct(rev.get("drift_90d_pct"), signed=True),
-                       "precede results above them" if rev["direction"] == "rising" else
-                       "reflect a softening the company has signalled")))
+                   # The measured drift only. "which tends to precede results above them" was a predictive
+                   # claim Optic's validation programme did not support, and "a softening the company has
+                   # signalled" was not established by any data here (advice policy, 2026-10-29; O04).
+                   "Estimates have been {} into the release ({} over 90 days).".format(
+                       rev["direction"], _pct(rev.get("drift_90d_pct"), signed=True))))
     cg = hurdle.get("consensus_growth")
     vals = [r["yoy_pct"] for r in (traj.get("revenue_yoy") or []) if r.get("yoy_pct") is not None]
     if cg and vals:
@@ -451,8 +452,7 @@ def predict_reaction(ea: Dict[str, Any], hurdle: Dict[str, Any], results: Dict[s
                    "After past beats the stock moved {} on average in the reacting session.".format(
                        _pct(on_beat, signed=True))))
     if bench_state in ("risk-off",):
-        ev.append((-1, "The market is below its 50- and 200-day averages, which tends to make reactions to "
-                       "good news smaller and to bad news larger."))
+        ev.append((-1, "The market is below its 50- and 200-day averages, a risk-off backdrop for the report."))
     elif bench_state == "risk-on":
         ev.append((0, "The market backdrop is supportive (SPY above its 50- and 200-day averages)."))
     if results.get("lean", "").startswith(("better", "modestly better")) and h == "demanding":

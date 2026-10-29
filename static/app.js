@@ -443,7 +443,7 @@ const GLOSSARY = {
   'expectancy': "The average profit or loss per trade across every completed trade. Positive means the approach made money on average; negative means it lost, no matter how good the win rate looks.",
   'profit factor': "Total money made by the winners divided by total money lost by the losers. Above 1.0 is profitable; below 1.0 is not.",
   'win rate': "The share of completed trades that made money. On its own it says very little. A 30% win rate is excellent if the winners are five times the size of the losers.",
-  'stop loss': "A price set in advance where you exit if the trade goes against you. It defines the loss before entering, instead of deciding in the moment.",
+  'stop loss': "An order to sell (or buy back) once the price reaches a level set in advance, so a trader decides the loss before entering instead of in the moment. It is not a guarantee: a price that gaps past the level fills at the next price available.",
   'time stop': "Closing a trade because it hasn't worked within a set number of days, rather than because it hit a price. Capital sitting in an idea that isn't moving has a cost.",
   'realised p&l': "Profit and loss from trades that have already closed. This is the number that is final.",
   'unrealised p&l': "Profit and loss on positions still open. It changes every time the price moves and only becomes real when the position closes.",
@@ -643,7 +643,7 @@ const HEADER_DEFS = {
   'quote': "The current price and where it sits inside today's range and the past year's range. The baseline every other panel is measured against.",
   'options analytics': 'The options-market side of the analysis: greeks, dealer gamma exposure and call-versus-put flow.',
   'swing setups': 'Entry rules for swing trades, bullish and bearish, read on completed candles. Each arms on a setup, triggers on one exact candle event and is cancelled by a stated level. For review: nothing is traded.',
-  'strike & entry recommendation': "Which option contract the terminal would pick given the current read, and the price level where entering makes sense instead of chasing.",
+  'strike & entry model': "The option contract the model scores highest for the current reading, with the model's levels for the stock. An example for research, not a recommendation to trade.",
   'price, moving averages & fibonacci': "The price history with trend lines and common pullback levels drawn on. Used to judge whether the trend is intact and where a move is likely to pause.",
   'rsi (14)': 'A momentum gauge from 0-100 showing whether the stock has been bought or sold too hard recently. Above 70 is stretched, below 30 is washed out.',
   'macd (12, 26, 9)': 'A trend gauge comparing two moving averages, used to spot momentum turning up or down before the price move is obvious.',
@@ -661,7 +661,7 @@ const HEADER_DEFS = {
   'options positioning: dealer gamma (gex)': 'An estimate of how much stock market-makers must buy or sell to stay hedged as price moves. It hints at whether the tape will feel calm and range-bound or fast and trending.',
   'call vs put flow': "Whether today's options activity leans toward bullish bets (calls) or bearish bets (puts). A read on positioning, not a promise of direction.",
   'net premium by strike': 'How much money is actually being spent at each strike price, showing where traders are placing real bets rather than just quoting.',
-  'buy calls / puts': 'Straightforward directional trades. Buying a call to bet the stock rises, or a put to bet it falls. Simple, but all the premium is at risk.',
+  'single calls or puts': 'One option on its own: a call gains if the stock rises, a put if it falls. Simple, but the whole premium can be lost.',
   'options strategies': 'Multi-leg trades that profit from a price range, a change in volatility, or one asset moving relative to another, rather than pure direction.',
   'news & catalysts': 'Recent headlines scored for tone, plus scheduled events like earnings that tend to move the stock and keep options expensive.',
 
@@ -699,21 +699,21 @@ const HEADER_DEFS = {
   'sector relative strength': "Which sectors are beating or lagging the S&P 500. Showing where money is actually flowing, not just what's green today.",
   'themes & sub-industries': 'Narrower baskets than sectors, like clean energy or cybersecurity, ranked against the broad market.',
   'niche industries': 'Very specific industry baskets, like semiconductors or memory chips, where strength often shows up before a broad sector average reflects it.',
-  'breakout candidates': 'Groups coiled near the top of their range with improving relative strength. Statistically the most likely to break out next.',
+  'breakout candidates': 'Groups near the top of their range with improving relative strength. A description of the chart, not a prediction that they will break out.',
   'ratio pair trades': "Going long one thing and short another, so the profit comes from the gap between them and you're far less exposed to the market's overall direction.",
 
   // ---- long-term & indices
   // ---- roth
   'roth ira model allocation': "A rules-based target mix built from your horizon and risk tolerance, measured against ten years of fund data. A starting point to compare your own plan against. Not advice, and it knows nothing about your income, taxes or other accounts.",
-  'target weights': "The model's suggested split, with what each fund costs to own, what it yields, and how badly it has fallen in the past. Weights are targets to rebalance toward, not prices to chase.",
+  'target weights': "The example allocation's split, with what each fund costs to own, what it yields, and how badly it has fallen in the past. An example to compare your own plan against, not a plan for your money.",
   'contribution projection': "What steady annual contributions would compound to at the blended historical return of these funds. Arithmetic on the past, not a forecast. The band shows uncertainty in the average rate, not the risk of a bad decade arriving early.",
   'what the roth wrapper changes': "Reasoning that applies specifically because this is a Roth: qualified withdrawals are tax-free (after 59½ and five years), distributions are not taxed as they arrive, losses aren't deductible, and the annual limit is small.",
   'fund universe': "Every candidate fund measured over its full history (return, cost, volatility and worst drawdown) so you can see why the model picked what it picked, and what it left out.",
   'correlation': "How closely two funds move together, from -1 to +1. Near +1 means owning both adds little diversification; the low pairs are what actually reduce risk.",
   'drift from target': "How far your actual holdings have wandered from the model weights. Markets cause this on their own. Whatever grows fastest ends up overweight, quietly making the portfolio riskier than you chose.",
-  "where to put this year's contribution": "A buy-only rebalancing plan: point new money at whatever is underweight and drift closes without selling anything. The simplest maintenance there is.",
+  'your contribution': "Optic does not say where to put your contribution or what to sell: that is a personal allocation decision. The drift table compares your holdings with the example's weights.",
   'overlap in your holdings': "Pairs of your holdings that move almost identically. Owning both feels like diversification but isn't. It's one bet at double the size, with twice the paperwork.",
-  'individual stock sleeve': "An optional slice for single companies, capped by your risk setting and horizon, with each candidate gated on its long-run record. The concentrated part of the portfolio, sized so a single blow-up can't derail the plan.",
+  'individual stock sleeve': "An optional slice for single companies in the example, capped by the risk setting and horizon, with each candidate gated on its long-run record. Optic shows each candidate's reading, not a weight for it.",
 
   // ---- optic portfolio
   "optic portfolio": "The terminal's own simulated trading record. Whenever a scan finds a setup that clears the conviction bar, it takes the trade on paper. Both as shares and as the option contract it recommended. And holds it until a stop, target, time limit or expiry closes it. It exists so the recommendations can be judged on results instead of on how confident they sound.",
@@ -744,10 +744,10 @@ const HEADER_DEFS = {
   "what's driving it": 'The specific readings that pushed the score to where it is.',
   'what makes up this score': "Every factor the model weighed and the points each contributed, so you can see where the number came from. The weightings are the author's judgement, not a fitted model. Read the factors, not just the total.",
   'volatility context': 'Whether options are currently expensive or cheap compared with how much the stock has actually been moving. Expensive options favor selling premium over buying it.',
-  'what would create a trade': 'The price levels that would turn the current no-trade read into an actionable setup.',
-  'where to enter': 'The price zone the terminal considers a reasonable entry, as opposed to chasing a move already underway.',
-  'entry zone levels': 'The specific prices that bound the suggested entry area.',
-  'target & risk': 'Where the trade is aiming, and the level that would prove the idea wrong.',
+  'what would create a setup': 'The price levels that would turn the current reading into a setup the model grades.',
+  'setups and where each stands': 'The setups the model describes for this stock (a pullback or a breakout) and where the price stands against each.',
+  'trigger zone levels': "The prices that bound the zone where the model's setup would trigger.",
+  "the model's levels for the stock": "The model's projected level, the level that would break the setup, and how each was set. Model output, not a target or a stop for your trade.",
   'candidate strikes, ranked': 'Option contracts scored against each other on cost, liquidity and probability of working out.',
   'notable contracts': 'Individual option contracts with unusual volume or open interest relative to their own normal. Often where new positioning is showing up.',
   'at-the-money greeks by expiry': 'How sensitive the closest-to-price options are, broken out by expiry date.',
@@ -1417,16 +1417,15 @@ const TABLE_DEFS = {
   'roth-drift': {
     'you hold': 'The dollar value of the holdings mapped to this exposure. Funds that track the same thing are added together as one exposure.',
     current: "This exposure's share of the whole portfolio's value today, in percent. Funds that track the same index count together as one exposure.",
-    target: 'The share of the portfolio the model allocation gives this exposure, in percent. The gap between it and the current share is the drift.',
-    drift: 'How far the current share sits from the target, in percentage points. Positive means this exposure has grown past its target share, and negative means it has fallen short.',
+    example: "The share of the portfolio the example allocation gives this exposure, in percent. It is the example's weight, not a target for your money.",
+    difference: "How far the current share sits from the example's, in percentage points. Positive means this exposure is a larger share than in the example, and negative a smaller one.",
   },
   'roth-buys': {
     'share of contribution': "The part of this year's contribution that goes to this fund, in percent. New money goes to the exposures furthest below target, which moves the portfolio back toward the model without selling anything.",
   },
   'roth-sleeve': {
-    conviction: "Optic's long-term read on the stock, from a score built on its trend, valuation and record: high, moderate, neutral, cautious or low. With too little usable history the score is capped, so a short record cannot read as a strong one.",
-    score: 'The long-term score behind the conviction, from minus 100 to plus 100. High conviction starts at 40 and low conviction at minus 40.',
-    suggested: 'The share of the stock sleeve this name would get under the model\'s sizing rules, in percent. A name that fails an eligibility test gets none, and the reason is listed under the table.',
+    'trend reading': "Optic's long-term trend model's reading of the stock, from a score built on its trend, valuation and record: high, moderate, neutral, cautious or low. With too little usable history the score is capped, so a short record cannot read as a strong one.",
+    score: 'The long-term score behind the reading, from minus 100 to plus 100. The high reading starts at 40 and the low one at minus 40.',
     history: 'How many years of prices the figures are measured over. A short history may have missed a full market cycle, which flatters it.',
   },
   'roth-funds': {
@@ -14385,10 +14384,10 @@ function renderSwing(d) {
   </div>
 
   <div class="panel gap" id="swing-ideas-single">
-    <h2>${hg('Buy calls / puts')}</h2>
+    <h2>${hg('Single calls or puts')}</h2>
     <p class="sub">Naked directional options. Quick-glance card in the same format as the strategies below.
       For a fully ranked set of strikes scored against a projected target, see the Strike &amp; Entry
-      Recommendation panel above. Strikes and premiums are from the chain, each leg a contract with a
+      model panel above. Strikes and premiums are from the chain, each leg a contract with a
       usable two-sided quote, open interest or volume of at least 20 and a spread of at most 15%; a delta
       with nothing that liquid has no idea. Prices are midpoints between the bid and the ask: estimates,
       not fills. Not recommendations. The sizing decision is yours.</p>
@@ -15081,10 +15080,10 @@ function renderEntryPlan(p, d) {
 
   if (!p.actionable) {
     return `<div class="panel gap">
-      <h2>${hg('Strike & entry recommendation')}</h2>
+      <h2>${hg('Strike & entry model')}</h2>
       <p class="sub">${esc(p.headline || '')}</p>
       ${(p.reasoning || []).map((r) => `<div class="callout">${gloss(r)}</div>`).join('')}
-      ${(p.waiting_for || []).filter(Boolean).length ? `<h3>${hg('What would create a trade')}</h3>
+      ${(p.waiting_for || []).filter(Boolean).length ? `<h3>${hg('What would create a setup')}</h3>
         <table class="data"><thead><tr><th>Trigger</th><th>Result</th></tr></thead><tbody>
         ${(p.waiting_for || []).filter(Boolean).map((w) => `<tr>
           <td class="name">${esc(w.condition)}</td><td class="name dim">${esc(w.then)}</td>
@@ -15103,7 +15102,7 @@ function renderEntryPlan(p, d) {
     && STATE.swing.technicals.volatility) || {};
 
   return `<div class="panel gap">
-    <h2>${hg('Strike & entry recommendation')}</h2>
+    <h2>${hg('Strike & entry model')}</h2>
     <p class="sub">Derived from the ${esc(p.stance)} read at ${esc(p.conviction)} conviction. Candidates are repriced with
       Black-Scholes at the projected target, so the ranking reflects payoff, not just a convenient delta.</p>
 
@@ -15124,18 +15123,18 @@ function renderEntryPlan(p, d) {
       ${tile('Contract', `${strikeLabel(r.strike)} ${p.direction === 'long' ? 'call' : 'put'}`,
     `Expires ${esc(r.expiry || '')} · ${r.dte || 0} days left · ${
       r.moneyness === 'ITM' ? 'already in the money' : 'not yet in the money'}`)}
-      ${tile('Limit price', usd(o.limit_price), `Per share, never pay above ${
-    usd(o.never_pay_more_than)}`)}
+      ${tile('Price at the mid', usd(r.entry_mid ?? o.limit_price), `Per share, an estimate between the bid and the ask${
+    r.ask ? `, which is ${usd(r.ask)}` : ''}. Not a guaranteed fill`)}
       ${tile('Cost per contract', usd(r.capital_per_contract, 0),
     `What one contract costs · the stock must clear ${usd(r.breakeven)} to break even`)}
-      ${tile('If the target is hit', fmtPct(r.return_at_target_pct, 0),
+      ${tile("At the model's projected level", fmtPct(r.return_at_target_pct, 0),
     `Return on the premium if the stock reaches ${usd(t.target_price)}, roughly ${
       t.estimated_calendar_days || '?'} days out`, signClass(r.return_at_target_pct))}
     </div>` : ''}
 
     <div class="grid c2">
       <div>
-        <h3>${hg('Where to enter')}</h3>
+        <h3>${hg('Setups and where each stands')}</h3>
         ${(p.entry_options || []).map((e) => `<div style="padding:var(--space-2) 0;border-bottom:1px solid var(--grid)">
           <div style="display:flex;gap:var(--space-3);align-items:baseline;flex-wrap:wrap">
             <strong style="font-size:var(--t-body)">${esc(e.style)}</strong>
@@ -15145,7 +15144,7 @@ function renderEntryPlan(p, d) {
           <div style="color:var(--ink-muted);font-size:var(--t-small);margin-top:var(--space-0)">Confirmation: ${gloss(e.confirmation)}</div>
         </div>`).join('')}
 
-        <h3>${hg('Entry zone levels')}</h3>
+        <h3>${hg('Trigger zone levels')}</h3>
         <table class="data">
           <thead><tr><th>Level</th><th>Price ($)</th></tr></thead>
           <tbody>${((p.entry_zone || {}).levels || []).map((z) => `<tr>
@@ -15155,17 +15154,18 @@ function renderEntryPlan(p, d) {
       </div>
 
       <div>
-        <h3>${hg('Target & risk')}</h3>
+        <h3>${hg("The model's levels for the stock")}</h3>
         ${kv([
-    ['Price target', `${usd(t.target_price)}. A ${fmtPct(t.move_required_pct, 1)} move from here`],
-    ['Where that target comes from', esc(t.target_source || '')],
-    ['Expected time to get there', `${t.estimated_trading_days || '?'} trading days (about ${
+    ['Projected level', `${usd(t.target_price)}. A ${fmtPct(t.move_required_pct, 1)} move from here`],
+    ['Where that level comes from', esc(t.target_source || '')],
+    ['Typical time to reach it', `${t.estimated_trading_days || '?'} trading days (about ${
       t.estimated_calendar_days || '?'} calendar days)`],
-    ['Stop on the stock', `${usd(risk.underlying_stop)}. Exit if the stock closes past this`],
-    ['How that stop was set', esc(risk.stop_basis || '')],
+    ['Level that breaks the setup', `${usd(risk.underlying_stop)}. A close past this breaks the model's premise`],
+    ['How that level was set', esc(risk.stop_basis || '')],
     ['Average daily range (14 days)', `${usd(t.atr14)} a day`],
   ])}
         <div class="caveat">${gloss(risk.invalidation || '')} ${gloss(risk.position_sizing || '')}</div>
+        <p class="caveat">Model output from price history and the chain, for research. Not an order, a forecast or a recommendation to trade.</p>
 
       </div>
     </div>
@@ -18628,8 +18628,8 @@ function renderIdea(idea) {
     idea.net_theta_per_day ? ['Net theta / day', fmt(idea.net_theta_per_day, 3)] : null,
     idea.theta_pct_of_premium_daily ? ['Theta burn', fmt(idea.theta_pct_of_premium_daily, 2) + '% of premium/day'] : null,
     idea.assignment_note ? ['Assignment', esc(idea.assignment_note)] : null,
-    rp.underlying_stop ? ['Stop on the stock', `${usd(rp.underlying_stop)} · ${esc(rp.stop_basis || '')}`] : null,
-    rp.first_target ? ['First target', fmt(rp.first_target, 2)] : null,
+    rp.underlying_stop ? ['Level that breaks the setup', `${usd(rp.underlying_stop)} · ${esc(rp.stop_basis || '')}`] : null,
+    rp.first_target ? ['First projected level', fmt(rp.first_target, 2)] : null,
   ])}</div>
     ${rp.invalidation ? `<div class="caveat">Invalidation: ${gloss(rp.invalidation)} ${gloss(rp.sizing_note || '')}</div>` : ''}
   </div>`;
@@ -25480,7 +25480,7 @@ function wsSaveNote(sym, text) {
 const WS_CHECKS = [
   'Do I know what invalidates this?',
   'Is the stop at a level, not a round number?',
-  'Is this sized so the stop costs 1% or less?',
+  'Do I know what a loss at the stop would cost?',
   'Am I early, or chasing?',
   'Does the higher timeframe agree?',
   'Is earnings inside my holding period?',
@@ -31169,7 +31169,7 @@ const RESEARCH_KEY = 'optic.research.v1';
 /* The questions, and where each one goes. Phrased as what a reader wants to
  * know, because "Deep research" and "Compare" are names for machinery. */
 const RESEARCH_ROUTES = [
-  { q: 'Which names look strongest right now?', to: 'scan',
+  { q: 'What do the named screens find today?', to: 'scan',
     note: 'Named screens over the ranked universe. Each states what it did not search.' },
   { q: 'How do two or three names stack up?', to: 'compare',
     note: 'Scored across three horizons separately, so a name can lead one and trail another.' },
@@ -31966,7 +31966,7 @@ function renderEarningsBrief(b) {
     <div class="earn-brief-head">
       <h2>${hg('Pre-earnings brief')}</h2>
       ${stance ? `<span class="earn-stance ${EARN_STANCE_CLASS[stance] || 'flat'}">${
-  esc(stance)}</span>` : ''}
+  esc(({ 'leaning bullish': 'Evidence leans positive', 'leaning bearish': 'Evidence leans negative', 'two-sided': 'Evidence is two-sided' })[stance] || stance)}</span>` : ''}
     </div>
     ${b.headline ? `<p class="earn-brief-lede">${esc(b.headline)}</p>` : ''}
     <div class="earn-brief">${briefProse(b.paragraphs)}</div>
@@ -32487,7 +32487,6 @@ function renderRoth(d) {
   const allocRows = (d.rows || []).map((r) => `<tr>
     <td class="name"><strong>${esc(r.symbol)}</strong><div class="subnote">${esc(r.name)}</div></td>
     <td><strong>${fmt(r.weight_pct, 1)}%</strong></td>
-    <td>${money(r.annual_dollars)}</td>
     <td>${fmt(r.expense_ratio_pct, 2)}%</td>
     <td>${fmt(r.yield_pct, 2)}%</td>
     <td>${fmtPct(r.cagr_10y_pct, 1)}</td>
@@ -32566,7 +32565,7 @@ function renderRoth(d) {
 
     <h3>${hg('Target weights')}</h3>
     <table class="data">
-      <thead><tr><th>Fund</th><th>Weight</th><th>Per year</th><th>Expense</th><th>Yield</th><th>10y return a year</th><th>Volatility</th><th>Worst drawdown</th></tr></thead>
+      <thead><tr><th>Fund</th><th>Weight</th><th>Expense</th><th>Yield</th><th>10y return a year</th><th>Volatility</th><th>Worst drawdown</th></tr></thead>
       <tbody>${allocRows}</tbody>
     </table>
     <p class="caveat">${gloss(bl.caveat || '')}</p>
@@ -32596,7 +32595,7 @@ function renderRoth(d) {
     <p class="sub">Portfolio value ${money(dr.total_value)}. ${gloss(dr.summary || '')}</p>
     ${dr.unmapped_note ? `<div class="callout">${gloss(dr.unmapped_note)}</div>` : ''}
     <table class="data" data-defs="roth-drift">
-      <thead><tr><th>Exposure</th><th>You hold</th><th>Current</th><th>Target</th><th>Drift</th><th></th></tr></thead>
+      <thead><tr><th>Exposure</th><th>You hold</th><th>Current</th><th>Example</th><th>Difference</th><th></th></tr></thead>
       <tbody>${(dr.rows || []).map((r) => `<tr>
         <td class="name">${esc(r.label)}</td>
         <td>${money(r.current_value)}</td>
@@ -32611,7 +32610,7 @@ function renderRoth(d) {
   </div>` : ''}
 
   <div class="panel span2 gap">
-    <h2>${hg('Where to put this year\'s contribution')}</h2>
+    <h2>${hg('Your contribution')}</h2>
     ${rb.available ? `
       <p class="sub">${gloss(rb.note || '')}</p>
       ${(rb.rows || []).length ? `<table class="data" data-defs="roth-buys">
@@ -32644,7 +32643,7 @@ function renderRoth(d) {
     <h2>${hg('Individual stock sleeve')}</h2>
     <p class="sub">${gloss(sl.note || '')}</p>
     ${(sl.rows || []).length ? `<table class="data" data-defs="roth-sleeve">
-      <thead><tr><th>Stock</th><th>Conviction</th><th>Score</th><th>10y CAGR</th><th>Worst drawdown</th><th>History</th><th>Suggested</th></tr></thead>
+      <thead><tr><th>Stock</th><th>Trend reading</th><th>Score</th><th>10y CAGR</th><th>Worst drawdown</th><th>History</th></tr></thead>
       <tbody>${sl.rows.map((r) => `<tr${r.eligible ? '' : ' style="opacity:0.62"'}>
         <td class="name"><strong>${esc(r.symbol)}</strong><div class="subnote">${esc(r.name || '')}</div></td>
         <td>${r.error ? '<span class="down">Error</span>' : toneChipConviction(r.conviction)}</td>
@@ -32652,7 +32651,6 @@ function renderRoth(d) {
         <td>${fmtPct(r.cagr_10y_pct, 1)}</td>
         <td class="down">${fmtPct(r.max_drawdown_pct, 0)}</td>
         <td>${fmt(r.years_of_history, 0)}y</td>
-        <td>${r.eligible ? `<strong>${fmt(r.suggested_pct, 1)}%</strong>` : '—'}</td>
       </tr>`).join('')}</tbody>
     </table>
     ${sl.rows.filter((r) => r.reject_reason || r.error).map((r) => `<div class="callout">
@@ -44170,12 +44168,12 @@ function updateChatContext() {
    * properly, and the chip row's version of it was a single dead line reading
    * "Load a ticker first" — which is the state a reader is already in. */
   const suggestions = STATE.swing ? [
-    'Why did the ranker pick that strike over a cheaper OTM one?',
-    'What does the gamma profile imply for a swing long here?',
+    'Why does the model score that strike above a cheaper out-of-the-money one?',
+    'What does the gamma profile say about how the price may move here?',
     'Is the flow confirming or fighting the chart?',
-    'Walk me through the entry zone and what invalidates it.',
+    "Walk me through the model's trigger zone and what breaks the setup.",
     'Does the short interest or insider activity change the read?',
-    'How does the earnings record affect holding through the print?',
+    'How has the stock moved after past earnings reports?',
   ] : [];
   const modes = $('#pulse-modes');
   if (modes) modes.innerHTML = pulseModesHTML();
@@ -46197,6 +46195,8 @@ async function streamTo(url, body, node) {
   const sourcesEl = node.querySelector('.sources');
   const render = createStreamRenderer(bubble);
   let acc = '';
+  // The advice policy's correction for a finished answer (app/ai_policy.py), applied once the stream has flushed.
+  let amended = null;
   /* Stoppable (2026-10-12): there was no way to end an answer, so a wrong
    * question ran to its 8,000-token end. The controller is the Stop button's;
    * `ended` says how the stream finished, so a cut-off answer is never kept
@@ -46307,6 +46307,13 @@ async function streamTo(url, body, node) {
           bubble.insertAdjacentHTML('beforebegin', `<p class="msg-assumed">Answered for a
             ${esc(hz.label.toLowerCase())} timeframe, from your question. Your setting is unchanged.</p>`);
         }
+      } else if (event === 'notice') {
+        /* The server's own line for a question that asked for a personal investment decision. */
+        if (payload.kind === 'policy' && payload.text && !node.querySelector('.msg-policy')) {
+          bubble.insertAdjacentHTML('beforebegin', `<p class="msg-assumed msg-policy" role="note">${esc(payload.text)}</p>`);
+        }
+      } else if (event === 'amend') {
+        if (typeof payload.text === 'string') amended = payload;
       } else if (event === 'status') {
         const state = String(payload.state || '');
         const words = PULSE_STEP_WORDS[state] || cap(state);
@@ -46344,6 +46351,12 @@ async function streamTo(url, body, node) {
   // However the loop exited — normal end, aborted body, malformed tail — the
   // reader must not be left mid-reveal with text it already received.
   render.flush();
+  if (amended) {
+    acc = amended.text;
+    bubble.innerHTML = pulseChartsIn(mdLite(acc));
+    mountPulseCharts(bubble);
+    bubble.insertAdjacentHTML('afterend', `<p class="msg-assumed msg-amended" role="note">${esc(amended.note || 'Milo removed a sentence that read as personal investment advice.')}</p>`);
+  }
   pulseLiveStatus(node, null);
   if (!finished && !node.dataset.ended) node.dataset.ended = 'cut';
   if (node.dataset.ended) {
@@ -50314,8 +50327,8 @@ const PANELS_SIMPLE_HIDES = {
 const PANELS_ADVANCED = {
   swing: [
     'delta analysis', 'gamma analysis', 'dealer gamma (gex)', 'dealer vanna (vex)',
-    'call vs put flow', 'net premium by strike', 'buy calls / puts',
-    'options strategies', 'strike & entry recommendation',
+    'call vs put flow', 'net premium by strike', 'single calls or puts',
+    'options strategies', 'strike & entry model',
   ],
   long: ['multiple and revenue history', 'valuation & accumulation'],
   market: ['cross-asset ratios', 'ratio pair trades',
@@ -50599,7 +50612,7 @@ const PANELS_OPEN_BY_DEFAULT = {
    * the contribution, and the drift from target, which is drawn only once
    * holdings are entered (and stayed folded under the Recalculate that asked
    * for it). The reference sections stay one press away. */
-  roth: ['roth ira model allocation', 'where to put this year', 'drift from target'],
+  roth: ['roth ira model allocation', 'your contribution', 'drift from target'],
   /* The statements, and the segment tables under them.
    *
    * 6,261px and seven sections with no index and no collapse, because this
@@ -51592,7 +51605,7 @@ const METRIC_GUIDES = [
     why: 'It shows the trend at a glance and where earlier moves paused.',
     read: 'A price above a rising 200-day average is usually called an uptrend; shorter averages above longer ones confirm it.',
     limits: 'Averages describe the past and turn late. Fibonacci levels are a trading convention, not a law the price follows.' },
-  { views: ['swing'], match: ['strike & entry recommendation', 'buy calls / puts', 'options strategies'],
+  { views: ['swing'], match: ['strike & entry model', 'single calls or puts', 'options strategies'],
     measures: 'Example option trades Optic builds from the current reading, with their cost, most you could lose and break-even price.',
     why: 'They show how a view on the stock could be expressed with options, and what it would cost.',
     read: 'Costs are for one contract, which covers 100 shares. Break-even is where the trade stops losing money at expiry.',

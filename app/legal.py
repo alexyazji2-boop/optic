@@ -59,14 +59,14 @@ SIMULATED = (
 # mistaken for advice.
 AREAS: Dict[str, str] = {
     "swing": (
-        "The strikes, limit prices, stops and targets below are model output, not a "
-        "recommendation to place any trade. Options can expire worthless and lose the "
-        "entire premium."
+        "The contracts, levels and scenarios on this tab are model output from the option "
+        "chain and price history, not advice to place any trade. Options can expire "
+        "worthless and lose the entire premium."
     ),
+    # The page's words since 2026-10-29: the two copies had drifted apart.
     "longterm": (
-        "A conviction score is a summary of historical data, not a view on whether this "
-        "holding suits you. It says nothing about your horizon, taxes or existing "
-        "exposure."
+        "A conviction score summarises historical data. It says nothing about whether this "
+        "holding suits your horizon, taxes or existing exposure."
     ),
     "retirement": (
         "A rules-based illustration for comparison against your own plan, not "
@@ -94,6 +94,58 @@ AREAS: Dict[str, str] = {
 }
 
 
+# ------------------------------------------------------------ the registry
+#
+# The exact wording each page of the v2 front end shows, keyed by the v2 area
+# id (post-demo overhaul, 2026-10-29). This is the single source:
+# static/v2/js/core/legal.js carries a copy so notices draw on the first paint
+# without a request, and tests/test_legal_registry.py fails when the two differ.
+# Before this, the client's copy had drifted from AREAS (a Milo notice, a Paper
+# Desk notice and an Indices notice the server did not have, and a long-term
+# notice in different words), and seven areas had no notice at all.
+#
+# Markup is the operator's own (<strong> only), never anything from a reader or
+# a feed. Short on purpose: one line beside the content it qualifies, with the
+# full disclaimer and the Terms one press away, rather than legal text repeated
+# on every screen.
+REGISTRY_VERSION = "disclosures-2026-10-29"
+
+PAGE_AREAS: Dict[str, str] = {
+    "pulse": "<strong>Not financial advice.</strong> Milo states which way the <em>data</em> leans and how strongly. That is a reading of numbers on this screen, not a recommendation for you: it does not know your horizon, capital or tax position, and even with a linked brokerage it describes your holdings rather than judging whether any of this suits you. It can be confidently wrong. The inputs are delayed, several are labelled proxies, and a lean is not a forecast.",
+    "overview": "<strong>Research, not a recommendation.</strong> The grades, scores and levels on this page are rules applied to past data. They have not been shown to predict returns, and they say nothing about whether a holding suits you.",
+    "chart": "<strong>Research, not a recommendation.</strong> Indicators and levels describe past prices, not signals to buy or sell. The drawing tools do arithmetic on the points you place.",
+    "swing": "<strong>Not a recommendation.</strong> The contracts, levels and scenarios on this tab are model output from the option chain and price history, not advice to place any trade. Options can expire worthless and lose the entire premium.",
+    "long": "<strong>Not a recommendation.</strong> A conviction score summarises historical data. It says nothing about whether this holding suits your horizon, taxes or existing exposure.",
+    "roth": "<strong>Not retirement or tax advice.</strong> A rules-based illustration to compare against your own plan. It is not tailored to your income, tax situation, other accounts or goals, and contribution limits and eligibility change. Confirm current rules with the IRS and a licensed professional.",
+    "earnings": "<strong>Not a recommendation.</strong> Event pricing describes what the market is charging, not what you should do about it. Holding an option through a report can lose money even when the direction is right.",
+    "tracker": "<strong>Hypothetical performance.</strong> These positions were never placed with real money. Simulated results are prepared with the benefit of hindsight, assume fills at the mid price, and bear no commission, slippage, financing, borrow cost or tax. No real account would necessarily achieve results resembling these, and simulated performance does not indicate future results.",
+    "paper": "<strong>Hypothetical performance.</strong> Positions you enter here were never placed with real money. Marks assume you could trade at the last price or the chain mid, and bear no commission, slippage, financing, borrow cost, assignment risk or tax. A short position here cannot fail to borrow and an option here is never exercised early. No real account would necessarily achieve results resembling these.",
+    "market": "<strong>Not a recommendation.</strong> A regime read on the market as a whole, not a view on any individual security, and not advice to change your positioning.",
+    "indices": "<strong>Not a recommendation.</strong> Long-run index context, not advice to buy, sell or hold any index fund.",
+    "brief": "<strong>Not a recommendation.</strong> A summary of published news, not analysis of it, and not a view on any security mentioned. Headlines belong to their publishers and link to the original, and nothing here has been verified independently. Scheduled releases are calendar dates, not forecasts.",
+    "screen": "<strong>Research, not a recommendation.</strong> A screen lists the names that meet the rules shown. Being on a list is not a recommendation, and the screens have not been shown to predict returns.",
+    "insiders": "<strong>Not a recommendation.</strong> Filed trades are public records of what insiders and members of Congress reported, often days or weeks after the trade. They are not signals to follow.",
+    "analysts": "<strong>Not a recommendation from Optic.</strong> Ratings and price targets are the analysts' own, as reported by the data source. Optic does not endorse or check them.",
+    "brokerage": "<strong>Not financial advice.</strong> Optic describes your linked holdings, read-only. It does not know your wider finances, taxes or goals, and nothing here suggests buying, selling or rebalancing.",
+}
+
+# The footer line every v2 page carries, the same in the Classic footer.
+FOOTER_LINE = ("<strong>Not financial advice.</strong> Optic Terminal is an independent research tool, not a "
+               "broker-dealer or investment adviser. Data may be delayed or wrong, and trading involves "
+               "substantial risk of loss.")
+
+# How AI-written text and data limits are named wherever they appear, so every
+# surface says them the same way (COMPLIANCE_REVIEW.md, "Context-sensitive disclosure").
+LABELS: Dict[str, str] = {
+    "ai_written": "Written by an AI model from the data shown",
+    "ai_short": "AI-written",
+    "delayed": "Quotes delayed about 15 minutes during the session",
+    "modelled": "Model output, from stated assumptions",
+    "third_party": "From a third-party source, not checked by Optic",
+    "simulated": "Hypothetical, never placed with real money",
+}
+
+
 def notice() -> Dict[str, Any]:
     """Everything a client needs to display the disclosures."""
     return {
@@ -101,6 +153,10 @@ def notice() -> Dict[str, Any]:
         "full": FULL,
         "simulated": SIMULATED,
         "areas": AREAS,
+        "page_areas": PAGE_AREAS,
+        "footer": FOOTER_LINE,
+        "labels": LABELS,
+        "version": REGISTRY_VERSION,
         "not_advice": True,
         "registered_adviser": False,
         "broker_dealer": False,

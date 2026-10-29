@@ -11,12 +11,14 @@ const STATE = { triggered: 'Triggered', armed: 'Armed, waiting', watching: 'Watc
 
 function item(it, d) {
   const up = it.direction === 'bull';
-  const level = !isNum(it.trigger_level) ? '' : it.state === 'armed' ? `Trigger at ${num(it.trigger_level)}. ` : `It closed through ${num(it.trigger_level)}. `;
+  // The rule's levels, said as the rule's (advice policy, 2026-10-29): "Trigger at N" and "A close below N invalidates it"
+  // read as an entry and a stop for the reader.
+  const level = !isNum(it.trigger_level) ? '' : it.state === 'armed' ? `The rule's trigger level is ${num(it.trigger_level)}. ` : `It closed through the rule's trigger level, ${num(it.trigger_level)}. `;
   const stale = it.data_as_of && it.data_as_of !== d.as_of;
   return html`<li class="sl-i">
     <div class="sl-h"><a class="tick" href="${hrefFor('chart', it.symbol)}">${it.symbol}</a><span class="${up ? 'up' : 'down'}">${up ? 'Rising setup' : 'Falling setup'}</span>
       <b>${it.setup}</b><span class="chip-tag">${STATE[it.state] || capFirst(it.state)}${it.state_at ? `, ${shortDate(it.state_at)}` : ''}</span></div>
-    <p>${clean(it.why_included)} ${level}${isNum(it.invalidation) ? `A close ${up ? 'below' : 'above'} ${num(it.invalidation)} invalidates it` : 'No invalidation level'}${isNum(it.close) ? `; the last close was ${num(it.close)}` : ''}.</p>
+    <p>${clean(it.why_included)} ${level}${isNum(it.invalidation) ? `The rule treats a close ${up ? 'below' : 'above'} ${num(it.invalidation)} as breaking the pattern` : 'The rule has no level that breaks the pattern'}${isNum(it.close) ? `; the last close was ${num(it.close)}` : ''}.</p>
     <div class="sl-two"><div><p class="t-label">Supports it</p><ul class="plain">${(it.supporting || []).map((x) => html`<li>${clean(x)}</li>`)}</ul></div>
       <div><p class="t-label">Conflicts with it</p>${(it.conflicting || []).length ? html`<ul class="plain">${it.conflicting.map((x) => html`<li>${clean(x)}</li>`)}</ul>` : html`<p class="t-muted">Nothing in the rule's checks or the calendar.</p>`}</div></div>
     ${(it.catalysts || []).length ? html`<p class="sl-cat"><b>Catalysts.</b> ${it.catalysts.map((c) => clean(c.text)).join(' ')}</p>` : ''}
@@ -45,7 +47,7 @@ export function shortlistBody(S) {
   const method = how(html`<ul class="plain">${(d.rules || []).map((x) => html`<li>${clean(x)}</li>`)}</ul><p>Selection rules ${d.version}. ${d.evaluated} of ${d.universe_size} names evaluated${(d.failed || []).length ? `; no data for ${d.failed.join(', ')}` : ''}. ${d.forming_excluded ? 'A candle still forming was left out. ' : ''}Built ${new Date(d.built_at).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' })}.</p>
     <p>Conditions are counted once per kind, so two readings of the same prices are not two confirmations; a count of conditions met is not a probability.</p>
     <p>What it cannot see: anything outside these ${d.universe_size} names, intraday moves after the close, and news after the build. A setup here is a rule's reading of the chart, not a recommendation or a forecast.</p>`);
-  return html`<p class="section-sub">Setups that changed on the ${fullDate(d.as_of)} close, across Optic Portfolio's ${d.universe_size} curated names. ${clean(((items[0] || {}).horizon) || '')}</p>
+  return html`<p class="section-sub">Setups that changed on the ${fullDate(d.as_of)} close, across Optic Portfolio's ${d.universe_size} curated names. ${clean(((items[0] || {}).horizon) || '')} A setup here is a rule's reading of the chart, not a recommendation or a forecast.</p>
     ${items.length ? html`<ol class="sl-list">${items.map((it) => item(it, d))}</ol>${(d.also_qualified || []).length ? html`<p class="asof">Also qualified, not shown: ${d.also_qualified.join(', ')}.</p>` : ''}`
       : empty('Nothing qualified on that close', clean(d.empty_note || 'An empty list is a normal answer.'))}
     ${method}${record(d.record)}`;

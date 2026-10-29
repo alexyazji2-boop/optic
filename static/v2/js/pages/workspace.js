@@ -28,6 +28,7 @@ import { go } from '../core/router.js';
 import { hello, etDate, portfolio, eventsBlock, STARTERS, STARTER_NAMES, STARTER_ABOUT, portfolioSeries, deskBody, evPress, changesBlock, trendsBlock, briefingHoldings } from './home.js';
 import { term } from '../ui/term.js';
 import * as FV from '../core/finviz.js';
+import { valuationWord } from '../core/research-words.js';
 import { poll } from '../core/poll.js';
 import { scoreLine, signedLine, toneSign, toneBand } from '../ui/score.js';
 
@@ -652,7 +653,7 @@ export const PANELS = {
       if (kindOf(link) === 'fund') return notCompany(link);
       const lt = (d || {}).long_term || {}, q = lt.quality || {}, v = lt.valuation || {};
       if (!q.grade) return html`<p class="ws-note">${clean(q.summary || ((lt.conviction || {}).why) || `No business grade for ${link}.`)}</p>`;
-      return html`<p class="ws-big">Grade ${q.grade}${v.label ? html` <span class="ws-word">Valuation: ${v.label.toLowerCase()}</span>` : ''}</p>
+      return html`<p class="ws-big">Grade ${q.grade}${v.label ? html` <span class="ws-word">Valuation: ${valuationWord(v.label).toLowerCase()}</span>` : ''}</p>
         <table class="ws-t"><caption class="sr">${link} business measures</caption><tbody>${(q.components || []).map((c) => html`<tr><td>${c.label}</td><td class="n"><b>${c.grade || ''}</b></td></tr>`)}</tbody></table>
         <p class="ws-read">${clean(((lt.conviction || {}).why) || '')}</p>`;
     },

@@ -76,7 +76,7 @@ def test_a_pick_reaches_the_ticket_without_retyping(tmp_path):
     assert d["stop"] == 1.28, "a premium stop: the model's value if the stock reaches the adverse case, per share"
     assert t["ticker"] == "AAPL" and t["instrument"] == "option" and t["optionType"] == "call" and t["strike"] == "350"
     assert t["entry"] == "13.2" and t["hold_days"] == "30" and t["catalyst_date"] == "2026-11-02" and t["hold_through"] is True
-    assert t["source"] == "the contract picker" and "Expect a rise in AAPL toward 370 within 30 days." == t["thesis"]
+    assert t["source"] == "the contract picker" and "Screening for a rise in AAPL toward 370 within 30 days." == t["thesis"]
 
 
 def test_the_desk_attaches_the_plan_and_keeps_the_journal_private():

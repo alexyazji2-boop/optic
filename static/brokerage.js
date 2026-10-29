@@ -415,7 +415,7 @@ function bkwBriefingHTML() {
   const w = b.written;
   const earlier = b.written_earlier;
   const written = w ? `<div class="bkw-written"><p><b>${esc(w.headline)}</b></p>${['what_changed', 'drivers', 'ahead', 'attention'].map((k) => w[k] ? `<p>${esc(w[k])}</p>` : '').join('')}
-      <p class="set-row-note">Written by Milo from the measured figures on this page, ${esc(agoWords(w.written_at))}.</p></div>`
+      <p class="set-row-note">Written by Milo, Optic's AI model, from the measured figures on this page, ${esc(agoWords(w.written_at))}. It describes your holdings; it does not say what to do with them.</p></div>`
     : `<p class="set-row-note">${earlier ? `An earlier write-up (${esc(agoWords(earlier.written_at))}) was from different figures. ` : ''}
       <button type="button" class="btn" data-bkw-write>Write it up</button> Uses one Milo message. The same figures are kept and not charged again.</p>`;
   return `<div class="panel span2"><h2>${hg('Briefing')}</h2>

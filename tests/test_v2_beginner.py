@@ -78,7 +78,7 @@ def test_overview_opens_on_what_the_company_does():
     assert "return answerGrid(fundAnswers(sym, trendItem(sym)));" in ans
     assert "${fund ? (D.fwError && D.fvError && D.earnError ? failed('The four answers', D.fwError, { retry: 'dossier' }) : answers(sym)) : OR.fourQuestions(c)}" in OV
     ovr = (JS / "pages/overview-research.js").read_text()
-    assert "This describes the stock, not the business." in ovr and "tile('trade', 'Is there a trade?', value, sw.why" in ovr
+    assert "This describes the stock, not the business." in ovr and "tile('trade', 'Is there a short-term setup?', setupGrade(sw.grade), sw.why" in ovr
 
 
 def test_the_long_term_views_are_told_apart_and_summed_up(tmp_path):
@@ -92,9 +92,9 @@ def test_the_long_term_views_are_told_apart_and_summed_up(tmp_path):
         trend: O.trendFinding(pts, 200),
       }}));
     """)
-    assert got["apple"] == "The business grades A and the long-term price trend is strong (82 of 100), but the price is above its fair value range (valuation stretched). Weighing them, Optic's combined long-term case is neutral."
+    assert got["apple"] == "The business grades A and the long-term price trend is strong (82 of 100), but the price is above its fair value range (valuation stretched). Weighing them, Optic's combined long-term reading: neutral on the long-term rules."
     assert " but " not in got["allGood"] and got["allGood"].startswith("The business grades A")
-    assert got["none"] == "Optic's combined long-term case is neutral."
+    assert got["none"] == "Optic's combined long-term reading: neutral on the long-term rules."
     assert abs(got["trend"]["ch"] - ((249.5 - 123.5) / 123.5 * 100)) < 1e-6 and got["trend"]["span"] == "a year", "a year back: 252 sessions"
     # the summing up leads "Taken together"; the trend score itself is the Optic Score's long-term reading (2026-10-25)
     comb = OV[OV.index("function combined() {"):OV.index("/* ---------------- what changed lately")]

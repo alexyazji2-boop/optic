@@ -1,0 +1,502 @@
+[
+  {
+    "text": "In a taxable account, gains on shares held for more than one year qualify for long-term rates, while shares held a year or less are taxed as ordinary income.",
+    "label": "research",
+    "why": "Generic capital gains rule."
+  },
+  {
+    "text": "Hang on to your shares until the ex-dividend date passes so you collect the $0.92 payout, then sell.",
+    "label": "advice",
+    "why": "Hold-then-sell timing instruction."
+  },
+  {
+    "text": "Your IRA is the better home for the REIT fund, and the municipal bond fund can stay in the taxable account.",
+    "label": "advice",
+    "why": "Asset location for the reader's accounts, stated as fact."
+  },
+  {
+    "text": "HSA withdrawals for qualified medical expenses are tax-free, and the account can reimburse an expense from years earlier as long as it was incurred after the HSA was opened.",
+    "label": "research",
+    "why": "Generic HSA tax rule."
+  },
+  {
+    "text": "If KO closes below $62 on a weekly basis, get out of the whole position and don't look back.",
+    "label": "advice",
+    "why": "Conditional exit order on the reader's holding."
+  },
+  {
+    "text": "Buy the NVDA December 180/190 call spread for around $3.40; it's the cleanest way to play the earnings move.",
+    "label": "advice",
+    "why": "Tells the reader which options spread to buy."
+  },
+  {
+    "text": "I checked the last 60 sessions, and the bid-ask spread on this name has been tightest in the final half hour of trading.",
+    "label": "research",
+    "why": "First-person measurement."
+  },
+  {
+    "text": "Open the Indicators menu and choose MACD to plot it beneath the price chart.",
+    "label": "research",
+    "why": "UI help."
+  },
+  {
+    "text": "Work a limit order at $87.50 and let the stock come to you.",
+    "label": "advice",
+    "why": "Price-level order instruction."
+  },
+  {
+    "text": "If it were my money, I'd put the next $5,000 into MSFT rather than GOOGL on this pullback.",
+    "label": "advice",
+    "why": "First-person pick of one stock over another."
+  },
+  {
+    "text": "- **Exit** before the lockup expires on November 12, when insiders can start selling.",
+    "label": "advice",
+    "why": "Bulleted exit with timing."
+  },
+  {
+    "text": "Fifty shares is plenty for an account your size.",
+    "label": "advice",
+    "why": "Position sizing for the reader with no action verb."
+  },
+  {
+    "text": "**Disclosure:** nothing in this summary is a recommendation to add to, trim or sell PTON.",
+    "label": "research",
+    "why": "Negated advice."
+  },
+  {
+    "text": "When you buy a put, the most you can lose is the premium you paid, while the payoff grows as the underlying falls toward zero.",
+    "label": "research",
+    "why": "Generic 'you' explaining a put's payoff, no instruction."
+  },
+  {
+    "text": "The November 20 $95 put on DIS is the one to sell if you'd be happy owning the shares at that price.",
+    "label": "advice",
+    "why": "Picks a put strike and expiry for the reader to write."
+  },
+  {
+    "text": "Bank of America upgraded the shares to Buy and lifted its target to $250, and I think that's the signal to start a position before the rest of the Street follows.",
+    "label": "advice",
+    "why": "Attributed upgrade, then a buy instruction in the second clause."
+  },
+  {
+    "text": "REIT dividends are mostly taxed as ordinary income, which is why asset-location studies often place REITs in tax-deferred accounts.",
+    "label": "research",
+    "why": "Tax rule plus an attributed research finding."
+  },
+  {
+    "text": "**Street view:** 18 analysts rate the stock a Buy, 7 rate it a Hold and 2 rate it a Sell, with a median price target of $135.",
+    "label": "research",
+    "why": "Attributed analyst ratings and target."
+  },
+  {
+    "text": "Between VOO and QQQ, go with VOO for your Roth; it's cheaper and far less concentrated in a handful of tech names.",
+    "label": "advice",
+    "why": "Chooses one fund over another for the reader's Roth."
+  },
+  {
+    "text": "Rolling a short call usually means buying back the current contract and selling a new one with a later expiry, often at a higher strike.",
+    "label": "research",
+    "why": "Generic definition of a roll."
+  },
+  {
+    "text": "Spot bitcoin ETFs took in $1.1 billion of net inflows last week, according to issuer data compiled by Bloomberg.",
+    "label": "research",
+    "why": "Attributed fund-flow fact."
+  },
+  {
+    "text": "I'd lean toward the equal-weight S&P 500 fund for your IRA, given how much mega-cap tech you already own through your 401(k).",
+    "label": "advice",
+    "why": "Hedged fund choice for the reader's IRA."
+  },
+  {
+    "text": "Investors who sold at the March 2020 low missed a rebound of more than 70% in the S&P 500 over the following year.",
+    "label": "research",
+    "why": "Historical fact."
+  },
+  {
+    "text": "The stock is down 18% from its July high and trades at 21 times forward earnings, below its five-year average of 26 and near the low end of its peer group.",
+    "label": "research",
+    "why": "Valuation measurements."
+  },
+  {
+    "text": "Don't add to PTON at these levels; let it prove it can grow subscribers again first.",
+    "label": "advice",
+    "why": "Negated add instruction."
+  },
+  {
+    "text": "If you sell a fund at a loss and buy a substantially identical one within 30 days before or after the sale, even inside an IRA, the wash-sale rule can disallow the loss.",
+    "label": "research",
+    "why": "Wash-sale rule explained with a generic 'you'."
+  },
+  {
+    "text": "Leave the timing to me; I'll keep an eye on your holdings and tell you exactly when to sell.",
+    "label": "advice",
+    "why": "Acts as the reader's adviser."
+  },
+  {
+    "text": "The IRS treats crypto as property, so swapping one coin for another counts as a taxable sale even when no dollars change hands.",
+    "label": "research",
+    "why": "Generic tax rule for crypto."
+  },
+  {
+    "text": "Buy a put on your QQQ shares to protect yourself through the Fed meeting, since the most you can lose that way is the premium.",
+    "label": "advice",
+    "why": "Hedging instruction for the reader's holding."
+  },
+  {
+    "text": "Jefferies told clients to 'avoid the regional banks until deposits stabilize,' according to a note published Monday, though the firm left its ratings unchanged.",
+    "label": "research",
+    "why": "Quoted advice attributed to a firm."
+  },
+  {
+    "text": "I can't see your full account, so I've only compared the two funds' fees, holdings and past volatility.",
+    "label": "research",
+    "why": "Declines to personalize."
+  },
+  {
+    "text": "How do age-based 529 portfolios change as the beneficiary gets closer to college?",
+    "label": "research",
+    "why": "Educational question, not a suggestion."
+  },
+  {
+    "text": "Promises of guaranteed high returns with little or no risk are a classic red flag for fraud, according to the SEC's investor education site.",
+    "label": "research",
+    "why": "Attributed investor-protection fact."
+  },
+  {
+    "text": "I wouldn't touch the regional banks until deposit outflows stabilize, so hold off on adding to the KRE position in your IRA.",
+    "label": "advice",
+    "why": "Avoid instruction covering the reader's IRA."
+  },
+  {
+    "text": "A bull call spread buys a lower-strike call and sells a higher-strike call in the same expiry, which caps both the cost and the maximum gain.",
+    "label": "research",
+    "why": "Generic strategy mechanics."
+  },
+  {
+    "text": "Steer clear of leveraged ETFs like TQQQ in your retirement account, because the daily reset will eat you alive in a choppy market.",
+    "label": "advice",
+    "why": "Avoid instruction for the reader's account."
+  },
+  {
+    "text": "Why do covered-call funds tend to lag the market in strong rallies?",
+    "label": "research",
+    "why": "Educational question about a strategy."
+  },
+  {
+    "text": "Put $10,000 into the fund now and you'll have about $19,700 in ten years at 7% a year.",
+    "label": "advice",
+    "why": "Instruction plus a promised return."
+  },
+  {
+    "text": "The scanner's trigger range for the CELH breakout setup is $48 to $50, and its exit signal fires on a close below $45.80.",
+    "label": "research",
+    "why": "Scanner's levels described as levels; no order."
+  },
+  {
+    "text": "- Trim META back to 5% of the account at tomorrow's open and park the proceeds in the money-market fund.",
+    "label": "advice",
+    "why": "Bulleted trim with sizing and timing."
+  },
+  {
+    "text": "Gross margin expanded 340 basis points to 47.2% last quarter on a richer data-center mix, though management warned that higher memory costs could reverse part of that gain.",
+    "label": "research",
+    "why": "Facts and attributed guidance, no instruction."
+  },
+  {
+    "text": "Roll your short $230 calls out to January and up to $240 before earnings so you don't get assigned.",
+    "label": "advice",
+    "why": "Options roll instruction with strike and expiry."
+  },
+  {
+    "text": "I'm not a registered investment adviser, so I can explain how a Roth conversion works but can't recommend one for your accounts.",
+    "label": "research",
+    "why": "Declines to advise."
+  },
+  {
+    "text": "By my math, fifty shares of MSFT at $480 is a $24,000 position, so a 10% drop would cost $2,400.",
+    "label": "research",
+    "why": "Arithmetic on a position; no sizing recommendation."
+  },
+  {
+    "text": "Set your stop at $212, just under the 50-day moving average, so a failed breakout doesn't turn into a big loss.",
+    "label": "advice",
+    "why": "Price-level stop order on the reader's position."
+  },
+  {
+    "text": "If KO closes below $62 on a weekly basis, the trend model flips its reading from up to down.",
+    "label": "research",
+    "why": "Describes the model's rule; no order for the reader."
+  },
+  {
+    "text": "The consensus 12-month price target of $300 implies about 18% upside from the current price, according to FactSet.",
+    "label": "research",
+    "why": "Attributed consensus target."
+  },
+  {
+    "text": "Gross margin expanded 340 basis points to 47.2% last quarter on a richer data-center mix, so I'd use any pullback toward $160 to build a full position.",
+    "label": "advice",
+    "why": "Facts first, then a buy plan with a price level."
+  },
+  {
+    "text": "It is our recommendation that the account be rebalanced to its target allocation before December 15.",
+    "label": "advice",
+    "why": "Formal passive-voice rebalancing instruction."
+  },
+  {
+    "text": "- Insider activity: the CEO sold 40,000 shares on October 6 under a 10b5-1 plan, according to a Form 4 filing.",
+    "label": "research",
+    "why": "Bulleted attributed insider sale."
+  },
+  {
+    "text": "Based on your stated objectives and risk tolerance, we recommend allocating 40% to equities, 50% to fixed income and 10% to cash equivalents.",
+    "label": "advice",
+    "why": "Formal personalized allocation."
+  },
+  {
+    "text": "Carve out 3% of your portfolio for a spot bitcoin ETF inside your IRA and leave it alone for five years.",
+    "label": "advice",
+    "why": "Crypto allocation in the reader's IRA."
+  },
+  {
+    "text": "- Revenue rose 24% year over year to $51.2 billion, with ad impressions up 11%.",
+    "label": "research",
+    "why": "Bulleted fact."
+  },
+  {
+    "text": "A bond fund with a duration of 15 years would lose roughly 15% of its value if rates rose by one percentage point, all else equal.",
+    "label": "research",
+    "why": "Risk explanation with a hypothetical."
+  },
+  {
+    "text": "It's time to rebalance your 401(k) back to 70/30 by moving some of the gains from the S&P 500 fund into the bond fund.",
+    "label": "advice",
+    "why": "Rebalancing instruction for the reader's 401(k)."
+  },
+  {
+    "text": "Set a price alert at $142, and when it triggers, put half your cash into the position.",
+    "label": "advice",
+    "why": "Alert is UI, but the second clause is a buy with sizing."
+  },
+  {
+    "text": "**Bottom line:** I'd describe the quarter as mixed, with revenue ahead of estimates and operating margin a full point below them.",
+    "label": "research",
+    "why": "Results summary; 'I'd describe' is not an instruction."
+  },
+  {
+    "text": "Tap the star next to a ticker to add it to your watchlist.",
+    "label": "research",
+    "why": "UI help; 'add' refers to the watchlist."
+  },
+  {
+    "text": "lol please don't touch GME again, you got lucky last time.",
+    "label": "advice",
+    "why": "Slang avoid instruction."
+  },
+  {
+    "text": "Drag the horizontal line on the chart to move your alert level; the alert fires when the last trade crosses it.",
+    "label": "research",
+    "why": "UI help."
+  },
+  {
+    "text": "Risk no more than 1% of your account on this trade, which works out to about 120 shares with the stop at $41.",
+    "label": "advice",
+    "why": "Position sizing for the reader's account."
+  },
+  {
+    "text": "As your adviser, my recommendation is that we shift 20% of your portfolio into short-term Treasuries before year-end.",
+    "label": "advice",
+    "why": "Claims to be the reader's adviser and reallocates the portfolio."
+  },
+  {
+    "text": "Should you sell before the ex-dividend date, you won't receive the upcoming dividend, even if you owned the shares on the declaration date.",
+    "label": "research",
+    "why": "Dividend rule phrased as a conditional, not an instruction."
+  },
+  {
+    "text": "1. Sell the two losing positions in your taxable account before December 31 to harvest the losses.",
+    "label": "advice",
+    "why": "Numbered sell instruction with a deadline."
+  },
+  {
+    "text": "**My call:** this is a buy under $120 and a hold above it.",
+    "label": "advice",
+    "why": "The assistant's own buy/hold call with a price level."
+  },
+  {
+    "text": "1. Open the Screener and set the market-cap filter to above $10 billion.",
+    "label": "research",
+    "why": "Numbered UI step."
+  },
+  {
+    "text": "Bank of America upgraded the shares to Buy from Neutral on Tuesday and raised its price target to $250 from $210.",
+    "label": "research",
+    "why": "Attributed rating change."
+  },
+  {
+    "text": "Berkshire Hathaway trimmed its Apple stake again in the second quarter, according to its 13F filing.",
+    "label": "research",
+    "why": "Attributed fund action."
+  },
+  {
+    "text": "Leveraged ETFs such as TQQQ reset their exposure daily, so over weeks of choppy trading their returns can fall well short of three times the index.",
+    "label": "research",
+    "why": "Risk explanation."
+  },
+  {
+    "text": "The model's nearest support level for AMZN is $212, roughly where the 50-day moving average sits.",
+    "label": "research",
+    "why": "Model's support level stated as a level, not a stop order."
+  },
+  {
+    "text": "You should know that the Buy label on this screen reflects the analyst consensus and isn't a recommendation from us.",
+    "label": "research",
+    "why": "Help text explaining what the Buy label means."
+  },
+  {
+    "text": "Add RKLB to your portfolio while it's 20% off the highs; the launch backlog more than justifies the valuation.",
+    "label": "advice",
+    "why": "Buy instruction with a reason."
+  },
+  {
+    "text": "Wouldn't it be smarter to swap your long-term bond fund for T-bills until the rate picture settles?",
+    "label": "advice",
+    "why": "Rhetorical question recommending a swap."
+  },
+  {
+    "text": "**Bottom line:** for your account this is a hold, not a sell, at least until the January guidance.",
+    "label": "advice",
+    "why": "Hold call for the reader's account."
+  },
+  {
+    "text": "Since you're on a high-deductible plan, invest your HSA in a total-market index fund and pay this year's medical bills out of pocket.",
+    "label": "advice",
+    "why": "Investment instruction for the reader's HSA."
+  },
+  {
+    "text": "The stock is down 18% from its July high and trades at 21 times forward earnings, below its five-year average of 26, which makes this a sensible spot for you to start with about a third of the position you eventually want.",
+    "label": "advice",
+    "why": "Valuation facts, then entry and sizing advice."
+  },
+  {
+    "text": "It may make sense for you to hold the shares until after March 14 so the gain qualifies as long-term.",
+    "label": "advice",
+    "why": "Hedged hold-and-timing instruction."
+  },
+  {
+    "text": "A limit order at $87.50 fills only at $87.50 or better, so it may never execute if the stock doesn't trade down to that price.",
+    "label": "research",
+    "why": "How a limit order behaves, using an example price."
+  },
+  {
+    "text": "Remember what happened in March 2020 and don't sell your index funds into this drop.",
+    "label": "advice",
+    "why": "Negated sell instruction for the reader's holdings."
+  },
+  {
+    "text": "Management guided fourth-quarter margins below consensus and two directors sold shares in September, so if you're still holding from the spring, I'd take the rest of your profit off the table.",
+    "label": "advice",
+    "why": "Facts, then a conditional sell instruction."
+  },
+  {
+    "text": "This one is going to be at $300 by summer, full stop.",
+    "label": "advice",
+    "why": "Certainty about a future price."
+  },
+  {
+    "text": "VOO charges a 0.03% expense ratio versus 0.20% for QQQ, and QQQ's ten largest holdings make up roughly half of the fund.",
+    "label": "research",
+    "why": "Compares two funds without picking one."
+  },
+  {
+    "text": "Dump the Dogecoin and grab ETH instead; at least ETH has real usage behind it.",
+    "label": "advice",
+    "why": "Crypto swap choosing one coin over another."
+  },
+  {
+    "text": "Hypothetically, an investor who put $10,000 into a fund returning 7% a year would have about $19,700 after ten years.",
+    "label": "research",
+    "why": "Clearly hypothetical compounding example."
+  },
+  {
+    "text": "You're locking in a 9% yield for the next decade with this one, so the income is basically guaranteed.",
+    "label": "advice",
+    "why": "Promises a return."
+  },
+  {
+    "text": "Why not sell a few covered calls against those 300 AAPL shares while you wait for the next leg up?",
+    "label": "advice",
+    "why": "Question that is really an options instruction."
+  },
+  {
+    "text": "Have you thought about moving the idle cash in your brokerage account into a money-market fund yielding 4.1%?",
+    "label": "advice",
+    "why": "Question steering the reader's cash."
+  },
+  {
+    "text": "With your daughter starting college in three years, her 529 should be in the conservative portfolio by now, with no new money going to the equity option.",
+    "label": "advice",
+    "why": "Tells the reader how to allocate their child's 529."
+  },
+  {
+    "text": "Selling a cash-secured put obligates the seller to buy 100 shares at the strike if assigned, so the cash set aside has to cover that purchase.",
+    "label": "research",
+    "why": "Explains a strategy's obligation generically."
+  },
+  {
+    "text": "This isn't a recommendation, but for context, open interest in the SOFI March puts is concentrated at the $20 strike.",
+    "label": "research",
+    "why": "Disclaimer followed by a fact."
+  },
+  {
+    "text": "Click Buy or Sell on the Paper Desk ticket to place a practice order; no real money moves.",
+    "label": "research",
+    "why": "UI help for practice orders; no recommendation."
+  },
+  {
+    "text": "The IPO lockup should expire on November 12, when roughly 180 million insider shares become eligible for sale.",
+    "label": "research",
+    "why": "'Should' expresses a scheduled date, not advice."
+  },
+  {
+    "text": "Place your buy order in the last half hour of trading, when the spread on this name is tightest.",
+    "label": "advice",
+    "why": "Tells the reader when to place an order."
+  },
+  {
+    "text": "You might consider trimming NVDA to around 8% of the account, since it's grown to nearly a quarter of your total.",
+    "label": "advice",
+    "why": "Hedged trim and sizing."
+  },
+  {
+    "text": "Rebalancing a 401(k) means selling funds that have grown above their target weight and buying those that have fallen below it.",
+    "label": "research",
+    "why": "Definition of rebalancing."
+  },
+  {
+    "text": "Not a recommendation, obviously, but in your shoes I'd be out of the March puts by Friday.",
+    "label": "advice",
+    "why": "Disclaimer wrapped around an options exit instruction."
+  },
+  {
+    "text": "Management guided fourth-quarter margins below consensus, and two directors sold shares in September under previously adopted 10b5-1 plans.",
+    "label": "research",
+    "why": "Attributed guidance and insider sales."
+  },
+  {
+    "text": "ngl I'd scale into ETH over the next few weeks instead of aping in all at once.",
+    "label": "advice",
+    "why": "Slang crypto buying instruction."
+  },
+  {
+    "text": "A fixed-fractional sizing rule risks the same percentage of equity on every trade, so the share count shrinks as the stop distance widens.",
+    "label": "research",
+    "why": "Describes a sizing method generically."
+  },
+  {
+    "text": "The stock yields 9% at the current price, but a payout ratio of 115% means the dividend isn't covered by earnings.",
+    "label": "research",
+    "why": "Yield fact with a risk explanation."
+  }
+]

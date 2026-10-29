@@ -98,7 +98,8 @@ def test_it_rides_after_the_cached_prefix_and_leaves_the_base_prompt_alone():
     src = open(ai.__file__, encoding="utf-8").read()
     body = src[src.index("    flavour_prompt = flavour_for("):]
     body = body[:body.index('        "messages": messages,')]
-    assert '"text": SYSTEM_PROMPT + FORMAT_PROMPT,\n             "cache_control": {"type": "ephemeral"}}' in body
+    # the advice policy rides in the cached prefix too (app/ai_policy.py, 2026-10-29)
+    assert '"text": SYSTEM_PROMPT + FORMAT_PROMPT + "\\n\\n" + ai_policy.POLICY_TEXT,\n             "cache_control": {"type": "ephemeral"}}' in body
     assert body.index("SYSTEM_PROMPT + FORMAT_PROMPT") < body.index("level_prompt") < body.index("persona_prompt")
     assert body.index("persona_prompt}] if persona_prompt") < body.index("flavour_prompt}] if flavour_prompt")
     assert "FLAVOUR_PROMPT" not in ai.SYSTEM_PROMPT and "looser voice" not in flat(ai.SYSTEM_PROMPT)

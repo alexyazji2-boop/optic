@@ -59,7 +59,7 @@ const mark = (w) => raw(`<svg viewBox="0 0 24 24" aria-hidden="true" class="chw-
 export const CHECKS = [
   'Do I know what invalidates this?',
   'Is the stop at a level, not a round number?',
-  'Is this sized so the stop costs 1% or less?',
+  'Do I know what a loss at the stop would cost?',
   'Am I early, or chasing?',
   'Does the higher timeframe agree?',
   'Is earnings inside my holding period?',
@@ -282,7 +282,7 @@ const BODY = {
       <label class="chw-field"><span>Stop</span><input type="number" step="0.01" min="0" inputmode="decimal" data-chw-sc="stop" value="${v(stop)}" placeholder="Your stop"></label>
       <label class="chw-field"><span>Buffer past the level</span><select data-chw-sc="buffer">${[[0.1, '0.1 ATR'], [0.25, '0.25 ATR'], [0.5, '0.5 ATR']].map(([x, l]) => html`<option value="${x}" ${Number(SC.buffer) === x ? 'selected' : ''}>${l}</option>`)}</select></label>
       <label class="chw-field"><span>Account (optional)</span><input type="number" step="100" min="0" inputmode="numeric" data-chw-sc="account" value="${SC.account || ''}" placeholder="For sizing"></label></div>
-      ${fromPlan ? fine('Stop from the entry plan (1.5 ATR from the price). Type your own to check it.') : ''}`;
+      ${fine('Type a stop of your own to check it against round numbers. Optic does not suggest one.')}`;
     if (!(stop > 0)) return html`${controls}${none('Enter a stop to check it against round numbers.')}`;
     if (S.scErr) return html`${controls}${failed('The stop check', S.scErr, { retry: 'w-stopcheck' })}`;
     const r = S.sc;
@@ -478,9 +478,11 @@ const checkCount = (n, sym) => `${n} of ${CHECKS.length} for ${sym}. Fixed quest
 function scInputs() {
   const sym = C.sym(), t = C.t() || {}, q = t.quote || {};
   const entry = Number(SC.entry[sym]) > 0 ? Number(SC.entry[sym]) : isNum(q.price) ? Number(q.price) : null;
-  const plan = ((t.entry_plan || {}).risk || {}).underlying_stop, typed = Number(SC.stop[sym]) > 0;
-  const stop = typed ? Number(SC.stop[sym]) : isNum(plan) ? Number(plan) : null;
-  return { entry, stop, fromPlan: !typed && stop !== null };
+  // Only the reader's own stop is checked. It used to be pre-filled from Optic's entry plan, which put Optic's
+  // level into the reader's trade (advice policy, 2026-10-29); the plan's level is shown beside the field instead.
+  const typed = Number(SC.stop[sym]) > 0;
+  const stop = typed ? Number(SC.stop[sym]) : null;
+  return { entry, stop, fromPlan: false };
 }
 function runStop() {
   if (!C.t()) return;

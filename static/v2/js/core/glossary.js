@@ -11,7 +11,7 @@ export const GLOSSARY = {
   'expectancy': "The average profit or loss per trade across every completed trade. Positive means the approach made money on average; negative means it lost, no matter how good the win rate looks.",
   'profit factor': "Total money made by the winners divided by total money lost by the losers. Above 1.0 is profitable; below 1.0 is not.",
   'win rate': "The share of completed trades that made money. On its own it says very little. A 30% win rate is excellent if the winners are five times the size of the losers.",
-  'stop loss': "A price set in advance where you exit if the trade goes against you. It defines the loss before entering, instead of deciding in the moment.",
+  'stop loss': "An order to sell (or buy back) once the price reaches a level set in advance, so a trader decides the loss before entering instead of in the moment. It is not a guarantee: a price that gaps past the level fills at the next price available.",
   'time stop': "Closing a trade because it hasn't worked within a set number of days, rather than because it hit a price. Capital sitting in an idea that isn't moving has a cost.",
   'realised p&l': "Profit and loss from trades that have already closed. This is the number that is final.",
   'unrealised p&l': "Profit and loss on positions still open. It changes every time the price moves and only becomes real when the position closes.",

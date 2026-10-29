@@ -52,7 +52,7 @@ function expected(em) {
 function breadth() {
   const s = (D.m || {}).sectors || {}, b = s.breadth || {}, evc = b.equal_vs_cap || {}, sp = s.suggested_pair;
   return html`${kv([['Sectors above the 200-day', pct(b.pct_sectors_above_200sma, 0)], ['Sectors above the 50-day', pct(b.pct_sectors_above_50sma, 0)]], 2)}<p>${clean(b.note || '')}</p>
-    ${s.rotation_note ? html`<p><b>Rotation.</b> ${clean(s.rotation_note)}</p>` : ''}${sp ? html`<p><b>Strongest against weakest right now:</b> long ${sp.long}, short ${sp.short}. ${clean(sp.note || '')}</p>` : ''}
+    ${s.rotation_note ? html`<p><b>Rotation.</b> ${clean(s.rotation_note)}</p>` : ''}${sp ? html`<p><b>Strongest and weakest sector right now:</b> ${sp.long} and ${sp.short}. ${clean(sp.note || '')}</p>` : ''}
     ${evc.note ? html`<h3>Equal weight against cap weight (RSP / SPY)</h3>${kv([['3 months', signed(evc.chg_3m_pct)], ['1 year', signed(evc.chg_1y_pct)]], 2)}<p>${clean(evc.note)}</p><div class="chart-slot" data-chart="rsp"></div>` : ''}`;
 }
 function curve() {
@@ -207,7 +207,7 @@ function themes() {
   return html`<h3>Themes and sub-industries</h3>${tbl(s.themes || [])}
     <h3>Breakout candidates</h3>${(s.breakout_candidates || []).length ? tbl(s.breakout_candidates) : html`<p class="quiet">No sector is set up for a breakout right now.</p>`}
     <h3>Niche industries</h3>${tbl(s.niche || [])}
-    <h3>Ratio pair trades</h3><div class="tscroll"><table class="t"><thead><tr><th>Pair</th><th>Ratio</th><th>z-score, 60 days</th><th>5 days</th><th>20 days</th><th>Setup</th></tr></thead><tbody>${(s.pairs || []).map((p) => html`<tr><td><b>${p.pair}</b><br><small class="t-muted">${clean(p.thesis || '')}</small></td><td>${num(p.ratio, 3)}</td><td class="${Math.abs(p.zscore_60d) >= 2 ? 'z-stretched' : ''}">${signed(p.zscore_60d, 1, '')}</td><td>${signed(p.chg_5d)}</td><td>${signed(p.chg_20d)}</td><td style="text-align:left">${clean(p.setup || '')}</td></tr>`)}</tbody></table></div>
+    <h3>Ratio pairs</h3><div class="tscroll"><table class="t"><thead><tr><th>Pair</th><th>Ratio</th><th>z-score, 60 days</th><th>5 days</th><th>20 days</th><th>Reading</th></tr></thead><tbody>${(s.pairs || []).map((p) => html`<tr><td><b>${p.pair}</b><br><small class="t-muted">${clean(p.thesis || '')}</small></td><td>${num(p.ratio, 3)}</td><td class="${Math.abs(p.zscore_60d) >= 2 ? 'z-stretched' : ''}">${signed(p.zscore_60d, 1, '')}</td><td>${signed(p.chg_5d)}</td><td>${signed(p.chg_20d)}</td><td style="text-align:left">${clean(p.setup || '')}</td></tr>`)}</tbody></table></div>
     <p class="asof">A z-score beyond ±2 is stretched against the last 60 sessions; it is not a call.</p>`;
 }
 

@@ -66,3 +66,40 @@ Density per route (guest, 1440): highest visible word counts Analysts 2,648, NVD
 Home 1,135 (187 controls), NVDA Earnings 1,085, Read 1,033. Small touch targets flagged by the audit script at 390:
 NVDA Investing 30, NVDA Overview 30, BRK-B 24, BTC 12. Contrast and unnamed-control counts were 0 on every load
 (audit.js rules; Phase 10 re-measures with WCAG 2.2 tooling).
+
+## Phase 02 (advice policy and legal consistency), 2026-10-29, working tree on c6724ff
+
+All runs: `.venv/bin/python -m pytest -q -p no:cacheprovider -rf` in `~/Optic/wt-ultra`; raw output in
+`phase02/pytest-run*.txt`. Times are when each run's output file was last written (ET).
+
+| Run | Ended | Outcome | What failed, and what was done |
+|---|---|---|---|
+| 1 | 05:22 | 9 failed, 7120 passed, 1 skipped | Tests pinning the old wording (take format, contract budget and picker, pitch audit, Milo prompt block, trade journal, beginner pass, Classic port, shortlist): each read and updated to the new wording |
+| 2 | 05:41 | 2 failed, 7203 passed, 1 skipped | The glossary must match Classic's word for word (Classic's stop-loss entry updated too); Milo's saved conversation now carries the policy notes (test updated, still no file data) |
+| 3 | 05:56 | 3 failed, 7205 passed, 1 skipped | Classic panel names and column definitions renamed in this phase (definitions table, panel lists and two tests updated) |
+| 4 | 06:17 | 2 failed, 7212 passed, 1 skipped | The scan go-ahead key had to be classed (a this-tab, read-once key, like `optic.reload.place`); the zones wording test |
+| 5 | 06:23 | **7214 passed, 1 skipped, 0 failed** | |
+| 6 | 06:35 | **7369 passed, 1 skipped, 0 failed** | With the rebuilt output check and set A as regression cases |
+| 7 (final) | 06:55 | **7471 passed, 1 skipped, 0 failed** | Version 4 of the output check, sets A and B as regression cases, the unsupported-claims rule |
+
+Other checks:
+
+| Check | Outcome | Raw |
+|---|---|---|
+| `node --check` on the 26 JS files changed in this phase | 26 passed, 0 failed | |
+| `python -m compileall -q app tests` | ok | |
+| Mutation checks in a scratch copy (5 mutations of the policy wiring and the notice copy) | each failed at least one test | `phase02/mutation-checks.txt` |
+| Chat route with the stand-in model: "Tell me exactly what stock to buy." | `notice` before any `delta`; categories `pick_for_me` | `phase02/milo/declined.jsonl` |
+| Chat route with the stand-in model: an answer containing "You should buy it before the report." | the sentence never streamed; `amend` before `done`, removed 1, rule `trade_instruction` | `phase02/milo/advise2.jsonl` |
+| Milo panel, signed in, headless Chrome (`tools/milo_policy_ui.py`) | policy line above the answer; removal note under it; both restored after reload from history; 0 page errors | `phase02/milo-ui/` |
+| Crawl, signed in, 56 v2 routes at 1440 (`tools/crawl.py`) | 0 script errors; only the deliberate `#/ZZZZQ` 404s | `phase02/crawl/` |
+| Notice on each research route (browser pane) | the right `.legal-area` text on all 20 routes | |
+| `#/scan?q=` without a press (browser pane) | the words fill the box; no `/api/screener/ask` request | |
+| `#/scan?q=` after Milo's card (flag set) | the scan ran ("12 of 746 ranked names match"); the flag was consumed | |
+| Earnings brief stance label (a test brief planted in the local data copy, removed after) | v2 "The evidence leans positive"; Classic "Evidence leans positive" | |
+| Output check on set A (80, written by a separate agent that never saw the code), version 2 | advice 10 of 40 caught; research 2 of 40 wrongly flagged | `phase02/heldout-result.json` |
+| Output check on set B (100, another agent, saw neither the code nor set A), version 3 | advice 27 of 50 caught; research 1 of 50 wrongly flagged | `phase02/heldout-result-b.json` |
+| Version 4 on sets A and B (seen, regression) | 90 of 90; 0 of 90 | `tests/test_ai_policy.py` |
+| Version 4 on stored real text (544 sentences) and Optic's own research text (2,361 sentences, 4 tickers) | 0 flagged on either, after fixing the 1 and 5 false alarms found | |
+| Output check speed | 0.14 ms per sentence; 4.3 ms for a 30-sentence answer | |
+| The seven named prompts with the real model | NOT TESTED: the key is refused (BL-01) | |

@@ -163,11 +163,12 @@ function take(c) {
   if (!t.available) return '';
   const hz = Object.fromEntries((c.horizons || []).map((h) => [h.id, h]));
   return html`<section class="section" aria-labelledby="ct-h"><div class="section-head"><div><h2 class="t-h2" id="ct-h">Optic's take</h2>${t.agreement ? html`<p class="section-sub">${clean(t.agreement)}</p>` : ''}</div>
-      ${miloButton('Ask Milo about this comparison', { ask: `Compare ${c.tickers.join(', ')}. ${t.headline || ''} Which would you look at first for my timeframe, and what is each one's biggest risk?`, context: 'Compare' })}</div>
+      ${miloButton('Ask Milo about this comparison', { ask: `Compare ${c.tickers.join(', ')}. ${t.headline || ''} What does each one's score rest on for this timeframe, and what is each one's biggest risk?`, context: 'Compare' })}</div>
     <p class="lead-line">${clean(t.headline || '')}</p>
     <div class="cmp-winners">${Object.entries(t.winners || {}).map(([hid, w]) => html`<div class="cmp-win ${w.decisive ? '' : 'is-close'}"><p class="t-label">${(hz[hid] || {}).name || w.name || hid}</p><p class="cmp-win-t">${w.decisive ? w.ticker : 'Level'}</p><p class="t-muted">${w.decisive ? `ahead by ${num(w.gap, 1)} points` : `${num(w.gap, 1)} points apart, under ${TIE}: not a ranking`}</p></div>`)}</div>
     ${(t.standouts || []).length ? html`<ul class="plain">${t.standouts.map((s) => html`<li><b>${s.ticker}</b> has ${clean(s.phrase)}</li>`)}</ul>` : ''}
-    ${t.method ? html`<p class="asof">${clean(t.method)}</p>` : ''}</section>`;
+    ${t.method ? html`<p class="asof">${clean(t.method)}</p>` : ''}
+    <p class="asof">These are Optic's own scores, which have not been shown to predict returns. The highest score is not a recommendation to buy it.</p></section>`;
 }
 
 function perf(c) {
@@ -193,7 +194,7 @@ function perfChart(c) {
 function bars(c) {
   const rows = c.rows || [];
   if (rows.length < 2) return '';
-  return html`<section class="section" aria-labelledby="cb-h"><h2 class="t-h2" id="cb-h">Where each name leads</h2>
+  return html`<section class="section" aria-labelledby="cb-h"><h2 class="t-h2" id="cb-h">Where each name scores highest</h2>
     <p class="section-sub">Every bar is the same 0-100 composite for its horizon, so the bars compare across names within a horizon. Two scores within ${TIE} points are treated as level.</p>
     <div class="cmp-bars">${(c.horizons || []).map((h) => { const r = ((c.ranks || {})[h.id] || []).slice().sort((a, b) => b.score - a.score); const gap = r.length > 1 ? gapOf(r[0].score, r[1].score) : 0;
       return html`<div class="cmp-hz ${gap >= TIE ? 'is-clear' : ''}"><h3>${h.name} <span class="t-muted">${h.horizon}</span></h3><p class="t-muted">${gap < TIE ? `level: ${num(gap, 1)} point${num(gap, 1) === '1.0' ? '' : 's'} apart, under ${TIE}` : `${r[0].ticker} ${num(gap, 1)} points clear`}</p>
@@ -211,7 +212,7 @@ function grid(c) {
       <thead><tr><th scope="col">Metric</th>${rows.map((r) => html`<th scope="col"><a href="#/${r.ticker}">${r.ticker}</a>${r.name && r.name !== r.ticker ? html`<small class="t-muted cmp-name">${r.name}</small>` : ''}${what(r) ? html`<small class="t-muted cmp-sector">${what(r)}</small>` : ''}</th>`)}</tr></thead>
       <tbody>${(c.horizons || []).map((h) => { const rk = (c.ranks || {})[h.id] || [];
         const st = standing(rk);
-        return html`<tr class="cmp-rank"><th scope="row">${h.name}<small class="t-muted cmp-means">${rankRead(rk.slice().sort((x, y) => y.score - x.score))}</small></th>${rows.map((r) => { const x = rk.find((y) => y.ticker === r.ticker), w = x ? st[x.ticker] : ''; const part = x && x.inputs && x.inputs[0] < x.inputs[1]; return html`<td>${x ? html`<span class="${w === 'best' ? 'cmp-best' : w === 'level' ? 'cmp-level' : 't-muted'}">${w}</span> <span class="${tone100(x.score)}">${num(x.score, 0)}</span>${scoreLine(x.score)}${part ? html`<small class="t-muted cmp-part">from ${x.inputs[0]} of ${x.inputs[1]} inputs</small>` : ''}` : 'n/a'}</td>`; })}</tr>`; })}
+        return html`<tr class="cmp-rank"><th scope="row">${h.name}<small class="t-muted cmp-means">${rankRead(rk.slice().sort((x, y) => y.score - x.score))}</small></th>${rows.map((r) => { const x = rk.find((y) => y.ticker === r.ticker), w = x ? st[x.ticker] : ''; const part = x && x.inputs && x.inputs[0] < x.inputs[1]; return html`<td>${x ? html`<span class="${w === 'best' ? 'cmp-best' : w === 'level' ? 'cmp-level' : 't-muted'}">${w === 'best' ? 'highest' : w}</span> <span class="${tone100(x.score)}">${num(x.score, 0)}</span>${scoreLine(x.score)}${part ? html`<small class="t-muted cmp-part">from ${x.inputs[0]} of ${x.inputs[1]} inputs</small>` : ''}` : 'n/a'}</td>`; })}</tr>`; })}
       ${GROUPS.map((g) => html`<tr class="cmp-group"><th scope="rowgroup" colspan="${rows.length + 1}">${g.title}</th></tr>
         ${g.rows.map((m) => { const lead = leader(m, rows, c.leaders);
           return html`<tr><th scope="row">${m.label}${m.note ? html` <small class="t-muted">${m.note}</small>` : ''}<small class="t-muted cmp-means">${m.means}</small></th>${rows.map((r) => html`<td>${cell(m.kind, r[m.key], (r.why_na || {})[m.key])}${lead === r.ticker ? html` <span class="cmp-dot" title="${m.lead === 'high' ? 'Higher' : 'Lower'} on this measure">·<span class="sr">, leads this row</span></span>` : ''}${m.sub && r[m.sub] ? html`<br><small class="t-muted">${clean(r[m.sub])}</small>` : ''}</td>`)}</tr>`; })}`)}</tbody></table></div>

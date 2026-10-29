@@ -1755,12 +1755,13 @@ the stock actually traded afterwards. Those two come apart more often than peopl
 expect, and when they do, that gap IS the story.
 - "## What the market is charging". The implied move against what the stock has \
 actually done, and whether that looks rich, cheap or fair.
-- "## Where it leaves you". The stance, the strongest argument against it, and the \
-specific thing that would change the read.
+- "## Where the evidence points". Which way the data leans, the strongest argument \
+against it, and the specific thing that would change the read.
 
-Take a clear stance. Leaning bullish, leaning bearish, or genuinely two-sided, and \
-say which. Name the strongest argument against your own read; a stance without its \
-counter-argument is not analysis. Frame it as what the data supports, not as an \
+Say which way the evidence leans: leaning bullish, leaning bearish, or genuinely \
+two-sided. A lean describes the data now; it is not a forecast or a recommendation. \
+Name the strongest argument against your own read; a lean without its \
+counter-argument is not analysis. Frame it as what the data supports, never as an \
 instruction: "the setup leans bullish" rather than "buy this".
 
 Hard rules, because this publishes unedited:
@@ -3531,6 +3532,9 @@ async def stream_chat(
                               "categories": meta.get("policy_kinds") or [],
                               "policy": ai_policy.POLICY_VERSION})
     answer_parts: List[str] = []
+    # Held back by at most one sentence, so a sentence that breaks the advice policy is never sent
+    # (app/ai_policy.py StreamGate); the end-of-stream amend below still reads the whole answer.
+    gate = ai_policy.StreamGate()
 
     # Milo's tools (app/milo_tools.py), when the route supplies them: Optic's own data for whatever the
     # question needs, not only what the page sent. Web search stays the reader's switch; the tools do not
@@ -3558,8 +3562,10 @@ async def stream_chat(
                     elif etype == "content_block_delta":
                         delta = getattr(event, "delta", None)
                         if getattr(delta, "type", "") == "text_delta":
-                            answer_parts.append(delta.text)
-                            yield _sse("delta", {"text": delta.text})
+                            safe = gate.feed(delta.text)
+                            if safe:
+                                answer_parts.append(safe)
+                                yield _sse("delta", {"text": safe})
                 final = await stream.get_final_message()
             _streamed("pulse", final, PULSE_MODEL)
             usage = getattr(final, "usage", None)
@@ -3635,11 +3641,16 @@ async def stream_chat(
                 continue
             break
 
-        # The finished answer, checked against the advice policy. The text has
-        # already streamed, so a breach is corrected in place with a note the
+        # The finished answer, checked against the advice policy. What the gate
+        # held back never reached the reader; anything it could not see whole
+        # has streamed, so a breach is corrected in place with a note the
         # reader sees, rather than quietly: the panel replaces the answer with
         # the cleaned text and keeps the note under it.
-        amend = ai_policy.amend_for_stream("".join(answer_parts))
+        tail = gate.flush()
+        if tail:
+            answer_parts.append(tail)
+            yield _sse("delta", {"text": tail})
+        amend = ai_policy.amend_for_stream("".join(answer_parts), withheld=gate.findings)
         if amend:
             log.warning("ai policy: pulse: removed %s sentence(s) (%s)", amend["removed"], ", ".join(amend["rules"]))
             yield _sse("amend", amend)
@@ -3700,6 +3711,7 @@ async def deep_research(
         ask = "{}\n\n{}".format(build_context(context), ask)
 
     research_parts: List[str] = []
+    gate = ai_policy.StreamGate()
     try:
         async with client.beta.messages.stream(
             model=PULSE_MODEL,
@@ -3726,8 +3738,10 @@ async def deep_research(
                 elif etype == "content_block_delta":
                     delta = getattr(event, "delta", None)
                     if getattr(delta, "type", "") == "text_delta":
-                        research_parts.append(delta.text)
-                        yield _sse("delta", {"text": delta.text})
+                        safe = gate.feed(delta.text)
+                        if safe:
+                            research_parts.append(safe)
+                            yield _sse("delta", {"text": safe})
             final = await stream.get_final_message()
         _streamed("research", final, PULSE_MODEL)
 
@@ -3757,7 +3771,11 @@ async def deep_research(
                 unique.append(src)
 
         # Checked against the advice policy once the text is complete, as Milo's answers are.
-        amend = ai_policy.amend_for_stream("".join(research_parts))
+        tail = gate.flush()
+        if tail:
+            research_parts.append(tail)
+            yield _sse("delta", {"text": tail})
+        amend = ai_policy.amend_for_stream("".join(research_parts), withheld=gate.findings)
         if amend:
             log.warning("ai policy: research: removed %s sentence(s) (%s)", amend["removed"], ", ".join(amend["rules"]))
             yield _sse("amend", amend)

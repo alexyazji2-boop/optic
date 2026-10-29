@@ -14,6 +14,7 @@ import { daysUntil } from '../core/marketTime.js';
 import { how } from '../ui/states.js';
 import { term } from '../ui/term.js';
 import { hrefFor } from '../nav.js';
+import { setupGrade, convictionPhrase, valuationWord } from '../core/research-words.js';
 
 const g = (o, ...ks) => ks.reduce((x, k) => (x && typeof x === 'object' ? x[k] : undefined), o);
 const fin = (v) => typeof v === 'number' && Number.isFinite(v);
@@ -306,7 +307,9 @@ export function marksFold(marks) {
 }
 
 /* ---------------- four questions, answered separately (Classic's static/research.js) ---------------- */
-const QUESTIONS = [['business', 'Is it a strong business?'], ['price', 'Is the price attractive?'], ['trade', 'Is there a trade?'], ['earnings', 'What about earnings?']];
+// The price and setup questions describe what the rules found rather than asking whether to buy (advice policy, 2026-10-29):
+// "Is the price attractive?" and "Is there a trade?" framed research output as a purchase decision.
+const QUESTIONS = [['business', 'Is it a strong business?'], ['price', 'How is it valued?'], ['trade', 'Is there a short-term setup?'], ['earnings', 'What about earnings?']];
 const PRICE_WORDS = ['very rich', 'rich', 'full', 'reasonable', 'cheap'];
 const list = (items) => { const rows = (items || []).filter(Boolean); return rows.length ? html`<ul class="plain">${rows.map((x) => html`<li>${clean(x)}</li>`)}</ul>` : ''; };
 const pct = (v, d = 1) => (fin(v) ? `${num(v, d)}%` : 'n/a');
@@ -357,41 +360,41 @@ function businessTile(lt, c) {
   }
   const q = lt.quality || {}, conv = lt.conviction || {};
   const value = q.status === 'scored' ? `Quality ${q.grade}` : 'Insufficient Data';
-  const sub = q.status === 'scored' ? `Quality and price together: ${conv.label}. ${conv.why || ''}` : (q.reason || '');
+  const sub = q.status === 'scored' ? `Quality and price together: ${convictionPhrase(conv.label)}. ${conv.why || ''}` : (q.reason || '');
   const more = html`${qtable(componentRows(q.components))}
     ${(lt.loss_paths || []).length ? html`${qh('Two ways this could lose money over three years')}${list(lt.loss_paths.map((l) => `${l.risk}: ${l.text}`))}` : ''}
-    ${g(lt, 'accumulation', 'offered') ? html`${qh('Levels to reassess at')}${list(lt.accumulation.zones.map((z) => `${usd(z.price)}: ${z.basis} (${pct(z.distance_pct)})`))}${fine(clean(lt.accumulation.condition))}` : ''}
+    ${g(lt, 'accumulation', 'offered') ? html`${qh('Price levels the long-term model marks')}${list(lt.accumulation.zones.map((z) => `${usd(z.price)}: ${z.basis} (${pct(z.distance_pct)})`))}${fine(clean(lt.accumulation.condition))}${fine('Levels from price history that the model reads against, not prices to buy at.')}` : ''}
     ${fine(clean(`${lt.policy_note || ''} ${lt.separation_note || ''}`))}`;
   return tile('business', 'Is it a strong business?', value, sub, more, c);
 }
 function priceTile(lt, c) {
   const v = (lt || {}).valuation || {};
-  if (!lt || !lt.available || !v.status) return tile('price', 'Is the price attractive?', 'Insufficient Data', 'Valuation needs the company\'s filings.', '', c);
+  if (!lt || !lt.available || !v.status) return tile('price', 'How is it valued?', 'Insufficient Data', 'Valuation needs the company\'s filings.', '', c);
   const lead = (v.components || []).find((x) => x.status === 'scored');
   const sub = v.status === 'scored' ? (lead ? lead.headline : v.summary) : (v.reason || '');
   const chart = lt.chart || {};
   const more = html`${qtable(componentRows(v.components, 'price'))}
     ${chart.text ? html`${qh('The chart, as context')}<p>${clean(chart.text)}</p>` : ''}${chart.volume ? fine(clean(chart.volume.text)) : ''}
     ${fine('Graded on its own, separately from the business: 4 of 4 is cheapest. A strong business can be an expensive stock.')}`;
-  return tile('price', 'Is the price attractive?', v.status === 'scored' ? v.label : 'Insufficient Data', sub, more, c);
+  return tile('price', 'How is it valued?', v.status === 'scored' ? valuationWord(v.label) : 'Insufficient Data', sub, more, c);
 }
 function tradeTile(sw, c) {
-  if (!sw) return tile('trade', 'Is there a trade?', 'Insufficient Data', 'No swing assessment.', '', c);
+  // The setup model's output, said as the model's levels rather than a trade to take (advice policy, 2026-10-29):
+  // no "entry", "targets" or share count for the reader, no "Avoid", and a line saying what the levels are.
+  if (!sw) return tile('trade', 'Is there a short-term setup?', 'Insufficient Data', 'No setup assessment.', '', c);
   const plan = sw.plan, objections = (sw.objections || []).slice().sort((a, b) => b.severity - a.severity);
-  const parts = [objections.length ? html`${qh('Reasons to skip it, most damaging first')}${list(objections.map((o) => o.text))}` : html`<p>No specific objection was found in the data.</p>`];
+  const parts = [objections.length ? html`${qh('What argues against the setup, strongest first')}${list(objections.map((o) => o.text))}` : html`<p>No specific objection was found in the data.</p>`];
   if (plan) {
     const inv = plan.invalidation || {}, sens = plan.sensitivity || {}, row = (k, v) => html`<tr><th scope="row">${k}</th><td colspan="2">${v}</td></tr>`;
-    parts.push(qtable([row('Setup', `${plan.kind} (${plan.side})`), row('Entry zone', `${usd((plan.entry_zone || [])[0])} to ${usd((plan.entry_zone || [])[1])}`), row('Confirmation', clean(plan.confirmation)),
-      row('Invalidation', `${usd(inv.price)}: ${clean(inv.structure || '')}. ${clean(inv.note || '')}`), row('Targets', `${(plan.targets || []).map(usd).join(', ')} (${clean(plan.target_basis || '')})`),
-      row('Reward to risk', `${fin(plan.reward_to_risk) ? num(plan.reward_to_risk, 2) : 'n/a'} = ${clean(plan.rr_formula || '')}; ${fin(sens.low) ? `${num(sens.low, 2)} to ${num(sens.high, 2)} across fills and costs` : ''}`),
-      row('Holding', clean(g(plan, 'holding', 'basis') || '')), row('Earnings', clean(g(plan, 'earnings', 'text') || ''))]));
+    parts.push(fine('These are levels Optic\'s setup model computes from price history, for research. They are not an order, a forecast or a recommendation.'));
+    parts.push(qtable([row('Pattern', `${plan.kind} (${plan.side})`), row('Trigger zone', `${usd((plan.entry_zone || [])[0])} to ${usd((plan.entry_zone || [])[1])}`), row('Confirmation the model looks for', clean(plan.confirmation)),
+      row('Breaks the pattern at', `${usd(inv.price)}: ${clean(inv.structure || '')}. ${clean(inv.note || '')}`), row('Projected levels', `${(plan.targets || []).map(usd).join(', ')} (${clean(plan.target_basis || '')})`),
+      row('The model\'s reward to risk', `${fin(plan.reward_to_risk) ? num(plan.reward_to_risk, 2) : 'n/a'} = ${clean(plan.rr_formula || '')}; ${fin(sens.low) ? `${num(sens.low, 2)} to ${num(sens.high, 2)} across fills and costs` : ''}`),
+      row('Typical time to resolve', clean(g(plan, 'holding', 'basis') || '')), row('Earnings', clean(g(plan, 'earnings', 'text') || ''))]));
     parts.push(fine(clean(plan.reassess || '')));
-    const s = plan.sizing_example;
-    if (s && s.available) parts.push(fine(clean(`${s.label} ${s.shares} shares risk about $${Math.round(s.planned_loss)} at the stop. ${s.gap_note || ''}`)));
-  } else if (sw.reassess_when) parts.push(html`${qh('What would make it worth another look')}<p>${clean(sw.reassess_when)}</p>`);
+  } else if (sw.reassess_when) parts.push(html`${qh('When the model would grade a setup again')}<p>${clean(sw.reassess_when)}</p>`);
   parts.push(fine(clean(sw.framework_note || '')));
-  const value = ['S', 'A', 'B'].includes(sw.grade) ? `Grade ${sw.grade}` : sw.grade;
-  return tile('trade', 'Is there a trade?', value, sw.why, html`${parts}`, c);
+  return tile('trade', 'Is there a short-term setup?', setupGrade(sw.grade), sw.why, html`${parts}`, c);
 }
 function earningsTile(er, c) {
   if (!er) return tile('earnings', 'What about earnings?', 'Insufficient Data', 'No earnings data.', '', c);
