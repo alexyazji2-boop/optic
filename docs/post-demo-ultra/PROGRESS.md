@@ -6,7 +6,7 @@ Read this and [REQUIREMENTS_MATRIX.md](REQUIREMENTS_MATRIX.md) before changing a
 
 - **Current phase:** 05 knowledge-level slider (next). Phases 01 to 04 complete (reports below).
 - **Branch / worktree:** `post-demo-ultra` in `~/Optic/wt-ultra`, from `9fa0f36` (tag `post-demo-ultra-baseline`). Upstream unset; nothing pushed or deployed.
-- **Commits:** `fce3e71` setup; `8040f8a` and `795325a` Phase 01; `d4a2b1a` Phase 01 report; `ce60b16` Phase 02 policy module (WIP); `c6724ff` Milo portfolio privacy (cherry-pick of 2236205); `a76916b` Phase 02; `6f2e814` its commit id; `7b14b56` Phase 03; `2f6a548` its commit id; Phase 04 (this commit; its id follows in the next).
+- **Commits:** `fce3e71` setup; `8040f8a` and `795325a` Phase 01; `d4a2b1a` Phase 01 report; `ce60b16` Phase 02 policy module (WIP); `c6724ff` Milo portfolio privacy (cherry-pick of 2236205); `a76916b` Phase 02; `6f2e814` its commit id; `7b14b56` Phase 03; `2f6a548` its commit id; `381a018` Phase 04.
 - **Local server:** launch config `optic-ultra` (:8250, stand-in model :8251 from `tools/milo_standin_ultra.py`, which adds an `ADVISE` keyword that makes the answer break the policy; data `~/Optic/ultra-data`, sandbox brokerage, jobs off, no real model key). Seed password in `~/Optic/ultra-data/seed-output.txt` (never print it). The server does not reload: restart it after editing static files, or the browser keeps the old `?v=` copies.
 - **Working folder (outside the repo):** `~/Optic/work/post-demo-ultra-2026-10-29/` (tools/, crawl1/, dead/, sheets/, baseline/, milo/, registry/, phase02/, phase03/, phase04/).
 - **Resource rule:** at most two subagents at a time (DECISIONS D-007).
@@ -23,7 +23,7 @@ Read this and [REQUIREMENTS_MATRIX.md](REQUIREMENTS_MATRIX.md) before changing a
 7. **Passed / failed.** Suite 7506 passed, 1 skipped, 0 failed. Dead controls 0, with 898 presses answered. Scenarios 27 of 27. Overflow and overlapping text 0 at every size. R04-01 to R04-12 PASS, with R04-09's spacing literals handed to Phase 10 (D-025).
 8. **Browser verification.** Headless Chrome for every measurement, dead-click run and scenario; the browser pane for the first-visit card, the fold memory, the time lines, the Overview's icons and the API words. Before and after sheets at 1440 and 390 and after-only sheets at 1024 and 768 were looked at; they showed the two problems listed in TEST_RESULTS, both fixed.
 9. **Outstanding.** None in Phase 04's scope. Handed on by the phase plan: the Dossier tabs' reading load (BUG-004) to Phase 06; spacing literals and headline sizes to Phase 10 (D-025). For the owner: the navigation names proposed in SIMPLICITY_AUDIT.md section 5, and the two long ported method sentences on the Overview (section 6).
-10. **Commit and next phase.** This commit (its id follows in the next); next is Phase 05.
+10. **Commit and next phase.** `381a018`; next is Phase 05.
 
 ## Phase 03 report (directive 03; reporting format of directive 00)
 
