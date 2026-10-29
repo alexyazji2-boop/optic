@@ -289,3 +289,20 @@ Proposed changes are listed for review; none of these texts was rewritten.
 | 11 | Data-delay statements agree ("delayed about 15 minutes"); the Options page says option chains are real time only when a real-time chain provider is configured | v2 pages | Confirm against each feed's terms (Q6) |
 | 12 | The Terms' "consult a licensed professional before making an investment decision" matches the full disclaimer | Terms, `FULL` | None |
 | 13 | Home's "What changed" panel sends held symbols to `/api/briefing`; the server keeps one row per symbol with a time and nothing about who asked (BUG-041 checked: no defect) | `app/briefing.py` | None |
+
+## 8. The knowledge level and the advice policy (Phase 05)
+
+The five levels (New to Markets to Expert) change how Optic words an explanation. They must never change what the
+advice policy allows, or let a reader get a friendlier answer by claiming to be a beginner.
+
+| # | Check | Evidence | Result |
+|---|---|---|---|
+| 1 | The policy rides on every level: the same policy text, in the same place, whatever the level | `tests/test_knowledge_level_apply.py::test_five_levels_on_one_question_differ_only_in_the_level_block` | PASS |
+| 2 | A question the policy declines is declined the same way at every level: the same request kinds, the same instruction to the model, the same line to the reader | `test_a_question_the_policy_declines_is_declined_the_same_way_at_every_level` | PASS |
+| 3 | Every level's instruction ends with one invariant: figures, calculations, dates, sources, caveats, delay and inference notes and missing-data statements stay; the advice policy applies unchanged; "a simpler level never makes the facts softer" | `app/knowledge.py` INVARIANT; `test_pulse_tone.py::test_the_registers_moved_to_the_knowledge_ladder` checks every level's block ends with it | PASS |
+| 4 | Deep research and the written portfolio briefing take the same level block and keep the policy block | `test_deep_research_and_the_research_route_take_the_level`, `test_the_written_briefing_is_worded_for_the_level` | PASS |
+| 5 | The five answers to one question in the proxy run pass Optic's own whole-answer advice check | TEST_RESULTS Phase 05, the proxy run | PASS on the proxy. 0 findings in four answers; 1 at Advanced, a conditional valuation judgment flagged by the "I'd lean toward" pattern, which on reading is not advice (BUG-092; the check's precision is measured in Phase 08) |
+| 6 | The Privacy policy lists the stored level among what an account keeps | `pages/legalpages.js`; `test_the_privacy_policy_names_the_stored_level` | PASS (wording); the EFFECTIVE date and whether to announce the change are the owner's and counsel's (DECISIONS D-033, BL-02) |
+
+The real model's answers at each level, through Optic's own path, are not tested: the key on this machine is
+refused (BL-01).

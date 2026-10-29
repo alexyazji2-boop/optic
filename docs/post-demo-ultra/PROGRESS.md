@@ -4,13 +4,36 @@ Read this and [REQUIREMENTS_MATRIX.md](REQUIREMENTS_MATRIX.md) before changing a
 
 ## Current state
 
-- **Current phase:** 05 knowledge-level slider (next). Phases 01 to 04 complete (reports below).
+- **Current phase:** 06 Dossier (next). Phases 01 to 05 complete (reports below).
 - **Branch / worktree:** `post-demo-ultra` in `~/Optic/wt-ultra`, from `9fa0f36` (tag `post-demo-ultra-baseline`). Upstream unset; nothing pushed or deployed.
-- **Commits:** `fce3e71` setup; `8040f8a` and `795325a` Phase 01; `d4a2b1a` Phase 01 report; `ce60b16` Phase 02 policy module (WIP); `c6724ff` Milo portfolio privacy (cherry-pick of 2236205); `a76916b` Phase 02; `6f2e814` its commit id; `7b14b56` Phase 03; `2f6a548` its commit id; `381a018` Phase 04.
-- **Local server:** launch config `optic-ultra` (:8250, stand-in model :8251 from `tools/milo_standin_ultra.py`, which adds an `ADVISE` keyword that makes the answer break the policy; data `~/Optic/ultra-data`, sandbox brokerage, jobs off, no real model key). Seed password in `~/Optic/ultra-data/seed-output.txt` (never print it). The server does not reload: restart it after editing static files, or the browser keeps the old `?v=` copies.
-- **Working folder (outside the repo):** `~/Optic/work/post-demo-ultra-2026-10-29/` (tools/, crawl1/, dead/, sheets/, baseline/, milo/, registry/, phase02/, phase03/, phase04/).
-- **Resource rule:** at most two subagents at a time (DECISIONS D-007).
-- **Next action:** Phase 05 (five-level knowledge slider): read `directives/05-knowledge-level.md`, the R05 rows, D-019 (density is separate; the slider sets the knowledge level only) and BUG-002's note. The density tools are `~/Optic/work/post-demo-ultra-2026-10-29/tools/density.py` (with `--secondary`) and `deadclicks.py`, both corrected for folded content (D-022); the before-server worktree for Phase 04 is to be removed once Phase 04 is committed.
+- **Commits:** `fce3e71` setup; `8040f8a` and `795325a` Phase 01; `d4a2b1a` Phase 01 report; `ce60b16` Phase 02 policy module (WIP); `c6724ff` Milo portfolio privacy (cherry-pick of 2236205); `a76916b` Phase 02; `6f2e814` its commit id; `7b14b56` Phase 03; `2f6a548` its commit id; `381a018` Phase 04; `b07e181` its commit id; Phase 05 as recorded in its report.
+- **Local server:** launch config `optic-ultra` (:8250, stand-in model :8251 from `tools/milo_standin_ultra.py`, which adds an `ADVISE` keyword that makes the answer break the policy and, since Phase 05, writes a Sector Read and a portfolio briefing in their writers' shapes; data `~/Optic/ultra-data`, sandbox brokerage, jobs off, no real model key). Seed password in `~/Optic/ultra-data/seed-output.txt` (never print it). The server does not reload Python: restart it after editing server code. The desktop app stops it when the session is paused; start it again with preview_start.
+- **Working folder (outside the repo):** `~/Optic/work/post-demo-ultra-2026-10-29/` (tools/, crawl1/, dead/, sheets/, baseline/, milo/, registry/, phase02/ to phase05/; the five-level proxy run in phase05/proxy/).
+- **Resource rule:** at most two subagents at a time (DECISIONS D-007). One proxy answer costs about 180,000 agent tokens.
+- **Next action:** Phase 06 (Dossier): read `directives/06-dossier.md`, the R06 rows, BUG-001, BUG-004 and BUG-068, D-019 and D-030 (the Simple Analysis must use the reader's knowledge level; R05-05 moves to PASS with that evidence).
+
+## Phase 05 report (directive 05; reporting format of directive 00)
+
+1. **Inspected.** Classic's homepage question and its history (`app.js` `knowledgeOnboardingHTML`, 41eec2f; `components/knowledge.js`, 194bb3d) and v2's removal of it (22b2cc7). The three homes of the level (`app/knowledge.py`, Classic's component, v2's `core/prefs.js`), Milo's own Level select, the settings architecture (`/api/auth/preferences`, `user_preferences`). Every model call (`app/ai.py`: Milo, deep research, the portfolio briefing, and eight shared writers) and every place their texts show. The glossary marking on rule-written text, the Chart page's readings and Learn panel. Both apps' Brokerage briefing and Classic's account and research requests.
+2. **Problems discovered.** v2 no longer asked the question, and the old labels described explanations rather than readers. Milo kept its own level control. The level lived only in the browser, so it did not follow a signed-in reader, and Classic's changes would have been undone by v2. Deep research and the briefing ignored the level (Classic's deep research too). Nothing let a reader re-explain a shared text at their level. Rule-written text explained terms the same way at every level, and eight chart studies had no definitions at all. During the work, the briefing's level line was missing on the first paint, and Classic misdescribed a write-up for the same figures at another level (BUG-083 to BUG-091).
+3. **Root causes.** The ladder predated the directive's five levels and carried an Adaptive mode. The preference had no account column. Per-reader writers took no level argument. Shared texts were written once with no path to another register. The glossary covered the terms Optic had needed so far, not the studies.
+4. **Fixes implemented.**
+   - **The levels:** five, with the directive's names and styles, written once with one invariant (D-026). Adaptive is retired (D-027).
+   - **One preference with one account rule,** in both apps (D-028).
+   - **One slider:** a native range input with the level named and an illustration. It sits in Home's first-visit card, Settings and Milo (D-031).
+   - **Per-reader writers take the level:** Milo, deep research and the briefing (both apps); the briefing is kept per level and says which level it was worded for.
+   - **Shared texts** offer "Explain it for X" as a Milo draft. Milo's history keeps each answer's level (D-029).
+   - **Rule-written text** follows the glossary policy (D-030), and the chart studies are defined in the server's words (D-032).
+   - **The Privacy text** names the stored level (D-033).
+5. **Files changed.** `app/knowledge.py`, `app/ai.py`, `app/main.py`, `app/db.py` (migration 19), `app/auth/store.py`, `app/brokerage/workspace_routes.py`; v2 `core/prefs.js`, `core/store.js`, `core/glossary.js`, `ui/levelslider.js` (new), `ui/milo.js`, `ui/states.js`, `ui/glossmark.js`, `pages/settings.js`, `pages/workspace.js`, `pages/home.js`, `pages/brokerage.js`, `pages/chart-widgets.js`, `pages/legalpages.js`, `app.js`, `css/components.css`, `css/pages.css`; Classic `components/knowledge.js`, `app.js`, `brokerage.js`; tests `test_knowledge_level_apply.py` and `test_v2_knowledge_level.py` (new), `test_knowledge_modes.py`, `test_milo_reasoning.py`, `test_brokerage_workspace.py`, `test_brokerage.py`, `test_pulse_tone.py`, `test_ui_mode.py`, `test_v2_beginner.py`, `test_v2_density.py`, `test_v2_milo_personas.py`; docs DECISIONS D-026 to D-034, BUG_REGISTER BUG-083 to BUG-092, REQUIREMENTS_MATRIX, TEST_RESULTS, COMPLIANCE_REVIEW section 8, BLOCKERS, FEATURE_REGISTRY.
+6. **Tests executed.** The full suite on the final tree. Phase 05's 25 new tests and the updated ones. Twenty-one browser checks in headless Chrome (L1 to L17, the Brokerage line in both apps, Classic's deep research, Home's Desk, a failed save), with screenshots. The five-level proxy run (D-034).
+7. **Passed / failed.** Suite 7529 passed, 1 skipped, 0 failed. Browser checks 21 of 21. The proxy run: the five answers keep the same figures, caveats and sources and differ in vocabulary and depth; Optic's advice check found nothing in four and one false positive at Advanced (BUG-092). R05-01 to R05-04, R05-06 and R05-07 PASS. R05-05 PARTIAL: the Dossier's rule-written analysis reads alike from Beginner to Advanced until Phase 06's Simple Analysis. R05-08 PARTIAL: the production model's own answers are blocked (BL-01).
+8. **Browser verification.** Headless Chrome for every check above, on the local server with the stand-in model, as a guest and signed in, in both apps. The screenshots of the slider at five sizes, the terms at three levels, the Desk, the Chart, the Learn panel and both Brokerage pages were looked at; they showed the two layout problems listed in TEST_RESULTS (BUG-083, BUG-088), both fixed.
+9. **Outstanding.**
+   - **Phase 06 by the directives' design:** level-specific wording for the Dossier's Simple Analysis (directive 06 section 2), which moves R05-05 to PASS.
+   - **Blocked:** the production model's answers at each level (BL-01).
+   - **For the owner:** whether the Privacy addition moves EFFECTIVE or needs an announcement (D-033).
+10. **Commit and next phase.** COMMIT_PLACEHOLDER; next is Phase 06.
 
 ## Phase 04 report (directive 04; reporting format of directive 00)
 
@@ -77,3 +100,6 @@ Read this and [REQUIREMENTS_MATRIX.md](REQUIREMENTS_MATRIX.md) before changing a
 
 ### 2026-10-29 Phase 03
 - Ticker precedence and SPY default, "Follows" removed, one resolver, palette and typeahead fixes, identity guards, 27 scenarios passed, suite green; committed (not pushed).
+
+### 2026-10-29 Phase 05
+- Five levels with the directive's names, one slider in three places, one preference with an account column and one rule in both apps (including a failed save), the level applied to Milo, deep research and the briefing in both apps, "Explain it for" on shared texts, the glossary policy on rule-written text and chart readings, the five-level proxy run, 22 browser checks, suite green; committed (not pushed).

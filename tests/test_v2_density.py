@@ -41,21 +41,22 @@ def test_a_reader_who_had_opened_the_advanced_sections_keeps_them_once(tmp_path)
 
 
 def test_density_and_the_knowledge_level_move_apart(tmp_path):
+    # the stored level is an id from before Phase 05; the first read of the level maps it, once, to the five-level id
     got = prefs_run(tmp_path, "localStorage.setItem('optic.knowledge.v1', 'literate');", """
       p.setDensity('advanced');
       const a = { d: p.density(), k: ls('optic.knowledge.v1'), m: ls('optic.mode.v1'), seen: seen.slice() };
-      p.setAdvancedLanguage(true);
+      p.setKnowledge('expert');
       const b = { d: p.density(), k: ls('optic.knowledge.v1'), m: ls('optic.mode.v1'), seen: seen.slice() };
       p.setAdvanced(false);   // the Dossier's switch
-      const c = { d: p.density(), k: ls('optic.knowledge.v1'), lang: p.advancedLanguageOn() };
-      p.setAdvancedLanguage(false);
+      const c = { d: p.density(), k: ls('optic.knowledge.v1'), level: p.knowledge() };
+      p.setKnowledge('beginner');
       const d = { d: p.density(), k: ls('optic.knowledge.v1') };
       print(JSON.stringify({ a, b, c, d }));
     """)
-    assert got["a"] == {"d": "advanced", "k": "literate", "m": "pro", "seen": ["density"]}
-    assert got["b"] == {"d": "advanced", "k": "advanced", "m": "pro", "seen": ["density", "knowledge"]}
-    assert got["c"] == {"d": "simple", "k": "advanced", "lang": True}, "the density switch leaves Milo's level alone"
-    assert got["d"] == {"d": "simple", "k": "literate"}, "turning Milo's level off returns to the rung the reader had"
+    assert got["a"] == {"d": "advanced", "k": "literate", "m": "pro", "seen": ["density"]}, "not read yet, so not yet mapped"
+    assert got["b"] == {"d": "advanced", "k": "expert", "m": "pro", "seen": ["density", "knowledge"]}
+    assert got["c"] == {"d": "simple", "k": "expert", "level": "expert"}, "the density switch leaves the level alone"
+    assert got["d"] == {"d": "simple", "k": "beginner"}, "and the level leaves density alone"
 
 
 def test_setting_the_same_density_again_says_nothing(tmp_path):
@@ -75,7 +76,8 @@ def test_settings_has_both_controls_and_says_each_leaves_the_other_alone():
     st = (JS / "pages/settings.js").read_text()
     assert "seg('View', [['simple', 'Simple'], ['advanced', 'Advanced']], prefs.density(), 'density')" in st
     assert "prefs.setDensity(b.dataset.v2Density)" in st
-    assert "prefs.setAdvancedLanguage(t.checked)" in st and "prefs.advancedLanguageOn() ? 'checked' : ''" in st
+    assert "${levelSlider({ id: 'set-lvl', label: 'Explain things for' })}" in st, "the level is the five-position slider (Phase 05)"
+    assert "it does not change what a page shows" in st
     frame = (JS / "pages/dossier-frame.js").read_text()
     assert "Milo's level is set in Settings." in frame
 

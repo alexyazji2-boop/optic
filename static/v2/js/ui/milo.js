@@ -28,6 +28,7 @@ import * as FF from './finfigs.js';
 import { CLASSIC } from '../core/classic.js';
 import { miloNotice } from '../core/legal.js';
 import { icon } from './icons.js';
+import { levelSlider } from './levelslider.js';
 
 const HISTORY_KEY = 'optic.pulse.history.v1', PERSONA_KEY = 'optic.pulse.persona.v1', HORIZON_KEY = 'optic.milo.horizon.v1', RESEARCH_KEY = 'optic.research.v1';
 const MAX_CONVERSATIONS = 30, MAX_MESSAGES = 60, MAX_CHARS = 12000;
@@ -142,7 +143,7 @@ function persist() {
   // the advice-policy notes go with their answer, so a reopened conversation still says what was declined or removed
   const from = Math.max(0, S.conv.messages.length - MAX_MESSAGES);
   const messages = S.conv.messages.slice(-MAX_MESSAGES).map((m, k) => { const inf = meta.get(from + k) || {}, o = { role: m.role, content: String(m.content || '').slice(0, MAX_CHARS) };
-    if (inf.policyLine) o.policy = String(inf.policyLine).slice(0, 400); if (inf.amended) o.amended = String(inf.amended).slice(0, 400); return o; });
+    if (inf.policyLine) o.policy = String(inf.policyLine).slice(0, 400); if (inf.amended) o.amended = String(inf.amended).slice(0, 400); if (inf.level) o.level = String(inf.level).slice(0, 20); return o; });
   const list = loadHistory().filter((c) => c.id !== S.conv.id);
   list.unshift({ id: S.conv.id, at: new Date().toISOString(), title: titleOf(messages), ticker: route.symbol || null, messages });
   saveHistory(list.slice(0, MAX_CONVERSATIONS));
@@ -399,6 +400,7 @@ function msgHTML(it) {
   return html`<article class="milo-msg milo-bot" data-v2-milo-i="${it.i}" aria-label="Milo's answer"><p class="milo-who">Milo</p>
     ${aboutLine(info)}
     ${info.assumed ? html`<p class="milo-assumed">${info.assumed}</p>` : ''}
+    ${levelNote(info, live)}
     ${info.deep ? html`<p class="milo-assumed">Deep research: read from live web sources.</p>` : info.web ? html`<p class="milo-assumed">Web search was on for this answer.</p>` : ''}
     ${info.notSent && info.notSent.length ? html`<p class="milo-not-sent" role="note"><b>Not sent with this question:</b> ${info.notSent.join('; ')}.</p>` : ''}
     ${info.policyLine ? html`<p class="milo-policy" role="note">${info.policyLine}</p>` : ''}
@@ -508,14 +510,13 @@ function personaHTML() {
 function settingsHTML() {
   if (!S.showSettings) return '';
   const pp = S.personas || {}, hz = ((pp.horizons || {}).horizons) || [], ms = (S.modes || {}).modes || [];
-  const h = hz.find((x) => x.id === horizon()) || hz[0] || null, mode = ms.find((m) => m.id === prefs.knowledge()) || null;
+  const h = hz.find((x) => x.id === horizon()) || hz[0] || null;
   const list = (rows, head) => (rows && rows.length ? html`<p class="t-label">${head}</p><ul class="plain">${rows.map((r) => html`<li>${r}</li>`)}</ul>` : '');
   // the classic order: the level first, then the timeframe
   return html`<div class="milo-sheet-scrim" data-v2-milo-settings-done aria-hidden="true"></div>
     <div class="milo-settings" id="milo-settings" role="dialog" aria-modal="false" aria-labelledby="milo-set-h">
     <div class="milo-set-head"><h3 id="milo-set-h" tabindex="-1">Response settings</h3><button type="button" class="icon-btn" data-v2-milo-settings-done aria-label="Close Response settings" title="Close">${icon('close')}</button></div>
-    ${ms.length ? html`<label class="select milo-level"><span class="t-label">Level</span><select data-v2-milo-mode>${ms.map((m) => html`<option value="${m.id}" ${prefs.knowledge() === m.id ? 'selected' : ''}>${m.label}</option>`)}</select></label>
-      ${mode && mode.blurb ? html`<p class="milo-lens-blurb">${mode.blurb}</p>` : ''}` : ''}
+    ${ms.length ? html`<div class="milo-level">${levelSlider({ id: 'milo-lvl', label: 'Level', compact: true })}</div>` : ''}
     ${hz.length ? html`<div class="milo-hz" role="group" aria-labelledby="milo-hz-lab"><span class="t-label" id="milo-hz-lab">Timeframe</span>
       <div class="seg">${hz.map((x) => html`<button type="button" aria-pressed="${h && x.id === h.id ? 'true' : 'false'}" data-v2-milo-hz="${x.id}" title="${x.blurb || ''}">${HZ_SHORT[x.id] || x.label}</button>`)}</div></div>
     ${h && h.blurb ? html`<p class="milo-lens-blurb">${h.blurb}</p>` : ''}` : ''}
@@ -824,7 +825,7 @@ export async function send(text, { deep = false } = {}) {
   if (focusTicker) S.conv.lastTicker = focusTicker;
   const ai = S.conv.messages.length; // index the answer will take
   S.conv.messages.push({ role: 'assistant', content: '' }); S.items.push({ kind: 'msg', i: ai });
-  meta.set(ai, { question: text, symbol: focusTicker || route.symbol || null, context, deep, web: !deep && !!S.web });
+  meta.set(ai, { question: text, symbol: focusTicker || route.symbol || null, context, deep, web: !deep && !!S.web, level: prefs.knowledge() });
   S.busy = true; S.live = { i: ai, text: '', status: MILO_STATES.submitted, symbol: focusTicker || route.symbol || null, lastAt: performance.now(), quiet: false };
   if (ta) { ta.value = ''; grow(ta); } S.draft = ''; S.showHistory = false; S.showSettings = false; S.toEnd = true;
   paintChrome(); paintLog(); paintForm(); paintLive();
@@ -839,7 +840,7 @@ export async function send(text, { deep = false } = {}) {
       method: 'POST', credentials: 'same-origin', signal: ctl.signal,
       headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream', 'X-Optic-CSRF': (document.cookie.match(/(?:^|; )optic_csrf=([^;]*)/) || [])[1] || '' },
       body: JSON.stringify(deep
-        ? { ticker: focusTicker || sym0 || null, question: askedText || (focusTicker || sym0 ? null : MARKET_BRIEF), context }
+        ? { ticker: focusTicker || sym0 || null, question: askedText || (focusTicker || sym0 ? null : MARKET_BRIEF), context, mode: prefs.knowledge() }
         : { messages: S.conv.messages.slice(0, ai).map((m) => ({ role: m.role, content: m.content })), context, web: !!S.web, attachments, persona: persona(), mode: prefs.knowledge(), horizon: horizon() }),
     });
     // the server has the question and has put its context together: the answer is being prepared
@@ -1190,6 +1191,28 @@ function setSettings(open, refocus = true) {
   else if (refocus) { const b = $('[data-v2-milo-settings]', h); if (b) b.focus({ preventScroll: true }); }
 }
 
+// An answer keeps the level it was written for (Phase 05, directive 05 section 6). When the reader has moved since, it
+// says so and offers to ask again at the new level: drafted into the box, sent only when the reader presses Send, and
+// the answer itself is never rewritten.
+const levelLabel = (id) => ((((S.modes || {}).modes) || []).find((m) => m.id === id) || {}).label || '';
+function levelNote(info, live) {
+  if (live || !info || !info.level || info.deep) return '';
+  const now = prefs.knowledge(), was = levelLabel(info.level), is = levelLabel(now);
+  if (info.level === now || !was || !is) return '';
+  const q = String(info.question || '').replace(/\s+/g, ' ').trim().slice(0, 90);
+  return html`<p class="milo-assumed milo-level-was">Explained for ${was}. Your level is now ${is}. <button type="button" class="textlink" data-v2-milo-follow="${q ? `Explain your answer to "${q}" again, for the ${is} level.` : `Explain that again, for the ${is} level.`}">Ask again for ${is}</button></p>`;
+}
+
+// the level moved while a conversation is open: say where the change starts, and leave what was written alone.
+// Registered once, here: wire() runs on every open of the panel.
+prefs.onChange((what) => {
+  if ((what !== 'knowledge' && what !== 'knowledge-synced') || !S.conv.messages.length) return;
+  const is = levelLabel(prefs.knowledge());
+  if (!is) return;
+  S.items.push({ kind: 'note', text: `From here on Milo explains for ${is}. Earlier answers stay as they were written.` });
+  if (S.mounted && S.mounted.isConnected) paintLog();
+});
+
 function wire(root) {
   root.addEventListener('submit', (e) => {
     if (e.target.closest('[data-v2-milo-form]')) { e.preventDefault(); send($('#milo-q', root).value); return; }
@@ -1243,7 +1266,6 @@ function wire(root) {
   root.addEventListener('scroll', (e) => { if (e.target.classList && e.target.classList.contains('milo-log')) syncLatest(); }, true);
   root.addEventListener('change', (e) => {
     const t = e.target;
-    if (t.matches('[data-v2-milo-mode]')) { prefs.setKnowledge(t.value); paintChrome(); const sel = $('[data-v2-milo-mode]', root); if (sel) sel.focus(); }
   });
   root.addEventListener('click', async (e) => {
     const t = (s) => e.target.closest(s); let b;
@@ -1278,7 +1300,7 @@ function wire(root) {
       const c = loadHistory().find((x) => x.id === b.dataset.v2MiloOpen); if (!c) return;
       S.conv = { id: c.id, messages: (c.messages || []).map((m) => ({ role: m.role, content: m.content })), lastTicker: c.ticker || null };
       meta.clear(); SC.i = null; S.items = S.conv.messages.map((m, i) => ({ kind: 'msg', i }));
-      S.conv.messages.forEach((m, i) => { if (m.role === 'assistant') { const saved = (c.messages || [])[i] || {}; meta.set(i, { question: (S.conv.messages[i - 1] || {}).content || '', symbol: c.ticker || null, policyLine: saved.policy || '', amended: saved.amended || '' }); } });
+      S.conv.messages.forEach((m, i) => { if (m.role === 'assistant') { const saved = (c.messages || [])[i] || {}; meta.set(i, { question: (S.conv.messages[i - 1] || {}).content || '', symbol: c.ticker || null, policyLine: saved.policy || '', amended: saved.amended || '', level: saved.level || '' }); } });
       S.showHistory = false; S.toEnd = true; paintChrome(); paintLog(); const ta = $('#milo-q', root); if (ta) ta.focus(); return;
     }
     if ((b = t('[data-v2-milo-del]'))) { const id = b.dataset.v2MiloDel; saveHistory(loadHistory().filter((c) => c.id !== id)); if (S.conv.id === id && !S.busy) { S.conv = blankConv(); S.items = []; meta.clear(); } paintChrome(); paintLog(false); const hd = $('#milo-hist-h', root); if (hd) { hd.setAttribute('tabindex', '-1'); hd.focus({ preventScroll: true }); } return; }

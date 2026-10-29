@@ -171,3 +171,88 @@ re-spaces every page, which then needs a visual review of every route at four si
 Phase 10 would review the same pages twice. The counts and the design standard's list are Phase 10's input
 (SIMPLICITY_AUDIT.md section 9).
 
+
+**D-026 (Phase 05) The five levels carry the directive's names.** The ladder had five modes named for the
+explanation (Simple, Financially Literate, Advanced, Professional, Adaptive); the code said the labels described
+the explanation rather than the reader. Directive 05 names five levels for the reader (New to Markets, Beginner,
+Intermediate, Advanced, Expert) with a style for each, so those names and styles replace the old ones
+(`app/knowledge.py`, the one place the styles are written). Old ids keep working: `simple` reads as New to Markets,
+`literate` as Intermediate, `professional` as Expert, in the server, Classic and v2, and a stored old id is rewritten
+once so both apps read the same value. Classic's panel ladder keeps its four rungs: New to Markets and Beginner share
+Simple's, so no Classic layout moves.
+
+**D-027 (Phase 05) Adaptive is retired.** Adaptive judged the depth from each question. It is not one of the five
+positions, and a slider with a sixth hidden mode would not show the reader what they get. A stored `adaptive` reads
+as Intermediate, where its layout already sat, and the reader's chosen level is always the one used
+(`knowledge.resolve_for_answer` returns it; the name is kept for its callers).
+
+**D-028 (Phase 05) One preference, with one rule for the account.** The value is Classic's key
+`optic.knowledge.v1` in the browser and `user_preferences.knowledge_level` for a signed-in reader (migration 19,
+additive: one nullable column; unknown values are dropped, old ids mapped). The rule, in v2 (`core/store.js`) and
+Classic (`components/knowledge.js`) alike:
+- At sign-in, an account that has a level wins and is written to the browser without being sent back.
+- An account that never chose takes the level this browser chose, if it chose one.
+- Each change made while signed in is saved to the account. A save that fails keeps the level in the browser,
+  and the slider says so. The failure is remembered (`optic.knowledge.pending.v1`) with the unsaved level itself, the
+  account, and the version of its preferences this browser last saw (`updated_at`, now returned with the preferences
+  and never set by a client). At the next load the unsaved level is sent up if nothing has changed the account since,
+  and yields to the account's newer level if something has. Versions are compared, never clocks. The entry is a
+  personal key (both apps' PERSONAL_KEYS), so it is shelved with the account's other things when someone else uses
+  the browser, and it carries its own level because the shared level setting may have changed in between.
+- A guest's level lives in the browser only. Where storage is refused (private mode), the default is used and
+  nothing breaks.
+
+The session's own answer (`/api/auth/me`) already carries the preferences, so v2 asks for them separately only when
+it does not. Density stays its own setting (D-019): the slider never changes which panels a page shows.
+
+**D-029 (Phase 05) Shared texts are written once; per-reader texts take the level.** Directive 05 section 6 asks
+that new answers use the new level, that existing content can be re-explained cheaply, that history is never
+silently changed and that API costs are avoided. So:
+- **Per-reader writers take the level:** Milo, deep research and the written portfolio briefing (both apps). The
+  briefing is kept per figures and per level. A write-up says which level it was worded for. When the reader's level
+  has moved, the page says "an earlier write-up was worded for X; this one would be for Y", and nothing is written
+  until the reader asks.
+- **Shared texts stay as written:** the Read, the Desk, Sector and Index Reads, pre-earnings briefs and editions are
+  written once for every reader, in the Intermediate register, so a level never costs another model call. A reader at
+  another level gets one "Explain it for X" press, which drafts a Milo question holding the text. Nothing is sent
+  until the reader presses Send.
+- **Milo's history keeps each answer's level.** A later level change adds a note that earlier answers stay as they
+  were written, and offers "Ask again for X" as a draft. No answer is rewritten or sent again.
+
+**D-030 (Phase 05) Rule-written text follows the glossary policy; Phase 06 builds the Simple Analysis on it.**
+Text written by fixed rules (the Overview, chart readings, the Options and Earnings notes) cannot be reworded per
+level without five hand-written versions of every sentence. The level decides how its terms are explained instead:
+- **New to Markets:** a term's definition sits in the sentence, from the glossary's own first sentence (up to 140
+  characters).
+- **Beginner to Advanced:** the term is marked and explains itself when pressed.
+- **Expert:** no marks.
+
+A definition joins prose only. A term in a table cell or a figure's label keeps its mark, so data rows keep their
+shape (directive 05 section 4). Beginner, Intermediate and Advanced therefore read alike on rule-written text. Directive 06 section 2 rebuilds the
+Dossier's Simple Analysis and requires it to use the reader's level; that is where the Dossier's rule-written
+wording gets level-specific text, built on this preference.
+
+**D-031 (Phase 05) The first-visit question is asked again, in Home's first-visit card.** v2 had asked "How should
+Optic speak to you?" on Home (de6b20b, 48e073d) and moved the level to Settings only on 2026-10-19 (22b2cc7); Phase 04
+removed the handlers left behind (D-021). Directive 05 restores Classic's homepage question (Classic: `app.js`
+`knowledgeOnboardingHTML`, 41eec2f, 2026-09-14; the levels in `components/knowledge.js`, 194bb3d). It returns as the
+compact slider inside the card a first visit already shows: no modal, no extra card, dismissed with the card. The
+same slider is in Settings and in Milo's Response settings, where Milo's own Level select used to be.
+
+**D-032 (Phase 05) Chart studies are defined in the server's own words.** The Chart page's explanations are its
+studies' readings under the chart. The glossary had no entry for eight of them, so New to Markets defined none. The
+entries added are the server's description of what it computes (`app/analytics/indicators.py`, CATALOGUE
+"represents"), word for word. They go into both glossaries, which must stay identical (tests/test_v2_chart_widgets.py),
+so Classic's term tips gain them too. A test keeps them equal to the server's text.
+
+**D-033 (Phase 05) The privacy text names the stored level; its date is the owner's.** The Privacy page lists what
+Optic keeps with an account. The level is now one of those things, so the list says so. The page's rule is that a
+change moves EFFECTIVE and a significant one is announced first. Whether this addition is significant, and whether it
+moves the date, is for the owner and counsel (BLOCKERS BL-02). EFFECTIVE is unchanged and COMPLIANCE_REVIEW section 8
+carries the item.
+
+**D-034 (Phase 05) Five meaningfully different answers are measured on a proxy, not claimed for production.** The
+key on this machine is refused (BL-01). Optic's own request for one question on one fixed context was built at each
+level. Each was answered by a separate Sonnet 5.5 agent (Milo's production model), given that one request under a
+neutral file name, and the answers were measured by a deterministic script (TEST_RESULTS, Phase 05). That shows what
+the prompts do to that model. It is not Optic's API path, and it is reported as a proxy.

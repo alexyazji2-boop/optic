@@ -31,6 +31,7 @@ import { watchTables } from './ui/align.js';
 import { startUnread } from './core/unread.js';
 import { startStrips } from './ui/strips.js';
 import { watch as watchGlossary } from './ui/glossmark.js';
+import { catalogue as levelCatalogue } from './ui/levelslider.js';
 import { wire as wireTypeahead } from './ui/typeahead.js';
 
 // Home is the research workspace (Market Overview by default); pages/home.js supplies its blocks
@@ -339,6 +340,7 @@ async function boot() {
   startUnread(shell.setUnread);
   wireTypeahead(document);   // suggestions under every symbol box that opts in with data-v2-ta (ui/typeahead.js)
   watchGlossary($('#main'));   // glossary terms marked on eligible text, once per section (Classic parity B9.1)
+  levelCatalogue();   // the five levels' names, for the slider and "Explain it for" (Phase 05); one cached request
   startStrips();   // sideways strips: edge arrows, the wheel and a mouse drag (Classic parity B3)   // the bell and the phone bar's Watchlist count (signed in only)
   scrollmem.start();
   router.onRoute(show);

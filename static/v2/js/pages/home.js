@@ -8,7 +8,7 @@
 import { html, raw } from '../core/dom.js';
 import * as store from '../core/store.js';
 import { num, signed, dir, money, signedMoney, clean, ago, shortDate, fullDate, isNum } from '../core/format.js';
-import { skeleton, empty, how } from '../ui/states.js';
+import { skeleton, empty, how, reExplain } from '../ui/states.js';
 import { icon } from '../ui/icons.js';
 
 export const STARTERS = ['AAPL', 'NVDA', 'MSFT', 'SPY'];
@@ -261,7 +261,8 @@ export function deskBody(md) {
   const lead = (md.lead || []).map(clean), ed = md.edition;
   const scen = md.scenarios || [], cal = md.calendar || [], limits = md.limits || [];
   const rest = lead.length > 1 || scen.length || md.note || cal.length;
-  return html`<p class="ws-sub">${md.date ? `For ${shortDate(md.date)}. ` : ''}${voiceWords(md)}</p>
+  // the Desk is written once for every reader (Phase 05): a reader at another level gets Milo to explain it at theirs
+  return html`<p class="ws-sub">${md.date ? `For ${shortDate(md.date)}. ` : ''}${voiceWords(md)}${reExplain(md)}</p>
     ${ed && ed.headline ? html`<div class="desk-ed"><p class="t-label">${ed.is_today ? 'Today\'s edition' : `Latest edition, ${shortDate(ed.date)}`}${ed.slot_label ? `, ${ed.slot_label}` : ''}${ed.test_edition ? ', a test edition' : ''}</p>
       <p class="desk-ed-h">${clean(ed.headline)}</p>${ed.summary ? html`<p>${clean(ed.summary)}</p>` : ''}<p><a class="textlink" href="#/read">The full edition ${icon('arrow')}</a></p></div>` : ''}
     ${md.overall ? html`<p class="desk-bottom"><b>Bottom line.</b> ${clean(md.overall)}</p>` : ''}

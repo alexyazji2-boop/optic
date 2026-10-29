@@ -259,19 +259,23 @@ def test_the_registers_moved_to_the_knowledge_ladder():
     protecting, asserted where the behaviour lives.
 
     The one that matters: a plainer register may not buy its plainness with the
-    facts. Simple is the rung most able to lose a caveat, because softening is
-    what "explain it simply" sounds like it licenses."""
+    facts. New to Markets (Simple before Phase 05) is the rung most able to
+    lose a caveat, because softening is what "explain it simply" sounds like it
+    licenses. Every rung also ends with the shared invariant."""
     from app import knowledge
-    simple = knowledge.MODES["simple"]["prompt"].lower()
+    simple = knowledge.MODES["new"]["prompt"].lower()
     assert "never state a number you do not have" in simple
     assert "delayed data and inferred flow" in simple
-    assert "not that the facts are softer" in simple
+    assert "plain words, not softer facts" in simple
+    for mode in knowledge.ORDER:
+        assert knowledge.prompt_for(mode).endswith(knowledge.INVARIANT), mode
 
 
 def test_every_rung_still_explains_its_own_terms_or_says_why_not():
-    """The middle rungs gloss as they go; Professional deliberately does not,
-    and has to say what it keeps instead. A rung that dropped both the glossing
-    and the labelling would read as confident about an inference."""
+    """The middle rungs gloss as they go; Expert (Professional before Phase 05)
+    deliberately does not, and has to say what it keeps instead. A rung that
+    dropped both the glossing and the labelling would read as confident about
+    an inference."""
     from app import knowledge
-    pro = knowledge.MODES["professional"]["prompt"].lower()
+    pro = knowledge.MODES["expert"]["prompt"].lower()
     assert "proxy" in pro and "measured" in pro and "inferred" in pro

@@ -1,13 +1,18 @@
 // Device preferences, shared with the classic app through its own keys, so a
 // choice made in either Settings holds in both: theme (optic.theme), text
-// size (optic.ui.scale.v1), time zone (optic.timezone) and the advanced switch
-// (optic.knowledge.v1 with optic.knowledge.basic.v1, the classic ladder).
-// These are device settings, not personal keys: they stay put on sign-in.
+// size (optic.ui.scale.v1), time zone (optic.timezone), density (optic.mode.v1)
+// and the knowledge level (optic.knowledge.v1, five levels since Phase 05). The
+// level is also kept on a signed-in reader's account (core/store.js syncs it);
+// the rest are device settings that stay put on sign-in.
 
 const THEME_KEY = 'optic.theme', SCALE_KEY = 'optic.ui.scale.v1', TZ_KEY = 'optic.timezone';
-const KNOW_KEY = 'optic.knowledge.v1', BASIC_KEY = 'optic.knowledge.basic.v1', ASKED_KEY = 'optic.knowledge.asked.v1';
-const LEVELS = { simple: 0, literate: 1, advanced: 2, professional: 3, adaptive: 1 };
-const DEFAULT_MODE = 'literate';
+const KNOW_KEY = 'optic.knowledge.v1', ASKED_KEY = 'optic.knowledge.asked.v1';
+// The five levels in slider order (post-demo Phase 05, app/knowledge.py). Their labels, blurbs and previews are the
+// server's (/api/knowledge/modes); only the ids and their order are here, and the ids before Phase 05 map on read.
+export const LEVEL_IDS = ['new', 'beginner', 'intermediate', 'advanced', 'expert'];
+const LEVELS = { new: 0, beginner: 1, intermediate: 2, advanced: 3, expert: 4 };
+const LEGACY = { simple: 'new', literate: 'intermediate', professional: 'expert', adaptive: 'intermediate' };
+const DEFAULT_MODE = 'intermediate';
 
 // The classic list, word for word (static/app.js TIMEZONES).
 export const TIMEZONES = [
@@ -107,22 +112,30 @@ export function clock(iso, z = zone()) {
 }
 
 /* ---------------- the knowledge level (how things are explained) ---------------- */
-export function knowledge() { const k = get(KNOW_KEY); return k && k in LEVELS ? k : DEFAULT_MODE; }
-/** Set the knowledge level directly (the Milo panel's selector), as OpticKnowledge.set does. */
-export function setKnowledge(id) {
-  if (!(id in LEVELS) || id === knowledge()) return;
-  put(KNOW_KEY, id); put(ASKED_KEY, '1'); emit('knowledge');
+// One value for the reader, on Classic's key: Milo's answers, deep research, the written briefing and how a page's
+// terms explain themselves all read it (D-026). It changes words, never figures (app/knowledge.py INVARIANT).
+const levelOf = (id) => { const k = String(id || ''); return k in LEVELS ? k : LEGACY[k] || null; };
+export function knowledge() {
+  const k = get(KNOW_KEY), id = levelOf(k);
+  if (id && id !== k) put(KNOW_KEY, id);   // an id from before Phase 05, rewritten once so both apps read the same
+  return id || DEFAULT_MODE;
 }
-/** Milo at the Advanced level or not: on goes to rung 2 and remembers the rung it left; off returns there (Settings'
- *  "Advanced answers from Milo", until Phase 05's slider). It changes the language only, never what a page shows. */
-export function advancedLanguageOn() { return LEVELS[knowledge()] >= LEVELS.advanced; }
-export function setAdvancedLanguage(on) {
-  if (on === advancedLanguageOn()) return;
-  if (on) { put(BASIC_KEY, knowledge()); put(KNOW_KEY, 'advanced'); }
-  else { let back = get(BASIC_KEY); if (!back || !(back in LEVELS) || LEVELS[back] >= LEVELS.advanced) back = DEFAULT_MODE; put(KNOW_KEY, back); }
-  put(ASKED_KEY, '1');
-  emit('knowledge');
+/** The level's position on the slider, 0 (New to Markets) to 4 (Expert). */
+export const levelIndex = (id = knowledge()) => LEVELS[levelOf(id) || DEFAULT_MODE];
+/** Whether the reader has chosen a level (or answered the question by keeping the default). */
+export const knowledgeChosen = () => get(ASKED_KEY) === '1';
+/** Set the level (the slider, wherever it is). `quiet` is for the account's value arriving at sign-in, which is
+ *  written here without being sent back. */
+export function setKnowledge(id, { quiet = false } = {}) {
+  const lv = levelOf(id); if (!lv) return false;
+  const changed = lv !== knowledge();
+  put(KNOW_KEY, lv); put(ASKED_KEY, '1');
+  if (changed) emit(quiet ? 'knowledge-synced' : 'knowledge');
+  return changed;
 }
+/** How a page's own terms explain themselves at this level, as Classic's catalogue says: the definition shown with the
+ *  term (New to Markets), the term marked to explain itself (Beginner to Advanced), or left plain (Expert). */
+export const explainPolicy = (id = knowledge()) => (levelOf(id) === 'new' ? 'inline' : levelOf(id) === 'expert' ? 'off' : 'on_demand');
 
 /* ---------------- density (what a page shows) ---------------- */
 // Simple or Advanced, one state of its own (post-demo overhaul, Phase 04, D-019). Simple leads with each page's main
@@ -137,7 +150,7 @@ export function density() {
   if (d === 'simple') return 'simple';
   // never set: taken once from the knowledge level, so a reader who had turned on "Show advanced analysis" (which
   // wrote the knowledge level) still sees the advanced sections, then kept apart from it
-  const from = LEVELS[knowledge()] >= LEVELS.advanced ? 'advanced' : 'simple';
+  const from = levelIndex() >= LEVELS.advanced ? 'advanced' : 'simple';
   put(DENSITY_KEY, from === 'advanced' ? 'pro' : 'simple');
   return from;
 }

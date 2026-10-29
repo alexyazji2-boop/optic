@@ -14,7 +14,8 @@ import * as api from '../core/api.js';
 import * as store from '../core/store.js';
 import { num, clean, capFirst, ago, isNum, billingOff } from '../core/format.js';
 import * as RP from '../core/reports.js';
-import { stamp } from '../core/prefs.js';
+import { stamp, knowledge } from '../core/prefs.js';
+import { catalogue as levels, levelLabel } from '../ui/levelslider.js';
 import { skeleton } from '../ui/states.js';
 import { lineChart, mountCharts } from '../ui/chart.js';
 import { button as miloButton, provideContext } from '../ui/milo.js';
@@ -211,6 +212,7 @@ function briefing() {
   if (!b) return html`<section class="section"><h2 class="t-h2">Briefing</h2><p class="t-muted" role="status">Measuring what moved...</p></section>`;
   if (b.error) return html`<section class="section"><h2 class="t-h2">Briefing</h2><p>${b.error}</p></section>`;
   const rows = ((b.today || {}).rows || []).slice(0, 5), w = b.written, earlier = b.written_earlier;
+  // a write-up is kept per figures and per knowledge level (Phase 05): one for the same figures at another level is said so
   return html`<section class="section" aria-labelledby="bb-h"><h2 class="t-h2" id="bb-h">Briefing</h2>
     <div class="grid2"><div><h3>Measured: what moved today ${src('market')}</h3>
         ${rows.length ? html`<div class="tscroll"><table class="t"><thead><tr><th scope="col">Holding</th><th scope="col">Today</th><th scope="col">Contribution</th></tr></thead><tbody>${rows.map((r) => html`<tr><td>${r.symbol}</td><td>${sPct(r.change_pct)}</td><td>${signedMoney(r.contribution, 'USD')}</td></tr>`)}</tbody></table></div>` : html`<p class="t-muted">No quotes to measure with just now.</p>`}</div>
@@ -218,9 +220,13 @@ function briefing() {
         ${(b.drivers || []).length ? b.drivers.map((x) => html`<div class="bk-driver"><p><b>${x.symbol}</b> ${sPct(x.change_pct)}</p>${(x.headlines || []).length ? html`<ul class="plain">${x.headlines.map(newsItem)}</ul>` : ''}${x.note ? html`<p class="asof">${clean(x.note)}</p>` : ''}</div>`) : html`<p class="t-muted">No large movers to look for headlines about.</p>`}
         ${(b.market_context || []).length ? html`<div class="bk-driver"><h4>Market context, not about one holding</h4><ul class="plain">${b.market_context.map(newsItem)}</ul></div>` : ''}
         <p class="asof">Only stories that name the company are listed under it. They are matched by when they were published, which is not evidence that they caused the move.</p></div></div>
-    ${w ? html`<div class="bk-written"><p><b>${w.headline}</b></p>${['what_changed', 'drivers', 'ahead', 'attention'].map((k) => (w[k] ? html`<p>${clean(w[k])}</p>` : ''))}<p class="asof">Written by Milo, Optic's AI model, from the measured figures on this page, ${ago(w.written_at)}. It describes your holdings; it does not say what to do with them.</p></div>`
-      : html`<p class="cluster">${earlier ? html`<span class="t-muted">An earlier write-up (${ago(earlier.written_at)}) was from different figures.</span>` : ''}<button type="button" class="btn btn-milo" data-v2-bk-write ${S.writing ? 'disabled' : ''}>${S.writing ? 'Writing...' : 'Write it up'}</button><span class="t-muted">Uses one Milo message. The same figures are kept and not charged again.</span></p>`}</section>`;
+    ${w ? html`<div class="bk-written"><p><b>${w.headline}</b></p>${['what_changed', 'drivers', 'ahead', 'attention'].map((k) => (w[k] ? html`<p>${clean(w[k])}</p>` : ''))}<p class="asof">Written by Milo, Optic's AI model, from the measured figures on this page, ${ago(w.written_at)}.${levelName(w.level) ? ` Worded for ${levelName(w.level)}.` : ''} It describes your holdings; it does not say what to do with them.</p></div>`
+      : html`<p class="cluster">${earlier ? html`<span class="t-muted">An earlier write-up (${ago(earlier.written_at)}) ${!sameFigures(earlier, b) ? 'was from different figures' : levelName(earlier.level) && levelName(knowledge()) ? `was worded for ${levelName(earlier.level)}; this one would be for ${levelName(knowledge())}` : 'was worded for another level'}.</span>` : ''}<button type="button" class="btn btn-milo" data-v2-bk-write ${S.writing ? 'disabled' : ''}>${S.writing ? 'Writing...' : 'Write it up'}</button><span class="t-muted">Uses one Milo message. The same figures at the same level are kept and not charged again.</span></p>`}</section>`;
 }
+
+// the level a write-up was worded for, by its name in the server's catalogue, which loadBriefing waits for
+const levelName = (id) => levelLabel(id);
+const sameFigures = (earlier, b) => !!(earlier && b && b.facts_key && String(earlier.facts_key || '').startsWith(`${b.facts_key}:`));
 
 /* ---------------- holdings & exposure ---------------- */
 function holdings(d) {
@@ -458,7 +464,8 @@ async function loadBriefing() {
   const scope = W.scopeKey;
   if (W.extra.briefing || W.loading.briefing === scope) return;
   W.loading.briefing = scope;
-  let r; try { r = await api.get(`/api/brokerage/workspace/briefing${query()}`, { force: true, timeout: 60000 }); } catch (e) { r = { error: api.explain(e, 'The briefing') }; }
+  // with the level names (ui/levelslider.js), so the first paint can say who a write-up was worded for
+  let r; try { [r] = await Promise.all([api.get(`/api/brokerage/workspace/briefing${query({ level: knowledge() })}`, { force: true, timeout: 60000 }), levels()]); } catch (e) { r = { error: api.explain(e, 'The briefing') }; }
   if (W.scopeKey !== scope) return;
   W.loading.briefing = null; W.extra.briefing = r;
   if (live && S.section === 'overview') paint();
@@ -529,7 +536,7 @@ function wire(main) {
     if ((b = t('[data-v2-bk-period]'))) { W.period = b.dataset.v2BkPeriod; delete W.data.performance; paint(); loadSection(false); return; }
     if (t('[data-v2-bk-write]')) {
       S.writing = true; paint();
-      const r = await act(() => api.post('/api/brokerage/workspace/briefing/written', { accounts: scopeIds() }, { timeout: 90000 }), null, 'The briefing could not be written.');
+      const r = await act(() => api.post('/api/brokerage/workspace/briefing/written', { accounts: scopeIds(), level: knowledge() }, { timeout: 90000 }), null, 'The briefing could not be written.');
       S.writing = false; if (r && W.extra.briefing) W.extra.briefing.written = r.written; paint(); return;
     }
     if ((b = t('[data-v2-bill]'))) {

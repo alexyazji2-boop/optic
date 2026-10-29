@@ -5,6 +5,7 @@ import { html, raw } from '../core/dom.js';
 import { explain } from '../core/api.js';
 import { ago, shortDate } from '../core/format.js';
 import * as prefs from '../core/prefs.js';
+import { levelLabel } from './levelslider.js';
 
 export const skeleton = (kind = 'lines', n = 3, label = 'Loading') => html`<div class="sk-wrap" role="status" aria-label="${label}">
   ${kind === 'chart' ? html`<div class="sk sk-chart"></div>` : ''}
@@ -35,8 +36,22 @@ export const generated = (x, { at } = {}) => {
   const by = x && x.written_by, mech = x && x.voice === 'mechanical';
   if (!by && !mech) return '';
   const when = at ? `, ${ago(at)}` : '';
-  return html`<p class="gen-note">${mech ? `Compiled by fixed rules from the figures${when}; no model wrote it.` : `Written by an AI model from the figures${when}. It interprets them and can be wrong; the figures are the record.`}</p>`;
+  return html`<p class="gen-note">${mech ? `Compiled by fixed rules from the figures${when}; no model wrote it.` : `Written by an AI model from the figures${when}. It interprets them and can be wrong; the figures are the record.`}${reExplain(x)}</p>`;
 };
+/* A shared text (the Read, the Desk, a Sector Read, a pre-earnings brief) is written once for every reader, in the
+ * Intermediate register, so that no level costs another model call. A reader at another level gets one press to have
+ * Milo explain it at theirs (Phase 05, directive 05 section 6): the text goes into Milo's box with the question, in
+ * view, and nothing is sent until the reader presses Send. */
+const textOf = (x) => [x.headline, x.subhead, typeof x.summary === 'string' ? x.summary : (x.summary || {}).text, x.overall,
+  ...(x.lead || []), ...(x.paragraphs || []), ...((x.sections || []).flatMap((s) => [s.title, ...(s.paragraphs || []), s.text])), x.note]
+  .filter((t) => typeof t === 'string' && t.trim()).map((t) => t.replace(/\*\*/g, '').replace(/^## /, '').trim()).join(' ');
+export function reExplain(x) {
+  const now = prefs.knowledge(), name = levelLabel(now);
+  if (now === 'intermediate' || !name) return '';
+  let body = textOf(x || {}).replace(/\s+/g, ' ').trim(); if (!body) return '';
+  if (body.length > 1500) body = `${body.slice(0, 1500).replace(/[^.!?]*$/, '').trim() || body.slice(0, 1500)}`;
+  return html` Worded for Intermediate readers. <button type="button" class="textlink re-explain" data-v2-milo="${`Explain this for the ${name} level, keeping every figure and caveat as it is:\n\n"${body}"`}">Explain it for ${name}</button>`;
+}
 export const empty = (title, body, action) => html`<div class="state" role="note"><p class="t-h3">${title}</p>${body ? html`<p>${body}</p>` : ''}${action || ''}</div>`;
 
 export const failed = (what, err, { retry } = {}) => html`<div class="state err" role="alert">

@@ -254,3 +254,120 @@ Home's panel set and the first-visit card did not move any of them.
 | The final Phase 04 tree, after every change | **7506 passed, 1 skipped, 0 failed** in 229 s (`phase04/pytest-full.txt`) |
 | Phase 04's own tests | `tests/test_v2_density.py` 8 and `tests/test_v2_simplicity.py` 11, plus the design-standard test for "Density and times"; all pass |
 
+
+## Phase 05 (knowledge-level slider), 2026-10-29, working tree on b07e181
+
+Raw results are under `~/Optic/work/post-demo-ultra-2026-10-29/phase05/`. Browser runs use headless Chrome 152 against
+the local server (:8250) on live delayed data, Thursday 2026-10-29 in the regular session. Signed-in runs use the local
+demo account, and its level is put back to Advanced afterwards. Brokerage runs link the local sandbox brokerage
+(synthetic holdings, no credentials) and unlink it afterwards. Milo, deep research and the briefing are answered by
+the stand-in model (`tools/milo_standin_ultra.py`), so these runs check what Optic sends and shows, not a real model's
+words. The five-level answers come from the proxy run below.
+
+### Browser checks (`tools/phase05_checks.py`, `phase05_checks2.py`, `phase05_brokerage_line.py`, `phase05_classic_research.py`)
+
+| Check | Result |
+|---|---|
+| L1 One page's terms at each level (`#/NVDA/options`): New to Markets 25 marks, 19 with their definition in the sentence and the 6 in tables or figure labels marked only; Beginner, Intermediate, Advanced 25 marks and no definitions in place; Expert none | PASS |
+| L2 The Settings slider by keyboard: named "Explain things for"; Right twice from Intermediate reaches Expert, and `aria-valuetext` and the label follow | PASS |
+| L3 The level survives a refresh | PASS |
+| L4 A second tab follows a change made in the first | PASS |
+| L5 An id from before Phase 05 (`professional`) reads as Expert and is rewritten once | PASS |
+| L6 Home's first-visit card asks "How should Optic speak to you?" with the slider; Left from Intermediate sets Beginner | PASS |
+| L7 A shared text (an Index Read) at Beginner offers "Explain it for Beginner"; the press drafts the question with the text in Milo's box and sends nothing (0 requests) | PASS |
+| L8 Phone 390: the slider 332 by 44 px, its level above it, no sideways scroll | PASS |
+| L9 Signed in: a change is saved to the account; another device's older level in this browser is replaced by the account's at the next load | PASS |
+| L10 Milo: an answer keeps the level it was asked at; after a change, a note says earlier answers stay as written and "Ask again for Expert" drafts the question without sending it | PASS |
+| L11 The request Milo sends carries the reader's level block (stand-in log) | PASS |
+| L12 Touch, phone 390 with touch emulation: a drag from the middle to the right end sets Expert (the label previews Advanced on the way and nothing is stored until release); a tap at the left end sets New to Markets | PASS |
+| L13 The three sliders (Settings, Home's card, Milo's Response settings) at 1440, 1024, 768, 390 and 375 by 549: no part overlaps another or leaves the screen, no sideways scroll, 44 px tall on touch screens | PASS |
+| L14 Classic signed in: Classic takes the account's level at load, a pick in Classic's question is saved to the account, and v2 shows it | PASS |
+| L15 The Chart page's study readings (Keltner, ADX, MFI on): New to Markets defines ADX and money flow index in the sentence; Intermediate marks three terms; Expert marks none | PASS |
+| L16 The written portfolio briefing (sandbox): asked at Beginner, the request carries the Beginner block and the answer is labelled `beginner` | PASS |
+| L17 The Chart's Learn panel: choosing ADX shows its definition and drafts "Explain ADX: what it measures, why someone would use it, and what it cannot tell me." in Milo's box; nothing sent | PASS |
+| Brokerage, v2: a write-up says "Worded for Beginner." on the first paint; at Expert the page says "An earlier write-up (just now) was worded for Beginner; this one would be for Expert." and offers Write it up | PASS |
+| Brokerage, Classic: the same two lines, from the same kept write-up | PASS |
+| Classic's Deep research at Beginner: the request carries the Beginner block (BUG-089) | PASS |
+| Home's Desk at Beginner and Expert: "Worded for Intermediate readers. Explain it for X" at the line's size; nothing at Intermediate | PASS |
+| A signed-in save that fails (the account's PATCH made to fail in the page): the level stays in this browser and the toast says "Kept in this browser. Your account did not save it; Optic will try again on your next visit."; at the next load, the account unchanged, the browser's level is sent up and kept (`tools/phase05_failed_save.py`) | PASS |
+
+### Five levels on one question (the proxy run; DECISIONS D-034)
+
+One question on one fixed context, a test fixture rather than market data: "Is NVDA expensive at a P/E of 31.2, and
+what is the options market pricing for its next report?"
+- **Quote:** price 214.01, the day's move -0.64%, quotes delayed 15 minutes.
+- **Valuation:** trailing P/E 31.2, forward 27.4.
+- **Options:** the Nov 27 expiry, 29 days out, at-the-money IV 41.1%, implied move 9.16%.
+- **Calendar:** the report on Nov 17.
+- **Source:** Yahoo Finance.
+
+**How the answers were made.**
+- Optic built its own Milo request at each level (`tools/phase05_proxy_build.py`, `phase05/proxy/request-<level>.json`).
+  The five are identical apart from the level block, about 51,000 characters of system prompt each.
+- Each request went to a separate Sonnet 5.5 agent (Milo's production model) under a neutral file name, `blind-a` to
+  `blind-e` (the mapping is in `blind-map.json`).
+- Each agent was asked to answer as the model receiving the request. Milo's tools were not available, so answers came
+  from the context alone.
+- The answers were measured by `tools/phase05_proxy_metrics.py` (`metrics.json`).
+- The run used about 0.92 million agent tokens of the session's plan and no API credit.
+
+| Level | Words | Sentences | Words per sentence | Flesch reading ease | Words of 3+ syllables | Glossary terms used | Explained where used |
+|---|---|---|---|---|---|---|---|
+| New to Markets | 340 | 27 | 12.6 | 81.8 | 6.5% | 3 | 3 |
+| Beginner | 323 | 23 | 14.0 | 72.4 | 8.4% | 3 | 2 |
+| Intermediate | 303 | 18 | 16.8 | 68.0 | 9.9% | 4 | 0 |
+| Advanced | 324 | 21 | 15.4 | 69.0 | 9.9% | 4 | 0 |
+| Expert | 293 | 22 | 13.3 | 69.2 | 8.5% | 5 | 0 |
+
+| Check, all five answers | Result |
+|---|---|
+| Figures outside the fixture and its simple derivations (the 14% the two multiples imply, the implied move as $19.60, the 11:00 ET capture time) | None |
+| Says the quotes are delayed; calls the forward P/E an estimate; gives the implied move no direction; puts the report before the expiry | Yes, all five |
+| Names the source | Yes, all five |
+| Optic's whole-answer advice check (`ai_policy.check_output`) | 0 findings in four answers. 1 at Advanced: "I'd lean toward 'expensive' if $NVDA's own history puts today's multiple near the top of its range". This is a conditional valuation judgment, not a trade instruction, so it is a false positive of the check's "I'd lean toward" pattern (BUG-092) |
+
+What differs, from reading the five answers:
+- **New to Markets** defines each term where it uses it ("price-to-earnings ratio: what you pay for each $1 of profit
+  from the last 12 months"). It makes one comparison outside markets ("like paying $31.20 for a shop that earns $1 a
+  year") and says why the reading matters to someone holding the stock.
+- **Beginner** uses the standard names and explains each in a sentence ("The price-to-earnings ratio (P/E) is the share
+  price divided by earnings per share"), one idea to a sentence. Both lower levels leave out the implied-volatility
+  figure: they select fewer figures but alter none.
+- **Intermediate** uses ordinary financial terms with brief context: trailing and forward earnings, at-the-money
+  implied volatility. It derives the 14% earnings growth the two multiples imply.
+- **Advanced** uses professional terms without definitions. It adds the base rate (past post-report moves) and what
+  would change the read.
+- **Expert** is the densest. It gives the derived figures (1.14, about 14%, the implied move as $19.60 either way),
+  says what argues against the read and what would change it, and defines nothing.
+
+**Reading.** On this model and question, the five levels change the vocabulary and the depth and keep the same figures,
+caveats and sources. No answer gives personal advice. The two lower levels separate clearly on readability. The upper
+three separate more on reasoning (derived figures, counter-arguments, base rates) than on readability statistics. This
+is one question, through an agent rather than Optic's API path, so it is a proxy and not a measure of Optic's
+production answers (BLOCKERS BL-01).
+
+### Found by Phase 05's own checks
+
+- The Brokerage page's "Worded for" line was missing on the first paint (BUG-083). Fixed.
+- With write-ups kept per level, Classic would have called a write-up for the same figures at another level "from
+  different figures" (BUG-084), and a level chosen in Classic never reached the account, so v2 reverted it (BUG-085).
+  Both fixed.
+- The glossary had no entry for eight chart studies (BUG-086), and a lone capital "A" stayed capital inside an
+  inline definition (BUG-087). Fixed.
+- The "Explain it for" link was body-sized in meta lines (BUG-088). Classic's deep research never sent the level
+  (BUG-089). Fixed.
+- After a failed save the toast promised the level was kept, but the next load put the account's older level back
+  (BUG-090). Fixed with the version rule (D-028).
+- New to Markets added definitions inside table cells and figure labels (BUG-091). Definitions now join prose only.
+- Four older tests pinned the level ids from before Phase 05 or a stub without the new `mode` argument; they were
+  updated to check the same properties under the new names.
+- The desktop app stopped the local server while the session was paused (its log ends with a normal shutdown). It
+  was started again from its launch entry, and every check after that ran on the restarted server.
+
+### Suite
+
+| Run | Outcome |
+|---|---|
+| The Phase 05 tree before the second set of checks | 7519 passed, 1 skipped, 4 failed (the four pinned tests above) |
+| The final Phase 05 tree, after every code change | **7529 passed, 1 skipped, 0 failed** in 212 s (`phase05/pytest-full.txt`) |
+| Phase 05's own tests | `tests/test_knowledge_level_apply.py` (9), `tests/test_v2_knowledge_level.py` (16); `tests/test_knowledge_modes.py`, `test_pulse_tone.py`, `test_ui_mode.py`, `test_brokerage.py` updated; all pass |

@@ -1760,7 +1760,9 @@ ul.cal-react { display: flex; flex-wrap: wrap; gap: 4px 18px; padding-left: 0; l
 .legend-line i.ref-sw { width: 18px; height: 0; border-top: 2px dashed var(--c-ink-3); }
 
 /* Home for a newcomer (beginner brief, 2026-10-20, items 2 to 4) */
-.ws-onboard { grid-template-areas: "text done" "ways ways"; }
+.ws-onboard { grid-template-areas: "text done" "ways ways" "level level"; }
+/* the restored question (Phase 05): the level slider, one row under the three ways, part of the card, never a step */
+.ob-level { grid-area: level; display: grid; gap: var(--s-2); padding-top: var(--s-3); border-top: 1px solid var(--c-line-2); }
 .ob-ways { grid-area: ways; margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--s-3) var(--s-5); }
 .ob-ways li { display: grid; gap: var(--s-2); align-content: start; min-width: 0; } .ob-ways p { margin: 0; font-size: var(--t-md); line-height: 1.45; color: var(--c-ink-2); } .ob-ways b { color: var(--c-ink); }
 .ob-acts { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; }

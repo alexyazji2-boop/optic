@@ -25,6 +25,7 @@ import { marketQuestions } from '../core/market-questions.js';
 import { toast } from '../ui/toast.js';
 import { icon } from '../ui/icons.js';
 import { go } from '../core/router.js';
+import { levelSlider } from '../ui/levelslider.js';
 import { hello, etDate, portfolio, eventsBlock, STARTERS, STARTER_NAMES, STARTER_ABOUT, portfolioSeries, deskBody, evPress, changesBlock, trendsBlock, briefingHoldings } from './home.js';
 import { term } from '../ui/term.js';
 import * as FV from '../core/finviz.js';
@@ -840,6 +841,8 @@ function onboard() {
       <li><p><b>Save a company to follow.</b> Following adds it to your ${term('watchlist', 'watchlist')}; it does not buy shares or spend money. <span class="ob-more">SPY is a fund that tracks the S&P 500. ${store.signedIn() ? '' : 'Kept in this browser until you sign in.'}</span></p>
         <div class="ob-picks" role="group" aria-label="Follow a company">${STARTERS.map((sym) => followBtn(sym))}</div></li>
     </ul>
+    <div class="ob-level">${levelSlider({ id: 'ob-lvl', label: 'How should Optic speak to you?', compact: true })}
+      <p class="ws-sub">It changes the wording, never the figures. Change it any time in Settings or in Milo.</p></div>
     <button type="button" class="btn btn-sm" data-ws-onboard-done>${following.length ? 'Done' : 'Not now'}</button>
   </section>`;
 }

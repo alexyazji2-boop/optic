@@ -457,11 +457,15 @@ const BODY = {
     const terms = Object.keys(GLOSSARY).sort(), word = GLOSSARY[G.learn] ? G.learn : terms[0];
     return html`<label class="select chw-sel"><span class="sr">Term</span><select data-chw-learn>${terms.map((x) => html`<option value="${x}" ${x === word ? 'selected' : ''}>${termName(x)}</option>`)}</select></label>
       <p class="chw-def" data-chw-def aria-live="polite">${GLOSSARY[word]}</p>
+      <p>${miloButton('Explain this with Milo', { ask: learnAsk(word), context: `${C.sym()} Dossier, Chart, Learn`, symbol: C.sym(), cls: 'btn-sm chw-learn-milo' })}</p>
       ${fine(`${terms.length} terms.`)}`;
   },
 };
+// The definitions are written once, for every reader; Milo explains a term at the reader's level (Phase 05), and the
+// button only drafts the question, as the term pop-up's does (ui/term.js)
+const learnAsk = (t) => `Explain ${termName(t)}: what it measures, why someone would use it, and what it cannot tell me.`;
 // The glossary's keys are lower case for matching; a term is shown as it is written ("ATM", "Forward P/E").
-const ACRONYM = new Set(['0dte', 'atm', 'atr', 'cagr', 'dte', 'ebitda', 'ema', 'eps', 'gex', 'itm', 'iv', 'macd', 'oi', 'otm', 'p/e', 'p&l', 'r1', 'r2', 'rsi', 'rvol', 's1', 's2', 'sma', 'vwap']);
+const ACRONYM = new Set(['0dte', 'adx', 'atm', 'atr', 'cagr', 'dte', 'ebitda', 'ema', 'eps', 'gex', 'itm', 'iv', 'macd', 'oi', 'otm', 'p/e', 'p&l', 'r1', 'r2', 'rsi', 'rvol', 's1', 's2', 'sma', 'vwap']);
 export const termName = (t) => capFirst(String(t).split(' ').map((w) => (ACRONYM.has(w) ? w.toUpperCase() : w === 'yoy' ? 'YoY' : w)).join(' '));
 // What the arrows on the chart stand for, and how far back they go, under a switch for them.
 function spanLine(t) {
@@ -742,7 +746,10 @@ export function onChange(e) {
   if (el.matches('[data-chw-btshow]')) { BT.show = el.checked; btSave(); C.chart(); return true; }
   if (el.matches('[data-chw-sr]')) { C.overlay('sr', el.checked); return true; }
   if (el.matches('[data-chw-ins]')) { C.overlay('ins', el.checked); return true; }
-  if (el.matches('[data-chw-learn]')) { G.learn = el.value; const d = el.closest('.chw-body').querySelector('[data-chw-def]'); if (d) d.textContent = GLOSSARY[el.value] || ''; return true; }
+  if (el.matches('[data-chw-learn]')) {
+    G.learn = el.value; const box = el.closest('.chw-body'), d = box.querySelector('[data-chw-def]'), b = box.querySelector('.chw-learn-milo');
+    if (d) d.textContent = GLOSSARY[el.value] || ''; if (b) b.dataset.v2Milo = learnAsk(el.value); return true;
+  }
   return false;
 }
 export function onSubmit(e) {

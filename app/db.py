@@ -956,6 +956,14 @@ MIGRATION_18 = [
 ]
 
 
+# The reader's knowledge level on the account (post-demo Phase 05, 2026-10-29): one of
+# app/knowledge.py's five ids, NULL until the reader chooses one while signed in, so an
+# account that never chose takes the level the browser already holds. Additive only.
+MIGRATION_19 = [
+    "ALTER TABLE user_preferences ADD COLUMN knowledge_level TEXT",
+]
+
+
 MIGRATIONS: List[Tuple[int, str, List[str]]] = [
     (1, "accounts", MIGRATION_1),
     (2, "oauth_pkce", MIGRATION_2),
@@ -975,6 +983,7 @@ MIGRATIONS: List[Tuple[int, str, List[str]]] = [
     (16, "brokerage_workspace", MIGRATION_16),
     (17, "watch_state", MIGRATION_17),
     (18, "usage_metrics", MIGRATION_18),
+    (19, "knowledge_level", MIGRATION_19),
 ]
 
 

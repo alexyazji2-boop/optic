@@ -16,6 +16,7 @@ import { clean, billingOff } from '../core/format.js';
 import { skeleton } from '../ui/states.js';
 import * as drawer from '../ui/drawer.js';
 import { toast } from '../ui/toast.js';
+import { levelSlider } from '../ui/levelslider.js';
 
 let D = {}, live = true, mainEl = null, appRef = null, ui = {};
 const me = () => store.state.me || {};
@@ -143,10 +144,10 @@ function preferences() {
     <section class="section" aria-labelledby="dn-h"><h2 class="t-h2" id="dn-h">How much each page shows</h2>
       <p class="section-sub">Simple leads with each page's main finding and folds the specialist research one press away. Advanced opens it, and Home shows every panel of its layout.</p>
       ${row('View', 'The Dossier\'s "Show advanced analysis" switch is the same setting. It does not change how Milo explains things.', seg('View', [['simple', 'Simple'], ['advanced', 'Advanced']], prefs.density(), 'density'))}</section>
-    <section class="section" aria-labelledby="hm-h"><h2 class="t-h2" id="hm-h">How Milo explains things</h2>
-      <p class="section-sub">This sets the level Milo pitches its answers at, the Level in Milo's Response settings. It does not change what a page shows.</p>
-      ${row('Advanced answers', 'On is Advanced or Professional, off is Simple, Financially Literate or Adaptive. Turning it off returns Milo to the level you had chosen.',
-        html`<label class="switch"><input type="checkbox" role="switch" data-v2-adv ${prefs.advancedLanguageOn() ? 'checked' : ''}> <span>Advanced answers from Milo</span></label>`)}</section>
+    <!-- the knowledge level (Phase 05): one slider, the same one Home's first visit and Milo's Response settings show -->
+    <section class="section" aria-labelledby="hm-h"><h2 class="t-h2" id="hm-h">How Optic explains things</h2>
+      <p class="section-sub">Milo's answers, deep research and the written portfolio briefing are worded for this level, and terms on the pages explain themselves to match. It changes the words, never the figures, sources or caveats, and it does not change what a page shows. ${store.signedIn() ? 'Saved to your account.' : 'Kept in this browser; sign in to keep it on your account.'}</p>
+      ${levelSlider({ id: 'set-lvl', label: 'Explain things for' })}</section>
     <section class="section" aria-labelledby="tz-h"><h2 class="t-h2" id="tz-h">Time zone</h2>
       <p class="section-sub"><b>US market hours are defined in Eastern Time and don't move.</b> This setting only changes the clock they're displayed against, so you can see when the open and close land where you are.</p>
       ${row('Show times in', `Currently ${z} (${prefs.zoneAbbrev(z)})${onMarket ? '. The same as market time, so nothing is converted.' : '.'}`,
@@ -290,7 +291,6 @@ function wire(main) {
   main.addEventListener('change', (e) => {
     const t = e.target;
     if (t.matches('[data-v2-tz]')) { prefs.setTimezone(t.value); paint(); const s = mainEl.querySelector('[data-v2-tz]'); if (s) s.focus(); return; }
-    if (t.matches('[data-v2-adv]')) { prefs.setAdvancedLanguage(t.checked); toast(t.checked ? 'Milo will give advanced answers.' : 'Milo will explain at your chosen level.'); }
   });
   main.addEventListener('submit', async (e) => {
     const f = e.target; e.preventDefault();

@@ -1,4 +1,6 @@
-"""Knowledge modes: one control, three axes.
+"""Knowledge levels: five positions, one preference, and the facts never move (Phase 05 rewrite of the ladder tests).
+
+The earlier history, kept because its reasons still hold:
 
 Before this there were two controls for one question. `uiMode` was Pro / Simple
 and hid panels; `PERSONAS` held six lenses, one of which ("Straight to it") was
@@ -28,130 +30,105 @@ INDEX = open("static/index.html", encoding="utf-8").read()
 STYLES = open("static/styles.css", encoding="utf-8").read()
 
 
-# ------------------------------------------------------------- the ladder
+# ------------------------------------------------------------- the levels
 
-def test_the_five_rungs_exist_in_order():
-    assert knowledge.ORDER == ["simple", "literate", "advanced",
-                               "professional", "adaptive"]
+def test_the_five_levels_exist_in_slider_order():
+    """The owner's five (directive 05, 2026-10-29), New to Markets to Expert, one slider position each."""
+    assert knowledge.ORDER == ["new", "beginner", "intermediate", "advanced", "expert"]
     assert set(knowledge.ORDER) == set(knowledge.MODES)
+    assert [knowledge.MODES[k]["position"] for k in knowledge.ORDER] == [1, 2, 3, 4, 5]
 
 
-def test_the_levels_are_monotonic_across_the_four_real_rungs():
-    """Adaptive is not a rung, it is a choice not to pick one, so it sits at the
-    end of the menu and shares Financially Literate's density."""
-    rungs = [knowledge.MODES[k]["level"] for k in
-             ("simple", "literate", "advanced", "professional")]
-    assert rungs == [0, 1, 2, 3], rungs
-    assert knowledge.MODES["adaptive"]["level"] == knowledge.LEVEL_LITERATE
+def test_the_labels_are_the_owners_five():
+    """The labels used to describe the explanation rather than the reader ("Simple", never "Beginner"). The owner's
+    directive names the five levels, so its words are the labels now (DECISIONS D-026)."""
+    assert [knowledge.MODES[k]["label"] for k in knowledge.ORDER] == [
+        "New to Markets", "Beginner", "Intermediate", "Advanced", "Expert"]
+
+
+def test_classics_panel_ladder_does_not_move():
+    """Classic's layouts read these integers. The two levels that replace Simple share its rung, so nobody's Classic
+    page moved when the five arrived; Intermediate sits where Financially Literate did."""
+    assert [knowledge.MODES[k]["level"] for k in knowledge.ORDER] == [0, 0, 1, 2, 3]
 
 
 def test_the_recommended_default_is_the_middle():
-    """Simple as the default would talk down to most readers; Professional would
-    hide nothing and explain nothing."""
-    assert knowledge.DEFAULT_MODE == "literate"
+    """New to Markets as the default would talk down to most readers; Expert would explain nothing."""
+    assert knowledge.DEFAULT_MODE == "intermediate"
 
 
-def test_an_unknown_mode_falls_back_rather_than_raising():
-    """The value arrives from localStorage, which the reader can edit, and from
-    a request body, which anybody can. An unknown mode still has to render
-    something."""
-    for bad in ("enormous", "", None, "PRO", "beginner"):
+def test_an_unknown_level_falls_back_and_the_old_ids_map():
+    """The value arrives from localStorage, which the reader can edit, from a request body, which anybody can, and
+    from pages loaded before Phase 05, which send the old ids."""
+    for bad in ("enormous", "", None, "PRO", "novice"):
         assert knowledge.normalise(bad) == knowledge.DEFAULT_MODE, bad
-    assert knowledge.normalise("Professional") == "professional", "case only"
+        assert not knowledge.known(bad), bad
+    assert knowledge.normalise("Expert") == "expert", "case only"
+    for old, new in (("simple", "new"), ("literate", "intermediate"), ("professional", "expert"), ("adaptive", "intermediate"), ("advanced", "advanced")):
+        assert knowledge.normalise(old) == new and knowledge.known(old), old
 
 
-# ----------------------------------------------- what a mode may never change
+# ----------------------------------------------- what a level may never change
 
-def test_no_rung_is_allowed_to_soften_the_facts():
-    """The load-bearing contract. A mode may hide a panel and simplify a
-    sentence; it may not round a number or drop a caveat, or "I am new to this"
-    becomes a way of getting a friendlier answer."""
-    simple = knowledge.MODES["simple"]["prompt"].lower()
-    assert "never state a number you do not have" in simple
-    assert "delayed data and inferred flow" in simple
-    assert "not that the facts are softer" in simple
+def test_every_level_carries_the_invariant():
+    """One sentence, appended in one place, so no level can be written without it (directive 05, section 5)."""
+    inv = knowledge.INVARIANT.lower()
+    for phrase in ("every figure, calculation and date is the same at every level", "every source is named the same way",
+                   "every caveat", "missing or unknown", "the advice policy in these instructions applies unchanged",
+                   "never makes the facts softer", "never drops a caveat"):
+        assert phrase in inv, phrase
+    for key in knowledge.ORDER:
+        block = knowledge.prompt_for(key)
+        assert block.startswith(knowledge.MODES[key]["prompt"]) and block.endswith(knowledge.INVARIANT), key
 
 
-def test_the_densest_rung_still_labels_an_inference():
-    """Professional drops the definitions, which is the point, and could just as
-    easily drop the line between measured and inferred. That line is the one
-    thing this register must keep."""
-    pro = knowledge.MODES["professional"]["prompt"].lower()
+def test_no_level_is_allowed_to_soften_the_facts():
+    """New to Markets is the level most able to lose a caveat, because softening is what it sounds like it licenses."""
+    new = knowledge.MODES["new"]["prompt"].lower()
+    assert "never state a number you do not have" in new
+    assert "delayed data and inferred flow" in new
+    assert "not softer facts" in new
+
+
+def test_the_densest_level_still_labels_an_inference():
+    """Expert drops the definitions, which is the point, and could as easily drop the line between measured and
+    inferred. That line is the one thing this register must keep: the instruction, not just the words."""
+    pro = knowledge.MODES["expert"]["prompt"].lower()
     for word in ("proxy", "measured", "inferred"):
         assert word in pro, word
-    # And the *instruction*, not just the vocabulary. The first version of this
-    # checked only the three words, and a mutation that deleted "keep it
-    # labelled" passed: the rest of the sentence still mentioned all three
-    # while no longer telling the model to do anything about them.
-    assert "keep it labelled" in pro
-    assert "label it in a word" in pro
+    assert "keep it labelled" in pro and "label it in a word" in pro
 
 
-def test_the_catalogue_publishes_what_it_cannot_change():
-    """The menu's promise and the behaviour come from one place. A selector
-    claiming to change density while the density table disagreed would be a
-    split nothing reports."""
+def test_the_levels_follow_the_directives_descriptions():
+    """Directive 05 section 1, word for word where it names the register."""
+    want = {"new": ("basic everyday english", "define every financial term"), "beginner": ("simple explanations", "introduce the essential terms"),
+            "intermediate": ("balanced financial vocabulary",), "advanced": ("professional technical language", "deeper analytical reasoning"),
+            "expert": ("concise, precise financial research language", "advanced metrics where they are relevant")}
+    for key, phrases in want.items():
+        text = knowledge.MODES[key]["prompt"].lower()
+        for phrase in phrases:
+            assert phrase in text, (key, phrase)
+
+
+def test_the_catalogue_publishes_what_it_cannot_change_and_one_fact_five_ways():
+    """The slider's promise and its previews come from one place. Every preview explains the same illustration, so the
+    number in it is the same at every level: the level changes the words around the figure, never the figure."""
     cat = knowledge.catalogue()
-    assert cat["changes"] and cat["never_changes"]
-    assert any("figures" in c for c in cat["never_changes"])
+    assert cat["changes"] and any("figures" in c for c in cat["never_changes"])
+    assert cat["preview_fact"].startswith("A company whose shares trade at 30 times its earnings")
+    assert [m["id"] for m in cat["modes"]] == knowledge.ORDER and cat["default"] == "intermediate"
+    assert cat["legacy"] == knowledge.LEGACY
+    for m in cat["modes"]:
+        assert m["preview"] and "30" in m["preview"], m["id"]
+    assert len({m["preview"] for m in cat["modes"]}) == 5, "five ways of saying it, not one"
 
 
-def test_no_label_categorises_the_reader():
-    """The labels say what the reader gets, never what the product thinks of
-    them: "Simple" describes the explanation where "Beginner" would describe the
-    person. Nothing in the interface calls anybody a novice."""
-    # The words that describe a *person*, not the words that describe what is
-    # assumed. "Assumes the basics" is about the knowledge and is fine; "Basic
-    # User" is about the reader and is not. The first draft of this banned
-    # "basic" outright and failed on the honest sentence.
-    banned = ("beginner", "basic user", "novice", "easy mode", "dumb",
-              "for experts", "power user")
-    for key, mode in knowledge.MODES.items():
-        text = (mode["label"] + " " + mode["blurb"] + " " + mode["tagline"]).lower()
-        for word in banned:
-            assert word not in text, "%s says %r" % (key, word)
-    # And the labels themselves are the five the brief specifies, none of which
-    # names a kind of person.
-    assert [knowledge.MODES[k]["label"] for k in knowledge.ORDER] == [
-        "Simple", "Financially Literate", "Advanced", "Professional", "Adaptive"]
-
-
-# ------------------------------------------------------------- adaptive only
-
-def test_only_adaptive_reads_the_question():
-    """A reader who picked Professional did not ask to be second-guessed by a
-    keyword match."""
-    for mode in ("simple", "literate", "advanced", "professional"):
-        assert knowledge.resolve_for_answer(mode, "what is a P/E ratio") == mode
-
-
-def test_adaptive_hears_a_request_to_be_taught():
-    for q in ("What is a P/E ratio?", "explain gamma exposure",
-              "why does the dollar matter", "in simple terms, what is IV"):
-        assert knowledge.resolve_for_answer("adaptive", q) == "simple", q
-
-
-def test_adaptive_hears_fluency_and_does_not_explain_it_back():
-    """"Never explain a term the reader has just used correctly" is the rule
-    this implements."""
-    q = "is the 31x forward multiple supported by the revenue trajectory"
-    assert knowledge.resolve_for_answer("adaptive", q) == "advanced"
-    assert knowledge.resolve_for_answer("adaptive", "what's the term structure doing") \
-        in ("simple", "advanced")
-
-
-def test_adaptive_with_nothing_to_go_on_lands_on_the_default():
-    """A reader who has asked nothing has given nothing to infer from."""
-    for q in ("", None, "NVDA"):
-        assert knowledge.resolve_for_answer("adaptive", q) == knowledge.DEFAULT_MODE
-
-
-def test_adaptive_never_writes_the_readers_mode():
-    """It changes the wording of one answer. The stored preference is the
-    reader's and is not silently reassigned."""
-    fn = knowledge.resolve_for_answer.__doc__ or ""
-    assert "changes nothing about the reader's chosen mode" in \
-        knowledge.resolve_for_answer.__code__.co_consts[0] or "adaptive" in fn.lower()
+def test_the_level_is_the_readers_own_and_never_read_from_the_question():
+    """Adaptive, which read each question, is not one of the five positions (D-027)."""
+    for mode in knowledge.ORDER:
+        for q in ("what is a P/E ratio", "is the 31x forward multiple supported by the skew", "", None):
+            assert knowledge.resolve_for_answer(mode, q) == mode
+    assert knowledge.resolve_for_answer("adaptive", "what is a P/E ratio") == "intermediate"
 
 
 # -------------------------------------------------- the lens / level split
@@ -216,13 +193,18 @@ def test_nothing_that_states_a_limitation_is_ever_gated():
 # --------------------------------------------------- client / server agreement
 
 def test_the_clients_level_table_agrees_with_the_server():
-    """The component copies five integers because density is decided on the
-    first paint, before any fetch has answered. Two records of one fact drift,
-    and the symptom would be panels at a density the selector does not claim."""
+    """Classic copies five integers because density is decided on the first paint, before any fetch has answered, and
+    both apps copy the old ids' map. Two records of one fact drift, so they are compared here."""
     table = COMPONENT.split("var LEVELS = {", 1)[1].split("};", 1)[0]
     client = {k: int(v) for k, v in re.findall(r"(\w+):\s*(\d)", table)}
     server = {k: v["level"] for k, v in knowledge.MODES.items()}
     assert client == server, (client, server)
+    legacy = COMPONENT.split("var LEGACY = {", 1)[1].split("};", 1)[0]
+    assert dict(re.findall(r"(\w+): '(\w+)'", legacy)) == knowledge.LEGACY
+    v2 = open("static/v2/js/core/prefs.js", encoding="utf-8").read()
+    assert "export const LEVEL_IDS = ['new', 'beginner', 'intermediate', 'advanced', 'expert'];" in v2
+    assert "const LEGACY = { simple: 'new', literate: 'intermediate', professional: 'expert', adaptive: 'intermediate' };" in v2
+    assert "const DEFAULT_MODE = 'intermediate';" in v2 and "var DEFAULT_MODE = 'intermediate';" in COMPONENT
 
 
 def test_the_component_copies_only_the_levels():

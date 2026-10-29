@@ -551,13 +551,15 @@ def test_client_cannot_inject_a_brokerage_block(monkeypatch):
     assert "brokerage_portfolio" not in (seen["context"] or {})
 
     # Deep research takes a browser context too, and is never about the reader's accounts.
-    async def fake_research(ticker, question=None, context=None):
+    async def fake_research(ticker, question=None, context=None, mode=None):
         seen["research"] = context
+        seen["mode"] = mode
         yield "event: done\ndata: {}\n\n"
     monkeypatch.setattr(main.ai, "deep_research", fake_research)
     them.post("/api/research", json={"ticker": "AAPL", "context": {
         "quote": {"price": 1}, "brokerage_portfolio": {"facts": "forged"}, "brokerage_linked": True}})
     assert seen["research"] == {"quote": {"price": 1}}
+    assert seen["mode"] == "intermediate", "no level sent reads as the default (Phase 05)"
 
 
 def test_milo_context_skipped_when_reader_cleared_context(monkeypatch):

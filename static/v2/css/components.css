@@ -456,6 +456,9 @@ ul.plain { margin: 0; padding-left: 18px; } ul.plain li { margin-bottom: 7px; }
 .milo-act-btn .ic { width: 15px; height: 15px; } .milo-act-btn:hover { background: var(--c-sunk); color: var(--c-ink); }
 .milo-note { margin: 0; font-size: var(--t-md); color: var(--c-ink-2); padding: 8px 10px; border-radius: var(--r-md); background: var(--c-sunk); }
 .gen-note, .milo-gen { margin: 0; font-size: var(--t-sm); line-height: 1.4; color: var(--c-ink-3); }
+/* "Explain it for X" sits in a text's meta line (ui/states.js reExplain), at that line's size, not a body link's */
+.re-explain { font-size: inherit; min-height: 32px; }
+@media (pointer: coarse), (max-width: 860px) { .re-explain { min-height: var(--tap); } }
 /* the drawer's own paragraph colour (.drawer-body p) is not Milo's: an answer's text is ink, each note keeps its own */
 .milo .milo-bubble p { color: inherit; }
 .milo .milo-who, .milo .milo-about, .milo .milo-gen, .milo .milo-assumed, .milo .milo-lens-blurb, .milo .milo-ctx-meta, .milo .milo-attached, .milo .milo-allow { color: var(--c-ink-3); }
@@ -888,6 +891,8 @@ table.st td a { text-decoration: none; font-weight: 600; } table.st td a:hover {
 @media (prefers-reduced-motion: no-preference) { .gbar, .pdot { transition: stroke var(--d); } }
 /* a term explained where it is used (ui/term.js): the word, underlined with dots, opens a short definition */
 .term { display: inline; padding: 0; margin: 0; border: 0; background: none; color: inherit; font: inherit; text-align: inherit; cursor: help; text-decoration: underline dotted var(--c-ink-3); text-decoration-thickness: 1.5px; text-underline-offset: 3px; }
+/* New to Markets (Phase 05): a marked term's short definition sits beside it, quieter than the sentence it is in */
+.term-inline { color: var(--c-ink-2); }
 .term:hover, .term[aria-expanded="true"] { text-decoration-color: var(--c-ink); }
 .term:focus-visible { outline: 2px solid var(--c-focus); outline-offset: 2px; border-radius: 2px; }
 .term-pop { position: absolute; z-index: 90; display: grid; gap: 6px; padding: 12px 14px; background: var(--c-raised); color: var(--c-ink-2); border: 1px solid var(--c-line); border-radius: var(--r-lg); box-shadow: var(--sh-pop); font-size: var(--t-md); line-height: 1.45; text-align: left; }
@@ -1125,3 +1130,30 @@ html.eff-1100 .answers { grid-template-columns: 1fr 1fr; } html.eff-1100 .answer
    note under an answer a sentence was removed from. Quiet, on the panel's own surface, never a banner. */
 .milo-policy, .milo-amended { margin: 6px 0 0; font-size: var(--t-sm); color: var(--c-ink-2); }
 .milo-amended { margin-top: 8px; }
+
+/* The knowledge-level slider (ui/levelslider.js, post-demo Phase 05): five steps on a quiet, squared track, the
+   chosen step an ink thumb (the active fill was too faint to see on the track), the level named beside it, and the
+   focus ring the one gold. Ticks mark the five positions; the ends are named under them. */
+.lvl { display: grid; gap: 8px; max-width: 620px; }
+.lvl-label { font: 600 var(--t-md)/1.3 var(--f-label); color: var(--c-ink); }
+.lvl-row { display: flex; align-items: flex-start; gap: 14px; }
+.lvl-track { position: relative; flex: 1; min-width: 0; }
+.lvl-in { -webkit-appearance: none; appearance: none; display: block; width: 100%; height: var(--tap); margin: 0; background: transparent; cursor: pointer; }
+.lvl-in::-webkit-slider-runnable-track { height: 6px; border-radius: 2px; background: var(--c-sunk); border: 1px solid var(--c-line); }
+.lvl-in::-moz-range-track { height: 6px; border-radius: 2px; background: var(--c-sunk); border: 1px solid var(--c-line); }
+.lvl-in::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 22px; height: 22px; margin-top: -9px; border-radius: var(--r-sm); background: var(--c-ink); border: 2px solid var(--c-plane); box-shadow: 0 0 0 1px var(--c-line); }
+.lvl-in::-moz-range-thumb { width: 18px; height: 18px; border-radius: var(--r-sm); background: var(--c-ink); border: 2px solid var(--c-plane); box-shadow: 0 0 0 1px var(--c-line); }
+.lvl-in:focus { outline: none; }
+.lvl-in:focus-visible::-webkit-slider-thumb { outline: 2px solid var(--c-focus); outline-offset: 2px; }
+.lvl-in:focus-visible::-moz-range-thumb { outline: 2px solid var(--c-focus); outline-offset: 2px; }
+.lvl-ticks { position: absolute; left: 11px; right: 11px; top: calc(var(--tap) / 2 + 7px); display: flex; justify-content: space-between; pointer-events: none; }
+.lvl-ticks i { width: 1px; height: 6px; background: var(--c-ink-3); }
+.lvl-ends { display: flex; justify-content: space-between; margin-top: 6px; font-size: var(--t-xs); color: var(--c-ink-3); }
+.lvl-now { flex: none; min-width: 8.5em; padding-top: 13px; font: 600 var(--t-md)/1.2 var(--f-label); color: var(--c-ink); }
+.lvl-blurb { margin: 0; font-size: var(--t-base); color: var(--c-ink-2); }
+.lvl-prev { margin: 0; font-size: var(--t-sm); color: var(--c-ink-2); }
+.lvl-prev .t-label { margin-right: 6px; }
+@media (max-width: 640px) {
+  .lvl-row { flex-direction: column; align-items: stretch; gap: 0; }
+  .lvl-now { order: -1; min-width: 0; padding-top: 0; }
+}

@@ -1951,8 +1951,8 @@ Return only a JSON object with these string fields:
 PORTFOLIO_BRIEF_MAX_TOKENS = 1600
 
 
-def write_portfolio_brief(facts: Dict[str, Any]) -> Dict[str, Any]:
-    """A written portfolio briefing from the workspace's measured facts.
+def write_portfolio_brief(facts: Dict[str, Any], level: Optional[str] = None) -> Dict[str, Any]:
+    """A written portfolio briefing from the workspace's measured facts, at the reader's knowledge level.
 
     Not cached here: the caller keys the result on the facts and seals it per
     reader (`portfolio_briefings`), because it describes one person's
@@ -1967,7 +1967,8 @@ def write_portfolio_brief(facts: Dict[str, Any]) -> Dict[str, Any]:
     try:
         client = Anthropic(max_retries=2)
         msg = _ask(client, "portfolio_brief", model=PULSE_MODEL, max_tokens=PORTFOLIO_BRIEF_MAX_TOKENS,
-                   system=[{"type": "text", "text": PORTFOLIO_BRIEF_PROMPT}],
+                   system=[{"type": "text", "text": PORTFOLIO_BRIEF_PROMPT},
+                           {"type": "text", "text": knowledge.prompt_for(level)}],
                    messages=[{"role": "user", "content": "DATA:\n" + json.dumps(facts, default=str)[:40000]}])
     except Exception as exc:                                    # noqa: BLE001
         log.warning("portfolio brief failed: %s", type(exc).__name__)
@@ -1982,7 +1983,7 @@ def write_portfolio_brief(facts: Dict[str, Any]) -> Dict[str, Any]:
         return {"available": False, "reason": "The briefing came back unreadable and was not kept."}
     clean = {k: str(parsed.get(k) or "").replace("\u2014", ",").strip()
              for k in ("headline", "what_changed", "drivers", "ahead", "attention")}
-    return {"available": True, "model": PULSE_MODEL, **clean}
+    return {"available": True, "model": PULSE_MODEL, "level": knowledge.normalise(level), **clean}
 
 
 def write_earnings_brief(ticker: str, facts: Dict[str, Any]) -> Optional[Dict[str, Any]]:
@@ -3347,10 +3348,9 @@ def build_chat_request(
     # and a bad lens is not worth failing a request over.
     persona_prompt = (PERSONAS.get(persona) or PERSONAS[DEFAULT_PERSONA])["prompt"]
 
-    # The knowledge level, resolved against the question rather than taken as
-    # given. Only Adaptive reads the question; every other mode is returned
-    # unchanged, because a reader who picked Professional did not ask to be
-    # second-guessed by a keyword match.
+    # The knowledge level: the reader's own, one of the five (app/knowledge.py,
+    # Phase 05). An old id from a page loaded before the change is mapped, and
+    # the level's block carries the invariant that no level changes the facts.
     level = knowledge.resolve_for_answer(mode, last_user)
     level_prompt = knowledge.prompt_for(level)
     horizon_prompt = horizon_mod.prompt_for(hz, hz_why)
@@ -3684,6 +3684,7 @@ async def deep_research(
     ticker: str,
     question: Optional[str] = None,
     context: Optional[Dict[str, Any]] = None,
+    mode: Optional[str] = None,
 ) -> AsyncGenerator[str, None]:
     """Live web research on a ticker or macro question, streamed as it's written."""
     client = _client()
@@ -3718,7 +3719,9 @@ async def deep_research(
             max_tokens=12000,
             system=[
                 {"type": "text", "text": RESEARCH_PROMPT + "\n\n" + ai_policy.POLICY_TEXT,
-                 "cache_control": {"type": "ephemeral"}}
+                 "cache_control": {"type": "ephemeral"}},
+                # the reader's knowledge level, after the cached prefix as in chat (Phase 05)
+                {"type": "text", "text": knowledge.prompt_for(mode)},
             ],
             messages=[{"role": "user", "content": ask}],
             thinking={"type": "adaptive"},

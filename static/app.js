@@ -154,6 +154,7 @@ const PERSONAL_KEYS = [
   'optic.v2.picker.v1',
   'optic.v2.replay.v1',
   'optic.v2.paper.draft.v1',
+  'optic.knowledge.pending.v1',  // a knowledge level the account has not saved yet (Phase 05)
   'optic.writeToken',            // the owner's token for writes to the record
   'optic.auth.passkeyOffered',   // so the next account is offered one as well
 ];
@@ -478,6 +479,14 @@ const GLOSSARY = {
   'trend strength oscillator': "TrendSpider's gauge of how strong and how stretched a trend is: ADX (trend strength) and RSI (direction) in one line, smoothed. Above +50 a strong move up may be overextended, below -50 a strong move down.",
   'macd': "A trend-following indicator that compares two moving averages to help spot when momentum is shifting up or down.",
   'atr': "Average True Range. A measure of how much a stock typically moves in a single day. A higher ATR means a more volatile stock.",
+  'bollinger bands': "A 20-day average with bands two standard deviations of the closing price either side. The band distance IS the recent volatility, restated in dollars.",
+  'keltner channel': "The same idea as Bollinger with a different ruler: an EMA with bands at two average true ranges, so the width is built from each bar's full high-to-low travel rather than from where it closed.",
+  'donchian channel': "The highest high and the lowest low of the last 20 sessions, drawn as a channel. The oldest systematic trend rule there is.",
+  'regression channel': "A least-squares straight line through the window, with bands at two standard errors of the residuals. The line is the trend the data itself implies, not one drawn by eye.",
+  'adx': "Wilder's measure of how ORDERLY the movement is, on a 0-100 scale, with direction carried separately by +DI and -DI. A market can score high on ADX while falling.",
+  'stochastic': "Where the close sits inside the last 14 sessions' high-low range, as a percentage. At 100 it closed at the top of the range; at 0, the bottom.",
+  'on-balance volume': "A running total of volume, added on up days and subtracted on down days. The level is arbitrary; only its direction carries meaning.",
+  'money flow index': "RSI computed on price times volume rather than price alone, bounded 0-100.",
   'fibonacci retracement': "A charting tool that marks likely support and resistance price levels using a mathematical ratio, meant to guess where a pullback might stop.",
   'support': "A price level where a falling stock has tended to stop falling and bounce.",
   'resistance': "A price level where a rising stock has tended to stop rising and pull back.",
@@ -46555,9 +46564,8 @@ async function sendChat(text) {
       attachments: files,
       persona: pulsePersona,
       // Two axes, sent separately. The lens picks which figures lead; the level
-      // picks how they are worded, and only Adaptive lets the server re-read
-      // the question to decide.
-      mode: window.OpticKnowledge ? window.OpticKnowledge.mode() : 'literate',
+      // picks how they are worded (one of five, app/knowledge.py).
+      mode: window.OpticKnowledge ? window.OpticKnowledge.mode() : 'intermediate',
       // The third axis: the timeframe. Words in the question override it for
       // that answer, server-side.
       horizon: miloHorizon,
@@ -46632,6 +46640,8 @@ async function runResearch() {
       ticker: STATE.ticker || null,
       question,
       context: chatContextPayload(),
+      // the reader's level, as the chat request above sends it (post-demo Phase 05)
+      mode: window.OpticKnowledge ? window.OpticKnowledge.mode() : 'intermediate',
     }, node);
   } catch (err) {
     node.classList.add('err');
@@ -50174,7 +50184,7 @@ function setUiMode(mode) {
   // with the selector.
   if (!UI_MODES.includes(mode)) return;
   if (window.OpticKnowledge) {
-    window.OpticKnowledge.set(mode === 'pro' ? 'professional' : 'literate');
+    window.OpticKnowledge.set(mode === 'pro' ? 'expert' : 'intermediate');
   }
 }
 
@@ -50183,7 +50193,7 @@ function setUiMode(mode) {
 function syncKnowledgeBody() {
   document.body.classList.toggle('mode-simple', uiMode() === 'simple');
   document.body.dataset.knowledge = (window.OpticKnowledge
-    ? window.OpticKnowledge.mode() : 'literate');
+    ? window.OpticKnowledge.mode() : 'intermediate');
 }
 
 /** Repaint for a level change. One owner, so no caller has to remember both. */

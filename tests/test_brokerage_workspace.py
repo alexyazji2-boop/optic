@@ -281,7 +281,7 @@ def test_the_written_briefing_is_metered_and_cached_per_facts(market, monkeypatc
     calls, guarded = [], []
     monkeypatch.setitem(main.brokerage_ws_routes.HOOKS, "spend_guard", lambda request: guarded.append(1))
     monkeypatch.setitem(main.brokerage_ws_routes.HOOKS, "write_brief",
-                        lambda facts: calls.append(facts) or {"available": True, "headline": "A quiet day.",
+                        lambda facts, level=None: calls.append(facts) or {"available": True, "headline": "A quiet day.",
                                                               "what_changed": "x", "drivers": "", "ahead": "",
                                                               "attention": ""})
     first = c.post("/api/brokerage/workspace/briefing/written", json={}).json()

@@ -23,6 +23,7 @@ from starlette.concurrency import run_in_threadpool
 from ..auth import deps
 from . import alerts as alerts_mod
 from . import service, store, workspace
+from .. import knowledge
 
 log = logging.getLogger("optic.brokerage")
 router = APIRouter(prefix="/api/brokerage/workspace", tags=["brokerage-workspace"])
@@ -102,11 +103,19 @@ async def ws_events(request: Request, accounts: Optional[str] = None) -> Dict[st
     return await _run(workspace.events_research, _reader(request), _scope(accounts))
 
 
+def _brief_key(facts_key: str, level: str) -> str:
+    """A written briefing is kept per facts and per knowledge level (Phase 05): the same
+    facts explained for another level are another briefing, and one written earlier
+    stays as it was, shown as earlier, never rewritten behind the reader's back."""
+    return "{}:{}".format(facts_key, knowledge.normalise(level))
+
+
 @router.get("/briefing")
-async def ws_briefing(request: Request, accounts: Optional[str] = None) -> Dict[str, Any]:
+async def ws_briefing(request: Request, accounts: Optional[str] = None,
+                      level: Optional[str] = None) -> Dict[str, Any]:
     user = _reader(request)
     out = await _run(workspace.briefing, user, _scope(accounts))
-    written = await run_in_threadpool(store.briefing, user["id"], out["facts_key"])
+    written = await run_in_threadpool(store.briefing, user["id"], _brief_key(out["facts_key"], level))
     latest = written or await run_in_threadpool(store.briefing, user["id"], None)
     out["written"] = written
     out["written_earlier"] = None if written else latest
@@ -120,7 +129,9 @@ async def ws_briefing_write(request: Request, payload: Dict[str, Any] = Body(def
     user = _reader(request)
     deps.csrf_guard(request)
     facts = await _run(workspace.briefing, user, _scope((payload or {}).get("accounts")))
-    kept = await run_in_threadpool(store.briefing, user["id"], facts["facts_key"])
+    level = knowledge.normalise((payload or {}).get("level"))
+    key = _brief_key(facts["facts_key"], level)
+    kept = await run_in_threadpool(store.briefing, user["id"], key)
     if kept:
         return {"written": kept, "cached": True}
     guard, writer = HOOKS.get("spend_guard"), HOOKS.get("write_brief")
@@ -129,10 +140,10 @@ async def ws_briefing_write(request: Request, payload: Dict[str, Any] = Body(def
     if guard is not None:
         guard(request)                                          # raises 401/429 like a Milo message
     slim = {k: facts.get(k) for k in ("today", "since_sync", "drivers", "upcoming", "observations", "limitations")}
-    out = await run_in_threadpool(writer, slim)
+    out = await run_in_threadpool(writer, slim, level)
     if out.get("available") is not True:
         raise HTTPException(status_code=502, detail=out.get("reason") or "The briefing could not be written.")
-    await run_in_threadpool(store.save_briefing, user["id"], facts["facts_key"], out)
+    await run_in_threadpool(store.save_briefing, user["id"], key, out)
     return {"written": dict(out, facts_key=facts["facts_key"]), "cached": False}
 
 

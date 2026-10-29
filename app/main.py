@@ -7932,8 +7932,10 @@ async def research(request: Request,
     context = _without_linked_keys(payload.get("context"))
     if not ticker and not question:
         raise HTTPException(status_code=400, detail="Provide a ticker or a question.")
+    # the reader's knowledge level, as chat takes it (Phase 05)
+    mode = knowledge_mod.normalise(payload.get("mode"))
     return StreamingResponse(
-        ai.deep_research(ticker, question=question, context=context),
+        ai.deep_research(ticker, question=question, context=context, mode=mode),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )

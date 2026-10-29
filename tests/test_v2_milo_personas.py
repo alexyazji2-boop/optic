@@ -22,7 +22,7 @@ def test_the_personas_are_on_show_and_the_level_and_timeframe_in_response_settin
     chrome = MILO[MILO.index("function chromeHTML() {"):MILO.index("function logHTML() {")]
     assert "${ctxHTML()}${movedHTML()}${personaHTML()}" in chrome, "under the context bar, always drawn"
     sheet = MILO[MILO.index("function settingsHTML() {"):MILO.index("// What Milo receives")]
-    order = [sheet.index(x) for x in ('class="select milo-level"', "data-v2-milo-hz=")]
+    order = [sheet.index(x) for x in ('class="milo-level"', "data-v2-milo-hz=")]   # the level is the slider now (Phase 05)
     assert order == sorted(order), "the classic order: the level, then the timeframe"
     assert 'aria-labelledby="milo-set-h"' in sheet and ">Response settings<" in sheet
 
