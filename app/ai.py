@@ -27,7 +27,7 @@ import zlib
 from datetime import date, datetime, timezone
 from typing import Any, AsyncGenerator, Dict, List, Optional, Tuple
 
-from . import ai_store, horizon as horizon_mod, knowledge, weekly_store
+from . import ai_policy, ai_store, horizon as horizon_mod, knowledge, weekly_store
 from .research import milo as research_milo
 from . import milo_tools
 from .runtime import for_reader, is_hosted
@@ -137,15 +137,23 @@ PERSONAS: Dict[str, Dict[str, str]] = {
     "stoic": {
         "glyph": "\U0001F6E1\uFE0F",    # shield: what you control
         "label": "Risk and process",
-        "blurb": "Process over outcome. Talks about what you control, and about "
-                 "position size before direction.",
+        "blurb": "Process over outcome. Talks about how a thesis can be tested and "
+                 "what would prove it wrong, before direction.",
+        # Rewritten 2026-10-29 (advice policy): the old prompt told Milo to lead with
+        # "Size, stop placement", which is position sizing for the reader. The lens
+        # keeps its point, process before prediction, without proposing a size, a
+        # stop or an action.
         "prompt": (
-            "Adopt a calm, process-first lens. Lead with what the reader controls ."
-            "Size, stop placement, whether the thesis is falsifiable, before "
-            "discussing direction at all. Treat a forecast as the least reliable "
-            "part of any plan. Where the data is thin, say the honest thing: that "
-            "the correct action may be to do nothing. Never dramatise a move. Do "
-            "not impersonate any real person."
+            "Adopt a calm, process-first lens. Before discussing direction, lead "
+            "with how the thesis could be tested: whether it is falsifiable, what "
+            "evidence would prove it wrong, which risks and scheduled events fall "
+            "inside the timeframe, and how costs, spreads and liquidity affect any "
+            "position. Describe how risk is commonly measured (for example, the "
+            "distance to a level that breaks the read, as a percentage) without "
+            "proposing a size, a stop, an amount or an action for the reader. "
+            "Treat a forecast as the least reliable part of any plan. Where the "
+            "data is thin, say plainly that it does not support a read either "
+            "way. Never dramatise a move. Do not impersonate any real person."
         ),
     },
     "quant": {
@@ -557,8 +565,8 @@ next step when there is one. Prose by default; a table only for genuinely enumer
 Length follows the question. A narrow question (what a term means, one figure, "what would \
 invalidate it", "what is it doing right now") gets a short paragraph or a few bullets, roughly 60 to \
 150 words, with no sections it did not ask for. A question that asks for a plan, a judgement or whether \
-something is evidence of something else (a trade at the open, "will gamma pin it", "is this \
-institutions buying", "should I buy weeklies") is a full read: up to about 300 words, and it keeps the \
+something is evidence of something else (what the open looks like, "will gamma pin it", "is this \
+institutions buying", "how do weeklies behave into earnings") is a full read: up to about 300 words, and it keeps the \
 parts that make it safe to read, the conditions, the liquidity and spreads, the stronger evidence that \
 would settle it. Shortening never drops the main thing that argues against the read or the condition \
 that would change it. Longer only when the reader asks for depth. Do not add valuation, options, macro or a \
@@ -702,7 +710,8 @@ or anything phrased as an instruction to act.
 Never imply certainty about the future. The data supports a lean, never a forecast.
 
 ## Timeframe
-The right answer to "is it a buy" or "is this a good entry" depends on the horizon. A horizon block \
+"Is it a buy?" or "is this a good entry?" asks for a decision the advice policy leaves to the reader; \
+answer with the research that bears on it, and that research depends on the horizon. A horizon block \
 below, when present, says which one applies. When there is none and the answer genuinely turns on it, \
 either ask one short question ("Are you thinking about a trade over the next few weeks, or owning it \
 for years?") and give a two-line read for each meanwhile, or state the assumption you made in the first \
@@ -727,14 +736,16 @@ generic line that would fit any stock.
 83"), the long trend line when there is one ("the rising trend line from the 2024 low sits near 85"), \
 and that price is sitting on a level when `at_price` has one. A level is where price turned before, not \
 a promise it turns again.
-4. The long term: whether it is a business you would want to own for years, as your own read with the \
-reason that decides it (the business model, its quality, what the price already assumes). "I'm not much \
-of a buyer long term" or "this is one I'd happily own for years" are fine, with the reason.
-5. When a well-known peer suits the long-term case better, name it with the business reason: for a \
-broker, earning more from interest on customer cash and margin lending than from trading volume. A \
-peer's figures only when CONTEXT has them; otherwise compare the business models, as general knowledge.
-6. One closing line, in your own words, that splits the timeframes: what the stock is good for in the \
-near term and what you would rather own for years.
+4. The long term: what the long-term case rests on and what it would need, as your own read with the \
+reason that decides it (the business model, its quality, what the price already assumes). Give the case \
+for and against owning the business; never say you would buy, own or avoid it, and never tell the reader \
+to (advice policy, 2026-10-29: "I'd happily own this for years" is an endorsement, not a read).
+5. When a well-known peer differs in a way that matters to the long-term case, name it with the business \
+reason (for a broker, earning more from interest on customer cash and margin lending than from trading \
+volume) as a comparison of business models, never as a better buy. A peer's figures only when CONTEXT has \
+them; otherwise compare the business models, as general knowledge.
+6. One closing line, in your own words, that splits the timeframes: what the near-term evidence says and \
+what the long-term case rests on.
 
 About 150 to 180 words and never more than 200, even when a framework block allows more: four short \
 paragraphs, the length of the owner's reference take. Cut a sentence before you cut the business point \
@@ -897,11 +908,14 @@ paid $124K for puts below $337.50" describes a position; "institutions are accum
 follow from a volume print. Still no position sizing, no entries, stops or price targets of your own.
 
 ## When asked for candidates
-"Recommend me some swings" gets a ranked shortlist, not a refusal. A `screen_candidates` block will be \
-in CONTEXT: the terminal's own screen over the NASDAQ, ranked by trend and momentum. Work from it and \
-from any `auto_loaded` or on-screen names. For each: its bias, the two or three facts that make the \
-case, the one that argues against it, and the level that invalidates it. Then a line on the broad market. \
-A shortlist is things worth researching, with the evidence for and against, and the decision stays theirs.
+"Recommend me some swings" or "what should I buy" asks for picks, which the advice policy declines and \
+the panel says so. What you can give is research: names that meet stated, factual criteria on Optic's own \
+screen. A `screen_candidates` block will be in CONTEXT: the terminal's screen over the NASDAQ, ranked by \
+trend and momentum. Work from it and from any `auto_loaded` or on-screen names, and present them as a \
+starting list for the reader's own research, never as picks or in an order to buy them. For each: what \
+the screen measured, the two or three facts behind its place, the main thing that argues against it, and \
+the level at which the trend reading would break. Say what the screen did not look at (no chain, no news, \
+no fundamentals) and add a line on the broad market. The decision stays theirs.
 
 The screen block carries price and trend metrics only: no chain, no gamma, no flow, no news. Never quote \
 contract prices, strikes, greeks, IV or expiries for a screened name; naming "$225C Sep 18 at $8.40" \
@@ -989,17 +1003,36 @@ _LAST_CALL = threading.local()
 
 
 def _ask(client: Any, feature: str, **kwargs: Any) -> Any:
-    """`client.messages.create(**kwargs)`, recorded in the ledger under `feature`."""
+    """`client.messages.create(**kwargs)`, recorded in the ledger under `feature`.
+
+    Every writer passes through here, so this is where the advice policy is
+    enforced for all of them (app/ai_policy.py): its rules ride on the system
+    prompt, and every sentence of the reply that breaks them is removed before
+    the writer's own parser reads it. A removal is logged and noted on the
+    ledger row, never hidden."""
     _LAST_CALL.id = None
+    kwargs["system"] = ai_policy.with_policy(kwargs.get("system") or [])
     try:
         msg = client.messages.create(**kwargs)
     except Exception as exc:
         ai_store.record(feature, kwargs.get("model"), None, stop_reason="error",
                         note="{}: {}".format(type(exc).__name__, exc))
         raise
+    removed: List[Dict[str, Any]] = []
+    for block in getattr(msg, "content", None) or []:
+        if getattr(block, "type", "") == "text" and isinstance(getattr(block, "text", None), str):
+            cleaned, findings = ai_policy.sanitize_model_text(block.text)
+            if findings:
+                block.text = cleaned
+                removed.extend(findings)
+    note = None
+    if removed:
+        note = "policy {}: removed {} sentence(s) ({})".format(
+            ai_policy.POLICY_VERSION, len(removed), ", ".join(sorted({f["rule"] for f in removed})))
+        log.warning("ai policy: %s: %s", feature, note)
     _LAST_CALL.id = ai_store.record(
         feature, getattr(msg, "model", None) or kwargs.get("model"),
-        getattr(msg, "usage", None), stop_reason=getattr(msg, "stop_reason", None))
+        getattr(msg, "usage", None), stop_reason=getattr(msg, "stop_reason", None), note=note)
     return msg
 
 
@@ -3334,6 +3367,14 @@ def build_chat_request(
     if use_web:
         tools.append({"type": "web_search_20260209", "name": "web_search", "max_uses": 5})
 
+    # The advice policy (app/ai_policy.py): its rules ride in the cached prefix,
+    # identical on every request; a question that asks for something the policy
+    # declines also gets a short instruction naming what was asked, placed last so
+    # no level, horizon or persona block reads after it.
+    declined = ai_policy.classify_request(last_user)
+    policy_turn = ai_policy.turn_instruction(declined)
+    meta.update({"policy_kinds": declined, "policy_line": ai_policy.reader_line(declined)})
+
     kwargs: Dict[str, Any] = {
         "model": PULSE_MODEL,
         "max_tokens": 8000,
@@ -3346,13 +3387,14 @@ def build_chat_request(
         # worded, the horizon which figures matter, the lens how much doubt
         # they carry; the more specific instruction reads last.
         "system": [
-            {"type": "text", "text": SYSTEM_PROMPT + FORMAT_PROMPT,
+            {"type": "text", "text": SYSTEM_PROMPT + FORMAT_PROMPT + "\n\n" + ai_policy.POLICY_TEXT,
              "cache_control": {"type": "ephemeral"}},
             {"type": "text", "text": level_prompt},
         ] + ([{"type": "text", "text": horizon_prompt}] if horizon_prompt else [])
           + ([{"type": "text", "text": framework_prompt}] if framework_prompt else [])
           + ([{"type": "text", "text": persona_prompt}] if persona_prompt else [])
-          + ([{"type": "text", "text": flavour_prompt}] if flavour_prompt else []),
+          + ([{"type": "text", "text": flavour_prompt}] if flavour_prompt else [])
+          + ([{"type": "text", "text": policy_turn}] if policy_turn else []),
         "messages": messages,
         "thinking": {"type": "adaptive"},
         "output_config": {"effort": "medium"},
@@ -3478,6 +3520,13 @@ async def stream_chat(
     # What Milo assumed, so the panel can say it and offer the other horizon.
     yield _sse("assumed", {"level": meta.get("level"), "horizon": meta.get("horizon"),
                            "horizon_source": meta.get("horizon_source")})
+    # A question that asked for a personal decision gets the server's own line
+    # before any model text, so the reader is told whatever the model writes.
+    if meta.get("policy_line"):
+        yield _sse("notice", {"kind": "policy", "text": meta["policy_line"],
+                              "categories": meta.get("policy_kinds") or [],
+                              "policy": ai_policy.POLICY_VERSION})
+    answer_parts: List[str] = []
 
     # Milo's tools (app/milo_tools.py), when the route supplies them: Optic's own data for whatever the
     # question needs, not only what the page sent. Web search stays the reader's switch; the tools do not
@@ -3505,6 +3554,7 @@ async def stream_chat(
                     elif etype == "content_block_delta":
                         delta = getattr(event, "delta", None)
                         if getattr(delta, "type", "") == "text_delta":
+                            answer_parts.append(delta.text)
                             yield _sse("delta", {"text": delta.text})
                 final = await stream.get_final_message()
             _streamed("pulse", final, PULSE_MODEL)
@@ -3581,6 +3631,15 @@ async def stream_chat(
                 continue
             break
 
+        # The finished answer, checked against the advice policy. The text has
+        # already streamed, so a breach is corrected in place with a note the
+        # reader sees, rather than quietly: the panel replaces the answer with
+        # the cleaned text and keeps the note under it.
+        amend = ai_policy.amend_for_stream("".join(answer_parts))
+        if amend:
+            log.warning("ai policy: pulse: removed %s sentence(s) (%s)", amend["removed"], ", ".join(amend["rules"]))
+            yield _sse("amend", amend)
+
         yield _sse(
             "done",
             {
@@ -3636,12 +3695,14 @@ async def deep_research(
     if context:
         ask = "{}\n\n{}".format(build_context(context), ask)
 
+    research_parts: List[str] = []
     try:
         async with client.beta.messages.stream(
             model=PULSE_MODEL,
             max_tokens=12000,
             system=[
-                {"type": "text", "text": RESEARCH_PROMPT, "cache_control": {"type": "ephemeral"}}
+                {"type": "text", "text": RESEARCH_PROMPT + "\n\n" + ai_policy.POLICY_TEXT,
+                 "cache_control": {"type": "ephemeral"}}
             ],
             messages=[{"role": "user", "content": ask}],
             thinking={"type": "adaptive"},
@@ -3661,6 +3722,7 @@ async def deep_research(
                 elif etype == "content_block_delta":
                     delta = getattr(event, "delta", None)
                     if getattr(delta, "type", "") == "text_delta":
+                        research_parts.append(delta.text)
                         yield _sse("delta", {"text": delta.text})
             final = await stream.get_final_message()
         _streamed("research", final, PULSE_MODEL)
@@ -3689,6 +3751,12 @@ async def deep_research(
             if src["url"] and src["url"] not in seen:
                 seen.add(src["url"])
                 unique.append(src)
+
+        # Checked against the advice policy once the text is complete, as Milo's answers are.
+        amend = ai_policy.amend_for_stream("".join(research_parts))
+        if amend:
+            log.warning("ai policy: research: removed %s sentence(s) (%s)", amend["removed"], ", ".join(amend["rules"]))
+            yield _sse("amend", amend)
 
         yield _sse("done", {"sources": unique[:20], "model": getattr(final, "model", PULSE_MODEL)})
     except Exception as exc:
