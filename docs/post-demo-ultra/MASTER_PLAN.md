@@ -57,7 +57,41 @@ personalised investment advice.
 | 10 Performance, security, accessibility, polish | [10](directives/10-performance-security-a11y-polish.md) | measurements, cost model, a11y and security findings | not started |
 | 11 Adversarial final audit | [11](directives/11-adversarial-final-audit.md) | FINAL_REPORT.md and the release decision | not started |
 
-The prioritised work list for phases 02 to 11 is written at the end of Phase 01, from what discovery finds.
+## Prioritised work list (written at the end of Phase 01 from the bug register)
+
+Each phase keeps its directive's full scope; these are the confirmed starting points, highest priority first.
+
+- **Phase 02 (advice, legal).** P0: Milo's portfolio tool on every page (BUG-007; take the reviewed fix from
+  milo-portfolio-privacy 2236205 per D-006); the overnight Robinhood feed without a switch (BUG-022; flag,
+  default decided with the licensing note for counsel); unlicensed Yahoo data disclosed consistently
+  (BUG-023, BLOCKED for a fix). Then every AI prompt in `app/ai.py` (12 features, several written "for a
+  self-directed trader"), one shared policy module and an output validator applied at `_ask` and the two
+  streams, stage and score labels that read as signals, the predictive claim (BUG-008), and the legal
+  surfaces (Terms, Privacy, footer, brokerage disclosure, Milo notice) into one disclaimer registry.
+- **Phase 03 (search, ticker state).** Home follows the last company opened and shows "Follows <T>"
+  (BUG-003, `workspace.js:189`); SPY default with a written precedence; the search scenario matrix
+  (rapid, invalid, punctuation, refresh, latency, provider failure) on the palette, the Dossier start box and
+  the Home ticker box; stale-response guards.
+- **Phase 04 (simplicity).** Home first visit (BUG-005: 12 panels, 187 controls), Dossier reading load
+  (BUG-004), Analysts 2,648 words, Financials and Investing over 2,000 words with up to 315 controls, the
+  welcome card, jargon in first screens; one presentation model separate from the knowledge level (BUG-002);
+  navigation names only with the owner's yes. Inputs: the owner-reviewed polish-rebased stack (D-006).
+- **Phase 05 (knowledge slider).** Map the five named levels onto `app/knowledge.py` (simple, literate,
+  advanced, professional, adaptive) keeping stored values readable; one preference with account
+  persistence (`user_preferences` has no column for it today); one prompt contract.
+- **Phase 06 (Dossier).** Simple Analysis in three questions; Advanced replaces Simple with one mode state
+  (BUG-001); request identity on ticker change; accuracy against the provider.
+- **Phase 07 (Milo streaming).** Send an honest first status before the context is built (first byte 1.5 to
+  2.2 s cold with the stand-in); measure client rendering per delta; New Chat; Close behaviour with a stream
+  in flight; scroll rules; composer checks.
+- **Phase 08 (Milo grounding).** Tool contracts for `app/milo_tools.py`; a 100+ case evaluation (the
+  milo-upgrade harness is an input); real-model runs BLOCKED on a working key (BL-01).
+- **Phase 09 (data integrity).** Score models that disagree (BUG-011), rounding (BUG-012), calendar names
+  (BUG-013), unused locals that may hide logic (BUG-017), reconciliation against Yahoo for a fixed set.
+- **Phase 10 (performance, security, accessibility).** `/docs` exposure (BUG-006), CSP report-only, fonts
+  from a CDN (BUG-019), duplicate brokerage status requests, cold first builds (BUG-016), small touch targets
+  (up to 30 on a page at 390), phone layout items (BUG-014, BUG-015), cost model for 100/1,000/10,000 users.
+- **Phase 11.** Independent re-verification of everything above.
 
 ## Files in this folder
 

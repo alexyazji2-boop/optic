@@ -19,6 +19,19 @@ text excludes those.
 repository; a search of every checkout, docs folder and Downloads found no copy. They are in `directives/`
 exactly as sent, so they survive context compaction. Interpretations go here, never into those files.
 
+**D-005 (Phase 01) v2 is the product under repair; Classic is inventoried at route level.** Every visitor gets
+v2 at `/` (OPTIC_DEFAULT_UI=v2 since 2026-10-19); Classic is the fallback at `/classic`, kept until the owner
+approves retiring it, and the house rule is to leave Classic's copy alone unless the task is about it
+(owner, 2026-10-25). So the registry lists Classic's 26 views and what replaces each in v2, and the crawl
+checks Classic for script errors and placeholder text. Server-side changes (AI policy, prompts, data
+correctness) reach both front ends and are tested for both.
+
+**D-006 (Phase 01) Other branches' unshipped fixes are inputs, merged only when a phase needs them.** Several
+local branches hold work the owner has not shipped (FEATURE_REGISTRY Part 7). A phase that needs one (for
+example the Milo portfolio-privacy fix for Phase 02/08, or the Milo evaluation harness for Phase 08) takes
+only that change, by cherry-pick or by hand, records the source commit here, and runs the full suite; nothing
+is merged wholesale, and nothing leaves this machine.
+
 **D-004 (setup) One phase at a time, nothing left behind.** The owner's sequencing instruction (directive 13)
 makes every phase a gate: the next phase starts only when the previous one's requirements are PASS or
 BLOCKED / UNVERIFIED for a named external reason.
