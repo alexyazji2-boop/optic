@@ -59,6 +59,8 @@ removed with the workspace's handlers for controls nothing draws (D-021, SIMPLIC
 
 *Phase 06 updates:* the Dossier Overview shows one analysis view at a time in `#ov-analysis`: the Simple Analysis (`static/v2/js/pages/overview-simple.js`, three answers by fixed rules at the reader's level) or the Advanced Analysis (Classic's research from `pages/overview-research.js`, word for word, in twelve sections). "Show advanced analysis" and "Show simple analysis" swap them through the density setting (D-035). Every response is tied to its visit (D-039). The pipeline is mapped in DOSSIER_PIPELINE.md.
 
+*Phase 07 updates:* Milo's chat route starts its response at once and names each step (`status` gathering, writing, then a tool by name), and the `done` event carries the answer's own timing (`StreamClock`, D-043). The panel draws an answer as it arrives: the finished part once, appended where drawing in pieces equals drawing whole (`settledEnd`), the arriving paragraph as markdown (`streamingHTML`), the chart once (D-044). New output follows only a reader at the end (D-045). New conversation and history wait for an answer with the reason, Close leaves it running, and the panel reopens where the reader was (D-046). Conversations stay in the browser, per account (D-047). The 14 stages and their measured times are in STREAMING_PIPELINE.md.
+
 ## Part 2. Routes and features: the index
 
 Every route the v2 router accepts (`static/v2/js/core/router.js`) and every global component, with its feature id,

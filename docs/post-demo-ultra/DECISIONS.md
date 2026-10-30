@@ -305,3 +305,94 @@ after it arrives, so a screen reader hears where it landed. When the search or a
 where the reader put it (BUG-093). The Overview keeps a focused heading focused through its redraws (BUG-097). Both
 were found by Phase 03's 20-search scenario. Before the fix one run missed 3 of 40 searches in a row; after it, none
 of 120 missed.
+
+**D-042 (Phase 07) The safety gate's cadence stays.** Phase 02's gate (`app/ai_policy.py` StreamGate) releases the
+answer in whole sentences, so that no sentence that breaks the advice policy is ever shown, even for a moment. An
+answer therefore arrives in about 20 steps of a sentence each: 51 characters at the median, 248 ms apart (p90 416).
+That is smoother than it sounds (each step is drawn in place), and the two ways to make it finer are both ruled out:
+streaming text before the gate has read it, or holding sentences back to reveal them a character at a time (directive
+07: "Do not fake streaming"). The first visible word waits for the first complete sentence; in the emulation the gate
+held text for up to 747 ms. The trade-off is recorded here and in STREAMING_PIPELINE.md.
+
+**D-043 (Phase 07) The transport stays, the response starts at once, and the server times every answer.** Server-sent
+events read with `fetch` were already genuine text-delta streaming (`messages.stream`). They suit a one-way answer
+with a POST body, cookies and a CSRF header, and nothing was replaced. What changed:
+- The chat route returns its stream before it gathers the page's figures, and says so first (`status: gathering`,
+  "Reading NVDA's figures"). A failure while gathering is an error event the reader is shown ("Milo could not gather
+  the figures for this question. Send it again in a moment."), without the internals.
+- Each model round says `writing` ("Working out the answer"). A tool's line lasts only while the tool runs.
+- `StreamClock` records, from the request's arrival: the context ready, the first model event, the first model text,
+  the first text the gate let out, each tool's time, the rounds, the text events and the longest gate hold. It is sent
+  with `done` and logged as `milo timing:`, so production's first real answers give the real model's figures.
+- The route yields for 5 ms after its first line, so the line leaves before the context work starts. Parts of that
+  work hold the event loop (BUG-113, Phase 10).
+
+**D-044 (Phase 07) An answer is drawn as it arrives, and a finished paragraph once.** `paintLive` appends the finished
+part of the answer and draws only the paragraph still arriving, at most once a frame. The answer's chart is made and
+drawn once.
+- `settledEnd` (core/milo-text.js) ends the finished part only where drawing in pieces gives what drawing the whole
+  answer gives. Never inside a code block or a bold run. Never before a list item, because mdLite joins a list to the
+  paragraph above it. Never before a line too short to tell, and never into the follow-ups.
+- The parity is tested a character at a time over answers with every kind of markdown Milo writes, and in the
+  browser (C03).
+- The arriving paragraph is drawn as markdown (`streamingHTML`): bold or a code block still open is closed for now,
+  and a marker only begun waits.
+- The limit of two action cards and two figures counts the whole answer (`seen`).
+- At the end the answer is finished in place (`paintFinished`): what is on screen stays, and only the parts around
+  the text are drawn.
+
+**D-045 (Phase 07) Following the end is the reader's choice.** New output follows a reader at the end of the
+conversation and never one who has moved up. Following is decided from the reader's own scrolling (`noteScroll`):
+- Optic only ever scrolls to the end, so a view that moved up was moved by the reader.
+- A wheel turned up stops the following before the view moves.
+- Within 60 px of the end is the end again.
+- A chart or a figure drawn later, and the log getting shorter (the composer growing, a phone's keyboard), keep a
+  following reader at the end (`keepEnd`, a ResizeObserver).
+"Latest" appears 160 px from the end; it scrolls there and follows again. The 120 px allowance measured after each
+frame's changes is gone: it left a following reader behind and pulled a reader 40 px up back down (BUG-100,
+BUG-101). The panel opens again where the reader was: at the end, or at the place they had scrolled up to (BUG-099).
+
+**D-046 (Phase 07) Close, New conversation and Delete while Milo answers.** The answer being written belongs to the
+conversation on screen.
+- **Close (X):** closes the panel and the answer carries on behind it. It is saved whole when it ends. Opening the
+  panel again shows it, still arriving if it is (C13, C14).
+- **New conversation, and Conversation history:** wait for the answer. They stay reachable (aria-disabled, not
+  disabled). A press says "Milo is still answering. Stop the answer first, then start a new conversation" (or "then
+  open your history"). Stop is beside the box. With history waiting, nothing is drawn over the list, and nothing can
+  open another conversation into the answer's place (BUG-102, BUG-104).
+- **Delete:** while Milo answers, the open conversation cannot be deleted; another can. A deleted conversation stays
+  deleted (BUG-103).
+- **Repeats:** New conversation pressed six times makes no conversations (only one with a message is saved). It
+  keeps the draft and clears the conversation's context, its previous ticker included.
+- Close is the X, New conversation the compose icon, Delete the bin beside each saved conversation in history. They
+  are three different controls in three places.
+
+**D-047 (Phase 07) Conversations are kept in this browser, apart for each account.** Milo's history is the classic
+app's key `optic.pulse.history.v1`. It is a personal key, read and written only while this browser holds the
+signed-in person's things (`core/device.js` holds()). Signing out shelves it, and another account or a guest starts
+empty. The panel says so: "Saved in this browser only, never uploaded, and kept apart for each account."
+- **Checked (C18):** the demo account, then another account, then a guest, then the demo account again, on one
+  browser. Each saw only its own. The guest's key held no one else's text. Coming back restored the demo account's
+  14 conversations.
+- **Ids:** random (`c` + time + random), and one conversation updated stays one entry (C16).
+- **A deleted conversation:** removed from the list, and from the screen when it is the open one (C17).
+- **A missing or unreadable list** reads as empty. A full one keeps the newest half.
+- **Server-side history, not built.** It would need: a `conversations` table keyed by the user id with messages
+  stored per row; every read and write checked against the session's user (no id alone opens anything); random,
+  unguessable ids; real deletion, with the account's deletion and export; a retention period; and a Privacy policy
+  change, since the policy now says conversations are not kept (counsel, BL-02). The owner decides whether it is
+  wanted.
+
+**D-048 (Phase 07) A small phone upright keeps room for the conversation.** At 860 px wide or less and 600 px tall or
+less (an iPhone SE's Safari is 375 by 549), the panel hides the subtitle ("Research assistant") and the attached line
+(the context bar names what is attached). It also hides the example question and takes the persona row's padding.
+The data line ("Prices are delayed up to 15 minutes. Not financial advice.") and every control stay. After an answer
+the conversation had 36 px; it now has 125 px. The tool row (Modes, Search the web, Deep research) still takes two
+rows at 375 px. Folding it or the header away is a design decision for the owner, not taken here.
+
+**D-049 (Phase 07) The question's limit is said, and a pasted image is attached.** A question holds 4,000 characters,
+as before. When the box is full it says "That is 4,000 characters, the most a question can hold." After a paste that
+was cut, it says how many characters were left out. Both appear under the box on every screen size. An image pasted
+into the box is attached as a dropped one is, with the same checks. Send with an empty box returns focus to the box
+and sends nothing.
+

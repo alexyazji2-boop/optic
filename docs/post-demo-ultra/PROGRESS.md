@@ -12,6 +12,86 @@ Read this and [REQUIREMENTS_MATRIX.md](REQUIREMENTS_MATRIX.md) before changing a
 - **Resource rule:** at most two subagents at a time (DECISIONS D-007). One proxy answer costs about 180,000 agent tokens.
 - **Next action:** Phase 07 (Milo streaming, New Chat, Close): read `directives/07-milo-streaming.md`, the R07 rows, and the Milo findings in registry A (A16 to A20). The Phase 06 browser tools are `tools/phase06_checks.py` (requests held or failed in the browser) and `tools/phase06_accuracy.py`.
 
+## Phase 07 report (directive 07; reporting format of directive 00)
+
+1. **Inspected.** Milo's whole path from Send to the last word, the fourteen stages of directive 07 (STREAMING_PIPELINE.md): the
+   panel's submit, request and stream reader, the chat route and its checks, the context, the tool loop, the model call, the
+   advice gate, the transport, the drawing, the scrolling and the finish. Also New conversation, Close, history and delete; the
+   composer; the knowledge level; Classic's handling of the same stream. Measured on the code before (`1652e14`, its own
+   worktree and data on :8252) and after, in headless Chrome, against the stand-in model.
+2. **Problems discovered.**
+   - **Drawing:** every frame rebuilt the whole answer, each finished paragraph 15 times at the median and a chart 16
+     times (BUG-107). The arriving paragraph was raw markdown (BUG-108).
+   - **Waiting:** the response began only once the context was gathered: nothing for 102 ms, 318 ms uncached (BUG-106).
+     The activity line was not true to what was happening (BUG-105).
+   - **Scrolling:** a reader at the end was left 52 to 163 px behind (BUG-100); a 40 px scroll up was pulled back
+     (BUG-101); the panel reopened at the top (BUG-099).
+   - **History and delete:** history was redrawn every frame while Milo answered (BUG-102), and a conversation deleted
+     mid-answer came back (BUG-103).
+   - **New conversation:** a silent disabled button while Milo answered (BUG-104).
+   - **Composer:** the 4,000-character cut was silent (BUG-109); a pasted image was ignored (BUG-110).
+   - **Phones:** 36 px of conversation on a 375 by 549 phone (BUG-111).
+   - **For Phase 10:** no server-side question length (BUG-112); synchronous work in the chat context holds the event loop
+     (BUG-113).
+3. **Root causes.** `paintLive` set the whole answer's HTML each frame and its tail as text. The route built the context
+   before returning the stream. Following the end was guessed with a 120 px allowance after each frame's changes, and
+   nothing restored or re-pinned the view. The answer's end saved the conversation on screen whatever the list said. The
+   short-screen rules started at 520 px.
+4. **Fixes implemented.**
+   - **The gate's cadence:** kept, with the trade-off recorded (D-042).
+   - **The route:** starts at once, says each step and times every answer (D-043).
+   - **The drawing:** the finished part drawn once, where pieces equal the whole; the arriving paragraph as markdown; the
+     chart once; the finish in place (D-044).
+   - **Following the end:** the reader's choice; the place restored on reopening (D-045).
+   - **While Milo answers:** New conversation and history wait and say why; Close leaves the answer running; delete guarded
+     (D-046).
+   - **History:** local-only, per account, documented, with the server design it would need (D-047).
+   - **Small phones:** room for the conversation (D-048). **The composer:** the limit said, pasted images attached (D-049).
+   - **Classic:** its step list skips the two new server steps and reads as before.
+5. **Files changed.**
+   - **Server:** `app/ai.py` (`StreamClock`, the `writing` step, tool timing), `app/main.py` (the chat route, `_chat_context`).
+   - **v2:** `static/v2/js/ui/milo.js`, `static/v2/js/core/milo-text.js` (`settledEnd`, `streamingHTML`, `seen`),
+     `static/v2/css/components.css`.
+   - **Classic:** `static/app.js` (one branch).
+   - **Tests:** `tests/test_v2_milo_streaming.py` (new, 11); `test_v2_milo_redesign.py`, `test_v2_milo_scout.py` and
+     `test_spend_guard.py` (its model stub is now async, as the real one is) updated.
+   - **Docs:** STREAMING_PIPELINE.md (new), DECISIONS D-042 to D-049, BUG_REGISTER BUG-099 to BUG-113, REQUIREMENTS_MATRIX,
+     TEST_RESULTS, FEATURE_REGISTRY.
+6. **Tests executed.**
+   - The full suite.
+   - The new streaming tests: parity a character at a time over four answers, the settle rules, the tail, the panel's
+     rules, the route's first step and error, the timing, Unicode, Classic.
+   - The 28 browser checks (`tools/phase07_checks.py`) on the code before and after.
+   - The latency and rendering measurement (`tools/phase07_measure.py`): five answers each, three with a chart, one
+     uncached.
+   - Raw-socket timing of the stream on both servers.
+   - A scroll-nudge probe, Classic's step list on both servers, and the phone layout measured at 375 by 549.
+7. **Passed / failed.**
+   - **Suite:** 7558 passed, 1 skipped, 0 failed (`phase07/pytest-full.txt`).
+   - **Browser checks:** 28 of 28 after; 20 of 28 before (C08, C12, C15a, C15b, C17, C21, C23, C25 failed).
+   - **Requirements:** R07-02 to R07-11 PASS. R07-01 PARTIAL: Optic's stages are measured, and the real model's own times
+     are BLOCKED (BL-01).
+   - **Measured:**
+     - The first line now reaches the reader at 24 ms, not 109.
+     - Each finished paragraph is drawn twice in all (was 15 at the median), and a chart once (was 16).
+     - Frame work p95 is 1.7 ms (was 2.6), with no long tasks.
+     - Input delay stays at most 3 ms.
+     - The first text, at about 840 ms, is set by the emulated model and the gate's first sentence, unchanged.
+8. **Browser verification.** Headless Chrome at 1440 by 900, 390 by 844 and 375 by 549, with screenshots looked at.
+   - The phone screenshot showed BUG-111, which the checks had passed.
+   - The first after run failed C03, because the incremental drawing split a list from its lead-in, and three checks on the
+     end distance (BUG-100). Both were fixed before this report.
+   - Reading Classic's handler showed it would have listed "Gathering" and "Writing" as steps. It now skips them, and its
+     list is the same as before on both servers.
+9. **Outstanding.**
+   - **Phase 10:** BUG-112 (the server-side question length) and BUG-113 (the event loop).
+   - **Phase 08:** BUG-092.
+   - **Phase 09:** BUG-098.
+   - **For the owner:** whether to fold the tool row or header on small phones (D-048), and whether server-side history is
+     wanted (D-047).
+   - **Blocked:** the real model's latency (BL-01). Every answer now logs its timing for when one runs.
+10. **Commit and next phase.** COMMIT_LINE; next is Phase 08.
+
 ## Phase 06 report (directive 06; reporting format of directive 00)
 
 1. **Inspected.** The Overview's whole pipeline (DOSSIER_PIPELINE.md): the router and search, the eleven payloads and the header's price refresh, the client caches, the fixed-rule readings of `overview-research.js`, the loading and error paths, the redraws and the section helpers, the density state behind "Show advanced analysis", and the sources each section names. The payloads of five kinds of symbol (a company, a loss-maker, a fund, a coin, an index).

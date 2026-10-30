@@ -475,3 +475,135 @@ sections: NVDA is 1,965 visible words at 1440.
 |---|---|
 | The final Phase 06 tree | **7547 passed, 1 skipped, 0 failed** in 214 s (`phase06/pytest-full.txt`). The run before it failed one test that sliced the page from `wire(main, sym)`, now `wire(main)`; its anchor was updated |
 | Phase 06's own tests | `tests/test_v2_dossier_analysis.py` (12); `test_v2_overview_classic_port.py` and `test_v2_parity_b6a.py` updated for the new layout |
+
+## Phase 07 (Milo streaming and conversation), 2026-10-29, working tree on 1652e14
+
+Raw results are under `~/Optic/work/post-demo-ultra-2026-10-29/phase07/`. Every run uses headless Chrome 152 signed in as the
+local demo account, against the stand-in model (BL-01: no real model). The code before Phase 07 (`1652e14`) is served from a
+separate worktree on :8252 with a copy of the data; the code after it on :8250. Network faults are made in the browser
+(CDP Fetch, and a wrapped stream), never on the server.
+
+### Latency and rendering (`tools/phase07_measure.py`, raw `measure-*.json`, summary `measure-summary.json`)
+
+NVDA's Overview at 1440 by 900, one question five times, each in a new conversation, back to back on an idle machine.
+Milliseconds from Send: the median, with the range. The model is emulated (STREAMTEST): its first token comes 0.6 s into
+its second round and about 60 tokens a second follow, so the first-text and done times are mostly the emulation's.
+
+| Measure | Before | After |
+|---|---|---|
+| Request sent | 6.8 (4.6 to 9.1) | 7.6 (5.7 to 9.3) |
+| Response headers | 101.7 (99.8 to 338.2) | 24.0 (17.4 to 25.5) |
+| First byte (after: the first line, "Reading NVDA's figures") | 108.6 (106.8 to 345.5) | 24.3 (17.6 to 25.7) |
+| First text event | 835.4 (829.5 to 1,067.5) | 835.4 (815.8 to 1,041.6) |
+| First visible text | 841.7 (836.1 to 1,073.7) | 843.4 (817.5 to 1,051.4) |
+| Answer done | 5,800.0 (5,760.1 to 5,983.5) | 5,773.9 (5,704.3 to 5,962.0) |
+| Text events per answer | 20 (20 to 20) | 20 (20 to 20) |
+| Gap between text events, median | 248 (238 to 251) | 248 (242 to 250) |
+| Gap between text events, p90 | 416 (400 to 426) | 416 (411 to 428) |
+| Characters per text event, median | 51 (51 to 51) | 51 (51 to 51) |
+| Times each finished paragraph was drawn, median | 15 (14 to 16) | 2 (2 to 2) |
+| Times each finished paragraph was drawn, most | 17 (16 to 18) | 2 (2 to 2) |
+| Animation-frame work, p95 (ms) | 2.6 (2 to 2.8) | 1.7 (1.3 to 1.8) |
+| Animation-frame work, longest (ms) | 3.2 (2.7 to 3.4) | 2 (1.4 to 2.5) |
+| Long tasks (50 ms or more) | 0 (0 to 0) | 0 (0 to 0) |
+| Characters typed into the composer while it streamed, all kept | yes | yes |
+| Input delay while it streamed (event start to its handler) | at most 3 ms | at most 3 ms |
+
+The server's own timing for the same five answers (after only; the code before had none): context ready 75 (66.7 to 277.5), first model event 97.1 (88.9 to 308.7), first model text 719.1 (710.5 to 927.8), first text out of the gate 819.7 (805.7 to 1,027.1), longest gate hold 746.9 (738.9 to 758.3), total 5,757.8 (5,692.6 to 5,946.9); get_quote 0.3, 0.4 ms.
+
+With a chart in the answer (STREAMCHART, three answers each):
+
+| Measure | Before | After |
+|---|---|---|
+| First visible text | 1,028.4 (835.6 to 1,138.1) | 849.0 (837.5 to 852.1) |
+| Answer done | 5,902.3 (5,829.3 to 5,975.8) | 5,851.7 (5,838.1 to 5,911.0) |
+| Times the chart was made and drawn | 16 (10 to 16) | 1 (1 to 1) |
+| Times each finished paragraph was drawn, median | 14 (9 to 14) | 2 (2 to 2) |
+| Animation-frame work, longest (ms) | 2.6 (1.3 to 2.9) | 1.5 (1.5 to 1.9) |
+
+An uncached ticker (PEP), one answer each: response headers 318 before and 22 after. Before, nothing came back until the
+context was ready; after, "Reading PEP's figures" showed at 23 ms and the context was ready at 366 (server). The first text
+arrived at 1,059 and 1,128: the context's own time varies run to run with the source.
+
+Over a raw socket (no browser, `scratchpad/raw_chat.py`), plain and chart answers took 5.7 to 5.9 s on both servers. The
+first line left the new server 4 to 51 ms after its headers before the 5 ms yield was added (BUG-113).
+
+### Browser checks (`tools/phase07_checks.py`, raw `checks-before.json`, `checks-after.json`)
+
+| Check | Before | After |
+|---|---|---|
+| C00 Milo opens beside NVDA, signed in | PASS | PASS |
+| C01 Successful streaming: incremental, complete, and saved as it was streamed | PASS | PASS |
+| C02 Markdown: headings, bullets, numbered steps and bold drawn, no raw markers | PASS | PASS |
+| C03 The streamed answer is the same as the answer drawn whole | PASS | PASS |
+| C04 Stop: the part already written stays, marked incomplete, and nothing changes after | PASS | PASS |
+| C05 Network interruption: the partial answer is kept and said to be incomplete; Ask again retries it | PASS | PASS |
+| C06 Network failure before any reply: the exchange is taken out and the question is back in the box | PASS | PASS |
+| C07 A gateway error (502): said with its code, and the question is back in the box | PASS | PASS |
+| C08 Slow rounds: each activity line is shown while that step runs, and none once text arrives or after the end | FAIL | PASS |
+| C09 Thirty seconds of silence is said, and the line goes once the answer comes | PASS | PASS |
+| C10 Consecutive questions: each is sent with the ones before it, and the conversation is saved once | PASS | PASS |
+| C11 New conversation: a clean view and context, six clicks make no extra conversations, history and the draft are kept | PASS | PASS |
+| C12 New conversation while Milo answers: refused with the reason, and the answer carries on untouched | FAIL | PASS |
+| C13 Close while Milo answers: the panel closes, the answer finishes behind it and is saved whole | PASS | PASS |
+| C15a Reopen after it finished: the whole answer once, with the view at the latest message | FAIL | PASS |
+| C14 Reopen while Milo answers: the answer carries on live and ends whole, shown once | PASS | PASS |
+| C15b Reopen restores the draft and where the reader was: the end, or the place they had scrolled to | FAIL | PASS |
+| C16 Restoration: after a reload the saved conversation is listed, reopens whole and continues under the same entry | PASS | PASS |
+| C17 Delete: another conversation and the open one go and stay gone; history while Milo answers is refused or steady | FAIL | PASS |
+| C19 Rapid submissions: five Enters send once; a double click on Send sends once and does not stop it | PASS | PASS |
+| C20 Composer keys and focus: Enter sends, Shift+Enter is a new line, an empty box sends nothing, focus is never lost | PASS | PASS |
+| C21 Large text and paste: the 4,000-character limit is said when reached, and a pasted image is attached | FAIL | PASS |
+| C22 A long answer: it arrives whole while the reader types the next question, and the view stays at its end | PASS | PASS |
+| C23 Scroll: the view follows only a reader at the end, through a chart; scrolling up holds; Latest returns and following resumes | FAIL | PASS |
+| C24 Knowledge level: a change applies to the next answer, is said in the log, and leaves the earlier answer as written | PASS | PASS |
+| C18 User isolation: another account and a guest on the same browser never see a person's conversations | PASS | PASS |
+| C25 Phones (390 x 844, 375 x 549): Milo fills the screen, the composer and Stop stay in view at 44 px, nothing spills sideways | FAIL | PASS |
+| C26 No script errors or console errors through the run | PASS | PASS |
+| **Total** | **20 of 28** | **28 of 28** |
+
+### The streaming tests (`tests/test_v2_milo_streaming.py`, 11)
+
+| Test | What it holds |
+|---|---|
+| test_an_answer_drawn_as_it_arrives_is_the_answer_drawn_whole | Four answers (the stand-in's; one with every construct Milo writes, Unicode included; bold across a blank line; a single paragraph; trailing blank lines) fed a character at a time, in the stand-in's token sizes and in lines: the pieces equal the whole drawing, and the arriving part never shows `**`, a fence or a heading's hashes |
+| test_the_finished_part_never_ends_where_the_drawing_would_change | No end before a list item, inside a code block or a bold run, before an undecided line or into the follow-ups; bold reads bold while it arrives; a marker only begun waits |
+| test_the_live_answer_appends_what_is_finished_and_draws_only_the_arriving_paragraph | The append, the changed-only paints, the finish in place, the answer-wide limits |
+| test_the_view_follows_only_a_reader_following_the_end | noteScroll, keepEnd, the ResizeObserver, Latest |
+| test_history_and_a_new_conversation_wait_for_the_answer_and_say_why | aria-disabled, the two messages, the guarded delete, nothing drawn over history |
+| test_the_panel_opens_again_where_the_reader_was | restoreView on opening and after history |
+| test_the_question_limit_is_said_and_a_pasted_image_is_attached | The limit line, the paste handler, an empty Send |
+| test_the_chat_route_says_its_first_step_at_once | `status: gathering` first; a failed context is an error event without the internals |
+| test_classic_shows_its_steps_as_before | Classic skips the two new server steps |
+| test_every_character_travels_escaped | Events are ASCII JSON; the browser decodes in stream mode |
+| test_the_answer_reports_its_own_timing | The `timing` keys and their order |
+
+### Found by Phase 07's own checks
+
+- **The first run on the new code failed C03.** The incremental drawing split a list from the paragraph above it, which
+  mdLite's whole drawing joins, so the answer read one way while it arrived and another when drawn again. `settledEnd`
+  now never ends before a list item, and the parity test feeds answers a character at a time.
+- **The same run failed C15a, C23 and C25 on the end distance (52 to 56 px).** The composer grew under the log after the
+  scroll to the end. A ResizeObserver keeps a following reader at the end.
+- **The arriving paragraph was raw markdown in both versions.** It was found reading the code, not by a check: the
+  directive's "jumpy markdown". It is now drawn as markdown (BUG-108).
+- **The phone screenshot at 375 by 549 showed one line of conversation, while C25 had passed.** That is BUG-111.
+- **Classic would have listed the server's two new steps as "Gathering" and "Writing".** Found reading its handler. It
+  now skips them; its step list is the same on both servers (`scratchpad/classic_steps.py`: "Reading what is on your
+  screen", "Checking NVDA's quote", "Worked through 2 steps").
+- **The first line reached the browser at about 85 ms although the server sends it first.** Synchronous context work held
+  it (BUG-113). A 5 ms yield now lets it out at 24 ms.
+- **One chart measurement took 6.6 s against 5.9.** A repeat, and the raw socket, gave 5.85 s on both: the machine, not
+  the code.
+- **The spend-guard tests' model stub was a plain generator.** The route now reads the model's stream with `async for`, so
+  the stub is async, as `ai.stream_chat` is.
+- **Check corrections.** C22 looked for "Paragraph 12" in the last 60 characters, where it never is. C23's nudge started
+  from a view already left behind. C24 assumed the level, where the account's own wins at sign-in. All three checks were
+  corrected and run again on both versions.
+
+### Suite
+
+| Run | Outcome |
+|---|---|
+| The final Phase 07 tree | **7558 passed, 1 skipped, 0 failed** in 225 s (`phase07/pytest-full.txt`) |
+| The run before it | 10 failed, all in `test_spend_guard.py`, on the synchronous model stub; the stub is now async |

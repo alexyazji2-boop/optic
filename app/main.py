@@ -7879,6 +7879,7 @@ async def chat(request: Request,
     Attachments are {name, media_type, data} with base64 data; they are passed
     straight through to the model and never written to disk.
     """
+    started = time.perf_counter()
     _spend_guard(request)
     _count_question(request, "chat")
     history = payload.get("messages") or []
@@ -7893,6 +7894,38 @@ async def chat(request: Request,
     # The third axis (2026-10-12): the timeframe the reader is deciding about.
     # Normalised the same way; words in the question override it per answer.
     horizon = horizon_mod.normalise(payload.get("horizon"))
+
+    async def answer() -> Any:
+        # The response starts at once and says what is happening (post-demo Phase 07): gathering the page's figures
+        # took the reader's whole wait before, behind "Sending your question", with nothing coming back at all.
+        # A failure here is an error event, since the response has begun.
+        yield ai._sse("status", {"state": "gathering"})
+        # Let that line out before the context work starts: parts of it run on the event loop before their first
+        # await, and the line sat behind them, reaching the browser with the context at about 85 ms instead of 25
+        # (Phase 07 measurement). The blocking itself is Phase 10's (BUG-113).
+        await asyncio.sleep(0.005)
+        try:
+            ctx = await _chat_context(request, history, context, horizon, attachments)
+        except Exception as exc:                                            # noqa: BLE001 - said to the reader
+            logging.getLogger("uvicorn.error").warning("chat context failed: %s: %s", type(exc).__name__, exc)
+            yield ai._sse("error", {"message": "Milo could not gather the figures for this question. Send it again in a moment."})
+            return
+        async for chunk in ai.stream_chat(history, context=ctx, use_web=use_web,
+                                          attachments=attachments, persona=persona, mode=mode,
+                                          horizon=horizon, toolbox=_milo_toolbox(request, ctx, history),
+                                          started=started):
+            yield chunk
+
+    return StreamingResponse(
+        answer(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+async def _chat_context(request: Request, history: List[Dict[str, Any]], context: Optional[Dict[str, Any]],
+                        horizon: str, attachments: Any) -> Optional[Dict[str, Any]]:
+    """The CONTEXT block for one Milo answer: the page's figures, with what the question needs added."""
     context = await _augment_chat_context(history, _without_linked_keys(context))
     if ((context or {}).get("focus") or {}).get("scope") != "none":
         # Side by side: the research pack and the framework read different
@@ -7911,13 +7944,7 @@ async def chat(request: Request,
             context = dict(context or {}, chart_levels=levelled["chart_levels"])
         if isinstance(linked, dict):
             context = dict(context or {}, **{k: linked[k] for k in _LINKED_KEYS if k in linked})
-    return StreamingResponse(
-        ai.stream_chat(history, context=context, use_web=use_web,
-                       attachments=attachments, persona=persona, mode=mode,
-                       horizon=horizon, toolbox=_milo_toolbox(request, context, history)),
-        media_type="text/event-stream",
-        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
-    )
+    return context
 
 
 @app.post("/api/research")

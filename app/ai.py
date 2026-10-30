@@ -1728,6 +1728,48 @@ def _sse(event: str, payload: Dict[str, Any]) -> str:
     return "event: {}\ndata: {}\n\n".format(event, json.dumps(payload))
 
 
+class StreamClock:
+    """Where one streamed answer's time went, measured on the server (post-demo Phase 07).
+
+    Milliseconds from the moment the request reached the route: the page's
+    context ready, the first event from the model, its first text, the first
+    text the advice gate let through, each tool run, and the longest the gate
+    held text back. Sent with the done event and logged once per answer, so the
+    real model's timings can be read in production's log without a debugger."""
+
+    def __init__(self, started: Optional[float] = None) -> None:
+        self.t0 = started if started is not None else time.perf_counter()
+        self.marks: Dict[str, float] = {}
+        self.tools: List[Tuple[str, float]] = []
+        self.rounds = 0
+        self.sent = 0
+        self.held_max = 0.0
+        self._held_since: Optional[float] = None
+
+    def mark(self, name: str) -> None:
+        self.marks.setdefault(name, time.perf_counter())
+
+    def fed(self, released: bool) -> None:
+        """Model text reached the gate; `released` is whether any text went out with it."""
+        now = time.perf_counter()
+        if released:
+            if self._held_since is not None:
+                self.held_max = max(self.held_max, now - self._held_since)
+            self._held_since = None
+            self.sent += 1
+            self.mark("first_text_sent")
+        elif self._held_since is None:
+            self._held_since = now
+
+    def summary(self) -> Dict[str, Any]:
+        ms = lambda t: round((t - self.t0) * 1000.0, 1)   # noqa: E731
+        out: Dict[str, Any] = {k + "_ms": ms(v) for k, v in self.marks.items()}
+        out.update({"tools": [{"name": n, "ms": round(d * 1000.0, 1)} for n, d in self.tools],
+                    "model_rounds": self.rounds, "text_events_sent": self.sent,
+                    "gate_hold_max_ms": round(self.held_max * 1000.0, 1), "total_ms": ms(time.perf_counter())})
+        return out
+
+
 # ---------------------------------------------------------------- chat stream
 
 
@@ -3493,7 +3535,11 @@ async def stream_chat(
     mode: str = knowledge.DEFAULT_MODE,
     horizon: str = horizon_mod.DEFAULT,
     toolbox: Optional[Any] = None,
+    started: Optional[float] = None,
 ) -> AsyncGenerator[str, None]:
+    # `started`: when the route took the request, so the clock includes the page's context being gathered
+    clock = StreamClock(started)
+    clock.mark("context_ready")
     client = _client()
     if client is None:
         yield _sse(
@@ -3547,9 +3593,14 @@ async def stream_chat(
         citations: List[Dict[str, str]] = []
         usage_sum = {"input_tokens": 0, "output_tokens": 0, "cache_read_input_tokens": 0}
         while True:
+            # said as each round of the model starts: what the reader is waiting for now is the model, not the
+            # tool whose status line is still showing (post-demo Phase 07)
+            clock.rounds += 1
+            yield _sse("status", {"state": "writing"})
             async with client.beta.messages.stream(**kwargs) as stream:
                 async for event in stream:
                     etype = getattr(event, "type", "")
+                    clock.mark("first_model_event")
                     if etype == "content_block_start":
                         block = getattr(event, "content_block", None)
                         btype = getattr(block, "type", "")
@@ -3562,7 +3613,9 @@ async def stream_chat(
                     elif etype == "content_block_delta":
                         delta = getattr(event, "delta", None)
                         if getattr(delta, "type", "") == "text_delta":
+                            clock.mark("first_model_text")
                             safe = gate.feed(delta.text)
+                            clock.fed(bool(safe))
                             if safe:
                                 answer_parts.append(safe)
                                 yield _sse("delta", {"text": safe})
@@ -3626,7 +3679,9 @@ async def stream_chat(
                     except milo_tools.InvalidInput:
                         words = "Looking that up"
                     yield _sse("status", {"state": words})
+                    ran = time.perf_counter()
                     content, is_error, _ = await toolbox.run(b.name, b.input)
+                    clock.tools.append((b.name, time.perf_counter() - ran))
                     # what has been looked up so far, as it is attached: the panel lists it while the answer streams
                     yield _sse("retrieved", {"items": toolbox.retrieved()})
                     result = {"type": "tool_result", "tool_use_id": b.id, "content": content}
@@ -3647,6 +3702,7 @@ async def stream_chat(
         # reader sees, rather than quietly: the panel replaces the answer with
         # the cleaned text and keeps the note under it.
         tail = gate.flush()
+        clock.fed(bool(tail))
         if tail:
             answer_parts.append(tail)
             yield _sse("delta", {"text": tail})
@@ -3654,6 +3710,8 @@ async def stream_chat(
         if amend:
             log.warning("ai policy: pulse: removed %s sentence(s) (%s)", amend["removed"], ", ".join(amend["rules"]))
             yield _sse("amend", amend)
+        timing = clock.summary()
+        log.info("milo timing: %s", json.dumps(timing))
 
         yield _sse(
             "done",
@@ -3668,6 +3726,8 @@ async def stream_chat(
                 # what the question named, the page's symbol included, and tokens no directory knows
                 "named": ((context or {}).get("question_named") or {}) if isinstance((context or {}).get("question_named"), dict) else {},
                 "usage": usage_sum,
+                # where the time went, measured here (StreamClock); the panel does not show it
+                "timing": timing,
             },
         )
     except Exception as exc:  # surfaced to the UI rather than swallowed

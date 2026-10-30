@@ -46323,6 +46323,10 @@ async function streamTo(url, body, node) {
         }
       } else if (event === 'amend') {
         if (typeof payload.text === 'string') amended = payload;
+      } else if (event === 'status' && (payload.state === 'gathering' || payload.state === 'writing')) {
+        /* The server's own steps for v2's panel (post-demo Phase 07): the figures being gathered, and a round of the
+           model under way. Classic's first step already says it is reading the screen, and its list keeps the steps
+           of work, so neither changes anything here. */
       } else if (event === 'status') {
         const state = String(payload.state || '');
         const words = PULSE_STEP_WORDS[state] || cap(state);

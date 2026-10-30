@@ -347,7 +347,7 @@ ul.plain { margin: 0; padding-left: 18px; } ul.plain li { margin-bottom: 7px; }
 .milo-panel .drawer-head { align-items: center; gap: 8px; padding: 10px 10px 10px 20px; }
 .milo-panel .drawer-acts { display: flex; align-items: center; gap: 2px; }
 .milo-panel .drawer-acts .icon-btn.is-on { background: var(--c-active); color: var(--c-ink); }
-.milo-panel .drawer-acts .icon-btn:disabled { opacity: .45; cursor: default; }
+.milo-panel .drawer-acts .icon-btn:disabled, .milo-panel .drawer-acts .icon-btn[aria-disabled="true"] { opacity: .45; cursor: default; }
 .milo-id { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .milo-id .scout-compact { width: 32px; }
 .milo-panel .milo-id h2 { font: 600 var(--t-xl)/1.15 var(--f-sans); letter-spacing: -0.01em; margin: 0; }
@@ -431,7 +431,8 @@ ul.plain { margin: 0; padding-left: 18px; } ul.plain li { margin-bottom: 7px; }
 .milo-tbl table { width: 100%; border-collapse: collapse; font-size: var(--t-sm); font-variant-numeric: tabular-nums; }
 .milo-tbl th, .milo-tbl td { padding: 6px 10px; border-bottom: 1px solid var(--c-line-2); text-align: left; white-space: nowrap; }
 .milo-tbl th { background: var(--c-plane-2); color: var(--c-ink-2); font-weight: 600; } .milo-tbl tr:last-child td { border-bottom: 0; } .milo-tbl td.n { text-align: right; }
-.milo-tail { margin: 0; white-space: pre-wrap; } .milo-status { margin: 4px 0 0; color: var(--c-ink-3); font-size: var(--t-md); }
+/* the answer still arriving: the finished paragraphs keep the gap under them, the arriving one follows it */
+.milo-bubble .milo-settled p:last-child { margin-bottom: 10px; } .milo-status { margin: 4px 0 0; color: var(--c-ink-3); font-size: var(--t-md); }
 .milo-src { display: inline-flex; align-items: center; min-height: 24px; padding: 0 7px; margin: 0 2px; border-radius: var(--r-xs); border: 1px solid var(--c-line); background: var(--c-raised); color: var(--c-ink-2); font: 500 var(--t-xs)/1 var(--f-label); text-decoration: none; vertical-align: 1px; cursor: pointer; }
 .milo-src:hover { border-color: var(--c-ink-3); color: var(--c-ink); }
 .milo-chart { margin: 8px 0; } .milo-chart-plot { min-height: 120px; }
@@ -560,6 +561,7 @@ ul.plain { margin: 0; padding-left: 18px; } ul.plain li { margin-bottom: 7px; }
 .milo-attached .ic { width: 14px; height: 14px; }
 .milo-attached span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .milo-allow { margin: 0; font-size: var(--t-sm); color: var(--c-ink-3); }
+.milo-limit { margin: 4px 0 0; font-size: var(--t-sm); color: var(--c-ink-2); }
 .milo-form[data-state="sending"] .milo-allow, .milo-form[data-state="streaming"] .milo-allow { color: var(--c-ink-2); }
 @media (pointer: coarse) {
   .milo-send, .milo-stop { width: var(--tap); height: var(--tap); }
@@ -597,6 +599,13 @@ ul.plain { margin: 0; padding-left: 18px; } ul.plain li { margin-bottom: 7px; }
   .milo-lens-blurb { display: none; }
   .scout-btn { width: 52px; } .milo-hello-h { margin-top: 2px; font-size: var(--t-xl); } .milo .milo-hi { margin-top: 2px; padding: 4px 12px; font-size: var(--t-base); }
   .milo-log { gap: 12px; padding-top: 10px; padding-bottom: 12px; }
+}
+/* a small phone upright (an iPhone SE's Safari is 375 x 549): the conversation had 36 px after an answer, one line.
+   The subtitle and the attached line go (the context bar names what is attached), the example question waits for a
+   taller screen and the persona row loses its padding; the data line and every control stay (post-demo Phase 07) */
+@media (max-width: 860px) and (max-height: 600px) {
+  .milo-sub, .milo-form-foot, .milo-suggest-slot { display: none; }
+  .milo-persona { padding-top: 0; padding-bottom: 0; }
 }
 
 /* ---------- states: loading, empty, stale, error ---------- */
