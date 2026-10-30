@@ -6,7 +6,7 @@ Read this and [REQUIREMENTS_MATRIX.md](REQUIREMENTS_MATRIX.md) before changing a
 
 - **Current phase:** 07 Milo streaming and conversation (next). Phases 01 to 06 complete (reports below).
 - **Branch / worktree:** `post-demo-ultra` in `~/Optic/wt-ultra`, from `9fa0f36` (tag `post-demo-ultra-baseline`). Upstream unset; nothing pushed or deployed.
-- **Commits:** `fce3e71` setup; `8040f8a` and `795325a` Phase 01; `d4a2b1a` Phase 01 report; `ce60b16` Phase 02 policy module (WIP); `c6724ff` Milo portfolio privacy (cherry-pick of 2236205); `a76916b` Phase 02; `6f2e814` its commit id; `7b14b56` Phase 03; `2f6a548` its commit id; `381a018` Phase 04; `b07e181` its commit id; `e64a5ee` Phase 05; `448e633` its commit id; Phase 06 as recorded in its report.
+- **Commits:** `fce3e71` setup; `8040f8a` and `795325a` Phase 01; `d4a2b1a` Phase 01 report; `ce60b16` Phase 02 policy module (WIP); `c6724ff` Milo portfolio privacy (cherry-pick of 2236205); `a76916b` Phase 02; `6f2e814` its commit id; `7b14b56` Phase 03; `2f6a548` its commit id; `381a018` Phase 04; `b07e181` its commit id; `e64a5ee` Phase 05; `448e633` its commit id; `0448900` Phase 06.
 - **Local server:** launch config `optic-ultra` (:8250, stand-in model :8251 from `tools/milo_standin_ultra.py`, which adds an `ADVISE` keyword that makes the answer break the policy and, since Phase 05, writes a Sector Read and a portfolio briefing in their writers' shapes; data `~/Optic/ultra-data`, sandbox brokerage, jobs off, no real model key). Seed password in `~/Optic/ultra-data/seed-output.txt` (never print it). The server does not reload Python: restart it after editing server code. The desktop app stops it when the session is paused; start it again with preview_start.
 - **Working folder (outside the repo):** `~/Optic/work/post-demo-ultra-2026-10-29/` (tools/, crawl1/, dead/, sheets/, baseline/, milo/, registry/, phase02/ to phase06/; the five-level proxy run in phase05/proxy/).
 - **Resource rule:** at most two subagents at a time (DECISIONS D-007). One proxy answer costs about 180,000 agent tokens.
@@ -55,7 +55,7 @@ Read this and [REQUIREMENTS_MATRIX.md](REQUIREMENTS_MATRIX.md) before changing a
    - **Phase 09:** BUG-098, a delay stated two ways by the data.
    - **Phase 08:** BUG-092, the advice check's "I'd lean toward" pattern.
    - **Blocked:** the production model's answers (BL-01); nothing on the Overview needs them.
-10. **Commit and next phase.** COMMIT_PLACEHOLDER; next is Phase 07.
+10. **Commit and next phase.** `0448900`; next is Phase 07.
 
 ## Phase 05 report (directive 05; reporting format of directive 00)
 
