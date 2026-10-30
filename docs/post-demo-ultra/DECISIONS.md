@@ -256,3 +256,52 @@ key on this machine is refused (BL-01). Optic's own request for one question on 
 level. Each was answered by a separate Sonnet 5.5 agent (Milo's production model), given that one request under a
 neutral file name, and the answers were measured by a deterministic script (TEST_RESULTS, Phase 05). That shows what
 the prompts do to that model. It is not Optic's API path, and it is reported as a proxy.
+
+**D-035 (Phase 06) The analysis view is the density setting.** Directive 06 asks for one authoritative mode state,
+kept apart from the analysis data. Phase 04 had already made "how much a page shows" one setting of its own
+(`optic.mode.v1`, D-019), and Settings already offers it. The Overview's Simple and Advanced views are that setting,
+read in one place (`paint`: `prefs.advancedOn()`). The button sets it, and its label names the other view. No second
+key was added, so the button and Settings can never disagree. The data (`D`, one per visit) is separate from the
+view, so a swap redraws from what is loaded and fetches nothing. Classic's Overview, still served at `/classic`,
+keeps its own switch and layout: the rebuilt Dossier is v2's, which every reader gets at `/`.
+
+**D-036 (Phase 06) The Simple Analysis is written by rules, at the reader's level.** A default view that called a
+model would cost money on every visit, and the owner's rule is no paid call on load. So the three answers are fixed
+rules over the payloads the page already loads (`pages/overview-simple.js`), in five registers, one per knowledge
+level. The registers change the words, how much is explained and how dense the figures are. They never change a
+figure, and every caveat is said at every level (a risk's reason is kept even at Expert, because for some risks it is
+the caveat). At New to Markets and Beginner the section explains its own terms, so the page's glossary marks stay off
+it; at the other levels the marks work as elsewhere. This is where the Dossier's rule-written text gets
+level-specific wording (D-030), and R05-05 moves to PASS on it.
+
+**D-037 (Phase 06) The Advanced Analysis is Classic's research, word for word, in separate sections.** The four
+questions, the Optic Score, the bull case and the bear case, Taken together, Optic's read, What changed lately, the
+thesis check, What to look at next, the rest of the ticker, the filings and the method keep their words. Four things
+changed in how they are put together:
+- The Advanced research fold is gone. Its blocks are sections of their own, so the jump strip lists them.
+- Key figures (7) and Key stats (18) were the same figures twice; they are one Key statistics section.
+- The bull case and the bear case are open rather than folded behind a count.
+- The headlines block is gone; the About section's Latest headlines already holds them.
+
+**D-038 (Phase 06) The swap is a quick fade that keeps the reader's place.** A press replaces the analysis area with
+the other view. The new view fades in over `--m-content` (150 ms) with `--ease-out`, opacity only, so nothing moves,
+and the shared reduced-motion rules switch the fade off. A reader who was inside the analysis area is shown the new
+view from its start, under the sticky header (the jump strip is measured as it is after the swap). A reader above it
+stays where they are. Focus stays on the button, and a status line says which view is showing.
+
+**D-039 (Phase 06) A response is drawn only into the visit that asked for it.** Every request of an Overview visit
+carries that visit's token, and its answer is applied only while that visit is current, which includes the stage
+read's retry and the track record's late load. Checking the symbol alone let an earlier visit to the same ticker draw
+into a later one (BUG-095). The page's handlers are wired once per page element; Try again re-rendered into the same
+element and doubled them (BUG-094).
+
+**D-040 (Phase 06) The Simple Analysis follows the header's price.** The header refreshes its price every 20 seconds
+through the trading day. The Simple Analysis says the same day's move and last trade, so it is redrawn in place,
+alone, when the quote it was written from has moved on. Without that, the two would disagree on one screen (BUG-096).
+The Advanced Analysis has no sentence that depends on the live quote.
+
+**D-041 (Phase 06) The arrival focus waits for the search.** The shell focuses each new page's heading one frame
+after it arrives, so a screen reader hears where it landed. When the search or a drawer is open, it now leaves focus
+where the reader put it (BUG-093). The Overview keeps a focused heading focused through its redraws (BUG-097). Both
+were found by Phase 03's 20-search scenario. Before the fix one run missed 3 of 40 searches in a row; after it, none
+of 120 missed.

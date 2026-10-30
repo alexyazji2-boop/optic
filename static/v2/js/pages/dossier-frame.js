@@ -112,13 +112,14 @@ function actions(sym, label, sm) {
   </div>`;
 }
 
-/* "Show advanced analysis", Classic's one control for how much of the specialist research shows open (owner's
- * screenshots, 2026-10-25), at the end of the tab row as in Classic. It is the density setting (core/prefs.js,
- * Settings' "How much each page shows"); since Phase 04 it no longer changes Milo's level (BUG-002). Only where it
- * changes something: the Overview. */
-export function advSwitch() {
-  const on = advancedOn();
-  return html`<button type="button" class="adv-switch" role="switch" aria-checked="${on}" data-v2-adv-toggle title="Opens Advanced research and the full case for and against on this page. Milo's level is set in Settings."><span class="adv-track" aria-hidden="true"><span class="adv-knob"></span></span><span class="adv-label">Show advanced analysis</span></button>`;
+/* "Show advanced analysis" and "Show simple analysis" (post-demo Phase 06, directive 06 section 3): the Overview's one
+ * control for which analysis it shows, at the end of the tab row as in Classic. A press swaps the analysis area, never
+ * adds to it, and the label then names the other view. It is the density setting (core/prefs.js, Settings' "How much
+ * each page shows", D-019), so it changes nothing about Milo's level or the ticker. Only where it changes something:
+ * the Overview. */
+export function advToggle(mode = advancedOn() ? 'advanced' : 'simple') {
+  const adv = mode === 'advanced';
+  return html`<button type="button" class="btn btn-sm adv-toggle" data-v2-adv-toggle data-mode="${mode}" aria-controls="ov-analysis" title="Swaps the analysis below between its simple and advanced views. Milo's level is set in Settings.">${adv ? 'Show simple analysis' : 'Show advanced analysis'}</button>`;
 }
 /* The Weinstein stage, on the Overview alone as in Classic: its reading in Classic's words ("Stage 3 · Topping",
  * "breakdown") as a label that opens what it means for this symbol, and Explain, which drafts the question for Milo. */

@@ -119,7 +119,7 @@ export function priceRead(t, { index = false } = {}) {
   const q = g(t, 'quote') || {};
   if (fin(q.fifty_two_low) && fin(q.fifty_two_high)) evidence.push(['52-week range', `${money(q.fifty_two_low)} to ${money(q.fifty_two_high)}`]);
   const why = fin(m3) && !text.includes('three months') ? `Over the last three months it is ${Math.abs(m3) < 2 ? 'little changed' : `${m3 >= 0 ? 'up' : 'down'} ${num(Math.abs(m3), 0)}%`}.` : '';
-  return { text, why, evidence, yr, m3, off, through: dates[dates.length - 1] };
+  return { text, why, evidence, yr, m3, off, through: dates[dates.length - 1], span };
 }
 
 /** The price against its own history (Classic's ovValuationRead), from the long-term payload's P/E history. */
@@ -261,8 +261,6 @@ export function keyStatRows(q, shortInt, phase) {
     revenue_growth: ['Revenue growth, last quarter', has(q.revenue_growth) ? signed(q.revenue_growth * 100, 1) : null],
   };
 }
-// The four figures most readers look a stock up for, plus its range and yield (Classic's OV_ESSENTIALS)
-export const OV_ESSENTIALS = ['market_cap', 'pe_trailing', 'revenue_growth', 'profit_margin', 'dividend_yield', 'high_52', 'low_52'];
 const statList = (rows, ids) => html`<dl class="ovx-stats">${ids.filter((id) => rows[id] && rows[id][1] !== null).map((id) => html`<div><dt>${term(`stat:${id}`, rows[id][0])}</dt><dd>${rows[id][1]}</dd></div>`)}</dl>`;
 
 /* ---------------- the past year's chart: its line, its marks and its source ---------------- */
@@ -452,13 +450,15 @@ export function fourQuestions(c) {
 }
 
 /* ---------------- key figures; the bull case and the bear case; what to look at next ---------------- */
-export function keyFigures(c) {
+/** Every key statistic the feed has, in one section of the advanced analysis (it was seven under Key figures and all
+ *  eighteen again under Advanced research, post-demo Phase 06). */
+export function keyStats(c) {
   const q = g(c.t, 'quote');
   if (!q || !fin(q.price)) return '';
-  const rows = keyStatRows(q, g(c.t, 'company', 'short_interest'), c.phase);
-  if (!OV_ESSENTIALS.some((id) => rows[id][1] !== null)) return '';
-  return html`<section class="section" aria-labelledby="kf-h"><h2 class="t-h2" id="kf-h">Key figures</h2>${statList(rows, OV_ESSENTIALS)}
-    <p class="asof">Select a label for what it means. All eighteen figures are under Advanced research below.</p></section>`;
+  const rows = keyStatRows(q, g(c.t, 'company', 'short_interest'), c.phase), ids = Object.keys(rows).filter((id) => rows[id][1] !== null);
+  if (!ids.length) return '';
+  return html`<section class="section" aria-labelledby="kf-h"><h2 class="t-h2" id="kf-h">Key statistics</h2>${statList(rows, ids)}
+    <p class="asof">Select a label for what it means.</p></section>`;
 }
 
 export function casesSection(c) {
@@ -468,9 +468,9 @@ export function casesSection(c) {
   const cols = html`<div class="cs-cols">
     <div><h3 class="case-h up">Bull case</h3>${f.pos.length ? html`<ul class="cs-list is-pos">${f.pos.map((x) => item(x, false))}</ul>` : html`<p class="t-muted">No bull-case point stands out in the data Optic holds.</p>`}</div>
     <div><h3 class="case-h down">Bear case</h3>${f.neg.length ? html`<ul class="cs-list is-neg">${f.neg.map((x) => item(x, true))}</ul>` : html`<p class="t-muted">No bear-case point stands out in the data Optic holds. That is not the same as no risk: every stock can fall.</p>`}</div></div>`;
-  // folded below the Advanced level, with the count in the summary; open at Advanced and above (Classic)
+  // open: it is part of the advanced analysis, which is where a reader comes to read it (post-demo Phase 06)
   return html`<section class="section" aria-labelledby="cs-h"><h2 class="t-h2" id="cs-h">Bull case and bear case</h2>
-    <details class="more-inline cs-fold" data-adv ${c.advanced ? 'open' : ''}><summary>Show the case for and against (${f.pos.length} for, ${f.neg.length} against)</summary><div class="how-body">${cols}</div></details>
+    <p class="section-sub">${f.pos.length} for, ${f.neg.length} against.</p>${cols}
     ${drv.length ? html`<details class="more-inline"><summary>What has been moving it recently</summary><div class="how-body">
       <ul class="cs-drv">${drv.map((x) => html`<li><span class="t-label">${x.kind}</span><span>${x.url ? html`<a class="textlink" href="${x.url}" target="_blank" rel="noopener noreferrer nofollow">${clean(x.text)}</a>` : clean(x.text)}</span>${x.note ? html`<span class="t-muted">${x.note}</span>` : ''}</li>`)}</ul>
       <p class="asof">None of these proves why the price moved. Prices also move on things no data feed records.</p></div></details>` : ''}
@@ -708,7 +708,8 @@ export function opticRead(c) {
   const t = c.t, p = t && t.pulse; if (!p) return '';
   const stance = String(p.stance || 'neutral'), skill = p.skill || {}, dg = t.digest || {}, story = dg.story || null, src = dg.sources || {};
   const fresh = ago(dg.as_of, c.now), tiers = g(t, 'news', 'tiers') || [], tier = story && story.tier ? tiers.find((x) => x.id === story.tier) : null;
-  return html`<div class="ovx-block pl" aria-labelledby="pl-h"><div class="pl-top"><h3 class="t-label" id="pl-h">Optic's read</h3>${fresh ? html`<span class="asof">Updated ${fresh}</span>` : ''}</div>
+  return html`<section class="section pl" aria-labelledby="pl-h"><div class="section-head"><div><h2 class="t-h2" id="pl-h">Optic's read</h2>
+      <p class="section-sub">Optic's short-term signal score${fresh ? `, updated ${fresh}` : ''}.</p></div></div>
     <p class="pl-lede is-${stance}">${clean(dg.lede || p.stance_label || stance.toUpperCase())}</p>
     ${catalystLine(p.catalyst)}${pendingLine(p.pending_catalyst)}${readMore(p)}
     ${story && story.title ? html`<p class="pl-story">${tier ? html`<span class="chip-tag pl-tier" title="${story.tier_why || ''}">${tier.label}</span>` : ''}<a class="textlink" href="${story.url || '#'}" target="_blank" rel="noopener noreferrer">${clean(story.title)}</a><span class="t-muted">${[story.publisher, story.age_words, story.catalyst].filter(Boolean).join(', ')}</span></p>` : ''}
@@ -719,12 +720,13 @@ export function opticRead(c) {
     <p class="asof">Each input scores from -100 to +100: a bar fills right of the line when the input leans bullish and left when it leans bearish.</p>
     <p class="pl-skill">${clean(skill.text || '')}</p>
     ${p.factors_priced < p.factors_total ? html`<p class="asof">${p.factors_priced} of ${p.factors_total} inputs had data. A missing input redistributes its weight rather than counting as zero.</p>` : ''}
-    ${dg.method ? how(html`<p>${clean(dg.method)}</p>`) : ''}</div>`;
+    ${dg.method ? how(html`<p>${clean(dg.method)}</p>`) : ''}</section>`;
 }
 
-/* ---------------- Advanced research: one press away, open at the Advanced level (Classic) ---------------- */
-function restBlock(c) {
-  const t = c.t, sym = c.sym, q = t.quote || {}, news = t.news || {}, p = t.pulse || {}, st = c.stars;
+/* ---------------- the rest of the ticker and the method: the last sections of the advanced analysis ---------------- */
+export function restSection(c) {
+  const t = c.t; if (!t) return '';
+  const sym = c.sym, q = t.quote || {}, news = t.news || {}, p = t.pulse || {}, st = c.stars;
   const lo = q.fifty_two_low, hi = q.fifty_two_high, band = fin(lo) && fin(hi) && hi > lo && fin(q.price) ? Math.round(((q.price - lo) / (hi - lo)) * 100) : null;
   const days = news.days_to_earnings;
   const cards = [
@@ -735,37 +737,21 @@ function restBlock(c) {
     ['news', 'News', news.article_count ? String(news.article_count) : null, news.overall_tone ? `headlines, ${news.overall_tone}` : 'headlines'],
     st && st.available ? ['long', 'Investing', `${st.stars} of 5 stars`, `Optic star rating, ${String(st.word || '').toLowerCase()}`] : ['long', 'Investing', fin(q.trailing_pe) ? num(q.trailing_pe, 1) : null, 'trailing P/E, valuation and holding case'],
   ];
-  return html`<div class="ovx-block" aria-labelledby="rest-h"><h3 class="t-label" id="rest-h">The rest of this ticker</h3>
-    <p class="asof">One reading from each section, so the row says what is there rather than only where to click.</p>
-    <ul class="ovx-cards">${cards.map(([view, label, value, note]) => html`<li><a class="ovx-card" href="${hrefFor(view, sym)}"><span class="t-label">${label}</span><b class="${value === null ? 't-muted' : ''}">${value === null ? 'n/a' : value}</b><span class="t-muted">${note}</span></a></li>`)}</ul></div>`;
+  return html`<section class="section ovx-sec" aria-labelledby="rest-h"><div class="section-head"><div><h2 class="t-h2" id="rest-h">The rest of this ticker</h2>
+    <p class="section-sub">One reading from each section, so the row says what is there rather than only where to click.</p></div></div>
+    <ul class="ovx-cards">${cards.map(([view, label, value, note]) => html`<li><a class="ovx-card" href="${hrefFor(view, sym)}"><span class="t-label">${label}</span><b class="${value === null ? 't-muted' : ''}">${value === null ? 'n/a' : value}</b><span class="t-muted">${note}</span></a></li>`)}</ul></section>`;
 }
-function headlines(c) {
-  const news = c.t.news || {}, heads = (news.articles || []).slice(0, 3);
-  if (!heads.length) return '';
-  return html`<div class="ovx-block" aria-labelledby="hl-h"><h3 class="t-label" id="hl-h">Latest headlines</h3>
-    <ul class="plain">${heads.map((a) => html`<li><a class="textlink" href="${a.url}" target="_blank" rel="noopener">${clean(a.title)}</a> <span class="t-muted">${a.publisher || ''}${a.age_words ? `, published ${a.age_words}` : ''}</span></li>`)}</ul>
-    <p>${tabLink(c.sym, 'news', `All ${news.article_count || heads.length} headlines`)}</p></div>`;
-}
-function methodNote(t) {
+export function methodSection(c) {
+  const t = c.t; if (!t) return '';
   const built = ago(t.generated_at), src = t.data_source === 'tradier' ? 'Tradier, with Yahoo Finance where it has no data' : 'Yahoo Finance';
-  return html`<div class="ovx-block"><h3 class="t-label">How this page is built</h3><ul class="plain">
+  return html`<section class="section ovx-sec" aria-labelledby="mt-h"><h2 class="t-h2" id="mt-h">How this page is built</h2><ul class="plain">
     <li>Every sentence above comes from the figures on this page by fixed rules. No AI model writes them, so the same data gives the same words.</li>
     <li>Business figures come from the company's filed statements via Yahoo Finance. The latest fiscal year can be months old, and the latest quarter is shown beside it when the two disagree.</li>
     <li>Price figures are daily closes from ${src}${built ? `, gathered ${built}` : ''}. Outside market hours the price is the last close.</li>
     <li>The wording uses fixed cut-offs, chosen for plain language rather than taken from research: business changes under 1% either way are "roughly flat", price changes under 2% "little changed"; a year and the last three months are called out as pointing different ways when one is up at least 5% and the other down at least 5%; an earnings report within 45 days is listed as a risk; a price 20% or more below its highest close is listed as a risk; a price-to-earnings ratio 20% or more above or below the company's own average over at least three fiscal years is called asking more or less than usual.</li>
     <li>Optic's short-term signal score, its star rating and its options readings are models. Each carries its own method and limits on its page.</li>
-    <li>Nothing here is a recommendation to buy or sell.</li></ul></div>`;
+    <li>Nothing here is a recommendation to buy or sell.</li></ul></section>`;
 }
-export function advancedSection(c) {
-  const t = c.t; if (!t) return '';
-  const rows = keyStatRows(t.quote, g(t, 'company', 'short_interest'), c.phase), ids = Object.keys(rows).filter((id) => rows[id][1] !== null);
-  return html`<section class="section ovx-adv" aria-label="Advanced research"><details class="adv-fold" data-adv ${c.advanced ? 'open' : ''}>
-    <summary><span class="t-h2">Advanced research</span><span class="section-sub">Optic's short-term signal score, all key statistics, every section at a glance, headlines and method</span></summary>
-    ${opticRead(c)}
-    ${ids.length ? html`<div class="ovx-block" aria-labelledby="ks-h"><h3 class="t-label" id="ks-h">Key stats</h3>${statList(rows, ids)}</div>` : ''}
-    ${restBlock(c)}${headlines(c)}${methodNote(t)}</details></section>`;
-}
-
 /** The context every section reads, built once per paint. */
 export function context({ sym, t, fw, fwError, lt, stars, fund, advanced, phase, now = Date.now() }) {
   const price = t ? priceRead(t, { index: /^\^/.test(sym) }) : null;

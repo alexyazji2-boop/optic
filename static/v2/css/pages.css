@@ -177,8 +177,6 @@
 .ovx-step:hover span:first-child { text-decoration: underline; } .ovx-step .t-muted { flex: none; font-size: var(--t-sm); }
 .ovx-steps + .btn-milo { margin-top: 10px; }
 .ovx-drv li { display: grid; gap: 2px; padding: 8px 0; border-bottom: 1px solid var(--c-line-2); }
-.ovx-block { padding: 14px 0 18px; border-top: 1px solid var(--c-line-2); } .ovx-block:first-of-type { border-top: 0; padding-top: 4px; }
-.ovx-block > h3 { margin: 0 0 6px; }
 .pl-lede { margin: 6px 0 10px; padding-left: 12px; border-left: 2px solid var(--c-line); font-size: var(--t-lead); color: var(--c-ink); max-width: 70ch; }
 .pl-lede.is-bullish { border-left-color: var(--c-pos); } .pl-lede.is-bearish { border-left-color: var(--c-neg); }
 .pl-cat { margin: 0 0 8px; color: var(--c-ink-2); max-width: 75ch; }
@@ -2030,7 +2028,18 @@ html.eff-1100 .ob-ways { grid-template-columns: minmax(0, 1fr); }
 .dstick.has-tools > .dhead { flex: 1 1 100%; min-width: 0; }
 .dstick.has-tools > .tabs { flex: 1 1 auto; min-width: 0; }
 .dh-tools { flex: none; display: flex; align-items: center; padding: 0 0 5px 12px; border-bottom: 1px solid var(--c-line); }
-@media (max-width: 640px) { .dh-tools { flex: 1 1 100%; justify-content: flex-start; padding: 8px 0 0; border-bottom: 0; } .dh-tools .adv-switch { min-height: var(--tap); } }
+@media (max-width: 640px) { .dh-tools { flex: 1 1 100%; justify-content: flex-start; padding: 8px 0 0; border-bottom: 0; } .dh-tools .adv-toggle { min-height: var(--tap); } }
+/* The Overview's analysis area (post-demo Phase 06): one view at a time. A swap fades the new view in, quickly and with
+   no movement, so nothing jumps; the shared reduced-motion rules (base.css) turn the fade off. */
+.adv-toggle { white-space: nowrap; }
+.ov-analysis[data-swapped] { animation: ov-swap var(--m-content) var(--ease-out); }
+@keyframes ov-swap { from { opacity: 0; } to { opacity: 1; } }
+.ov-simple .sa-q { margin: 0 0 16px; max-width: 72ch; }
+.ov-simple .sa-q > h3 { margin: 0 0 4px; }
+.ov-simple .sa-q > p { margin: 0 0 6px; font-size: var(--t-lg); line-height: 1.55; } .ov-simple .sa-q > p:last-child { margin-bottom: 0; }
+.ov-simple .sa-next { margin-top: 20px; padding-top: 12px; border-top: 1px solid var(--c-line-2); max-width: 72ch; }
+.ov-simple .sa-next > .t-label { margin: 0 0 4px; }
+.sa-steps { list-style: none; margin: 0; padding: 0; }
 .dh-stage { display: flex; align-items: center; gap: 6px; margin: 0; flex: none; font-size: var(--t-sm); }
 .dh-stage .term { display: inline-flex; align-items: center; gap: 6px; min-height: 34px; font-weight: 600; text-decoration: none; }
 .dh-stage-tag { font-weight: 400; color: var(--c-ink-2); }
@@ -2039,14 +2048,6 @@ html.eff-1100 .ob-ways { grid-template-columns: minmax(0, 1fr); }
 .dh-stage.stage-3 .term { color: var(--c-warn); } .dh-stage.stage-3 .stage-dot { background: var(--c-warn); }
 .dh-stage.stage-4 .term { color: var(--c-neg); } .dh-stage.stage-4 .stage-dot { background: var(--c-neg); }
 .dh-stage .dh-explain { min-height: 30px; padding: 0 10px; font-size: var(--t-sm); }
-.adv-switch { display: inline-flex; align-items: center; gap: 8px; min-height: 34px; padding: 0 10px; border: 1px solid var(--c-line); border-radius: var(--r-ctl); background: none; color: var(--c-ink); font: 500 var(--t-md)/1 var(--f-sans); cursor: pointer; white-space: nowrap; }
-.adv-switch:hover { background: var(--c-sunk); } .adv-switch:focus-visible { outline: 2px solid var(--c-focus); outline-offset: 1px; }
-.adv-track { position: relative; width: 28px; height: 16px; border-radius: var(--r-xs); background: var(--c-sunk); border: 1px solid var(--c-line); transition: background-color var(--d-fast); }
-.adv-knob { position: absolute; top: 2px; left: 2px; width: 10px; height: 10px; border-radius: 2px; background: var(--c-ink-3); transition: transform var(--d-fast); }
-.adv-switch[aria-checked="true"] .adv-track { background: var(--c-active); border-color: var(--c-ink-3); }
-.adv-switch[aria-checked="true"] .adv-knob { transform: translateX(12px); background: var(--c-ink); }
-@media (prefers-reduced-motion: reduce) { .adv-track, .adv-knob { transition: none; } }
-html[data-motion="reduce"] .adv-track, html[data-motion="reduce"] .adv-knob { transition: none; }
 /* the past year's chart */
 .py-title { margin: 0 0 4px; font-size: var(--t-lg); font-weight: 600; color: var(--c-ink); }
 .ovx-marks td:first-child { white-space: nowrap; } .ovx-marks td:last-child { white-space: normal; text-align: left; }
@@ -2114,14 +2115,6 @@ html[data-motion="reduce"] .adv-track, html[data-motion="reduce"] .adv-knob { tr
 .osc-how { margin-top: auto; } .osc-t { width: 100%; margin: 6px 0; } .osc-t th { text-align: left; } .osc-t td:last-child { white-space: normal; }
 @media (max-width: 860px) { .osc-grid { grid-template-columns: minmax(0, 1fr); } .osc-card { padding: 4px 0 10px; } .osc-card + .osc-card { padding: 14px 0 6px; border-left: 0; border-top: 1px solid var(--c-line-2); } .osc-n { font-size: 34px; } }
 /* Optic's read, and the rest of Advanced research */
-.adv-fold > summary { display: flex; flex-direction: column; gap: 2px; padding: 2px 0; cursor: pointer; list-style: none; }
-.adv-fold > summary::-webkit-details-marker { display: none; }
-.adv-fold > summary .t-h2::after { content: ''; display: inline-block; width: 7px; height: 7px; margin: 0 0 3px 10px; border-right: 2px solid var(--c-ink-3); border-bottom: 2px solid var(--c-ink-3); transform: rotate(-45deg); transition: transform var(--d-fast); }
-.adv-fold[open] > summary .t-h2::after { transform: rotate(45deg); }
-.adv-fold > summary:focus-visible { outline: 2px solid var(--c-focus); outline-offset: 2px; border-radius: var(--r-xs); }
-.ovx-block { padding: 16px 0 18px; border-top: 1px solid var(--c-line-2); } .adv-fold > summary + .ovx-block { margin-top: 12px; }
-.ovx-block > .t-label, .pl-top .t-label { margin: 0 0 8px; text-transform: uppercase; letter-spacing: .06em; font-size: var(--t-xs); font-weight: 600; }
-.pl-top { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; } .pl-top .asof { margin: 0; }
 .pl-lede { margin: 6px 0 10px; padding-left: 12px; border-left: 2px solid var(--c-line); font-size: var(--t-lead); line-height: 1.4; color: var(--c-ink); max-width: 70ch; }
 .pl-lede.is-bullish, .pl-lede.is-leaning.bullish { border-left-color: var(--c-pos); } .pl-lede.is-bearish, .pl-lede.is-leaning.bearish { border-left-color: var(--c-neg); }
 .pl-cat { margin: 0 0 8px; padding-left: 12px; border-left: 2px dashed var(--c-line); color: var(--c-ink-2); max-width: 75ch; } .pl-cat b { color: var(--c-ink); }

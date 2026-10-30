@@ -1,14 +1,22 @@
 // Dossier, Overview. One company: a compact header (its logo, and its Weinstein
-// stage with Explain), what it does, the past year's chart with its marked dates
-// and the options-implied range ahead of it, then Classic's Overview (owner's
-// screenshots, 2026-10-25; overview-research.js): four questions answered
-// separately, the Optic Score, the key figures, the bull case and the bear case,
-// Optic's combined read, what changed lately, what to look at next, and Advanced
-// research, which "Show advanced analysis" opens. A fund keeps a fund's four
-// answers and its long-term record. The rest is one step away under More.
+// stage with Explain), what it does, and the past year's chart with its marked
+// dates and the options-implied range ahead of it. Below them, one analysis area
+// that shows one of two views, never both (post-demo Phase 06, directive 06):
+// - Simple analysis (overview-simple.js): what's happening, why it matters and what
+//   else to know, worded for the reader's knowledge level.
+// - Advanced analysis: Classic's Overview research (overview-research.js), in
+//   separate sections: the four questions, the Optic Score, the key statistics, the
+//   bull case and the bear case, Optic's combined read and short-term read, what
+//   changed lately, what to look at next, the rest of the ticker and the method.
+//   A fund keeps a fund's four answers and its long-term record.
+// "Show advanced analysis" swaps one for the other. Which one shows is the density
+// setting (core/prefs.js, D-019): one state, kept apart from the data, so a swap
+// fetches nothing.
 //
 // Every answer is worded by a stated rule from the server's own fields. No
-// number here is computed differently from the classic app.
+// number here is computed differently from the classic app. Every response is
+// tied to the visit that asked for it, so nothing from an earlier ticker, or an
+// earlier visit to the same one, is ever drawn.
 import * as FV from '../core/finviz.js';
 import { term } from '../ui/term.js';
 import { $, $$, html, render as draw, raw } from '../core/dom.js';
@@ -20,7 +28,9 @@ import * as RP from '../core/reports.js';
 import { lineChart, mountCharts } from '../ui/chart.js';
 import { skeleton, empty, failed, staleLine, how } from '../ui/states.js';
 import { icon } from '../ui/icons.js';
-import { header as frameHeader, tabs as frameTabs, isFund, fresher, livePrice, advSwitch } from './dossier-frame.js';
+import { header as frameHeader, tabs as frameTabs, isFund, fresher, livePrice, advToggle } from './dossier-frame.js';
+import { simpleFacts, simpleSection } from './overview-simple.js';
+import { levelLabel } from '../ui/levelslider.js';
 import { button as miloButton, provideContext } from '../ui/milo.js';
 import * as drawer from '../ui/drawer.js';
 import { hrefFor } from '../nav.js';
@@ -32,8 +42,9 @@ import { defineLive } from '../ui/term.js';
 import * as TR from '../core/track.js';
 import { convictionPhrase } from '../core/research-words.js';
 let lp = null;   // the header's price refresh (dossier-frame livePrice), stopped in dispose()
-let unPrefs = null;   // the advanced switch's subscription, ended in dispose()
-let advMoved = false;   // set when the switch moved, so the next paint lets its folds follow it
+let unPrefs = null;   // the analysis view's and the knowledge level's subscription, ended in dispose()
+let advMoved = false;   // set when the view was swapped, so the next paint fades the new one in and keeps its place
+let VISIT = 0;   // each render is a visit; a response is drawn only into the visit that asked for it
 
 let live = true;
 let D = {};
@@ -328,20 +339,59 @@ function stageFor(sym) {
 /** The session's phase, for "High today" against "High last session". */
 const phase = () => ((D.session || {}).prices || {}).phase || ((D.session || {}).session || {}).phase || '';
 
+/* ---------------- the two analysis views ---------------- */
+// Simple analysis waits for the payloads it reads (each has a fallback when it fails), so a sentence never says "no
+// history" for a history that has not arrived yet.
+function simpleView(sym, c) {
+  const level = prefs.knowledge(), label = levelLabel(level);
+  if (D.tickerError && !D.ticker) return simpleSection({ sym }, level, { label, error: `The figures behind it did not load: ${clean(String(D.tickerError.message || 'no answer').replace(/\.$/, ''))}. The chart above has a Try again.` });
+  if (!D.ticker || D.session === undefined || D.longterm === undefined || D.earnings === undefined) return simpleSection({ sym }, level, { label, loading: true });
+  const F = simpleFacts({ sym, kind: kindOf(sym, D), t: D.ticker, lt: D.longterm, quote: D.quote, session: D.session, earnings: D.earnings, price: c.price, f: c.f, today: c.today });
+  D.simpleKey = quoteKey();
+  return simpleSection(F, level, { label });
+}
+const quoteKey = () => JSON.stringify([D.quote && D.quote.price, D.quote && D.quote.change_pct, D.quote && D.quote.delayed_minutes, !!(((D.session || {}).session) || {}).is_regular]);
+/** The header's price refreshes every 20 seconds (dossier-frame livePrice). The simple analysis says the same day's
+ *  move and the same last trade, so when the quote it was written from has moved on it is redrawn in place: the
+ *  section alone, not the page, so the chart and the reader's place are left as they are. */
+function refreshSimple(main, sym) {
+  if (prefs.advancedOn() || quoteKey() === D.simpleKey) return;
+  const sec = $('#ov-analysis > .ov-simple', main); if (!sec || sec.hasAttribute('aria-busy')) return;
+  const c = OR.context({ sym, t: D.ticker || null, fw: D.fwRaw, fwError: D.fwNetError, lt: D.longterm || null, stars: (D.fairValue || {}).stars, fund: isFundHere(sym), advanced: false, phase: phase() });
+  const tmp = document.createElement('div'); draw(tmp, simpleView(sym, c));
+  if (tmp.firstElementChild) sec.replaceWith(tmp.firstElementChild);
+}
+function advancedView(sym, c, fund) {
+  return html`${fund ? (D.fwError && D.fvError && D.earnError ? failed('The four answers', D.fwError, { retry: 'dossier' }) : answers(sym)) : OR.fourQuestions(c)}${fund ? OR.fundRisk(sym, c.f) : ''}
+    ${OR.scoreSection(c)}${fund ? '' : OR.keyStats(c)}${OR.casesSection(c)}
+    ${fund ? fundRecord(sym) : ''}${combined()}${OR.opticRead(c)}${digest(sym)}${fund ? '' : html`<div data-tc-slot></div>`}${OR.nextSection(c)}${OR.restSection(c)}${D.ticker ? more(sym) : ''}${OR.methodSection(c)}`;
+}
+// the sticky stack a section scrolls under: the top bar, the Dossier header and the jump strip (ui/sections.js). The
+// strip is measured itself: it comes and goes with the view (the advanced one has enough sections for it), and its
+// height variable is only updated a frame later.
+const cssPx = (name) => parseFloat(getComputedStyle(document.documentElement).getPropertyValue(name)) || 0;
+function stack(main) {
+  const nav = main.querySelector(':scope > .sec-index:not(.sec-only-bulk)');
+  return cssPx('--topbar-h') + cssPx('--dstick-h') + (nav && getComputedStyle(nav).position === 'sticky' ? nav.offsetHeight : 0);
+}
+
 /* ---------------- page ---------------- */
 function paint(main, sym) {
   if (!live) return;
-  const advChanged = advMoved; advMoved = false;
+  const swapped = advMoved; advMoved = false;
+  const mode = prefs.advancedOn() ? 'advanced' : 'simple';
   const keepFocus = document.activeElement && main.contains(document.activeElement) ? document.activeElement : null;
-  const key = keepFocus && (keepFocus.dataset.v2Answer || keepFocus.dataset.v2Range || keepFocus.dataset.v2Watch || (keepFocus.hasAttribute('data-v2-adv-toggle') ? 'adv' : ''));
-  // what the reader opened stays open while later data arrives, and a fold the switch opened that the reader shut
-  // stays shut; when the switch itself moves, its folds follow it
+  // the page's heading, focused on arrival for a screen reader, keeps focus through the redraws as data arrives
+  const key = keepFocus && (keepFocus.dataset.v2Answer || keepFocus.dataset.v2Range || keepFocus.dataset.v2Watch || (keepFocus.hasAttribute('data-v2-adv-toggle') ? 'adv' : '') || (keepFocus.tagName === 'H1' ? 'h1' : ''));
+  // what the reader opened stays open while later data arrives
   const openDetails = $$('details[open] summary', main).map((x) => x.textContent.trim());
-  const shutAdv = $$('details[data-adv]:not([open]) summary', main).map((x) => x.textContent.trim());
   const openEvs = $$('[data-v2-ev][aria-expanded="true"]', main).map((x) => x.getAttribute('aria-controls'));
   const scrollY = window.scrollY;
+  // where the analysis area began on screen before a swap: a reader reading inside it is shown the new view from its
+  // start, and one above it stays where they are
+  const before = swapped ? $('#ov-analysis', main) : null, anchor = before ? before.getBoundingClientRect().top : null, wasTop = before ? stack(main) : 0;
   const fund = isFundHere(sym);
-  const c = OR.context({ sym, t: D.ticker || null, fw: D.fwRaw, fwError: D.fwNetError, lt: D.longterm || null, stars: (D.fairValue || {}).stars, fund, advanced: prefs.advancedOn(), phase: phase() });
+  const c = OR.context({ sym, t: D.ticker || null, fw: D.fwRaw, fwError: D.fwNetError, lt: D.longterm || null, stars: (D.fairValue || {}).stars, fund, advanced: mode === 'advanced', phase: phase() });
   // No quote and no price history, both "not found": the symbol is not listed, and the page says that once. Drawn in
   // full it went on to a red "price history did not load, Try again" and four "Insufficient Data" verdicts for a
   // symbol that does not exist (investor audit, 2026-10-27).
@@ -351,48 +401,62 @@ function paint(main, sym) {
       ${empty(`Optic has no listing for ${sym}`, 'No quote and no price history came back for this symbol. It may be misspelled, delisted, or listed outside the US under another form.', html`<div class="cluster"><button type="button" class="btn btn-primary btn-sm" data-v2-open-palette>Search for the company</button><a class="btn btn-sm" href="#/">Go to Home</a></div>`)}`);
     return;
   }
-  draw(main, html`<div class="dstick has-tools">${frameHeader(sym, D, 'overview', { stage: () => stageFor(sym) })}${frameTabs(sym, 'overview', { fund: isFund(D) })}<div class="dh-tools">${advSwitch()}</div></div>
+  draw(main, html`<div class="dstick has-tools">${frameHeader(sym, D, 'overview', { stage: () => stageFor(sym) })}${frameTabs(sym, 'overview', { fund: isFund(D) })}<div class="dh-tools">${advToggle(mode)}</div></div>
     ${D.quoteError && !D.quote ? (D.quoteError.kind === 'notfound' ? empty(`Optic has no listing for ${sym}`, 'No quote came back for this symbol. It may be misspelled, delisted, or listed outside the US under another form.', html`<button type="button" class="btn btn-sm" data-v2-open-palette>Search for the company</button>`) : failed(`${sym}'s quote`, D.quoteError, { retry: 'dossier' })) : ''}
     ${((D.framework || {}).freshness || {}).state === 'stale' ? staleLine({ text: clean(D.framework.freshness.text) }) : ''}
     ${about(sym)}
     <section class="section dchart" aria-labelledby="py-h">${D.tickerError ? failed('The price history', D.tickerError, { retry: 'dossier' }) : chartBlock(sym)}</section>
-    ${fund ? (D.fwError && D.fvError && D.earnError ? failed('The four answers', D.fwError, { retry: 'dossier' }) : answers(sym)) : OR.fourQuestions(c)}${fund ? OR.fundRisk(sym, c.f) : ''}
-    ${OR.scoreSection(c)}${fund ? '' : OR.keyFigures(c)}${OR.casesSection(c)}
-    ${fund ? fundRecord(sym) : ''}${combined()}${digest(sym)}${fund ? '' : html`<div data-tc-slot></div>`}${OR.nextSection(c)}${D.ticker ? more(sym) : ''}${OR.advancedSection(c)}
+    <div class="ov-analysis" id="ov-analysis" data-v2-analysis="${mode}" ${swapped ? 'data-swapped' : ''}>${mode === 'advanced' ? advancedView(sym, c, fund) : simpleView(sym, c)}</div>
+    <p class="sr" role="status" data-v2-analysis-status></p>
     <p class="asof disclaimer">${clean((D.ticker || {}).disclaimer || 'Not financial advice. For research and education only.')}</p>`);
-  mountThesis(main, sym, () => D);   // the thesis check: one node for the visit, so a half-typed note survives this redraw
+  mountThesis(main, sym, () => D);   // the thesis check: one node for the visit, so a half-typed note survives this redraw and a swap
   if (D.ticker) mountChart(main, sym);
-  $$('details summary', main).forEach((x) => {
-    const d = x.parentElement, t = x.textContent.trim();
-    if (d.hasAttribute('data-adv')) { if (!advChanged) { if (openDetails.includes(t)) d.open = true; else if (shutAdv.includes(t)) d.open = false; } return; }
-    if (openDetails.includes(t)) d.open = true;
-  });
+  $$('details summary', main).forEach((x) => { if (openDetails.includes(x.textContent.trim())) x.parentElement.open = true; });
   openEvs.forEach((id) => { const b = $(`[aria-controls="${id}"]`, main); const body = document.getElementById(id); if (b && body) { b.setAttribute('aria-expanded', 'true'); body.hidden = false; } });
   if (Math.abs(window.scrollY - scrollY) > 2) window.scrollTo(0, scrollY);
-  if (key) { const el = key === 'adv' ? $('[data-v2-adv-toggle]', main) : $(`[data-v2-answer="${key}"],[data-v2-range="${key}"],[data-v2-watch="${key}"]`, main); if (el) el.focus(); }
+  if (swapped) {
+    // after ui/sections.js has redrawn its strip for the new view (its observer's microtask comes first), and before
+    // the browser draws a frame, so the new view is never seen in the wrong place
+    queueMicrotask(() => {
+      const now = $('#ov-analysis', main), top = stack(main);
+      if (now && anchor !== null && anchor < wasTop) window.scrollTo(0, Math.max(0, window.scrollY + now.getBoundingClientRect().top - top - 8));
+    });
+    // said once the new view is in the page, so a screen reader hears what changed and focus stays on the button
+    const st = $('[data-v2-analysis-status]', main);
+    setTimeout(() => { if (st && st.isConnected) st.textContent = `Showing the ${mode} analysis.`; }, 60);
+  }
+  if (key) {
+    const el = key === 'adv' ? $('[data-v2-adv-toggle]', main) : key === 'h1' ? $('h1', main) : $(`[data-v2-answer="${key}"],[data-v2-range="${key}"],[data-v2-watch="${key}"]`, main);
+    if (el) { if (key === 'h1') el.setAttribute('tabindex', '-1'); el.focus({ preventScroll: true }); }
+  }
 }
 
 export async function render(main, route) {
   live = true;
-  const sym = route.symbol;
-  D = { sym };
+  const sym = route.symbol, visit = ++VISIT;
+  D = { sym, visit };
+  const mine = () => live && D.visit === visit;
   provideContext(() => ({ view: 'overview', ticker: sym, quote: D.quote, verdict: (D.ticker || {}).verdict, company: (D.ticker || {}).company, news: (D.ticker || {}).news, framework: D.framework, fair_value: D.fairValue, earnings: D.earnings, digest: D.digest, stage: D.stage && D.stage.available ? { stage: D.stage.stage, name: D.stage.name, transition: D.stage.transition_short } : null, thesis_check: thesisContext() }));
   document.title = `${sym} Dossier, Optic`;
   if (lp) lp.stop();
-  lp = livePrice(main, route.symbol, () => D, 'overview', { stage: () => stageFor(sym) });
+  lp = livePrice(main, route.symbol, () => D, 'overview', { stage: () => stageFor(sym), onQuote: () => { if (mine()) refreshSimple(main, sym); } });
   if (unPrefs) unPrefs();
-  // "Show advanced analysis" here or Settings' "How much each page shows" (density): the Overview's folds follow it at once
-  unPrefs = prefs.onChange((what) => { if (what === 'density' && D.sym === sym) { advMoved = true; paint(main, sym); } });
+  // "Show advanced analysis" here or Settings' "How much each page shows" (density) swaps the view; the knowledge
+  // level, from anywhere, rewords the simple analysis
+  unPrefs = prefs.onChange((what) => {
+    if (!mine()) return;
+    if (what === 'density') { advMoved = true; paint(main, sym); } else if (what === 'knowledge' || what === 'knowledge-synced') paint(main, sym);
+  });
   paint(main, sym);
-  wire(main, sym);
-  sections(main, 'overview', { levels: { 'advanced research': 2 }, norm: (t) => { const n = ((main.querySelector('.dhead .name span') || {}).textContent || '').trim(); return n ? t.split(n).join('the company') : t; } });   // folds, Expand all, Panels (Classic parity B3)
+  wire(main);
+  sections(main, 'overview', { norm: (t) => { const n = ((main.querySelector('.dhead .name span') || {}).textContent || '').trim(); return n ? t.split(n).join('the company') : t; } });   // folds, Expand all, Panels (Classic parity B3)
   const enc = encodeURIComponent(sym);
-  const step = (p, ok, bad) => { p.then((d) => { if (D.sym === sym) ok(d); }, (e) => { if (D.sym === sym) bad(e); }).finally(() => { if (D.sym === sym) paint(main, sym); }); };
+  const step = (p, ok, bad) => { p.then((d) => { if (mine()) ok(d); }, (e) => { if (mine()) bad(e); }).finally(() => { if (mine()) paint(main, sym); }); };
   // `unreachable` is the source failing, not the symbol being unknown: read as one, a feed outage said "Optic has no
   // listing for NVDA" (investor audit, 2026-10-27). The symbol joins the recents once a quote confirms it: kept from
   // the first paint, a mistyped ZZZZQ whose quote timed out stayed, and a guest's Home linked its panels to it.
   step(api.get(`/api/quote/${enc}`, { ttl: 20000, timeout: 15000 }), (d) => { if (d && d.available !== false) { D.quote = fresher(D.quote, d.quote || d); store.pushRecent(sym); } else if (d && d.unreachable) D.quoteError = new api.ApiError('server', 503, `The quote source did not answer for ${sym}`); else { D.quoteError = new api.ApiError('notfound', 404, `No quote for ${sym}`); store.forgetRecent(sym); } }, (e) => { D.quoteError = e; });
-  step(api.get(`/api/session/${enc}`, { ttl: 60000 }), (d) => { D.session = d; learn(sym, { session: d, quote: D.quote }); }, () => {});
+  step(api.get(`/api/session/${enc}`, { ttl: 60000 }), (d) => { D.session = d; learn(sym, { session: d, quote: D.quote }); }, () => { D.session = null; });
   step(api.get(`/api/ticker/${enc}?max_expiries=4&macro=true`, { ttl: 120000, timeout: 60000 }), (d) => {
     D.ticker = d; if (d.quote) D.quote = fresher(D.quote, d.quote);
     if (d.data_caveat) D.freshText = clean(String(d.data_caveat).split(/(?<=\.)\s/)[0]);   // the delay; Greeks and Black-Scholes belong to Options
@@ -408,15 +472,20 @@ export async function render(main, route) {
   // a failed stage read is asked once more after half a minute, as Classic asks again on its next paint: a missing
   // stage is otherwise silent, where a missing grade says so
   const stageRead = (tries) => step(api.get(`/api/stage?symbol=${enc}`, { ttl: 1800000, timeout: 45000 }), (d) => { D.stage = d; },
-    () => { D.stage = null; if (tries > 0) setTimeout(() => { if (live && D.sym === sym) stageRead(tries - 1); }, 30000); });
+    () => { D.stage = null; if (tries > 0) setTimeout(() => { if (mine()) stageRead(tries - 1); }, 30000); });
   stageRead(1);
-  TR.load().then(() => { if (D.sym === sym && D.stage) stageFor(sym); });   // the stage's explanation adds what history says (B6c)
+  TR.load().then(() => { if (mine() && D.stage) stageFor(sym); });   // the stage's explanation adds what history says (B6c)
 }
 
 export function dispose() { if (lp) { lp.stop(); lp = null; } if (unPrefs) { unPrefs(); unPrefs = null; } live = false; disposeThesis(); drawer.close({ silent: true }); }
 
-function wire(main, sym) {
+// once per page element: Try again renders into the same element, and a second listener made one press of "Show
+// advanced analysis" swap the view twice, back to where it was. Handlers read the visit's symbol, not a captured one.
+function wire(main) {
+  if (main.dataset.v2Wired) return;
+  main.dataset.v2Wired = '1';
   main.addEventListener('click', (e) => {
+    const sym = D.sym;
     const r = e.target.closest('[data-v2-range]');
     if (r) { range = r.dataset.v2Range; paint(main, sym); return; }
     if (e.target.closest('[data-v2-adv-toggle]')) { prefs.setAdvanced(!prefs.advancedOn()); return; }   // the repaint follows from prefs.onChange

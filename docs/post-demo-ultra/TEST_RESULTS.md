@@ -371,3 +371,107 @@ production answers (BLOCKERS BL-01).
 | The Phase 05 tree before the second set of checks | 7519 passed, 1 skipped, 4 failed (the four pinned tests above) |
 | The final Phase 05 tree, after every code change | **7529 passed, 1 skipped, 0 failed** in 212 s (`phase05/pytest-full.txt`) |
 | Phase 05's own tests | `tests/test_knowledge_level_apply.py` (9), `tests/test_v2_knowledge_level.py` (16); `tests/test_knowledge_modes.py`, `test_pulse_tone.py`, `test_ui_mode.py`, `test_brokerage.py` updated; all pass |
+
+## Phase 06 (the Dossier), 2026-10-29, working tree on 448e633
+
+Raw results are under `~/Optic/work/post-demo-ultra-2026-10-29/phase06/`. Runs use headless Chrome 152 against the
+local server (:8250) as a guest, on live delayed data, Thursday 2026-10-29 after the close. Requests are failed or
+held in the browser (CDP Fetch), never on the server.
+
+### Browser checks (`tools/phase06_checks.py`, raw `phase06-checks.json`)
+
+| Check | Result |
+|---|---|
+| D1 Show advanced analysis on NVDA: one analysis area, now Advanced; no Simple section; the label reads Show simple analysis; 12 sections; no request; the button stays at the same height on screen and keeps focus; the status line says Showing the advanced analysis | PASS |
+| D2 Show simple analysis restores it, again with no request | PASS |
+| D3 Five presses 70 ms apart: one view, the one the label names, no section twice | PASS |
+| D4 A reader scrolled to Key statistics is shown the simple view from its start, 8 px under the sticky header; a reader at the top stays at the top | PASS |
+| D5 After a refresh the chosen view is the one shown, alone | PASS |
+| D6 AAPL's price history held, then MSFT opened, then AAPL's answer released: MSFT's simple analysis, no mention of AAPL | PASS |
+| D7 The same while the advanced analysis loads (AMZN held, GOOGL opened) | PASS |
+| D8 AMD's long-term answer held; Home; AMD again; the first visit's answer released: drawn once, correctly, no script error | PASS |
+| D9 INTC's price history held: the simple view shows one loading line; the advanced view swaps in and back while loading; then INTC | PASS |
+| D10 ORCL's price history fails: the simple analysis says the figures did not load and points to the chart's Try again; Try again recovers the page; one press then swaps once | PASS |
+| D11 NVDA, then Home, then back: the same ticker and view, no request (all from cache) | PASS |
+| D12 The level changed from Intermediate to Expert while NVDA is open: the words change, the figures stay | PASS |
+| D13 The swap fades in 0.15 s; with reduced motion, 0 s | PASS |
+| D14 Phones (390 and 375 by 549): the button is 44 px tall; neither view scrolls sideways | PASS |
+| D15 META's price history held; the search used to open NFLX: NFLX, no mention of META | PASS |
+| D16 A changed quote served to the header's 20-second refresh (the page's clock set to 10:30 New York): the header and the simple analysis both say the day's move of −5.55% | PASS |
+
+### The figures against the provider (`tools/phase06_accuracy.py`, raw `phase06-accuracy.json`)
+
+Each symbol's simple analysis was read at the Advanced level, whose figures have one decimal. Every figure was then
+worked out again from the same payloads by the script, independently of the page's code:
+- **Price:** the year's, three months' and today's change, and the distance from the high.
+- **Business:** revenue and net income growth, and the gross, operating and net margins.
+- **Valuation:** the P/E against its own median, and the forward P/E.
+- **Earnings:** the report date and days, and the options-implied move.
+- **Context:** the stated delay, the fiscal year's end, the company's name, the Weinstein stage, and the chart's
+  source and last date.
+
+| Symbol | Result |
+|---|---|
+| NVDA, AAPL, MSFT, JPM, KO | PASS: every figure matches |
+| RIVN (losing money) | PASS: no P/E is shown, and "No meaningful P/E" is said |
+| SPY, BTC-USD, ^GSPC | PASS: no company figures for a fund, a coin or an index |
+| ZZZZQ | PASS: "Optic has no listing for ZZZZQ" |
+
+### The five levels on the page
+
+The simple analysis of RIVN, SPY, BTC-USD, ^GSPC and NVDA was read at two to four levels each, five symbols in all.
+The wording changes with the level and the figures do not. A sample, NVDA's first answer:
+- **New to Markets:** "NVDA's share price is up 6% over the past year. It is 11% below the highest price it closed at
+  in that time."
+- **Expert:** "1Y +6.3%, 3M +6.4%, −10.7% from the period high close."
+
+Reading the samples, and the unit tests, found four wording faults, all fixed:
+- "fiscal year FY26";
+- "2025 to Dec 31, 2025";
+- the index line without "The";
+- a risk's reason left out at Advanced and Expert. For "options positioning may amplify price swings" that reason
+  is the caveat, "an assumption, not reported positions", so no level may drop it (`tests/test_v2_dossier_analysis.py`
+  checks it at every level).
+
+### Reading load (`tools/density.py`, the Phase 04 tool; raw `phase06/density-after`)
+
+| Route | Visible words | Controls | Cards | Closed folds | Page height |
+|---|---|---|---|---|---|
+| NVDA, 1440 (Phase 04 after, then now) | 1,409 → 458 | 99 → 45 | 12 → 3 | 19 → 4 | 5,211 → 2,468 px |
+| NVDA, 390 | 1,396 → 450 | 91 → 37 | 12 → 3 | 19 → 4 | 8,958 → 3,376 px |
+| SPY, 1440 | 1,070 → 389 | 65 → 32 | 16 → 3 | 11 → 3 | 4,360 → 2,300 px |
+| SPY, 390 | 1,063 → 382 | 58 → 25 | 16 → 3 | 11 → 3 | 7,099 → 3,006 px |
+
+These are the default (Simple) view. The Advanced view holds the research that was there before, in twelve
+sections: NVDA is 1,965 visible words at 1440.
+
+### Phase 03's search scenarios, run again (`phase06/phase03-regression/`)
+
+| Run | Outcome |
+|---|---|
+| The first run | 26 of 27: S5 (20 searches in a row) missed one |
+| S5 alone, twice | Passed once, then missed 2 of 20 |
+| A 60-search loop with focus logged | 1 miss. The log showed the search box losing focus to the page's heading, which the shell focuses one frame after a page arrives (BUG-093). The Overview's next redraw then dropped that focus to the page's body (BUG-097) |
+| After the fix: the 60-search loop | 0 misses |
+| After the fix: all 27 scenarios | **27 of 27** |
+| After the fix: S5 twice more | Passed both times |
+
+### Found by Phase 06's own checks
+
+- D4 first failed: the swap left the simple view 49 px too low. The jump strip leaves with the advanced view, and its
+  height variable updates a frame later. The strip is now measured itself, after the sections helper redraws it and
+  before a frame is drawn.
+- D16 first matched the wrong text: "55.6%" contains "5.6%". Then it waited on a refresh that runs every 5 minutes
+  after 20:00 New York time. The check now matches the day's-move sentence and sets the page's clock to trading
+  hours.
+- The accuracy check first expected "0.0%" for AAPL at its high; the page rightly says "at the period's highest
+  close".
+- BUG-093 to BUG-097 were fixed. BUG-098 (SPY's quote states no delay while the data caveat says 15 minutes) is
+  handed to Phase 09.
+
+### Suite
+
+| Run | Outcome |
+|---|---|
+| The final Phase 06 tree | **7547 passed, 1 skipped, 0 failed** in 214 s (`phase06/pytest-full.txt`). The run before it failed one test that sliced the page from `wire(main, sym)`, now `wire(main)`; its anchor was updated |
+| Phase 06's own tests | `tests/test_v2_dossier_analysis.py` (12); `test_v2_overview_classic_port.py` and `test_v2_parity_b6a.py` updated for the new layout |

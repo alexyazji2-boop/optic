@@ -4,13 +4,58 @@ Read this and [REQUIREMENTS_MATRIX.md](REQUIREMENTS_MATRIX.md) before changing a
 
 ## Current state
 
-- **Current phase:** 06 Dossier (next). Phases 01 to 05 complete (reports below).
+- **Current phase:** 07 Milo streaming and conversation (next). Phases 01 to 06 complete (reports below).
 - **Branch / worktree:** `post-demo-ultra` in `~/Optic/wt-ultra`, from `9fa0f36` (tag `post-demo-ultra-baseline`). Upstream unset; nothing pushed or deployed.
-- **Commits:** `fce3e71` setup; `8040f8a` and `795325a` Phase 01; `d4a2b1a` Phase 01 report; `ce60b16` Phase 02 policy module (WIP); `c6724ff` Milo portfolio privacy (cherry-pick of 2236205); `a76916b` Phase 02; `6f2e814` its commit id; `7b14b56` Phase 03; `2f6a548` its commit id; `381a018` Phase 04; `b07e181` its commit id; `e64a5ee` Phase 05.
+- **Commits:** `fce3e71` setup; `8040f8a` and `795325a` Phase 01; `d4a2b1a` Phase 01 report; `ce60b16` Phase 02 policy module (WIP); `c6724ff` Milo portfolio privacy (cherry-pick of 2236205); `a76916b` Phase 02; `6f2e814` its commit id; `7b14b56` Phase 03; `2f6a548` its commit id; `381a018` Phase 04; `b07e181` its commit id; `e64a5ee` Phase 05; `448e633` its commit id; Phase 06 as recorded in its report.
 - **Local server:** launch config `optic-ultra` (:8250, stand-in model :8251 from `tools/milo_standin_ultra.py`, which adds an `ADVISE` keyword that makes the answer break the policy and, since Phase 05, writes a Sector Read and a portfolio briefing in their writers' shapes; data `~/Optic/ultra-data`, sandbox brokerage, jobs off, no real model key). Seed password in `~/Optic/ultra-data/seed-output.txt` (never print it). The server does not reload Python: restart it after editing server code. The desktop app stops it when the session is paused; start it again with preview_start.
-- **Working folder (outside the repo):** `~/Optic/work/post-demo-ultra-2026-10-29/` (tools/, crawl1/, dead/, sheets/, baseline/, milo/, registry/, phase02/ to phase05/; the five-level proxy run in phase05/proxy/).
+- **Working folder (outside the repo):** `~/Optic/work/post-demo-ultra-2026-10-29/` (tools/, crawl1/, dead/, sheets/, baseline/, milo/, registry/, phase02/ to phase06/; the five-level proxy run in phase05/proxy/).
 - **Resource rule:** at most two subagents at a time (DECISIONS D-007). One proxy answer costs about 180,000 agent tokens.
-- **Next action:** Phase 06 (Dossier): read `directives/06-dossier.md`, the R06 rows, BUG-001, BUG-004 and BUG-068, D-019 and D-030 (the Simple Analysis must use the reader's knowledge level; R05-05 moves to PASS with that evidence).
+- **Next action:** Phase 07 (Milo streaming, New Chat, Close): read `directives/07-milo-streaming.md`, the R07 rows, and the Milo findings in registry A (A16 to A20). The Phase 06 browser tools are `tools/phase06_checks.py` (requests held or failed in the browser) and `tools/phase06_accuracy.py`.
+
+## Phase 06 report (directive 06; reporting format of directive 00)
+
+1. **Inspected.** The Overview's whole pipeline (DOSSIER_PIPELINE.md): the router and search, the eleven payloads and the header's price refresh, the client caches, the fixed-rule readings of `overview-research.js`, the loading and error paths, the redraws and the section helpers, the density state behind "Show advanced analysis", and the sources each section names. The payloads of five kinds of symbol (a company, a loss-maker, a fund, a coin, an index).
+2. **Problems discovered.**
+   - **The switch:** it opened two folds under the simple content instead of replacing it, and its label never changed (BUG-001).
+   - **Reading load:** the default view held 1,409 visible words in 12 cards (BUG-004).
+   - **The answer guard:** answers were checked by symbol only, so a late answer from an earlier visit to the same ticker could be drawn (BUG-095).
+   - **Try again:** it wired the page's handlers a second time, so the switch then cancelled itself (BUG-094).
+   - **Focus:** a search opened as a page arrived lost focus to the page's heading, and the Overview's redraw then dropped focus to the body (BUG-093, BUG-097).
+   - **The day's move:** the header's 20-second price refresh would have left the new Simple Analysis saying an older move (BUG-096).
+   - **Data:** SPY's quote states no delay while the data caveat says 15 minutes (BUG-098, for Phase 09).
+3. **Root causes.** The switch was a density control that opened folds; the research was one long page with a fold at the end; requests had no identity beyond the symbol; `wire()` ran on every render; the shell's arrival focus did not know about the search.
+4. **Fixes implemented.**
+   - **One analysis area:** it shows the Simple Analysis or the Advanced Analysis, swapped by the density setting, the one state (D-035).
+   - **The Simple Analysis:** three answers by fixed rules in five registers, with the same figures and every caveat at every level (D-036).
+   - **The Advanced Analysis:** Classic's research word for word, in twelve separate sections with the duplicates merged (D-037).
+   - **The swap:** a 150 ms fade, the reader's place kept, focus kept, said to a screen reader (D-038).
+   - **The visit token** for every answer; handlers wired once (D-039).
+   - **The Simple Analysis follows the header's price** (D-040).
+   - **The arrival focus** waits for the search, and the heading keeps focus through redraws (D-041).
+5. **Files changed.**
+   - **Pages:** `static/v2/js/pages/overview-simple.js` (new), `pages/dossier.js`, `pages/dossier-frame.js`, `pages/overview-research.js`.
+   - **Shell and styles:** `app.js`, `css/pages.css`.
+   - **Tests:** `tests/test_v2_dossier_analysis.py` (new); `test_v2_overview_classic_port.py`, `test_v2_parity_b6a.py` and `test_pitch_audit_2026_10_22.py` updated.
+   - **Docs:** DOSSIER_PIPELINE.md (new), DECISIONS D-035 to D-041, BUG_REGISTER, REQUIREMENTS_MATRIX, TEST_RESULTS, FEATURE_REGISTRY, SIMPLICITY_AUDIT.
+6. **Tests executed.**
+   - The full suite.
+   - Phase 06's 12 unit tests.
+   - Sixteen browser checks (D1 to D16), with requests failed or held in the browser.
+   - The accuracy run on ten symbols.
+   - Phase 03's 27 search scenarios, and a 60-search loop with focus logged.
+   - The Phase 04 density tool on the Overview.
+   - Five symbols' simple analyses read at several levels.
+7. **Passed / failed.** Suite 7547 passed, 1 skipped, 0 failed. Browser checks 16 of 16. Accuracy 10 of 10. Search scenarios 27 of 27 after BUG-093's fix (26 of 27 before). R06-01 to R06-09 PASS, and R05-05 now PASS.
+8. **Browser verification.** Headless Chrome for every check, at 1440, 390 and 375 by 549, with screenshots of both views looked at. The first reads found:
+   - D4: the simple view landed 49 px low after a swap.
+   - Four wording faults.
+   - BUG-093, BUG-096 and BUG-097.
+   All are fixed (TEST_RESULTS, Phase 06).
+9. **Outstanding.**
+   - **Phase 09:** BUG-098, a delay stated two ways by the data.
+   - **Phase 08:** BUG-092, the advice check's "I'd lean toward" pattern.
+   - **Blocked:** the production model's answers (BL-01); nothing on the Overview needs them.
+10. **Commit and next phase.** COMMIT_PLACEHOLDER; next is Phase 07.
 
 ## Phase 05 report (directive 05; reporting format of directive 00)
 
@@ -103,3 +148,6 @@ Read this and [REQUIREMENTS_MATRIX.md](REQUIREMENTS_MATRIX.md) before changing a
 
 ### 2026-10-29 Phase 05
 - Five levels with the directive's names, one slider in three places, one preference with an account column and one rule in both apps (including a failed save), the level applied to Milo, deep research and the briefing in both apps, "Explain it for" on shared texts, the glossary policy on rule-written text and chart readings, the five-level proxy run, 22 browser checks, suite green; committed (not pushed).
+
+### 2026-10-29 Phase 06
+- Dossier pipeline mapped; one analysis area swapping a rule-written Simple Analysis (five levels) and the sectioned Advanced Analysis on the density setting; visit tokens; the swap's fade and place; the Simple Analysis following the header's price; the search focus race fixed; 16 browser checks, accuracy 10 of 10, Phase 03's 27 scenarios; suite green; committed (not pushed).

@@ -165,8 +165,9 @@ def test_the_statistics_definitions_and_the_stage_term(tmp_path):
 def test_the_research_sections_and_where_they_sit():
     dossier = (JS / "pages/dossier.js").read_text()
     # the Overview port's layout (2026-10-25), with B6a's thesis check and a fund's risk card kept in it
-    assert "${digest(sym)}${fund ? '' : html`<div data-tc-slot></div>`}${OR.nextSection(c)}${D.ticker ? more(sym) : ''}${OR.advancedSection(c)}" in dossier
-    assert "levels: { 'advanced research': 2 }" in dossier, "one press away below the Advanced level"
+    # the advanced analysis (post-demo Phase 06): B6a's thesis check and a fund's risk card kept in it
+    assert "${combined()}${OR.opticRead(c)}${digest(sym)}${fund ? '' : html`<div data-tc-slot></div>`}${OR.nextSection(c)}${OR.restSection(c)}${D.ticker ? more(sym) : ''}${OR.methodSection(c)}" in dossier
+    assert "levels:" not in dossier, "no section is folded by a level: the view itself swaps (BUG-068)"
     assert "${fund ? OR.fundRisk(sym, c.f) : ''}" in dossier and "export function fundRisk(sym, f)" in RESEARCH
     assert "api.get(`/api/stage?symbol=${enc}`" in dossier and "{ stage: () => stageFor(sym) }" in dossier, "the stage survives the live price's redraws"
     assert "TR.historyLine('stage')" in dossier, "the stage's explanation says what its replay on history found (B6c)"

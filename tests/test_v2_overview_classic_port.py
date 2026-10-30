@@ -274,12 +274,14 @@ def test_key_figures_carry_classics_definitions_word_for_word():
     term = (JS / "ui/term.js").read_text()
     for k, v in classic.items():
         assert v in term, k
-    assert "export const OV_ESSENTIALS = ['market_cap', 'pe_trailing', 'revenue_growth', 'profit_margin', 'dividend_yield', 'high_52', 'low_52'];" in OVR
-    assert "Select a label for what it means. All eighteen figures are under Advanced research below." in OVR
+    # one section of every figure the feed has, in the advanced analysis (post-demo Phase 06): seven under Key figures
+    # and all eighteen again under Advanced research said the same figures twice
+    assert "export function keyStats(c) {" in OVR and '<h2 class="t-h2" id="kf-h">Key statistics</h2>${statList(rows, ids)}' in OVR
+    assert "OV_ESSENTIALS" not in OVR and "export function keyFigures" not in OVR
 
 
 def test_optic_read_keeps_its_inputs_scale_skill_line_and_method_fold():
-    read = OVR[OVR.index("export function opticRead(c) {"):OVR.index("/* ---------------- Advanced research")]
+    read = OVR[OVR.index("export function opticRead(c) {"):OVR.index("/* ---------------- the rest of the ticker and the method")]
     for want in ("Optic's read", "of inputs agree", "Each input scores from -100 to +100: a bar fills right of the line when the input leans bullish and left when it leans bearish.",
                  "skill.text", "dg.method ? how(", "role=\"group\" aria-label=\"How the ${p.factors_total || 5} inputs scored\""):
         assert want in read, want
@@ -290,9 +292,11 @@ def test_the_header_and_the_switch():
     assert "${raw(logoHTML(sym, { lazy: false }))}" in FRAME and "/api/logo/${encodeURIComponent(sym)}" in (JS / "ui/symbols.js").read_text()
     assert "main: `Stage ${r.stage} · ${r.name || ''}`.trim(), tag: r.transition_short || ''" in OVR, "Classic's 'Stage 3 · Topping' and 'breakdown'"
     assert "miloButton('Explain', { ask: st.ask(sym)" in FRAME, "Explain drafts the question; nothing is sent"
-    assert "role=\"switch\" aria-checked=\"${on}\" data-v2-adv-toggle" in FRAME and "Show advanced analysis" in FRAME
-    assert "if (e.target.closest('[data-v2-adv-toggle]')) { prefs.setAdvanced(!prefs.advancedOn()); return; }" in DOS, "Classic's keys (optic.knowledge.v1)"
-    assert '<details class="adv-fold" data-adv ${c.advanced ? \'open\' : \'\'}>' in OVR and '<details class="more-inline cs-fold" data-adv ${c.advanced ? \'open\' : \'\'}>' in OVR
+    # the switch swaps the analysis area and names the other view (post-demo Phase 06, BUG-001): it no longer opens folds
+    assert "${adv ? 'Show simple analysis' : 'Show advanced analysis'}</button>" in FRAME and 'data-v2-adv-toggle data-mode="${mode}" aria-controls="ov-analysis"' in FRAME
+    assert "if (e.target.closest('[data-v2-adv-toggle]')) { prefs.setAdvanced(!prefs.advancedOn()); return; }" in DOS, "one state: density"
+    assert "${mode === 'advanced' ? advancedView(sym, c, fund) : simpleView(sym, c)}" in DOS
+    assert "data-adv" not in OVR and "data-adv" not in DOS and 'role="switch"' not in FRAME
 
 
 def test_nothing_on_the_overview_calls_a_model_or_sends():

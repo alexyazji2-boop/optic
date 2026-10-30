@@ -189,9 +189,11 @@ async function show(route) {
   });
   // a tab strip's bar slides (if the press has not moved it already) and the content fades in, once drawn (ui/motion.js)
   if (tabsWere) whenDrawn(view, 'nav.tabs', () => motion.tabsAfter(view, tabsWere));
-  // Focus the page's heading so a screen reader hears where it landed.
+  // Focus the page's heading so a screen reader hears where it landed, unless the reader is in the search or a drawer:
+  // this frame can come after a search was opened, and taking focus from it sent the next Enter nowhere (post-demo
+  // Phase 06, BUG-093)
   requestAnimationFrame(() => {
-    const h = drawer.isOpen() ? null : view.querySelector('h1');
+    const h = drawer.isOpen() || palette.isOpen() ? null : view.querySelector('h1');
     if (h) { h.setAttribute('tabindex', '-1'); h.focus({ preventScroll: true }); }
     announce(document.title.replace(', Optic', ''));
   });

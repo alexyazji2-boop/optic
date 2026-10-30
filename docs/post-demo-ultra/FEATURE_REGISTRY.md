@@ -57,6 +57,8 @@ removed with the workspace's handlers for controls nothing draws (D-021, SIMPLIC
 
 *Phase 05 updates:* the knowledge level now has one home for its styles (`app/knowledge.py`, five levels: New to Markets, Beginner, Intermediate, Advanced, Expert, D-026) and one value: Classic's key `optic.knowledge.v1` in the browser, which both front ends read, and `user_preferences.knowledge_level` for a signed-in reader (migration 19), kept in step by one rule in each front end (D-028). One slider (`static/v2/js/ui/levelslider.js`) sets it on Home's first-visit card, in Settings and in Milo's Response settings; Milo's own Level select is gone. Density stays apart (D-019).
 
+*Phase 06 updates:* the Dossier Overview shows one analysis view at a time in `#ov-analysis`: the Simple Analysis (`static/v2/js/pages/overview-simple.js`, three answers by fixed rules at the reader's level) or the Advanced Analysis (Classic's research from `pages/overview-research.js`, word for word, in twelve sections). "Show advanced analysis" and "Show simple analysis" swap them through the density setting (D-035). Every response is tied to its visit (D-039). The pipeline is mapped in DOSSIER_PIPELINE.md.
+
 ## Part 2. Routes and features: the index
 
 Every route the v2 router accepts (`static/v2/js/core/router.js`) and every global component, with its feature id,

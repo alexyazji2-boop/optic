@@ -37,7 +37,7 @@ def test_four_stars_is_not_called_below_the_range(tmp_path):
 
 
 def test_fund_drawers_carry_the_fund_questions():
-    wire = OV[OV.index("function wire(main, sym) {"):]
+    wire = OV[OV.index("function wire(main) {"):]   # wired once per page element since Phase 06 (BUG-094)
     assert "if (isFundHere(sym)) Object.assign(titles, { quality: 'What is it?', price: 'What do its holdings cost?', next: 'What does it pay?' });" in wire
 
 
