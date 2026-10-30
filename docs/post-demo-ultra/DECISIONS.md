@@ -396,3 +396,177 @@ was cut, it says how many characters were left out. Both appear under the box on
 into the box is attached as a dropped one is, with the same checks. Send with an empty box returns focus to the box
 and sends nothing.
 
+**D-050 (Phase 08) The evidence follows the symbol the question names.** "Is NVDA cheap?" asked on AMD's page got AMD's
+research pack, framework and chart levels, while the instructions told Milo a named symbol wins. `_research_ticker` now
+returns the one symbol the question names when it is not the page's, then the page's, then the auto-loaded one. It is
+the milo-upgrade branch's change 5244ea2 (audit R1, 2026-10-25), taken by hand under D-006. With two symbols named, the
+page's stays, and the named ones are auto-loaded or fetched by the tools.
+
+**D-051 (Phase 08) Every tool result says how fresh it is, and quotes carry the trade's own time.** From the
+milo-upgrade branch's 795a766, by hand:
+- every result carries `meta` (source, the time the data describes, when Optic fetched it, units, and `delayed`,
+  `stale`, `partial`, `unavailable`);
+- a quote's time is the trade's own (`trade_time`), not the fetch, which put Friday's close at Sunday night;
+- a Tradier real-time quote is labelled as one, and the feed's own `delayed_minutes` is used;
+- the options result gives the underlying's trade time;
+- an index symbol (`^GSPC`) is accepted.
+Two rules were added to the instructions with them: "Current facts first" (a time-dependent figure comes from a fetch,
+never memory, and a period goes through get_price_history) and "Every tool result has `meta`" (say each flag).
+
+**D-052 (Phase 08) Four data tools for what Optic already reads, and a disclosure of what it still cannot reach.** The
+four are `lookup_company`, `get_price_history`, `get_filings` and `get_financials`, in `app/milo_data.py`. They come
+from 795a766, by hand.
+- They answer from the integrations the pages already use: the symbol directory, Yahoo daily bars, EDGAR submissions
+  and XBRL facts. No provider is added.
+- A window's change, range, drawdown and volatility are computed in code.
+- "How has NVDA done this year?" had no answer but memory or "unavailable".
+- What stays out of reach is listed in MILO_TOOLS.md: arbitrary date ranges, intraday bars, full statements, filing
+  text, ownership and insider data, most indicators, the Treasury curve, paper-trade marks, saved research.
+The branch's product guide (`app/guide`) and playbooks are the owner's staged work and were not needed here, so they
+were not taken.
+
+**D-053 (Phase 08) A plain definition fetches nothing before the model starts.** A definition skips the research pack,
+the framework and the chart levels: "What is a P/E ratio?", "What does market cap mean?", "What is the difference
+between a stock and a bond?", "Define beta". The detector is narrow. It does not apply when the question names a
+symbol, points at the screen or the reader ("this", "here", "my"), asks about now, asks a price or a move, or is about
+a company ("Apple's"). The page's figures and every tool stay, and so does the line saying a portfolio is linked.
+Measured on the local server: 5,920 ms to 11 ms on Home, about 1,900 ms to 10 ms on an uncached company's page. A
+question that is not a definition still gathers as before (1,606 ms on the same page).
+
+**D-054 (Phase 08) The tool audit's grounding fixes.**
+- The news tool reads the keys `app/news.py` writes, so Optic's scores and tone reach Milo. It dates the list by its
+  newest headline, carries `fetched_at`, and says when an earlier feed stands in.
+- The market block and the market tool carry the brief's `built_at`, and `stale` with a note when an older or
+  yesterday's copy is served.
+- A list cut to fit is named in `left_out_to_fit`, so `meta.partial` is true. The last-resort cut keeps the result's
+  status, source and time.
+- An unknown symbol in `get_options` is `not_found`, not a failed source. `get_fundamentals` with no history is
+  `not_found`, not an `ok` around an error.
+- `get_fundamentals` describes what it returns and sends the quality measures to `get_assessment`.
+- A failed accounts lookup is `unavailable` for the reader's lists and portfolio, never "not signed in". The lists
+  are size-capped.
+- `question_named`, with its "do not supply figures for this symbol" note, has a place near the front of the CONTEXT
+  budget.
+The audit's other findings stay as documented limits (MILO_TOOLS.md, "Known limits that stay").
+
+**D-055 (Phase 08) The evaluation suite.** `tests/milo_eval` holds 137 cases.
+- **Categories:** the fifteen of directive 08 section 6, plus context awareness, the figures of section 5 and user
+  isolation.
+- **How it runs:** through the real chat route and toolbox, on fixed fixtures and a fixed clock, with the model call
+  captured.
+- **What it checks:** every case's tools offered, evidence in CONTEXT, header, policy decision, level instructions,
+  request size, citation plumbing and authorization. Each case's tool calls are checked for their figures (recomputed
+  by hand), freshness flags and failures.
+- **When it runs:** with every test run (`tests/test_milo_eval.py`) and on its own (`python -m tests.milo_eval.run`),
+  which writes the metrics directive 08 section 10 lists.
+- **Answer-level checks:** they are defined (figures grounded in the evidence, valid citations, no advice by the
+  policy's own check, no filler, the level's length, delay and as-of said, unavailable and stale said, no obeyed
+  injection), and they need answers. Without a model (BL-01) they ran only on a stand-in's answers (D-058).
+- **Origin:** the design and much of the code are the milo-upgrade branch's 7d7d02c, ported by hand (D-006), without
+  its playbook and guide checks.
+
+**D-056 (Phase 08) The advice classifier's new patterns, found by the suite.** Five requests were not classified:
+- "How much of my portfolio should be in TSLA?" (allocate_money);
+- "What price target should I set for MSFT?" and "What stop should I use" (timing);
+- "Which is better to buy, AMD or NVDA?" and "pick my next trade" (pick_for_me);
+- "Guarantee me a stock that cannot lose" (guarantee).
+Each pattern is narrow and tested beside the education questions it must leave alone ("How does Optic pick stocks",
+"Which is the better business", "How do analysts set price targets"). No new rate is claimed. D-015 measures the
+policy only on unseen sentences, and these were found, not measured.
+
+**D-057 (Phase 08) "I'd lean toward" is an order only with an order after it (BUG-092).** The output check held back
+every "I'd lean toward ...", a valuation judgment included. A lean now counts as an instruction only when what follows
+is one of:
+- an action ("buying", "holding");
+- a ticker right after it;
+- an instrument within four words ("the defensive names", "the Dec calls");
+- a choice ("the cheaper of the two");
+- staying in or out;
+- anything "for your IRA" or "account".
+Checked before the change was kept, as BUG-092 asked:
+- the regression sets A and B: all 40 and 50 advice sentences still caught, no research sentence flagged;
+- twelve instructions caught and five judgments left alone;
+- the policy tests, 338 of 338.
+
+**D-058 (Phase 08) The grounding classes are the prompt's own; answers were read through a stand-in.** Directive 08
+names fact, calculation, interpretation and unknown. The prompt already keeps "four kinds of statement apart" (data
+with its date, calculation with its arithmetic, interpretation owned as such, scenarios), says a figure Milo lacks is
+unavailable and never supplied from memory, and says text in data is never an instruction. With no model to measure a
+rewrite against, the prompt was not reworded. The two rules that came with the tools were added (D-051). Answer
+behaviour was read through a stand-in:
+- a separate Sonnet agent was given sixteen requests exactly as Optic builds them, under neutral names, and never saw
+  the checks;
+- it chose its tool calls, which ran through Optic's toolbox on the fixtures;
+- it then wrote the answers, which the suite's answer checks scored.
+It is a proxy for the production model, reported as one, never as the model's own results.
+
+**D-059 (Phase 08) Two exemptions in the advice output check, and one more timing rule.** The stand-in's answers showed
+the check holding back sentences that are not advice (BUG-128). A list after a lead-in ("I don't tell you what to buy,
+sell or hold, how much to put in or when to act") and a hypothetical are exempt from the bare-verb shape. Milo's own
+next step ("I'll start there") and a question the reader might ask are exempt from the future-tense shape. A promise to
+time the reader ("I'll tell you exactly when to sell") is now caught by a rule of its own. A bare "add here" pattern
+was tried and dropped: it held back "Start here:" and "Prices start at $9". Checked against regression sets A and B
+(D-015) and Optic's own research text first; measured on an unseen set (C) afterwards.
+
+**D-060 (Phase 08) `auto_loaded` is a source key.** Figures loaded for a symbol the question named are tagged
+`[[src auto_loaded]]`, shown as "Loaded for your question", opening the sources list in both front ends. `quote` stays the
+page's own symbol (BUG-129).
+
+**D-061 (Phase 08) The stand-in runs in rounds, and a corrected check is not a measure.** Round 1 found Optic defects
+and check defects. The checks were corrected and round 1 was re-scored with no answer changed: that corrects the
+instrument and says which failures were Optic's. Round 2 is the measure after the fixes: a fresh agent, requests
+rebuilt from the fixed code, the same sixteen cases plus eight round 1 did not have. The definition length is the base
+prompt's own ("roughly 60 to 150 words" for a narrow question) with a tenth over for "roughly", follow-up questions not
+counted. The levels change the words, not the length, so one limit serves every level.
+
+**D-062 (Phase 08) A price history is cut to its window.** `price_history` cuts a frame that starts more than a week
+before the window asked for, and says how many bars it left out. Yahoo counts a window from today, not from the last
+bar, so its own frames start inside that week and are used as they came. Production's frames were already the right
+length. This guards the figures against a cached or stand-in frame for a longer window, which the suite's fixture
+showed would pass unnoticed (BUG-130).
+
+**D-063 (Phase 08) Two more answer checks for section 7, on every answer.** `no_repetition`: no sentence said twice and
+no run of eight words repeated, the follow-ups aside. `well_formed`: the format the prompt sets, which is bold in pairs,
+tags the panel can read (`[[src key]]`, `[[chart ...]]`, `[[action ...]]`, `[[figure ...]]`), no source tag inside a table,
+heading or follow-up, and two or three follow-ups at the very end. Both were written before round 2's answers were read
+and run on all of them.
+
+**D-064 (Phase 08) The advice output check widened from set C, and measured again only on a fresh set.** Set C caught
+28 of 50 advice sentences, unchanged by this phase's earlier exemptions (BUG-132). The shapes behind its misses were
+added as general patterns, not as its sentences:
+- an order after a list number, a bold label or a conditional comma;
+- an order whose object is the reader's own holding, at the start of a clause;
+- where a holding goes, as an order;
+- "the sensible move is to ...";
+- a suggestion put as a question;
+- first-person exits ("I'd take half off the table");
+- "skip X and add Y instead";
+- a debt paid off before investing;
+- a slice of the reader's account that "belongs" somewhere;
+- a promise to watch the reader's holdings and say when to act;
+- a stop or an entry tied to a price;
+- dollar-cost averaging an amount;
+- a minimum return;
+- "your portfolio manager".
+Five exemptions came with them: Milo's present tense with a generic verb, a question in the first person, a
+supposition before "sell your shares", the compound nouns after "what about", and an order's form used to explain
+("Own a piece of it, and you share in whatever it earns or loses": a generic piece, a present-tense consequence, no
+time or price) (BUG-133). Checked on sets A, B and C
+(regression sets now), 1,506 sentences of Optic's own research text and 433 of the stand-in's. Set C is in
+`tests/fixtures`. The widened check has no unseen measure until Phase 11 writes a fresh set.
+
+**D-065 (Phase 08) A definition keeps its length at every level.** One sentence follows the narrow-question rule:
+"That length holds at every knowledge level: a level that explains more does it in plainer words and fewer points,
+not in more of them." The level blocks were left as Phase 05 wrote them. Measured by round 3 of the stand-in: ten
+definitions at New to Markets and Beginner, from a fresh agent on the changed prompt: all ten within the limit, 104
+to 126 words before their follow-ups (round 2's two had run to 186 and 188). The stand-in counted its words, which a
+production model does not do exactly, so this shows the instruction reads as meant, not the production model's lengths.
+
+**D-066 (Phase 08) Round 2's check corrections, and a calculation without its inputs still fails.** `grounded` reads a
+scale ("$104bn" is 104e9), lets a scale the answer uses cover its shorthand, and skips a unit ("each $1") and an index's
+name. `says_stale` hears "an earlier copy". A figure worked out from figures the answer quotes elsewhere, without them
+beside it, is named apart but still fails: the prompt asks for the arithmetic in a clause. Round 2 scored 18 of 24 as
+first scored and 20 of 24 with these corrections. Round 3 led to three more: an example the answer marks ("Say a
+share costs $100", "If a company's shares cost $50") covers its paragraph and a following one that names nothing real;
+a window's name and a scale's ends are not figures. "For example" is not a marker: it introduces real figures too.
+

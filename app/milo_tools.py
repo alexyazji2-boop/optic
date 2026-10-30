@@ -12,7 +12,9 @@ What a tool is, and is not:
 
 * Each tool is one terminal capability: a quote, the Options tab's analytics, chart levels, the long-term
   model, the fair-value model, the earnings panel, the news panel, the market read, a comparison, the
-  research framework, the screener, and the signed-in reader's own watchlists.
+  research framework, the screener, the signed-in reader's own watchlists and linked portfolio, and (since
+  post-demo Phase 08, from the milo-upgrade branch) the symbol directory, price history, SEC filings and
+  reported results (`app/milo_data.py`).
 * Inputs are validated here before anything runs (a symbol pattern, enums, bounded lists), because the
   request streams with eager input and the API does not validate for us.
 * Every result is trimmed to a size the model can use and carries its source and freshness: when the
@@ -32,11 +34,14 @@ import asyncio
 import json
 import re
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
-TICKER = re.compile(r"^[A-Z0-9][A-Z0-9.\-^=]{0,11}$")
+# A leading caret is allowed: index symbols (^VIX, ^GSPC) start with one, and the description below offers
+# ^GSPC as an example while the first pattern rejected it (milo-reasoning evaluation, 2026-10-16; milo-upgrade
+# 795a766; post-demo Phase 08).
+TICKER = re.compile(r"^[A-Z0-9^][A-Z0-9.\-^=]{0,11}$")
 DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 RESULT_CHARS = 12_000
 MAX_ROUNDS = 4
@@ -91,11 +96,15 @@ SPECS: List[Dict[str, Any]] = [
     },
     {
         "name": "get_fundamentals",
-        "description": ("Optic's long-term model for one company: the holding view and its conviction, "
-                        "business quality measures (growth, margins, returns on capital, cash conversion, "
-                        "balance sheet, dilution), the valuation history against its own record, drawdowns, "
-                        "and the weekly levels. Call it for questions about the business, its financials, "
-                        "quality, or owning it for years, when CONTEXT lacks them."),
+        # It listed returns on capital, cash conversion, the balance sheet and dilution, which it does not return
+        # (they are the research framework's: get_assessment, long_term); a description that promises a figure the
+        # result lacks invites one from memory (post-demo Phase 08, from the tool audit)
+        "description": ("Optic's long-term model for one company: the holding view and its conviction, revenue and "
+                        "earnings growth, profit margin, P/E, PEG, price to book and dividend yield, the returns over "
+                        "one, three, five and ten years, the valuation history against its own record, drawdowns, "
+                        "volatility and beta, and the weekly levels. Call it for questions about the business, its "
+                        "growth and margins, or owning it for years, when CONTEXT lacks them. For returns on capital, "
+                        "cash conversion, the balance sheet or dilution, call get_assessment with mode long_term."),
         "input_schema": {"type": "object", "properties": {"ticker": _TICKER_PROP},
                          "required": ["ticker"], "additionalProperties": False},
     },
@@ -191,6 +200,54 @@ SPECS: List[Dict[str, Any]] = [
                                                  "options", "briefing"]}},
             "required": ["part"], "additionalProperties": False},
     },
+    # The milo-upgrade branch's data tools (795a766, 2026-10-25), brought in by hand in post-demo Phase 08: facts
+    # Optic already reads for its pages that Milo could not ask for (app/milo_data.py).
+    {
+        "name": "lookup_company",
+        "description": ("Find the ticker for a company, fund, index, rate, currency or crypto from its name, an alias "
+                        "or part of a symbol, from the listed-symbol directory the terminal's search uses. Call it "
+                        "when the reader names a company without its ticker, or a ticker you are not sure exists, "
+                        "before fetching anything for it."),
+        "input_schema": {"type": "object", "properties": {
+            "query": {"type": "string", "description": "A company name, alias or symbol, at most 60 characters."}},
+            "required": ["query"], "additionalProperties": False},
+    },
+    {
+        "name": "get_price_history",
+        "description": ("Daily or weekly price bars for one symbol over a named window, from the same Yahoo Finance "
+                        "history the charts draw, with the window's change, high and low closes with dates, largest "
+                        "drawdown and realised volatility computed by Optic, and the most recent bars. Call it "
+                        "whenever the question asks how something has moved or performed over a period (\"the last "
+                        "three months\", \"this year\", \"since the spring\") or needs past prices, and answer "
+                        "from the window's figures, never from memory."),
+        "input_schema": {"type": "object", "properties": {
+            "ticker": _TICKER_PROP,
+            "period": {"type": "string", "enum": ["1m", "3m", "6m", "ytd", "1y", "2y", "5y"]},
+            "interval": {"type": "string", "enum": ["daily", "weekly"],
+                         "description": "daily unless the window is 2y or longer."}},
+            "required": ["ticker", "period"], "additionalProperties": False},
+    },
+    {
+        "name": "get_filings",
+        "description": ("The company's recent notable SEC filings, newest first (annual and quarterly reports, current "
+                        "reports with their item numbers, proxies and similar), each with its filing date and a link "
+                        "to the document, from SEC EDGAR. Call it for questions about what a company has filed or "
+                        "disclosed recently, or when its latest report was filed."),
+        "input_schema": {"type": "object", "properties": {
+            "ticker": _TICKER_PROP,
+            "limit": {"type": "integer", "minimum": 1, "maximum": 20,
+                      "description": "How many filings, 10 unless the question needs more."}},
+            "required": ["ticker"], "additionalProperties": False},
+    },
+    {
+        "name": "get_financials",
+        "description": ("Quarterly revenue and diluted EPS exactly as the company filed them in XBRL with the SEC, "
+                        "with trailing twelve months and year-on-year growth, for up to the last 12 quarters. Call "
+                        "it when the question needs reported results over time (\"how has revenue grown\", \"what "
+                        "did they earn last quarter\") rather than Optic's long-term model (get_fundamentals)."),
+        "input_schema": {"type": "object", "properties": {"ticker": _TICKER_PROP},
+                         "required": ["ticker"], "additionalProperties": False},
+    },
 ]
 TOOL_NAMES = [s["name"] for s in SPECS]
 PORTFOLIO_PARTS = ("summary", "exposure", "events", "performance", "scorecard", "options", "briefing")
@@ -262,6 +319,23 @@ def validate(name: str, raw: Any) -> Dict[str, Any]:
         if not req or len(req) > 200:
             raise InvalidInput("request must be a description in words, 1 to 200 characters.")
         out["request"] = req
+    if name == "lookup_company":
+        query = re.sub(r"\s+", " ", str(args.get("query") or "")).strip()
+        if not query or len(query) > 60:
+            raise InvalidInput("query must be a name or symbol, 1 to 60 characters.")
+        out["query"] = query
+    if name == "get_price_history":
+        if args.get("period") not in ("1m", "3m", "6m", "ytd", "1y", "2y", "5y"):
+            raise InvalidInput("period must be 1m, 3m, 6m, ytd, 1y, 2y or 5y.")
+        interval = args.get("interval") or ("weekly" if args["period"] in ("2y", "5y") else "daily")
+        if interval not in ("daily", "weekly"):
+            raise InvalidInput("interval must be daily or weekly.")
+        out.update(period=args["period"], interval=interval)
+    if name == "get_filings":
+        limit = args.get("limit", 10)
+        if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 20:
+            raise InvalidInput("limit must be a whole number from 1 to 20.")
+        out["limit"] = limit
     return out
 
 
@@ -282,6 +356,10 @@ def status_words(name: str, args: Dict[str, Any]) -> str:
         "screen_stocks": "Screening stocks",
         "get_my_watchlists": "Reading your watchlists",
         "get_my_portfolio": "Reading your linked portfolio ({})".format(args.get("part") or "summary"),
+        "lookup_company": "Looking up {}".format(args.get("query") or "the company"),
+        "get_price_history": "Reading {}'s price history".format(t),
+        "get_filings": "Reading {}'s SEC filings".format(t),
+        "get_financials": "Reading {}'s reported results".format(t),
     }.get(name, "Looking that up")
 
 
@@ -292,28 +370,41 @@ def _num(x: Any, nd: int = 4) -> Any:
     return x
 
 
-def trim(obj: Any, depth: int = 0, list_max: int = 8, str_max: int = 500) -> Any:
-    """A smaller copy: lists cut, long strings cut, floats rounded, deep nesting summarised."""
+def trim(obj: Any, depth: int = 0, list_max: int = 8, str_max: int = 500, cut: Optional[List[str]] = None,
+         path: str = "") -> Any:
+    """A smaller copy: lists cut, long strings cut, floats rounded, deep nesting summarised. Each list it cuts is
+    noted in `cut` ("sectors: 8 of 11"), so the result can say it is partial."""
     if isinstance(obj, dict):
         if depth > 5:
             return "{...}"
-        return {k: trim(v, depth + 1, list_max, str_max) for k, v in obj.items()
-                if not str(k).startswith("_") and v not in (None, "", [], {})}
+        return {k: trim(v, depth + 1, list_max, str_max, cut, "{}.{}".format(path, k) if path else str(k))
+                for k, v in obj.items() if not str(k).startswith("_") and v not in (None, "", [], {})}
     if isinstance(obj, list):
-        return [trim(v, depth + 1, list_max, str_max) for v in obj[:list_max]]
+        if cut is not None and len(obj) > list_max:
+            cut.append("{}: {} of {}".format(path or "list", list_max, len(obj)))
+        return [trim(v, depth + 1, list_max, str_max, cut, path) for v in obj[:list_max]]
     if isinstance(obj, str):
         return obj if len(obj) <= str_max else obj[:str_max] + "..."
     return _num(obj)
 
 
 def fit(obj: Any, limit: int = RESULT_CHARS) -> Any:
-    """Trim harder until the JSON fits `limit` characters."""
+    """Trim harder until the JSON fits `limit` characters. What was cut is said in `left_out_to_fit`, which the
+    result's `meta` turns into `partial` (post-demo Phase 08: lists were cut to eight or fewer without a word, so a
+    market read showed 8 of the 11 sectors as if they were all of them)."""
     for lm, sm in ((8, 500), (5, 300), (3, 200), (2, 120), (1, 80)):
-        out = trim(obj, list_max=lm, str_max=sm)
+        cut: List[str] = []
+        out = trim(obj, list_max=lm, str_max=sm, cut=cut)
+        if cut and isinstance(out, dict):
+            # with what an earlier step already left out (shrink's dropped parts), not in place of it
+            prior = [x for x in (out.get("left_out_to_fit") or []) if isinstance(x, str)]
+            out["left_out_to_fit"] = (prior + [c for c in sorted(set(cut)) if c not in prior and not c.startswith("left_out_to_fit")])[:12]
         if len(json.dumps(out, default=str)) <= limit:
             return out
+    # the last resort keeps what the result is and when it is from
+    keep = {k: obj.get(k) for k in ("status", "source", "as_of", "as_of_utc") if isinstance(obj, dict) and obj.get(k)}
     text = json.dumps(trim(obj, list_max=1, str_max=60), default=str)
-    return {"truncated": True, "partial": text[:limit - 100]}
+    return dict(keep, truncated=True, partial=text[:limit - 400])
 
 
 def _pick(d: Any, *keys: str) -> Dict[str, Any]:
@@ -350,9 +441,23 @@ def compact_quote(q: Dict[str, Any]) -> Dict[str, Any]:
     for key in ("pre_market_time", "post_market_time"):
         if key in body:
             body[key] = et(body[key])
-    stamp = q.get("as_of") or q.get("market_time")
-    return {"source": "Yahoo Finance quote (delayed)", "as_of": et(stamp), "as_of_utc": stamp,
-            "freshness_note": DELAY_NOTE, "quote": body}
+    # The trade's own time. `as_of` on a Yahoo quote is when Optic fetched it, which on a delayed feed is fifteen
+    # minutes or a whole weekend after the price was set; it was reported as the quote's time (milo-upgrade 795a766,
+    # 2026-10-25; post-demo Phase 08).
+    source = str(q.get("quote_source") or "")
+    realtime = source.startswith("tradier (real-time)")
+    # Tradier overlays its price on Yahoo's quote and keeps Yahoo's `trade_time`, which is then the delayed
+    # print's time, not this price's; its own `as_of` is the fetch of a real-time quote (app/providers/tradier.py).
+    stamp = q.get("as_of") if realtime else (q.get("trade_time") or q.get("as_of") or q.get("market_time"))
+    out = {"source": "Tradier quote (labelled real-time by the provider)" if realtime else "Yahoo Finance quote (delayed)",
+           "as_of": et(stamp), "as_of_utc": stamp,
+           "as_of_is": ("when Optic fetched the real-time quote" if realtime else "the trade's time" if q.get("trade_time")
+                        else "when Optic fetched it (the feed gave no trade time)"),
+           "freshness_note": None if realtime else DELAY_NOTE, "quote": body,
+           "currency": q.get("currency")}
+    if q.get("delayed_minutes") is not None and not realtime:
+        out["delayed_minutes"] = q.get("delayed_minutes")
+    return {k: v for k, v in out.items() if v is not None}
 
 
 def compact_options(snap: Dict[str, Any], limit: int = RESULT_CHARS) -> Dict[str, Any]:
@@ -380,7 +485,10 @@ def compact_options(snap: Dict[str, Any], limit: int = RESULT_CHARS) -> Dict[str
     out = {
         "source": "Optic's Options-tab analytics, computed from the {} option chain".format(
             snap.get("data_source") or "delayed"),
-        "freshness": {"quote_time": et(q.get("as_of")), "quote_as_of_utc": q.get("as_of"),
+        # The underlying's trade time where the feed gives one: `as_of` is when Optic fetched the snapshot, which
+        # read as Sunday night for Friday's chain (milo-upgrade evaluation, 2026-10-25; post-demo Phase 08).
+        "freshness": {"quote_time": et(q.get("trade_time") or q.get("as_of")), "quote_as_of_utc": q.get("trade_time") or q.get("as_of"),
+                      "quote_time_is": "the trade's time" if q.get("trade_time") else "when Optic fetched it",
                       "analysis_built": et(snap.get("generated_at")),
                       "market_state": q.get("market_state"), "note": DELAY_NOTE + (
                           " The chain is as delayed as the quote; open interest is the exchange's count from "
@@ -435,8 +543,9 @@ OPTIONS_OPTIONAL = [("expiry_context",), ("greeks", "second_order"), ("volatilit
 def shrink(out: Dict[str, Any], optional: List[Tuple[str, ...]], limit: int = RESULT_CHARS) -> Dict[str, Any]:
     """Drop optional parts, least needed first, until the JSON fits; the rest is never truncated.
     Bulky lists inside what stays are only shortened when every optional part is already gone."""
-    out = trim(out, list_max=40, str_max=600)
-    dropped = []
+    cut: List[str] = []
+    out = trim(out, list_max=40, str_max=600, cut=cut)
+    dropped = sorted(set(cut))
     for path in optional:
         if len(json.dumps(out, default=str)) <= limit:
             break
@@ -498,15 +607,26 @@ def compact_generic(source: str, payload: Any, as_of: Optional[str] = None) -> D
 
 
 def compact_news(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """The news panel's headlines. It read `score`, `sentiment` and `catalyst`, while app/news.py writes
+    `sentiment_score`, `tone` and `catalysts` (and `overall_tone`, `net_sentiment` for the list), so Optic's score
+    never reached Milo; and its time was the first headline's, which is the most important, not the newest
+    (post-demo Phase 08, from the tool audit). The older keys are still read for other callers' shapes."""
     items = []
     for h in (payload.get("articles") or payload.get("headlines") or payload.get("items") or [])[:10]:
         if isinstance(h, dict):
-            items.append(_pick(h, "title", "publisher", "published", "age_hours", "score", "sentiment", "tier",
-                               "catalyst", "url"))
-    return fit({"source": "Yahoo Finance headlines, scored by Optic's word list (not read for meaning)",
-                "as_of": payload.get("generated_at") or (items[0].get("published") if items else None),
-                "summary": _pick(payload, "score", "tone", "summary", "counts", "catalyst_summary"),
-                "headlines": items})
+            items.append(_pick(h, "title", "publisher", "published", "age_hours", "sentiment_score", "tone", "tier",
+                               "catalysts", "about_company", "score", "sentiment", "catalyst", "url"))
+    newest = max((str(i["published"]) for i in items if i.get("published")), default=None)
+    out = {"source": "Yahoo Finance headlines, scored by Optic's word list (not read for meaning)",
+           "as_of": payload.get("generated_at") or newest, "fetched_at": payload.get("fetched_at"),
+           "summary": _pick(payload, "overall_tone", "net_sentiment", "article_count", "tier_counts", "score", "tone",
+                            "summary", "counts", "catalyst_summary", "times_note"),
+           "headlines": items}
+    held = payload.get("held")
+    if isinstance(held, dict):
+        out["stale"] = True
+        out["stale_note"] = held.get("note") or "The feed came back empty just now; these are its earlier stories."
+    return fit({k: v for k, v in out.items() if v is not None})
 
 
 def compact_valuation(v: Dict[str, Any]) -> Dict[str, Any]:
@@ -522,6 +642,114 @@ def compact_valuation(v: Dict[str, Any]) -> Dict[str, Any]:
                                      "tornado", "what_ifs", "dividends", "cost_of_equity") if v.get(k) is not None}}
     return shrink(out, [("what_ifs",), ("tornado",), ("sensitivity",), ("classification",), ("dividends",),
                         ("scenario_text",), ("assumptions",)])
+
+
+# ------------------------------------------------------------------------------------------- freshness
+# Every tool result carries `meta`: where it came from, what time it describes, its units, and four flags a
+# reader would ask about (delayed, stale, partial, unavailable), so Milo can say how far to trust a figure
+# without inferring it from the payload (milo-upgrade 795a766, 2026-10-25; post-demo Phase 08). True and False
+# are findings; None means the flag does not apply to that kind of data (a filing is not "delayed").
+
+UNITS: Dict[str, Dict[str, str]] = {
+    "get_quote": {"prices": "the quote currency (`currency`)", "change_pct": "percent", "volume": "shares",
+                  "market_cap": "the quote currency"},
+    "get_options": {"prices and strikes": "USD", "gex": "USD of dealer hedging per 1% move", "iv": "annualised, "
+                    "as a decimal unless labelled percent", "volume and open_interest": "contracts"},
+    "get_chart_levels": {"levels": "the quote currency", "rsi": "0 to 100", "atr_pct": "percent"},
+    "get_price_history": {"prices": "the quote currency (`currency`)", "change_pct, max_drawdown_pct, "
+                          "realised_vol_annualised_pct": "percent", "volume": "shares"},
+    "get_fundamentals": {"money": "the company's reporting currency as Yahoo gives it", "margins and growth": "as labelled"},
+    "get_valuation": {"value_per_share and price": "the quote currency", "rates": "decimals unless labelled percent"},
+    "get_earnings": {"eps": "the quote currency per share", "moves": "percent"},
+    "get_financials": {"revenue": "USD as filed", "eps": "USD per diluted share as filed", "yoy": "percent"},
+    "get_market": {"levels": "each instrument's own units", "changes": "percent"},
+    "compare": {"returns": "percent", "scores": "0 to 100"},
+    "get_filings": {}, "get_news": {}, "lookup_company": {},
+    "get_assessment": {"grades": "framework labels, not probabilities"},
+    "screen_stocks": {"returns": "percent", "price": "USD"},
+    "get_my_watchlists": {}, "get_my_portfolio": {"money": "each account's currency, combined in USD where stated",
+                                                  "weights": "percent"},
+}
+# Tools whose figures come from the delayed price feed.
+_FEED = ("get_quote", "get_options", "get_chart_levels", "get_price_history", "get_market", "compare", "screen_stocks")
+_UNAVAILABLE = ("unavailable", "not_found", "unsupported", "timeout", "error", "invalid_input", "limit")
+_COPY_SOURCES = ("get_filings", "get_financials", "lookup_company")
+
+
+def _parse(stamp: Any) -> Optional[datetime]:
+    if not isinstance(stamp, str) or not stamp:
+        return None
+    try:
+        t = datetime.fromisoformat(stamp.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return t if t.tzinfo else t.replace(tzinfo=timezone.utc)
+
+
+def describe(name: str, result: Any, is_error: bool, now: Optional[datetime] = None,
+             session_state: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """The `meta` block for one tool result."""
+    r = result if isinstance(result, dict) else {}
+    now = now or datetime.now(timezone.utc)
+    status = str(r.get("status") or ("unavailable" if is_error else "ok"))
+    st = session_state
+    if st is None:
+        try:
+            from . import session as market_session
+            st = market_session.state(now)
+        except Exception:                                           # noqa: BLE001 - freshness is best effort
+            st = {}
+    notes: List[str] = []
+    realtime = "real-time" in str(r.get("source") or "")
+    delayed: Optional[bool] = None
+    if name in _FEED:
+        delayed = not realtime
+        if name == "get_quote" and r.get("delayed_minutes") is not None:
+            delayed = float(r["delayed_minutes"]) > 0
+    stale: Optional[bool] = bool(r["stale"]) if isinstance(r.get("stale"), bool) else None
+    # Sources that answer from a kept copy when they cannot be reached say so with `stale`; when they do not, the
+    # copy is today's, which is a finding (False), not "does not apply".
+    if stale is None and name in _COPY_SOURCES and status == "ok":
+        stale = False
+    as_of = r.get("as_of_utc") or _as_of(r)
+    close = _parse(((st or {}).get("last_close") or {}).get("at"))
+    if name == "get_quote" and status == "ok":
+        t = _parse(r.get("as_of_utc"))
+        if t is not None:
+            if st.get("is_regular"):
+                stale = (now - t).total_seconds() > 45 * 60
+                if stale:
+                    notes.append("The quote's time is more than 45 minutes old with the regular session open.")
+            elif close is not None:
+                stale = t < close - timedelta(minutes=10)
+                if stale:
+                    notes.append("The quote's time is before the last regular close.")
+    if name == "get_price_history" and status == "ok" and isinstance(r.get("as_of"), str) and close is not None:
+        last_bar = r["as_of"][:10]
+        if r.get("interval") == "weekly":
+            stale = (close.date() - datetime.strptime(last_bar, "%Y-%m-%d").date()).days > 7
+        else:
+            # The newest bar should be the last completed session's, or today's while a session runs.
+            stale = last_bar < close.date().isoformat()
+            if st.get("is_regular"):
+                notes.append("The regular session is open: today's bar, if present, is still forming.")
+    partial = bool(r.get("left_out_to_fit") or r.get("truncated") or status == "partial"
+                   or (isinstance(r.get("missing"), list) and r.get("missing")))
+    if r.get("left_out_to_fit"):
+        notes.append("Left out to fit: {}.".format(", ".join(map(str, r["left_out_to_fit"]))))
+    unavailable = bool(is_error or status in _UNAVAILABLE)
+    if unavailable:
+        delayed = None                  # nothing came back, so there is no figure to be delayed
+    out = {"source": r.get("source"), "as_of": as_of,
+           "retrieved_at": now.isoformat(timespec="seconds"), "units": UNITS.get(name, {}),
+           "delayed": delayed, "stale": stale, "partial": partial, "unavailable": unavailable}
+    if delayed and name in _FEED:
+        mins = r.get("delayed_minutes")
+        out["delay"] = ("about {} minutes per the feed".format(int(float(mins))) if mins is not None
+                        else "about 15 minutes during the session (Yahoo Finance)")
+    if notes:
+        out["notes"] = notes
+    return out
 
 
 # ------------------------------------------------------------------------------------------- toolbox
@@ -547,7 +775,10 @@ class Record:
                 "get_earnings": "earnings panel", "get_news": "news", "get_market": "market read",
                 "compare": "comparison", "get_assessment": "research framework",
                 "screen_stocks": "screener", "get_my_watchlists": "your watchlists",
-                "get_my_portfolio": "your portfolio ({})".format(self.args.get("part") or "summary")
+                "get_my_portfolio": "your portfolio ({})".format(self.args.get("part") or "summary"),
+                "lookup_company": "symbol lookup",
+                "get_price_history": "price history ({}, {})".format(self.args.get("period"), self.args.get("interval")),
+                "get_filings": "SEC filings", "get_financials": "reported revenue and EPS",
                 }.get(self.tool, self.tool)
 
     def label(self) -> str:
@@ -613,19 +844,22 @@ class Toolbox:
             result = await asyncio.wait_for(asyncio.to_thread(self.runners[name], **args), timeout=budget)
             status = (result or {}).get("status", "ok") if isinstance(result, dict) else "ok"
             body = {"status": status, **(result if isinstance(result, dict) else {"data": result})}
-            content, is_error = json.dumps(body, default=str), status in ("unavailable", "not_found", "unsupported")
+            is_error = status in ("unavailable", "not_found", "unsupported")
+            body["meta"] = describe(name, body, is_error)
+            content = json.dumps(body, default=str)
             rec = Record(name, args, not is_error, status, time.monotonic() - t0,
                          source=(result or {}).get("source") if isinstance(result, dict) else None,
                          as_of=_as_of(result))
         except asyncio.TimeoutError:
             content, is_error = json.dumps({"status": "unavailable", "error": (
                 "The data source did not answer within {:.0f} seconds. Say it could not be retrieved this time; "
-                "do not guess the figures.".format(self.call_timeout))}), True
+                "do not guess the figures.".format(self.call_timeout)),
+                "meta": describe(name, {"status": "timeout"}, True)}), True
             rec = Record(name, args, False, "timeout", time.monotonic() - t0, error="timeout")
         except Exception as exc:                                    # noqa: BLE001 - a provider failure, reported
             content, is_error = json.dumps({"status": "unavailable", "error": (
                 "The data source failed ({}). Say it could not be retrieved this time; do not guess the "
-                "figures.".format(type(exc).__name__))}), True
+                "figures.".format(type(exc).__name__)), "meta": describe(name, {"status": "error"}, True)}), True
             rec = Record(name, args, False, "error", time.monotonic() - t0, error=type(exc).__name__)
         self._spent += rec.seconds
         rec.retrieved_at = datetime.now(timezone.utc).isoformat(timespec="seconds")

@@ -100,6 +100,10 @@ _REQ = {
         re.compile(r"\bis\s+(it|this|now|today)\s+(a\s+good\s+time\s+to|the\s+time\s+to|time\s+to)\s+(buy|sell|get\s+in|get\s+out)\b", _I),
         re.compile(r"\b(is|would)\s+(it|this|\$?[A-Z]{1,5})\s+(be\s+)?a\s+(good\s+|strong\s+)?(buy|sell)\b"),
         re.compile(r"\bis\s+(it|this)\s+a\s+(good\s+|strong\s+)?(buy|sell)\b", _I),
+        # found by the Phase 08 evaluation suite (post-demo overhaul, 2026-10-29): a choice between two to buy, and
+        # "pick me a stock" / "pick my next trade" (not "how does Optic pick stocks")
+        re.compile(r"\b(which|what)\s+(one\s+)?(is|would\s+be)\s+(the\s+)?(better|best)\s+(one\s+)?(to\s+)?(buy|sell|own|invest\s+in|get)\b", _I),
+        re.compile(r"\bpick\s+(me\s+(a|the|some)\s+|my\s+(next\s+)?)(trades?|stocks?|investments?|picks?)\b", _I),
     ],
     "allocate_money": [
         re.compile(r"\bi\s+(have|got|own)\s+\$?\s?\d[\d,.]*\s*(k|thousand|million|grand|dollars|usd)?\b", _I),
@@ -109,12 +113,18 @@ _REQ = {
         re.compile(r"\b(position|bet|trade)\s+siz(e|ing)\b[^.?!]{0,20}\b(for\s+me|should|my)\b", _I),
         re.compile(r"\bwhat\s+(percent|percentage|%|portion|share)\s+(of\s+my|should\s+i)\b", _I),
         re.compile(r"\b(build|design|make)\s+(me\s+)?(a|my)\s+portfolio\b", _I),
+        # "how much of my portfolio should be in TSLA" (Phase 08 evaluation suite)
+        re.compile(r"\bhow\s+much\s+of\s+my\s+(portfolio|money|savings|account|capital|cash|net\s+worth|income)\b"
+                   r"[^.?!]{0,40}\b(should|go|be\s+in|put)\b", _I),
     ],
     "timing": [
         re.compile(r"\b(tell\s+me\s+)?(precisely|exactly)?\s*when\s+(should\s+i|to|do\s+i)\s+(buy|sell|enter|exit|get\s+in|get\s+out|close)\b", _I),
         re.compile(r"\bwhat\s+(price|level)\s+(should\s+i|to|do\s+i)\s+(buy|sell|enter|exit|set\s+(my|a)\s+stop)\b", _I),
         re.compile(r"\b(my|the)\s+(entry|exit)\s+(point|price|level)\b[^.?!]{0,20}\b(should|for\s+me)\b", _I),
         re.compile(r"\bwhere\s+(should\s+i|do\s+i)\s+(put|set|place)\s+(my\s+)?(stop|order)\b", _I),
+        # "what price target should I set", "what stop should I use" (Phase 08 evaluation suite)
+        re.compile(r"\bwhat\s+(price\s+)?(target|stop(-loss)?|limit|exit)(\s+price)?\s+(should|do|would)\s+i\s+"
+                   r"(set|use|put|place|pick|choose|aim\s+for)\b", _I),
     ],
     "portfolio_action": [
         re.compile(r"\b(use|using|based\s+on|look\s+at|from|with)\s+my\s+(brokerage|portfolio|holdings|account|positions)\b"
@@ -161,8 +171,11 @@ def classify_request(question: str) -> List[str]:
     # "no guarantee" in a question about whether something is guaranteed is still
     # a question about a guarantee; but "guaranteed" inside "is anything
     # guaranteed?" is education. Keep it only when the reader asks for one.
+    # "guarantee me a stock that cannot lose" asks for one too (Phase 08 evaluation suite)
     if "guarantee" in found and not re.search(
-            r"\b(give|want|need|find|show|get)\s+(me\s+)?(a\s+)?(guaranteed|sure)|guaranteed\s+(trade|return|profit|win|money|upside|income)",
+            r"\b(give|want|need|find|show|get)\s+(me\s+)?(a\s+)?(guaranteed|sure)|guaranteed\s+(trade|return|profit|win|money|upside|income)"
+            r"|\bguarantee\s+(me|us)\b|\b(can'?t|cannot)\s+lose\b|\bsure\s+(thing|bet|win|profit)\b|\bfree\s+money\b"
+            r"|\brisk[- ]free\s+(trade|return|money|profit)\b",
             q, _I):
         found.remove("guarantee")
     return found
@@ -278,6 +291,10 @@ _OUT = {
                    r"(?:\$\s?)?\d", _I),
         re.compile(r"\b(?:set|place|put)\s+(?:your|a)\s+(?:stop(?:[- ]loss)?|limit\s+order|buy\s+order|sell\s+order)\s+(?:at|near|around|below|above)\b", _I),
         re.compile(r"\bwait\s+for\s+(?:a\s+)?(?:pullback|dip|break(?:out)?|close\s+above|close\s+below)\b[^.]{0,40}\b(?:before|then)\s+(?:buying|selling|entering)\b", _I),
+        # a promise to time the reader's trades: "I'll ... tell you exactly when to sell" (it was caught only through
+        # "I'll keep" until Phase 08 exempted Milo's own next steps); "I don't tell you what to buy" stays negated
+        re.compile(r"\btell\s+you\s+(?:exactly\s+|precisely\s+|just\s+|right\s+)?(?:when|what|which|whether)\s+(?:to\s+)?(?:buy|sell|"
+                   r"exit|enter|get\s+in|get\s+out|trim|add|hold|short|cover|take\s+profits?)\b", _I),
     ],
     "guarantee": [
         re.compile(r"\bguarantee(?:d|s)?\s+(?:returns?|profits?|upside|gains?|income|win|to\s+(?:rise|go\s+up|double|recover|beat|make))\b", _I),
@@ -364,7 +381,7 @@ _SHAPES = {
         # 1. an order at the start of a sentence or bullet: "Pick up a few shares", "Average down", "Exit if it closes under 200"
         (re.compile(r"^\W{0,6}(?:(?:just|simply|definitely|then|so|now|maybe|perhaps|honestly|try\s+to|be\s+sure\s+to|make\s+sure\s+to|"
                     r"go\s+ahead\s+and|don'?t\s+be\s+afraid\s+to|feel\s+free\s+to)\s+)?(?:consider\s+" + _A_ING + r"|" + _A +
-                    r"|switch\s+to\s+(?:cash|bonds|stocks|treasur\w*|(?-i:[A-Z]{2,5}\b)))\b" + _NOT_AN_ORDER, _I), None),
+                    r"|switch\s+to\s+(?:cash|bonds|stocks|treasur\w*|(?-i:[A-Z]{2,5}\b)))\b" + _NOT_AN_ORDER, _I), "generic_conditional"),
         # 2. "you should ...", "you'd be smart to trim", "you're better off holding", "you might consider swapping"
         (re.compile(r"\byou(?:'d|\s+would|'re|\s+are)?\s+(?:should|ought\s+to|need\s+to|must|have\s+to|might\s+want\s+to|"
                     r"may\s+want\s+to|want\s+to|really\s+should|definitely\s+should|be\s+(?:smart|wise|well\s+served)\s+to|"
@@ -375,7 +392,7 @@ _SHAPES = {
                     r"personally\s+|really\s+|rather\s+)?(?:" + _A_ALL + r"|be\s+(?:a\s+)?(?:buyer|seller)s?|be\s+(?:comfortable|happy|"
                     r"inclined|tempted|keen)\s+(?:" + _A_ING + r"|to\s+" + _A_ALL + r")|(?:like|love|favou?r|prefer)\s+(?:" + _A_ING +
                     r"|it\s+here|it\s+at|this\s+(?:one|stock|name)))\b(?!\s+(?:that|a\s+(?:note|caveat|point)|one\s+(?:caveat|point)|context))",
-                    re.I), None),
+                    re.I), "self_future"),
         # 4. framing that calls it a buy: "the dip to buy", "a must-buy", "worth adding a little", "is a buy here"
         (re.compile(r"\b(?:the\s+(?:dip|pullback|drop|level)\s+to\s+(?:buy|add)|must[- ](?:buy|own|have)\b|"
                     r"(?:is|looks\s+like|remains)\s+a\s+(?:strong\s+|clear\s+|solid\s+)?(?:buy|sell)\b|"
@@ -389,7 +406,7 @@ _SHAPES = {
         (re.compile(r"^\W{0,6}(?:if|should|once|when|unless|in\s+case)\b[^,]{0,80},\s+(?:then\s+)?(?:just\s+)?(?:" + _A + r")\b"
                     + _NOT_AN_ORDER, _I), None),
         # (not "short" here: "..., short customer-bought puts" and "..., short of the 2.5 an S needs" describe)
-        (re.compile(r"^\W{0,6}[^,]{2,60},\s+(?:then\s+)?(?:just\s+)?(?!short\b)(?:" + _A + r")\b" + _NOT_AN_ORDER, _I), "hypothetical"),
+        (re.compile(r"^\W{0,6}[^,]{2,60},\s+(?:then\s+)?(?:just\s+)?(?!short\b)(?:" + _A + r")\b" + _NOT_AN_ORDER, _I), "lead_clause"),
         # "Add RKLB to your portfolio": bare "add" is an order when its object is a ticker or the reader's holdings
         (re.compile(r"^\W{0,6}(?:just\s+)?add\s+(?:(?-i:[A-Z]{1,5})\b|\w+\s+to\s+your\s+(?:portfolio|ira|roth|account|holdings|position))", _I), None),
         # a negated order is still an order: "Don't sell your META here", "Never buy the open"
@@ -403,7 +420,14 @@ _SHAPES = {
                     r"\bbank\s+(?:most\s+of\s+|some\s+of\s+|all\s+of\s+|half\s+of\s+)?(?:the|your)\s+(?:gains?|profits?)\b", _I), None),
         # first person, further forms: "I'd be out of the position", "I'd be selling into this", "I wouldn't touch BA"
         (re.compile(r"\bI(?:'d|\s+would|'ll|\s+will)\s+(?:be\s+(?:out\s+of|out\b|long\b|short\b|" + _A_ING + r")|"
-                    r"split\s+(?:it|them|the|my|your)|write\s+(?:the\s+)?(?:\w+\s+){0,2}(?:calls|puts)|lean\s+(?:toward|towards|to)|"
+                    r"split\s+(?:it|them|the|my|your)|write\s+(?:the\s+)?(?:\w+\s+){0,2}(?:calls|puts)|"
+                    # a lean is an order when it leans toward an action, a ticker, an instrument or a choice; "I'd lean
+                    # toward 'expensive' if its history puts the multiple near the top" is a judgement (BUG-092, Phase 08)
+                    r"lean\s+(?:toward|towards|to)\s+(?:(?:" + _A_ING + r"|" + _A_ALL + r")\b|\$?(?-i:[A-Z]{1,5})\b|"
+                    r"(?:the\s+|a\s+|an\s+)?(?:[\w&.\-]+\s+){0,4}?(?:stocks?|shares|names|funds?|etfs?|calls|puts|options?|positions?|"
+                    r"longs?|shorts?|ones?)\b|(?:the\s+)?[\w\-]+\s+of\s+the\s+(?:two|three|pair|group)\b|(?:staying|getting)\s+(?:in|out)\b)|"
+                    r"lean\s+(?:toward|towards|to)\b[^.;]{0,80}\b(?:for|in|inside)\s+your\s+(?:ira|roth|401\(?k\)?|hsa|account|portfolio|"
+                    r"savings|retirement)\b|"
                     r"go\s+with|stick\s+with|opt\s+for|pick|choose|favou?r|use\s+(?:any|the|a|this)\s+(?:pullback|dip|drop|weakness|rally|"
                     r"bounce|pop)\b[^.;]{0,30}?\bto\s+(?:" + _A_ALL + r"))|"
                     r"\bI\s+(?:wouldn'?t|would\s+not|won'?t)\s+(?:touch|go\s+near|own|buy|hold)\b|\bneither\s+should\s+you\b", re.I), None),
@@ -422,7 +446,9 @@ _SHAPES = {
                     r"\b(?:it\s+)?(?:may|might|could|would|does|should)\s+make\s+sense\s+(?:for\s+you\s+)?to\s+(?:" + _A_ALL + r")\b|"
                     r"\b(?:wouldn'?t|would)\s+it\s+be\s+(?:smarter|wiser|better|safer)\s+to\s+(?:" + _A_ALL + r")\b|"
                     r"\b(?:have\s+you\s+(?:thought\s+about|considered)|why\s+not|how\s+about|what\s+about)\s+(?:" + _A_ING + r"|moving|"
-                    r"putting|parking|shifting)\b|\bthis\s+is\s+a\s+(?:hold|buy|sell)\b|"
+                    r"putting|parking|shifting)\b(?!\s+(?:power|pressure|interest|volume|activity|signals?|compan(?:y|ies)|periods?|"
+                    r"programs?|patterns?|habits?|behaviou?r|climax|exhaustion|spree|rights?|limits?|costs?|fees?|tax(?:es)?|rules?))|"
+                    r"\bthis\s+is\s+a\s+(?:hold|buy|sell)\b|"
                     r"\bcould\s+do\s+(?:a\s+lot\s+)?worse\s+than\s+(?:" + _A_ING + r"|parking|putting|owning)\b|"
                     r"\byour\s+(?:income|age|horizon|goals?|situation|risk\s+tolerance)\b[^.]{0,80}\b(?:is|would\s+be)\s+the\s+right\s+"
                     r"(?:call|move|choice|mix|allocation|approach|plan)\b", re.I), None),
@@ -468,12 +494,98 @@ _SHAPES = {
 }
 
 
+# Set C (Phase 08, 2026-10-29): fifty advice sentences written by an agent that read none of this caught 28. The
+# shapes it showed were missing, kept general rather than matched to its sentences:
+_PAST = r"(?:moved|sold|bought|trimmed|took|rebalanced|switched|rotated|got\s+out|cashed\s+out|locked\s+in|cut|dumped|added)"
+_HOLDING = (r"(?:shares|stake|position|holdings?|lot|stocks?|funds?|etfs?|ira|roth|401\(?k\)?|hsa|529|cash|money|savings|portfolio|"
+            r"allocation|overweight|underweight|exposure|profits?|gains?|loss(?:es)?|(?:taxable|brokerage|retirement|investment)\s+account)")
+_SHAPES["trade_instruction"] += [
+    # an order whose object is the reader's own holding, at the start of a clause: "If the Fed cuts, rotate your tech
+    # overweight into small caps", "Nah, leave your COST shares alone", "Harvest the loss on your INTC lot", "Take your
+    # profits in AMD"
+    # (it starts after the comma, so "If the Fed cuts, rotate ..." is the conditional order it is, not a supposition)
+    (re.compile(r"(?:^\W{0,6}|(?<=[,;:] )|(?<=\bso )|(?<=\bthen ))(?:so\s+|then\s+|and\s+)?(?:just\s+|simply\s+)?(?:rotate|move|shift|swap|harvest|"
+                r"leave|skip|take|put|park|sell|buy|trim|roll|convert|redirect|reallocate|transfer|pull|cash\s+out|dump|unload|exit|"
+                r"close)\s+(?:\w+\s+){0,3}?your\s+(?:\w+\s+){0,3}?" + _HOLDING + r"\b", _I), "hypothetical"),
+    # where a holding goes, as an order: "Move the bond fund into the IRA and keep the index fund in the taxable account"
+    (re.compile(r"^\W{0,6}(?:move|put|keep|hold|park|shift|place|locate)\s+(?:the|your|that|this)\s+(?:\w+\s+){0,3}?(?:fund|etf|bonds?|"
+                r"shares|stocks?|stake|position|cash|money|holdings?|reit)\s+(?:in|into|inside|within|out\s+of)\s+(?:the|your|a|an)\s+"
+                r"(?:taxable|ira|roth|401\(?k\)?|hsa|529|brokerage|retirement|tax[- ]advantaged)\b", _I), None),
+    # the move called the sensible one: "the sensible move is to exit before the next report", "the smartest thing is
+    # to stop adding to TSLA"
+    (re.compile(r"\bthe\s+(?:sensible|smart|smartest|right|best|wise|wisest|prudent|logical|obvious|safest|safe)\s+(?:move|"
+                r"thing(?:\s+to\s+do)?|play|call|step|course(?:\s+of\s+action)?|option)\s+(?:here\s+|now\s+|for\s+you\s+)?"
+                r"(?:is|would\s+be|might\s+be|may\s+be)\s+(?:to\s+)?(?:stop\s+(?:adding|buying|selling)|" + _A_ALL + r"|" + _A_ING
+                + r")\b", _I), "hypothetical"),
+    # a suggestion put as a question: "Shouldn't you trim TSLA?", "Why don't you add more?", "How about you sell half
+    # your SPY?", "Would you consider buying AAPL under $180?", "Isn't it time you moved some of that Nvidia?"
+    (re.compile(r"\b(?:shouldn'?t|should\s+not|why\s+don'?t)\s+you\s+(?:just\s+|also\s+|maybe\s+)?(?:" + _A_ALL + r")\b|"
+                r"\b(?:how|what)\s+about\s+you\s+(?:" + _A_ALL + r")\b|"
+                r"\b(?:would|could|might)n?'?t?\s+you\s+(?:consider|think\s+about)\s+(?:" + _A_ING + r")\b|"
+                r"\b(?:isn'?t|is\s+it\s+not)\s+(?:it\s+)?(?:about\s+)?(?:high\s+)?time\s+(?:you\s+" + _PAST + r"|to\s+(?:" + _A_ALL
+                + r"))\b", _I), None),
+    # first person, further forms: "I'd take half off the table at $118", "I'd be heading for the exit"
+    (re.compile(r"(?:\bI(?:'d|\s+would|'ll|\s+will)\s+|^\W{0,6}|\byou\s+(?:could|should|might|can)\s+)take\s+(?:half|some|a\s+(?:third|"
+                r"quarter|bit|little|chunk)|part|most|all|\d+(?:\.\d+)?\s?%)\s+(?:of\s+(?:it|them|the\s+position|your\s+\w+)\s+)?off\s+the\s+table\b|"
+                r"\bI(?:'d|\s+would)\s+(?:be\s+)?(?:head(?:ing)?|run(?:ning)?|rush(?:ing)?|mak(?:e|ing))\s+(?:for|to)\s+(?:the\s+)?exits?\b", re.I), None),
+    # "so skip NXPI and add a utility instead"
+    (re.compile(r"(?:^\W{0,6}|[,;]\s+(?:so\s+|and\s+)?|\bso\s+)(?:skip|pass\s+on|steer\s+clear\s+of)\s+(?-i:[A-Z]{2,5})\b|"
+                r"\badd\s+(?:a|an|some|one)\s+(?:\w+\s+){0,2}(?:stock|fund|etf|name|utility|utilities|position|holding)\s+instead\b", _I), None),
+    # paying off a debt before investing, as an order: "Pay off the 7.5% car loan before adding another dollar"
+    (re.compile(r"^\W{0,6}(?:pay\s+(?:off|down)|clear|knock\s+out)\s+(?:the|your|that)\s+(?:[\w.%]+\s+){0,3}?(?:loan|debt|card|balance|"
+                r"mortgage)\b[^.]{0,60}\b(?:before|then|instead\s+of)\b", _I), None),
+]
+_SHAPES["allocation"] += [
+    # "A 10% slice of your 401k belongs in the stable value option", "The better home for that $5,000 is your IRA"
+    (re.compile(r"\b(?:\d+(?:\.\d+)?\s?%|half|a\s+third|a\s+quarter|some|part)\s+(?:slice\s+|share\s+|chunk\s+|portion\s+)?of\s+your\s+"
+                r"(?:\w+\s+){0,2}(?:401\(?k\)?|ira|roth|hsa|529|portfolio|account|savings|money|cash)\s+(?:belongs|should\s+(?:go|be|sit)|goes)\b|"
+                r"\b(?:better|best|right|ideal|natural)\s+(?:home|place|spot|account)\s+for\s+(?:that|your|the|this)\s+(?:\$\s?\d[\d,.]*\s*(?:k|m)?|"
+                r"money|cash|savings|fund|bonds?|shares|stock|position|holding|reit)\b[^.]{0,20}\b(?:is|would\s+be)\s+(?:your|the|an?)\b", _I), "hypothetical"),
+]
+_SHAPES["timing"] += [
+    # a promise to watch the reader's holdings and say when to act: "I'll watch your NVDA position and tell you the moment
+    # it's time to take profits", "I'll message you when your IRA needs rebalancing", "I'll tell you when each name
+    # becomes a buy", "send me your holdings and I'll tell you what to change"
+    (re.compile(r"\bI(?:'ll|\s+will|\s+can)\s+(?:keep\s+(?:an\s+)?eye\s+on|watch|monitor|track)\s+(?:your|the|this|each|every)\b[^.;]{0,60}"
+                r"\b(?:and|then)\s+(?:tell|let|message|alert|ping|notify)\b|"
+                r"\bI(?:'ll|\s+will|\s+can)\s+(?:message|tell|alert|ping|notify|let)\s+you\s+(?:know\s+)?(?:exactly\s+|right\s+)?(?:when|the\s+moment|"
+                r"as\s+soon\s+as|once)\b[^.;?]{0,90}?\b(?:buy|sell|rebalanc\w*|trim|exit|take\s+profits?|get\s+(?:in|out)|time\s+to|"
+                r"becomes?\s+a\s+(?:buy|sell)|needs?\s+(?:rebalancing|trimming|selling))\b|"
+                r"\btell\s+you\s+(?:exactly\s+)?what\s+to\s+(?:change|rebalance|do\s+with\s+(?:your|it|them))\b", re.I), None),
+    # a stop or an entry tied to a price: "let the rest run with a stop at $104", "Put a stop at $104", "You should consider
+    # a stop at $104", "start building a position under $270" ("A trader using a stop at $104 would have..." describes)
+    (re.compile(r"\b(?:let\s+(?:it|the\s+rest|them)\s+run|ride\s+(?:it|the\s+rest)|hold\s+(?:it|the\s+rest))\s+with\s+a\s+(?:trailing\s+)?"
+                r"stop(?:[- ]loss)?\b|(?:^\W{0,6}|(?<=[,;:] )|(?<=\band ))(?:use|put|keep|set|place)\s+a\s+(?:trailing\s+)?stop(?:[- ]loss)?\s+"
+                r"(?:at|near|around|below|under|of)\s+\$?\d|\byou(?:'d|\s+would)?\s+(?:should|might\s+want\s+to|may\s+want\s+to|could|need\s+to)\s+"
+                r"(?:consider|use|set|place|put\s+in)\s+a\s+(?:trailing\s+)?(?:stop(?:[- ]loss)?|limit\s+order)\b|"
+                r"\b(?:start|begin)\s+(?:building|buying|accumulating|adding\s+to|nibbling\s+at|scaling\s+into)\s+(?:a\s+position\s+|shares\s+|it\s+)?"
+                r"(?:\w+\s+){0,2}?(?:under|below|near|around|at|above|over)\s+\$?\d", _I), "hypothetical"),
+]
+_SHAPES["position_sizing"] = [
+    # "Dollar-cost average $200 a week into ETH"
+    (re.compile(r"\b(?:dollar[- ]cost[- ]averag(?:e|ing)|DCA)\s+(?:about\s+|around\s+)?\$\s?\d[\d,.]*\s*(?:k|m)?\s+(?:a|per|each|every)\s+"
+                r"(?:day|week|month|paycheck|pay\s+period)\b", _I), "hypothetical"),
+]
+_SHAPES["guarantee"] = [
+    # "This fund will return at least 12% a year, so it's a safe place to park your down payment"
+    (re.compile(r"\bwill\s+(?:return|earn|yield|make|pay|deliver|give\s+you)\s+(?:you\s+)?(?:at\s+least|a\s+minimum\s+of|no\s+less\s+than|"
+                r"more\s+than)\s+\$?\d|\b(?:safe|safest|secure)\s+(?:place|spot|home|bet)\s+(?:to|for)\s+(?:(?:park|put|keep|hold|stash|grow)\s+)?your\b", _I), None),
+]
+_SHAPES["adviser_claim"] = [
+    # "From here on I'm acting as your portfolio manager"
+    (re.compile(r"\b(?:as|I\s+am|I'm|acting\s+as|in\s+my\s+role\s+as)\s+your\s+(?:personal\s+|own\s+)?(?:portfolio|money|wealth|"
+                r"investment)\s+manager\b", re.I), None),
+]
+
 _SHAPES["trade_instruction"] += _SHAPES.pop("trade_instruction+")
 # The phrase-by-phrase patterns' own exemptions: "You asked whether you should sell ..." reports a question, and
 # "obligates the seller to buy 100 shares per contract" explains an option, not a size for the reader.
 _MECHANICS = re.compile(r"\b(?:per\s+contract|obligat\w*|oblig\w*|if\s+assigned|(?:the\s+)?right\s+to\s+(?:buy|sell)|covers?\s+100)\b", _I)
-_OUT_EXEMPT = {("trade_instruction", 0): "hypothetical", ("timing", 0): "hypothetical", ("position_sizing", 1): "mechanics",
-               ("position_sizing", 2): "hypothetical"}
+# ("If you sell your shares at a loss, the wash-sale rule may apply" explains a tax rule: the last trade_instruction
+# pattern reads it as the supposition it is, Phase 08)
+_OUT_EXEMPT = {("trade_instruction", 0): "hypothetical", ("trade_instruction", 1): "generic_conditional",
+               ("trade_instruction", 3): "asked", ("trade_instruction", 10): "hypothetical",
+               ("timing", 0): "hypothetical", ("position_sizing", 1): "mechanics", ("position_sizing", 2): "hypothetical"}
 
 # A negation before the trigger, inside the same clause, turns "you should buy"
 # into "nobody can tell you that you should buy" or "I can't say you should buy".
@@ -514,6 +626,51 @@ def _hypothetical(sentence: str, start: int) -> bool:
     return bool(_HYPOTHETICAL.search(clause))
 
 
+# Found by the Phase 08 stand-in answers (post-demo overhaul, 2026-10-29), each a sentence the gate would have cut:
+# - "I don't tell you what to buy, sell or hold": the comma lists actions, it does not end a condition before an order
+#   ("If it breaks 200, sell" still is one);
+# - "Tell me a stock you have in mind and I'll start there": with "I'll" or "I will", a generic verb (start, put,
+#   keep, move, ...) is Milo's own next step, while a trading verb ("I'll sell half") still counts.
+_GENERIC_VERBS = re.compile(r"\b(?:" + "|".join(sorted({x for x in _MORE if " " not in x} | {"start", "put", "keep", "move", "build",
+                                                                                        "write", "split", "park", "shift"}, key=len, reverse=True))
+                            + r")$", _I)
+_ACTION_AT_END = re.compile(r"\b(?:" + _A_ALL + r")$", _I)
+
+
+def _lead_is_a_list(match: str) -> bool:
+    lead = match.rsplit(",", 1)[0].strip()
+    return bool(_ACTION_AT_END.search(lead))
+
+
+def _milo_next_step(match: str) -> bool:
+    # also the present tense, Milo saying how it works: "I keep the exact wording of my instructions to myself", "I keep
+    # four things apart" (stand-in round 2); "I'd keep it" is still a lean on the reader's holding
+    return bool(re.match(r"\W{0,6}I(?:'ll|\s+will)?\s", match, _I)) and bool(_GENERIC_VERBS.search(match.strip()))
+
+
+# "How do I add a stock to a watchlist?", one of Milo's suggested follow-ups: in a question the first person is the
+# reader asking, not Milo recommending (also found by the Phase 08 stand-in answers)
+_ASKING = re.compile(r"\b(?:do|does|did|can|could|should|would|will|shall|may|might|must)\s+$", _I)
+
+
+def _asked(sentence: str, start: int) -> bool:
+    return bool(_ASKING.search(sentence[:start])) and sentence.rstrip().endswith("?")
+
+
+# "Own a piece of it, and you share in whatever it earns": an order's form used to explain, the English conditional ("if
+# you own a piece of it, you share ..."), when the object is a generic piece and the consequence a present fact. "Buy a
+# stake now, and you lock in the price" and "Buy a share, and you'll profit" still count (stand-in round 3, Phase 08).
+_GENERIC_CONDITIONAL = re.compile(r"^\W{0,6}(?:own|buy|hold|sell|short|write)\s+(?:a|an|one)\s+(?:piece|share|slice|stake|part|portion|bit|unit|"
+                                  r"bond|stock|put|call|option|contract)\b(?![^,]*\b(?:now|today|here|before|while|under|below|above|at\s+\$|this\s+week))[^,]{0,60},"
+                                  r"\s+and\s+(?:you|the\s+\w+|it|they)\s+(?!will\b|would\b|could\b|should\b|might\b)\w+", _I)
+
+
+# A list number or a bold or plain label before the sentence ("1. ", "**Action:** ", "Bottom line: "), read past so an
+# order after it is still at the start (set C)
+_LEAD_LABEL = re.compile(r"^\s*(?:\d{1,2}[.)]\s+)?(?:\*\*[^*\n]{1,40}:\*\*\s*|\*\*[^*\n]{1,40}\*\*\s*:\s*|"
+                         r"(?:bottom\s+line|action|next\s+steps?|my\s+take|the\s+move|takeaway|verdict|plan)\s*:\s+)?", _I)
+
+
 def _in_quotes(sentence: str, start: int, end: int) -> bool:
     return any(m.start() <= start and end <= m.end() for m in _QUOTED.finditer(sentence))
 
@@ -524,7 +681,8 @@ def check_output(text: str) -> List[Dict[str, Any]]:
     Each finding is {"rule", "sentence", "match", "why"}. A sentence appears once,
     under the first rule it breaks, in RULES order."""
     findings = []
-    for s in sentences(text):
+    for whole in sentences(text):
+        s = _LEAD_LABEL.sub("", whole, count=1)
         for rule in RULES:
             hit = None
             for rx, exempt in ([(rx, _OUT_EXEMPT.get((rule, i))) for i, rx in enumerate(_OUT.get(rule, []))]
@@ -538,12 +696,20 @@ def check_output(text: str) -> List[Dict[str, Any]]:
                         continue
                     if exempt == "mechanics" and _MECHANICS.search(s):
                         continue
+                    if exempt == "lead_clause" and (_hypothetical(s, m.start()) or _lead_is_a_list(m.group(0))):
+                        continue
+                    if exempt == "self_future" and (_milo_next_step(m.group(0)) or _asked(s, m.start())):
+                        continue
+                    if exempt == "asked" and _asked(s, m.start()):
+                        continue
+                    if exempt == "generic_conditional" and _GENERIC_CONDITIONAL.search(s):
+                        continue
                     hit = m
                     break
                 if hit:
                     break
             if hit:
-                findings.append({"rule": rule, "sentence": s, "match": hit.group(0), "why": RULES[rule]})
+                findings.append({"rule": rule, "sentence": whole, "match": hit.group(0), "why": RULES[rule]})
                 break
     return findings
 

@@ -12,6 +12,118 @@ Read this and [REQUIREMENTS_MATRIX.md](REQUIREMENTS_MATRIX.md) before changing a
 - **Resource rule:** at most two subagents at a time (DECISIONS D-007). One proxy answer costs about 180,000 agent tokens.
 - **Next action:** Phase 08 (Milo grounding and a 100+ case evaluation): read `directives/08-milo-knowledge-eval.md`, the R08 rows, BUG-092 and the Phase 05 proxy notes (DECISIONS D-034). The Phase 07 tools are `tools/phase07_checks.py` (28 browser checks of the panel) and `tools/phase07_measure.py` (latency and rendering); the stand-in model has STREAMTEST, STREAMSLOW, STREAMCHART and SLOWLY.
 
+## Phase 08 report (directive 08; reporting format of directive 00)
+
+1. **Inspected.**
+   - **Tools and context:** every tool Milo can call and every source the server loads into CONTEXT, with a read-only
+     audit cited to the line (MILO_TOOLS.md).
+   - **Prompt and policy:** the grounding rules in the system prompt, and the advice policy's request classifier and
+     output check.
+   - **Prior work:** the milo-upgrade branch's tools, freshness block and evaluation harness (D-006 input).
+   - **Live timing:** the chat route's own timing for definitions and for other questions.
+2. **Problems discovered.**
+   - **The wrong company's evidence:** it followed the page's ticker, not the one named (BUG-114).
+   - **Quote times were fetch times,** and index symbols were refused (BUG-115, BUG-116).
+   - **Unreachable data:** no price history, filings, reported results or name lookup, though Optic reads all four
+     (BUG-117).
+   - **Definitions waited** 0.5 to 5.9 s for data they do not use (BUG-118).
+   - **Five advisory requests went unclassified** (BUG-119).
+   - **The news tool lost Optic's scores** (BUG-120).
+   - **Yesterday's market brief could arrive unflagged** (BUG-121).
+   - **Lists were cut silently** (BUG-122).
+   - **Unknown symbols read as failed sources** (BUG-123).
+   - **A tool promised fields it never returns** (BUG-124).
+   - **A failed accounts lookup read as "not signed in"** (BUG-125).
+   - **The unknown-symbol note was dropped first** (BUG-126).
+   - **An uncapped list** (BUG-127).
+   - **A judgement was held back as an instruction** (BUG-092).
+   - **Found by the stand-in's answers:** Milo's own sentences held back as advice (BUG-128, BUG-133); figures loaded
+     for the question had no source tag, so they were tagged as the page's quote (BUG-129); fixture defects (BUG-130);
+     answer checks that failed honest answers (BUG-131, BUG-135); definitions at the two simplest levels running past
+     the prompt's length (BUG-134).
+   - **Found by an unseen set (C):** the advice output check caught 28 of 50 advice sentences nobody had tuned it for,
+     the same before and after this phase's first changes (BUG-132).
+3. **Root causes.**
+   - **Precedence:** the page's ticker took precedence over the question.
+   - **Times:** compactors copied the fetch time and fixed text.
+   - **Missing tools:** none existed for what the pages read.
+   - **Context:** every question gathered the full context.
+   - **Patterns:** they did not cover the phrasings.
+   - **Key names:** they drifted between the news module and its compactor.
+   - **Copies and cuts:** `_market_block` copied levels only, and `trim` kept no record of its cuts.
+   - **Errors:** a 404 was caught as a generic exception, a description outgrew its result, and a failed lookup set the
+     user to none.
+   - **Budget order:** a section had no place in it.
+   - **Written before any answer existed:** the output check's shapes, the format prompt's source keys, the fixtures'
+     typed-in numbers and the answer checks.
+   - **Two rules that pulled apart:** the simplest levels ask for every term defined and every point explained, and
+     nothing said the narrow-question length holds at every level.
+4. **Fixes implemented.**
+   - **Evidence follows the named symbol** (D-050).
+   - **A freshness block on every result, and quotes with the trade's own time** (D-051).
+   - **Four data tools** (D-052).
+   - **Definitions fetch nothing** (D-053).
+   - **The audit's grounding fixes** (D-054).
+   - **The evaluation suite** (D-055).
+   - **The classifier's patterns** (D-056).
+   - **The narrowed lean rule** (D-057).
+   - **The grounding classes mapped and answers read through a stand-in** (D-058).
+   - **Two exemptions in the output check and a timing rule** (D-059).
+   - **`auto_loaded` as a source key** (D-060).
+   - **The stand-in in rounds, with a corrected check kept apart from a measure** (D-061).
+   - **A price history cut to its window** (D-062).
+   - **Repetition and the prompt's format checked on every answer** (D-063).
+   - **The advice output check widened from set C, with four exemptions** (D-064).
+   - **The definition length at every level** (D-065).
+   - **Round 2's check corrections, kept apart from the score as first scored** (D-066).
+5. **Files changed.**
+   - **Server:** `app/milo_tools.py`, `app/milo_data.py` (new, from milo-upgrade), `app/main.py`, `app/ai.py`,
+     `app/ai_policy.py`.
+   - **Front ends:** the `auto_loaded` source in `static/v2/js/core/milo-text.js` and `static/app.js`.
+   - **Tests:** `tests/milo_eval/` (new: fixtures, harness, cases, checks, answer checks, runner),
+     `tests/test_milo_eval.py`, `tests/test_milo_grounding.py`, `tests/test_milo_data_tools.py` (from milo-upgrade,
+     adapted to the portfolio privacy rule), `tests/test_milo_tools.py` (tool count), `tests/test_pulse_sources.py`
+     (the new key), `tests/test_milo_take_chart.py` (the citable keys), `tests/test_ai_policy.py` and
+     `tests/fixtures/advice_set_c_2026-10-29.json` (set C as a regression set) and `tests/conftest.py` (the two markers).
+   - **Docs:** MILO_TOOLS.md (new), DECISIONS D-050 to D-066, BUG_REGISTER BUG-114 to BUG-135 and BUG-092,
+     REQUIREMENTS_MATRIX, TEST_RESULTS, FEATURE_REGISTRY.
+6. **Tests executed.**
+   - The full suite.
+   - The evaluation suite: 137 cases and 949 request-level checks.
+   - The grounding tests and the data tools' tests.
+   - End-to-end checks E01 to E03 on live data.
+   - Server timing for definitions.
+   - The output check against regression sets A and B.
+   - The stand-in's answers in three rounds: sixteen; twenty-four from a fresh agent after the fixes; ten definitions
+     after the length rule.
+   - The output check on unseen set C, then on sets A, B and C, 1,506 sentences of Optic's own research text and 433 of
+     the stand-in's (`tools/phase08_advice_regression.py`).
+7. **Passed / failed.**
+   - **Suite:** 7,970 passed, 1 skipped, 0 failed.
+   - **Evaluation suite:** 949 of 949 request-level checks; all 18 categories.
+   - **E01 to E03:** 3 of 3.
+   - **Stand-in answers** (a proxy, not the production model, BL-01):
+     - Round 1: 5 of 16 as first scored, 12 of 16 re-scored with no answer changed.
+     - Round 2, after the fixes: 18 of 24 as first scored, 21 re-scored (257 of 261 checks; routing 24 of 24).
+     - Round 3, ten definitions after D-065: all within the length; 4 of 10 as first scored, 10 re-scored.
+   - **Advice output check on unseen set C:** 28 of 50 advice sentences caught, 1 of 50 research held back; then
+     widened (50 of 50 and 0 of 50 as a regression set), with no unseen measure until Phase 11.
+8. **Browser verification.**
+   - **What ran:** headless Chrome against the local server on live delayed data, with the stand-in asking for the new
+     price-history tool and for a quote.
+   - **What it showed:** the activity line, the sources fold with both times, and the figures, which match Optic's own
+     daily bars. Rerun on the final tree (2026-10-30, 1:20 AM ET): 3 of 3 again, the quote observed at 4 pm and
+     retrieved at 1:20 am.
+9. **Outstanding.**
+   - **Blocked (BL-01):** the production model's own answers, routing and latency. The suite's answer checks and
+     `tests/milo_eval/run_model.py` are ready for the first run with a working key.
+   - **Phase 11:** an unseen set for the widened advice check (BUG-132 stays FIXED until then).
+   - **Phase 10:** BUG-112 and BUG-113.
+   - **Phase 09:** BUG-098.
+   - **For the owner:** the documented limits that stay (MILO_TOOLS.md), and the milo-upgrade guide and playbooks, which
+     were not taken.
+10. **Commit and next phase.** COMMIT_LINE; next is Phase 09.
+
 ## Phase 07 report (directive 07; reporting format of directive 00)
 
 1. **Inspected.** Milo's whole path from Send to the last word, the fourteen stages of directive 07 (STREAMING_PIPELINE.md): the

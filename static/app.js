@@ -45723,6 +45723,9 @@ const PULSE_SOURCES = {
   track_record: ['Track record', 'swing'],
   // The reader's linked accounts (read-only), added by the server only.
   brokerage_portfolio: ['Your brokerage', 'brokerage'],
+  // A figure for a symbol the server loaded because the question named it (post-demo Phase 08): the chip opens the
+  // list under the answer. There was no key for it, so Milo tagged it `quote`, the page's own symbol.
+  auto_loaded: ['Loaded for your question', 'sources'],
 };
 const PULSE_SRC_RE = /\s?\[\[src ([a-z_]{2,20})\]\]/g;
 

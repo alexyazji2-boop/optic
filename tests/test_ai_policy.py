@@ -134,12 +134,17 @@ def test_the_rebuilt_check_leaves_research_and_screen_instructions_alone(sentenc
 # extended from the general shapes behind those misses, so this set is a regression case now, not a measure.
 # Set B: 100 sentences by another agent that saw neither the code nor set A. Measured once, on the version that
 # set A had shaped: 27 of 50 advice sentences caught, 1 of 50 research sentences wrongly flagged. Then a regression
-# case too, like set A. A fresh set is the only measure of what the check does now (Phase 11).
+# case too, like set A.
+# Set C (Phase 08): 100 sentences by a third agent that read none of Optic's files. Measured once, on the version sets
+# A and B had shaped with Phase 08's exemptions: 28 of 50 advice sentences caught, 1 of 50 research sentences wrongly
+# flagged (the same as before Phase 08's changes). The check was then widened from the shapes behind those misses
+# (D-064), so it is a regression case now. A fresh set is the only measure of what the check does now (Phase 11).
 SET_A = json.loads((ROOT / "tests" / "fixtures" / "advice_set_a_2026-10-29.json").read_text())
 SET_B = json.loads((ROOT / "tests" / "fixtures" / "advice_set_b_2026-10-29.json").read_text())
+SET_C = json.loads((ROOT / "tests" / "fixtures" / "advice_set_c_2026-10-29.json").read_text())
 
 
-@pytest.mark.parametrize("item", SET_A + SET_B, ids=lambda d: d["label"][:3] + ":" + d["text"][:40])
+@pytest.mark.parametrize("item", SET_A + SET_B + SET_C, ids=lambda d: d["label"][:3] + ":" + d["text"][:40])
 def test_sets_a_and_b_are_read_as_labelled(item):
     flagged = bool(P.check_output(item["text"]))
     assert flagged == (item["label"] == "advice"), (item["text"], P.check_output(item["text"]))

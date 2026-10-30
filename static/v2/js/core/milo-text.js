@@ -33,6 +33,9 @@ export const SOURCES = {
   desk_edition: ['Optic Desk', 'brief'], desk_section: ['Optic Desk', 'brief'], research: ['Sources Milo read', 'sources'],
   retrieved: ['Data Milo retrieved', 'sources'], chart_levels: ['Levels', 'chart'], track_record: ['Track record', 'swing'],
   brokerage_portfolio: ['Your brokerage', 'brokerage'],
+  // a figure for a symbol the server loaded because the question named it: the chip opens the list of what was loaded
+  // (post-demo Phase 08; there was no key for it, so Milo tagged it `quote`, the page's own symbol)
+  auto_loaded: ['Loaded for your question', 'sources'],
 };
 const SYMBOL_VIEWS = { overview: '', chart: 'chart', swing: 'options', long: 'investing', earnings: 'earnings', news: 'news' };
 const PLAIN_VIEWS = { market: '#/macro', brief: '#/read', indices: '#/indices', compare: '#/compare', tracker: '#/portfolio', paper: '#/paper', watchlist: '#/watchlist', brokerage: '#/brokerage' };

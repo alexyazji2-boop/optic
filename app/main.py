@@ -134,6 +134,7 @@ from .analytics import stockmaps as stockmaps_mod
 from .analytics import trendlines as trendlines_mod
 from .analytics import take_chart as take_chart_mod
 from . import milo_tools
+from . import milo_data
 from .analytics import seasonality as seasonality_mod
 from .analytics import sector_board as sector_board_mod
 from .analytics import sector_confirm as sector_confirm_mod
@@ -6838,6 +6839,14 @@ def _market_block(brief: Any) -> Optional[Dict[str, Any]]:
         out["index_regime"] = regime_mod.score(overview)
     except Exception:
         pass
+    # When it was built, and whether it is an older copy served while a newer one is built: dropped until post-demo
+    # Phase 08 (tool audit), so yesterday's brief could reach Milo as if it were today's
+    out["built_at"] = brief.get("built_at")
+    if brief.get("stale"):
+        out["stale"] = True
+        out["stale_note"] = ("Yesterday's brief, served while today's is built: its levels, moves and summary are "
+                             "yesterday's." if brief.get("previous_day") else
+                             "An older copy of today's brief, served while a newer one is built: it may be behind the tape.")
     out["note"] = (
         "Index and sector levels, breadth, the index regime score and the macro "
         "calendar, from the terminal's daily brief. sector_breadth_pct is the share "
@@ -6920,12 +6929,20 @@ def _research_deps() -> "desk_research_mod.Deps":
 
 
 def _research_ticker(context: Optional[Dict[str, Any]]) -> Optional[str]:
-    """The company the question is about: the focus, else the one the server
-    auto-loaded, else the open ticker."""
+    """The company the question is about: the one symbol the question names when it is not the page's, else
+    the focus, else the one the server auto-loaded, else the open ticker.
+
+    The question used to lose to the page: "Is NVDA cheap?" asked on AMD's page got AMD's research pack,
+    framework and chart levels, while the prompt told Milo a named symbol wins (post-demo Phase 08, from the
+    milo-upgrade branch's 5244ea2, audit R1 of 2026-10-25)."""
     ctx = context or {}
     focus = ctx.get("focus") if isinstance(ctx.get("focus"), dict) else {}
-    if focus.get("ticker"):
-        return str(focus["ticker"]).upper()
+    named = ((ctx.get("question_named") or {}).get("symbols") or []) if isinstance(ctx.get("question_named"), dict) else []
+    page = str(focus.get("ticker") or "").upper()
+    if len(named) == 1 and str(named[0]).upper() != page:
+        return str(named[0]).upper()
+    if page:
+        return page
     auto = ctx.get("auto_loaded")
     if isinstance(auto, dict) and auto:
         return str(next(iter(auto))).upper()
@@ -7603,7 +7620,13 @@ def _tool_quote(ticker: str) -> Dict[str, Any]:
 def _tool_options(ticker: str, expiries: Optional[List[str]] = None) -> Dict[str, Any]:
     # Four expiries, as the Options tab asks for them (loadSwing: max_expiries=4), so the gamma, walls
     # and flow Milo quotes are the tab's for the same moment.
-    snap = _swing_snapshot(ticker, expiries, 4, False)
+    try:
+        snap = _swing_snapshot(ticker, expiries, 4, False)
+    except HTTPException as exc:
+        # an unknown symbol: said as "not found", not as a source that failed this time (post-demo Phase 08)
+        if exc.status_code == 404:
+            return {"status": "not_found", "error": "Optic has no option chain for {}: {}".format(ticker, exc.detail)}
+        raise
     if not isinstance(snap, dict) or not (snap.get("quote") or {}).get("price"):
         return {"status": "not_found", "error": "No quote or chain for {}.".format(ticker)}
     return milo_tools.compact_options(snap)
@@ -7626,6 +7649,9 @@ def _tool_fundamentals(ticker: str) -> Dict[str, Any]:
     except Exception:                                               # noqa: BLE001 - best effort, as the tab
         news_read = None
     holding = longterm.analyse_holding(PROVIDER, ticker, news_read)
+    if isinstance(holding, dict) and holding.get("error") and not holding.get("price"):
+        # no price history: said as not found, not as an "ok" result around an error (post-demo Phase 08)
+        return {"status": "not_found", "error": "Optic's long-term model has nothing for {}: {}.".format(ticker, holding["error"])}
     return milo_tools.compact_generic(
         "Optic's long-term model (Yahoo Finance prices and statements, SEC filings)",
         {"holding": holding, "close_defence": defence_mod.for_longterm(holding)},
@@ -7656,8 +7682,11 @@ def _tool_market() -> Dict[str, Any]:
     block = _market_block(brief_mod.state(YF_PROVIDER, None, False))
     if not block:
         return {"status": "unavailable", "error": "The daily brief is not built yet."}
-    return milo_tools.compact_generic("Optic's daily brief (Yahoo Finance index, sector and macro data)", block,
-                                      block.get("as_of"))
+    out = milo_tools.compact_generic("Optic's daily brief (Yahoo Finance index, sector and macro data)", block,
+                                     block.get("as_of"))
+    if block.get("stale"):          # at the top, where the result's `meta` reads it
+        out["stale"], out["stale_note"] = True, block.get("stale_note")
+    return out
 
 
 def _tool_compare(tickers: List[str]) -> Dict[str, Any]:
@@ -7754,23 +7783,29 @@ def _milo_toolbox(request: Request, context: Optional[Dict[str, Any]] = None,
         # The accounts database being unavailable must not take the answer with it: the reader is a
         # guest for this one tool, and every other tool works.
         logging.getLogger("uvicorn.error").warning("milo tools: no account lookup: %s", type(exc).__name__)
-        user = None
+        user, lookup_failed = None, True
+    else:
+        lookup_failed = False
+    unread = {"status": "unavailable", "error": ("The accounts database could not be read just now, so the reader's "
+                                                 "saved data is unavailable this time. Do not say they are signed out.")}
 
     def watchlists() -> Dict[str, Any]:
+        if lookup_failed:
+            return dict(unread)
         if not user:
             return {"status": "ok", "signed_in": False,
                     "note": "The reader is not signed in, so no watchlists are stored for them; any list in "
                             "this browser arrives with the question."}
         lists = [account_mod._list_payload(w) for w in account_mod._lists_for(user["id"])]
-        return {"status": "ok", "signed_in": True, "source": "The reader's saved watchlists",
-                "watchlists": [{"name": w.get("name"), "symbols": w.get("symbols") or []} for w in lists]}
+        return milo_tools.fit({"status": "ok", "signed_in": True, "source": "The reader's saved watchlists",
+                               "watchlists": [{"name": w.get("name"), "symbols": w.get("symbols") or []} for w in lists]})
 
     focus = (context or {}).get("focus") if isinstance((context or {}).get("focus"), dict) else {}
     raw_scope = (context or {}).get("brokerage_scope")
     scope = [str(a)[:64] for a in raw_scope][:20] if isinstance(raw_scope, list) else None
 
     def portfolio(part: str) -> Dict[str, Any]:
-        return _milo_portfolio(user, part, scope)
+        return dict(unread) if lookup_failed else _milo_portfolio(user, part, scope)
 
     runners = {
         "get_quote": _tool_quote, "get_options": _tool_options, "get_chart_levels": _tool_levels,
@@ -7778,6 +7813,9 @@ def _milo_toolbox(request: Request, context: Optional[Dict[str, Any]] = None,
         "get_news": _tool_news, "get_market": _tool_market, "compare": _tool_compare,
         "get_assessment": _tool_assessment, "screen_stocks": _tool_screen, "get_my_watchlists": watchlists,
         "get_my_portfolio": portfolio,
+        # the symbol directory, price history, SEC filings and reported results: what Optic already reads for its
+        # pages (post-demo Phase 08, from the milo-upgrade branch's 795a766)
+        **milo_data.runners(PROVIDER, YF_PROVIDER),
     }
     if focus.get("scope") in ("none", "market") or not (
             focus.get("view") == "brokerage" or any(_asks_about_own_portfolio(t) for t in (history or [])
@@ -7927,6 +7965,18 @@ async def _chat_context(request: Request, history: List[Dict[str, Any]], context
                         horizon: str, attachments: Any) -> Optional[Dict[str, Any]]:
     """The CONTEXT block for one Milo answer: the page's figures, with what the question needs added."""
     context = await _augment_chat_context(history, _without_linked_keys(context))
+    last = next((t for t in reversed(history or []) if t.get("role") != "assistant"), None)
+    if _is_definition((last or {}).get("content") or "", context):
+        # A plain definition needs no research pack, framework or chart levels: they fetched a company's filings
+        # and figures, or the macro series, before the model could start, 0.5 to 5.9 s on the local server for
+        # "What is the difference between a stock and a bond?" (post-demo Phase 08). The page's own figures and
+        # every tool stay, so a definition can still use the page's numbers as its example. Whether the reader
+        # has a linked portfolio is still said (one lookup, nothing attached unless the question is theirs).
+        if ((context or {}).get("focus") or {}).get("scope") != "none":
+            linked = await _with_linked_portfolio(request, history, context)
+            if isinstance(linked, dict):
+                context = dict(context or {}, **{k: linked[k] for k in _LINKED_KEYS if k in linked})
+        return context
     if ((context or {}).get("focus") or {}).get("scope") != "none":
         # Side by side: the research pack and the framework read different
         # sources and neither needs the other's answer, so the slower of the
@@ -7945,6 +7995,31 @@ async def _chat_context(request: Request, history: List[Dict[str, Any]], context
         if isinstance(linked, dict):
             context = dict(context or {}, **{k: linked[k] for k in _LINKED_KEYS if k in linked})
     return context
+
+
+# A plain definition: "What is a P/E ratio?", "What does market cap mean?", "What is the difference between a stock
+# and a bond?", "Define implied volatility" (post-demo Phase 08). Not one when the question names a symbol, points
+# at the screen or at the reader ("this", "here", "my"), asks about now ("today", "current"), asks a price or a
+# move, or is about a company ("Apple's margin"). Erring the other way costs nothing but time: the context is
+# gathered as before.
+_DEFINITION = re.compile(
+    r"^(?:what\s+(?:is|are)\s+(?:a|an|the)\s+\S|what\s+(?:is|are)\s+(?!it\b|that\b|this\b)[a-z/&.\- ]{2,40}\??$|"
+    r"what\s+does\s+.{2,50}\s+(?:mean|tell\s+(?:me|us))\b|what'?s\s+(?:a|an)\s+|define\s+|explain\s+(?:what\s+)?(?:a|an)\s+|"
+    r"how\s+does\s+(?:a|an)\s+.{2,40}\s+work\b)", re.I)
+_NOT_DEFINITION = re.compile(
+    r"\b(?:this|these|those|here|my|our|mine|(?<!tell )me|i|today|tonight|now|current(?:ly)?|latest|recent(?:ly)?|yesterday|"
+    r"its|price|prices|priced|trading|worth|doing|moving(?!\s+average)|moved|move)\b|\b(?!what|that|it|there|here|who|how|let)[a-z]+'s\b",
+    re.I)
+
+
+def _is_definition(question: str, context: Optional[Dict[str, Any]]) -> bool:
+    q = " ".join(str(question or "").split())
+    if not q or len(q.split()) > 14:
+        return False
+    named = (context or {}).get("question_named") if isinstance((context or {}).get("question_named"), dict) else {}
+    if named.get("symbols") or named.get("unknown"):
+        return False
+    return bool(_DEFINITION.search(q)) and not _NOT_DEFINITION.search(q)
 
 
 @app.post("/api/research")
