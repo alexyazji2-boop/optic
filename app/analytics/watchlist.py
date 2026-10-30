@@ -78,8 +78,10 @@ def _frames(provider, symbols: List[str]) -> Dict[str, pd.DataFrame]:
         frames = provider.batch_history(wanted, period=PERIOD, interval="1d") or {}
     except Exception:
         frames = {}
-    with _lock:
-        _cache[key] = {"at": time.time(), "frames": frames}
+    # a failed or empty pull is not kept as the list's answer for 90 seconds (Phase 09 cache audit, S29)
+    if frames:
+        with _lock:
+            _cache[key] = {"at": time.time(), "frames": frames}
     return frames
 
 
@@ -239,6 +241,9 @@ def build(provider, symbols: List[str], now: Optional[datetime] = None) -> Dict[
             "symbol": sym,
             "available": True,
             "price": _num(closes.iloc[-1]),
+            # the daily bar the price is, and when the bars were read when the feed did not answer (S29)
+            "price_bar_date": str(closes.index[-1].date()) if hasattr(closes.index[-1], "date") else None,
+            "price_stale_since": (getattr(frame, "attrs", None) or {}).get("stand_in_since"),
             "change_pct": _change(closes, 1),
             "change_5d_pct": _change(closes, 5),
             "change_20d_pct": _change(closes, 20),

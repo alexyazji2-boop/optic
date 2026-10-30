@@ -46,13 +46,14 @@ export const tradeTime = (q) => (q && (q.trade_time || q.market_time)) || null;
 /**
  * How fresh a session price is, in words, from the feed and nothing else (owner's safeguard, 2026-10-21): "Live" only
  * when the feed states no delay for the exchange and the trade is under two minutes old; a delay the feed states, by
- * its number; without one, the site's standing "about 15 minutes". Refreshing often never earns "Live".
+ * its number; without one, the site's standing "up to 15 minutes" (the feed's quotes run from real time to 15 minutes
+ * behind, Phase 09). Refreshing often never earns "Live".
  */
 export function sessionFreshness(q, now = Date.now()) {
   const t = tradeTime(q), at = t ? Date.parse(t) : NaN, delay = q && isNum(q.delayed_minutes) ? Number(q.delayed_minutes) : null;
   const last = t ? `last trade ${etStamp(t)}` : '';
   if (delay === 0 && Number.isFinite(at) && now - at >= -60000 && now - at <= 120000) return { word: 'live', text: `Live, ${last}` };
   if (delay === 0) return { word: 'quiet', text: last ? capFirst(last) : 'No delay stated by the feed' };
-  const lead = delay !== null ? `Delayed ${num(delay, 0)} minutes` : 'Delayed about 15 minutes';
+  const lead = delay !== null ? `Delayed ${num(delay, 0)} minutes` : 'Delayed up to 15 minutes';
   return { word: 'delayed', text: last ? `${lead}, ${last}` : lead };
 }

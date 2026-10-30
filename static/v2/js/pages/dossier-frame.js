@@ -129,6 +129,9 @@ function stageLine(sym, st) {
     ${miloButton('Explain', { ask: st.ask(sym), context: `${sym} Dossier, Overview: Weinstein stage`, symbol: sym, cls: 'btn-sm dh-explain' })}</p>`;
 }
 
+/** The feed did not answer and the last bars Optic read stand in: said in the header, with when (Phase 09, S02). */
+const staleBars = (D) => (D.ticker && D.ticker.bars_stale_since
+  ? html`<p class="stale dh-stale">Charts and indicators from the bars Optic read at ${etStamp(D.ticker.bars_stale_since)}: the feed did not answer just now.</p>` : '');
 export function header(sym, D, view = 'overview', { compact = false, bar = true, stage = null } = {}) {
   const q = D.quote || {};
   const s = (D.session && D.session.prices) || {};
@@ -144,7 +147,7 @@ export function header(sym, D, view = 'overview', { compact = false, bar = true,
       <p class="dh-price">${isNum(q.price) ? html`<span class="dh-px">${num(q.price)}</span>` : D.quoteError ? '' : html`<span class="sk dh-sk dh-sk-sm" role="status" aria-label="Loading the price"></span>`}
         <span class="dh-chg ${dir(q.change_pct)}">${isNum(q.change_pct) ? html`${signed(q.change, 2, '')} (${signed(q.change_pct)})` : ''}</span>
         ${isNum(q.price) ? html`<span class="dh-ext">${priceWhen(D)}</span>` : ''}${ext ? html`<span class="dh-ext">${capFirst(ext.kind)} ${num(ext.price)} <span class="${dir(ext.change_pct)}">${signed(ext.change_pct)}</span>${ext.as_of ? ` at ${etStamp(ext.as_of)}` : ''}</span>` : ''}</p>
-      ${stageLine(sym, st)}${actions(sym, label, true)}
+      ${staleBars(D)}${stageLine(sym, st)}${actions(sym, label, true)}
     </header>`;
   }
   return html`<header class="dhead ${compact ? 'compact' : ''}">

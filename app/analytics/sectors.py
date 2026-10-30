@@ -339,15 +339,18 @@ def analyse(provider) -> Dict[str, Any]:
     # Breadth proxy: how much of the sector complex is above its own 200-day.
     above_200 = [r for r in sector_rows if r.get("above_sma200")]
     above_50 = [r for r in sector_rows if r.get("above_sma50")]
-    breadth_200 = round(len(above_200) / max(len(sector_rows), 1) * 100.0, 1)
+    share_200 = len(above_200) / max(len(sector_rows), 1) * 100.0
+    breadth_200 = round(share_200, 1)
     breadth_50 = round(len(above_50) / max(len(sector_rows), 1) * 100.0, 1)
 
+    # The note's whole percent comes from the unrounded share: 6 of 11 is 54.5% in the payload, which Python's
+    # format would then round to 54 (half to even) beside the page's 55 (BUG-012, Phase 09)
     if breadth_200 >= 70:
-        breadth_note = "Broad participation: {:.0f}% of sectors above their 200-day. Breakouts have follow-through.".format(breadth_200)
+        breadth_note = "Broad participation: {:.0f}% of sectors above their 200-day. Breakouts have follow-through.".format(share_200)
     elif breadth_200 >= 45:
-        breadth_note = "Mixed participation ({:.0f}% above 200-day). Leadership is narrowing: fewer sectors are carrying the market.".format(breadth_200)
+        breadth_note = "Mixed participation ({:.0f}% above 200-day). Leadership is narrowing: fewer sectors are carrying the market.".format(share_200)
     else:
-        breadth_note = "Narrow tape, only {:.0f}% of sectors above their 200-day. Long setups are fighting the current.".format(breadth_200)
+        breadth_note = "Narrow tape, only {:.0f}% of sectors above their 200-day. Long setups are fighting the current.".format(share_200)
 
     breakouts = sorted(
         [r for r in sector_rows + theme_rows + niche_rows if r["breakout_score"] >= 45],

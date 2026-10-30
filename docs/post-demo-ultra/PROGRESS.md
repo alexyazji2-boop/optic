@@ -12,6 +12,87 @@ Read this and [REQUIREMENTS_MATRIX.md](REQUIREMENTS_MATRIX.md) before changing a
 - **Resource rule:** at most two subagents at a time (DECISIONS D-007). One proxy answer costs about 180,000 agent tokens.
 - **Next action:** Phase 09 (market data integrity): read `directives/09-market-data-integrity.md`, the R09 rows (R09-01 to R09-09) and the register's rows for Phase 09 (BUG-011, BUG-012, BUG-013, BUG-064, BUG-067, BUG-098). Phase 08's tools: `python -m tests.milo_eval.run` (the suite's report), `tools/phase08_checks.py` (E01 to E03 on live data), `tools/phase08_proxy.py` (stand-in rounds: requests, results, score), `tools/phase08_setc.py` and `tools/phase08_advice_regression.py` (the advice check on every set and corpus against a baseline copy). Phase 11 owes a fresh advice set for the widened check (BUG-132).
 
+## Phase 09 report (directive 09; reporting format of directive 00)
+
+1. **Inspected.**
+   - **Pathways:** every financial-data pathway and every cache, from a read-only audit cited to the line
+     (DATA_PATHWAYS.md). Eleven of its twenty risks and four of its pathway claims were checked by hand.
+   - **The live data:** Optic's figures through its own API, against Yahoo's and the SEC's own responses
+     (RECONCILIATION.md).
+   - **The session rules:** against NYSE's published calendar.
+   - **The workflows:** the eight scenarios, in headless Chrome.
+   - **Cross-feature:** the Phase 09 bugs left open by earlier phases (BUG-011, BUG-012, BUG-013, BUG-064,
+     BUG-067, BUG-098).
+2. **Problems discovered.**
+   - **The yield:** worked at another moment's price (BUG-136).
+   - **Made-up readings:** the RSI's 50s (BUG-137), and a VWAP with no volume (BUG-138).
+   - **The session:** half days and holiday evenings misread (BUG-139).
+   - **Stale or wrong statements:** the pattern study's typed-in figures, wrong today (BUG-067), and "delayed about
+     15 minutes" beside quotes that state no delay (BUG-098).
+   - **Labels and readings:** two models with one company's two numbers unexplained (BUG-011), one score read and
+     coloured two ways (BUG-064), a whole's parts not adding up and one change rounded two ways (BUG-012), an
+     unlabelled weight basis (BUG-141), a result not yet in the feed read as nothing (BUG-013).
+   - **Caches:** reader answers not marked private (BUG-142), six-hour stand-ins unlabelled (BUG-143), refusals kept
+     for hours (BUG-144), stale corporate actions (BUG-145), failed pulls kept (BUG-146), deleted holdings kept in
+     memory (BUG-147), the browser's refused refresh and memos (BUG-148), Milo not told the data's age (BUG-149),
+     the news length (BUG-150).
+   - **The carry:** a dividend carry assumed without saying so (BUG-151).
+3. **Root causes.**
+   - **Precomputed figures:** passed through from the feed at another moment.
+   - **Fills:** used in place of a missing value.
+   - **Labels by phase:** one label per phase, not per cause.
+   - **Copied figures:** ported word for word with the copy.
+   - **Rounding:** each surface rounded its own way.
+   - **Failures cached as answers:** and stand-ins handed on as current.
+   - **Headers:** only the routes that asked for them set any.
+4. **Fixes implemented.**
+   - **Delay wording** (D-067).
+   - **Yield** (D-068).
+   - **No reading without its inputs** (D-069).
+   - **The session against NYSE's calendar** (D-070).
+   - **The pattern study's figures from the study** (D-071).
+   - **One score, one reading** (D-072).
+   - **One rounding rule per figure** (D-073).
+   - **The cache audit's fixes** (D-074).
+   - **The reconciliation method** (D-075).
+5. **Files changed.**
+   - **Server:** `app/providers/yf.py`, `app/analytics/technicals.py`, `indicators.py`, `extras.py`,
+     `watchlist.py`, `relperf.py`, `regime.py`, `sectors.py`, `watches.py`, `app/session.py`, `app/main.py`,
+     `app/ai.py`, `app/milo_tools.py`, `app/milo_data.py`, `app/research/service.py`, `app/brokerage/service.py`.
+   - **v2:** `core/api.js`, `core/format.js`, `core/marketTime.js`, `core/status.js`, `ui/finfigs.js`,
+     `ui/milo.js`, and the pages alerts, brokerage, compare, dcf, dossier, dossier-frame, earningsweek, investing,
+     options-panels, overview-research, paper, retirement, settings, sheet and workspace.
+   - **Classic:** `static/app.js`.
+   - **Tests:** `tests/test_market_data_integrity.py` (new), `tests/fixtures/pattern_base_rates_2026-10-29.json`
+     (new), and eight tests updated for the deliberate changes.
+   - **Docs:** DATA_PATHWAYS.md and RECONCILIATION.md (new); DECISIONS D-067 to D-075; BUG_REGISTER BUG-136 to
+     BUG-151, with BUG-011, BUG-012, BUG-013, BUG-064, BUG-067 and BUG-098 closed; REQUIREMENTS_MATRIX R09;
+     TEST_RESULTS; FEATURE_REGISTRY; COMPLIANCE_REVIEW section 9.
+6. **Tests executed.**
+   - The full suite.
+   - The reconciliation (twice in full on the final tree, after the first run's fixes).
+   - Scenarios A to H.
+   - The session tests against NYSE's calendar.
+   - The new integrity tests.
+7. **Passed / failed.**
+   - **Suite:** SUITE_LINE.
+   - **Reconciliation:** 278 rows, 277 PASS, 1 UNVERIFIED (the first run's 9 failures: 6 the reference's definitions, 3 Optic's yield).
+   - **Scenarios:** A to H all PASS, no script exceptions.
+8. **Browser verification.**
+   - **What ran:** headless Chrome on live delayed data, as scenarios A to H, with screenshots in
+     `phase09/scenarios/shots`.
+   - **What it showed:** one SPY price across four surfaces; NVDA everywhere after a late AAPL answer; stated missing
+     and failure states with no invented figure; recovery from a reload mid-load; cached freshness labels; two
+     readers isolated; and brokerage weights that recompute.
+9. **Outstanding.**
+   - **Phase 10:** the cache audit's S01, S09, S16 and S19 (an unbounded adapter cache, duplicate Yahoo fetches, no
+     negative cache for feeds, the symbol directory's lock), plus BUG-112 and BUG-113.
+   - **Not observable at the run's hour:** a pre-market price, and a regular session observed live (R09-02, R09-03
+     PARTIAL).
+   - **Not reconciled:** news timestamps, reported EPS and margins, and currency conversion (R09-02).
+   - **For counsel:** the legal page's delay sentence (COMPLIANCE_REVIEW section 9).
+10. **Commit and next phase.** COMMIT_LINE; next is Phase 10.
+
 ## Phase 08 report (directive 08; reporting format of directive 00)
 
 1. **Inspected.**

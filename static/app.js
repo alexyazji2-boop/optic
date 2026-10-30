@@ -5526,7 +5526,7 @@ function renderHomeStatus(health) {
   const assistantOn = !!(health && health.assistant && health.assistant.enabled);
   foot.innerHTML = [
     `<span class="dot-sep"><span class="chip ${realtime ? 'bull' : 'neutral'}" style="padding:var(--space-0) var(--space-2)"><span class="dot"></span>${
-      realtime ? `real-time chains via ${esc(feedName(provider))}` : `${esc(feedName(provider))} · quotes delayed ~15 min`}</span></span>`,
+      realtime ? `real-time chains via ${esc(feedName(provider))}` : `${esc(feedName(provider))} · quotes delayed up to 15 min`}</span></span>`,
     `<span class="dot-sep"><span class="chip ${assistantOn ? 'bull' : 'neutral'}" style="padding:var(--space-0) var(--space-2)"><span class="dot"></span>${
       assistantOn ? `${ASSISTANT_NAME} ready` : `${ASSISTANT_NAME} needs an API key`}</span></span>`,
     '<span>Greeks computed locally via Black-Scholes. Analysis only, not investment advice.</span>',
@@ -15361,7 +15361,7 @@ function securityViewsFor(sym) {
  * Outside the regular session the header's figure is not a moving quote. On
  * the free feed it is the regular-session close (the session strip carries
  * any extended-hours print, through freshExtended); on Tradier it is the last
- * trade, which can be an extended-hours one. "Delayed ~15 min" beside a
+ * trade, which can be an extended-hours one. "Delayed up to 15 min" beside a
  * Friday close read on a Sunday would describe the feed, not the number. */
 /* Which close. "At the close" on a Monday morning is Friday's, and on a
  * holiday the day before it; the server's calendar names the day
@@ -15396,10 +15396,10 @@ function secDataStateHTML(q) {
       ? 'The most recent trade the feed holds, which outside the regular session can be an extended-hours one'
       : 'The regular-session close. Any extended-hours print is on the session strip';
   } else {
-    label = realtime ? 'Live' : 'Delayed ~15 min';
+    label = realtime ? 'Live' : 'Delayed up to 15 min';
     tone = realtime ? 'is-live' : 'is-delayed';
     why = realtime ? 'Quotes from a real-time feed'
-      : 'Quotes come from a free feed and run about 15 minutes behind the exchange';
+      : 'Quotes come from a free feed and can run up to 15 minutes behind the exchange';
   }
   const stamp = session === 'regular' || realtime ? at : '';
   return `<span class="data-state ${tone}" title="${esc(why)}">
@@ -18232,7 +18232,7 @@ function ovScoreHTML(d) {
       empty: l.unavailable ? `The long-term score is not available: ${String(l.unavailable).replace(/\.$/, '')}.` : 'Working out the long-term score…' })}
     </div>
     ${notes.map((x) => `<p class="osc-both">${esc(x)}</p>`).join('')}
-    <p class="ov-fine">50 is each model's neutral midpoint, where its inputs balance; it is not a measured break-even. Neither score is a probability, an expected return or a forecast, and neither has been shown to predict returns. Not a recommendation to buy or sell.</p>
+    <p class="ov-fine">50 is each model's neutral midpoint, where its inputs balance; it is not a measured break-even. Neither score is a probability, an expected return or a forecast, and neither has been shown to predict returns. Compare ranks names on scores of its own, built only from inputs every compared name has, so its numbers for this company differ from these. Not a recommendation to buy or sell.</p>
   </section>`;
 }
 
@@ -19792,7 +19792,8 @@ async function loadPriority() {
  * panel does not resolve it — the reader can see both and the sample size.
  *
  * On this data most of them disagree, and the panel says so plainly rather than
- * burying it: fifteen candlestick patterns across 43 names and ten years come
+ * burying it, in the study's own figures (patternRateRanges): on the build of
+ * 2026-10-29, thirteen candlestick patterns across 43 names and ten years came
  * out at hit rates between 46% and 51%.
  */
 const PATTERN_STATE_LABEL = {
@@ -21544,6 +21545,21 @@ function baseRatesMissing(rates) {
   return `${rates.reason || 'Base rates are not available.'} The measured column stays empty until they are.`;
 }
 
+/* The base-rate study's own figures for the panel's sentences about it. They were typed into the copy and drifted
+   from the data ("all four confirmed structures land between 51% and 55% ... one of them at 31%" beside a study
+   measuring 49% to 53%, the lowest unconfirmed at 42%; Phase 09, BUG-067), so they come from the rates, and a
+   sentence with no rates states no figure. */
+function patternRateRanges(rates) {
+  const pats = (rates && rates.available && rates.patterns) || {};
+  const pick = (state) => Object.keys(pats).filter((k) => k.endsWith(`|${state}`)).map((k) => (pats[k] || {}).h21)
+    .filter((h) => h && h.hit_rate !== null && h.hit_rate !== undefined);
+  const span = (hs) => (hs.length ? { lo: Math.min(...hs.map((h) => h.hit_rate * 100)), hi: Math.max(...hs.map((h) => h.hit_rate * 100)),
+    nlo: Math.min(...hs.map((h) => h.n)), nhi: Math.max(...hs.map((h) => h.n)), count: hs.length } : null);
+  const years = rates && rates.available ? Number(String(rates.history || '').replace(/y$/, '')) : null;
+  return { confirmed: span(pick('confirmed')), unconfirmed: span(pick('unconfirmed')), candle: span(pick('candle')),
+    names: rates && rates.available ? rates.universe_size : null, years };
+}
+
 function renderPatterns(d) {
   const p = d && d.patterns;
   if (!p) return '';
@@ -21552,6 +21568,7 @@ function renderPatterns(d) {
       <p class="sub">${esc(p.reason || 'Not enough history to read structure.')}</p></div>`;
   }
   const rates = STATE.patternRates;
+  const rr = patternRateRanges(rates);
   const structural = p.chart_patterns || [];
   const zones = p.zones || [];
   const candles = (p.candles || []).slice(0, 6);
@@ -21607,8 +21624,9 @@ function renderPatterns(d) {
   return `<div class="panel span-all">
     <h2>${hg('Chart patterns')}${askPulse('patterns')}</h2>
     <p class="sub">Structure, candles and zones read mechanically off the daily bars.
-      Then, next to each one, what actually happened afterwards across 43 names and ten
-      years. The two columns often disagree, and this panel deliberately does not
+      Then, next to each one, what actually happened afterwards ${rr.names && rr.years
+    ? `across ${fmt(rr.names, 0)} names and ${['', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten'][rr.years] || fmt(rr.years, 0)}
+      years` : "in Optic's study of past occurrences"}. The two columns often disagree, and this panel deliberately does not
       resolve that for you.</p>
 
     ${structural.length ? `<h3 class="pat-head">Structure</h3>
@@ -21619,9 +21637,12 @@ function renderPatterns(d) {
     </table></div>
     <p class="caveat">A reversal pattern is only <em>confirmed</em> once a close has
       cleared its neckline, and cleared it promptly. A crossing months later is a
-      coincidence, not a resolution. Confirmation is the whole difference on this
-      data: all four confirmed structures land between 51% and 55%, and all four
-      unconfirmed ones at or below 50%, one of them at 31%. A pattern that fails to
+      coincidence, not a resolution.${rr.confirmed && rr.unconfirmed ? (rr.confirmed.lo > rr.unconfirmed.hi
+    ? ` Confirmation is the whole difference on this
+      data: all ${fmt(rr.confirmed.count, 0)} confirmed structures land between ${fmt(rr.confirmed.lo, 0)}% and ${fmt(rr.confirmed.hi, 0)}%, and all ${fmt(rr.unconfirmed.count, 0)}
+      unconfirmed ones at or below ${fmt(rr.unconfirmed.hi, 0)}%, the lowest at ${fmt(rr.unconfirmed.lo, 0)}%.`
+    : ` On this data the confirmed structures land between ${fmt(rr.confirmed.lo, 0)}% and ${fmt(rr.confirmed.hi, 0)}%
+      and the unconfirmed ones between ${fmt(rr.unconfirmed.lo, 0)}% and ${fmt(rr.unconfirmed.hi, 0)}%.`) : ''} A pattern that fails to
       confirm is not a weaker version of the same signal, it is the trend carrying
       on.</p>`
     : '<p class="sub">No structural pattern currently passes the size, prior-move and '
@@ -21651,10 +21672,10 @@ function renderPatterns(d) {
         <th class="num">That direction held, 21 sessions</th></tr></thead>
       <tbody>${candleRows}</tbody>
     </table></div>
-    <p class="caveat">Every candlestick pattern here measures between 46% and 51% on a
-      sample of two to twelve thousand occurrences. That is a coin toss, and it is the
+    ${rr.candle ? `<p class="caveat">Every candlestick pattern here measures between ${fmt(rr.candle.lo, 0)}% and ${fmt(rr.candle.hi, 0)}% on a
+      sample of ${fmt(rr.candle.nlo, 0)} to ${fmt(rr.candle.nhi, 0)} occurrences.${rr.candle.lo >= 45 && rr.candle.hi <= 55 ? ` That is a coin toss, and it is the
       most useful thing this panel can tell you about them: they describe what the bar
-      did, and on this evidence they do not forecast what the next twenty do.</p>` : ''}
+      did, and on this evidence they do not forecast what the next twenty do.` : ''}</p>` : ''}` : ''}
 
     <p class="caveat">${gloss(p.method || '')}</p>
     ${rates && rates.available ? `<p class="caveat">Base rates: ${
@@ -31565,7 +31586,10 @@ function renderCompare(c) {
         <div class="cmp-hz-h">Horizon: ${esc(h.horizon)}</div>
         <p class="cmp-hz-b">${esc(h.basis)}</p>
       </div>`).join('')}
-    </div>` : ''}
+    </div>
+    <p class="weekly-sub">These are Compare's own scores, built only from inputs every compared name has. A Dossier's
+      short- and long-term readings weigh more (options activity, news tone, the business's filings), so their numbers
+      differ from these.</p>` : ''}
     <div class="cmp-controls">
       ${inputs}
       <button type="button" class="btn" data-cmp-run>Compare</button>
@@ -33058,7 +33082,7 @@ function renderSettings() {
     // real-time chain said "delayed roughly 15 minutes" here regardless.
     ['Data source', STATE.health && STATE.health.realtime_chain
       ? `Real-time option chains via ${feedName(STATE.health.provider)}; other quotes may be delayed`
-      : 'Yahoo Finance. Quotes delayed roughly 15 minutes'],
+      : 'Yahoo Finance. Quotes delayed up to 15 minutes'],
     ['Assistant', (() => {
       const a = (STATE.health || {}).assistant;
       if (!a) return 'Checking\u2026';
@@ -35618,6 +35642,14 @@ function ltMonthYear(iso) {
  * re-reads it for the headline: the worst possible maps to 0, the best to 100
  * and zero, no edge either way, to 50. Each side is scaled to its own limit
  * because the long-term model's limits are not symmetric (-78 to +97). */
+/* The long-term score's colour by its own model's bands, as the Overview's Optic Score colours it: positive from
+   "moderate", negative from "cautious", neutral between. The hero went by the raw score's sign, so +5, inside the
+   model's neutral band, read green here and neutral on the Overview (Phase 09, BUG-064). */
+function longConvictionClass(h) {
+  const c = String((h && h.conviction) || '');
+  return c === 'high' || c === 'moderate' ? signClass(1) : c === 'cautious' || c === 'low' ? signClass(-1) : signClass(0);
+}
+
 function score100(score, min, max) {
   if (score === null || score === undefined || !Number.isFinite(Number(score))) return null;
   const lo = Number.isFinite(min) && min < 0 ? min : -100;
@@ -35706,7 +35738,7 @@ function renderLong(d) {
       <div style="display:flex;align-items:flex-end;gap:var(--space-5);flex-wrap:wrap">
         <div>
           <div class="hero-label">Conviction</div>
-          <div class="hero ${signClass(h.conviction_score)}">${score100HTML(longScore100(h, h.conviction_score))}</div>
+          <div class="hero ${longConvictionClass(h)}">${score100HTML(longScore100(h, h.conviction_score))}</div>
           <div class="note subnote sm">50 is neutral, 100 is every factor at its best</div>
         </div>
         <div style="display:flex;flex-direction:column;gap:var(--space-2)">
@@ -51645,7 +51677,7 @@ const METRIC_GUIDES = [
   { views: ['long'], match: ['long-term view'],
     measures: "Optic's long-term conviction: the long-run price trend, five-year returns against the S&P 500, return for the risk taken, the forward P/E, how far the price is from its high, and the dividend, combined and shown out of 100.",
     why: 'A summary of how the multi-year case looks on the figures Optic holds.',
-    read: '50 means no edge either way; higher means more of the inputs are favourable. The breakdown lists what lifts and what drags the score.',
+    read: '50 is the model\'s neutral midpoint, where its inputs balance; it is not a measured break-even. Higher means more of the inputs are favourable. The breakdown lists what lifts and what drags the score.',
     limits: 'A rule-based score, not a fair value or a recommendation. It cannot judge management, competition or anything that is not in the numbers.' },
   { views: ['long'], match: ['valuation vs its own history', 'multiple and revenue history', 'revenue and the multiple'],
     measures: 'The price-to-earnings ratio, what investors pay for each dollar of yearly profit, today against its own range over past years.',

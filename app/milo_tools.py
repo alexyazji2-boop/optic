@@ -412,7 +412,7 @@ def _pick(d: Any, *keys: str) -> Dict[str, Any]:
     return {k: d.get(k) for k in keys if d.get(k) not in (None, "", [], {})}
 
 
-DELAY_NOTE = ("Delayed quote: Yahoo Finance prices run about 15 minutes behind during the session; outside it the "
+DELAY_NOTE = ("Delayed quote: Yahoo Finance prices can run up to 15 minutes behind during the session; outside it the "
               "price is the last close or an extended-hours print.")
 
 

@@ -86,7 +86,7 @@ def test_the_later_quote_wins_and_the_header_says_when(tmp_path):
       }}));
     """)
     assert got["a"] == 101 and got["b"] == 101 and got["name"] == "A", "the later trade wins, the other fills gaps"
-    assert got["open"].startswith("Delayed about 15 minutes, last trade "), "in session a delayed trade, never the close"
+    assert got["open"].startswith("Delayed up to 15 minutes, last trade "), "in session a delayed trade, never the close"
     assert got["shut"] == "Close of Mon Oct 19"
     frame = SRC["pages/dossier-frame.js"]
     assert "${isNum(q.price) ? html`<span class=\"dh-ext\">${priceWhen(D)}</span>` : ''}" in frame

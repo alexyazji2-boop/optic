@@ -126,6 +126,7 @@ def price_history(history: Callable[..., Any], quote: Callable[[str], Dict[str, 
     if df is None or len(df) == 0:
         return {"status": "not_found", "error": "No {} price history for {}.".format(interval, ticker)}
     whole = len(df)
+    since = (getattr(df, "attrs", None) or {}).get("stand_in_since")
     df = _in_window(df, period)
     dates = [d.strftime("%Y-%m-%d") for d in df.index]
     closes = [float(x) for x in df["Close"].tolist()]
@@ -140,7 +141,7 @@ def price_history(history: Callable[..., Any], quote: Callable[[str], Dict[str, 
         q = quote(ticker) or {}
     except Exception:                                                # noqa: BLE001 - the currency is a label
         q = {}
-    return {
+    body = {
         "status": "ok",
         "source": "Yahoo Finance {} bars (closes not adjusted for dividends; splits are)".format(interval),
         "ticker": ticker, "period": period, "interval": interval,
@@ -157,6 +158,10 @@ def price_history(history: Callable[..., Any], quote: Callable[[str], Dict[str, 
                    "standard deviation of log returns between bars, annualised (x sqrt({}))."
                    .format(TRADING_DAYS[ivl])),
     }
+    if since:
+        # the feed did not answer and the last bars read stood in: said, with when (Phase 09, S02)
+        body.update(stale=True, stale_note="The feed did not answer just now; these are the bars Optic last read, at {}.".format(since))
+    return body
 
 
 # ------------------------------------------------------------------------------------- SEC filings

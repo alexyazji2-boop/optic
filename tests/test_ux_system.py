@@ -107,13 +107,13 @@ def test_the_data_state_says_what_the_number_is():
     `quote_source`."""
     _js(DATA_STATE, ["closeLabel", "secDataStateHTML"], """
       var h = label();
-      assert(h.indexOf('Delayed ~15 min') >= 0 && h.indexOf('is-delayed') >= 0, 'free feed: ' + h);
+      assert(h.indexOf('Delayed up to 15 min') >= 0 && h.indexOf('is-delayed') >= 0, 'free feed: ' + h);
       assert(h.indexOf('2:05 pm') >= 0, 'with the time it was fetched');
       STATE.health = { realtime_chain: true };
       h = label();
       assert(h.indexOf('Live') >= 0 && h.indexOf('is-live') >= 0, 'real-time feed: ' + h);
       h = label({ as_of: 'x', quote_source: 'yfinance (Tradier quote unavailable)' });
-      assert(h.indexOf('Delayed ~15 min') >= 0, 'a fallen-back quote is not live: ' + h);
+      assert(h.indexOf('Delayed up to 15 min') >= 0, 'a fallen-back quote is not live: ' + h);
       STATE.health = null; session = 'after';
       h = label();
       assert(h.indexOf('At the close') >= 0 && h.indexOf('is-closed') >= 0, 'after hours: ' + h);

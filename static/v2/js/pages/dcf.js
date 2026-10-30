@@ -799,7 +799,8 @@ export function mountDcf(root, sym) {
     Object.assign(V, { sym, data: null, defaults: null, edits: null, loading: false, error: '', open: {}, tab: 'wacc_growth', focus: null, sel: null, extra: {}, saved: null, status: '', replays: {}, compares: {}, armed: null, comps: null, sotp: null, peers: '', sotpM: {} });
     const n = document.createElement('section');
     n.className = 'section dcf'; n.id = 'dcf'; n.setAttribute('aria-labelledby', 'dcf-h');
-    n.innerHTML = '<div class="section-head"><div><h2 class="t-h2" id="dcf-h">Fair-value model, discounted cash flow</h2></div></div><div class="dcf-body"></div>';
+    // two values on one tab (BUG-064): this model and the range from the company's own P/E history, said apart
+    n.innerHTML = '<div class="section-head"><div><h2 class="t-h2" id="dcf-h">Fair-value model, discounted cash flow</h2><p class="section-sub">A separate model from the fair value range above, which comes from the company\'s own P/E history, so the two values differ.</p></div></div><div class="dcf-body"></div>';
     V.node = n; wire(n); paint(); load(false);
     registerValuation(VAL_API);
   }

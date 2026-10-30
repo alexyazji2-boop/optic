@@ -64,16 +64,16 @@ const folded = (id) => isPhone() && ((S.fold[S.preset] || {})[id] ?? !(ESSENTIAL
 // How fresh each panel's figures are, from the server's own caches
 // (providers/yf.py TTLs, fred.py, the route docstrings), not a guess.
 const FRESH = {
-  indices: 'Quotes delayed about 15 minutes; refreshed every minute while the market is open.',
+  indices: 'Quotes delayed up to 15 minutes; refreshed every minute while the market is open.',
   portfolio: 'Valued at Optic\'s delayed prices, refreshed every minute in session; quantities as of the last broker sync.',
   priority: 'Rebuilt at most every 10 minutes.',
-  watch: 'Quotes delayed about 15 minutes; refreshed every minute while the market is open.',
-  quote: 'Quote delayed about 15 minutes; daily closes re-read at most every 5 minutes.',
+  watch: 'Quotes delayed up to 15 minutes; refreshed every minute while the market is open.',
+  quote: 'Quote delayed up to 15 minutes; daily closes re-read at most every 5 minutes.',
   cnews: 'Headlines re-read at most every 10 minutes.',
   contracts: 'Chain delayed about 15 minutes; re-read at most once a minute.',
   regime: 'From delayed quotes and daily closes; refreshed every minute while the market is open.',
   expected: 'From the delayed VIX and index; refreshed every minute while the market is open.',
-  sectors: 'Fund prices delayed about 15 minutes; refreshed every minute while the market is open.',
+  sectors: 'Fund prices delayed up to 15 minutes; refreshed every minute while the market is open.',
   calendar: 'Schedule from the last built Read (built every 20 minutes); actual and prior from FRED, re-read at most every 6 hours.',
   desk: 'Written from the day\'s figures once a day, and again when the market moves away from what it says; until then a version compiled by fixed rules shows. The time under the panel is when the version shown was written or compiled.',
   earnings: 'Rebuilt at most once an hour; report dates move on the scale of days.',
@@ -81,7 +81,7 @@ const FRESH = {
   news: 'From the last built Read, built every 20 minutes.',
   alerts: 'From the scheduled scan.',
   economy: 'FRED series change on release days; Optic re-reads them at most every 6 hours.',
-  value: 'Earnings data re-read at most every 6 hours; price delayed about 15 minutes.',
+  value: 'Earnings data re-read at most every 6 hours; price delayed up to 15 minutes.',
   vol: 'Chain delayed about 15 minutes; re-read at most every 2 minutes. Outside market hours the free feed can serve it unquoted.',
   gex: 'From open interest in the delayed chain, re-read at most every 2 minutes. Open interest itself updates once a day.',
   tearn: 'Report dates and consensus re-read at most every 10 minutes; the implied move from the delayed chain.',
@@ -89,7 +89,7 @@ const FRESH = {
   fin: 'Reported statements; they change when the company files.',
   own: 'Insider filings arrive within days; 13F holdings about 45 days after each quarter.',
   changes: 'The latest completed session against the one before; it changes once a session closes.',
-  trends: 'Fund prices delayed about 15 minutes, re-read at most once a minute; the levels are the prior completed session\'s.',
+  trends: 'Fund prices delayed up to 15 minutes, re-read at most once a minute; the levels are the prior completed session\'s.',
   questions: 'Built from the market figures above as they refresh; the pool rotates each market day.',
 };
 // The footer's one line: a short source and a status in a word or two. The full source, FRESH and
@@ -110,7 +110,7 @@ const marketOpen = () => !!sessionNow().is_regular;
 // Quoted panels say which prices they hold: delayed in session, otherwise the close they are from
 // (the footer's "Updated" time is when Optic fetched them, not when they traded).
 const lastClose = () => (sessionNow().last_close || {}).date;
-const statusOf = (id) => (QUOTED.has(id) ? (marketOpen() ? 'Delayed 15 min' : (lastClose() ? `${etDay(lastClose()).replace(/^\w+ /, '')} close` : 'Last close')) : (CADENCE[id] || ''));
+const statusOf = (id) => (QUOTED.has(id) ? (marketOpen() ? 'Delayed up to 15 min' : (lastClose() ? `${etDay(lastClose()).replace(/^\w+ /, '')} close` : 'Last close')) : (CADENCE[id] || ''));
 // Lists and tables take a default height for their kind and fill the rest of their row; the other
 // panels size to their content.
 const LIST = new Set(['watch', 'cnews', 'contracts', 'calendar', 'earnings', 'movers', 'news', 'alerts', 'changes', 'questions']);

@@ -800,3 +800,66 @@ every set and corpus against a baseline copy).
 - `tests/test_milo_eval.py` (137 cases and the answer checks' pairs), `tests/test_milo_grounding.py`, `tests/test_milo_data_tools.py`,
   `tests/test_ai_policy.py` (sets A, B and C): 733 passed.
 - Full suite on the final Phase 08 tree: 7,970 passed, 1 skipped, 0 failed (raw `phase08/pytest-full-5.txt`).
+
+## Phase 09 (market data integrity), 2026-10-30, working tree on 0268f7f
+
+Raw results are under `~/Optic/work/post-demo-ultra-2026-10-29/phase09/`. Every live check ran against the local server
+(:8250) on live delayed data, in the small hours of Friday 2026-10-30, which is the overnight session. The prices
+compared are therefore Thursday's close and its post-market prints.
+
+### Reconciliation (`tools/phase09_recon.py`; table in RECONCILIATION.md; raw `recon/`)
+
+| Run | Rows | Result |
+|---|---|---|
+| First (about 2 AM ET) | 248 | 239 PASS, 9 FAIL: 6 were the reference's own definitions (trailing dividend window, one share class, forward against trailing yield, a TTM missing a 10-K quarter), 3 were Optic's (the yield at another price, BUG-136) |
+| Final, with indicators, report dates, headlines and the market read added | 278 | 277 PASS, 1 UNVERIFIED (SPY: a fund has no earnings date) |
+
+### Scenarios A to H (`tools/phase09_scenarios.py`; raw `scenarios/phase09-scenarios.json`, screenshots in `scenarios/shots`)
+
+| Scenario | What was checked | Result |
+|---|---|---|
+| A | Search SPY, chart, Dossier, Milo: 769.36 on the quote API, the Dossier, the chart and in Milo's context; Milo's focus SPY | PASS |
+| B | AAPL then NVDA at once, five AAPL requests held and released late: header, name, price and title all NVDA, no AAPL or Apple on the page | PASS |
+| C | ZZZZQX says there is no quote; SPY's Financials says it is a fund; no NaN, undefined or $0.00 | PASS |
+| D | MSFT reloaded while its ticker request was held: the page recovered in full, no failure text | PASS |
+| E | Back to a cached AAPL Dossier: "Close of Thu Oct 29" both times, the close's own label, not the fetch | PASS |
+| F | NVDA's sources and Home's market sources failing (503 in the browser): "did not answer" on both, no price shown, no invented figure | PASS |
+| G | The demo reader and a second reader signed in at once in separate contexts, six rounds of simultaneous level changes and a list each: each read back only their own | PASS |
+| H | The sandbox brokerage: every weight is its value over long holdings (76,367.25, stated and recomputed), allocation shares are over the whole account with cash (79,067.25) | PASS |
+| No script exceptions in A to F | | PASS |
+
+### The session against NYSE's calendar (`tests/test_market_data_integrity.py`)
+
+NYSE Group's published 2026 and 2027 holidays and half days (ICE press release; nyse.com/trade/hours-calendars, read
+2026-10-30) match `session.market_holidays` and `early_closes` exactly. Thirteen pinned instants read as what is
+trading. The four that read wrong before (BUG-139) were the hours after a half day, the evening before a holiday,
+the label of either, and the strip drawn on a half day.
+
+### Caches (DATA_PATHWAYS.md Part 2)
+
+| Count | |
+|---|---|
+| Caches documented | 75 (5 HTTP, 47 server, 10 disk, 13 browser) |
+| Cross-reader leak found | none |
+| RISK rows | 20: 11 checked by hand and fixed (BUG-142 to BUG-150), 4 to Phase 10, 5 accepted or latent with reasons |
+
+### Tests and suite
+
+- `tests/test_market_data_integrity.py` (new): 45 passed. It covers:
+  - the yield's rule;
+  - the RSI warm-up;
+  - VWAP without volume;
+  - the delay wording across v2, Classic and the server;
+  - the session against NYSE's calendar;
+  - the pattern study's figures in both apps;
+  - one score, one reading;
+  - rounding;
+  - private reader answers;
+  - the brokerage forget;
+  - dated stand-ins;
+  - refusals not kept;
+  - the browser's caches;
+  - Milo's data age.
+- Updated for the deliberate changes: `test_session_holidays`, `test_pulse_tone`, `test_v2_editorial_pass`,
+  `test_v2_parity_b2b2`, `test_v2_positions`, `test_v2_beginner`, `test_ux_system`, `test_v2_scores`.
+- Full suite on the final Phase 09 tree: 8,015 passed, 1 skipped, 0 failed (raw `phase09/pytest-full-2.txt`).

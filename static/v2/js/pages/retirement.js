@@ -7,7 +7,7 @@ import { html, render as draw } from '../core/dom.js';
 import * as api from '../core/api.js';
 import * as store from '../core/store.js';
 import { holds } from '../core/device.js';
-import { num, signed, compact, clean, capFirst, isNum } from '../core/format.js';
+import { num, signed, compact, clean, capFirst, isNum, wholeParts } from '../core/format.js';
 import { skeleton, failed, simpleFold } from '../ui/states.js';
 import { xyChart } from '../ui/xychart.js';
 import { mountCharts } from '../ui/chart.js';
@@ -48,7 +48,8 @@ const BASIS = { total: 'with distributions', price: 'price only', mixed: 'partly
 /** The headline split, from the server's final weights: the table summed (pitch audit, 2026-10-22). */
 export function splitTiles(a) {
   const eqNote = [isNum(a.equity_funds_pct) ? `${num(a.equity_funds_pct, 1)}% stock funds` : '', a.stock_sleeve_pct > 0 ? `${num(a.stock_sleeve_pct, 1)}% stocks` : '', a.reit_pct > 0 ? `${num(a.reit_pct, 1)}% REITs` : ''].filter(Boolean).join(', ');
-  return [['Equity', `${num(a.equity_pct, 0)}%`, eqNote], ['Bonds', `${num(a.bond_pct, 0)}%`, 'ballast'], ...(a.gold_pct > 0 ? [['Gold', `${num(a.gold_pct, 0)}%`, 'no cash flow']] : [])];
+  const [eq, bd, gd] = wholeParts([a.equity_pct, a.bond_pct, a.gold_pct > 0 ? a.gold_pct : null]);
+  return [['Equity', `${num(eq, 0)}%`, eqNote], ['Bonds', `${num(bd, 0)}%`, 'ballast'], ...(a.gold_pct > 0 ? [['Gold', `${num(gd, 0)}%`, 'no cash flow']] : [])];
 }
 function model(d) {
   const a = d.allocation || {}, bl = d.blended || {}, w = bl.window || {};

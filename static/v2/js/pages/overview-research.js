@@ -629,7 +629,7 @@ export function scoreSection(c) {
         : scoreCard({ id: 'long', span: 'Long term: several years', empty: l && l.unavailable ? `The long-term score is not available: ${l.unavailable.replace(/\.$/, '')}.` : 'Working out the long-term score…', method: '' })}
     </div>
     ${notes.map((x) => html`<p class="osc-both">${x}</p>`)}
-    <p class="asof">50 is each model's neutral midpoint, where its inputs balance; it is not a measured break-even. Neither score is a probability, an expected return or a forecast, and neither has been shown to predict returns. Not a recommendation to buy or sell.</p></section>`;
+    <p class="asof">50 is each model's neutral midpoint, where its inputs balance; it is not a measured break-even. Neither score is a probability, an expected return or a forecast, and neither has been shown to predict returns. Compare ranks names on scores of its own, built only from inputs every compared name has, so its numbers for this company differ from these. Not a recommendation to buy or sell.</p></section>`;
 }
 
 /* ---------------- Optic's read: the short-term signals, assembled from the payload (Classic's renderOpticPulse) ---------------- */

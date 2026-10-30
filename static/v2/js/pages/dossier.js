@@ -292,7 +292,7 @@ function about(sym) {
   const lead = firstSentences(summary);
   const rev = fund ? '' : revenueLine();
   const ses = ((D.session || {}).session) || {};
-  const price = isNum(q.price) ? html`${money(q.price)}${isNum(q.change_pct) ? html`, <span class="${dir(q.change_pct)}">${signed(q.change_pct)}</span> ${ses.is_regular ? 'today' : 'at the last close'}` : ''}<small>US dollars; quotes delayed about 15 minutes</small>` : '';
+  const price = isNum(q.price) ? html`${money(q.price)}${isNum(q.change_pct) ? html`, <span class="${dir(q.change_pct)}">${signed(q.change_pct)}</span> ${ses.is_regular ? 'today' : 'at the last close'}` : ''}<small>US dollars; quotes delayed up to 15 minutes</small>` : '';
   const items = [
     ...(summary && summary.length > lead.length + 20 ? [[`${fund ? 'What it is' : 'What it does'}, in full`, html`<p>${summary}</p>${prof.summary_source && prof.summary_source.form_name ? html`<p class="asof">From its ${prof.summary_source.form_name}${prof.summary_source.filed ? `, filed ${fullDate(prof.summary_source.filed)}` : ''}.</p>` : ''}`, '']] : []),
     ...((news.articles || []).length ? [['Latest headlines', html`<ul class="plain">${news.articles.slice(0, 6).map((a) => html`<li><a href="${a.url}" target="_blank" rel="noopener">${clean(a.title)}</a> <span class="t-muted">${a.publisher}, published ${a.age_words || ''}${a.tone && (a.keywords || []).length ? `, ${a.tone} wording` : ''}</span></li>`)}</ul><a class="textlink" href="${hrefFor('news', sym)}">All headlines on News ${icon('out')}</a>`, news.overall_tone || '']] : []),
@@ -436,7 +436,8 @@ export async function render(main, route) {
   const sym = route.symbol, visit = ++VISIT;
   D = { sym, visit };
   const mine = () => live && D.visit === visit;
-  provideContext(() => ({ view: 'overview', ticker: sym, quote: D.quote, verdict: (D.ticker || {}).verdict, company: (D.ticker || {}).company, news: (D.ticker || {}).news, framework: D.framework, fair_value: D.fairValue, earnings: D.earnings, digest: D.digest, stage: D.stage && D.stage.available ? { stage: D.stage.stage, name: D.stage.name, transition: D.stage.transition_short } : null, thesis_check: thesisContext() }));
+  // data_as_of: when the company data was read, so the server's stale-context line can fire, as Classic's does (Phase 09, B11)
+  provideContext(() => ({ view: 'overview', ticker: sym, data_as_of: (D.ticker || {}).generated_at || null, quote: D.quote, verdict: (D.ticker || {}).verdict, company: (D.ticker || {}).company, news: (D.ticker || {}).news, framework: D.framework, fair_value: D.fairValue, earnings: D.earnings, digest: D.digest, stage: D.stage && D.stage.available ? { stage: D.stage.stage, name: D.stage.name, transition: D.stage.transition_short } : null, thesis_check: thesisContext() }));
   document.title = `${sym} Dossier, Optic`;
   if (lp) lp.stop();
   lp = livePrice(main, route.symbol, () => D, 'overview', { stage: () => stageFor(sym), onQuote: () => { if (mine()) refreshSimple(main, sym); } });

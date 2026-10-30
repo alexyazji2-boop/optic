@@ -552,7 +552,7 @@ def observed(kind, d, p, now=None):
     q, price = _quote(d)
     out = {"price": price, "quote_time": q.get("market_time") or q.get("as_of"),
            "source": q.get("source") or "Yahoo Finance",
-           "delay": "Prices from the free feed are about 15 minutes behind the exchange."}
+           "delay": "Prices from the free feed can be up to 15 minutes behind the exchange."}
     if kind in ("price_above", "price_below"):
         out["level"] = _num((p or {}).get("level"))
     elif kind in ("rsi_above", "rsi_below"):
@@ -630,7 +630,7 @@ def catalogue():
             "4:00 ET and once after the close, skipping exchange holidays, and keeps "
             "what fired for you here. As a guest, alerts live in this browser and are "
             "checked only while this page is open. Prices come from the free feed, "
-            "about 15 minutes behind the exchange. Optic shows alerts here; it does "
+            "up to 15 minutes behind the exchange. Optic shows alerts here; it does "
             "not send email or push notifications."
         ),
         "schedule": {"every_minutes": 30, "hours": "Mon to Fri, 9:30 to 4:00 ET, and once after the close",

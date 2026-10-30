@@ -94,8 +94,10 @@ export async function get(path, { ttl = 60000, force = false, onUpdate, timeout,
     if (now - hit.at < ttl) return hit.data;
     // stale: return it now, refresh in the background
     if (!hit.promise) {
+      // a refresh refused for want of a session drops the copy: a signed-out reader's answers are not served on
+      // (they were, indefinitely, after a 401; Phase 09 cache audit)
       hit.promise = request('GET', path, { timeout }).then((d) => { if (keep && !keep(d)) { hit.promise = null; return hit.data; } cache.set(path, { at: Date.now(), data: d }); if (onUpdate) onUpdate(d); return d; })
-        .catch(() => { hit.promise = null; });
+        .catch((e) => { hit.promise = null; if (e && (e.status === 401 || e.status === 403)) cache.delete(path); });
     }
     return hit.data;
   }

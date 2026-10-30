@@ -49,8 +49,14 @@ def _cached(key: str, ttl: float, build):
         val = build()
     except Exception:
         # Serve a stale value rather than nothing: a day-old dividend history is
-        # far more useful than an error, and none of this is time-critical.
-        return hit[1] if hit else None
+        # far more useful than an error, and none of this is time-critical. It says
+        # when it was read (Phase 09 cache audit, S31: it was served unlabelled, at
+        # any age).
+        if not hit:
+            return None
+        if isinstance(hit[1], dict):
+            return dict(hit[1], stale=True, read_at=datetime.fromtimestamp(hit[0], tz=timezone.utc).isoformat(timespec="seconds"))
+        return hit[1]
     _CACHE[key] = (now, val)
     return val
 

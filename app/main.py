@@ -40,6 +40,7 @@ from . import db as accounts_db
 from . import frontend
 from . import metrics as metrics_mod
 from .auth import admin as auth_admin
+from .auth import config as auth_config
 from .auth import deps as auth_deps
 from .auth import ratelimit as auth_ratelimit
 from . import feedback as feedback_mod
@@ -873,7 +874,7 @@ def _swing_snapshot(
         )
     else:
         data_caveat = (
-            "Quotes are delayed ~15 minutes. Greeks are computed locally via "
+            "Quotes are delayed up to 15 minutes, and each states its own trade time. Greeks are computed locally via "
             "Black-Scholes with a {} risk-free rate.".format(rate_info["label"])
         )
 
@@ -882,6 +883,11 @@ def _swing_snapshot(
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "data_source": PROVIDER.name,
         "data_caveat": data_caveat,
+        # the bars behind the technicals, when the feed did not answer and the last ones read stood in (Phase 09, S02)
+        "bars_stale_since": (getattr(hist, "attrs", None) or {}).get("stand_in_since"),
+        # the dividend carry every implied volatility and greek is solved with: a missing yield is priced as none, and
+        # says so rather than passing for a fact (Phase 09, the zero-fallback audit)
+        "carry": {"dividend_yield": div, "assumed_none": quote.get("dividend_yield") is None},
         "quote": quote,
         "verdict": call,
         "technicals": tech,
@@ -5500,13 +5506,14 @@ async def valuation_comps(ticker: str, peers: str = "") -> Dict[str, Any]:
 
 def _bars_body(sym: str, df, digits: int) -> Dict[str, Any]:
     """A frame of bars as the charts read them: one array per column."""
+    since = (getattr(df, "attrs", None) or {}).get("stand_in_since")
     df = df.dropna(subset=["Close"])
 
     def col(name, places=digits):
         if name not in df:
             return None
         return [None if v != v else round(float(v), places) for v in df[name]]
-    return {
+    out = {
         "available": True,
         "ticker": sym,
         "dates": [str(i.date()) for i in df.index],
@@ -5514,6 +5521,10 @@ def _bars_body(sym: str, df, digits: int) -> Dict[str, Any]:
         "close": col("Close"), "volume": col("Volume", 0),
         "bars": int(len(df)),
     }
+    if since:
+        # the feed did not answer, and these are the bars Optic last read: said, with when (Phase 09, S02)
+        out.update(stale=True, stale_since=since, stale_note="The feed did not answer just now; these are the bars Optic last read.")
+    return out
 
 
 @app.get("/api/weekly-bars/{ticker}")
@@ -8165,7 +8176,7 @@ def _ws_spot(sym: str) -> Optional[Dict[str, Any]]:
     if q.get("price") is None:
         return None
     return {"price": q.get("price"), "as_of": q.get("as_of"), "market_time": q.get("market_time"),
-            "source": "Yahoo Finance", "delayed_minutes": 15}
+            "source": "Yahoo Finance", "delayed_minutes": q.get("delayed_minutes")}
 
 
 def _ws_div(sym: str) -> Dict[str, Any]:
@@ -8462,4 +8473,12 @@ async def security_headers(request: Request, call_next: Any) -> Any:
     proto = (request.headers.get("x-forwarded-proto") or request.url.scheme or "").split(",")[0].strip()
     if proto == "https":
         h.setdefault("Strict-Transport-Security", "max-age=15552000")
+    # A signed-in reader's answers are theirs: no shared cache may keep one, and an answer for one cookie is never
+    # another's. Only /api/auth/me, the admin routes and the streams said so before (Phase 09 cache audit, H3).
+    if request.url.path.startswith("/api/"):
+        vary = h.get("Vary")
+        if not vary or "cookie" not in vary.lower():
+            h["Vary"] = (vary + ", Cookie") if vary else "Cookie"
+        if auth_config.COOKIE_NAME in request.cookies:
+            h.setdefault("Cache-Control", "private, no-store")
     return resp

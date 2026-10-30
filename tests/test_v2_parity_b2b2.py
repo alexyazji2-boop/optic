@@ -22,8 +22,9 @@ def test_freshness_comes_from_the_feed_never_from_the_refresh_rate(tmp_path):
     assert got["live"]["word"] == "live" and got["live"]["text"].startswith("Live, last trade "), "no delay stated and a trade 20 s old"
     assert got["stale"]["word"] == "quiet" and got["stale"]["text"].startswith("Last trade "), "no delay, but ten minutes since a trade: not live"
     assert got["stated"]["text"].startswith("Delayed 15 minutes, last trade "), "the feed's own number"
-    assert got["unknown"]["text"].startswith("Delayed about 15 minutes, last trade "), "the site's standing wording when the feed is silent"
-    assert got["bare"] == {"word": "delayed", "text": "Delayed about 15 minutes"}
+    # "up to 15 minutes" since Phase 09: the feed's quotes run from real time to 15 minutes behind (BUG-098)
+    assert got["unknown"]["text"].startswith("Delayed up to 15 minutes, last trade "), "the site's standing wording when the feed is silent"
+    assert got["bare"] == {"word": "delayed", "text": "Delayed up to 15 minutes"}
     assert got["older"]["word"] == "live", "the older market_time still counts"
     assert got["prefer"] == "a"
 
@@ -54,7 +55,7 @@ def test_the_chart_tab_ticks_live_and_never_under_the_readers_hand():
     assert "document.title = `${D.sym} ${num(p)}" in page
     assert "if (!(Number(price) > 0) || drag || tg || pointers.size) return false;" in pc, "nothing is drawn under a drag"
     assert "closes[N - 1] = price; Object.assign(ind, indicators());" in pc
-    assert "sessionFreshness(q).text" in frame and "Delayed about 15 minutes${last}" not in frame
+    assert "sessionFreshness(q).text" in frame and "Delayed up to 15 minutes${last}" not in frame
 
 
 def test_options_has_a_price_chart_whose_insider_arrows_open_the_filings():

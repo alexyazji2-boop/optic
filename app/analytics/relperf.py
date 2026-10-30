@@ -90,8 +90,10 @@ def _peer_closes(provider) -> pd.DataFrame:
         if hit and (time.time() - hit["at"]) < _TTL:
             return hit["df"]
     df = _closes(provider, universe())
-    with _lock:
-        _cache["closes"] = {"at": time.time(), "df": df}
+    # an empty answer (a refused download) is not kept for the full 90 minutes (Phase 09 cache audit, S30)
+    if df is not None and not getattr(df, "empty", True):
+        with _lock:
+            _cache["closes"] = {"at": time.time(), "df": df}
     return df
 
 

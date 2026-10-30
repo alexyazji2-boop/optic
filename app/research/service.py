@@ -263,7 +263,7 @@ def _missed(g: "_Gather", *names: str) -> str:
 
 SOURCES = {
     "statements": "SEC EDGAR XBRL company facts (us-gaap), each figure linked to its filing",
-    "prices": "Yahoo Finance daily bars and quote (delayed about 15 minutes in session)",
+    "prices": "Yahoo Finance daily bars and quote (delayed up to 15 minutes in session)",
     "estimates": "Yahoo Finance analyst consensus, estimate trend and surprise history",
     "options": "The options chain's at-the-money straddle on the first expiry after the release",
     "risk_free": "10-year US Treasury yield (FRED) for the valuation; 13-week bill for options",

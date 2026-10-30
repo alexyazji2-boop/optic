@@ -16,8 +16,8 @@ function row(r) {
   const mine = store.isFollowed(r.ticker);
   const out = r.reported && isNum(r.eps_reported);
   const eps = out ? html`EPS <b>${num(r.eps_reported)}</b>${isNum(r.eps_consensus) ? ` against ${num(r.eps_consensus)} expected` : ''}${r.result_short ? `: ${r.result_short.toLowerCase()}` : ''}`
-    : isNum(r.eps_consensus) ? html`${r.reported ? 'Expected EPS' : 'EPS'} <b>${num(r.eps_consensus)}</b>`
-    : html`<span class="t-muted">${r.reported ? 'Reported' : 'No EPS estimate'}</span>`;
+    : isNum(r.eps_consensus) ? html`${r.reported ? 'Expected EPS' : 'EPS'} <b>${num(r.eps_consensus)}</b>${r.reported ? html`<span class="t-muted">; the result is not in the feed yet</span>` : ''}`
+    : html`<span class="t-muted">${r.reported ? 'Reported; the result is not in the feed yet' : 'No EPS estimate'}</span>`;
   const rev = isNum(r.revenue_consensus) ? html`, revenue ${r.reported ? 'expected ' : ''}<b>$${compact(r.revenue_consensus)}</b>` : '';
   const when = r.session_label || (r.reported ? 'Time not known' : 'Time not set');
   return html`<li class="ew-row"><a class="ew-name" href="#/${encodeURIComponent(r.ticker)}/earnings"><b class="ew-tick">${r.ticker}</b> <span>${r.name || ''}</span></a>

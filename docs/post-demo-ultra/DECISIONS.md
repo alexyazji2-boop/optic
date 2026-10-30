@@ -570,3 +570,72 @@ first scored and 20 of 24 with these corrections. Round 3 led to three more: an 
 share costs $100", "If a company's shares cost $50") covers its paragraph and a following one that names nothing real;
 a window's name and a scale's ends are not figures. "For example" is not a marker: it introduces real figures too.
 
+**D-067 (Phase 09) Quotes are "delayed up to 15 minutes", and each says its own.** The feed's quotes run from real time to
+fifteen minutes behind. Yahoo states a delay per exchange: SPY 0, AAPL 15. Optic's per-quote words already came from
+the quote (the owner's safeguard of 2026-10-21: "Live" only when the feed states no delay and the trade is under two
+minutes old). The flat "delayed about 15 minutes" in some fifteen places contradicted that (BUG-098). Every general
+statement now says "up to 15 minutes": v2, Classic, the server's caveat, Milo's prompt and tool note, and the alert
+notes. The fallback for a quote that states no delay says it too. Option chains keep "about 15 minutes", their own
+feed's delay. The legal page's sentence is counsel's, so it was left as written and noted in COMPLIANCE_REVIEW.
+
+**D-068 (Phase 09) A dividend yield is the dividend rate over the price shown.** Yahoo's percent is worked at another
+moment's price and rounded to two places (BUG-136), so a stock's yield is now `dividendRate / price`, at Optic's
+own price. A fund has no rate and keeps the feed's figure, which the reconciliation matched to its last four
+distributions over the price (SPY 0.99%). The 20% plausibility cut stays.
+
+**D-069 (Phase 09) No reading without its inputs.** The RSI's warm-up is empty rather than 50 (BUG-137). A VWAP needs
+volume, and bars without it say there is no VWAP (BUG-138). A missing dividend yield is still priced as none, which
+is the only carry the pricer can use, but the payload and the options page now say it was assumed (BUG-151).
+
+**D-070 (Phase 09) The session against NYSE's own calendar.**
+- **Calendar:** the 2026 and 2027 holidays and half days match NYSE Group's published calendar (ICE's press release
+  and nyse.com, read 2026-10-30).
+- **Half days:** the 5 pm to 8 pm gap after a half day is "Closed after the half day".
+- **Labels:** a closed moment says why: the weekend, or "Closed for Thanksgiving Day" the evening before.
+- **Strip:** drawn in the day's own hours (BUG-139).
+- **Clock:** the clock change on 2026-11-01 was checked on both sides.
+
+**D-071 (Phase 09) The pattern study's figures come from the study.** The Patterns panel's sentences about the base-rate
+study were ported from Classic word for word, figures included, and the figures were no longer true (BUG-067). The
+words stay. The study's size, its confirmed and unconfirmed ranges, and the candle range and samples are now read
+from `/api/patterns/base-rates`, in both apps. With no rates, no figure is stated. "Confirmation is the whole
+difference" is said only while the confirmed range sits wholly above the unconfirmed one, and "a coin toss" only
+while every candle measures between 45% and 55%.
+
+**D-072 (Phase 09) One score reads one way on every page.** These are explanations, not merged models (BUG-011,
+BUG-064):
+- **Options:** the composite is named as the Overview's short-term reading, and 50 reads as the Overview reads it,
+  a neutral midpoint and not a measured break-even.
+- **Investing:** the long-term score is named as the Overview's long-term reading and coloured by its model's own
+  bands, in both apps.
+- **Two fair values:** the range from the company's own P/E history and the discounted cash flow each say the
+  other differs.
+- **Compare and the Overview:** each says its scores are its own. Compare's horizon scores and the Optic Score are
+  different models, and forcing them to agree would be wrong.
+
+**D-073 (Phase 09) One rounding rule per figure (BUG-012).**
+- **Parts of a whole** round by largest remainder, so they add up (`format.js` `wholeParts`).
+- **A change in prose** is written at the precision of the legend beside it.
+- **A server note** rounds from the unrounded share, not from a figure already rounded to one place. Python rounds
+  an exact half to even, and the page rounds it up.
+
+**D-074 (Phase 09) The cache audit's outcomes.** Twenty RISK rows. Eleven were checked by hand and fixed:
+- reader answers private (BUG-142);
+- stand-ins dated (BUG-143);
+- refusals not kept (BUG-144);
+- stale corporate actions labelled (BUG-145);
+- failed pulls not kept (BUG-146);
+- deleted holdings dropped (BUG-147);
+- the browser's refused refresh and memos (BUG-148);
+- Milo told the data's age (BUG-149);
+- the news length (BUG-150).
+
+Four are performance or hardening and go to Phase 10 (S01, S09, S16, S19). Five are recorded as accepted or latent,
+each with its reason (DATA_PATHWAYS.md). No cross-reader leak was found in reader-specific caches.
+
+**D-075 (Phase 09) How the reconciliation is done.** Optic's API on live delayed data is read against the providers' own
+responses, through a separate yfinance client and the SEC's companyfacts API, at the definition Optic states. Where
+a reference's definition differed, the reference was corrected and the change recorded. Where Optic's figure was
+wrong, the code was fixed. A figure with no reference is UNVERIFIED. First run: 248 rows, 9 failures (6 the
+reference's, 3 Optic's). Final run: 278 rows, 277 PASS, 1 UNVERIFIED (SPY has no earnings date).
+

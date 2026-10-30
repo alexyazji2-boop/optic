@@ -10,8 +10,16 @@ import * as FV from '../core/finviz.js';
 import { groupedBars, periodLines, hbars } from './bars.js';
 
 export const KINDS = ['revenue', 'margins', 'cashflow', 'segments', 'eps', 'reactions'];
+// One request per figure in flight, re-asked after five minutes; a failure is not kept for the page's life, so the
+// next answer that draws the figure asks again (Phase 09 cache audit, B04)
 const cache = new Map();
-const get = (url) => { if (!cache.has(url)) cache.set(url, api.get(url, { ttl: 300000, timeout: 60000 }).catch((e) => ({ __error: e }))); return cache.get(url); };
+const get = (url) => {
+  const hit = cache.get(url);
+  if (!hit || Date.now() - hit.at > 300000) {
+    cache.set(url, { at: Date.now(), p: api.get(url, { ttl: 300000, timeout: 60000 }).catch((e) => { cache.delete(url); return { __error: e }; }) });
+  }
+  return cache.get(url).p;
+};
 const key = (items) => html`<p class="legend-line fv-key">${items.map(([cls, name, hollow]) => html`<span><i class="sw ${cls}${hollow ? ' hollow' : ''}"></i>${name}</span>`)}</p>`;
 const table = (cols, rows) => html`<details class="more-inline milo-fig-data"><summary>View data</summary><div class="tscroll"><table class="t"><thead><tr>${cols.map((c) => html`<th scope="col">${c}</th>`)}</tr></thead><tbody>${rows.map((r) => html`<tr>${r.map((v, i) => (i ? html`<td>${v}</td>` : html`<th scope="row">${v}</th>`))}</tr>`)}</tbody></table></div></details>`;
 const missing = (why) => ({ missing: why });

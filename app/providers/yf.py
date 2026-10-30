@@ -1,6 +1,6 @@
 """yfinance adapter.
 
-Free, keyless, ~15-minute delayed. Good enough for swing-timeframe work:
+Free, keyless; quotes delayed up to 15 minutes, each with its own trade time and stated delay. Good enough for swing-timeframe work:
 full option chains with IV and open interest, daily/weekly OHLCV, headlines.
 Everything is cached briefly so a dashboard refresh doesn't re-hammer Yahoo.
 """
@@ -459,8 +459,22 @@ def _keep_good(key: str, value) -> None:
 
 
 def _stand_in(key: str, empty):
+    """The last good answer for `key`, up to STAND_IN_MAX_AGE old, or `empty`. A frame (or a board of them) comes back
+    tagged with when it was read, `attrs["stand_in_since"]`, so whatever shows it can say how old it is: it was
+    handed on as if current until Phase 09's cache audit (S02)."""
     got = _CACHE.get("good:" + key)
-    return got[1] if got is not None and time.time() - got[0] <= STAND_IN_MAX_AGE else empty
+    if got is None or time.time() - got[0] > STAND_IN_MAX_AGE:
+        return empty
+    since = datetime.fromtimestamp(got[0], tz=timezone.utc).isoformat(timespec="seconds")
+
+    def tag(frame):
+        if not isinstance(frame, pd.DataFrame):
+            return frame
+        out = frame.copy(deep=False)
+        out.attrs = dict(frame.attrs, stand_in_since=since)
+        return out
+    value = got[1]
+    return {k: tag(v) for k, v in value.items()} if isinstance(value, dict) else tag(value)
 
 
 def _empty_answer(key: str, empty) -> "_Failed":
@@ -742,6 +756,7 @@ class YFinanceProvider(MarketDataProvider):
     TTL_NEWS = 600
     # How long an empty news answer stands before the next read asks again, and
     # how long the last list that had stories in it stands in for one. See news().
+    NEWS_DEPTH = 36             # the longest list any caller asks for (news.analyse)
     TTL_NEWS_EMPTY = 120
     NEWS_STALE_FOR = 6 * 3600
     # Data that publishes on a calendar rather than on the tape.
@@ -907,6 +922,13 @@ class YFinanceProvider(MarketDataProvider):
             div_yield = None
             if raw_yield is not None and raw_yield >= 0:
                 div_yield = raw_yield / 100.0
+                # A year of dividends at the current rate over the price shown beside it, when the feed gives the
+                # rate: Yahoo works its own percent at another moment's price and rounds it to two places (KO read
+                # 2.31% beside 2.12 / 92.82 = 2.28%; Phase 09's reconciliation). A fund has no rate, and keeps the
+                # feed's trailing distribution yield.
+                rate = _f(info.get("dividendRate"))
+                if rate is not None and rate >= 0 and price:
+                    div_yield = rate / price
                 if div_yield > 0.20:
                     div_yield = None  # implausible; drop rather than mis-price
 
@@ -1806,6 +1828,9 @@ class YFinanceProvider(MarketDataProvider):
         def build() -> Dict[str, Any]:
             t = yf.Ticker(ticker)
             out: Dict[str, Any] = {}
+            # a part that raised (a refusal among them) is handed back, never kept as "no estimates" for an hour
+            # (Phase 09 cache audit, S08); a part that came back empty is a fact and is kept
+            broke: Optional[BaseException] = None
             for name, attr in (
                 ("eps_trend", "eps_trend"),
                 ("eps_revisions", "eps_revisions"),
@@ -1815,8 +1840,8 @@ class YFinanceProvider(MarketDataProvider):
             ):
                 try:
                     frame = getattr(t, attr)
-                except Exception:
-                    frame = None
+                except Exception as exc:
+                    frame, broke = None, exc
                 if frame is None or getattr(frame, "empty", True):
                     out[name] = None
                     continue
@@ -1824,7 +1849,7 @@ class YFinanceProvider(MarketDataProvider):
                     str(idx): {str(c): _f(frame.loc[idx, c]) for c in frame.columns}
                     for idx in frame.index
                 }
-            return out
+            return _failed(out, broke) if broke is not None else out
 
         return _cached("est:" + ticker, 3600, build)
 
@@ -1834,11 +1859,12 @@ class YFinanceProvider(MarketDataProvider):
         def build() -> Dict[str, Any]:
             t = yf.Ticker(ticker)
             out: Dict[str, Any] = {"targets": None, "ratings": []}
+            broke: Optional[BaseException] = None              # as estimates: a part that raised is not kept
             try:
                 targets = t.analyst_price_targets or {}
                 out["targets"] = {k: _f(v) for k, v in targets.items()}
-            except Exception:
-                pass
+            except Exception as exc:
+                broke = exc
             try:
                 frame = t.recommendations
                 if frame is not None and not frame.empty:
@@ -1853,9 +1879,9 @@ class YFinanceProvider(MarketDataProvider):
                         }
                         for _, row in frame.iterrows()
                     ]
-            except Exception:
-                pass
-            return out
+            except Exception as exc:
+                broke = exc
+            return _failed(out, broke) if broke is not None else out
 
         return _cached("analyst:" + ticker, 3600, build)
 
@@ -1985,6 +2011,7 @@ class YFinanceProvider(MarketDataProvider):
         def build() -> Dict[str, Any]:
             t = yf.Ticker(ticker)
             summary: Dict[str, Any] = {}
+            broke: Optional[BaseException] = None              # as estimates: a part that raised is not kept
             try:
                 frame = t.insider_purchases
                 if frame is not None and not frame.empty:
@@ -1995,8 +2022,8 @@ class YFinanceProvider(MarketDataProvider):
                             "shares": _f(row.get("Shares")),
                             "transactions": _f(row.get("Trans")),
                         }
-            except Exception:
-                summary = {}
+            except Exception as exc:
+                summary, broke = {}, exc
 
             trades: List[Dict[str, Any]] = []
             try:
@@ -2024,27 +2051,30 @@ class YFinanceProvider(MarketDataProvider):
                                 "detail": text[:120],
                             }
                         )
-            except Exception:
-                trades = []
+            except Exception as exc:
+                trades, broke = [], exc
             # newest first whatever order the frame came in, so the first rows are the latest filings
             trades.sort(key=lambda r: r["date"], reverse=True)
 
-            return {"summary_6m": summary, "transactions": trades[:limit]}
+            body = {"summary_6m": summary, "transactions": trades[:limit]}
+            return _failed(body, broke) if broke is not None else body
 
-        return _cached("insider:" + ticker, 3600, build)
+        # the window and the cap are in the key: the first caller's fixed both for an hour (S08)
+        return _cached("insider:{}:{}:{}".format(ticker, limit, days), 3600, build)
 
     def institutions(self, ticker: str, limit: int = 10) -> Dict[str, Any]:
         def build() -> Dict[str, Any]:
             t = yf.Ticker(ticker)
             breakdown: Dict[str, Any] = {}
+            broke: Optional[BaseException] = None              # as estimates: a part that raised is not kept
             try:
                 frame = t.major_holders
                 if frame is not None and not frame.empty:
                     col = frame.columns[0]
                     for idx, row in frame.iterrows():
                         breakdown[str(idx)] = _f(row[col])
-            except Exception:
-                breakdown = {}
+            except Exception as exc:
+                breakdown, broke = {}, exc
 
             holders: List[Dict[str, Any]] = []
             try:
@@ -2061,12 +2091,13 @@ class YFinanceProvider(MarketDataProvider):
                                 "pct_change": _f(row.get("pctChange")),
                             }
                         )
-            except Exception:
-                holders = []
+            except Exception as exc:
+                holders, broke = [], exc
 
-            return {"breakdown": breakdown, "top_holders": holders}
+            body = {"breakdown": breakdown, "top_holders": holders}
+            return _failed(body, broke) if broke is not None else body
 
-        return _cached("inst:" + ticker, self.TTL_FILED, build)
+        return _cached("inst:{}:{}".format(ticker, limit), self.TTL_FILED, build)
 
     # -------------------------------------------------------------- news
 
@@ -2090,14 +2121,17 @@ class YFinanceProvider(MarketDataProvider):
         is more likely the feed than the company out of the news.
         """
         key = "news:" + ticker
+        # One list per symbol, read at the longest length any caller asks for and cut to each caller's: the key has no
+        # length, so the first caller's (12 or 36) fixed every other's for ten minutes (Phase 09 cache audit, S10)
+        depth = max(int(limit), self.NEWS_DEPTH)
         try:
-            items = _cached(key, self.TTL_NEWS, lambda: self._gather_news(ticker, limit))
+            items = _cached(key, self.TTL_NEWS, lambda: self._gather_news(ticker, depth))
         except Exception:
             items = []
         now = time.time()
         if items:
             _NEWS_GOOD[key] = (now, items)
-            return items
+            return items[:limit]
         hit = _CACHE.get(key)
         if hit is not None and now - hit[0] >= self.TTL_NEWS_EMPTY:
             _CACHE.pop(key, None)
@@ -2105,7 +2139,7 @@ class YFinanceProvider(MarketDataProvider):
         if good is not None and now - good[0] < self.NEWS_STALE_FOR:
             # Marked with when it was fetched: shown as fresh, a six-hour-old
             # list read as this minute's news (app/news.py says so instead).
-            return HeldNews(good[1], good[0])
+            return HeldNews(good[1][:limit], good[0])
         return []
 
     def _gather_news(self, ticker: str, limit: int) -> List[Dict[str, Any]]:

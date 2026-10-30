@@ -1,0 +1,269 @@
+{
+ "available": true,
+ "horizons": [
+  5,
+  10,
+  21
+ ],
+ "benchmark": "SPY",
+ "universe_size": 43,
+ "history": "10y",
+ "min_sample": 20,
+ "generated_at": "2026-10-29T05:42:32.934825+00:00",
+ "method": "Every occurrence of each pattern across 43 names over 10y of daily bars. Structural patterns are entered at the confirmation close. The first bar a reader could have acted on, and measured against SPY over the identical dates AND against the ticker's own average bar, so a bullish pattern in a stock that outperformed for a decade has to beat that stock's own drift to count, without that second correction every pattern here measured as bullish, bearish ones included. Unconfirmed patterns are measured separately rather than dropped, because whether the geometry alone carries information is the question. Windows overlap, so no significance test is quoted: the standard error would be understated. A hit rate near 50% with an excess near zero is the honest description of most of these shapes.",
+ "patterns": {
+  "Bearish engulfing|candle": {
+   "sample": 3991,
+   "h21": {
+    "excess_mean_pct": 0.27,
+    "edge_mean_pct": -0.05,
+    "edge_median_pct": -0.06,
+    "drift_pct": 0.32,
+    "hit_rate": 0.505,
+    "n": 3991
+   }
+  },
+  "Bullish engulfing|candle": {
+   "sample": 3255,
+   "h21": {
+    "excess_mean_pct": 0.26,
+    "edge_mean_pct": -0.01,
+    "edge_median_pct": 0.0,
+    "drift_pct": 0.27,
+    "hit_rate": 0.487,
+    "n": 3255
+   }
+  },
+  "Doji|candle": {
+   "sample": 4834,
+   "h21": {
+    "excess_mean_pct": 0.16,
+    "edge_mean_pct": -0.11,
+    "edge_median_pct": -0.02,
+    "drift_pct": 0.26,
+    "hit_rate": null,
+    "n": 4834
+   }
+  },
+  "Double bottom|confirmed": {
+   "sample": 124,
+   "h21": {
+    "excess_mean_pct": -0.07,
+    "edge_mean_pct": -0.32,
+    "edge_median_pct": 0.17,
+    "drift_pct": 0.25,
+    "hit_rate": 0.512,
+    "n": 123
+   }
+  },
+  "Double bottom|unconfirmed": {
+   "sample": 124,
+   "h21": {
+    "excess_mean_pct": -0.69,
+    "edge_mean_pct": -0.97,
+    "edge_median_pct": -0.55,
+    "drift_pct": 0.29,
+    "hit_rate": 0.467,
+    "n": 122
+   }
+  },
+  "Double top|confirmed": {
+   "sample": 152,
+   "h21": {
+    "excess_mean_pct": 0.16,
+    "edge_mean_pct": -0.06,
+    "edge_median_pct": -0.13,
+    "drift_pct": 0.22,
+    "hit_rate": 0.52,
+    "n": 152
+   }
+  },
+  "Double top|unconfirmed": {
+   "sample": 260,
+   "h21": {
+    "excess_mean_pct": 0.29,
+    "edge_mean_pct": -0.14,
+    "edge_median_pct": 0.0,
+    "drift_pct": 0.42,
+    "hit_rate": 0.488,
+    "n": 260
+   }
+  },
+  "Dragonfly doji|candle": {
+   "sample": 4461,
+   "h21": {
+    "excess_mean_pct": 0.15,
+    "edge_mean_pct": -0.11,
+    "edge_median_pct": -0.09,
+    "drift_pct": 0.27,
+    "hit_rate": 0.464,
+    "n": 4461
+   }
+  },
+  "Evening star|candle": {
+   "sample": 3249,
+   "h21": {
+    "excess_mean_pct": 0.04,
+    "edge_mean_pct": -0.23,
+    "edge_median_pct": -0.03,
+    "drift_pct": 0.27,
+    "hit_rate": 0.503,
+    "n": 3249
+   }
+  },
+  "Gravestone doji|candle": {
+   "sample": 3920,
+   "h21": {
+    "excess_mean_pct": 0.13,
+    "edge_mean_pct": -0.09,
+    "edge_median_pct": -0.07,
+    "drift_pct": 0.22,
+    "hit_rate": 0.505,
+    "n": 3920
+   }
+  },
+  "Hammer|candle": {
+   "sample": 2806,
+   "h21": {
+    "excess_mean_pct": 0.5,
+    "edge_mean_pct": 0.22,
+    "edge_median_pct": 0.0,
+    "drift_pct": 0.28,
+    "hit_rate": 0.475,
+    "n": 2806
+   }
+  },
+  "Hanging man|candle": {
+   "sample": 2979,
+   "h21": {
+    "excess_mean_pct": 0.33,
+    "edge_mean_pct": 0.07,
+    "edge_median_pct": 0.0,
+    "drift_pct": 0.26,
+    "hit_rate": 0.484,
+    "n": 2979
+   }
+  },
+  "Head and shoulders|confirmed": {
+   "sample": 87,
+   "h21": {
+    "excess_mean_pct": 0.28,
+    "edge_mean_pct": -0.08,
+    "edge_median_pct": 0.0,
+    "drift_pct": 0.36,
+    "hit_rate": 0.494,
+    "n": 87
+   }
+  },
+  "Head and shoulders|unconfirmed": {
+   "sample": 73,
+   "h21": {
+    "excess_mean_pct": 1.05,
+    "edge_mean_pct": 0.65,
+    "edge_median_pct": 0.58,
+    "drift_pct": 0.4,
+    "hit_rate": 0.479,
+    "n": 73
+   }
+  },
+  "Inside bar|candle": {
+   "sample": 12529,
+   "h21": {
+    "excess_mean_pct": 0.3,
+    "edge_mean_pct": 0.02,
+    "edge_median_pct": 0.0,
+    "drift_pct": 0.28,
+    "hit_rate": null,
+    "n": 12529
+   }
+  },
+  "Inverse head and shoulders|confirmed": {
+   "sample": 81,
+   "h21": {
+    "excess_mean_pct": 0.67,
+    "edge_mean_pct": 0.38,
+    "edge_median_pct": 0.17,
+    "drift_pct": 0.29,
+    "hit_rate": 0.525,
+    "n": 80
+   }
+  },
+  "Inverse head and shoulders|unconfirmed": {
+   "sample": 48,
+   "h21": {
+    "excess_mean_pct": -2.67,
+    "edge_mean_pct": -2.96,
+    "edge_median_pct": -2.5,
+    "drift_pct": 0.29,
+    "hit_rate": 0.417,
+    "n": 48
+   }
+  },
+  "Inverted hammer|candle": {
+   "sample": 2646,
+   "h21": {
+    "excess_mean_pct": 0.47,
+    "edge_mean_pct": 0.25,
+    "edge_median_pct": 0.0,
+    "drift_pct": 0.21,
+    "hit_rate": 0.489,
+    "n": 2646
+   }
+  },
+  "Morning star|candle": {
+   "sample": 3384,
+   "h21": {
+    "excess_mean_pct": 0.08,
+    "edge_mean_pct": -0.19,
+    "edge_median_pct": -0.19,
+    "drift_pct": 0.28,
+    "hit_rate": 0.459,
+    "n": 3384
+   }
+  },
+  "Outside bar|candle": {
+   "sample": 9167,
+   "h21": {
+    "excess_mean_pct": 0.4,
+    "edge_mean_pct": 0.12,
+    "edge_median_pct": 0.0,
+    "drift_pct": 0.28,
+    "hit_rate": 0.489,
+    "n": 9167
+   }
+  },
+  "Shooting star|candle": {
+   "sample": 2474,
+   "h21": {
+    "excess_mean_pct": 0.19,
+    "edge_mean_pct": -0.06,
+    "edge_median_pct": -0.03,
+    "drift_pct": 0.24,
+    "hit_rate": 0.503,
+    "n": 2474
+   }
+  },
+  "Three black crows|candle": {
+   "sample": 7356,
+   "h21": {
+    "excess_mean_pct": 0.34,
+    "edge_mean_pct": 0.09,
+    "edge_median_pct": -0.06,
+    "drift_pct": 0.24,
+    "hit_rate": 0.504,
+    "n": 7356
+   }
+  },
+  "Three white soldiers|candle": {
+   "sample": 9741,
+   "h21": {
+    "excess_mean_pct": 0.27,
+    "edge_mean_pct": -0.02,
+    "edge_median_pct": -0.02,
+    "drift_pct": 0.29,
+    "hit_rate": 0.474,
+    "n": 9741
+   }
+  }
+ }
+}

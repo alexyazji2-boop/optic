@@ -320,10 +320,13 @@ def test_filed_fundamentals_are_not_refetched_hourly():
     # Bounded by the publication cadence, not chosen for speed: long enough to
     # be worth having, far short of the fortnight that is the shortest cadence.
     assert 2 <= hours <= 24, hours
-    for key in ("short:", "earnhist:", "fin:", "inst:"):
+    for key in ("short:", "earnhist:", "fin:"):
         # `gate=False` on the short interest, which reads the shared `.info`
         # scrape rather than making a request of its own.
         assert re.search(r'return _cached\("%s" \+ ticker, self\.TTL_FILED, build(, gate=False)?\)'
                          % key, yf), key
-    assert 'return _cached("insider:" + ticker, 3600, build)' in yf, (
+    # the holders' key carries its cap since Phase 09 (the first caller's fixed every other's)
+    assert 'return _cached("inst:{}:{}".format(ticker, limit), self.TTL_FILED, build)' in yf
+    # the window and cap are in the insiders key since Phase 09; the short TTL stays
+    assert 'return _cached("insider:{}:{}:{}".format(ticker, limit, days), 3600, build)' in yf, (
         "insider filings arrive continuously and must keep the short TTL")

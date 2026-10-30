@@ -883,8 +883,12 @@ function mountAnswerCharts(root) {
   root.querySelectorAll('[data-v2-milo-chart]:not([data-mounted])').forEach((fig) => {
     fig.dataset.mounted = '1';
     const sym = fig.dataset.v2MiloChart, span = fig.dataset.span, key = `${sym} ${span}`, plot = $('.milo-chart-plot', fig);
-    if (!chartCache.has(key)) chartCache.set(key, api.get(`/api/take-chart/${encodeURIComponent(sym)}?span=${encodeURIComponent(span)}`, { ttl: 600000, timeout: 30000 }).catch(() => null));
-    chartCache.get(key).then((tc) => {
+    // re-asked after ten minutes, and a failure is not kept (Phase 09 cache audit, B04)
+    const hit = chartCache.get(key);
+    if (!hit || Date.now() - hit.at > 600000) {
+      chartCache.set(key, { at: Date.now(), p: api.get(`/api/take-chart/${encodeURIComponent(sym)}?span=${encodeURIComponent(span)}`, { ttl: 600000, timeout: 30000 }).catch(() => { chartCache.delete(key); return null; }) });
+    }
+    chartCache.get(key).p.then((tc) => {
       if (!document.contains(plot)) return;
       const c = tc && tc.available ? tc.chart : null;
       if (!c || !(c.close || []).length) { plot.innerHTML = `<p class="t-muted">No price history for ${esc(sym)}.</p>`; keepEnd(); return; }

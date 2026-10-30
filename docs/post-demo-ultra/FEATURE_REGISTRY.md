@@ -61,6 +61,17 @@ removed with the workspace's handlers for controls nothing draws (D-021, SIMPLIC
 
 *Phase 07 updates:* Milo's chat route starts its response at once and names each step (`status` gathering, writing, then a tool by name), and the `done` event carries the answer's own timing (`StreamClock`, D-043). The panel draws an answer as it arrives: the finished part once, appended where drawing in pieces equals drawing whole (`settledEnd`), the arriving paragraph as markdown (`streamingHTML`), the chart once (D-044). New output follows only a reader at the end (D-045). New conversation and history wait for an answer with the reason, Close leaves it running, and the panel reopens where the reader was (D-046). Conversations stay in the browser, per account (D-047). The 14 stages and their measured times are in STREAMING_PIPELINE.md.
 
+*Phase 09 updates:*
+- **Delay wording:** quotes are said to be "delayed up to 15 minutes" everywhere, and each quote keeps its own trade time and stated delay.
+- **Dividend yield:** a stock's is its dividend rate over the price shown.
+- **Indicators:** the RSI's warm-up is empty, and VWAP needs volume.
+- **Market session:** the calendar matches NYSE's for 2026 and 2027; half days and holiday evenings read as closed, each saying why.
+- **Pattern study:** the panel's sentences state the study's own figures in both apps.
+- **Scores:** each score reads one way on every page, and the Overview and Compare say why their numbers differ.
+- **Freshness:** stale stand-ins, corporate actions and watchlist rows say their age.
+- **Privacy:** signed-in API answers are private, and deleted brokerage data leaves memory at once.
+- **Where it is written down:** the pathways, caches and the reconciliation are in DATA_PATHWAYS.md and RECONCILIATION.md.
+
 *Phase 08 updates:* Milo has seventeen tools. The four new ones are `lookup_company`, `get_price_history`, `get_filings` and `get_financials` (`app/milo_data.py`, from the milo-upgrade branch). Every tool result carries a `meta` freshness block, and quotes carry the trade's own time. The research pack, framework and chart levels follow the symbol the question names. Figures loaded for a symbol the question named have their own source, "Loaded for your question" (`[[src auto_loaded]]`), in both front ends. A plain definition fetches nothing before the model starts. The tool contracts and what Milo cannot reach are in MILO_TOOLS.md. The evaluation suite (`tests/milo_eval`, 137 cases) runs with every test run, and `tests/milo_eval/run_model.py` runs it against the real model when a key is accepted (BL-01).
 
 ## Part 2. Routes and features: the index

@@ -17,6 +17,19 @@ export function num(v, dp = 2) {
   return shown(Number(v), dp).toLocaleString('en-US', { minimumFractionDigits: dp, maximumFractionDigits: dp }).replace('-', MINUS);
 }
 
+/** Parts of one whole, rounded so they add up to the whole's own rounding (largest remainder): 93.5 and 6.5 show as
+ *  94 and 6, never 94 and 7 (Retirement's split read 94% and 7%, BUG-012). Missing parts stay missing. */
+export function wholeParts(values, dp = 0) {
+  const k = 10 ** dp, vals = values.map((v) => (isNum(v) ? Number(v) * k : null)), have = vals.filter((v) => v !== null);
+  if (!have.length) return values.map(() => null);
+  const target = Math.round(have.reduce((a, b) => a + b, 0)), floors = vals.map((v) => (v === null ? null : Math.floor(v)));
+  let left = target - floors.filter((v) => v !== null).reduce((a, b) => a + b, 0);
+  const order = vals.map((v, i) => [i, v === null ? -1 : v - Math.floor(v)]).filter(([, r]) => r >= 0).sort((a, b) => b[1] - a[1]);
+  const out = floors.slice();
+  for (const [i] of order) { if (left <= 0) break; out[i] += 1; left -= 1; }
+  return out.map((v) => (v === null ? null : v / k));
+}
+
 export function signed(v, dp = 2, unit = '%') {
   if (!isNum(v)) return 'n/a';
   const n = shown(Number(v), dp);

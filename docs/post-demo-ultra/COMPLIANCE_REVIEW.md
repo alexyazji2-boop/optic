@@ -306,3 +306,11 @@ advice policy allows, or let a reader get a friendlier answer by claiming to be 
 
 The real model's answers at each level, through Optic's own path, are not tested: the key on this machine is
 refused (BL-01).
+
+## 9. Market data statements (Phase 09)
+
+| # | Finding | Where | State |
+|---|---|---|---|
+| 1 | The app now says quotes are "delayed up to 15 minutes", and each quote states its own trade time and the delay its feed states (D-067). The legal pages' sentence still reads "Quotes delayed about 15 minutes during the session" (`app/legal.py`, the `delayed` entry). Yahoo's quotes for some listings are real-time last sales, and for others are stated as 15 minutes late. | `app/legal.py`; every other statement changed in Phase 09 | Left as written: whether the legal wording should match, and how a delayed display must be labelled under the CTA and UTP plans' delayed-data policies (source-foundation's research notes, 2026-10-16), are questions for counsel |
+| 2 | A quote the feed marks as not delayed and under two minutes old can read "Live" on a Dossier (the owner's safeguard of 2026-10-21, unchanged). Whether Optic may show such a price as live under Yahoo's terms is a licensing question, not an engineering one. | `static/v2/js/core/marketTime.js` `sessionFreshness` | For counsel and the owner |
+

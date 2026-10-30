@@ -427,7 +427,8 @@ def test_the_response_varies_on_origin(accounts):
     a cache that missed that would hand one origin a decision about another."""
     res = client.post("/api/feedback", json={"message": "vary"},
                       headers={"Origin": "https://evil.example"})
-    assert res.headers["vary"] == "Origin"
+    # (every /api/ answer also varies on the cookie since Phase 09's cache audit)
+    assert "Origin" in [v.strip() for v in res.headers["vary"].split(",")]
     assert "access-control-allow-origin" not in res.headers
 
 

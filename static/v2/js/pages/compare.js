@@ -178,7 +178,8 @@ function perf(c) {
   const p = c.performance || {}, s = p.series || [];
   if (s.length < 2) return html`<section class="section"><h2 class="t-h2">How they have moved</h2><p class="quiet">Not enough shared history to draw.</p></section>`;
   const sorted = s.slice().sort((a, b) => b.change_pct - a.change_pct), best = sorted[0], worst = sorted[sorted.length - 1];
-  const verb = (x) => (isNum(x.change_pct) ? `${x.ticker} ${x.change_pct >= 0 ? 'rose' : 'fell'} ${num(Math.abs(x.change_pct), 0)}%` : `${x.ticker}'s move is not reported`);
+  // one decimal, as the legend beside it ("rose 2%" sat over "+1.5%", BUG-012)
+  const verb = (x) => (isNum(x.change_pct) ? `${x.ticker} ${x.change_pct >= 0 ? 'rose' : 'fell'} ${num(Math.abs(x.change_pct), 1)}%` : `${x.ticker}'s move is not reported`);
   return html`<section class="section" aria-labelledby="cp-h"><h2 class="t-h2" id="cp-h">How they have moved</h2>
     <p class="lead-line">${verb(best)} over the period; ${verb(worst)}.</p>
     <p class="section-sub">Each close divided by its close on ${fullDate(p.start)}, times 100, to ${fullDate(p.end)}: ${p.sessions} sessions, one point a week. Price only: dividends are not included.</p>

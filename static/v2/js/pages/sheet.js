@@ -60,7 +60,7 @@ function page1(F) {
     <header class="sh-head"><div><p class="sh-kicker">Research sheet</p><h1>${id.name} <span class="sh-sym">${id.sym}</span></h1>
         <p class="sh-meta">${[id.exchange, id.currency].filter(Boolean).join(', ')}${b.industry ? `. ${[b.industry, b.sector].filter(Boolean).join(', ')}` : ''}</p></div>
       <div class="sh-px"><b>${isNum(id.price) ? money(id.price) : 'No price'}</b>${isNum(id.change_pct) ? html` <span>${signed(id.change_pct)}</span>` : ''}
-        <p>${id.observed ? `Quote at ${etStamp(id.observed)}, delayed about 15 minutes` : 'Quote time not reported'}${id.session ? `. ${id.session}` : ''}</p></div></header>
+        <p>${id.observed ? `Quote at ${etStamp(id.observed)}, delayed up to 15 minutes` : 'Quote time not reported'}${id.session ? `. ${id.session}` : ''}</p></div></header>
     <h2>The business ${tag('reported')}</h2><p>${b.summary || html`<span class="sh-na">No description reported.</span>`}${isNum(b.market_cap) ? ` Market value ${usd(b.market_cap)}.` : ''}</p>
     <h2>Key financials ${tag('reported')}</h2>
     ${fi ? html`<p class="sh-sub">${fi.fiscal || 'Latest fiscal year'}${fi.period ? `, the year to ${fullDate(fi.period)}` : ''}</p>
