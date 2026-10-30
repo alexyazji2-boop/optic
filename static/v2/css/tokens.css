@@ -44,6 +44,9 @@
      so a line never reads as a candle, and each line is named at its right end, so none is told apart by colour alone.
      On ivory every one clears 4.5:1 against the panel, so the end labels read as text. */
   --c-ind-ema9: var(--c-ink); --c-ind-ema21: #2e7613; --c-ind-ema50: #c4283a; --c-ind-vwap: #7b4fd6;
+  /* WaveTrend's pane (2026-10-30): WT1 blue, WT2 a lighter cyan; on ivory 4.7:1 and 3.5:1 against the page, on
+     charcoal 6.1:1 and 12.5:1, so both clear 3:1 for a line in either theme */
+  --c-ind-wt1: #3a6db5; --c-ind-wt2: #1a8ca1;
   /* charts */
   --c-chart-ink: var(--c-ink);
   --c-chart-grid: #e3dccd;
@@ -126,6 +129,7 @@
   --c-line: #363430; --c-line-2: #272623;
   --c-gold: #d4b144; --c-gold-ink: #e3c76f;
   --c-pos: #4cc38a; --c-neg: #f07a66; --c-warn: #e7b25a; --c-proposed: #b9a0ff; --c-focus: #f0d77c; --c-ind-ema21: #7bd64f; --c-ind-ema50: #ff5a63; --c-ind-vwap: #b28cff;
+  --c-ind-wt1: #5b8fe0; --c-ind-wt2: #7fdcec;
   --c-chart-grid: #2a2925; --c-area-top: rgba(212, 177, 68, .20); --c-cone-a: rgba(212, 177, 68, .30); --c-cone-edge: #e3c76f;
   --c-tip-bg: #eceae4; --c-tip-ink: #0b0b0a; --c-scrim: rgba(0, 0, 0, .6); --c-on-gold: #0b0b0a;
   color-scheme: dark;
@@ -138,6 +142,7 @@
     --c-line: #363430; --c-line-2: #272623;
     --c-gold: #d4b144; --c-gold-ink: #e3c76f;
     --c-pos: #4cc38a; --c-neg: #f07a66; --c-warn: #e7b25a; --c-proposed: #b9a0ff; --c-focus: #f0d77c; --c-ind-ema21: #7bd64f; --c-ind-ema50: #ff5a63; --c-ind-vwap: #b28cff;
+    --c-ind-wt1: #5b8fe0; --c-ind-wt2: #7fdcec;
     --c-chart-grid: #2a2925; --c-area-top: rgba(212, 177, 68, .20); --c-cone-a: rgba(212, 177, 68, .30); --c-cone-edge: #e3c76f;
     --c-tip-bg: #eceae4; --c-tip-ink: #0b0b0a; --c-scrim: rgba(0, 0, 0, .6); --c-on-gold: #0b0b0a;
     color-scheme: dark;

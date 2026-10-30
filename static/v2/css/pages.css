@@ -900,6 +900,15 @@ table.chw-table { font-size: var(--t-sm); } table.chw-table th { padding: 6px 4p
 /* the classic studies (C11; ui/studies.js, pages/chart-studies.js) */
 .ch-imenu { max-height: min(72vh, 660px); overflow-y: auto; overscroll-behavior: contain; }
 .ch-snote:empty { display: none; }
+/* what followed WaveTrend's signals, under the chart while its pane is on (ui/wavetrend.js) */
+#ch-wt:empty { display: none; }
+#ch-wt { flex-basis: 100%; width: 100%; }
+.ch-wt { margin-top: var(--s-4); }
+.ch-wt .ch-wt-h { margin: 0 0 var(--s-1); }
+.ch-wt-find { margin: 0 0 var(--s-2); max-width: 72ch; }
+.ch-wt-t td b { font-weight: 600; }
+.ch-wt-t td { white-space: nowrap; }   /* three lines a cell; a phone scrolls the table sideways rather than wrap each to eight */
+.ch-wt-t td small { display: block; margin-top: 2px; font-size: var(--t-xs); color: var(--c-ink-3); }
 .pc .zn { stroke-width: 1; } .pc .zn.sup { fill: color-mix(in srgb, var(--c-neg) 12%, transparent); stroke: color-mix(in srgb, var(--c-neg) 45%, transparent); } .pc .zn.dem { fill: color-mix(in srgb, var(--c-pos) 12%, transparent); stroke: color-mix(in srgb, var(--c-pos) 45%, transparent); } .pc .zn.brk { stroke-dasharray: 4 3; fill-opacity: .5; }
 .pc .lv.acc { stroke: var(--c-cat-2); stroke-dasharray: 2 4; } .pc .lv-t.acc { fill: var(--c-cat-2); }
 .pc .sl { stroke-width: 1.2; } .pc .sl.mid { stroke-dasharray: 5 4; } .pc .sl.kc { stroke: var(--c-cat-3); } .pc .sl.dc { stroke: var(--c-cat-2); } .pc .sl.rc { stroke: var(--c-cat-1); } .pc .sl.vw { stroke: var(--c-ind-vwap); stroke-width: 1.6; }
@@ -911,6 +920,13 @@ table.chw-table { font-size: var(--t-sm); } table.chw-table th { padding: 6px 4p
 /* the panes from /api/indicators (C19): the first line gold, the second blue and dashed; ADX's +DI green, -DI red */
 .pc .ov.ip0 { stroke: var(--c-gold); } .pc .ov.ip1 { stroke: var(--c-cat-1); stroke-dasharray: 4 3; } .pc .ov.ip2 { stroke: var(--c-cat-3); stroke-dasharray: 4 3; }
 .pc .ov.ipu { stroke: var(--c-pos); stroke-width: 1.1; } .pc .ov.ipd { stroke: var(--c-neg); stroke-width: 1.1; } .pc .g.ref { stroke-dasharray: 3 3; }
+/* WaveTrend (ui/wavetrend.js): WT1 a blue area against zero with its edge, WT2 a lighter cyan line, the levels dashed and
+   zero solid, a dot at each cross (green up, red down, larger when strong), each divergence a line between its two WT2
+   pivots, dotted on to the bar where it became known */
+.pc .wt-a { fill: var(--c-ind-wt1); fill-opacity: .22; } .pc .ov.wt1 { stroke: var(--c-ind-wt1); stroke-width: 1; } .pc .ov.wt2 { stroke: var(--c-ind-wt2); stroke-width: 1.5; }
+.pc .g.wt-lv { stroke-dasharray: 3 3; } .pc .g.wt-z { stroke: var(--c-ink-3); stroke-opacity: .45; }
+.pc .wt-x.u { fill: var(--c-pos); } .pc .wt-x.d { fill: var(--c-neg); } .pc .wt-x.big { stroke: var(--c-plane); stroke-width: 1; }
+.pc .wt-dv { stroke-width: 1.6; } .pc .wt-dv.u { stroke: var(--c-pos); } .pc .wt-dv.d { stroke: var(--c-neg); } .pc .wt-dk { stroke-width: 1.2; stroke-dasharray: 1 2; }
 .pc .pane-t { paint-order: stroke; stroke: var(--c-plane); stroke-width: 3px; stroke-linejoin: round; }   /* a pane's name over its lines stays readable */
 /* candle colours: MA Trend, then Weinstein stages (4 classes, so the reader's up and down colours give way) */
 .pc .wick.tint.mt1, .pc .body.tint.mt1, .pc .wick.tint.st2, .pc .body.tint.st2 { stroke: var(--c-pos); fill: var(--c-pos); }

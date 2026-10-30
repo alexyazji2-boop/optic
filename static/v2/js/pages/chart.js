@@ -68,13 +68,13 @@ const OVERLAYS = [['ma', 'MA 20, 50, 200'], ['ema', 'EMA 9, 21, 50'], ['cloud921
   ['stages', 'Weinstein stages'], ['matrend', 'MA Trend Identifier']];
 // where each group of the Indicators menu starts
 const OV_GROUP = { ma: 'Averages and bands', fib: 'Levels', msb: 'Structure and events', stages: 'Candle colours' };
-// the last five from /api/indicators (C19, 2026-10-19), under the classic catalogue's names
-const PANES = [['volume', 'Volume'], ['rsi', 'RSI 14'], ['macd', 'MACD 12, 26, 9'], ['tso', 'Trend Strength Oscillator'], ['adx', 'ADX and DI'], ['stochastic', 'Stochastic'], ['obv', 'On-balance volume'], ['mfi', 'Money flow index'], ['rs', 'Relative strength line']];
+// five from /api/indicators (C19, 2026-10-19), under the classic catalogue's names; WaveTrend from its own route
+const PANES = [['volume', 'Volume'], ['rsi', 'RSI 14'], ['macd', 'MACD 12, 26, 9'], ['tso', 'Trend Strength Oscillator'], ['adx', 'ADX and DI'], ['stochastic', 'Stochastic'], ['obv', 'On-balance volume'], ['mfi', 'Money flow index'], ['rs', 'Relative strength line'], ['wavetrend', 'WaveTrend']];
 
 let D = {}, V = {}, live = true, mainEl = null, chart = null, unsub = null, phoneMq = null;
 
 function readView() {
-  const d = { interval: '60', range: '6M', style: 'candles', session: 'regular', read: false, layers: false, dock: [], overlays: { ma: true, ema: false, bb: false, fib: false, sr: false, gex: false, msb: false, events: true, ins: true, cloud921: false, cloud2150: false, keltner: false, donchian: false, sec: false, vwap: false, zones: false, accum: false, trends: false, vbp: false, sessions: false, stages: false, matrend: false }, panes: { volume: true, rsi: false, macd: false, tso: false, adx: false, stochastic: false, obv: false, mfi: false, rs: false }, msbK: 5 };
+  const d = { interval: '60', range: '6M', style: 'candles', session: 'regular', read: false, layers: false, dock: [], overlays: { ma: true, ema: false, bb: false, fib: false, sr: false, gex: false, msb: false, events: true, ins: true, cloud921: false, cloud2150: false, keltner: false, donchian: false, sec: false, vwap: false, zones: false, accum: false, trends: false, vbp: false, sessions: false, stages: false, matrend: false }, panes: { volume: true, rsi: false, macd: false, tso: false, adx: false, stochastic: false, obv: false, mfi: false, rs: false, wavetrend: false }, msbK: 5 };
   try { const s = JSON.parse(localStorage.getItem(VIEW_KEY) || 'null'); if (s && typeof s === 'object') { Object.assign(d, s, { overlays: Object.assign(d.overlays, s.overlays || {}), panes: Object.assign(d.panes, s.panes || {}) }); } } catch (e) { /* private */ }
   if (!INTERVALS.some((x) => x.key === d.interval)) d.interval = '60';   // a first visit opens on hourly bars, as in the classic app
   try { d.snap = localStorage.getItem(SNAP_KEY) !== 'off'; } catch (e) { d.snap = true; }   // on, as it always was in the classic app
@@ -336,7 +336,7 @@ const countOf = (keys) => keys.filter((k) => V.overlays[k]).length;
 // what each is also called, for Find (Classic's indicator search): a reader types RSI, moving average or volume profile
 const ALSO = { filings: 'sec edgar filings 10-k 10-q 8-k annual quarterly report proxy', ma: 'moving average sma simple', ema: 'exponential moving average', cloud921: 'ema cloud', cloud2150: 'ema cloud', bb: 'bollinger bands volatility', keltner: 'atr channel', donchian: 'breakout channel high low', sec: 'linear regression', vwap: 'volume weighted average price',
   fib: 'fibonacci retracement', sr: 'support resistance levels', gex: 'gamma exposure call wall put wall flip', zones: 'supply demand', accum: 'accumulation', trends: 'trendlines', vbp: 'volume profile point of control', msb: 'market structure break swing', events: 'earnings reports', ins: 'insider buying selling form 4', sessions: 'session dividers intraday',
-  stages: 'stage analysis weinstein', matrend: 'moving average trend', volume: 'volume', rsi: 'relative strength index momentum', macd: 'moving average convergence divergence momentum', tso: 'trend strength oscillator', adx: 'directional movement di', stochastic: 'stoch oscillator', obv: 'on balance volume', mfi: 'money flow index', rs: 'relative strength line versus spy' };
+  stages: 'stage analysis weinstein', matrend: 'moving average trend', volume: 'volume', rsi: 'relative strength index momentum', macd: 'moving average convergence divergence momentum', tso: 'trend strength oscillator', adx: 'directional movement di', stochastic: 'stoch oscillator', obv: 'on balance volume', mfi: 'money flow index', rs: 'relative strength line versus spy', wavetrend: 'wave trend lazybear momentum oscillator divergence' };
 const paneRow = (k) => { const l = (PANES.find((x) => x[0] === k) || [])[1]; return html`<label class="check ${cannot(k) ? 'is-off' : ''}"><input type="checkbox" data-v2-ch-pane="${k}" ${V.panes[k] && !cannot(k) ? 'checked' : ''} ${cannot(k) ? 'disabled' : ''}> <span>${l}</span> <small class="t-muted">pane</small></label>`; };
 /** The overlays and panes whose name, key or other names hold every word of `q`. */
 export function findIndicators(q) {
@@ -470,6 +470,7 @@ function paintChart(over) {
   syncHeight();
   const n = $('#ch-note', mainEl); if (n) n.textContent = clean(D.note || '');
   const sn = $('#ch-snote', mainEl); if (sn) sn.textContent = cmpNote().concat(ST.notes(ticked()), filingNote()).join(' ');
+  paintEvidence();
   const dr = $('#ch-draw', mainEl); if (dr) { const on = !!compareOpt(); dr.classList.toggle('is-cmp', on); dr.inert = on; }
 }
 // The plot fills the window under the toolbar, less the reading line above it (40 until it is drawn) and the
@@ -595,7 +596,7 @@ function paint() {
         <div class="ch-wrail" id="ch-wrail">${W.rail(shown(), isPhone())}${miloButton(html`<span class="sr">Ask Milo about the ${D.sym} chart</span>`, { context: `${D.sym} Dossier, Chart`, symbol: D.sym, cls: 'chw-milo' })}</div>
         <div class="ch-side" id="ch-side" ${V.read || shown().length ? '' : 'hidden'}><aside class="ch-read" id="ch-read" aria-labelledby="cr-h" ${V.read ? '' : 'hidden'}></aside></div></div>
       <div class="ch-foot"><p class="asof" id="ch-note"></p><p class="asof ch-snote" id="ch-snote" aria-live="polite"></p>
-        <p class="asof">${matchMedia('(pointer: coarse)').matches ? 'Pinch to zoom, drag sideways or the strip under the chart to move along, tap a bar to read it. Tap a drawing to select it, then drag it or a handle.' : 'Wheel or pinch to zoom, drag the chart or the strip under it to move along, arrows to read each bar, plus and minus to zoom. Click a drawing to select it; drag it to move it, or drag a handle to move one point.'}</p></div>
+        <p class="asof">${matchMedia('(pointer: coarse)').matches ? 'Pinch to zoom, drag sideways or the strip under the chart to move along, tap a bar to read it. Tap a drawing to select it, then drag it or a handle.' : 'Wheel or pinch to zoom, drag the chart or the strip under it to move along, arrows to read each bar, plus and minus to zoom. Click a drawing to select it; drag it to move it, or drag a handle to move one point.'}</p><div id="ch-wt"></div></div>
     </section>`);
   applyColours(); paintChart(); paintRead(); syncSide();
 }
@@ -672,7 +673,9 @@ function paintExtras() { if (chart) chart.set(extras()); }
 // draw yet, or its reading.
 const ticked = () => Object.assign({}, V.overlays, V.panes);
 function studies() { ST.need(ticked()); return ST.data(ticked()); }
-function paintStudies() { if (chart) chart.set(Object.assign({ overlays: V.overlays }, ST.data(ticked()))); const n = $('#ch-snote', mainEl); if (n) n.textContent = cmpNote().concat(ST.notes(ticked()), filingNote()).join(' '); }
+function paintStudies() { if (chart) chart.set(Object.assign({ overlays: V.overlays }, ST.data(ticked()))); const n = $('#ch-snote', mainEl); if (n) n.textContent = cmpNote().concat(ST.notes(ticked()), filingNote()).join(' '); paintEvidence(); }
+// what followed WaveTrend's signals, under the chart while its pane is on (chart-studies.js has the answer)
+function paintEvidence() { const e = $('#ch-wt', mainEl); if (e) draw(e, ST.evidence(ticked())); }
 const phase = () => ((D.session || {}).prices || {}).phase || ((D.session || {}).session || {}).phase || (marketSession() || {}).phase || null;
 
 export async function render(main, route) {

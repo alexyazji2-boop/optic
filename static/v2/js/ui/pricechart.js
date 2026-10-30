@@ -19,6 +19,7 @@ import { num, esc, compact, signed } from '../core/format.js';
 import { makeAxis } from './timeaxis.js';
 import { drawOn } from './drawon.js';
 import { tsoSeries, maTrendSeries, volumeByPrice, sessionStarts, nyDate, TSO_LEVEL } from './studies.js';
+import { paneSvg as wavePane, summaryLine as waveSummary } from './wavetrend.js';
 import { TOOL_POINTS, channel, fibExt, pitchfork, riskReward, positionSize, measure, snap, moved, segDist } from './drawings.js';
 import { icon } from './icons.js';
 
@@ -245,7 +246,7 @@ export function createPriceChart(host, opts) {
   function computeLayout() {
     W = Math.max(300, host.clientWidth); H = S.height || Math.round(Math.max(340, Math.min(620, W * 0.55)));
     const panes = []; const r = 56, l = 4;
-    const extra = (S.panes.rsi ? 1 : 0) + (S.panes.macd ? 1 : 0) + (S.panes.tso ? 1 : 0) + SERVER_PANES.filter((k) => S.panes[k]).length;
+    const extra = (S.panes.rsi ? 1 : 0) + (S.panes.macd ? 1 : 0) + (S.panes.tso ? 1 : 0) + SERVER_PANES.filter((k) => S.panes[k]).length + (S.panes.wavetrend ? 1 : 0);
     // each pane a sixth of the height, or a share of half of it once there are more than three
     const paneH = extra ? Math.round(H * Math.min(0.17, 0.5 / extra)) : 0;
     const priceH = H - 26 - extra * (paneH + 8);
@@ -258,6 +259,7 @@ export function createPriceChart(host, opts) {
     if (S.panes.macd) { panes.push({ id: 'macd', y0: y, y1: y + paneH }); y += paneH + 8; }
     if (S.panes.tso) { panes.push({ id: 'tso', y0: y, y1: y + paneH }); y += paneH + 8; }
     SERVER_PANES.filter((k) => S.panes[k]).forEach((k) => { panes.push({ id: k, y0: y, y1: y + paneH, server: true }); y += paneH + 8; });
+    if (S.panes.wavetrend) { panes.push({ id: 'wavetrend', y0: y, y1: y + paneH }); y += paneH + 8; }
     const span = Math.max(1, to - from + 1), bw = (W - l - r) / span;
     return { l, r, panes, bw, X: (i) => l + (i - from + 0.5) * bw, I: (x) => Math.round((x - l) / bw - 0.5 + from) };
   }
@@ -514,6 +516,11 @@ export function createPriceChart(host, opts) {
         let mx = 100; for (let i = from; i <= to; i++) { const v = ind.tso[i]; if (Number.isFinite(v)) mx = Math.max(mx, Math.abs(v)); }
         const Y = (v) => p.y0 + (1 - (v + mx) / (2 * mx)) * (p.y1 - p.y0);
         o += `<line class="g" x1="0" x2="${W - layout.r}" y1="${Y(TSO_LEVEL)}" y2="${Y(TSO_LEVEL)}"/><line class="g" x1="0" x2="${W - layout.r}" y1="${Y(-TSO_LEVEL)}" y2="${Y(-TSO_LEVEL)}"/><line class="g z" x1="0" x2="${W - layout.r}" y1="${Y(0)}" y2="${Y(0)}"/><text class="ax" x="${W - layout.r + 6}" y="${Y(TSO_LEVEL) + 4}">+50</text><text class="ax" x="${W - layout.r + 6}" y="${Y(-TSO_LEVEL) + 4}">−50</text><text class="pane-t" x="6" y="${p.y0 + 12}">TSO 14, 14, 5</text><path class="ov tso" d="${path(ind.tso, X, Y)}"/>`;
+      } else if (p.id === 'wavetrend') {
+        // WaveTrend (ui/wavetrend.js), from /api/indicators/wavetrend laid on these bars, or why it has nothing to draw
+        const wt = (S.studies || {}).wavetrend;
+        if (!wt || !wt.wt1) { o += `<text class="pane-t" x="6" y="${p.y0 + 12}">WaveTrend: ${esc(wt ? wt.reason : 'loading')}</text>`; return; }
+        o += wavePane(p, wt, { from, to, X, right: W - layout.r, cross, clip: `${CLIP}-wt` });
       } else {
         const m = ind.macd; let mx = 0; for (let i = from; i <= to; i++) [m.line[i], m.signal[i], m.hist[i]].forEach((v) => { if (Number.isFinite(v)) mx = Math.max(mx, Math.abs(v)); });
         const Y = (v) => p.y0 + (1 - (v + (mx || 1)) / (2 * (mx || 1))) * (p.y1 - p.y0);
@@ -588,7 +595,7 @@ export function createPriceChart(host, opts) {
   // buttons at the foot of the price, and a remove button at the top right of each pane (rebuilt only when the
   // panes change, so a button is never replaced under the pointer).
   let placedSig = '', paneSig = '';
-  const PANE_LABEL = Object.assign({ vol: 'Volume', rsi: 'RSI 14', macd: 'MACD 12, 26, 9', tso: 'Trend Strength Oscillator' }, PANE_NAMES);
+  const PANE_LABEL = Object.assign({ vol: 'Volume', rsi: 'RSI 14', macd: 'MACD 12, 26, 9', tso: 'Trend Strength Oscillator', wavetrend: 'WaveTrend' }, PANE_NAMES);
   function place2() {
     const panes = layout.panes, foot = (panes.find((q) => q.id === 'vol') || panes[0]).y1, sig = [W, H, panes.map((q) => `${q.id}:${q.y0}`).join(',')].join('|');
     const ps2 = S.onRemove ? panes.slice(1).map((q) => q.id).join(',') : '';
@@ -717,7 +724,8 @@ export function createPriceChart(host, opts) {
     const last = breaks[breaks.length - 1];
     const msb = S.overlays.msb ? (last ? ` ${breaks.length} market structure break${breaks.length === 1 ? '' : 's'} in view; the latest is ${last.dir === 'bull' ? 'bullish' : 'bearish'}, on ${fmtT(bars[last.at].t)} through ${num(last.price)}.` : ' No market structure break in view.') : '';
     const ins = (flags.length ? ` ${flags.reduce((a, g) => a + g.items.length, 0)} insider trades marked.` : '') + (fileMarks.length ? ` ${fileMarks.length} SEC filing${fileMarks.length === 1 ? '' : 's'} marked.` : '');
-    return `${S.label || 'Price'}, ${to - from + 1} bars from ${fmtT(a.t)} to ${fmtT(b.t)}: from ${num(a.c)} to ${num(b.c)}, ${ch >= 0 ? 'up' : 'down'} ${num(Math.abs(ch), 1)} percent.${msb}${ins} Left and right read each bar, up and down stretch the price scale, plus and minus zoom, M measures.`;
+    const wt = S.panes.wavetrend && (S.studies || {}).wavetrend, wts = wt && wt.wt1 ? waveSummary(wt, from, to) : '';
+    return `${S.label || 'Price'}, ${to - from + 1} bars from ${fmtT(a.t)} to ${fmtT(b.t)}: from ${num(a.c)} to ${num(b.c)}, ${ch >= 0 ? 'up' : 'down'} ${num(Math.abs(ch), 1)} percent.${msb}${ins}${wts} Left and right read each bar, up and down stretch the price scale, plus and minus zoom, M measures.`;
   }
   const redraw = () => { if (!raf) raf = requestAnimationFrame(draw); };
 

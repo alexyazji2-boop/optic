@@ -77,6 +77,7 @@ from .analytics import compare as compare_mod
 from .analytics import correlation as correlation_mod
 from .analytics import global_markets as global_mod
 from .analytics import indicators as indicators_mod
+from .analytics import wavetrend as wavetrend_mod
 from .analytics import patterns as patterns_mod
 from .analytics import fair_value as fair_value_mod
 from .analytics import pe_history as pe_history_mod
@@ -6380,6 +6381,74 @@ async def indicator_panel(
         elif weekly:
             out["interval"] = "1wk"
         out["ticker"] = sym
+        out["generated_at"] = datetime.now(timezone.utc).isoformat()
+        return out
+    return await _run(build)
+
+
+@app.get("/api/indicators/wavetrend/{ticker}")
+async def wavetrend_panel(
+    ticker: str,
+    range_: str = Query("10y", alias="range", description="A daily or weekly period; ten years unless the chart asks"),
+    intraday: str = Query("", description="An /api/intraday range key, e.g. 5 or 60"),
+    window: str = Query("", description="That size's window, as /api/intraday takes it"),
+    session: str = Query("", description="That chart's session, as /api/intraday takes it"),
+    weekly: bool = Query(False, description="Compute on weekly bars"),
+    channel_len: int = Query(wavetrend_mod.CHANNEL_LEN, ge=2, le=200, description="The EMA of the typical price"),
+    avg_len: int = Query(wavetrend_mod.AVG_LEN, ge=2, le=200, description="The EMA that smooths it into WT1"),
+    ma_len: int = Query(wavetrend_mod.MA_LEN, ge=1, le=50, description="The simple average of WT1 that is WT2"),
+    ob1: float = Query(wavetrend_mod.OVERBOUGHT[0], gt=0, le=300, description="First overbought level"),
+    ob2: float = Query(wavetrend_mod.OVERBOUGHT[1], gt=0, le=300, description="Second overbought level"),
+    os1: float = Query(wavetrend_mod.OVERSOLD[0], ge=-300, lt=0, description="First oversold level"),
+    os2: float = Query(wavetrend_mod.OVERSOLD[1], ge=-300, lt=0, description="Second oversold level"),
+    pivot_lookback: int = Query(wavetrend_mod.PIVOT_LOOKBACK, ge=1, le=20,
+                                description="Bars either side of a WT2 pivot"),
+) -> Dict[str, Any]:
+    """WaveTrend on the chart's own bars (app/analytics/wavetrend.py): WT1, WT2 and their difference, the
+    crosses, the divergences and what followed them.
+
+    Its own route rather than an id of /api/indicators, whose answers are lines and a reading: this one carries
+    signals and a measurement of them. The bar parameters are that route's, read the same way, so the pane is
+    bar for bar with the candles. Daily bars default to ten years, the pattern base rates' history, because the
+    measurement is only as good as the number of signals in the window; the pane draws the bars in view.
+    """
+    sym = ticker.upper().strip()
+    if not re.fullmatch(r"[A-Z0-9.\-^=]{1,12}", sym):
+        raise HTTPException(status_code=400, detail="Not a ticker symbol.")
+    if ob2 < ob1 or os2 > os1:
+        raise HTTPException(status_code=400,
+                            detail="The second levels are the outer ones: ob2 at or above ob1, os2 at or below os1.")
+
+    def build() -> Dict[str, Any]:
+        spec = intraday_spec(intraday, window, session) if intraday else None
+        if intraday and not spec:
+            return {"available": False,
+                    "reason": "Unknown intraday range {!r}. Expected one of: {}.".format(
+                        intraday, ", ".join(sorted(INTRADAY_SPECS)))}
+        if not spec and range_ not in wavetrend_mod.PERIODS:
+            return {"available": False,
+                    "reason": "Unknown range {!r}. Expected one of: {}.".format(
+                        range_, ", ".join(sorted(wavetrend_mod.PERIODS)))}
+        if spec:
+            hist = YF_PROVIDER.intraday_history(sym, period=spec["period"], interval=spec["interval"],
+                                                prepost=spec["prepost"])
+        else:
+            # the feed the chart's bars came from, as /api/indicators chooses it: the brokerage feed would read
+            # `max` as a year
+            source = PROVIDER if range_ != "max" else YF_PROVIDER
+            hist = source.history(sym, period=range_, interval="1wk" if weekly else "1d")
+        if hist is None or hist.empty:
+            if spec:
+                return {"available": False, "ticker": sym,
+                        "reason": "No intraday bars came back for {}.".format(sym)}
+            raise HTTPException(status_code=404, detail="No price data found for '{}'.".format(sym))
+        out = wavetrend_mod.build(hist, channel_len=channel_len, avg_len=avg_len, ma_len=ma_len,
+                                  overbought=(ob1, ob2), oversold=(os1, os2), lookback=pivot_lookback,
+                                  intraday=bool(spec))
+        out["ticker"] = sym
+        out["interval"] = spec["interval"] if spec else ("1wk" if weekly else "1d")
+        if spec:
+            out["intraday"] = intraday
         out["generated_at"] = datetime.now(timezone.utc).isoformat()
         return out
     return await _run(build)

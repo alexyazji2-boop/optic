@@ -6,12 +6,15 @@
 //   Weinstein stages: /api/stage, the stage of every week; a daily or intraday bar takes its last completed week's;
 //   auto trend lines: /api/trendlines, fitted on a year of daily bars, drawn on daily and weekly charts;
 //   accumulation zones: /api/longterm, from twelve years of weekly bars;
-//   supply and demand: the ticker payload the page already has.
+//   supply and demand: the ticker payload the page already has;
+//   WaveTrend: /api/indicators/wavetrend, on these very bars as the panes above are, with its crosses,
+//     divergences and what followed them (ui/wavetrend.js draws the pane and the block under the chart).
 // None of them calls a model. EMA clouds, MA Trend, TSO, volume by price and session dividers need nothing:
 // ui/pricechart.js works them out from the bars.
 import * as api from '../core/api.js';
 import { num, clean } from '../core/format.js';
 import { alignLines, stageOfBars, trendSegments, weekMonday } from '../ui/studies.js';
+import { onBars as waveOnBars, evidenceBlock } from '../ui/wavetrend.js';
 
 /* What each one is, for the Indicators menu: the classic app's own descriptions where it has one. */
 export const HELP = {
@@ -34,6 +37,7 @@ export const HELP = {
   mfi: 'RSI computed on price times volume rather than price alone, 0 to 100.',
   rs: 'Price divided by SPY, rebased to 100 at the first bar. Rising means doing better than the index, which can also mean losing less.',
   matrend: 'Colours each candle by where it opened and closed against the 10, 20, 50, 100 and 200-bar simple averages: green above all five, red below all five, grey between. While it is on it colours the candles in place of Stages.',
+  wavetrend: 'LazyBear\'s oscillator: the typical price against its 9-bar EMA in units of its average distance from it, smoothed over 12 bars (WT1, the area), with a 3-bar average of that (WT2, the line). Dots mark where they cross, larger beyond 53 either side of zero; a line joins two pivots where price and WT2 disagree. Under the chart, what followed each signal on these bars, against entries at random.',
 };
 const SERVER = ['keltner', 'donchian', 'sec', 'vwap'];
 export const SERVER_PANES = ['adx', 'stochastic', 'obv', 'mfi', 'rs'];
@@ -79,6 +83,14 @@ export function need(on) {
       .then((r) => { if (box.indKey === k) box.ind = r; }, (e) => { if (box.indKey === k) box.ind = { available: false, reason: e.message || 'did not load' }; })
       .finally(() => { if (S === box && box.indKey === k && P) P.repaint(); });
   }
+  // WaveTrend on the same bars as the panes above; daily bars ask for nothing and get the route's ten years
+  if (on.wavetrend && P.bars() && S.wtKey !== barsQuery()) {
+    const q = barsQuery(), box = S;
+    S.wtKey = q; S.wt = undefined;
+    api.get(`/api/indicators/wavetrend/${enc}${q ? `?${q}` : ''}`, { ttl: 300000, timeout: 60000 })
+      .then((r) => { if (box.wtKey === q) box.wt = r; }, (e) => { if (box.wtKey === q) box.wt = { available: false, reason: e.message || 'did not load' }; })
+      .finally(() => { if (S === box && box.wtKey === q && P) P.repaint(); });
+  }
   if (on.stages) get('stage', `/api/stage?symbol=${enc}`, { ttl: 3600000, timeout: 45000 });
   if (on.trends) get('tl', `/api/trendlines/${enc}`, { ttl: 600000, timeout: 45000 });
   if (on.accum) get('lt', `/api/longterm/${enc}`, { ttl: 3600000, timeout: 60000 });
@@ -106,6 +118,10 @@ export function data(on) {
   if (ind && ind.available !== false && S.indKey === serverKey(on)) {
     st.lines = once('lines', [ind, bars], () => Object.fromEntries(SERVER.filter((k) => (ind.indicators || {})[k] && ind.indicators[k].available !== false).map((k) => [k, alignLines(ind.dates, ind.indicators[k].lines, bars)])));
     st.panes = once('panes', [ind, bars], () => panesFrom(ind, bars));
+  }
+  if (on.wavetrend && S.wt && S.wtKey === barsQuery()) {
+    const w = S.wt;
+    st.wavetrend = w.available === false ? { reason: w.reason || 'not available for these bars' } : once('wavetrend', [w, bars], () => waveOnBars(w, bars));
   }
   if (on.stages && S.stage && S.stage.available === true) {
     st.stages = once('stages', [S.stage, bars], () => stageOfBars(bars, S.stage.history, { weekly: P.weekly(), intraday: !!iv.intraday }));
@@ -135,5 +151,12 @@ export function notes(on) {
   if (on.accum) { if (S.lt === undefined) out.push('Loading the accumulation zones.'); else if (!S.lt.holding) out.push(`Accumulation zones: ${S.lt.reason || 'not available for this symbol'}.`); }
   if (on.zones) { const t = P.t(); if (!t) out.push('Loading supply and demand.'); else if (!(((t.patterns || {}).zones) || []).some((z) => !z.out_of_horizon)) out.push('Supply and demand: no zone within reach of the price.'); }
   if (on.sessions && !iv.intraday) out.push('Session dividers are drawn on intraday bars.');
+  if (on.wavetrend) { const w = S.wt; if (w === undefined || S.wtKey !== barsQuery()) out.push('Loading WaveTrend.'); else if (w.available === false) out.push(`WaveTrend: ${clean(w.reason || 'not available for these bars')}.`); }
   return out;
+}
+
+/** What followed WaveTrend's signals on these bars, under the chart while its pane is on and its answer is in. */
+export function evidence(on) {
+  if (!P || !P.bars() || !on.wavetrend || !S.wt || S.wt.available === false || S.wtKey !== barsQuery()) return '';
+  return evidenceBlock(S.wt);
 }
