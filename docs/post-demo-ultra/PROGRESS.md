@@ -4,13 +4,13 @@ Read this and [REQUIREMENTS_MATRIX.md](REQUIREMENTS_MATRIX.md) before changing a
 
 ## Current state
 
-- **Current phase:** 09 Market data integrity (next). Phases 01 to 08 complete (reports below).
+- **Current phase:** 10 Performance, security, accessibility and polish (next). Phases 01 to 09 complete (reports below).
 - **Branch / worktree:** `post-demo-ultra` in `~/Optic/wt-ultra`, from `9fa0f36` (tag `post-demo-ultra-baseline`). Upstream unset; nothing pushed or deployed.
-- **Commits:** `fce3e71` setup; `8040f8a` and `795325a` Phase 01; `d4a2b1a` Phase 01 report; `ce60b16` Phase 02 policy module (WIP); `c6724ff` Milo portfolio privacy (cherry-pick of 2236205); `a76916b` Phase 02; `6f2e814` its commit id; `7b14b56` Phase 03; `2f6a548` its commit id; `381a018` Phase 04; `b07e181` its commit id; `e64a5ee` Phase 05; `448e633` its commit id; `0448900` Phase 06; `1652e14` its commit id; `874c109` Phase 07; `f26af09` its commit id; `ab5a2ae` Phase 08.
+- **Commits:** `fce3e71` setup; `8040f8a` and `795325a` Phase 01; `d4a2b1a` Phase 01 report; `ce60b16` Phase 02 policy module (WIP); `c6724ff` Milo portfolio privacy (cherry-pick of 2236205); `a76916b` Phase 02; `6f2e814` its commit id; `7b14b56` Phase 03; `2f6a548` its commit id; `381a018` Phase 04; `b07e181` its commit id; `e64a5ee` Phase 05; `448e633` its commit id; `0448900` Phase 06; `1652e14` its commit id; `874c109` Phase 07; `f26af09` its commit id; `ab5a2ae` Phase 08; `0268f7f` its commit id; `17024f0` Phase 09.
 - **Local server:** launch config `optic-ultra` (:8250, stand-in model :8251 from `tools/milo_standin_ultra.py`, which adds an `ADVISE` keyword that makes the answer break the policy and, since Phase 05, writes a Sector Read and a portfolio briefing in their writers' shapes; data `~/Optic/ultra-data`, sandbox brokerage, jobs off, no real model key). Seed password in `~/Optic/ultra-data/seed-output.txt` (never print it). The server does not reload Python: restart it after editing server code. The desktop app stops it when the session is paused; start it again with preview_start.
 - **Working folder (outside the repo):** `~/Optic/work/post-demo-ultra-2026-10-29/` (tools/, crawl1/, dead/, sheets/, baseline/, milo/, registry/, phase02/ to phase08/; the five-level proxy run in phase05/proxy/; Phase 08's stand-in rounds in phase08/proxy, proxy-r2 and proxy-r3, and advice set C in phase08/).
 - **Resource rule:** at most two subagents at a time (DECISIONS D-007). One proxy answer costs about 180,000 agent tokens.
-- **Next action:** Phase 09 (market data integrity): read `directives/09-market-data-integrity.md`, the R09 rows (R09-01 to R09-09) and the register's rows for Phase 09 (BUG-011, BUG-012, BUG-013, BUG-064, BUG-067, BUG-098). Phase 08's tools: `python -m tests.milo_eval.run` (the suite's report), `tools/phase08_checks.py` (E01 to E03 on live data), `tools/phase08_proxy.py` (stand-in rounds: requests, results, score), `tools/phase08_setc.py` and `tools/phase08_advice_regression.py` (the advice check on every set and corpus against a baseline copy). Phase 11 owes a fresh advice set for the widened check (BUG-132).
+- **Next action:** Phase 10 (performance, security, accessibility and polish): read `directives/10-performance-security-a11y-polish.md`, the R10 rows and the register's rows for Phase 10 (BUG-006, BUG-031, BUG-037, BUG-112, BUG-113 and the rest marked 10), and the cache audit's S01, S09, S16 and S19 (DATA_PATHWAYS.md). Phase 09's tools: `tools/phase09_recon.py` (the reconciliation), `tools/phase09_recon_doc.py` (its document), `tools/phase09_scenarios.py` (scenarios A to H). Phase 11 owes a fresh advice set for the widened check (BUG-132).
 
 ## Phase 09 report (directive 09; reporting format of directive 00)
 
@@ -91,7 +91,7 @@ Read this and [REQUIREMENTS_MATRIX.md](REQUIREMENTS_MATRIX.md) before changing a
      PARTIAL).
    - **Not reconciled:** news timestamps, reported EPS and margins, and currency conversion (R09-02).
    - **For counsel:** the legal page's delay sentence (COMPLIANCE_REVIEW section 9).
-10. **Commit and next phase.** COMMIT_LINE; next is Phase 10.
+10. **Commit and next phase.** Committed as `17024f0` on `post-demo-ultra` (not pushed, not deployed); next is Phase 10.
 
 ## Phase 08 report (directive 08; reporting format of directive 00)
 
