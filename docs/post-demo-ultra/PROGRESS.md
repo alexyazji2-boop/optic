@@ -4,13 +4,13 @@ Read this and [REQUIREMENTS_MATRIX.md](REQUIREMENTS_MATRIX.md) before changing a
 
 ## Current state
 
-- **Current phase:** 07 Milo streaming and conversation (next). Phases 01 to 06 complete (reports below).
+- **Current phase:** 08 Milo grounding and evaluation (next). Phases 01 to 07 complete (reports below).
 - **Branch / worktree:** `post-demo-ultra` in `~/Optic/wt-ultra`, from `9fa0f36` (tag `post-demo-ultra-baseline`). Upstream unset; nothing pushed or deployed.
-- **Commits:** `fce3e71` setup; `8040f8a` and `795325a` Phase 01; `d4a2b1a` Phase 01 report; `ce60b16` Phase 02 policy module (WIP); `c6724ff` Milo portfolio privacy (cherry-pick of 2236205); `a76916b` Phase 02; `6f2e814` its commit id; `7b14b56` Phase 03; `2f6a548` its commit id; `381a018` Phase 04; `b07e181` its commit id; `e64a5ee` Phase 05; `448e633` its commit id; `0448900` Phase 06.
+- **Commits:** `fce3e71` setup; `8040f8a` and `795325a` Phase 01; `d4a2b1a` Phase 01 report; `ce60b16` Phase 02 policy module (WIP); `c6724ff` Milo portfolio privacy (cherry-pick of 2236205); `a76916b` Phase 02; `6f2e814` its commit id; `7b14b56` Phase 03; `2f6a548` its commit id; `381a018` Phase 04; `b07e181` its commit id; `e64a5ee` Phase 05; `448e633` its commit id; `0448900` Phase 06; `1652e14` its commit id; `874c109` Phase 07.
 - **Local server:** launch config `optic-ultra` (:8250, stand-in model :8251 from `tools/milo_standin_ultra.py`, which adds an `ADVISE` keyword that makes the answer break the policy and, since Phase 05, writes a Sector Read and a portfolio briefing in their writers' shapes; data `~/Optic/ultra-data`, sandbox brokerage, jobs off, no real model key). Seed password in `~/Optic/ultra-data/seed-output.txt` (never print it). The server does not reload Python: restart it after editing server code. The desktop app stops it when the session is paused; start it again with preview_start.
-- **Working folder (outside the repo):** `~/Optic/work/post-demo-ultra-2026-10-29/` (tools/, crawl1/, dead/, sheets/, baseline/, milo/, registry/, phase02/ to phase06/; the five-level proxy run in phase05/proxy/).
+- **Working folder (outside the repo):** `~/Optic/work/post-demo-ultra-2026-10-29/` (tools/, crawl1/, dead/, sheets/, baseline/, milo/, registry/, phase02/ to phase07/; the five-level proxy run in phase05/proxy/).
 - **Resource rule:** at most two subagents at a time (DECISIONS D-007). One proxy answer costs about 180,000 agent tokens.
-- **Next action:** Phase 07 (Milo streaming, New Chat, Close): read `directives/07-milo-streaming.md`, the R07 rows, and the Milo findings in registry A (A16 to A20). The Phase 06 browser tools are `tools/phase06_checks.py` (requests held or failed in the browser) and `tools/phase06_accuracy.py`.
+- **Next action:** Phase 08 (Milo grounding and a 100+ case evaluation): read `directives/08-milo-knowledge-eval.md`, the R08 rows, BUG-092 and the Phase 05 proxy notes (DECISIONS D-034). The Phase 07 tools are `tools/phase07_checks.py` (28 browser checks of the panel) and `tools/phase07_measure.py` (latency and rendering); the stand-in model has STREAMTEST, STREAMSLOW, STREAMCHART and SLOWLY.
 
 ## Phase 07 report (directive 07; reporting format of directive 00)
 
@@ -90,7 +90,7 @@ Read this and [REQUIREMENTS_MATRIX.md](REQUIREMENTS_MATRIX.md) before changing a
    - **For the owner:** whether to fold the tool row or header on small phones (D-048), and whether server-side history is
      wanted (D-047).
    - **Blocked:** the real model's latency (BL-01). Every answer now logs its timing for when one runs.
-10. **Commit and next phase.** COMMIT_LINE; next is Phase 08.
+10. **Commit and next phase.** `874c109`; next is Phase 08.
 
 ## Phase 06 report (directive 06; reporting format of directive 00)
 
@@ -231,3 +231,6 @@ Read this and [REQUIREMENTS_MATRIX.md](REQUIREMENTS_MATRIX.md) before changing a
 
 ### 2026-10-29 Phase 06
 - Dossier pipeline mapped; one analysis area swapping a rule-written Simple Analysis (five levels) and the sectioned Advanced Analysis on the density setting; visit tokens; the swap's fade and place; the Simple Analysis following the header's price; the search focus race fixed; 16 browser checks, accuracy 10 of 10, Phase 03's 27 scenarios; suite green; committed (not pushed).
+
+### 2026-10-29 Phase 07
+- The fourteen stages traced and measured before and after; the route starts at once and times every answer; the answer drawn as it arrives, a finished paragraph once, the chart once, the arriving paragraph as markdown; following the end left to the reader; New conversation and history wait for an answer and say why, Close leaves it running, reopening restores the place; history local and per account (documented); the limit said, pasted images attached; small phones given room; Classic unchanged; 28 of 28 browser checks (20 before), suite green; committed (not pushed).
