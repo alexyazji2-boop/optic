@@ -35,7 +35,8 @@ def test_a_refused_key_is_not_enabled(monkeypatch):
     monkeypatch.setattr(main.auth_deps, "is_admin", lambda request: False)
     guest = TestClient(main.app).get("/api/health").json()
     assert guest["assistant"] == {"enabled": False, "hint": "the people running this terminal have not switched me on."}
-    assert "commit" not in guest and "accounts" not in guest and "uptime_seconds" not in guest
+    assert "accounts" not in guest and "source" not in guest["assistant"]
+    assert "commit" in guest and "uptime_seconds" in guest          # public again, for publish.sh (BUG-181)
 
 
 def test_an_accepted_or_unchecked_key_stays_enabled(monkeypatch):

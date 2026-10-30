@@ -351,7 +351,10 @@ export async function render(main, route) {
   // marked again while the page is open, every two minutes in the trading day and ten outside it, paused while hidden:
   // they were taken on load and after a trade only (BUG-073)
   if (remark) remark.stop();
-  remark = poll(async (current) => { if (live && current() && book.open.length && !marking) await mark(); }, { every: 120000, closed: 600000 });
+  // not while the reader is typing on the page: a re-mark redraws it, which took text not yet saved and moved the focus
+  // into the ticket's field of the same name (BUG-182, Phase 11); the next round marks it
+  const editing = () => { const a = document.activeElement; return !!a && !!mainEl && mainEl.contains(a) && (/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName) || a.isContentEditable); };
+  remark = poll(async (current) => { if (live && current() && book.open.length && !marking && !editing()) await mark(); }, { every: 120000, closed: 600000 });
   main.addEventListener('input', (e) => {
     const ev = e.target.dataset.v2PtEvText;
     if (ev !== undefined) { ticket.evidence[Number(ev)].text = e.target.value; return; }

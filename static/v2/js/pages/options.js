@@ -72,7 +72,9 @@ function saveBudget(v) {
 /* ---------------- readings ---------------- */
 function readings(sym) {
   const t = D.t || {}, vs = t.vol_surface || {}, g = t.gex || {}, e = D.earn || {};
-  if (!D.t) return html`<section class="readings" aria-label="What options are pricing">${skeleton('lines', 2, 'Loading what options are pricing')}</section>`;
+  // a failed load is said once, with Try again, by the page's "Options data" line: this skeleton stayed for good under
+  // it (BUG-193, Phase 11), as paintMore's already did not
+  if (!D.t) return D.tErr ? '' : html`<section class="readings" aria-label="What options are pricing">${skeleton('lines', 2, 'Loading what options are pricing')}</section>`;
   const im = (e.implied && e.implied.available) ? e.implied : null;
   const r30 = P.row30(vs);
   const spot = (D.quote || t.quote || {}).price;

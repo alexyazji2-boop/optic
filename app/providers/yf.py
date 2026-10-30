@@ -1327,11 +1327,18 @@ class YFinanceProvider(MarketDataProvider):
             dates = cal.get("Earnings Date") if isinstance(cal, dict) else None
             if not dates:
                 return None
-            first = dates[0] if isinstance(dates, (list, tuple)) else dates
-            try:
-                return str(pd.Timestamp(first).date())
-            except Exception:
-                return None
+            # the first date not yet past: Yahoo keeps a report that has happened until it posts the next one, and KO's
+            # of 2026-10-27 was shown as its next report three days later (BUG-201, Phase 11)
+            today = session_mod.market_today()
+            ahead = []
+            for d in (dates if isinstance(dates, (list, tuple)) else [dates]):
+                try:
+                    day = pd.Timestamp(d).date()
+                except Exception:
+                    continue
+                if day >= today:
+                    ahead.append(day)
+            return str(min(ahead)) if ahead else None
 
         return _cached("earn:" + ticker, 3600, build, gate=False)
 

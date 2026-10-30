@@ -72,6 +72,16 @@ removed with the workspace's handlers for controls nothing draws (D-021, SIMPLIC
 - **Privacy:** signed-in API answers are private, and deleted brokerage data leaves memory at once.
 - **Where it is written down:** the pathways, caches and the reconciliation are in DATA_PATHWAYS.md and RECONCILIATION.md.
 
+*Phase 11 updates* (the adversarial audit's fixes):
+- **`/api/health`:** gives everyone the commit and uptime again, for `publish.sh` and the crashloop check (D-095).
+- **Feeds:** a feed host is held back only when it did not answer or refused (D-096).
+- **Logos:** a logo refused for the hour's budget is not cached; text typed in the palette asks for no logo.
+- **Home's desk note line:** says "not ready yet" and "switched off" apart from "could not be produced" (D-097).
+- **The Brokerage scorecard:** "Inputs and method" writes its inputs out instead of printing JSON.
+- **The Paper Desk:** does not re-mark while the reader types.
+- **Milo:** a report stays with the conversation it was written in.
+- **Search:** an answer is kept only for the directory it was ranked on.
+
 *Phase 10 updates:*
 - **Guards:** Problem Reports (`/api/feedback`) and the report views need the owner's session, not the write token. A
   request body is at most 2 MB, plus four 5 MB attachments on the chat and research routes; a question is at most

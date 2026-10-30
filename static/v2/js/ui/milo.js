@@ -436,11 +436,14 @@ function reportHTML(i) {
 async function sendReport(i, text) {
   const q = String((S.conv.messages[i - 1] || {}).content || ''), a = String((S.conv.messages[i] || {}).content || '');
   const head = `${text.trim().slice(0, 600)}\n\nMilo answer report\nQuestion: ${q.slice(0, 300)}\nAnswer: `;
-  S.report = { conv: S.conv.id, i, text, busy: true }; paintLog(false);
+  // the conversation it was written in, taken now: read after the request, a report sent before New conversation
+  // showed its outcome under the new one's answer at the same place (BUG-185, Phase 11)
+  const conv = S.conv.id;
+  S.report = { conv, i, text, busy: true }; paintLog(false);
   try {
     await api.post('/api/feedback', { message: head + a.slice(0, Math.max(200, 1990 - head.length)), page: `Milo, ${contextLabel('auto')}`.slice(0, 200) });
-    S.report = { conv: S.conv.id, i, sent: true };
-  } catch (e) { S.report = { conv: S.conv.id, i, text, err: api.explain(e, 'The report') }; }
+    S.report = { conv, i, sent: true };
+  } catch (e) { S.report = { conv, i, text, err: api.explain(e, 'The report') }; }
   paintLog(false);
 }
 /** The instruments an answer's data concerns: what the server loaded for the question and what Milo looked up,

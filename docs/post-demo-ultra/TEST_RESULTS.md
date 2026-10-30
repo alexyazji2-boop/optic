@@ -1091,3 +1091,287 @@ Installed dependencies (SEC-07; full list in `security/pip-freeze.txt`, 70 packa
   275 s. Again on the final tree with these documents (13:16 ET, `pytest-full-final.txt`): 8,068 passed, 1 skipped,
   0 failed, in 300 s.
 
+## Phase 11 (adversarial final audit), 2026-10-30, working tree on a0e60f8
+
+Raw results are under `~/Optic/work/post-demo-ultra-2026-10-29/phase11/` and the tools in `tools/` beside it (each
+tool's usage line is at its top; `tools/phase11_batch.sh` ran the reruns one after another).
+
+Conditions:
+- **Browser and server:** headless Chrome 156 on this Mac, against the local server (:8250, restarted after each
+  server fix: at about 14:00, then 17:33, 18:19 and 18:26 ET), with the stand-in model (it spends nothing; no working key, BL-01)
+  and the sandbox brokerage.
+- **Data:** live delayed data on Friday 2026-10-30, from 13:30 to 18:40 ET, so mostly after the close.
+- **Provider refusals:** during the audit Yahoo refused some requests (401 "Invalid Crumb", "User is unable to access
+  this feature") and once served a quote only as a flagged partial. Where the page stated such a failure, it counts
+  as a condition, not a defect (D-098).
+
+### Feature verification (`tools/phase11_features.py`; raw `features/`, `features-recheck/`, `features-recheck2/`)
+
+- **Scope:** every route-level feature in FEATURE_REGISTRY.md's index, 75 rows: 47 routes (some as a guest and as a
+  reader) and the 28 Home rows (the layout and its 27 panels, in their layouts and in My Desk).
+- **Each row, at 1440 and 390:**
+  - renders: an h1 and content, no skeleton left once it settles;
+  - errors: no script exception, console error, failed request or 5xx;
+  - text: no undefined, NaN, null or [object Object];
+  - no sideways scroll;
+  - refresh: a reload lands on the same view, the header given 15 s to fill in.
+- **The failure state, at 1440:** every /api/ request answered 503 in the browser with a neutral detail, so only
+  Optic's own words count.
+- **Browsers:** the reader's and the guest's rows run in separate browsers; a first run that shared one was discarded
+  (D-098).
+
+First run (13:37 to 15:00 ET, on a server also serving the demo journey, with Yahoo refusing some requests): 253 of
+284 checks passed. The 31 that did not, each followed up:
+
+| First-run result | Checks | Follow-up | Outcome |
+|---|---|---|---|
+| Home's portfolio panel "not visible" | 2 | `workspace.js:883`: an optional panel hides itself when nothing is linked | by design |
+| Home panels still loading after 12 s (desk, questions, trends, alerts, indices, regime, expected, contracts, vol, gex, tearn, fin, own) | 13 | `tools/phase11_home_panels.py` on the restarted server: every panel in every layout showed its content within 2.5 s at 1440, none still loading at 390, My Desk's five within 1.5 s, a guest's at once (`home-panels/`) | load condition |
+| A 409 logged by Home's portfolio panel | 1 | my own tools linked and unlinked the sandbox while the page held a minute-old "linked" status; the panel states the server's reason | caused by the test harness |
+| The header's name missing just after a reload (NVDA Overview, NVDA Chart, SPY) | 3 | the name arrives with the profile after the skeletons go; rechecked with 15 s for the header | PASS at both sizes |
+| A section still loading ("The past year", Markets at a glance: SPY, the guest's AAPL, the guest's Home, Home at 390) | 5 | rechecked twice on the restarted server | PASS at both sizes |
+| Raw `}}` on Brokerage, Holdings | 1 | the scorecard's "Inputs and method" folds printed JSON | BUG-190, fixed; `tools/phase11_scorecard.py`: 5 folds opened at 1440 and 390, no JSON |
+| Options left 3 skeletons with every request failing | 1 | `readings()` ignored the failed load | BUG-193, fixed; rechecked: PASS |
+| The four owner pages stated no failure | 4 | a 503 shown as "These are not yours to read" | BUG-194, fixed; rechecked: PASS |
+| The Dossier start page stated no failure | 1 | it makes no request on load, so nothing fails | not applicable |
+
+- **Rechecks (34 rows on the restarted server):** one row met a real provider failure, Options at 1440, whose
+  contract table came back 503 from Yahoo and read "The contracts did not load ... Try again". That is the stated
+  failure the page should show.
+- **Logos** (BUG-191, BUG-196; `tools/phase11_logo204.py`, raw `logo204/`): a symbol without a logo now answers 204.
+  - A bare image of one still fires its error event.
+  - The palette's rows for "SPY" and "nvidia" show the initial where there is no logo, including for the typed
+    "nvidia" itself.
+  - Nothing reached the console or the network log. PASS.
+
+### The investor-demo journey (section 3; `tools/phase11_journey.py`; raw `journey/<run>/` with a screenshot per step; `journey-table.md`)
+
+The directive's fifteen steps in order, in one browser, on live data, with the stand-in model and the sandbox
+brokerage (linked through the page in step 14, unlinked after). What each step checks:
+
+1. Home renders for a new guest, with the first-visit card, nothing stuck and no sideways scroll.
+2. The level slider by keyboard: a page's terms gain inline definitions at New to Markets and lose every mark at
+   Expert.
+3. Search for SPY in the palette: its Dossier, its name, and a header price within 0.5% of the quote API.
+4. Then "nvidia": the header, title and price follow, with no SPY or SPDR left on the page.
+5. The Dossier: the company, its industry and its share price agree with the quote.
+6. Simple Analysis: readability measured, jargon listed.
+7. Show advanced analysis replaces it: one analysis area, no simple view.
+8. Back to simple: one view, the same text as before, no duplicate heading.
+9. Milo, a basic question:
+   - the answer's own words grow in steps;
+   - the price quoted is the quote API's within 1%;
+   - the sources and the AI disclosure show.
+10. Milo, a three-month question, on which the stand-in calls the price-history tool:
+    - the tool is named while it runs and in the sources;
+    - the change and the first and last closes match Optic's daily bars.
+11. New chat: no earlier answer, and the stand-in's log shows the new conversation's first request carried one
+    message.
+12. Close: the panel closes and focus returns to Ask Milo.
+13. Reopen: the same conversation, with the earlier one in history. After a reload, Milo opens on a new
+    conversation and the last reopens whole from history, Phase 07's design (R07-07).
+14. Brokerage: linked through Connections, connected, five holdings whose weights recompute and whose long value
+    matches the stated one.
+15. Markets, Discover, Compare, Positions, Watchlist, Alerts, Earnings week, Settings and Home: each renders, nothing
+    stuck, no sideways scroll.
+
+Eight runs. The first five ran before the logo fix (14:30 to 14:41 ET). The three "final" runs ran on the restarted
+server with the Phase 11 fixes in (17:34 to 17:41 ET).
+
+| Run | Steps passed | Not passed, and why |
+|---|---|---|
+| `w1440`, a fresh guest | 13 of 15 | 3 and 4: the browser logged a 404 for a related fund's missing logo (BUG-196) |
+| `w1280-signed` | 13 of 15 | the same |
+| `w390-signed` | 13 of 15 | the same |
+| `w1440-slow-signed` | 15 of 15 | |
+| `w1440-signed-refresh-backfwd` | 11 of 15 | Steps 3 and 4: the logo 404s. Step 13: my check expected the conversation open after a reload, where Phase 07's design opens a new one with the last in history (the check was corrected; the history held both). Step 14: Connect was refused 429, the hour's limit of 10 having been spent by this audit's own runs; the page said so in a toast |
+| `w1440-final`, a fresh guest | **15 of 15** | |
+| `w390-signed-final` | **15 of 15** | |
+| `w1440-signed-refresh-backfwd-final` | **15 of 15** | reloaded after steps 4, 5, 8 and 13, back and forward after 5; the conversation reopened whole from history after the reload |
+
+What the runs measured:
+- **Simple Analysis:**
+  - 249 to 256 words in 21 sentences, about 12 words a sentence;
+  - Flesch reading ease 70, Flesch-Kincaid grade 6.4 to 6.5;
+  - of the jargon list only "P/E" appears, defined where it is used.
+- **The level:** NVDA's Options tab shows 25 marked terms with 19 defined inline at New to Markets, and none at Expert.
+- **Milo, the answer's first visible words:** 0.16 to 0.68 s, and finished in 0.54 to 1.06 s with the stand-in model;
+  1.51 s to the first words on the slow network.
+- **Milo's three-month figures** matched Optic's daily bars within a cent in every run:
+  - 14:30 ET: 3.55%, 195.04 to 201.97, against bars of 195.04 and 201.96;
+  - 17:36 ET: 1.94%, 200.75 to 204.64, against 200.75 and 204.64.
+- **The sandbox brokerage:** five holdings whose weights recompute from their values, and the long value as stated
+  (74,657.40 to 75,213.55 across runs, prices moving).
+
+### Repeatability (section 4): which scenarios ran
+
+| Scenario | How | Where |
+|---|---|---|
+| Fresh browser session | a new profile as a guest, who signs in at step 9 and keeps the guest's things | journeys `w1440`, `w1440-final` |
+| Existing signed-in session | signed in before step 1 | journeys `w1280-signed`, `w390-signed`, `w390-signed-final`, `w1440-slow-signed`, both refresh runs |
+| Normal network | no throttling | every journey but one |
+| Simulated slow network | 400 ms latency, 1.5 Mb/s down, 750 kb/s up | journey `w1440-slow-signed` |
+| Desktop, laptop, mobile | 1440 x 900, 1280 x 800, 390 x 844 (a touch phone) | journeys by size; the feature check at 1440 and 390 |
+| Browser refresh | after steps 4, 5, 8 and 13 | both refresh runs; adversarial X04 |
+| Back and forward | after step 5: back to SPY, forward to NVDA | both refresh runs |
+| Concurrent API requests | 15 ticker changes in under 2 s; two tabs; late answers after navigating away | adversarial X01, X05, X08; Phase 09's scenario B rerun |
+| Provider failure | every /api/ request answered 503, page by page; the twelve conditions | the feature check's failure pass (38 pages); Phase 10's resilience rerun |
+
+### Adversarial run (section 5; `tools/phase11_adversarial.py`; raw `adversarial/`, `adversarial-rerun/`, `adversarial-final/`)
+
+Signed in as the local demo reader at 1440. The first run passed 10 of 14. Of the four that did not, three were the
+check itself (corrected) and one a defect (fixed). Run again whole on the final tree, it passed 14 of 14
+(`adversarial-final/`; it ran when another tool imported it).
+
+| Case | What it tried | Result |
+|---|---|---|
+| X01 | 15 ticker changes in under 2 s | PASS: one view, MSFT everywhere, no other ticker left |
+| X02 | three prompts sent while Milo was busy | PASS: one answer, the latest text kept in the box, idle after |
+| X03 | Milo closed one second into a slow answer (about 15 s in all), reopened later | PASS: still streaming on reopening, then finished whole, nothing left spinning. The first run read it before the answer could end |
+| X04 | a reload while AMD's quote was held | PASS: loaded in full afterwards |
+| X05 | two tabs, then one moved to TSLA | PASS: each kept its own |
+| X06 | ZZZZQX, 123, a 40-letter symbol, HTML and script in the address and in search | PASS: each said so, nothing ran, nothing was injected. The frame's actions still show for an unknown symbol (BUG-198, P2) |
+| X07 | the level changed in another tab while the analysis loaded | FAIL, then PASS after the fix. Only the sliders followed another tab's change, so the analysis kept its old wording (BUG-197); now "Worded for New to Markets" |
+| X08 | to Markets while AAPL's requests were held, then released | PASS: nothing of Apple reached Markets |
+| X09 | offline on a Dossier's News, then back with Try again | PASS: stated, recovered. Its wording, "The headlines needs a connection", led to BUG-199; now "Optic needs a connection for the headlines" |
+| X10 | a 20,000-character paste in Milo; 9,000 characters straight to the server; 560 in search | PASS: the paste is held to 4,000 with "That is 4,000 characters, the most a question can hold." and answered; the server refuses 9,000 with 413; search survives. The first run set the box's value from script, which `maxLength` does not stop |
+| X11 | keyboard only | PASS. Arrival focus is on the page's heading inside main, the skip link goes to main, and Cmd+K opens the palette. Enter goes to AAPL; Enter on Ask Milo opens it with focus inside; Escape closes it with focus back. The first run's Enter lacked its character, so Chrome did not click |
+| X12 | no earnings record; a fund's financials; BRK-A's thin chain | PASS: each stated, no broken figure |
+| X13 | the ticker across features | PASS: Milo, Chart and News follow AMD; Home keeps SPY; Compare keeps its own |
+| X14 | the level changed in Response settings between two questions | PASS: both answered; "Explained for Advanced. Your level is now Expert. Ask again for Expert" |
+
+A Milo answer report held across New conversation (BUG-185; `tools/phase11_report_conv.py`): nothing of it showed
+under the new conversation's answer. PASS.
+
+### Earlier phases' browser checks, rerun on the final tree (logs `phase11/regress-*.log`, raw `phase11/regress/`)
+
+Each phase's own tool, unchanged, against the server restarted at 17:33 with every Phase 11 server fix but BUG-200's
+and BUG-201's (rerun after them below). Two front-end fixes landed while these ran (BUG-197, BUG-199); X07 and X09
+check those.
+
+| Tool | What it checks | Result |
+|---|---|---|
+| `phase03_scenarios.py` | search, ticker state and navigation (27 scenarios) | 27 of 27 |
+| `phase06_checks.py` | the Dossier's one analysis view, its transitions, the right ticker under failed and late requests | 16 of 16 |
+| `phase07_checks.py` | Milo's conversation: streaming, cancel, interruption, New, Close, reopen, restore, history, isolation, phones (28) | 27 of 28. C18's isolation held: account B saw none of the demo reader's conversations, the demo reader none of B's, a guest none of either. Its last condition, B's own question saved, could not be met: B, a free account, had used its 3 questions for the day (`/api/ai-allowance`: 3 of 3, next at 21:26 ET), so the question was refused as designed |
+| `phase08_checks.py` | the price-history tool end to end; a quote's observed time against its fetch time; no console errors | 3 of 3 ("observed 4 pm, retrieved 6:02 pm" after the close) |
+| `phase09_scenarios.py` | A to H: one SPY price across surfaces, late answers, unknown symbols and funds, a reload mid-load, cached freshness, failing sources, two readers at once, the sandbox's weights | A to H PASS, no script exception |
+| `phase10_resilience.py` | the twelve failure conditions | 12 of 12, no uncaught exception |
+| `classic_crawl.py` | Classic's 26 views as a guest at 1440 and 390 | 26 of 26 clean at each size |
+| `phase11_api_sweep.py` | every GET route under /api/ (145), as a guest and signed in (274 requests) | no 5xx, no timeout, no malformed JSON; the 401, 403, 409, 410 and 422 answers are the routes' stated refusals |
+
+### Financial correctness (section 6)
+
+- **The journey's figure checks:** all PASS in the final runs. Header prices against the quote API; the Dossier's
+  share price; Milo's history figures against the daily bars; the sandbox's weights and long value.
+- **The Dossier's figures against the provider's own answers** (`tools/phase06_accuracy.py`, after the 18:26
+  restart): 10 of 10 (NVDA, AAPL, MSFT, JPM, KO, RIVN, SPY, BTC-USD, ^GSPC, and an unknown symbol said to be unknown).
+- **Phase 09's reconciliation** (`tools/phase09_recon.py`, 278 rows against a separate Yahoo client and the SEC):
+  run three times.
+
+| Run | PASS | FAIL | UNVERIFIED | The misses |
+|---|---|---|---|---|
+| 18:09, before the fixes | 274 | 3 | 1 | AAPL and NVDA had no next report date: `/api/ticker` lost it whenever the option chain was complete (**BUG-200**, P1, in the build the investors saw since 2026-10-13). TSM's yield: Yahoo's 0.87% is worked at Thursday's close and Optic's 0.93% at Friday's, the day TSM fell 5.9% (Optic's own definition recomputes exactly, D-068) |
+| after BUG-200's fix (18:19 restart) | 274 | 3 | 1 | KO's report of 2026-10-27 shown as its next one, hidden until now because the field was missing (**BUG-201**, P1). AAPL's post-market price, two reads seconds apart. TSM as before |
+| after BUG-201's fix (18:26 restart) | 271 | 5 | 2 | NVDA's post-market price, seconds apart. MSFT's delay, trade time and post-market price: Yahoo refused its full quote document at that moment and Optic served the close marked partial, as designed (full again minutes later). TSM as before. SPY has no report date or, that run, headlines on one side |
+
+After the fixes, `/api/ticker` carries the next report date for NVDA (2026-11-17), AAPL (2026-11-02) and MSFT
+(2027-01-27), and none for KO until Yahoo posts one.
+
+### Milo (section 7)
+
+- **The evaluation suite** (`.venv/bin/python -m tests.milo_eval.run --out phase11/eval`; raw `eval/`): 137 cases,
+  every check of all 18 categories passed (949 checks), among them the beginner, research, current data, missing
+  data, stale data, advisory, injection, multi-turn, portfolio and isolation cases.
+  - The suite's cost estimate priced a cache read at $0.20 a million tokens where the verified rate is $0.10
+    (BUG-180, fixed): a median of $0.0311 an answer.
+  - The 100 answer-level checks did not run: no model can be called here. The key in `.env` was rechecked with one
+    free models-list request: 401 (BL-01).
+- **The advice output check on a fresh unseen set** (BUG-132; `tools/phase11_setd.py`):
+  - **The set:** set D, 100 sentences (50 advice, 50 research), written on 2026-10-30 by an agent told to read
+    nothing on this machine (a first attempt stalled without writing; `phase11/heldout-advice-set-d.json`).
+  - **Measured once,** on the check as it stands, before anyone read the sentences: **14 of 50 advice sentences
+    caught, 0 of 50 research sentences held back.**
+  - **The misses** include plain instructions on the reader's own holdings ("Cap NVDA at 5% of the account and move
+    anything above that into the short-term Treasury fund"; "Dana, add another $5,000 of Amazon on any dip toward
+    $200"). Also missed: list items and bold labels; first-person and softened suggestions; the passive; verdicts;
+    suggesting questions; promises to watch and alert; a promised payout.
+  - **Outcome:** Phase 08's widening on set C did not carry over. BUG-132 is OPEN (D-099).
+- **End to end with the stand-in:** the demo journey's steps 9 to 13 and the Phase 07 and 08 reruns (above).
+
+### Simplicity (section 8; `tools/density.py`, `tools/phase11_density_table.py`; raw `density-9fa0f36/`, `density-now/`, `density-table.md`)
+
+- **The method:** Phase 04's density tool as a first-time guest with a fresh profile, on two builds the same
+  afternoon:
+  - the build the investors saw (9fa0f36, served from a scratch worktree with an empty data folder on :8253);
+  - this tree (:8250).
+- **What it counts:** what renders, not comprehension.
+
+| Route | Size | Words, first screen | Words, page | Controls | Cards | Headings | Page height px |
+|---|---|---|---|---|---|---|---|
+| Home | 1440 | 354 / 284 | 799 / 666 | 92 / 65 | 12 / 5 | 14 / 7 | 2820 / 2340 |
+| Home | 390 | 123 / 125 | 388 / 328 | 58 / 39 | 13 / 6 | 15 / 8 | 3682 / 2929 |
+| NVDA Overview | 1440 | 230 / 222 | 1392 / 467 | 96 / 45 | 12 / 3 | 16 / 8 | 4996 / 2495 |
+| NVDA Overview | 390 | 128 / 106 | 1379 / 459 | 88 / 37 | 12 / 3 | 16 / 8 | 8645 / 3447 |
+| SPY Overview | 1440 | 141 / 197 | 765 / 396 | 52 / 32 | 15 / 3 | 12 / 8 | 3496 / 2302 |
+
+- **Home:** at 1440, more than half the cards (12 to 5), almost a third of the controls (92 to 65) and a sixth of the
+  words (799 to 666) are gone. On a phone, a third of the controls and half the cards are gone.
+- **The Dossier's Overview:** two thirds of the words and over half of the controls are gone. Simple Analysis shows
+  first and the Advanced Analysis replaces it on request.
+- **Not compared:** Compare, Earnings week, Read and Markets on a phone were still loading on the cold demo-day server
+  when it measured them (its screenshots). So the totals over all 29 routes are not like for like and are not used.
+- **Other tabs:** Options, Investing and Settings are within a few percent of demo day; their analytical content was
+  kept as it was.
+
+### Engineering checks (section 10)
+
+| Check | Command | Result |
+|---|---|---|
+| Production build | `docker build .` | NOT TESTED: no Docker here (BL-06); Railway builds the image (`python:3.12-slim`) on deploy |
+| Type checking | none configured | NOT AVAILABLE: no mypy, pyright or tsc in the project or on this machine |
+| Python syntax | every tracked `.py` parsed with `ast` (748 files) | PASS, 0 errors (`eng/python-syntax.txt`) |
+| JavaScript syntax | `node --check` (modules through `--input-type=module`) on every tracked `static/` file (126) | PASS, 0 errors (`eng/js-syntax.txt`) |
+| Linting | `tools/phase10_unused.py` (the standard library's `ast`; no linter installed, D-085) | 1 unused import, an intentional availability probe; 78 unused locals from before (`eng/unused.txt`) |
+| Secret scan | every tracked file (1,196) against key and token patterns, and addresses outside example domains | PASS: no key or token. The one "private key" match is a placeholder string in a test whose keys are generated per run. The addresses are the published contact, the demo seed's and code comments (`eng/secret-scan.txt`) |
+| Unit and integration tests | `.venv/bin/python -m pytest -q -p no:cacheprovider` | below |
+| End-to-end | the browser tools above | above |
+| Financial calculations | the suite's calculation tests; the reconciliation; the accuracy run | above |
+| Milo evaluation | `tests.milo_eval.run` | 949 of 949 checks |
+| Search | the suite's search tests; Phase 03's scenarios; Phase 10's equivalence (8,139 pairs) | PASS |
+| Dossier | the suite's Dossier tests; Phase 06's checks and accuracy | PASS |
+| Accessibility | the suite's design-standard and checklist tests (76 with Phase 10's and 11's, run on the final tree); Phase 10's audit (25 routes); X11 | PASS; not rerun in full in Phase 11 |
+| Visual regression | the feature check's screenshots at 1440 and 390 (`features/shots/`); Phase 10's 116-check sweep | inspected by eye; no pixel comparison exists |
+| Security | the suite's security tests; the secret scan; the independent review of Phase 10's commit (below) | PASS; dependency scan BLOCKED (BL-12) |
+
+### The independent review of Phase 10's commit
+
+An agent that had not written the code reviewed `git diff 3698975 3971e7f` (about 3,000 added lines, docs skipped)
+for defects it could tie to a failure, running probes and single test files. Each finding was checked here before
+acting:
+
+| Finding | Severity | Checked | Outcome |
+|---|---|---|---|
+| `/api/health` no longer gave a visitor `commit`, which `publish.sh` reads to see a deploy land (and DEPLOY.md's crashloop signal, `uptime_seconds`) | P1 | its probe and `publish.sh:24,77-78` | BUG-181, fixed: public again; a test runs `publish.sh`'s own pattern |
+| The Paper Desk's new re-mark redrew the page under the reader's typing | P2 | read `paper.js` | BUG-182, fixed: a round is skipped while focus is in a field |
+| One document's 5xx marked its whole feed host down for 60 s | P2 | its stubbed run | BUG-183, fixed |
+| A logo refused for the hour's budget was cached a day | P2 | confirmed | BUG-184, fixed |
+| A report's outcome attached to the conversation open when its request returned | P2 | read `milo.js` | BUG-185, fixed, browser-checked |
+| Home said the desk note "could not be produced" before any attempt and when switched off | P2 | read | BUG-186, fixed |
+| The OAuth state cookie works only on the host where sign-in started | P1 if another host serves sign-in | www.theopticterminal.com does not resolve (curl, 2026-10-30) | BUG-187, P2, OPEN, with the fix written |
+| A search answer ranked on yesterday's directory could be kept | P2 | read | BUG-188, fixed |
+| A non-object history turn raised after the question was counted | P2 | read | BUG-189, fixed |
+| A sweep can drop a key lock between hand-out and use: one extra fetch | P2 | read | BUG-192, WONTFIX |
+
+Its "no real defect" list covered:
+- the body limit, query redaction, the per-address limits, and the Milo ceiling with its paying-reader rule;
+- the personal-blocks rule, the auth changes, `public_errors`, the owner guard on feedback, and the new headers;
+- `api.js`'s unreadable-body handling, the keep sheet, `fresh()`, and Earnings week's polling;
+- Classic's catalyst and logo changes.
+
+### Tests and suite
+
+- `tests/test_phase11_fixes.py` (new): 13 tests, one or more for each Phase 11 fix that had no test home. The others
+  extend their existing tests: health, the feed host, logos (three files), the desk note, the report form, the
+  calendar test's pinned date.
+- Full suite on the final tree (`phase11/pytest-full-final.txt`): 8,084 passed, 1 skipped, 0 failed, in 234 s.

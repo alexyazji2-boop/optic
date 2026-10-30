@@ -132,10 +132,11 @@ export async function settle(map) {
 export function explain(err, what = 'This') {
   if (!err) return '';
   switch (err.kind) {
-    case 'offline': return `${what} needs a connection. Optic will try again when you are back online.`;
+    // said so the verb fits any subject: "The headlines needs a connection" (BUG-199, Phase 11), as notfound's below
+    case 'offline': return `Optic needs a connection for ${what.toLowerCase()}. It will try again when you are back online.`;
     case 'timeout': return `${what} took too long to load. The data provider may be slow right now.`;
     case 'auth': return `Sign in to see ${what.toLowerCase()}.`;
-    case 'forbidden': return `${what} is not available on this account.`;
+    case 'forbidden': return `${what}: not available on this account.`;
     // the server's own sentence when it sent one ("No listed options for 'AAPL'."); "The contracts was not
     // found" read as broken grammar and as a missing page when Yahoo briefly listed no expiries (2026-10-22)
     case 'notfound': return err.message && err.message !== 'Request failed' && !/^not found$/i.test(err.message)

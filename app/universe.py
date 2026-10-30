@@ -565,9 +565,12 @@ def search(query: str, limit: int = 10, _idx: Optional[Dict[str, Any]] = None) -
            {"symbol": t[4][0], "name": t[4][1], "etf": t[4][2], "kind": "etf" if t[4][2] else "stock",
             "match": t[4][3], "dollar_volume": volume.get(t[3]) or None} for t in best]
     with _PREP_LOCK:
-        _ANSWERS[key] = [dict(r) for r in out]
-        while len(_ANSWERS) > _ANSWERS_MAX:
-            _ANSWERS.popitem(last=False)
+        # kept only while the directory it was ranked on is still the one in use: an answer finished on yesterday's
+        # rows after today's cleared the memo would have been served all day (BUG-188, Phase 11)
+        if _PREP["rows"] is rows:
+            _ANSWERS[key] = [dict(r) for r in out]
+            while len(_ANSWERS) > _ANSWERS_MAX:
+                _ANSWERS.popitem(last=False)
     return out
 
 

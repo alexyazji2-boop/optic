@@ -241,12 +241,16 @@ def test_the_logo_route_takes_listed_symbols_on_its_own_pool(monkeypatch, tmp_pa
     monkeypatch.setattr(main, "_logo_fetch", lambda sym: fetched.append(sym) or (b"\x89PNG\r\n\x1a\nxx", "image/png"))
     monkeypatch.setattr(main.universe_mod, "known_symbol", lambda sym: sym == "AAPL")
     c = TestClient(main.app)
-    assert c.get("/api/logo/ZZZZQ").status_code == 404 and not list(tmp_path.iterdir())
-    assert c.get("/api/logo/AAPL%0A").status_code == 404          # fullmatch: no second key with a newline
+    assert c.get("/api/logo/ZZZZQ").status_code == 204 and not list(tmp_path.iterdir())
+    assert c.get("/api/logo/AAPL%0A").status_code == 204          # fullmatch: no second key with a newline
     assert c.get("/api/logo/AAPL").status_code == 200 and fetched == ["AAPL"]
     monkeypatch.setattr(main, "_LOGO_FETCHES_PER_HOUR", 0)
     monkeypatch.setattr(main.universe_mod, "known_symbol", lambda sym: True)
-    assert c.get("/api/logo/MSFT").status_code == 404 and not (tmp_path / "MSFT.none").exists()   # over budget, not kept
+    r = c.get("/api/logo/MSFT")
+    assert r.status_code == 204 and not (tmp_path / "MSFT.none").exists()   # over budget, not kept
+    assert r.headers["cache-control"] == "no-store"      # nor kept by the browser for a day (BUG-184, Phase 11)
+    monkeypatch.setattr(main.universe_mod, "known_symbol", lambda sym: sym == "AAPL")
+    assert c.get("/api/logo/ZZZZQ").headers["cache-control"] == "public, max-age=86400"   # an unlisted symbol stays a kept miss
 
 
 def test_the_client_address_comes_from_the_edge_not_the_first_hop(monkeypatch):
@@ -439,6 +443,20 @@ def test_a_feed_host_that_just_failed_is_not_asked_again_at_once(monkeypatch):
         _REAL_FETCH("https://fred.example/missing.csv", "text/csv")
     assert not feeds._DOWN                               # one missing document is not the host down
 
+    def busy(req, timeout=None):
+        raise urllib.error.HTTPError(req.full_url, 503, "Service Unavailable", {}, None)
+    monkeypatch.setattr(urllib.request, "urlopen", busy)
+    with pytest.raises(urllib.error.HTTPError):
+        _REAL_FETCH("https://sec.example/cgi-bin/browse-edgar?type=4", "application/atom+xml")
+    assert not feeds._DOWN       # BUG-183 (Phase 11): one query's 503 held the other eleven forms back for a minute
+
+    def refused(req, timeout=None):
+        raise urllib.error.HTTPError(req.full_url, 429, "Too Many Requests", {}, None)
+    monkeypatch.setattr(urllib.request, "urlopen", refused)
+    with pytest.raises(urllib.error.HTTPError):
+        _REAL_FETCH("https://sec.example/cgi-bin/browse-edgar?type=8-K", "application/atom+xml")
+    assert "sec.example" in feeds._DOWN                  # a refusal is the caller's, so the host is left alone a while
+
 
 def test_a_failed_directory_refresh_is_not_retried_on_every_search(monkeypatch):
     """S19: each search retried the download, holding the directory lock for its whole timeout."""
@@ -485,10 +503,13 @@ def test_the_earnings_week_says_it_is_building_instead_of_waiting_silently():
 def test_the_calendar_and_info_are_read_once_for_their_readers(monkeypatch):
     """S09: the next report date and the consensus band read Yahoo's calendar separately, and the fund facts and the
     futures month each re-read `.info` beside the quote's own read."""
+    import datetime as dt
     import app.providers.yf as y
     from app.main import YF_PROVIDER as P
     monkeypatch.setattr(y, "_CACHE", {})
     monkeypatch.setattr(y, "_wait_turn", lambda: None)
+    # the date is pinned: the next report must not have passed (BUG-201), and 2026-11-19 will
+    monkeypatch.setattr(y.session_mod, "market_today", lambda now=None: dt.date(2026, 10, 30))
     calls = {"calendar": 0}
 
     class Stub:
@@ -602,7 +623,10 @@ def test_a_partial_answer_that_fails_is_kept_as_cut_off_and_reports_stay_with_th
     src = read("static/v2/js/ui/milo.js")
     assert "if (failed && !ended) ended = 'cut';" in src
     assert "S.report && S.report.i === it.i && S.report.conv === S.conv.id ? reportHTML(it.i)" in src
-    assert src.count("S.report = { conv: S.conv.id, i") == 4 and "? null : { conv: S.conv.id, i, text: '' }" in src
+    assert src.count("S.report = { conv: S.conv.id, i") == 1 and "? null : { conv: S.conv.id, i, text: '' }" in src
+    # the conversation a report was written in is taken before its request, not after it returns (BUG-185, Phase 11)
+    send = src[src.index("async function sendReport"):src.index("export function concerns")]
+    assert send.index("const conv = S.conv.id;") < send.index("await api.post('/api/feedback'") and send.count("S.report = { conv, i") == 3
     assert "S.view = null; S.report = null;" in src
 
 

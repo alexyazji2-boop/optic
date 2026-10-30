@@ -731,3 +731,40 @@ while Yahoo was refusing this machine (both servers waited the 20 s gate maximum
 timings that depend on cold fetches are recorded as conditions, not as a change; the client-side figures (layout
 shift, interaction delay, search, Milo's first words) and the in-process measurements (search cost, event-loop stalls)
 are the ones compared.
+
+**D-095 (Phase 11) The commit and uptime are public again.** Phase 10 made them the operator's (BUG-052), but the
+owner's `publish.sh` reads `commit` from an anonymous `/api/health` to see a deploy land, and DEPLOY.md reads
+`uptime_seconds` to tell a crashloop from a deploy (BUG-181, found by the independent review of Phase 10's commit).
+The repository is public, so the deployed commit tells a visitor nothing they cannot read already. Where the AI
+credential comes from, whether Anthropic refused it, and the migrations stay the operator's.
+
+**D-096 (Phase 11) A feed host is held back only when it did not answer or refused.** S16's memory (Phase 10) also
+counted a 5xx, which is one document's: one EDGAR query's 503 failed the other eleven forms for a minute (BUG-183). A
+host that answered costs no timeout to ask again; a 403 or 429 is given to the caller, so the host is left alone for
+`HOST_DOWN_SECONDS`.
+
+**D-097 (Phase 11) The desk note says which kind of missing.** With only the keep-warm job writing it (D-091), "could
+not be produced" covered three states. `pending` ("is not ready yet") before the day's first attempt, `off` ("is
+switched off on this terminal") with `DESK_PROSE_AUTO=false`, and `unwritten` after an attempt failed, told apart by
+the store's own attempt count (BUG-186).
+
+**D-098 (Phase 11) How the final audit counts.** A provider's refusal (Yahoo answered 401 "Invalid Crumb" to some
+requests during the audit) is a condition, not a defect, when the page states it; a page that leaves a skeleton or
+says nothing is a defect whatever the cause. The reader's and the guest's checks run in separate browsers (pages in
+one browser share cookies, so a guest's sign-out signed the reader out in the first run, which was discarded). The
+demo journey answers the keep sheet the way a presenter would ("Bring them into my account"). Findings from the
+independent review were each checked before being acted on.
+
+**D-099 (Phase 11) The advice output check is not widened again; its measure stands.** On fresh set D the check caught
+14 of 50 advice sentences (0 of 50 research sentences held back), after Phase 08 widened it on set C, where it had
+caught 28 of 50. A rule set tuned on one agent's phrasings did not carry to the next agent's, so another round tuned
+on D would only make D a regression set (D-015) and need a set E to measure, with no reason to expect a different
+outcome. The check stays as the last of the layers (the request classifier, the prompt's policy, the check), BUG-132
+is OPEN, and what would change the picture is the owner's: a model-based reading of each finished answer (BL-07, one
+small-model call per answer) and a working key, so the answers themselves can be measured (BL-01).
+
+**D-100 (Phase 11) The final decision is NOT READY.** Directive 11 offers two outcomes. With BUG-132 open (Milo's
+advice safeguards measured weak and the model's own behaviour unmeasured) and the market data unlicensed (BUG-022,
+BUG-023), the blocking issues are P0 and none can be closed by engineering alone. Everything else passed or is
+recorded. The decision names what would unblock each, and the manual checks a human staging review needs
+(FINAL_REPORT sections 8 and 17).

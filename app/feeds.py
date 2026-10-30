@@ -113,8 +113,9 @@ _ATOM = "{http://www.w3.org/2005/Atom}"
 _LOCK = threading.RLock()
 _MEM: Dict[str, Dict[str, Any]] = {}
 _LAST_HIT: Dict[str, float] = {}
-# A host that just failed, and when (S16, Phase 10): nothing remembered a failure, so a dead FRED, BLS or wire host
-# cost its whole timeout on every call that asked. For HOST_DOWN_SECONDS the next call fails at once, the same way.
+# A host that just failed to answer or refused, and when (S16, Phase 10): nothing remembered a failure, so a dead FRED,
+# BLS or wire host cost its whole timeout on every call that asked. For HOST_DOWN_SECONDS the next call fails at once,
+# the same way. A document's own error (a 404, a 5xx) is not the host's (BUG-183, Phase 11).
 _DOWN: Dict[str, float] = {}
 HOST_DOWN_SECONDS = 60.0
 
@@ -573,8 +574,10 @@ def _fetch(url: str, accept: str, user_agent: Optional[str] = None,
                 request, timeout=timeout or TIMEOUT_SECONDS) as response:
             body = response.read()
     except urllib.error.HTTPError as exc:
-        # the host answered: a 404 is that document's, not the host's; a refusal or a server error is the host's
-        if exc.code in (403, 429) or exc.code >= 500:
+        # The host answered, so asking it again costs no timeout. Only a refusal (403 or 429, which SEC and others give
+        # to a caller, not to a document) holds the host back; a 404 or a 5xx is that document's. A 503 on one EDGAR
+        # query held the other eleven forms back for a minute, and one CNBC feed the other six (BUG-183, Phase 11).
+        if exc.code in (403, 429):
             with _LOCK:
                 _DOWN[host] = time.time()
         raise

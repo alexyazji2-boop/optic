@@ -4,13 +4,146 @@ Read this and [REQUIREMENTS_MATRIX.md](REQUIREMENTS_MATRIX.md) before changing a
 
 ## Current state
 
-- **Current phase:** 11 Adversarial final audit (next). Phases 01 to 10 complete (reports below).
+- **Current phase:** none. Phases 01 to 11 are complete (reports below). FINAL_REPORT.md holds the decision: **NOT READY: BLOCKING ISSUES REMAIN** (BUG-132, the advice output check, P0; BUG-022 and BUG-023, unlicensed market data, P0, the owner's and counsel's).
 - **Branch / worktree:** `post-demo-ultra` in `~/Optic/wt-ultra`, from `9fa0f36` (tag `post-demo-ultra-baseline`). Upstream unset; nothing pushed or deployed.
-- **Commits:** `fce3e71` setup; `8040f8a` and `795325a` Phase 01; `d4a2b1a` Phase 01 report; `ce60b16` Phase 02 policy module (WIP); `c6724ff` Milo portfolio privacy (cherry-pick of 2236205); `a76916b` Phase 02; `6f2e814` its commit id; `7b14b56` Phase 03; `2f6a548` its commit id; `381a018` Phase 04; `b07e181` its commit id; `e64a5ee` Phase 05; `448e633` its commit id; `0448900` Phase 06; `1652e14` its commit id; `874c109` Phase 07; `f26af09` its commit id; `ab5a2ae` Phase 08; `0268f7f` its commit id; `17024f0` Phase 09; `3698975` its commit id; `3971e7f` Phase 10.
-- **Local server:** launch config `optic-ultra` (:8250, stand-in model :8251 from `tools/milo_standin_ultra.py`, which adds an `ADVISE` keyword that makes the answer break the policy and, since Phase 05, writes a Sector Read and a portfolio briefing in their writers' shapes; data `~/Optic/ultra-data`, sandbox brokerage, jobs off, no real model key). Seed password in `~/Optic/ultra-data/seed-output.txt` (never print it). The server does not reload Python: restart it after editing server code. The desktop app stops it when the session is paused; start it again with preview_start. `optic-ultra-p09` (:8252) serves the Phase 09 commit from a scratch worktree for A/B runs.
-- **Working folder (outside the repo):** `~/Optic/work/post-demo-ultra-2026-10-29/` (tools/, crawl1/, dead/, sheets/, baseline/, milo/, registry/, phase02/ to phase10/; the five-level proxy run in phase05/proxy/; Phase 08's stand-in rounds in phase08/proxy, proxy-r2 and proxy-r3, and advice set C in phase08/; Phase 10's measurements in phase10/ by kind, each from a `tools/phase10_*.py`, `loop_stall.py` or `ab_table.py`).
-- **Resource rule:** at most two subagents at a time (DECISIONS D-007). One proxy answer costs about 180,000 agent tokens.
-- **Next action:** Phase 11 (adversarial final audit): read `directives/11-adversarial-final-audit.md` and directive 00's final reporting. It ends in FINAL_REPORT.md with the directive's items and a READY or NOT READY verdict. It owes a fresh, agent-written, unseen advice set for the widened output check (BUG-132; measured only on unseen sets, D-015). The open row (BUG-173, the owner's call), the BLOCKED rows and BL-01 to BL-13 go into the verdict.
+- **Commits:** `fce3e71` setup; `8040f8a` and `795325a` Phase 01; `d4a2b1a` Phase 01 report; `ce60b16` Phase 02 policy module (WIP); `c6724ff` Milo portfolio privacy (cherry-pick of 2236205); `a76916b` Phase 02; `6f2e814` its commit id; `7b14b56` Phase 03; `2f6a548` its commit id; `381a018` Phase 04; `b07e181` its commit id; `e64a5ee` Phase 05; `448e633` its commit id; `0448900` Phase 06; `1652e14` its commit id; `874c109` Phase 07; `f26af09` its commit id; `ab5a2ae` Phase 08; `0268f7f` its commit id; `17024f0` Phase 09; `3698975` its commit id; `3971e7f` Phase 10; `a0e60f8` its commit id; the Phase 11 commit, whose id is recorded by the commit after it.
+- **Local server:** launch config `optic-ultra` (:8250, stand-in model :8251 from `tools/milo_standin_ultra.py`, which adds an `ADVISE` keyword that makes the answer break the policy and, since Phase 05, writes a Sector Read and a portfolio briefing in their writers' shapes; data `~/Optic/ultra-data`, sandbox brokerage, jobs off, no real model key). Seed password in `~/Optic/ultra-data/seed-output.txt` (never print it). The server does not reload Python: restart it after editing server code. The desktop app stops it when the session is paused; start it again with preview_start. `optic-ultra-p09` (:8252) serves the Phase 09 commit and `optic-ultra-base` (:8253) the demo-day build, from scratch worktrees, for A/B runs.
+- **Working folder (outside the repo):** `~/Optic/work/post-demo-ultra-2026-10-29/` (tools/, phase02/ to phase11/ and the earlier folders). Phase 11's tools are `tools/phase11_*.py` and `tools/phase11_batch.sh`; its results are in `phase11/`.
+- **Resource rule:** at most two subagents at a time (DECISIONS D-007).
+- **Next action:** the owner's. FINAL_REPORT.md sections 8 and 17 list what only the owner, counsel and outside providers can do: a working model key and the model-based check (BUG-132), licensed data (BUG-022, BUG-023), the security decisions (BL-10 to BL-13), SMTP, and a human run of the demo on real devices. Nothing here is to be pushed or deployed without the owner's word.
+
+## Phase 11 report (directive 11; reporting format of directive 00)
+
+1. **Inspected.**
+   - **Features:** every inventoried feature: the 75 route-level rows of the index at 1440 and 390, with a refresh and
+     a failure state.
+   - **The demo:** the fifteen-step investor journey under five scenarios.
+   - **Adversarial use:** fourteen attempts to break the terminal.
+   - **Earlier phases:** their browser checks (Phase 03, 06, 07, 08, 09, 10), rerun on the final tree.
+   - **Correctness:** the market-data reconciliation (three times) and the Dossier's accuracy run.
+   - **Milo:** the evaluation suite, and a fresh unseen advice set (BUG-132).
+   - **Simplicity:** the first-time density of the build the investors saw against this one.
+   - **Coverage:** Classic's 26 views; every GET API route.
+   - **Engineering:** the checks with their commands; the requirements matrix row by row.
+   - **Review:** an independent review of Phase 10's commit.
+2. **Problems discovered.**
+   - **Advice:** the advice output check caught 14 of 50 unseen advice sentences (BUG-132, reopened, P0).
+   - **In Phase 10's own work (BUG-181 to BUG-189 and BUG-192, from the review):**
+     - the deploy script's commit check broken (P1);
+     - typed text wiped by the Paper Desk's re-mark;
+     - one EDGAR 503 failing eleven forms;
+     - a budget-refused logo cached a day;
+     - a report shown under the wrong conversation;
+     - Home's desk note line wrong before its first write;
+     - the sign-in state bound to one host;
+     - a race in the search memo;
+     - a malformed turn raising;
+     - a lock race that can fetch one key twice (BUG-192, accepted as WONTFIX: no wrong figure).
+   - **Older, found by the audit's checks:**
+     - the next report date lost from every company's analysis (BUG-200, P1, live since 2026-10-13), and once back, a
+       past report shown as next (BUG-201, P1);
+     - the Options readings left loading for good after a failure (BUG-193, P1);
+     - owner pages calling a 503 a refusal (BUG-194);
+     - the Brokerage scorecard printing JSON (BUG-190);
+     - the palette asking a logo for typed text, and logo misses logged as errors (BUG-191, BUG-196);
+     - a level change in another tab not reaching the page (BUG-197);
+     - offline and refused sentences with the wrong verb (BUG-199);
+     - an unknown symbol keeping the Dossier's actions (BUG-198);
+     - the Home card's example links wrapping unevenly (BUG-195);
+     - the Milo suite's cache price (BUG-180).
+3. **Root causes.**
+   - **A rule-based classifier measured on its authors' sets:** it does not carry to new phrasings (D-099).
+   - **Effects not traced to their readers:** a script reading a health field; a pop-once leg read twice.
+   - **A provider's quirk taken as data:** Yahoo keeps a past report in its calendar.
+   - **Failure paths that skip one widget:** the Options readings.
+   - **Status codes read loosely:** a 503 as a refusal; a 5xx as a dead host.
+   - **Cross-tab state:** reached the slider, not the page.
+4. **Fixes implemented.**
+   - **Server:**
+     - commit and uptime public again (D-095);
+     - only refusals hold a feed host back (D-096);
+     - no-store and 204 for logo misses;
+     - the desk note's reasons told apart (D-097);
+     - legs readable twice (BUG-200);
+     - the first report date not yet past (BUG-201);
+     - the search memo keyed to its directory;
+     - malformed turns skipped.
+   - **v2:**
+     - the Paper Desk re-mark waits for the reader;
+     - reports keep their conversation;
+     - the Options readings stop on a failure;
+     - owner pages tell a failure from a refusal;
+     - the scorecard's inputs written out;
+     - no logo for typed text;
+     - a level change in another tab rewords the page;
+     - number-neutral failure sentences.
+   - **The Milo suite:** prices cache reads at the verified rate.
+   - **Not fixed (D-099):** the advice check was not widened again, so set D stays a measure; the remedy is the owner's
+     (BL-07, BL-01).
+5. **Files changed.**
+   - **Server:** `app/main.py`, `app/ai_store.py`, `app/feeds.py`, `app/universe.py`, `app/providers/yf.py`.
+   - **v2:** `core/api.js`, `core/prefs.js`, `ui/milo.js`, `ui/palette.js`, `ui/symbols.js`, and the pages brokerage,
+     home, options, paper and reports.
+   - **Classic:** `static/app.js`.
+   - **Tests:**
+     - `tests/test_phase11_fixes.py` (new, 13 tests);
+     - updated: `test_health_version`, `test_health_refused_key`, `test_desk_freshness`, `test_phase10_hardening`,
+       `test_v2_overview_classic_port`, `test_v2_search_rows`;
+     - `tests/milo_eval/run.py`.
+   - **Docs:**
+     - FINAL_REPORT.md;
+     - TEST_RESULTS Phase 11;
+     - BUG_REGISTER BUG-180 to BUG-201, with BUG-132 reopened;
+     - DECISIONS D-095 to D-100;
+     - REQUIREMENTS_MATRIX R11, and 25 cells filled across R02 to R06;
+     - BLOCKERS BL-01 and BL-07;
+     - FEATURE_REGISTRY and COMPLIANCE_REVIEW section 4.2.
+6. **Tests executed.**
+   - The full suite.
+   - The Milo evaluation suite.
+   - Set D.
+   - The feature check and its rechecks.
+   - Home's panel timings.
+   - Eight journey runs.
+   - The adversarial run, three times over.
+   - The reruns of Phase 03, 06, 07, 08, 09 and 10's checks.
+   - The accuracy run.
+   - The reconciliation, three times.
+   - Classic's crawl at two sizes.
+   - The API sweep.
+   - The density comparison.
+   - The syntax, unused-code and secret scans.
+7. **Passed / failed.**
+   - **Suite:** 8,084 passed, 1 skipped, 0 failed.
+   - **Milo suite:** 949 of 949 request-level checks.
+   - **Set D:** 14 of 50 caught.
+   - **Journey:** the final runs 15 of 15, three times.
+   - **Adversarial:** 14 of 14.
+   - **Earlier phases' tools:**
+     - Phase 03: 27 of 27;
+     - Phase 06: 16 of 16;
+     - Phase 07: 27 of 28 (C18's isolation held; account B's daily allowance was spent);
+     - Phase 08: 3 of 3;
+     - Phase 09: A to H;
+     - Phase 10's resilience: 12 of 12.
+   - **Accuracy:** 10 of 10.
+   - **Reconciliation:** the final run 271 PASS, 5 FAIL, 2 UNVERIFIED, all misses conditions.
+   - **Classic:** 52 of 52.
+   - **API sweep:** no 5xx.
+   - **Features:** 91 of 95 passing, 2 partly verified, 1 blocked, 1 not tested.
+8. **Browser verification.**
+   - **How:** headless Chrome on live data against the local server, with screenshots for every journey step, every
+     feature row and the comparison.
+   - **What it showed:**
+     - the demo journey whole at three sizes, after reloads and with back and forward;
+     - every failure condition stated;
+     - figures matching the providers and Optic's own data.
+9. **Outstanding** (FINAL_REPORT sections 8 and 17):
+   - **The P0s:** BUG-132 (the owner's: BL-07, BL-01), and BUG-022 and BUG-023 (the owner's and counsel's: BL-09).
+   - **Open P2s:** BUG-173, BUG-187, BUG-195, BUG-198.
+   - **Not testable here:** a real model, real providers, real devices, a screen reader, and counsel.
+10. **Commit and next phase.** Committed on `post-demo-ultra` (not pushed, not deployed); the id is recorded by the
+    commit after it. There is no next phase: the decision is the owner's.
 
 ## Phase 10 report (directive 10; reporting format of directive 00)
 
@@ -610,3 +743,7 @@ Read this and [REQUIREMENTS_MATRIX.md](REQUIREMENTS_MATRIX.md) before changing a
 
 ### 2026-10-30 Phase 10 (02:50 to about 13:30 ET)
 - Performance baseline, fixes and two A/B runs; the cost audit; the security review (12 fixed, 5 escalated); 25 routes checked for accessibility; the 116-check sweep; twelve resilience cases; the analytics review; 28 new rows and 31 earlier ones closed; suite green; committed (not pushed).
+
+### 2026-10-30 Phase 11 (about 13:30 to 18:45 ET, with a pause of about three hours at the usage limit)
+- The feature check (95 ids), the demo journey under five scenarios (15 of 15 on the final tree), 14 adversarial cases, the earlier phases' checks rerun, the reconciliation three times, the Milo suite, a fresh advice set (14 of 50 caught), the density comparison with the demo-day build, an independent review of Phase 10; 22 defects found, 18 fixed; FINAL_REPORT: NOT READY, blocking issues remain; suite green; committed (not pushed).
+

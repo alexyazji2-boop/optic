@@ -248,6 +248,18 @@ def keep(kind: str, key: str, payload: Dict[str, Any]) -> bool:
     return True
 
 
+def attempts(kind: str, key: str) -> int:
+    """How many attempts `claim` has counted at a piece under kind/key; 0 before the first. So a page can tell a piece
+    not yet tried from one that failed (BUG-186, Phase 11)."""
+    try:
+        with closing(_connect()) as conn:
+            row = conn.execute("SELECT attempts FROM kept WHERE kind = ? AND key = ?", (kind, key)).fetchone()
+        return int(row["attempts"] or 0) if row else 0
+    except (sqlite3.Error, OSError):
+        with _MEMORY_LOCK:
+            return int((_MEMORY.get((kind, key)) or {}).get("attempts") or 0)
+
+
 def claim(kind: str, key: str, max_attempts: int, retry_seconds: float) -> bool:
     """Count an attempt at a piece not yet kept, if one is allowed now. True
     when the caller may make it.

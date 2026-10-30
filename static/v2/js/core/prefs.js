@@ -133,6 +133,10 @@ export function setKnowledge(id, { quiet = false } = {}) {
   if (changed) emit(quiet ? 'knowledge-synced' : 'knowledge');
   return changed;
 }
+// The level moved in another tab: what this page has drawn at the old level is drawn again, as for a change made
+// here. Only the sliders followed it, so a Dossier's Simple Analysis kept its old wording under a slider showing the
+// new level (BUG-197, Phase 11). Quiet: the other tab has already sent it to the account.
+try { window.addEventListener('storage', (e) => { if (e.key === KNOW_KEY && levelOf(e.newValue)) emit('knowledge-synced'); }); } catch (e) { /* no window */ }
 /** How a page's own terms explain themselves at this level, as Classic's catalogue says: the definition shown with the
  *  term (New to Markets), the term marked to explain itself (Beginner to Advanced), or left plain (Expert). */
 export const explainPolicy = (id = knowledge()) => (levelOf(id) === 'new' ? 'inline' : levelOf(id) === 'expert' ? 'off' : 'on_demand');

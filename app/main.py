@@ -549,24 +549,40 @@ class _Legs:
         self.parallel = parallel
         self.timings = timings
         self._legs: Dict[str, Any] = {}
+        # A leg read a second time gets the first read's answer, or its exception again. The earnings date is read by
+        # the volatility surface and again for "what matters next"; the second read found the leg gone (KeyError), so
+        # /api/ticker lost next_earnings_date whenever the chain was complete, since 2026-10-13 (BUG-200, Phase 11).
+        self._read: Dict[str, Tuple[bool, Any]] = {}
 
     def start(self, name: str, fn, *args, **kwargs) -> None:
         if self.timings is not None:
             fn = self.timings.wrap(name, fn)
+        self._read.pop(name, None)
         self._legs[name] = (_LEG_POOL.submit(fn, *args, **kwargs) if self.parallel
                             else (fn, args, kwargs))
 
     def get(self, name: str) -> Any:
+        if name in self._read:
+            ok, value = self._read[name]
+            if ok:
+                return value
+            raise value
         leg = self._legs.pop(name)
         began = time.perf_counter()
         try:
             if not self.parallel:
                 fn, args, kwargs = leg
-                return fn(*args, **kwargs)
-            return leg.result()
+                value = fn(*args, **kwargs)
+            else:
+                value = leg.result()
+        except Exception as exc:
+            self._read[name] = (False, exc)
+            raise
         finally:
             if self.timings is not None:
                 self.timings.blocked += time.perf_counter() - began
+        self._read[name] = (True, value)
+        return value
 
 
 def _sector_confirm(ticker: str) -> Dict[str, Any]:
@@ -1064,7 +1080,9 @@ def _swing_snapshot(
     # matters next" without it would be missing the obvious answer. Cached by
     # the provider and best-effort, like the calendar.
     try:
-        payload["next_earnings_date"] = legs.get("earnings_date")
+        nxt = legs.get("earnings_date")
+        # a date kept from before midnight that has since passed is not the next report (BUG-201)
+        payload["next_earnings_date"] = nxt if not nxt or str(nxt) >= session_mod.market_today().isoformat() else None
     except Exception as exc:
         logging.getLogger("uvicorn.error").warning(
             "next earnings date unavailable for %s: %s", ticker, exc)
@@ -1157,10 +1175,18 @@ async def health(request: Request) -> Dict[str, Any]:
         "realtime_chain": PROVIDER.name == "tradier"
         and "sandbox." not in str(getattr(PROVIDER, "base", "")),
         "server_time": now.isoformat(),
+        # The commit and uptime stay public: the repository is public, publish.sh reads `commit` to see a deploy land,
+        # and DEPLOY.md reads `uptime_seconds` to tell a crashloop from a deploy (BUG-181, Phase 11)
+        "commit": deployed_commit(),
+        # Uptime is the other half of the question. A process that restarted
+        # minutes ago either just deployed or is crash-looping, and both are
+        # things you want to see rather than infer.
+        "booted_at": _BOOTED_AT.isoformat(),
+        "uptime_seconds": int((now - _BOOTED_AT).total_seconds()),
     }
     assistant = _assistant_status()
-    # Where the AI credential comes from, whether Anthropic refused it, the commit, uptime and the migrations are the
-    # operator's diagnostics: a visitor gets whether Milo is on, nothing more (BUG-052, Phase 10)
+    # Where the AI credential comes from, whether Anthropic refused it and the migrations are the operator's
+    # diagnostics: a visitor gets whether Milo is on, nothing more (BUG-052, Phase 10)
     if not _operator(request):
         on = bool(assistant.get("enabled"))
         # a reason in the visitor's words when Milo is off (Classic's greeting reads `hint`); the operator's is theirs
@@ -1168,12 +1194,6 @@ async def health(request: Request) -> Dict[str, Any]:
     return {
         **public,
         "assistant": assistant,
-        "commit": deployed_commit(),
-        # Uptime is the other half of the question. A process that restarted
-        # minutes ago either just deployed or is crash-looping, and both are
-        # things you want to see rather than infer.
-        "booted_at": _BOOTED_AT.isoformat(),
-        "uptime_seconds": int((now - _BOOTED_AT).total_seconds()),
         "accounts": _accounts_health(),
     }
 
@@ -1976,7 +1996,14 @@ def _logo_fetch(sym: str) -> Optional[Tuple[bytes, str]]:
     return None
 
 
-def _logo(sym: str) -> Optional[Tuple[bytes, str]]:
+# A listed symbol refused for this hour's fetch budget: a miss to say now and forget, since the logo is fetched once the
+# budget allows (BUG-184, Phase 11: it went out as a 404 browsers kept for a day)
+_LOGO_LATER = "later"
+
+
+def _logo(sym: str) -> Any:
+    """The stored or fetched logo as (bytes, type); None when there is none to be had; `_LOGO_LATER` when the
+    budget refused a fetch this hour."""
     os.makedirs(_LOGO_DIR, exist_ok=True)
     base = os.path.join(_LOGO_DIR, sym.replace(".", "_"))
     now = time.time()
@@ -1988,8 +2015,10 @@ def _logo(sym: str) -> Optional[Tuple[bytes, str]]:
                 return fh.read(), kind
     if os.path.exists(base + ".none") and now - os.path.getmtime(base + ".none") < _LOGO_MISS_KEEP:
         return None
-    if universe_mod.known_symbol(sym) is False or not _logo_budget():
-        return None                      # not stored: a listed symbol is fetched once the budget allows
+    if universe_mod.known_symbol(sym) is False:
+        return None
+    if not _logo_budget():
+        return _LOGO_LATER               # not stored: a listed symbol is fetched once the budget allows
     with _LOGO_LOCK:
         got = _logo_fetch(sym)
     if got is None:
@@ -2003,14 +2032,21 @@ def _logo(sym: str) -> Optional[Tuple[bytes, str]]:
     return got
 
 
+# No logo is 204 No Content: the image's error event still leaves the symbol's initial showing in both apps, and the
+# browser logs no "Failed to load resource" for every fund without one in a list of results (BUG-196, Phase 11).
+_NO_LOGO_STATUS = 204
+
+
 @app.get("/api/logo/{symbol}")
 async def company_logo(symbol: str) -> Response:
     sym = str(symbol or "").upper()
     if not _LOGO_SYM.fullmatch(sym):      # match() took a trailing newline ("AAPL\n"), a second cache key (SEC-06)
-        return Response(status_code=404, headers={"Cache-Control": "public, max-age=86400"})
+        return Response(status_code=_NO_LOGO_STATUS, headers={"Cache-Control": "public, max-age=86400"})
     got = await asyncio.get_running_loop().run_in_executor(_LOGO_POOL, _logo, sym)
     if got is None:
-        return Response(status_code=404, headers={"Cache-Control": "public, max-age=86400"})
+        return Response(status_code=_NO_LOGO_STATUS, headers={"Cache-Control": "public, max-age=86400"})
+    if got == _LOGO_LATER:
+        return Response(status_code=_NO_LOGO_STATUS, headers={"Cache-Control": "no-store"})
     body, kind = got
     return Response(content=body, media_type=kind, headers={
         "Cache-Control": "public, max-age=604800",
@@ -3419,8 +3455,16 @@ def _morning_desk(macro: Optional[Dict[str, Any]], write: bool = False) -> Dict[
         desk["rewriting"] = _rewrite_desk_soon(desk) if write else False
         prose = None
     elif not prose:
-        desk["voice_reason"] = ("unconfigured" if ai.available().get("enabled") is not True
-                                else "unwritten")
+        # Since only the keep-warm job writes it (BUG-032), "not written" is often "not tried yet today" or "switched
+        # off", which Home called "could not be produced" (BUG-186, Phase 11)
+        if ai.available().get("enabled") is not True:
+            desk["voice_reason"] = "unconfigured"
+        elif not DESK_PROSE_AUTO:
+            desk["voice_reason"] = "off"
+        elif not ai_store.attempts("desk", str(desk.get("date") or "")):
+            desk["voice_reason"] = "pending"
+        else:
+            desk["voice_reason"] = "unwritten"
     if prose:
         desk["voice"] = "written"
         desk["written_by"] = prose.get("written_by")
@@ -8262,8 +8306,11 @@ def _personal_blocks_for(history: List[Dict[str, Any]], context: Optional[Dict[s
     if not isinstance(context, dict):
         return context, []
     present = [k for k in _PERSONAL_BLOCKS if context.get(k)]
-    last = next((t for t in reversed(history or []) if t.get("role") != "assistant"), None)
-    if not present or _ABOUT_THE_READERS.search((last or {}).get("content") or ""):
+    # a turn that is not a dict is skipped, not read: it raised here, outside the answer's try, after the question
+    # was counted (BUG-189, Phase 11)
+    last = next((t for t in reversed(history or []) if isinstance(t, dict) and t.get("role") != "assistant"), None)
+    content = (last or {}).get("content")
+    if not present or _ABOUT_THE_READERS.search(content if isinstance(content, str) else ""):
         return context, []
     return {k: v for k, v in context.items() if k not in present}, [_PERSONAL_BLOCKS[k] for k in present]
 

@@ -262,10 +262,21 @@ function exposure(e, d) {
     ${(e.etfs || []).length ? html`<h3>Funds</h3><ul class="plain">${e.etfs.map((f) => html`<li><b>${f.symbol}</b> ${pct(f.share_pct)} of your portfolio: ${f.status === 'looked_through' ? `holdings as of ${day(f.report_date)} from ${f.source || 'SEC Form N-PORT'}, ${pct(f.coverage_pct)} of the fund itemised${f.stale ? ' (an older copy: SEC could not be reached)' : ''}` : clean(f.reason || status[f.status] || 'not looked through')}${f.leveraged || f.inverse ? html` ${tag('warn', 'Leveraged or inverse')}` : ''}</li>`)}</ul>` : ''}
     ${limits(e.limitations)}</section>`;
 }
+// An assessment's inputs and weights as a reader reads them: names in words, figures as given, a list one level deep,
+// anything deeper on one line. They were printed as JSON ("Inputs: {"stocks_assessed":3,...}", BUG-190, Phase 11).
+const inWords = (k) => String(k).replace(/_pct$/, ' %').replace(/_/g, ' ');
+const inValue = (v) => (v === null || v === undefined ? 'none' : typeof v === 'boolean' ? (v ? 'yes' : 'no') : isNum(v) ? String(Math.round(v * 100) / 100) : String(v));
+const isLeaf = (v) => v === null || typeof v !== 'object';
+const inLine = (v) => (isLeaf(v) ? inValue(v) : Array.isArray(v) ? v.map(inLine).join(', ')
+  : Object.entries(v).map(([k, x]) => (isLeaf(x) ? `${inWords(k)} ${inValue(x)}` : `${inWords(k)} (${inLine(x)})`)).join(', '));
+function readable(v, depth = 0) {
+  if (isLeaf(v)) return inValue(v);
+  if (Array.isArray(v)) return v.every(isLeaf) ? v.map(inValue).join(', ') : html`<ul class="plain">${v.slice(0, 25).map((x) => html`<li>${depth >= 1 ? inLine(x) : readable(x, depth + 1)}</li>`)}</ul>`;
+  return html`<ul class="plain">${Object.entries(v).map(([k, x]) => html`<li>${inWords(k)}: ${depth >= 1 ? inLine(x) : readable(x, depth + 1)}</li>`)}</ul>`;
+}
 function scorecard(s) {
   if (!s) return html`<section class="section"><h2 class="t-h2">Optic scorecard</h2><p class="t-muted" role="status">Calculating the five assessments...</p></section>`;
   if (s.error) return html`<section class="section"><h2 class="t-h2">Optic scorecard</h2><p>${s.error}</p></section>`;
-  const txt = (v) => (typeof v === 'string' ? v : Array.isArray(v) ? v.join(', ') : JSON.stringify(v));
   return html`<section class="section" aria-labelledby="bs-h"><h2 class="t-h2" id="bs-h">Optic scorecard</h2>
     <p class="section-sub">${src('optic')} Five separate assessments of the portfolio as it stands, each with what it is built from and what it could not assess. There is no overall score.</p>
     <div class="bk-scores">${(s.assessments || []).length ? s.assessments.map((a) => { const scored = isNum(a.score);
@@ -274,7 +285,7 @@ function scorecard(s) {
       return html`<div class="bk-score"><div class="split"><p class="t-label">${a.label}</p>${scored ? html`<b class="bk-score-n">${Math.round(a.score)}</b>` : tag('off', 'Not scored')}</div><p class="bk-level">${a.level || ''}</p>
         ${scored ? html`<span class="bk-bar-t" aria-hidden="true"><span class="bk-bar-f" style="width:${Math.max(2, Math.min(100, a.score))}%"></span></span>` : ''}<p>${clean(a.summary || '')}</p>
         <p class="asof">Coverage ${pct(a.coverage_pct, 0)} of value.${drivers ? ` Driven by ${drivers}.` : ''}</p>${missing ? html`<p class="asof">Not assessed: ${missing}.</p>` : ''}
-        <details class="more-inline"><summary>Inputs and method</summary><p>${clean(a.method || '')}</p>${a.weights ? html`<p>Weights: ${txt(a.weights)}</p>` : ''}${a.inputs ? html`<p>Inputs: ${txt(a.inputs)}</p>` : ''}<p class="asof">${a.version || s.version || ''}</p></details></div>`; }) : html`<p>No assessments could be made.</p>`}</div>
+        <details class="more-inline"><summary>Inputs and method</summary><p>${clean(a.method || '')}</p>${a.weights ? html`<p>Weights:</p>${readable(a.weights)}` : ''}${a.inputs ? html`<p>Inputs:</p>${readable(a.inputs)}` : ''}<p class="asof">${a.version || s.version || ''}</p></details></div>`; }) : html`<p>No assessments could be made.</p>`}</div>
     <p class="asof">${clean(s.disclaimer || 'These describe the portfolio today. They are not forecasts of return and not validated probabilities.')}</p></section>`;
 }
 function optionsRisk(o) {

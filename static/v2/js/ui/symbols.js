@@ -27,14 +27,16 @@ export function marked(text, query) {
 }
 /** The logo, over the symbol's initial. `lazy: false` for one above the fold, such as the Dossier header's (on every
  *  tab since 2026-10-25, as Classic's header has it), which a repaint draws afresh and a lazy load could leave waiting. */
-export function logoHTML(symbol, { lazy = true } = {}) {
+export function logoHTML(symbol, { lazy = true, image = true } = {}) {
   const sym = String(symbol || '').toUpperCase(), first = (sym.match(/[A-Z0-9]/) || [''])[0];
-  return `<span class="sym-logo" aria-hidden="true" data-l="${esc(first)}">${LOGO_SYM.test(sym) && !NO_LOGO.has(sym) ? `<img src="/api/logo/${encodeURIComponent(sym)}" alt=""${lazy ? ' loading="lazy"' : ''} decoding="async">` : ''}</span>`;
+  return `<span class="sym-logo" aria-hidden="true" data-l="${esc(first)}">${image && LOGO_SYM.test(sym) && !NO_LOGO.has(sym) ? `<img src="/api/logo/${encodeURIComponent(sym)}" alt=""${lazy ? ' loading="lazy"' : ''} decoding="async">` : ''}</span>`;
 }
 /** One result: the logo, the symbol and the name with what was typed marked, and the kind of listing. */
 export function rowHTML(r, query, { kind = true } = {}) {
   const k = r.kind || (r.etf ? 'etf' : 'stock');
-  return `${logoHTML(r.symbol)}<span class="sym-sym">${marked(r.symbol, query)}</span><span class="sym-name">${marked(r.name || '', query)}</span>${kind && KIND[k] ? `<span class="sym-kind">${esc(KIND[k])}</span>` : ''}`;
+  // text taken as typed is not yet a listing: its initial only, since asking for "NVIDIA"'s logo was a 404 in the console
+  // on every search by name (BUG-191, Phase 11)
+  return `${logoHTML(r.symbol, { image: !r.typed })}<span class="sym-sym">${marked(r.symbol, query)}</span><span class="sym-name">${marked(r.name || '', query)}</span>${kind && KIND[k] ? `<span class="sym-kind">${esc(KIND[k])}</span>` : ''}`;
 }
 
 // a logo that did not load leaves the initial showing (one listener for the page)

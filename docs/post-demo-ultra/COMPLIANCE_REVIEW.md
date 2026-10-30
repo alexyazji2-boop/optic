@@ -192,6 +192,19 @@ Reading the table: on sentences written by someone who had not seen it, the best
 of the advice (27 of 50) and wrongly removed about 1 research sentence in 50. Version 4, the one in this branch, has
 not been measured on unseen sentences; a fresh set is part of Phase 11's adversarial audit.
 
+Phase 11 rows (the check as it stands after Phase 08's widening on set C, D-064):
+
+| Version | Set | Advice caught | Research wrongly flagged |
+|---|---|---|---|
+| 5, widened on set C (Phase 08) | set C (seen) | 50 of 50 | 0 of 50 |
+| 5 | set D: 100 sentences written on 2026-10-30 by an agent that read nothing on this machine (`phase11/heldout-advice-set-d.json`) | **14 of 50** | **0 of 50** |
+
+On the newest unseen set the check caught fewer than a third of the advice sentences, among them plain instructions
+on the reader's own holdings. It is a last line behind the request classifier and the prompt's policy, not a
+safeguard to rely on alone; whether the model writes such sentences in the first place has not been measured, as no
+model can be called here (BL-01). A model-based reading of each finished answer (BL-07) is the owner's decision
+(D-099; BUG-132 OPEN).
+
 Each version check takes about 0.14 ms per sentence (4.3 ms for a 30-sentence answer), so the gate adds no
 noticeable delay to the stream.
 

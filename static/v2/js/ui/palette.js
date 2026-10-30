@@ -118,7 +118,7 @@ function savedFor(sym) {
 function symbolRows(sym, detail, { kind = '', enter = true, bare = false } = {}) {
   const word = KIND_WORD[kind];
   const what = [detail, word && kind !== 'etf' ? word : ''].filter(Boolean).join(', ');
-  const out = [{ group: 'Open', lead: isInstrument(sym, kind || undefined) ? icon('markets') : icon('dossier'), label: sym, detail: what, sym: { symbol: sym, name: detail, kind }, tag: enter ? 'enter' : '', run: go(openHref(sym, kind || undefined)) }];
+  const out = [{ group: 'Open', lead: isInstrument(sym, kind || undefined) ? icon('markets') : icon('dossier'), label: sym, detail: what, sym: { symbol: sym, name: detail, kind, typed: !kind }, tag: enter ? 'enter' : '', run: go(openHref(sym, kind || undefined)) }];
   if (bare) return out;   // nothing listed under that name: no Chart, Options and the rest to offer for it
   if (isInstrument(sym, kind || undefined)) {
     const proxy = PROXY[sym];

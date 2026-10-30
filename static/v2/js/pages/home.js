@@ -255,6 +255,8 @@ function voiceWhy(md) {
   if (md.voice !== 'mechanical') return '';
   if (md.voice_reason === 'moved') return `The written version${md.written_at ? ` from ${etTime(md.written_at)}` : ''} is not shown, because the market has moved since it was written and its figures no longer match.${md.rewriting ? ' A new one is being written against today\'s figures.' : ''}`;
   if (md.voice_reason === 'unwritten') return 'Today\'s written version could not be produced.';
+  if (md.voice_reason === 'pending') return 'Today\'s written version is not ready yet.';
+  if (md.voice_reason === 'off') return 'The written version is switched off on this terminal.';
   return '';
 }
 export function deskBody(md) {

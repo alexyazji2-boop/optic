@@ -118,14 +118,19 @@ def test_the_live_desk_replaces_it_once_the_tape_has_moved(desk_parts):
     assert desk["written_at"] == "2026-09-28T13:05:00+00:00"
 
 
-@pytest.mark.parametrize("enabled,reason", [(True, "unwritten"), (False, "unconfigured")])
-def test_a_missing_written_desk_says_which_kind_of_missing(desk_parts, enabled, reason):
+@pytest.mark.parametrize("enabled,auto,tried,reason", [(True, True, 1, "unwritten"), (False, True, 0, "unconfigured"),
+                                                         (True, True, 0, "pending"), (True, False, 0, "off")])
+def test_a_missing_written_desk_says_which_kind_of_missing(desk_parts, enabled, auto, tried, reason):
     """"Not configured on this deployment" was printed on the live site, where
-    the assistant is configured and the day's note had simply failed."""
+    the assistant is configured and the day's note had simply failed. Since only the
+    keep-warm job writes the note, "could not be produced" was printed before any
+    attempt and with the note switched off (BUG-186, Phase 11)."""
     live, patch = desk_parts
     patch.setattr(main, "_desk_prose", lambda desk, write=False: None)
     patch.setattr(main.ai, "available", lambda: {"enabled": enabled})
-    assert main._morning_desk(None, write=True)["voice_reason"] == reason
+    patch.setattr(main, "DESK_PROSE_AUTO", auto)
+    patch.setattr(main.ai_store, "attempts", lambda kind, key: tried if (kind, key) == ("desk", "2026-09-28") else 0)
+    assert main._morning_desk(None, write=False)["voice_reason"] == reason
 
 
 def test_the_written_desk_records_what_it_was_written_against(monkeypatch):
@@ -157,6 +162,8 @@ def test_the_line_under_the_desk_says_why_it_is_the_assembled_one():
       var moved = deskVoiceReason({voice_reason: 'moved', written_at: 'T'});
       assert(moved.indexOf('from STAMP is not shown') > 0 && moved.indexOf('no longer match') > 0, moved);
       assert(deskVoiceReason({voice_reason: 'unwritten'}).indexOf('could not be produced') > 0, 'unwritten');
+      assert(deskVoiceReason({voice_reason: 'pending'}).indexOf('not ready yet') > 0, 'pending');
+      assert(deskVoiceReason({voice_reason: 'off'}).indexOf('switched off') > 0, 'off');
       assert(deskVoiceReason({voice_reason: 'unconfigured'}).indexOf('not configured') > 0, 'unconfigured');
       assert(deskVoiceReason({}).indexOf('not configured') > 0, 'an old payload');
       print('TEST_OK');""")

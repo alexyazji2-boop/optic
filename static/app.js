@@ -10196,6 +10196,8 @@ function deskVoiceReason(d) {
       + (d.rewriting ? ' A new one is being written against the figures above.' : '');
   }
   if (d.voice_reason === 'unwritten') return "Today's written version could not be produced.";
+  if (d.voice_reason === 'pending') return "Today's written version is not ready yet.";
+  if (d.voice_reason === 'off') return 'The written version is switched off on this terminal.';
   return 'The written version needs the assistant, which is not configured on this deployment.';
 }
 

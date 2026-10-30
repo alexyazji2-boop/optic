@@ -335,9 +335,10 @@ def test_the_logo_route(logos):
     assert a.status_code == 200 and a.headers["content-type"].startswith("image/svg+xml")
     assert "sandbox" in a.headers["content-security-policy"] and a.headers["x-content-type-options"] == "nosniff", "an SVG opened on its own runs nothing"
     assert c.get("/api/logo/AAPL").status_code == 200 and logos == ["AAPL"], "kept on disk: asked for once"
-    assert c.get("/api/logo/ZZZZ").status_code == 404 and c.get("/api/logo/ZZZZ").status_code == 404 and logos.count("ZZZZ") == 1, "no logo is remembered too"
+    # no logo is 204 No Content since Phase 11 (BUG-196): the page falls back to the initial without a console error
+    assert c.get("/api/logo/ZZZZ").status_code == 204 and c.get("/api/logo/ZZZZ").status_code == 204 and logos.count("ZZZZ") == 1, "no logo is remembered too"
     for bad in ("%5EGSPC", "ES%3DF", "..%2Fetc", "A" * 14):
-        assert c.get(f"/api/logo/{bad}").status_code == 404
+        assert c.get(f"/api/logo/{bad}").status_code in (204, 404)    # 404: a path the route never sees
     assert "^GSPC" not in logos and len(logos) == 2, "an index, a future or a path is never asked for"
 
 

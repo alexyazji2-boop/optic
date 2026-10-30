@@ -26,9 +26,10 @@ from tests.milo_eval import harness, checks          # noqa: E402
 from tests.milo_eval.cases import CASES, CATEGORIES   # noqa: E402
 
 # Anthropic's list price for the chat model (app/ai.py PULSE_MODEL, claude-sonnet-5-5), per million tokens, as the
-# 2026-10-16 live trial recorded it (docs/milo/reasoning-eval/LIVE-MODEL-TRIAL.md: $2 in, $10 out); cached input at a
-# tenth. No tokenizer is reachable here, so characters are turned into tokens by a rule of thumb.
-PRICE_IN, PRICE_OUT, PRICE_CACHED = 2.0, 10.0, 0.2
+# 2026-10-16 live trial recorded it (docs/milo/reasoning-eval/LIVE-MODEL-TRIAL.md: $2 in, $10 out); a cache read at
+# $0.10, as Anthropic's pricing page read on 2026-10-30 gives it and app/ai_store.py prices it (BUG-176; $0.20 before
+# Phase 11, BUG-180). No tokenizer is reachable here, so characters are turned into tokens by a rule of thumb.
+PRICE_IN, PRICE_OUT, PRICE_CACHED = 2.0, 10.0, 0.1
 CHARS_PER_TOKEN = 3.6
 FAMILIES = ("tool_selection", "factual_support", "calculation", "freshness", "authorization", "injection",
             "citation_plumbing", "policy", "level", "budget")
@@ -118,7 +119,7 @@ def report(results, out: Path, started: float):
                   int(statistics.median(chars)), max(chars)) if chars else "",
               "* Estimated input per answer {:,} tokens median (two model rounds, base prompt cached), output 1,200 tokens assumed.".format(
                   int(statistics.median(toks))) if toks else "",
-              "* Estimated cost per answer: median ${:.4f}, max ${:.4f}, at $2 / $10 per million tokens in / out and cached input at $0.20.".format(
+              "* Estimated cost per answer: median ${:.4f}, max ${:.4f}, at $2 / $10 per million tokens in / out and cached input at $0.10.".format(
                   statistics.median(costs), max(costs)) if costs else "",
               "", "## Answer-level checks (not executed)", "",
               "{} answer checks are defined across the cases (`answer_checks.py`), with {} outcomes named unacceptable. None ran: no "
