@@ -27,7 +27,7 @@ from typing import Any, Dict, List, Optional
 
 import numpy as np
 
-from ..fred import SERIES_MAP, observations
+from ..fred import observations
 
 # Grouped the way a macro reader thinks, and ordered within each group by how
 # often the number actually moves markets.

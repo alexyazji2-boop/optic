@@ -34,7 +34,7 @@ Conventions, stated once here and in METHODS.md:
 from __future__ import annotations
 
 import math
-from datetime import date, timedelta
+from datetime import date
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
 DAYS_PER_YEAR = 365.25

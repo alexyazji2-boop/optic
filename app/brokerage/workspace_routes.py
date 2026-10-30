@@ -20,6 +20,7 @@ from typing import Any, Callable, Dict, List, Optional
 from fastapi import APIRouter, Body, HTTPException, Request
 from starlette.concurrency import run_in_threadpool
 
+from .. import public_errors
 from ..auth import deps
 from . import alerts as alerts_mod
 from . import service, store, workspace
@@ -182,5 +183,5 @@ async def ws_alerts_settings(request: Request, payload: Dict[str, Any] = Body(de
     try:
         saved = await run_in_threadpool(alerts_mod.save_settings, user["id"], payload or {})
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
+        raise HTTPException(status_code=400, detail=public_errors.public(exc, 300))
     return {"ok": True, "settings": saved}

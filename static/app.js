@@ -1028,6 +1028,8 @@ function initGlossaryTooltips() {
 /* ------------------------------------------------------------------ utils */
 
 function esc(str) {
+  // Not the apostrophe: every attribute this escapes into is double-quoted (SEC-15, Phase 10; the one single-quoted
+  // sink, data-spark, was changed to double quotes), and escaping it here would change Classic's text everywhere.
   return String(str === null || str === undefined ? '' : str)
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
@@ -4795,7 +4797,7 @@ function homeResultHTML(res) {
   if (res.pending) return `<span class="cs-note-result is-pending">${esc(res.text || '')}</span> `;
   const headline = res.headline
     ? ` <span class="cs-note-src">${esc(res.headline_source || 'Agency')}: \u201c${esc(res.headline)}\u201d${
-      res.headline_url ? ` <a href="${esc(res.headline_url)}" target="_blank" rel="noopener">Release</a>` : ''}</span>`
+      res.headline_url ? ` <a href="${safeHref(res.headline_url)}" target="_blank" rel="noopener">Release</a>` : ''}</span>`
     : '';
   return `<span class="cs-note-result"${res.forecast_note ? ` title="${esc(res.forecast_note)}"` : ''}>${
     esc(res.text || '')}</span>${headline} `;
@@ -18755,6 +18757,9 @@ function renderCatalystMode(c) {
       ${read.headline ? `<p class="earn-brief-lede" style="margin-top:var(--space-5)">${esc(read.headline)}</p>` : ''}
       <div class="weekly-body">${briefProse(read.paragraphs)}</div>
       <p class="caveat">${esc(read.disclaimer || '')}</p>`
+    : read.on_request ? `<p class="caveat" style="margin-top:var(--space-4)">${catalystReadBusy ? 'Writing the read...' : 'Not written yet.'}</p>
+      ${catalystReadBusy ? '' : '<button type="button" class="btn" data-catread-write>Write the read</button>'}
+      <p class="caveat">Written by an AI model when someone asks, then kept for an hour and shared with every reader.</p>`
     : '<p class="caveat" style="margin-top:var(--space-4)">No written read for this release.</p>'}
     <p class="caveat" id="catmode-method">${gloss(c.method || '')}</p>
     <p class="caveat"><button type="button" class="cat-archive-link"
@@ -18806,11 +18811,29 @@ function catalystAgeLabel(age) {
 // the tab is revisited after this long, not once per page.
 const CATALYST_MODE_TTL_MS = 10 * 60 * 1000;
 let catalystModeAt = 0;
+let catalystReadBusy = false;
+
+/* The written read is a paid model call, so opening the tab asks only for one already kept
+ * (`cached=true`) and the reader writes one with the button, as in the rebuilt app. Opening
+ * the panel wrote a read whenever none was kept (Phase 10 cost audit, C4). */
+document.addEventListener('click', async (e) => {
+  if (!e.target.closest || !e.target.closest('[data-catread-write]') || catalystReadBusy) return;
+  catalystReadBusy = true;
+  mountPanel('catmode-host', renderCatalystMode(STATE.catalystMode));
+  try {
+    STATE.catalystMode = await getJSON('/api/catalyst-mode');
+    catalystModeAt = Date.now();
+  } catch (err) {
+    if (window.OpticAuth && window.OpticAuth.toast) window.OpticAuth.toast(`The read could not be written just now (${err.message}).`, 'bad');
+  }
+  catalystReadBusy = false;
+  mountPanel('catmode-host', renderCatalystMode(STATE.catalystMode));
+});
 
 async function loadCatalystMode() {
   if (STATE.catalystMode && Date.now() - catalystModeAt < CATALYST_MODE_TTL_MS) return;
   try {
-    STATE.catalystMode = await getJSON('/api/catalyst-mode');
+    STATE.catalystMode = await getJSON('/api/catalyst-mode?cached=true');
     catalystModeAt = Date.now();
     mountPanel('catmode-host', renderCatalystMode(STATE.catalystMode));
   } catch (err) {
@@ -30670,7 +30693,7 @@ function renderMarket(d) {
     <td class="${signClass(r.chg_20d)}">${fmtPct(r.chg_20d, 2)}</td>
     <td class="${signClass(r.vs_sma200)}">${fmtPct(r.vs_sma200, 1)}</td>
     <td>${fmt(r.rsi, 0)}</td>
-    <td><span data-spark='${esc(JSON.stringify(r.series || []))}'></span></td>
+    <td><span data-spark="${esc(JSON.stringify(r.series || []))}"></span></td>
   </tr>`;
 
   views.market.innerHTML = `${renderMarketPlain(d)}
@@ -31814,10 +31837,12 @@ async function runCompare() {
  * source that is no larger has bought nothing and may have lost the logo, so it
  * is reverted. Correct beats sharp.
  */
+/* Optic's own logo proxy, by ticker, as the rebuilt app reads it (/api/logo). The three outside services above,
+ * keyed on the company's domain, each saw every reader and which companies they looked at, and Chrome blocked one of
+ * them (ERR_BLOCKED_BY_ORB) on the earnings page (BUG-028, Phase 10). The walk below still works with one source: a
+ * miss shows the monogram. */
 const LOGO_SOURCES = [
-  (d) => `https://www.google.com/s2/favicons?domain=${encodeURIComponent(d)}&sz=64`,
-  (d) => `https://unavatar.io/${encodeURIComponent(d)}`,
-  (d) => `https://favicone.com/${encodeURIComponent(d)}?s=256`,
+  (t) => `/api/logo/${encodeURIComponent(t)}`,
 ];
 
 function companyMark(ticker, domain, size) {
@@ -31829,10 +31854,10 @@ function companyMark(ticker, domain, size) {
   for (let i = 0; i < initials.length; i += 1) {
     hash = (hash * 31 + initials.charCodeAt(i)) % 360;
   }
-  const img = domain
-    ? `<img src="${esc(LOGO_SOURCES[0](domain))}" alt=""
+  const img = ticker
+    ? `<img src="${esc(LOGO_SOURCES[0](ticker))}" alt=""
         loading="lazy" referrerpolicy="no-referrer"
-        data-logo-domain="${esc(domain)}" data-logo-step="0"
+        data-logo-domain="${esc(ticker)}" data-logo-step="0"
         data-logo-min="${px * 2}"
         onerror="nextLogoSource(this)" onload="checkLogoSharpness(this)">`
     : '';
@@ -45021,7 +45046,15 @@ function mdLite(text) {
   out = out.replace(/^### (.*)$/gm, '<strong>$1</strong>');
   out = out.replace(/^## (.*)$/gm, '<strong>$1</strong>');
   out = out.replace(/^\s*[-*] (.*)$/gm, '• $1');
-  out = out.replace(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener" style="color:var(--s1)">$1</a>');
+  /* The destination's host beside each link the model wrote, so a link a web page or a headline talked it
+   * into shows where it goes before the click (SEC-05, Phase 10 security review). */
+  out = out.replace(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g, (m, label, url) => {
+    const hm = /^https?:\/\/([^/?#:\s]+)/i.exec(url);
+    const host = hm ? hm[1].toLowerCase().replace(/^www\./, '') : '';
+    const note = host && !label.toLowerCase().includes(host)
+      ? ` <span style="color:var(--ink-muted);font-size:var(--t-small)">(${host})</span>` : '';
+    return `<a href="${url}" target="_blank" rel="noopener" style="color:var(--s1)">${label}</a>${note}`;
+  });
   return out;
 }
 
@@ -47038,8 +47071,10 @@ function bkConnectionsHTML() {
   parts.push(bkPermissions(st, !conns.length));
   if (conns.length) {
     parts.push(`<div class="panel span2 gap set-danger"><h2>${hg('Delete all brokerage data')}</h2>
-      <p class="sub">Disconnects every brokerage at the provider and deletes everything Optic stored about them, including the
-        encryption key, so backups cannot be read either. Your Optic account stays.</p>
+      <p class="sub">Disconnects every brokerage at the provider and deletes the accounts, holdings, history, alerts and
+        briefings Optic stored about them, with the encryption key, so backups cannot be read either. Kept: your Optic
+        account, your alert settings, the record that you agreed to the linking terms, and anything you saved yourself,
+        such as a thesis or a Milo answer, which you delete where you saved it.</p>
       <div class="set-row-act">${BROKER.armed === 'all'
     ? '<button type="button" class="btn bk-danger" data-bk-delete-all="confirm">Yes, delete all brokerage data</button> <button type="button" class="btn" data-bk-disarm>Keep it</button>'
     : '<button type="button" class="btn" data-bk-delete-all>Delete all brokerage data</button>'}</div></div>`);

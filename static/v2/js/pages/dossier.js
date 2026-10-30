@@ -453,26 +453,29 @@ export async function render(main, route) {
   sections(main, 'overview', { norm: (t) => { const n = ((main.querySelector('.dhead .name span') || {}).textContent || '').trim(); return n ? t.split(n).join('the company') : t; } });   // folds, Expand all, Panels (Classic parity B3)
   const enc = encodeURIComponent(sym);
   const step = (p, ok, bad) => { p.then((d) => { if (mine()) ok(d); }, (e) => { if (mine()) bad(e); }).finally(() => { if (mine()) paint(main, sym); }); };
+  // A copy kept past its time is drawn at once and asked for again behind it; the fresh one is drawn when it lands. It
+  // never was: a company opened earlier showed its old figures until a reload (BUG-065, Phase 10)
+  const fresh = (url, opts, ok, bad) => step(api.get(url, { ...opts, onUpdate: (d) => { if (mine()) { ok(d); paint(main, sym); } } }), ok, bad);
   // `unreachable` is the source failing, not the symbol being unknown: read as one, a feed outage said "Optic has no
   // listing for NVDA" (investor audit, 2026-10-27). The symbol joins the recents once a quote confirms it: kept from
   // the first paint, a mistyped ZZZZQ whose quote timed out stayed, and a guest's Home linked its panels to it.
-  step(api.get(`/api/quote/${enc}`, { ttl: 20000, timeout: 15000 }), (d) => { if (d && d.available !== false) { D.quote = fresher(D.quote, d.quote || d); store.pushRecent(sym); } else if (d && d.unreachable) D.quoteError = new api.ApiError('server', 503, `The quote source did not answer for ${sym}`); else { D.quoteError = new api.ApiError('notfound', 404, `No quote for ${sym}`); store.forgetRecent(sym); } }, (e) => { D.quoteError = e; });
-  step(api.get(`/api/session/${enc}`, { ttl: 60000 }), (d) => { D.session = d; learn(sym, { session: d, quote: D.quote }); }, () => { D.session = null; });
-  step(api.get(`/api/ticker/${enc}?max_expiries=4&macro=true`, { ttl: 120000, timeout: 60000 }), (d) => {
+  fresh(`/api/quote/${enc}`, { ttl: 20000, timeout: 15000 }, (d) => { if (d && d.available !== false) { D.quote = fresher(D.quote, d.quote || d); store.pushRecent(sym); } else if (d && d.unreachable) D.quoteError = new api.ApiError('server', 503, `The quote source did not answer for ${sym}`); else { D.quoteError = new api.ApiError('notfound', 404, `No quote for ${sym}`); store.forgetRecent(sym); } }, (e) => { D.quoteError = e; });
+  fresh(`/api/session/${enc}`, { ttl: 60000 }, (d) => { D.session = d; learn(sym, { session: d, quote: D.quote }); }, () => { D.session = null; });
+  fresh(`/api/ticker/${enc}?max_expiries=4&macro=true`, { ttl: 120000, timeout: 60000 }, (d) => {
     D.ticker = d; if (d.quote) D.quote = fresher(D.quote, d.quote);
     if (d.data_caveat) D.freshText = clean(String(d.data_caveat).split(/(?<=\.)\s/)[0]);   // the delay; Greeks and Black-Scholes belong to Options
   }, (e) => { D.tickerError = e; });
-  step(api.get(`/api/framework/${enc}?mode=combined`, { ttl: 300000, timeout: 60000 }), (d) => { D.fwRaw = d; D.framework = d.available === false ? null : d; if (d.available === false) D.fwError = new api.ApiError('notfound', 404, d.reason || 'No framework read'); }, (e) => { D.fwError = e; D.fwNetError = e; D.fwRaw = null; D.framework = {}; });
-  step(api.get(`/api/fair-value/${enc}`, { ttl: 600000, timeout: 30000 }), (d) => { D.fairValue = d; }, (e) => { D.fvError = e; D.fairValue = {}; });
-  step(api.get(`/api/longterm/${enc}?indices=false`, { ttl: 600000, timeout: 45000 }), (d) => { D.longterm = d; }, () => { D.longterm = {}; });
-  step(api.get(`/api/earnings/${enc}`, { ttl: 600000, timeout: 45000 }), (d) => { D.earnings = d; }, (e) => { D.earnError = e; D.earnings = {}; });
-  step(api.get(`/api/digest/${enc}`, { ttl: 300000, timeout: 30000 }), (d) => { D.digest = d; }, () => { D.digest = null; });
-  step(api.get(`/api/segments/${enc}`, { ttl: 600000, timeout: 60000 }), (d) => { D.segments = d; }, () => { D.segments = null; });
+  fresh(`/api/framework/${enc}?mode=combined`, { ttl: 300000, timeout: 60000 }, (d) => { D.fwRaw = d; D.framework = d.available === false ? null : d; if (d.available === false) D.fwError = new api.ApiError('notfound', 404, d.reason || 'No framework read'); }, (e) => { D.fwError = e; D.fwNetError = e; D.fwRaw = null; D.framework = {}; });
+  fresh(`/api/fair-value/${enc}`, { ttl: 600000, timeout: 30000 }, (d) => { D.fairValue = d; }, (e) => { D.fvError = e; D.fairValue = {}; });
+  fresh(`/api/longterm/${enc}?indices=false`, { ttl: 600000, timeout: 45000 }, (d) => { D.longterm = d; }, () => { D.longterm = {}; });
+  fresh(`/api/earnings/${enc}`, { ttl: 600000, timeout: 45000 }, (d) => { D.earnings = d; }, (e) => { D.earnError = e; D.earnings = {}; });
+  fresh(`/api/digest/${enc}`, { ttl: 300000, timeout: 30000 }, (d) => { D.digest = d; }, () => { D.digest = null; });
+  fresh(`/api/segments/${enc}`, { ttl: 600000, timeout: 60000 }, (d) => { D.segments = d; }, () => { D.segments = null; });
   // the chart's ex-dividend and split marks (Classic's extras), and the header's Weinstein stage: both free reads
-  step(api.get(`/api/extras/${enc}?benchmark=SPY`, { ttl: 600000, timeout: 30000 }), (d) => { D.extras = d; }, () => { D.extras = null; });
+  fresh(`/api/extras/${enc}?benchmark=SPY`, { ttl: 600000, timeout: 30000 }, (d) => { D.extras = d; }, () => { D.extras = null; });
   // a failed stage read is asked once more after half a minute, as Classic asks again on its next paint: a missing
   // stage is otherwise silent, where a missing grade says so
-  const stageRead = (tries) => step(api.get(`/api/stage?symbol=${enc}`, { ttl: 1800000, timeout: 45000 }), (d) => { D.stage = d; },
+  const stageRead = (tries) => fresh(`/api/stage?symbol=${enc}`, { ttl: 1800000, timeout: 45000 }, (d) => { D.stage = d; },
     () => { D.stage = null; if (tries > 0) setTimeout(() => { if (mine()) stageRead(tries - 1); }, 30000); });
   stageRead(1);
   TR.load().then(() => { if (mine() && D.stage) stageFor(sym); });   // the stage's explanation adds what history says (B6c)

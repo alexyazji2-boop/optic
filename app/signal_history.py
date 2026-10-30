@@ -36,7 +36,7 @@ import json
 import logging
 import math
 from datetime import datetime, timezone
-from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence
+from typing import Any, Callable, Dict, List, Optional, Sequence
 
 from . import db
 from .analytics import setups as setups_mod

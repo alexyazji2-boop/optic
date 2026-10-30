@@ -25,7 +25,7 @@ from __future__ import annotations
 
 import json
 import os
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 # Beside this module, not under app/data: `data/` is the runtime folder and git ignores it.
 PATH = os.path.join(os.path.dirname(__file__), "straddle_calibration.json")

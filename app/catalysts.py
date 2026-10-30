@@ -62,6 +62,7 @@ import time
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
+from . import public_errors
 from . import catalyst_rules, feeds
 from . import session as session_mod
 
@@ -542,7 +543,7 @@ def search(query: str = "", status: str = "relevant", category: str = "",
             rows = conn.execute(
                 "SELECT * FROM catalysts ORDER BY event_date DESC LIMIT 500").fetchall()
     except sqlite3.Error as exc:
-        return {"available": False, "reason": "Catalyst store unavailable: {}".format(exc)}
+        return {"available": False, "reason": "Catalyst store unavailable: {}".format(public_errors.public(exc))}
 
     items = [_row_to_dict(r) for r in rows]
     total = len(items)

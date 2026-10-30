@@ -25,6 +25,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 from zoneinfo import ZoneInfo
 
+from . import public_errors
 from . import events, feeds
 from .analytics.sectors import SECTORS, THEMES
 
@@ -144,7 +145,7 @@ def index_levels(provider, symbol: str = "SPY") -> Dict[str, Any]:
     try:
         frames = provider.batch_history([symbol], period="1y", interval="1d") or {}
     except Exception as exc:                     # noqa: BLE001
-        return {"available": False, "reason": str(exc)[:120]}
+        return {"available": False, "reason": public_errors.public(exc)}
     frame = frames.get(symbol)
     if frame is None or frame.empty or len(frame) < 60:
         return {"available": False, "reason": "Not enough history."}

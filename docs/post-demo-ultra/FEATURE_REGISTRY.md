@@ -72,6 +72,28 @@ removed with the workspace's handlers for controls nothing draws (D-021, SIMPLIC
 - **Privacy:** signed-in API answers are private, and deleted brokerage data leaves memory at once.
 - **Where it is written down:** the pathways, caches and the reconciliation are in DATA_PATHWAYS.md and RECONCILIATION.md.
 
+*Phase 10 updates:*
+- **Guards:** Problem Reports (`/api/feedback`) and the report views need the owner's session, not the write token. A
+  request body is at most 2 MB, plus four 5 MB attachments on the chat and research routes; a question is at most
+  8,000 characters. Milo has a server-wide ceiling of 300 questions a day (`MILO_QUESTIONS_PER_DAY`) that paying
+  readers and owners do not count against. Search is limited to 600 a minute per address, alert checks to 60 every ten minutes per address, and
+  wrong write tokens to 20 an hour. The logo proxy fetches only for listed symbols, within an hourly budget.
+- **Sign-in:** a session ends 90 days after it began, whatever its use (`SESSION_MAX_DAYS`). Apple's sign-in, like
+  Google's, is bound to the browser that started it when the site is served over HTTPS. An address with a password is never linked to a provider by email alone.
+- **Headers:** Permissions-Policy and Cross-Origin-Opener-Policy on every answer. Exception text shown to a reader has
+  hosts, URLs and paths removed (`app/public_errors.py`).
+- **The desk note** is written by the keep-warm job, never by a reader's page load (`DESK_PROSE_AUTO`, D-091).
+- **Milo:** a watchlist's rows, a paper book and its journal, and a retirement plan reach the model only with
+  questions about them, and the panel says when they were left out (D-093). An answer cut off mid-stream stays,
+  marked incomplete, with Ask again and Report a problem. Links in answers show their host.
+- **Earnings week** says it is gathering report dates while its list is built, and fills in by itself.
+- **Brokerage:** an expired connection offers Reconnect (with the consent box when it is needed). The deletion
+  sentence says what is deleted and what is kept, in both apps (BUG-074).
+- **Signing in from a guest's browser:** the "Keep what you made on this browser?" sheet's Close leaves the guest's
+  things for the next guest, and says so.
+- **Logs:** the access log drops search text and secrets in query strings, and mail log lines mask the address.
+- **Where it is written down:** SECURITY_REVIEW.md, COST_AUDIT.md and ANALYTICS_REVIEW.md.
+
 *Phase 08 updates:* Milo has seventeen tools. The four new ones are `lookup_company`, `get_price_history`, `get_filings` and `get_financials` (`app/milo_data.py`, from the milo-upgrade branch). Every tool result carries a `meta` freshness block, and quotes carry the trade's own time. The research pack, framework and chart levels follow the symbol the question names. Figures loaded for a symbol the question named have their own source, "Loaded for your question" (`[[src auto_loaded]]`), in both front ends. A plain definition fetches nothing before the model starts. The tool contracts and what Milo cannot reach are in MILO_TOOLS.md. The evaluation suite (`tests/milo_eval`, 137 cases) runs with every test run, and `tests/milo_eval/run_model.py` runs it against the real model when a key is accepted (BL-01).
 
 ## Part 2. Routes and features: the index

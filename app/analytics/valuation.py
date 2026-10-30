@@ -22,6 +22,7 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional
 
 import pandas as pd
+from .. import public_errors
 
 # A band needs enough years to have a middle. Three is the floor: two gives a
 # midpoint that is really just the average of the endpoints.
@@ -81,7 +82,7 @@ def history_band(provider, ticker: str, financials: Dict[str, Any],
         # opening months. Cached by the provider, so this is usually free.
         frame = provider.history(ticker, period="6y", interval="1d")
     except Exception as exc:
-        return {"available": False, "reason": f"price history unavailable: {exc}"}
+        return {"available": False, "reason": f"price history unavailable: {public_errors.public(exc)}"}
 
     years: List[Dict[str, Any]] = []
     for i, period in enumerate(periods):

@@ -115,7 +115,12 @@ def resolve(profile: Dict[str, Any],
     match = store.get_user_by_email(email)
     if match:
         both_verified = provider_verified and bool(match.get("email_verified"))
-        if both_verified and not relay:
+        # Not onto an account that has a password (SEC-04, Phase 10 security review). Registering needs no mailbox,
+        # so anyone could create `victim@` with their own password; one click on the unsolicited verification mail
+        # made it verified, and the victim's later Google sign-in landed in the stranger's account, password and
+        # session intact. The password holder signs in that way first and connects the provider under Settings;
+        # someone who never set that password resets it, which ends every session (store.consume_reset).
+        if both_verified and not relay and not store.get_password(match["id"]):
             store.add_identity(match["id"], provider, subject, email)
             log.info("linked %s identity to existing verified account", provider)
             return {"outcome": "linked", "user": match, "provider": provider}

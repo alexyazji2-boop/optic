@@ -531,7 +531,9 @@ def test_the_symbol_is_encoded_in_the_path():
 # endpoints 401'd a guest, which is `require_user` answering before any query
 # runs. It proves the route exists and says nothing about the table.
 
-def test_health_reports_whether_the_accounts_schema_is_ready():
+def test_health_reports_whether_the_accounts_schema_is_ready(monkeypatch):
+    from app import main as main_mod
+    monkeypatch.setattr(main_mod.auth_deps, "is_admin", lambda request: True)   # the operator's diagnostics (BUG-052)
     body = client.get("/api/health").json()
     assert "accounts" in body
     acc = body["accounts"]
@@ -565,9 +567,13 @@ def test_health_survives_an_unreadable_accounts_database(monkeypatch):
     assert client.get("/api/health").status_code == 200
 
 
-def test_health_does_not_leak_the_schema():
+def test_health_does_not_leak_the_schema(monkeypatch):
     """Version numbers only. A row count or a column name here would make an
-    operational probe into a schema dump."""
+    operational probe into a schema dump. Even to the operator; a visitor gets
+    no accounts field at all (BUG-052)."""
+    from app import main as main_mod
+    assert "accounts" not in client.get("/api/health").json()
+    monkeypatch.setattr(main_mod.auth_deps, "is_admin", lambda request: True)
     acc = client.get("/api/health").json()["accounts"]
     flat = json.dumps(acc).lower()
     for leak in ("theses", "users", "password", "token", "session", "email",

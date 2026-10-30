@@ -639,3 +639,95 @@ a reference's definition differed, the reference was corrected and the change re
 wrong, the code was fixed. A figure with no reference is UNVERIFIED. First run: 248 rows, 9 failures (6 the
 reference's, 3 Optic's). Final run: 278 rows, 277 PASS, 1 UNVERIFIED (SPY has no earnings date).
 
+
+## Phase 10 (2026-10-30): performance, security, accessibility, polish
+
+**D-076 (Phase 10) A server-wide ceiling on Milo questions, the owner's number.** The security review (SEC-01, the one
+High finding) showed that accounts are free and unverified, so a script registering addresses got a fresh allowance
+each time with nothing over them all. `MILO_QUESTIONS_PER_DAY` (default 300) counts the last 24 hours' questions from
+guests and free accounts in `milo_questions`, before either allowance is charged; the owner's are left out, and so are
+paying readers', who are never refused by it (their plan has its own monthly cap; the cost audit found the first version
+refused Pro readers too). It bounds the number of questions, not their cost: about $0.11 a message measured on
+2026-10-11, and up to about $1.44 for a question that reaches every limit (cost audit), so a dollar ceiling read from the
+ledger is proposed for the owner. 0 switches it off. The default is a guard, not a product limit: the owner sets it, and a
+spend limit in the Anthropic console still sits outside the app (BLOCKERS).
+
+**D-077 (Phase 10) Email verification is still not required for Milo.** `require_verified` exists and the review asks for
+it, but production has no mail relay (BUG-021, BLOCKED), so requiring a click in an inbox would leave every account on the
+guest tier; the code records this as a deliberate choice. The ceiling (D-076) bounds the exposure instead. Revisit when
+the owner configures mail.
+
+**D-078 (Phase 10) The client address comes from the edge.** theopticterminal.com resolves to Cloudflare addresses and
+uses Cloudflare's name servers (checked 2026-10-30 with a DNS lookup, no request to the site), so `CF-Connecting-IP`,
+which Cloudflare sets and overwrites, is the address the rate limits use; `CLIENT_IP_HEADER` and `TRUSTED_PROXY_HOPS`
+cover a different edge. A request sent to the platform's own address rather than through Cloudflare can still write the
+header: closing the origin to direct traffic is the owner's (BLOCKERS).
+
+**D-079 (Phase 10) Problem reports are read by the signed-in owner only.** Each report carries its reporter's email, so
+the write token no longer reads them (`_owner_session_guard`, as on Accounts); both report pages already used the owner's
+session with the CSRF header. The token still resolves reports, which returns no personal data. Wrong tokens are limited
+to 20 an hour per address.
+
+**D-080 (Phase 10) Classic's `esc` is unchanged.** Escaping the apostrophe changed Classic's markup everywhere (four tests
+pinned its text), against the rule that Classic's copy stays word for word. The one single-quoted attribute it fed
+(`data-spark`) is double-quoted instead, and a test refuses any new single-quoted interpolation in Classic.
+
+**D-081 (Phase 10) Passkeys keep "preferred" user verification.** The code records the trade-off: "required" would refuse a
+hardware key with no PIN. Escalated as a Low finding (SEC-13) for the owner rather than changed.
+
+**D-082 (Phase 10) Session hardening, partly.** Sessions now end 90 days after sign-in however much they are used
+(`SESSION_MAX_DAYS`). The `__Host-` cookie names and a CSRF value bound to the session are not changed: renaming the
+cookies signs every reader out at the next deploy, which is the owner's call (SEC-14).
+
+**D-083 (Phase 10) Headers added, the full CSP not enforced yet.** `Permissions-Policy` (camera, microphone, location,
+payment, USB off; fullscreen and passkeys left alone) and `Cross-Origin-Opener-Policy: same-origin-allow-popups` are set.
+Enforcing the full policy needs nonces for the inline import map and theme boot, and `report-to` needs a collector; both
+are proposed, not done (SEC-09).
+
+**D-084 (Phase 10) The fonts stay on jsDelivr.** The owner's rule names jsDelivr for Inter and Space Grotesk, so they are
+not moved; pinning their versions and adding integrity attributes is proposed (SEC-10, BUG-019).
+
+**D-085 (Phase 10) No dependency scanner was downloaded.** Installing pip-audit (or any scanner) downloads packages, which
+needs the owner's approval; the installed versions are listed and a hashed lock file is proposed (SEC-07). BLOCKED.
+
+**D-086 (Phase 10) The open scan buttons stay open.** The tracker scan, marks and catalyst refresh were opened to every
+reader at the owner's request ("make sure they work without the need of an API key"); their global spacing bounds them.
+The watch check, the owner's unread count, the post-close reading order and the valuation replay were fixed (BUG-072).
+
+**D-087 (Phase 10) Web search is not switched off when a portfolio is attached.** Injected text can arrive in headlines
+and filings as well as search results, so turning one source off would not close it. Instead the prompts say that tool
+results, search results and files are data, never instructions, and both apps show the host beside every link Milo
+writes (SEC-05).
+
+**D-088 (Phase 10) Exception text is scrubbed, not replaced.** Most of the thirty sites carry Optic's own sentences
+("needs a positive cash flow") or say usefully what failed, so `app/public_errors.public` removes hosts, URLs and file
+paths and keeps the sentence (SEC-16).
+
+**D-089 (Phase 10) A body limit of 2 MB, more for Milo.** Every route takes at most `BODY_MAX_BYTES` (2 MB); the chat and
+research routes take four 5 MB attachments in base64 on top. A question is at most 8,000 characters, twice the v2
+composer's, so a paragraph pasted into Classic still goes (BUG-112, SEC-03).
+
+**D-090 (Phase 10) Faster search with the same ranking.** The per-row work moved to once a directory and answers are kept
+for the directory's day; 8,139 query and limit pairs gave identical results before and after (`tools/phase10_search.py`), and a test pins the
+ranking rules (BUG-053).
+
+**D-091 (Phase 10) The desk note is written by the keep-warm job, never by a reader's page load.** BUG-032: the first Home
+of the day and up to twelve after it made a paid call, against the owner's rule that reading a page costs nothing. The
+note is still written (the owner asked for it to "update whenever necessary"), by the keep-warm job, which runs only while
+readers are around, within the same daily bounds (two attempts, twelve rewrites); Home only reads what is kept.
+`DESK_PROSE_AUTO=false` leaves Home on the assembled desk.
+
+**D-092 (Phase 10) Starters send; everything else drafts.** BUG-049 asked why the panel's starters send when other entry
+points draft. The owner decided on 2026-10-20 that starters "must send meaningful requests"; the code comment that said
+every entry point drafts was wrong and is corrected. WONTFIX.
+
+**D-093 (Phase 10) The reader's own blocks travel only with questions about them.** BUG-071: the server leaves a
+watchlist's rows, a paper book and its journal, and a retirement plan out of a question that is not about them, and the
+panel says so. The test is wide ("my", "these", "here", "list", "book", "plan", "should I", "I own" and the like),
+because leaving a block out by mistake costs an answer about the reader's own list.
+
+**D-094 (Phase 10) Measurements under a throttled feed.** The back-to-back A/B of the Phase 09 commit and this tree ran
+while Yahoo was refusing this machine (both servers waited the 20 s gate maximum on cold symbols afterwards), so page
+timings that depend on cold fetches are recorded as conditions, not as a change; the client-side figures (layout
+shift, interaction delay, search, Milo's first words) and the in-process measurements (search cost, event-loop stalls)
+are the ones compared.

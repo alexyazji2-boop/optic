@@ -102,17 +102,17 @@ def _written(tape_marks):
 
 def test_the_written_desk_shows_while_the_tape_still_matches_it(desk_parts):
     live, patch = desk_parts
-    patch.setattr(main, "_desk_prose", lambda desk: _written(_marks()))
-    desk = main._morning_desk(None)
+    patch.setattr(main, "_desk_prose", lambda desk, write=False: _written(_marks()))
+    desk = main._morning_desk(None, write=True)
     assert desk["voice"] == "written" and desk["lead"] == ["written lead, futures -0.11%"]
     assert "voice_reason" not in desk
 
 
 def test_the_live_desk_replaces_it_once_the_tape_has_moved(desk_parts):
     live, patch = desk_parts
-    patch.setattr(main, "_desk_prose", lambda desk: _written(_marks()))
+    patch.setattr(main, "_desk_prose", lambda desk, write=False: _written(_marks()))
     live["tape"] = _tape(es=0.12, nq=0.19, rty=0.23, vix=15.91)
-    desk = main._morning_desk(None)
+    desk = main._morning_desk(None, write=True)
     assert desk["voice"] == "mechanical" and desk["lead"] == ["assembled lead"]
     assert desk["voice_reason"] == "moved"
     assert desk["written_at"] == "2026-09-28T13:05:00+00:00"
@@ -123,15 +123,15 @@ def test_a_missing_written_desk_says_which_kind_of_missing(desk_parts, enabled, 
     """"Not configured on this deployment" was printed on the live site, where
     the assistant is configured and the day's note had simply failed."""
     live, patch = desk_parts
-    patch.setattr(main, "_desk_prose", lambda desk: None)
+    patch.setattr(main, "_desk_prose", lambda desk, write=False: None)
     patch.setattr(main.ai, "available", lambda: {"enabled": enabled})
-    assert main._morning_desk(None)["voice_reason"] == reason
+    assert main._morning_desk(None, write=True)["voice_reason"] == reason
 
 
 def test_the_written_desk_records_what_it_was_written_against(monkeypatch):
     monkeypatch.setattr(main, "_DESK_PROSE", {})
     monkeypatch.setattr(main.ai, "write_morning_desk", lambda desk: {"lead": ["x"]})
-    prose = main._desk_prose({"date": "2026-09-28", "tape": _tape()})
+    prose = main._desk_prose({"date": "2026-09-28", "tape": _tape()}, write=True)
     assert prose["tape_marks"] == _marks()
     assert prose["written_at"]
 
@@ -194,27 +194,27 @@ def test_a_desk_the_tape_has_moved_past_is_written_again(rewrites):
     same test that hides it: once the futures or the VIX have moved past what
     the written desk says, a new one is written against the tape as it is."""
     live, patch, written = rewrites
-    first = main._morning_desk(None)
+    first = main._morning_desk(None, write=True)
     assert first["voice"] == "written" and first["lead"] == ["written 1"]
     live["tape"] = _tape(es=0.12, nq=0.19, rty=0.23, vix=15.91)
-    moved = main._morning_desk(None)
+    moved = main._morning_desk(None, write=True)
     # The reader who found it stale is not kept waiting for the rewrite.
     assert moved["voice"] == "mechanical" and moved["voice_reason"] == "moved"
     assert moved["rewriting"] is True
     _settle()
-    again = main._morning_desk(None)
+    again = main._morning_desk(None, write=True)
     assert again["voice"] == "written" and again["lead"] == ["written 2"]
     assert len(written) == 2 and written[1] == live["tape"], "written against the new tape"
 
 
 def test_one_rewrite_a_half_hour_at_most(rewrites):
     live, patch, written = rewrites
-    main._morning_desk(None)
+    main._morning_desk(None, write=True)
     live["tape"] = _tape(es=0.12, nq=0.19, rty=0.23, vix=15.91)
-    main._morning_desk(None)
+    main._morning_desk(None, write=True)
     _settle()
     live["tape"] = _tape(es=-0.4, nq=-0.5, rty=-0.6, vix=17.2)
-    later = main._morning_desk(None)
+    later = main._morning_desk(None, write=True)
     assert later["voice_reason"] == "moved" and later["rewriting"] is False
     assert len(written) == 2, "the second move inside the same half hour waits"
     assert main.DESK_REWRITE_SECONDS == 1800
@@ -225,20 +225,20 @@ def test_and_a_dozen_a_day_at_most(rewrites):
     assert main.DESK_REWRITES_PER_DAY == 12
     patch.setattr(main, "DESK_REWRITE_SECONDS", 0.000001)     # every request its own slot
     patch.setattr(main, "DESK_REWRITES_PER_DAY", 2)
-    main._morning_desk(None)
+    main._morning_desk(None, write=True)
     for es in (0.5, 1.0, 1.5, 2.0):
         live["tape"] = _tape(es=es, nq=es, rty=es, vix=15.0 + es)
-        main._morning_desk(None)
+        main._morning_desk(None, write=True)
         _settle()
     assert len(written) == 1 + 2, "the first write, then two rewrites"
 
 
 def test_no_assistant_no_rewrite(rewrites):
     live, patch, written = rewrites
-    main._morning_desk(None)
+    main._morning_desk(None, write=True)
     patch.setattr(main.ai, "available", lambda: {"enabled": False})
     live["tape"] = _tape(es=0.12, nq=0.19, rty=0.23, vix=15.91)
-    assert main._morning_desk(None)["rewriting"] is False
+    assert main._morning_desk(None, write=True)["rewriting"] is False
     _settle()
     assert len(written) == 1
 

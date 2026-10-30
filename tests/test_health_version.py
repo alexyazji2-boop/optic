@@ -41,8 +41,18 @@ def test_each_platform_var_is_recognised(monkeypatch):
         assert deployed_commit() == "abc123def456", name
 
 
-def test_health_exposes_commit_and_uptime():
+def test_health_exposes_commit_and_uptime(monkeypatch):
+    """To the operator. A visitor gets neither (BUG-052): the commit of a public
+    repository says whether a published fix has reached production yet."""
+    from app import main as main_mod
+    monkeypatch.setattr(main_mod.auth_deps, "is_admin", lambda request: True)
     body = client.get("/api/health").json()
     assert body["commit"] == deployed_commit()
     assert body["uptime_seconds"] >= 0
     assert body["booted_at"].endswith("+00:00")
+
+
+def test_a_visitor_gets_the_public_fields_only():
+    body = client.get("/api/health").json()
+    assert set(body) == {"status", "provider", "realtime_chain", "server_time", "assistant"}, body
+    assert set(body["assistant"]) <= {"enabled", "hint"}, body["assistant"]

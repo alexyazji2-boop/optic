@@ -90,7 +90,6 @@ def score(overview: Dict[str, Any]) -> Dict[str, Any]:
         return {"available": False}
 
     spy = indices.get("SPY") or {}
-    qqq = indices.get("QQQ") or {}
     iwm = indices.get("IWM") or {}
     vix = indices.get("^VIX") or indices.get("VIX") or {}
 

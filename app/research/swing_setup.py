@@ -538,7 +538,6 @@ def _grade_why(grade: str, criteria: Dict[str, bool], meaningful: List[Dict[str,
 
 
 def _reassess_when(rd: Dict[str, Any], setup: Dict[str, Any]) -> str:
-    atr = rd.get("atr14") or 0
     if setup.get("extended"):
         return ("The model would grade a setup again after a pullback toward the 20-day EMA (about {:.2f}) "
                 "with RSI back under 60, which would put the pattern's trigger nearer the level that breaks "

@@ -124,6 +124,9 @@ export function guestThingsHere() {
   return found;
 }
 
+/** Whether a guest's things are still waiting for the reader's answer. */
+export const askIsPending = () => !!askPending;
+
 /** The guest's things become the account's: they stay where they are. */
 export function bringGuestThings() {
   const ask = askPending;

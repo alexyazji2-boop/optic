@@ -40,6 +40,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 from zoneinfo import ZoneInfo
 
+from . import public_errors
 from . import ai, ai_store, events, feeds, news
 from . import session as session_mod
 from .analytics import regime
@@ -301,7 +302,7 @@ def _overview(yf_provider) -> Dict[str, Any]:
         # close against its own 200-session average, which needs 200 closes.
         frames = yf_provider.batch_history(symbols, period="1y", interval="1d") or {}
     except Exception as exc:                     # noqa: BLE001 - provider-agnostic
-        error = f"{type(exc).__name__}: {str(exc)[:120]}"
+        error = f"{type(exc).__name__}: {public_errors.public(exc)}"
 
     def build(rows: List[Dict[str, str]]) -> List[Dict[str, Any]]:
         out = []
@@ -1029,7 +1030,7 @@ def build(yf_provider, day: Optional[str] = None) -> Dict[str, Any]:
         global_context = global_markets.build(yf_provider)
     except Exception as exc:                                    # noqa: BLE001
         log.warning("global overnight unavailable: %s", exc)
-        global_context = {"available": False, "reason": str(exc)[:140]}
+        global_context = {"available": False, "reason": public_errors.public(exc, 140)}
 
     degraded = [s["id"] for s in macro["sources"] + wires["sources"] if s.get("error")]
     degraded += [f"calendar:{i}" for i in calendar.get("degraded", [])]

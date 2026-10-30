@@ -336,7 +336,6 @@ def build(positions: List[Dict[str, Any]], spots: Dict[str, Dict[str, Any]], clo
     if not priced:
         return {"available": False, "version": VERSION, "reason": "No position could be revalued.", "coverage": {"unpriced": unpriced}}
     syms = sorted({l["symbol"] for l in priced})
-    spot_of = {l["symbol"]: l["spot"] for l in priced}
     options = [l for l in legs if l["kind"] == "option"]
     p_opts = [l for l in priced if l["kind"] == "option"]
 

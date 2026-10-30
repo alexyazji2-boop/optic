@@ -25,6 +25,7 @@ from fastapi.responses import JSONResponse, Response, StreamingResponse
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
 
+from . import public_errors
 from . import (ai, brief as brief_mod, feeds as feeds_mod, legal,
                news as news_mod, paper, session as session_mod)
 from . import account as account_mod
@@ -225,7 +226,31 @@ for _name in (__package__ or "app", "optic"):
         _pkg_log.propagate = False
 
 
-app = FastAPI(title="Optic Terminal", version="1.0.0")
+# One-time tokens travel in query strings (the emailed verify and reset links, the OAuth and brokerage callbacks), and
+# uvicorn's access log prints the whole request target: a reset link stays usable for 15 minutes to anyone who can
+# read the platform's logs (SEC-02, Phase 10). The values go; the path and the parameter names stay for debugging.
+# Search text goes the same way.
+# `q` too: what a reader types into search is theirs, not the log's (Phase 10 analytics review)
+_SECRET_QUERY = re.compile(r"([?&](?:token|code|state|id_token|access_token|secret|q)=)[^&\s]*", re.I)
+
+
+class _RedactQuery(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        args = record.args
+        if isinstance(args, tuple) and len(args) >= 3 and isinstance(args[2], str) and "=" in args[2]:
+            record.args = args[:2] + (_SECRET_QUERY.sub(r"\1[redacted]", args[2]),) + args[3:]
+        return True
+
+
+logging.getLogger("uvicorn.access").addFilter(_RedactQuery())
+
+
+# The interactive API docs and the schema list every route, the owner's and admin ones included: kept for a local
+# machine, off on a hosting platform unless OPTIC_API_DOCS=1 asks for them (BUG-006, Phase 10)
+_API_DOCS = (not is_hosted()) or os.environ.get("OPTIC_API_DOCS") == "1"
+app = FastAPI(title="Optic Terminal", version="1.0.0",
+              docs_url="/docs" if _API_DOCS else None, redoc_url="/redoc" if _API_DOCS else None,
+              openapi_url="/openapi.json" if _API_DOCS else None)
 
 # ------------------------------------------------------------------ transfer
 #
@@ -244,6 +269,77 @@ app = FastAPI(title="Optic Terminal", version="1.0.0")
 # 800 bytes rather than the 500-byte default: below about that, the gzip header
 # and the loss of the proxy's ability to stream cost more than the saving, and
 # every JSON payload worth compressing here is far larger.
+class _BodyLimit:
+    """A request body over the limit is refused with 413 before any handler buffers it (SEC-03, Phase 10).
+
+    Nothing capped a body: one multi-hundred-megabyte POST to any route, signed in or not, would sit in the only
+    worker's memory, which DEPLOY.md records being killed near 700 MB. A declared length is checked at once; a
+    chunked body with no length is read here up to the limit and handed on. The chat and research routes take
+    attachments (four files of 5 MB, base64), so they get room for those."""
+
+    def __init__(self, app: Any) -> None:
+        self.app = app
+
+    @staticmethod
+    def limit(path: str) -> int:
+        if path in ("/api/chat", "/api/research"):
+            return ai.ATTACH_MAX_FILES * ai.ATTACH_MAX_BYTES * 4 // 3 + BODY_MAX_BYTES
+        return BODY_MAX_BYTES
+
+    async def __call__(self, scope: Dict[str, Any], receive: Any, send: Any) -> None:
+        if scope.get("type") != "http":
+            await self.app(scope, receive, send)
+            return
+        limit = self.limit(scope.get("path") or "")
+        headers = dict(scope.get("headers") or [])
+        declared = headers.get(b"content-length")
+        if declared is not None:
+            try:
+                too_big = int(declared) > limit
+            except ValueError:
+                too_big = True
+            if too_big:
+                await self._refuse(scope, receive, send)
+                return
+            await self.app(scope, receive, send)
+            return
+        if b"chunked" not in headers.get(b"transfer-encoding", b"").lower():
+            await self.app(scope, receive, send)
+            return
+        chunks: List[bytes] = []
+        size = 0
+        while True:
+            message = await receive()
+            if message["type"] != "http.request":
+                return
+            size += len(message.get("body", b""))
+            if size > limit:
+                await self._refuse(scope, receive, send)
+                return
+            chunks.append(message.get("body", b""))
+            if not message.get("more_body"):
+                break
+        body = b"".join(chunks)
+        sent = False
+
+        async def replay() -> Dict[str, Any]:
+            nonlocal sent
+            if not sent:
+                sent = True
+                return {"type": "http.request", "body": body, "more_body": False}
+            return await receive()
+
+        await self.app(scope, replay, send)
+
+    @staticmethod
+    async def _refuse(scope: Dict[str, Any], receive: Any, send: Any) -> None:
+        await JSONResponse(status_code=413, content={"detail": "That request is larger than this server accepts."},
+                           headers={"Connection": "close"})(scope, receive, send)
+
+
+BODY_MAX_BYTES = int(os.environ.get("BODY_MAX_BYTES", str(2 * 1024 * 1024)))
+# Innermost of the middleware, so the security headers still go on a refusal
+app.add_middleware(_BodyLimit)
 app.add_middleware(GZipMiddleware, minimum_size=800)
 
 # ------------------------------------------------------ open, with accounts
@@ -314,6 +410,11 @@ else:
 # context variable because each loop is its own task: set inside one, it is
 # seen by that task's _run calls and by nobody else's.
 _BACKGROUND_JOB = contextvars.ContextVar("optic_background_job", default=False)
+
+
+# The daily periods Yahoo answers. A caller's `period` or `range` became part of a cache key as sent, so any string
+# made a new entry (S01, Phase 10); anything else is refused here, as Yahoo would have refused it.
+_DAILY_PERIODS = frozenset({"1d", "5d", "1mo", "3mo", "6mo", "1y", "2y", "5y", "10y", "ytd", "max"})
 
 
 def _run(fn, *args, **kwargs):
@@ -797,7 +898,7 @@ def _swing_snapshot(
         try:
             macro_read = legs.get("macro")
         except Exception as exc:  # macro is supporting context, never fatal
-            macro_read = {"error": "macro panel unavailable: {}".format(exc)}
+            macro_read = {"error": "macro panel unavailable: {}".format(public_errors.public(exc))}
 
     call = swing.verdict(tech, gex_read, flow_read, news_read, spot)
     # O3 (Options audit): the read as it stood, kept once per symbol per
@@ -852,7 +953,7 @@ def _swing_snapshot(
         try:
             company = legs.get("company")
         except Exception as exc:  # company data is context, never fatal
-            company = {"error": "fundamentals unavailable: {}".format(exc)}
+            company = {"error": "fundamentals unavailable: {}".format(public_errors.public(exc))}
 
     # Shown on the Swing tab but never scored. Skipped for tracker scans: it costs
     # three more provider calls per ticker, and over a thirty-name shortlist that
@@ -864,7 +965,7 @@ def _swing_snapshot(
             earnings_momentum = legs.get("earnings")
         except Exception as exc:
             earnings_momentum = {"available": False,
-                                 "reason": "earnings momentum unavailable: {}".format(exc)}
+                                 "reason": "earnings momentum unavailable: {}".format(public_errors.public(exc))}
 
     if PROVIDER.name == "tradier":
         data_caveat = (
@@ -1037,18 +1138,36 @@ def _assistant_status() -> Dict[str, Any]:
     return status
 
 
+def _operator(request: Request) -> bool:
+    """Whether this caller is the terminal's operator; the accounts database down reads as a visitor."""
+    try:
+        return bool(auth_deps.is_admin(request))
+    except Exception:                                   # noqa: BLE001
+        return False
+
+
 @app.get("/api/health")
-async def health() -> Dict[str, Any]:
+async def health(request: Request) -> Dict[str, Any]:
     now = datetime.now(timezone.utc)
-    return {
+    public = {
         "status": "ok",
         "provider": PROVIDER.name,
         # Tradier's sandbox serves the same API fifteen minutes late, so a
         # sandbox token is not a real-time feed and the page must not say so.
         "realtime_chain": PROVIDER.name == "tradier"
         and "sandbox." not in str(getattr(PROVIDER, "base", "")),
-        "assistant": _assistant_status(),
         "server_time": now.isoformat(),
+    }
+    assistant = _assistant_status()
+    # Where the AI credential comes from, whether Anthropic refused it, the commit, uptime and the migrations are the
+    # operator's diagnostics: a visitor gets whether Milo is on, nothing more (BUG-052, Phase 10)
+    if not _operator(request):
+        on = bool(assistant.get("enabled"))
+        # a reason in the visitor's words when Milo is off (Classic's greeting reads `hint`); the operator's is theirs
+        return {**public, "assistant": {"enabled": on} if on else {"enabled": False, "hint": "the people running this terminal have not switched me on."}}
+    return {
+        **public,
+        "assistant": assistant,
         "commit": deployed_commit(),
         # Uptime is the other half of the question. A process that restarted
         # minutes ago either just deployed or is crash-looping, and both are
@@ -1820,8 +1939,26 @@ _LOGO_DIR = os.path.join(os.path.dirname(screen_mod.CACHE_PATH), "logos")
 _LOGO_SOURCES = ("https://assets.parqet.com/logos/symbol/{sym}", "https://financialmodelingprep.com/image-stock/{sym}.png")
 _LOGO_OK = {"image/png", "image/jpeg", "image/webp", "image/gif", "image/svg+xml"}
 _LOGO_KEEP, _LOGO_MISS_KEEP, _LOGO_MAX_BYTES = 14 * 86400, 2 * 86400, 200_000
-_LOGO_SYM = re.compile(r"^[A-Z][A-Z0-9.\-]{0,9}$")   # listed stocks and funds; indices, futures and pairs have none
+_LOGO_SYM = re.compile(r"[A-Z][A-Z0-9.\-]{0,9}")   # fullmatch: listed stocks and funds; indices, futures and pairs have none
 _LOGO_LOCK = threading.BoundedSemaphore(4)
+# The logo route had the shared thread pool and no bound (SEC-06, BUG-053; Phase 10): any made-up symbol wrote files
+# that were never removed and parked a shared worker on two 6-second fetches. Now only listed symbols, on a pool of
+# its own, with an hour's budget of outside fetches for the whole server; a refusal over budget is not stored.
+_LOGO_POOL = ThreadPoolExecutor(max_workers=4, thread_name_prefix="logo")
+_LOGO_FETCHES_PER_HOUR = int(os.environ.get("LOGO_FETCHES_PER_HOUR", "600"))
+_logo_fetched: List[float] = []
+_logo_budget_lock = threading.Lock()
+
+
+def _logo_budget() -> bool:
+    """Whether one more outside fetch fits in the hour's budget; counts it when it does."""
+    now = time.time()
+    with _logo_budget_lock:
+        _logo_fetched[:] = [t for t in _logo_fetched if now - t < 3600]
+        if len(_logo_fetched) >= _LOGO_FETCHES_PER_HOUR:
+            return False
+        _logo_fetched.append(now)
+        return True
 
 
 def _logo_fetch(sym: str) -> Optional[Tuple[bytes, str]]:
@@ -1851,6 +1988,8 @@ def _logo(sym: str) -> Optional[Tuple[bytes, str]]:
                 return fh.read(), kind
     if os.path.exists(base + ".none") and now - os.path.getmtime(base + ".none") < _LOGO_MISS_KEEP:
         return None
+    if universe_mod.known_symbol(sym) is False or not _logo_budget():
+        return None                      # not stored: a listed symbol is fetched once the budget allows
     with _LOGO_LOCK:
         got = _logo_fetch(sym)
     if got is None:
@@ -1867,9 +2006,9 @@ def _logo(sym: str) -> Optional[Tuple[bytes, str]]:
 @app.get("/api/logo/{symbol}")
 async def company_logo(symbol: str) -> Response:
     sym = str(symbol or "").upper()
-    if not _LOGO_SYM.match(sym):
+    if not _LOGO_SYM.fullmatch(sym):      # match() took a trailing newline ("AAPL\n"), a second cache key (SEC-06)
         return Response(status_code=404, headers={"Cache-Control": "public, max-age=86400"})
-    got = await _run(_logo, sym)
+    got = await asyncio.get_running_loop().run_in_executor(_LOGO_POOL, _logo, sym)
     if got is None:
         return Response(status_code=404, headers={"Cache-Control": "public, max-age=86400"})
     body, kind = got
@@ -1879,8 +2018,33 @@ async def company_logo(symbol: str) -> Response:
         "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; img-src data:; sandbox"})
 
 
+# Typeahead from one address: a fast typist sends a few a second for a few seconds, and 600 a minute is far above
+# that and far below a loop (BUG-053, Phase 10). In memory: a restart costs at most a minute of one caller's burst.
+SEARCH_PER_MINUTE = int(os.environ.get("SEARCH_PER_MINUTE", "600"))
+_search_calls: Dict[str, List[float]] = {}
+_search_lock = threading.Lock()
+
+
+def _search_allowed(request: Request) -> bool:
+    if SEARCH_PER_MINUTE <= 0:
+        return True
+    who, now = auth_ratelimit.client_ip(request), time.time()
+    with _search_lock:
+        recent = [t for t in _search_calls.get(who, []) if now - t < 60]
+        if len(recent) >= SEARCH_PER_MINUTE:
+            _search_calls[who] = recent
+            return False
+        recent.append(now)
+        _search_calls[who] = recent
+        if len(_search_calls) > 4096:
+            for addr in [a for a, hits in _search_calls.items() if not any(now - t < 60 for t in hits)]:
+                _search_calls.pop(addr, None)
+    return True
+
+
 @app.get("/api/search")
 async def symbol_search(
+    request: Request,
     q: str = Query("", max_length=40, description="Partial symbol or company name"),
     limit: int = Query(10, ge=1, le=25),
 ) -> Dict[str, Any]:
@@ -1888,6 +2052,9 @@ async def symbol_search(
     US-listed symbol, and the indices, rates, currencies and futures Optic quotes,
     ranked so the thing someone meant comes first. `available` is False when the
     symbol directory could not be read, so the box can say so instead of "no match"."""
+    if not _search_allowed(request):
+        raise HTTPException(status_code=429, detail="That is a lot of searches from this connection in a minute. "
+                                                    "Try again in a moment.")
     return await _run(lambda: {"query": q, **universe_mod.search_with_status(q, limit)})
 
 
@@ -2025,10 +2192,12 @@ def _briefing_report(symbols: List[str], held: List[str]) -> Dict[str, Any]:
         try:
             return setups_mod.analyse(sym, df, bench, now=now)
         except Exception as exc:                              # noqa: BLE001
-            return {"available": False, "reason": str(exc)[:120]}
+            return {"available": False, "reason": public_errors.public(exc)}
 
     out = briefing_mod.build(symbols, held, bars_for, setups_for, per)
-    briefing_mod.note_requested(symbols, now)
+    # Listed names only: anyone may send sixty well-formed symbols a call, and invented ones took places in the
+    # post-close reading order that real names asked about were waiting for (BUG-072, Phase 10)
+    briefing_mod.note_requested([s for s in symbols if universe_mod.known_symbol(s) is not False], now)
     out["generated_at"] = now.isoformat()
     if out["unread"]:
         _briefing_read_soon(out["unread"], per["latest"])
@@ -2087,7 +2256,7 @@ def _digest_news(symbol: str) -> Dict[str, Any]:
     try:
         return news_mod.analyse(YF_PROVIDER, symbol, 12)
     except Exception as exc:                                      # noqa: BLE001
-        return {"articles": [], "error": str(exc)[:120]}
+        return {"articles": [], "error": public_errors.public(exc)}
 
 
 @app.get("/api/digest/{ticker}")
@@ -2660,6 +2829,30 @@ async def watch_catalogue() -> Dict[str, Any]:
     return watches_mod.catalogue()
 
 
+# Each check builds a full swing snapshot, about 20 seconds of fetching, for anyone (BUG-072, Phase 10). The Alerts
+# page checks one symbol at a time, a reader's whole list in a minute or two; 60 in ten minutes is well above that.
+WATCH_CHECKS_PER_10_MIN = int(os.environ.get("WATCH_CHECKS_PER_10_MIN", "60"))
+_watch_checks: Dict[str, List[float]] = {}
+_watch_checks_lock = threading.Lock()
+
+
+def _watch_check_allowed(request: Request) -> bool:
+    if WATCH_CHECKS_PER_10_MIN <= 0 or _is_owner(request):
+        return True
+    who, now = auth_ratelimit.client_ip(request), time.time()
+    with _watch_checks_lock:
+        recent = [t for t in _watch_checks.get(who, []) if now - t < 600]
+        if len(recent) >= WATCH_CHECKS_PER_10_MIN:
+            _watch_checks[who] = recent
+            return False
+        recent.append(now)
+        _watch_checks[who] = recent
+        if len(_watch_checks) > 4096:
+            for addr in [a for a, hits in _watch_checks.items() if not any(now - t < 600 for t in hits)]:
+                _watch_checks.pop(addr, None)
+    return True
+
+
 @app.post("/api/watches/check")
 async def watch_check(request: Request, body: Dict[str, Any] = Body(default={})) -> Dict[str, Any]:
     """Evaluate a set of watches and report which have tripped.
@@ -2691,6 +2884,9 @@ async def watch_check(request: Request, body: Dict[str, Any] = Body(default={}))
     if not isinstance(rows, list) or len(rows) > 25:
         raise HTTPException(status_code=400,
                             detail="Send a list of at most 25 watches.")
+    if not _watch_check_allowed(request):
+        raise HTTPException(status_code=429, detail="That is a lot of alert checks from this connection in ten "
+                                                    "minutes. The scheduled check still runs; try again shortly.")
 
     def build() -> Dict[str, Any]:
         payload = _swing_snapshot(ticker, None, 1, False, include_earnings=True)
@@ -2756,7 +2952,7 @@ def _attach_setups(payload: Dict[str, Any], symbol: str) -> None:
             YF_PROVIDER.history(bench, period="2y", interval="1d"))
     except Exception as exc:                               # noqa: BLE001
         logging.getLogger("optic").info("setups for %s skipped: %s", symbol, exc)
-        payload["setups"] = {"available": False, "rows": [], "reason": str(exc)}
+        payload["setups"] = {"available": False, "rows": [], "reason": public_errors.public(exc, 300)}
 
 
 @app.post("/api/watches/run")
@@ -2959,7 +3155,7 @@ DESK_MAX_ATTEMPTS = 2
 DESK_RETRY_SECONDS = 3600.0
 
 
-def _desk_prose(desk: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+def _desk_prose(desk: Dict[str, Any], write: bool = False) -> Optional[Dict[str, Any]]:
     """The written voice for today, or None to keep the deterministic one.
 
     Cached on the date and nothing else. A failure is held by its attempts,
@@ -2967,6 +3163,10 @@ def _desk_prose(desk: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     request for the rest of the day, or on every deploy. `None` is a legitimate
     answer here rather than an error, because `morning_desk.build` has already
     written a correct note.
+
+    `write` is the keep-warm job's alone. A reader's request only reads what is kept: a reader opening Home made the
+    first write of the day and up to twelve rewrites, a paid call on a page load (BUG-032, Phase 10; the owner's rule
+    that reading a page costs nothing).
     """
     day = desk.get("date")
     if not day:
@@ -2976,6 +3176,8 @@ def _desk_prose(desk: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     stored = ai_store.kept("desk", day)
     if stored:
         prose = stored[0]
+    elif not write:
+        return None
     elif ai_store.claim("desk", day, DESK_MAX_ATTEMPTS, DESK_RETRY_SECONDS):
         prose = _write_desk_prose(desk, day)
     else:
@@ -3168,7 +3370,7 @@ def _desk_sources() -> "desk_edition_mod.Sources":
                                                include_company=False) or {}).get("gex") or {})
 
 
-def _morning_desk(macro: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+def _morning_desk(macro: Optional[Dict[str, Any]], write: bool = False) -> Dict[str, Any]:
     """Today's desk, from panels already built plus the rate path.
 
     The macro strip is passed in rather than refetched: the desk quotes the same
@@ -3205,7 +3407,7 @@ def _morning_desk(macro: Optional[Dict[str, Any]]) -> Dict[str, Any]:
     # exactly as assembled, so the note and the strip above it cannot disagree,
     # and a section the model declines to write keeps the deterministic one.
     desk["voice"] = "mechanical"
-    prose = _desk_prose(desk)
+    prose = _desk_prose(desk, write=write)
     # Why the written voice is not the one showing, for the line under the desk.
     # It said "not configured on this deployment" for every case, which was
     # untrue on the live site the day its note failed to write.
@@ -3213,8 +3415,8 @@ def _morning_desk(macro: Optional[Dict[str, Any]]) -> Dict[str, Any]:
         desk["voice_reason"] = "moved"
         desk["written_at"] = prose.get("written_at")
         # And written again, against the tape as it is now, so the written
-        # voice comes back describing it (see _rewrite_desk_soon).
-        desk["rewriting"] = _rewrite_desk_soon(desk)
+        # voice comes back describing it (see _rewrite_desk_soon): by the keep-warm job, never a reader (BUG-032).
+        desk["rewriting"] = _rewrite_desk_soon(desk) if write else False
         prose = None
     elif not prose:
         desk["voice_reason"] = ("unconfigured" if ai.available().get("enabled") is not True
@@ -3946,11 +4148,19 @@ KEEP_WARM_BOOT_DELAY = 5
 _KEEP_WARM: Dict[str, float] = {"read_at": 0.0}
 
 
+# The written desk note, by the keep-warm job: its first write of the day and its rewrites when the tape has moved past
+# it, both still bounded on disk (DESK_MAX_ATTEMPTS, DESK_REWRITES_PER_DAY). The job runs only while readers are
+# around (KEEP_WARM_IDLE), so a quiet night still costs nothing; Home itself only reads what is kept (BUG-032).
+# "false" leaves Home on the assembled desk.
+DESK_PROSE_AUTO = os.environ.get("DESK_PROSE_AUTO", "true").strip().lower() not in ("0", "false", "no", "off")
+
+
 def _warm_shared() -> None:
-    """The ticker build's shared legs, each refetched if near its expiry."""
+    """The ticker build's shared legs, each refetched if near its expiry, and the desk note."""
     log = logging.getLogger("uvicorn.error")
+    macro_out: Dict[str, Any] = {}
     with yf_provider_mod.refreshing_early():
-        for name, fn in (("macro", lambda: macro_mod.analyse(YF_PROVIDER)),
+        for name, fn in (("macro", lambda: macro_out.update(macro=macro_mod.analyse(YF_PROVIDER))),
                          ("sector board", lambda: sector_board_mod.build(YF_PROVIDER)),
                          ("SPY", lambda: YF_PROVIDER.history("SPY", period="6mo", interval="1d")),
                          ("calendar", _macro_calendar_rows)):
@@ -3958,6 +4168,11 @@ def _warm_shared() -> None:
                 fn()
             except Exception as exc:                            # noqa: BLE001
                 log.info("keep-warm %s skipped: %s", name, exc)
+    if DESK_PROSE_AUTO and ai.available().get("enabled") is True:
+        try:
+            _morning_desk(macro_out.get("macro"), write=True)
+        except Exception as exc:                                # noqa: BLE001
+            log.info("keep-warm desk note skipped: %s", exc)
 
 
 async def _congress_loop() -> None:
@@ -4255,6 +4470,11 @@ def _unknown_symbols(text: str, known: List[str]) -> List[str]:
             continue
         out.append(t)
     return out[:3]
+
+
+def _named_and_unknown(text: str) -> Tuple[List[str], List[str]]:
+    named = _symbols_in(text)
+    return named, _unknown_symbols(text, named)
 
 
 def _symbols_in(text: str) -> List[str]:
@@ -4981,7 +5201,7 @@ async def portfolio_risk_panel(
         try:
             state = paper.state(60, None, book if book in paper.BOOK_IDS else paper.DEFAULT_BOOK)
         except Exception as exc:
-            return {"available": False, "reason": "Tracker unavailable: {}".format(exc)}
+            return {"available": False, "reason": "Tracker unavailable: {}".format(public_errors.public(exc))}
         positions = (state or {}).get("open") or []
         out = portfolio_risk_mod.build(YF_PROVIDER, positions)
         out["generated_at"] = datetime.now(timezone.utc).isoformat()
@@ -5060,7 +5280,7 @@ async def portfolio_scenarios(book: Optional[str] = Query(None, description="Whi
         try:
             state = paper.state(60, None, book if book in paper.BOOK_IDS else paper.DEFAULT_BOOK)
         except Exception as exc:                                # noqa: BLE001
-            return {"available": False, "reason": "Tracker unavailable: {}".format(exc)}
+            return {"available": False, "reason": "Tracker unavailable: {}".format(public_errors.public(exc))}
         legs = _paper_scenario_legs((state or {}).get("open") or [])
         if not legs:
             return {"available": False, "version": scenarios_mod.VERSION, "reason": "No open positions."}
@@ -5096,7 +5316,7 @@ async def replay_step(rid: str, at: int = Query(-replays_mod.LEAD, description="
         except KeyError:
             raise HTTPException(status_code=404, detail="No replay called {}.".format(rid))
         except LookupError as exc:
-            raise HTTPException(status_code=503, detail=str(exc))
+            raise HTTPException(status_code=503, detail=public_errors.public(exc, 300))
     return await _run(build)
 
 
@@ -5159,7 +5379,7 @@ def _build_ranking_in_background() -> None:
             screen_mod.run(YF_PROVIDER, symbols, progress=progress)
         _RANKING_BUILD.update(error=None, failed_at=None)
     except Exception as exc:  # noqa: BLE001 - reported on the page instead
-        _RANKING_BUILD.update(error=str(exc)[:200], failed_at=time.time())
+        _RANKING_BUILD.update(error=public_errors.public(exc, 200), failed_at=time.time())
         logging.getLogger("uvicorn.error").warning("ranking build failed: %s", exc)
     finally:
         _RANKING_BUILD["running"] = False
@@ -5603,6 +5823,8 @@ async def trendlines_panel(ticker: str,
     if intraday and not spec:
         return {"available": False,
                 "reason": "Unknown intraday range {!r}.".format(intraday)}
+    if not spec and period not in _DAILY_PERIODS:
+        return {"available": False, "reason": "Unknown period {!r}.".format(period[:12])}
 
     def build() -> Dict[str, Any]:
         if spec:
@@ -5725,7 +5947,8 @@ async def list_alerts(request: Request, limit: int = Query(50, ge=1, le=200),
                  "note": "These alerts are shown in Optic; email delivery is not set up for readers."})
     return {
         "alerts": alerts_mod.recent(limit=limit, unseen_only=unseen),
-        "unseen": alerts_mod.unseen_count(),
+        # the read flags are the owner's, so the count of unread is too (BUG-072, Phase 10)
+        "unseen": alerts_mod.unseen_count() if _is_owner(request) else None,
         "kinds": alerts_mod.KINDS,
         "delivery": delivery,
     }
@@ -5851,7 +6074,7 @@ async def submit_feedback(request: Request,
         # User-Agent is just another string the reporter typed.
         agent = request.headers.get("user-agent") or ""
 
-        out = await _run(feedback_mod.submit, message, page, reply, agent, reporter)
+        out = await _run(feedback_mod.submit, message, page, reply, agent, reporter, deployed_commit())
         auth_ratelimit.record("feedback", auth_ratelimit.client_ip(request))
     except HTTPException as exc:
         return JSONResponse(status_code=exc.status_code,
@@ -5869,27 +6092,11 @@ async def read_feedback(request: Request,
                         ) -> Dict[str, Any]:
     """The reports, for whoever owns the deployment.
 
-    `_write_guard` on a read. The guard's real subject is "is this the
-    operator", and a second gate meaning the same thing is a second gate to
-    keep in step. What it protects is other people's words: a reader filing a
-    problem is writing to the operator, not to the web.
-
-    The write token is the route that always works here. The guard's admin
-    branch pairs with `csrf_guard`, and a URL typed into an address bar carries
-    no CSRF header, so a signed-in owner visiting this directly gets a 403 that
-    is about the cookie rather than about them.
+    The signed-in owner alone, as on the Accounts page, not `_write_guard`: each report carries its reporter's email,
+    and the write token would let anyone holding that one string read every reader's address and words (BUG-030,
+    Phase 10). Both report pages already read it with the owner's session and the CSRF header.
     """
-    try:
-        _write_guard(request)
-    except HTTPException as exc:
-        # Every refusal that guard writes is phrased about changing the ledger,
-        # because until this route existed every caller it turned away was
-        # trying to. A reader who asked for the reports and is told "writes are
-        # disabled... it refuses to let anonymous callers change the ledger"
-        # goes looking for a write they never made. Same rule, same status,
-        # true sentence.
-        raise HTTPException(status_code=exc.status_code,
-                            detail=_READ_GUARD_COPY.get(exc.status_code, exc.detail))
+    _owner_session_guard(request)
     # Checked after the guard, so a caller who may not read the reports learns
     # nothing from how a bad value is answered.
     if status is not None and status not in feedback_mod.STATUSES:
@@ -6349,6 +6556,8 @@ async def indicator_panel(
             return {"available": False,
                     "reason": "Unknown intraday range {!r}. Expected one of: {}.".format(
                         intraday, ", ".join(sorted(INTRADAY_SPECS)))}
+        if not spec and range_ not in _DAILY_PERIODS:      # a caller's string was a new cache entry (S01)
+            return {"available": False, "reason": "Unknown range {!r}.".format(range_[:12])}
 
         def frame_for(symbol: str):
             if spec:
@@ -7118,12 +7327,13 @@ async def _augment_chat_context_lookups(history: List[Dict[str, Any]],
         already.update(str((r or {}).get("ticker") or "").upper() for r in cmp["rows"] if isinstance(r, dict))
 
     text = last.get("content") or ""
-    named = _symbols_in(text)
+    # Off the event loop: each capitalised word is a directory search, and run here they held every other request
+    # (BUG-113, Phase 10)
+    named, unknown = await _run(_named_and_unknown, text)
     wanted = [s for s in named if s not in already]
     # What the question is about, for the line under the answer: every symbol it named, the page's own included,
     # and ticker-like tokens no directory knows. Without it the label followed whatever Milo looked up: a BRK-A
     # question read "About SPY", and ZZZZQX asked from Home read "About MSFT" (audit 2026-10-22).
-    unknown = _unknown_symbols(text, named)
     asked = {"symbols": named, "unknown": unknown}
     if unknown:
         asked["note"] = ("The question names {}, which Optic's symbol directory does not have. Say that no data "
@@ -7134,7 +7344,7 @@ async def _augment_chat_context_lookups(history: List[Dict[str, Any]],
         out = dict(context or {})
         added = False
         if _wants_candidates(text):
-            candidates = _screen_candidates()
+            candidates = await _run(_screen_candidates)
             if candidates:
                 out["screen_candidates"] = candidates
                 added = True
@@ -7235,6 +7445,31 @@ WRITE_TOKEN = os.environ.get("OPTIC_WRITE_TOKEN", "").strip()
 # the Secure cookie flag and the OAuth redirect URI, and it cannot import this
 # module because this module imports its router. Re-exported above, so
 # `main.is_hosted()` still resolves.
+
+
+# Wrong write tokens, per address, for an hour (BUG-030, Phase 10): a guess had no cost. In memory, as the burst caps.
+TOKEN_MISSES_PER_HOUR = 20
+_token_misses: Dict[str, List[float]] = {}
+_token_misses_lock = threading.Lock()
+
+
+def _token_misses_left(who: str) -> int:
+    now = time.time()
+    with _token_misses_lock:
+        recent = [t for t in _token_misses.get(who, []) if now - t < 3600]
+        _token_misses[who] = recent
+        if not recent:
+            _token_misses.pop(who, None)
+        return TOKEN_MISSES_PER_HOUR - len(recent)
+
+
+def _token_missed(who: str) -> None:
+    with _token_misses_lock:
+        _token_misses.setdefault(who, []).append(time.time())
+        if len(_token_misses) > 4096:
+            now = time.time()
+            for addr in [a for a, hits in _token_misses.items() if not any(now - t < 3600 for t in hits)]:
+                _token_misses.pop(addr, None)
 
 
 def _is_operator(request: Request) -> bool:
@@ -7341,8 +7576,14 @@ def _write_guard(request: Request) -> None:
         supplied = request.headers.get("x-optic-token", "")
         # Constant-time: a plain == leaks the shared prefix through timing, and
         # this token is the only thing standing in front of the ledger.
-        if secrets.compare_digest(supplied, WRITE_TOKEN):
+        who = auth_ratelimit.client_ip(request)
+        if supplied and _token_misses_left(who) <= 0:
+            raise HTTPException(status_code=429, detail="Too many wrong write tokens from this connection in an "
+                                                        "hour. Reading every panel stays open to everyone.")
+        if secrets.compare_digest(supplied.encode("utf-8"), WRITE_TOKEN.encode("utf-8")):   # bytes: a non-ASCII str raised (SEC-11)
             return
+        if supplied:
+            _token_missed(who)
         raise HTTPException(
             status_code=401,
             detail="This action changes the record, so it needs the write token. "
@@ -7404,6 +7645,12 @@ AI_CALLS_PER_HOUR = int(os.environ.get("AI_CALLS_PER_HOUR", "30"))
 # their own copy can re-open it -- set it above zero and the per-address
 # metering below works exactly as it did.
 GUEST_AI_CALLS_PER_DAY = int(os.environ.get("GUEST_AI_CALLS_PER_DAY", "0"))
+# A ceiling over everyone's questions together, the owner's aside (SEC-01, Phase 10 security review). The allowances
+# above are per account and per address, accounts are free and unverified (no mail relay, see above), so a script
+# registering addresses got a fresh allowance each time with nothing over them all. Counted from milo_questions, so a
+# restart does not reset it. At about $0.11 a message (auth/store.py) the default bounds the open spend near $33 a
+# day; 0 switches it off. The owner's number to set (D-076); an Anthropic console spend limit still sits outside.
+MILO_QUESTIONS_PER_DAY = int(os.environ.get("MILO_QUESTIONS_PER_DAY", "300"))
 
 _ai_calls: Dict[str, List[float]] = {}
 
@@ -7516,7 +7763,20 @@ def _spend_guard(request: Request) -> None:
             # address to be confirmed as well as listed, so registering under
             # the owner's address does not buy anyone unlimited use.
             return
-        elif user:
+        # Before either allowance is charged, so a refusal here costs the reader nothing (SEC-01). Not over a paying
+        # reader, whose plan has its own monthly cap: a free spike must not refuse the people paying (cost audit).
+        paying = bool(user) and auth_store.subscription(user["id"])["plan"] != "free"
+        if MILO_QUESTIONS_PER_DAY > 0 and not paying:
+            used = metrics_mod.questions_since(
+                (datetime.now(timezone.utc) - timedelta(days=1)).strftime("%Y-%m-%dT%H:%M:%SZ"))
+            if used is not None and used >= MILO_QUESTIONS_PER_DAY:
+                logging.getLogger("optic").warning("Milo's server-wide ceiling reached: %d questions in 24 hours", used)
+                raise HTTPException(
+                    status_code=429,
+                    detail="Milo has answered as many questions in the last 24 hours as this server allows, "
+                           "so new ones wait until earlier ones pass a day old. Everything else in the "
+                           "terminal works as usual.")
+        if user:
             limits = auth_store.subscription(user["id"])["limits"]
             # The monthly cap (paid plans only) is checked before the daily
             # spend and recorded after it, so a refusal on either side never
@@ -7596,8 +7856,14 @@ async def ai_allowance_state(request: Request) -> Dict[str, Any]:
     Exists so the panel can be honest before the click rather than after: a 429
     arriving mid-answer reads as a failure, and the same fact stated in advance
     reads as a limit."""
-    return {"allowance": ai_allowance(request),
-            "ai": ai.available()}
+    # The status /api/health gives, so a key Anthropic refused reads as off here too (it read as on before Phase
+    # 10). The model and where its credential comes from are the operator's alone (BUG-052).
+    status = _assistant_status()
+    if not _operator(request):
+        status = ({"enabled": True} if status.get("enabled") else
+                  {"enabled": False, "hint": ai.available().get("hint") if not status.get("key_refused") else
+                   "Milo cannot answer on this deployment right now. Every other panel works without it."})
+    return {"allowance": ai_allowance(request), "ai": status}
 
 
 @app.get("/api/knowledge/modes")
@@ -7929,6 +8195,9 @@ async def chat(request: Request,
     straight through to the model and never written to disk.
     """
     started = time.perf_counter()
+    too_long = ai.question_too_long(ai.newest_turn(payload.get("messages")))
+    if too_long:
+        raise HTTPException(status_code=413, detail=too_long)      # before the allowance is charged (BUG-112)
     _spend_guard(request)
     _count_question(request, "chat")
     history = payload.get("messages") or []
@@ -7953,8 +8222,11 @@ async def chat(request: Request,
         # await, and the line sat behind them, reaching the browser with the context at about 85 ms instead of 25
         # (Phase 07 measurement). The blocking itself is Phase 10's (BUG-113).
         await asyncio.sleep(0.005)
+        trimmed, left = _personal_blocks_for(history, context)
+        if left:
+            yield ai._sse("attachments", {"problems": ["{}, since the question is not about it".format(x) for x in left]})
         try:
-            ctx = await _chat_context(request, history, context, horizon, attachments)
+            ctx = await _chat_context(request, history, trimmed, horizon, attachments)
         except Exception as exc:                                            # noqa: BLE001 - said to the reader
             logging.getLogger("uvicorn.error").warning("chat context failed: %s: %s", type(exc).__name__, exc)
             yield ai._sse("error", {"message": "Milo could not gather the figures for this question. Send it again in a moment."})
@@ -7970,6 +8242,30 @@ async def chat(request: Request,
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+# The reader's own blocks from the page they asked on: a watchlist's rows, a paper book and its journal, a retirement
+# plan. They went with every question asked there, whatever it was about, so "What is a P/E ratio?" from the Watchlist
+# sent the whole list to the model provider (BUG-071, Phase 10). Now only with a question about the reader's own
+# things; the test is wide on purpose, since leaving a block out by mistake costs an answer about the reader's list.
+_PERSONAL_BLOCKS = {"watchlist": "the list on this page", "reader_watchlist": "your watchlist",
+                    "reader_holdings": "your paper book", "journal": "your trade journal", "roth": "your retirement plan"}
+_ABOUT_THE_READERS = re.compile(
+    r"\b(?:my|mine|our|ours|these|those|here|watch\s?list|list|portfolio|positions?|holdings?|book|paper|trades?|"
+    r"plan|retirement|roth|ira|allocation|journal|contribut\w*|this (?:list|book|plan|page|account)|"
+    r"(?:am|did|do|should|have|can|could|would) i|i (?:own|hold|have|had|bought|sold|traded|made|lost))\b", re.I)
+
+
+def _personal_blocks_for(history: List[Dict[str, Any]], context: Optional[Dict[str, Any]]
+                         ) -> Tuple[Optional[Dict[str, Any]], List[str]]:
+    """The context without the reader's own blocks when the question is not about them, and what was left out."""
+    if not isinstance(context, dict):
+        return context, []
+    present = [k for k in _PERSONAL_BLOCKS if context.get(k)]
+    last = next((t for t in reversed(history or []) if t.get("role") != "assistant"), None)
+    if not present or _ABOUT_THE_READERS.search((last or {}).get("content") or ""):
+        return context, []
+    return {k: v for k, v in context.items() if k not in present}, [_PERSONAL_BLOCKS[k] for k in present]
 
 
 async def _chat_context(request: Request, history: List[Dict[str, Any]], context: Optional[Dict[str, Any]],
@@ -8037,6 +8333,9 @@ def _is_definition(question: str, context: Optional[Dict[str, Any]]) -> bool:
 async def research(request: Request,
                    payload: Dict[str, Any] = Body(...)) -> StreamingResponse:
     """Streaming live web research for a ticker or macro question."""
+    too_long = ai.question_too_long(payload.get("question"))
+    if too_long:
+        raise HTTPException(status_code=413, detail=too_long)      # before the allowance is charged (BUG-112)
     _spend_guard(request)
     _count_question(request, "research")
     ticker = (payload.get("ticker") or "").upper()
@@ -8460,6 +8759,8 @@ CSP_REPORT_ONLY = (
     "frame-ancestors 'none'; object-src 'none'; base-uri 'self'"
 )
 
+PERMISSIONS_POLICY = "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
+
 
 @app.middleware("http")
 async def security_headers(request: Request, call_next: Any) -> Any:
@@ -8470,6 +8771,11 @@ async def security_headers(request: Request, call_next: Any) -> Any:
     h.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
     h.setdefault("Content-Security-Policy", CSP_ENFORCED)
     h.setdefault("Content-Security-Policy-Report-Only", CSP_REPORT_ONLY)
+    # Browser features no page uses, off (SEC-09, Phase 10): fullscreen (the chart) and passkeys keep their defaults.
+    # The opener policy keeps a page another site opened from reaching back into this one; popups Optic opens are
+    # left as they were.
+    h.setdefault("Permissions-Policy", PERMISSIONS_POLICY)
+    h.setdefault("Cross-Origin-Opener-Policy", "same-origin-allow-popups")
     proto = (request.headers.get("x-forwarded-proto") or request.url.scheme or "").split(",")[0].strip()
     if proto == "https":
         h.setdefault("Strict-Transport-Security", "max-age=15552000")

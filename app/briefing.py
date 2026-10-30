@@ -44,6 +44,7 @@ from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence
 import numpy as np
 import pandas as pd
 
+from . import public_errors
 from . import session as session_mod
 from .analytics import setups as setups_mod
 
@@ -257,18 +258,18 @@ def observe(provider, symbol: str) -> Dict[str, Any]:
         data["next_earnings"] = provider.earnings_date(symbol)
     except Exception as exc:                                   # noqa: BLE001
         data["next_earnings"] = None
-        data["errors"]["next_earnings"] = str(exc)[:120]
+        data["errors"]["next_earnings"] = public_errors.public(exc)
     try:
         rows = provider.earnings_history(symbol, limit=8) or []
         done = [r for r in rows if r.get("eps_reported") is not None and r.get("date")]
         data["last_reported"] = max(done, key=lambda r: r["date"]) if done else None
     except Exception as exc:                                   # noqa: BLE001
         data["last_reported"] = None
-        data["errors"]["last_reported"] = str(exc)[:120]
+        data["errors"]["last_reported"] = public_errors.public(exc)
     try:
         facts = sec_facts.history(symbol)
     except Exception as exc:                                   # noqa: BLE001
-        facts = {"available": False, "reason": str(exc)[:120]}
+        facts = {"available": False, "reason": public_errors.public(exc)}
     if facts.get("available"):
         rev = (facts.get("revenue_ttm") or [None])[-1]
         eps = (facts.get("eps_ttm") or [None])[-1]
@@ -283,7 +284,7 @@ def observe(provider, symbol: str) -> Dict[str, Any]:
         data["shares_outstanding"] = _num((provider.short_interest(symbol) or {}).get("shares_outstanding"))
     except Exception as exc:                                   # noqa: BLE001
         data["shares_outstanding"] = None
-        data["errors"]["shares_outstanding"] = str(exc)[:120]
+        data["errors"]["shares_outstanding"] = public_errors.public(exc)
     return data
 
 

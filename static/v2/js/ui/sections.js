@@ -15,6 +15,7 @@
 //   desktop; it scrolls away on a phone, as the header does (B1.8).
 import { icon } from './icons.js';
 import { density, onChange as onPrefs } from '../core/prefs.js';
+import { reducedMotion } from '../core/dom.js';
 
 const OPEN_KEY = 'optic.panels.open', HIDDEN_KEY = 'optic.panels.hidden.v1';
 const LEVEL_WORD = { 2: 'Advanced', 3: 'Professional' };
@@ -130,7 +131,9 @@ function setOpen(root, s, open) {
   apply(root);
   if (open) resized();
 }
-const reduced = () => { try { return matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) { return false; } };
+// the system's setting or Settings' Motion: Reduce, as everywhere else: the system's alone kept smooth scrolling on for a
+// reader who chose Reduce in Settings (Phase 10 motion review)
+const reduced = () => { try { return reducedMotion(); } catch (e) { return false; } };
 /** Open a section if it is folded (or taken off), then bring it under the sticky header, its heading focused. */
 export function openSection(root, id, { scroll = true } = {}) {
   const s = root.querySelector(`#${CSS.escape(id)}`); if (!s) return false;

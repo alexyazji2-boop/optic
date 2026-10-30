@@ -77,7 +77,8 @@ async function fetchRows(symbols, { force = false } = {}) {
   const chunks = [];
   for (let i = 0; i < symbols.length; i += 40) chunks.push(symbols.slice(i, i + 40));
   const res = await Promise.all(chunks.map((c) => api.get(`/api/watchlist?symbols=${c.map(encodeURIComponent).join(',')}`, { ttl: 60000, timeout: 30000, force })));
-  S.checked = new Date().toISOString();
+  // the server's time of reading, the oldest of the chunks; the browser's own clock only when an older server sent none (BUG-073)
+  S.checked = res.map((r) => r && r.generated_at).filter(Boolean).sort()[0] || new Date().toISOString();
   S.method = (res[0] || {}).method || '';
   const got = new Map(res.flatMap((r) => r.rows || []).map((r) => [r.symbol, r]));
   return symbols.map((s) => got.get(s) || { symbol: s, available: false, reason: 'No data returned for this symbol.' });

@@ -27,11 +27,10 @@ mechanism and the current reading; nothing here says which way a pair goes next.
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
-import numpy as np
 
-from .series_stats import _f, apply_quote, live_quotes, snapshot
+from .series_stats import apply_quote, live_quotes, snapshot
 
 BENCHMARK = "DX-Y.NYB"
 

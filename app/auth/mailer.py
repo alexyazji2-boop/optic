@@ -135,14 +135,16 @@ def send(to: str, subject: str, body: str, link: Optional[str] = None) -> bool:
     message = EmailMessage()
     message["Subject"] = subject
     message["From"] = formataddr((EMAIL_FROM_NAME, EMAIL_FROM))
-    message["To"] = to
-    message.set_content(body)
     try:
+        # Inside the try: an address with a line break raises here, and it was a 500 after the account row
+        # existed (SEC-12, Phase 10)
+        message["To"] = to
+        message.set_content(body)
         _send_smtp(message)
         return True
-    except (smtplib.SMTPException, OSError, ssl.SSLError) as exc:
-        # The address is logged, the error is logged, the token never is.
-        log.warning("mail send failed to=%s subject=%s error=%s", to, subject, exc)
+    except (smtplib.SMTPException, OSError, ssl.SSLError, ValueError) as exc:
+        # The address masked as on the no-relay path (SEC-17), the error logged, the token never.
+        log.warning("mail send failed to=%s subject=%s error=%s", _masked(to), subject, exc)
         return False
 
 

@@ -14,9 +14,10 @@ import logging
 import re
 import threading
 import time
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, timezone
 from typing import Any, Callable, Dict, List, Optional
 
+from .. import public_errors
 from . import words
 from zoneinfo import ZoneInfo
 
@@ -132,7 +133,7 @@ class _Gather:
         except cf.TimeoutError:
             self.gaps.append("{} did not answer in time".format(name))
         except Exception as exc:                                                  # noqa: BLE001
-            self.gaps.append("{} failed ({})".format(name, str(exc)[:80]))
+            self.gaps.append("{} failed ({})".format(name, public_errors.public(exc, 80)))
         return None
 
     def close(self) -> None:

@@ -22,10 +22,11 @@ that can be built honestly.
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional
+from datetime import datetime, timezone
+from typing import Any, Dict, Optional
 from zoneinfo import ZoneInfo
 
+from . import public_errors
 from . import events, feeds
 
 ET = ZoneInfo("America/New_York")
@@ -121,7 +122,7 @@ def market_reaction(provider) -> Dict[str, Any]:
     try:
         frames = provider.batch_history(symbols, period="1mo", interval="1d") or {}
     except Exception as exc:
-        return {"available": False, "reason": "Price data unavailable: {}".format(exc)}
+        return {"available": False, "reason": "Price data unavailable: {}".format(public_errors.public(exc))}
 
     rows = []
     for asset in REACTION_ASSETS:

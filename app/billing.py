@@ -33,7 +33,7 @@ import hmac
 import logging
 import os
 import time
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Optional
 
 import requests
 from fastapi import APIRouter, HTTPException, Request
@@ -219,7 +219,8 @@ def verify_signature(body: bytes, header: str, secret: str, now: Optional[float]
     if abs((now or time.time()) - stamp) > TOLERANCE:
         return False
     expected = hmac.new(secret.encode(), "{}.".format(stamp).encode() + body, hashlib.sha256).hexdigest()
-    return any(hmac.compare_digest(expected, sig) for sig in parts.get("v1") or [])
+    # bytes: two str with a non-ASCII character raise TypeError, a 500 instead of a refusal (SEC-11, Phase 10)
+    return any(hmac.compare_digest(expected.encode("utf-8"), sig.encode("utf-8")) for sig in parts.get("v1") or [])
 
 
 def _find_user(obj: Dict[str, Any]) -> Optional[str]:

@@ -446,7 +446,7 @@ def predict_reaction(ea: Dict[str, Any], hurdle: Dict[str, Any], results: Dict[s
         ev.append((-1, "With a demanding bar, a beat in line with the company's history may not be enough."))
     elif h == "conservative":
         ev.append((1, "With a low bar, an ordinary result could be enough to lift the stock."))
-    on_beat, on_miss = sur.get("avg_move_on_beat_pct"), sur.get("avg_move_on_miss_pct")
+    on_beat = sur.get("avg_move_on_beat_pct")
     if on_beat is not None and (sur.get("beat_rate_pct") or 0) >= 70:
         ev.append((1 if on_beat > 0.5 else -1 if on_beat < -0.5 else 0,
                    "After past beats the stock moved {} on average in the reacting session.".format(

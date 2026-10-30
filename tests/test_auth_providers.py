@@ -100,6 +100,19 @@ def test_a_provider_that_has_not_verified_the_address_cannot_claim_an_account():
     assert store.get_identity("google", "sub-1") is None
 
 
+def test_a_provider_is_not_attached_to_an_account_that_has_a_password():
+    """SEC-04 (Phase 10): a stranger could register the victim's address with their own password; one click on the
+    verification mail made it verified, and the victim's later provider sign-in landed in that account."""
+    planted = store.create_user("reader@example.com", "Real", "Owner", email_verified=True)
+    store.set_password(planted["id"], "argon2-hash", "argon2id")
+    outcome = linking.resolve(profile())
+    assert outcome["outcome"] == "needs_link"
+    assert store.get_identity("google", "sub-1") is None
+    # signed in the way they did before, the password holder connects it themselves
+    linked = linking.resolve(profile(), link_user_id=planted["id"])
+    assert linked["outcome"] == "linked"
+
+
 def test_apple_private_relay_is_never_a_match_key():
     store.create_user("abc@privaterelay.appleid.com", "Real", "Owner",
                       email_verified=True)
@@ -218,6 +231,39 @@ def test_a_state_that_was_never_issued_is_refused(google):
                        follow_redirects=False)
     assert "auth_error=state" in reply.headers["location"]
     assert client.get("/api/auth/me").json()["authenticated"] is False
+
+
+def test_a_callback_from_another_browser_is_refused(google):
+    """SEC-08 (Phase 10): the state was checked against the database alone, so a link a stranger started could be
+    finished in someone else's browser, signing that person in to the stranger's account."""
+    client.get("/api/auth/google/start", follow_redirects=False)
+    state = main.accounts_db.rows("SELECT state FROM oauth_states")[0]["state"]
+    other = TestClient(main.app)
+    reply = other.get("/api/auth/google/callback", params={"code": "c", "state": state}, follow_redirects=False)
+    assert "auth_error=state" in reply.headers["location"]
+    assert other.get("/api/auth/me").json()["authenticated"] is False
+    # the browser that started it still finishes it
+    mine = client.get("/api/auth/google/callback", params={"code": "c", "state": state}, follow_redirects=False)
+    assert "auth=ok" in mine.headers["location"]
+
+
+def test_apple_is_bound_too_on_a_secure_host(monkeypatch):
+    """BUG-043 (Phase 10): Apple returns with a cross-site form POST, which carries only a SameSite=None; Secure cookie,
+    so its state is bound with one of those wherever the site is served over HTTPS."""
+    monkeypatch.setattr(config, "cookie_secure", lambda: True)
+    monkeypatch.setattr(oauth, "start", lambda provider, state, nonce: ("https://appleid.apple.com/auth/authorize?state=" + state, None))
+    monkeypatch.setattr(oauth, "complete", lambda *a, **k: profile(provider="apple", subject="apple-7"))
+    reply = client.get("/api/auth/apple/start", follow_redirects=False)
+    cookie = reply.headers.get("set-cookie", "")
+    assert "optic_oauth=" in cookie and "samesite=none" in cookie.lower() and "secure" in cookie.lower()
+    state = main.accounts_db.rows("SELECT state FROM oauth_states")[0]["state"]
+    other = TestClient(main.app)
+    refused = other.post("/api/auth/apple/callback", data={"code": "c", "state": state}, follow_redirects=False)
+    assert "auth_error=state" in refused.headers["location"]
+    from app.auth import routes as auth_routes
+    assert auth_routes._binds_state("apple") and auth_routes._binds_state("google")
+    monkeypatch.setattr(config, "cookie_secure", lambda: False)
+    assert not auth_routes._binds_state("apple")          # plain HTTP: a SameSite=None cookie would be dropped
 
 
 def test_state_is_single_use(google):

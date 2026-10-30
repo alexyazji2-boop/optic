@@ -23,7 +23,7 @@ Nothing here calls a model or fetches.
 from __future__ import annotations
 
 import re
-from datetime import date, datetime
+from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 
 THEMES = ("equities", "rates", "dollar", "oil", "credit", "volatility", "earnings", "sectors",
@@ -115,7 +115,7 @@ def _sign(x: Optional[float], flat: float) -> int:
 
 def relationships(evm: Dict[str, Dict[str, Any]]) -> List[Dict[str, Any]]:
     out: List[Dict[str, Any]] = []
-    spy, qqq, iwm = _sym(evm, "SPY", "index"), _sym(evm, "QQQ", "index"), _sym(evm, "IWM", "index")
+    spy, qqq = _sym(evm, "SPY", "index"), _sym(evm, "QQQ", "index")
     tnx, dxy, gold = _sym(evm, "^TNX"), _sym(evm, "DX-Y.NYB"), _sym(evm, "GC=F")
     wti, hyg, vix = _sym(evm, "CL=F"), _sym(evm, "HYG"), _sym(evm, "^VIX")
     xle = _sym(evm, "XLE", "sector")

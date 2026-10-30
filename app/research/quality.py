@@ -16,7 +16,7 @@ figure is a gap in the evidence, not evidence against the company.
 
 from __future__ import annotations
 
-from statistics import mean, median, pstdev
+from statistics import mean, median
 from typing import Any, Dict, List, Optional, Tuple
 
 from . import policy as policy_mod

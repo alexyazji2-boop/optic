@@ -331,6 +331,9 @@ export function dispose() { live = false; }
 export const retry = { brief: (m, r) => { api.invalidate('/api/brief'); render(m, r); } };
 
 function wire(main) {
+  // once per page view: Try again draws into the same view, and wiring it again doubled every press (BUG-037)
+  if (main.__v2Wired) return;
+  main.__v2Wired = true;
   let t;
   main.addEventListener('input', (e) => {
     if (!e.target.closest('[data-v2-read-search]')) return;

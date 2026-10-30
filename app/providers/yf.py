@@ -78,6 +78,41 @@ def _remember_timezone(symbol: str, doc: Optional[Dict[str, Any]]) -> None:
 
 _CACHE: Dict[str, Any] = {}
 
+# Nothing ever left _CACHE before Phase 10 (S01 in docs/post-demo-ultra/DATA_PATHWAYS.md): no eviction, one lock per key
+# ever seen, and keys built from what callers send (the ticker in every path, a chart's period). The longest life an
+# entry has is a day (profile, splits, fund facts), so an entry older than that is never served again and goes; past
+# CACHE_MAX entries the oldest stored go first, which costs a refetch and nothing else. A key's lock goes with its entry
+# when nobody holds it.
+CACHE_MAX = int(os.environ.get("YF_CACHE_MAX", "20000"))
+_CACHE_OLDEST = 86400.0 + 300.0
+_SWEEP_EVERY = 60.0
+_SWEPT = {"at": 0.0}
+
+
+def sweep_cache(now: Optional[float] = None) -> int:
+    """Drop entries no reader can be served again, then the oldest past CACHE_MAX. Returns how many went."""
+    now = time.time() if now is None else now
+    entries = list(_CACHE.items())                     # one copy under the GIL; writers may carry on meanwhile
+    gone = [k for k, v in entries if isinstance(v, tuple) and v and now - float(v[0]) > _CACHE_OLDEST]
+    for k in gone:
+        _CACHE.pop(k, None)
+    over = len(_CACHE) - CACHE_MAX
+    if over > 0:
+        oldest = sorted(((float(v[0]), k) for k, v in list(_CACHE.items()) if isinstance(v, tuple) and v))[:over]
+        for _, k in oldest:
+            _CACHE.pop(k, None)
+        gone += [k for _, k in oldest]
+    with _KEY_GUARD:
+        for k in [k for k, lock in _KEY_LOCKS.items() if k not in _CACHE and not lock.locked()]:
+            _KEY_LOCKS.pop(k, None)
+    _SWEPT["at"] = now
+    return len(gone)
+
+
+def _maybe_sweep() -> None:
+    if len(_CACHE) > CACHE_MAX or time.time() - _SWEPT["at"] > _SWEEP_EVERY:
+        sweep_cache()
+
 # Where `.info`'s three documents are fetched side by side (_info_documents).
 # Long-lived rather than one pool per call: curl_cffi keeps a connection per
 # thread, so a thread that lives keeps its connection to Yahoo warm. Nothing
@@ -564,6 +599,7 @@ def _fill(key: str, ttl: float, producer, gate: bool, fresh_for: float):
             with _PACE_LOCK:
                 _on_success()
         _CACHE[key] = (time.time(), value)
+        _maybe_sweep()
         return value
 
 
@@ -1258,10 +1294,8 @@ class YFinanceProvider(MarketDataProvider):
         """
         def build() -> Optional[str]:
             try:
-                info = dict(yf.Ticker(ticker).info or {})
-            except Exception as exc:                            # noqa: BLE001
-                if _is_rate_limit(exc):
-                    note_throttle(exc)
+                info = dict(self._info(ticker) or {})    # the quote's own read (S09); its gate saw any refusal
+            except Exception:                                   # noqa: BLE001
                 return None
             code = str(info.get("underlyingSymbol") or "")
             # e.g. ZQV26.CBT -> V (October), 26 (2026). The month letter is the
@@ -1275,12 +1309,17 @@ class YFinanceProvider(MarketDataProvider):
             year = 2000 + int(match.group(2))
             return "{:04d}-{:02d}-01".format(year, month)
 
-        return _cached("cmonth:" + ticker, self.TTL_FILED, build)
+        return _cached("cmonth:" + ticker, self.TTL_FILED, build, gate=False)
+
+    def _calendar(self, ticker: str) -> Dict[str, Any]:
+        """Yahoo's calendar for a symbol, read once for the next report date and the consensus band: the two read it
+        separately, two requests for one document (S09, Phase 10). Gated here; the two readers over it are not."""
+        return _cached("cal:" + ticker, 3600, lambda: yf.Ticker(ticker).calendar or {})
 
     def earnings_date(self, ticker: str) -> Optional[str]:
         def build() -> Optional[str]:
             try:
-                cal = yf.Ticker(ticker).calendar
+                cal = self._calendar(ticker)
             except Exception as exc:
                 return _failed(None, exc)
             if not cal:
@@ -1294,7 +1333,7 @@ class YFinanceProvider(MarketDataProvider):
             except Exception:
                 return None
 
-        return _cached("earn:" + ticker, 3600, build)
+        return _cached("earn:" + ticker, 3600, build, gate=False)
 
     # ----------------------------------------------------------- history
 
@@ -1747,7 +1786,7 @@ class YFinanceProvider(MarketDataProvider):
 
         def build() -> Dict[str, Any]:
             try:
-                info = yf.Ticker(ticker).info or {}
+                info = self._info(ticker) or {}          # the quote's own read, not a second one (S09, Phase 10)
             except Exception as exc:
                 return _failed({}, exc)
             # yfinance reports both of these as fractions (0.03 = 0.03%, 0.0105 = 1.05%)
@@ -1764,14 +1803,14 @@ class YFinanceProvider(MarketDataProvider):
                 "yield_pct": _f(raw_yield * 100.0) if raw_yield is not None else None,
             }
 
-        return _cached("fundmeta:" + ticker, 86400, build)
+        return _cached("fundmeta:" + ticker, 86400, build, gate=False)
 
     def earnings_calendar(self, ticker: str) -> Dict[str, Any]:
         """Next scheduled report plus the consensus EPS/revenue band for it."""
 
         def build() -> Dict[str, Any]:
             try:
-                cal = yf.Ticker(ticker).calendar or {}
+                cal = self._calendar(ticker)
             except Exception as exc:
                 return _failed({}, exc)
             dates = cal.get("Earnings Date") or []
@@ -1814,7 +1853,7 @@ class YFinanceProvider(MarketDataProvider):
                 "revenue_high": _f(cal.get("Revenue High")),
             }
 
-        return _cached("earncal:" + ticker, 3600, build)
+        return _cached("earncal:" + ticker, 3600, build, gate=False)
 
     def estimates(self, ticker: str) -> Dict[str, Any]:
         """Analyst estimates and how they've been revised.

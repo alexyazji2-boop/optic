@@ -20,7 +20,7 @@ import json
 from typing import Any, Dict, List, Optional, Tuple
 
 from .. import db, knowledge
-from . import tokens
+from . import config, tokens
 
 # ------------------------------------------------------------------- helpers
 
@@ -239,6 +239,11 @@ def session_by_token(token: str) -> Optional[Dict[str, Any]]:
     Expiry is in the WHERE clause rather than checked afterwards. A caller who
     forgets the check is then unable to authenticate an expired session, instead
     of doing it silently."""
+    if config.SESSION_MAX_DAYS > 0:
+        # and never older than the absolute limit, whatever the slide says (SEC-14)
+        return db.row(
+            "SELECT * FROM sessions WHERE session_token_hash = ? AND expires_at > ? AND created_at > ?",
+            (tokens.token_hash(token), db.utcnow(), db.in_seconds(-config.SESSION_MAX_DAYS * 86400)))
     return db.row(
         "SELECT * FROM sessions WHERE session_token_hash = ? AND expires_at > ?",
         (tokens.token_hash(token), db.utcnow()))

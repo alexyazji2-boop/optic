@@ -262,6 +262,9 @@ def build(provider, symbols: List[str], now: Optional[datetime] = None) -> Dict[
         "benchmark": BENCH,
         "unavailable": missing,
         "method": _METHOD,
+        # when these rows were read, for the page's "Checked for new prices at": it used the browser's clock at the
+        # moment it asked, which a copy kept in the page's cache made up to a minute wrong (BUG-073, Phase 10)
+        "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
     }
 
 

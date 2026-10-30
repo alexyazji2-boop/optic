@@ -26,7 +26,7 @@ and the count of what was dropped is reported.
 
 from __future__ import annotations
 
-from typing import Any, Callable, Dict, List, Optional, Sequence
+from typing import Any, Dict, List, Optional, Sequence
 
 import numpy as np
 

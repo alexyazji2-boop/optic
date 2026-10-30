@@ -23,6 +23,7 @@ Roth-specific reasoning that genuinely changes the answer versus a taxable accou
 
 from __future__ import annotations
 
+from .. import public_errors
 from .. import legal as legal_mod
 
 from typing import Any, Dict, List, Optional
@@ -790,7 +791,7 @@ def _stock_sleeve(provider, symbols: List[str], risk: str,
         try:
             read = longterm.analyse_holding(provider, sym)
         except Exception as exc:
-            rows.append({"symbol": sym, "error": str(exc)})
+            rows.append({"symbol": sym, "error": public_errors.public(exc)})
             continue
         if read.get("error"):
             rows.append({"symbol": sym, "error": read["error"]})

@@ -14,6 +14,7 @@
 // The arrows are children of the strip, sticky at its edges with a negative margin, so they take no room and need
 // no wrapper; a page that redraws a strip loses them, and one observer puts them back.
 import { icon } from './icons.js';
+import { reducedMotion } from '../core/dom.js';
 
 export const STRIPS = '.tabs, .tabset, .mstrip, .drail, .bk-tabs, .chw-rail, .ch-draw, .ws-presets, .chips-scroll, .sec-list, .cs-strip, .palette-filters';
 const LATCH_MS = 200;
@@ -45,7 +46,9 @@ function paintBg(el) {
   const cs = getComputedStyle(el);
   el.style.setProperty('--strip-pl', cs.paddingLeft); el.style.setProperty('--strip-pr', cs.paddingRight);
 }
-const reduced = () => { try { return matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) { return false; } };
+// the system's setting or Settings' Motion: Reduce, as everywhere else: the system's alone kept smooth scrolling on for a
+// reader who chose Reduce in Settings (Phase 10 motion review)
+const reduced = () => { try { return reducedMotion(); } catch (e) { return false; } };
 /** Which arrows a strip shows: there is more before it, after it, or both. */
 export function moreWays(scrollLeft, clientWidth, scrollWidth) {
   const max = scrollWidth - clientWidth;

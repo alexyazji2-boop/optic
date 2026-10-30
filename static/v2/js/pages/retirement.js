@@ -121,7 +121,7 @@ function paint() {
   draw(mainEl, html`<header class="page-head">${sectionHead('portfolio', 'roth')}
       <p class="section-sub">Rules-based example allocations by horizon and risk setting, to compare with your own plan. An example, not a recommendation for you, and not retirement or tax advice.</p></header>
     <section class="section first" aria-labelledby="rm-h"><h2 class="t-h2" id="rm-h">Roth IRA model allocation</h2><p class="section-sub">Set your horizon and risk tolerance. The model is derived from those, not assumed.</p>
-      ${form()}${d && d.limit_note ? html`<p class="asof">${clean(d.limit_note)}</p>` : ''}
+      ${form()}${D.clamped ? html`<p class="asof" role="status">${D.clamped}</p>` : ''}${d && d.limit_note ? html`<p class="asof">${clean(d.limit_note)}</p>` : ''}
       ${D.err ? failed('The model', D.err, { retry: 'load' }) : !d ? skeleton('rows', 5, 'Loading ten years of history for the fund universe') : model(d)}</section>
     ${d ? html`<section class="section" aria-labelledby="rp-h"><h2 class="t-h2" id="rp-h">Contribution projection</h2>${projection(d.projection || {})}</section>${sections(d)}` : ''}`);
   if (Math.abs(window.scrollY - y) > 2) window.scrollTo(0, y);
@@ -129,7 +129,9 @@ function paint() {
 }
 
 async function load() {
-  const my = ++seq; D.loading = true; D.err = null; paint();
+  // the last result goes with the inputs it was for: a failed run showed it under the error card as if it were the
+  // new one (BUG-073, Phase 10)
+  const my = ++seq; D.loading = true; D.err = null; D.d = null; paint();
   try {
     const d = await api.post('/api/retirement', inputs, { timeout: 90000 });
     if (my !== seq || !live) return;
@@ -157,6 +159,11 @@ export async function render(main) {
     const f = e.target.closest('[data-v2-roth]'); if (!f) return;
     e.preventDefault();
     inputs = clampInputs({ years: f.years.value, risk: f.risk.value, annual: f.annual.value, holdings: f.holdings.value, stock_candidates: f.stock_candidates.value });
+    // a value outside what the model plans for is changed, and said: it was changed in silence (BUG-073)
+    const changed = [];
+    if (String(Math.round(Number(f.years.value))) !== String(inputs.years)) changed.push(`years to ${inputs.years} (from 1 to 45)`);
+    if (Number(f.annual.value) !== inputs.annual) changed.push(`the yearly amount to $${inputs.annual.toLocaleString('en-US')} (from $0 to $100,000)`);
+    D.clamped = changed.length ? `Set ${changed.join(' and ')}.` : '';
     if (holds(store.state.user)) { try { localStorage.setItem(KEY, JSON.stringify(inputs)); } catch (err) { /* private mode */ } }
     load();
   });

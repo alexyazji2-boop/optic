@@ -863,3 +863,231 @@ the label of either, and the strip drawn on a half day.
 - Updated for the deliberate changes: `test_session_holidays`, `test_pulse_tone`, `test_v2_editorial_pass`,
   `test_v2_parity_b2b2`, `test_v2_positions`, `test_v2_beginner`, `test_ux_system`, `test_v2_scores`.
 - Full suite on the final Phase 09 tree: 8,015 passed, 1 skipped, 0 failed (raw `phase09/pytest-full-2.txt`).
+
+## Phase 10 (performance, security, accessibility and polish), 2026-10-30, working tree on 3698975
+
+Raw results are under `~/Optic/work/post-demo-ultra-2026-10-29/phase10/` and the tools in `tools/` beside it (each
+tool's usage line is at its top). Browser checks ran in headless Chrome 156.0.8078.74 over CDP on this Mac (macOS
+27.0.1, arm64) against the local server (:8250, the stand-in model on :8251, so nothing was spent), on live delayed
+data, signed in as the local demo reader unless a row says otherwise, on Friday 2026-10-30 from 02:50 to 13:10 ET.
+
+### Performance (`tools/phase10_perf.py OUT LABEL [--routes=...]`; raw `perf/`)
+
+Conditions: 1440 x 900, no throttling. Each route is loaded in a fresh page with the cache busted, after one warm-up
+visit so the server's caches answer as they would for a returning reader; three runs, medians. FCP and LCP come from
+paint entries, CLS from layout shifts without recent input, blocking is long tasks' time over 50 ms, and "ready" is
+the route's own content marker.
+
+The A/B, with the feed answering (13:04 and 13:06 ET, the regular session): the Phase 09 commit (3698975, its own
+data copy) on :8252, then this tree on :8250 (`perf-ab2-before.json`, `perf-ab2-after.json`).
+
+| Route | Ready s | FCP ms | LCP ms | CLS | Blocking ms | API requests |
+|---|---|---|---|---|---|---|
+| Home | 0.363 / 0.347 | 752 / 716 | 824 / 784 | 0.0205 / 0.0043 | 0 / 0 | 10 / 10 |
+| Dossier (NVDA) | 0.299 / 0.245 | 776 / 732 | 1108 / 976 | 0.0141 / 0 | 0 / 0 | 18 / 18 |
+| Options (NVDA) | 2.400 / 2.296 | 744 / 708 | 3096 / 2920 | 0.0792 / 0.0792 | 0 / 0 | 11 / 11 |
+
+All seven routes, the baseline (02:52 ET, the overnight session) against the tree after the fixes (07:03 ET, before
+the open), one server (`perf-baseline.json`, `perf-after-fixes.json`):
+
+| Route | Ready s | FCP ms | LCP ms | CLS | Blocking ms | Longest task ms | API requests |
+|---|---|---|---|---|---|---|---|
+| Home | not reached / not reached | 504 / 524 | 580 / 592 | 0.0216 / 0.0216 | 0 / 0 | 0 / 0 | 11 / 11 |
+| Dossier (NVDA) | 0.170 / 0.907 | 484 / 520 | 700 / 1352 | 0.0145 / 0 | 0 / 0 | 0 / 0 | 18 / 18 |
+| Chart (SPY) | 0.066 / 0.073 | 484 / 504 | 732 / 764 | 0.0129 / 0.0129 | 31 / 35 | 69 / 72 | 10 / 10 |
+| Options (NVDA) | 0.277 / 1.660 | 480 / 544 | 544 / 2104 | 0.0569 / 0.0678 | 0 / 0 | 0 / 0 | 11 / 11 |
+| Compare (NVDA, MSFT) | 0.228 / 0.911 | 508 / 504 | 752 / 1388 | 0.1519 / 0 | 0 / 0 | 0 / 0 | 6 / 6 |
+| Markets | 0.484 / 0.482 | 496 / 520 | 976 / 952 | 0.1051 / 0 | 0 / 0 | 0 / 0 | 14 / 14 |
+| Earnings week | 0.068 / 0.074 | 476 / 500 | 516 / 552 | 0.2165 / 0 | 0 / 0 | 0 / 0 | 6 / 6 |
+
+- **Layout shift.** Dossier, Compare, Markets and Earnings week went to 0: the main region keeps its height while a
+  route loads (`#main` in `components.css`), so the footer no longer jumps up and back. Options' 0.068 to 0.079 is the
+  same on both commits (its chain arriving) and under 0.1.
+- **The 07:03 rises** in ready time and LCP on Dossier, Options and Compare were the feed, not the code: Yahoo was
+  refusing this machine from about 07:00, so the adapter halved its rate and waited up to its 20 s gate (D-094). The
+  07:24 and 07:28 A/B ran into the same (Dossier 0.33 s on the Phase 09 server, 8.68 s on this tree's, whose cold
+  quote waited the gate; `perf-ab-before.json`, `perf-ab-after.json`). The 13:04 A/B above, with the feed
+  answering, shows none of it.
+- **Home's ready marker** was never reached in the first two runs: it counted the skeletons inside folded panels. The
+  tool now counts only visible ones (fixed before the A/B runs).
+- **Duplicate requests:** the baseline's one (`/api/session` twice on Home) did not recur in the 13:04 runs.
+
+Interactions, from the 07:24 and 07:28 A/B (Phase 09 / this tree):
+
+| Interaction | Phase 09 | This tree |
+|---|---|---|
+| Milo, Send to the first visible words (stand-in model, three questions) | 0.57, 0.19, 0.22 s | 0.99, 0.18, 0.16 s |
+| Milo, Send to the answer finished | 0.99, 0.56, 0.64 s | 1.36, 0.55, 0.53 s |
+| Search, typing to the first result (four queries) | 0.13, 0.12, 0.13, 0.12 s | 0.13, 0.12, 0.12, 0.13 s |
+| A Dossier tab click, interaction to next paint | 24 ms | 32 ms |
+| Home to a Dossier (navigation until its price shows) | 0.44 s | 0.48 s |
+| The chart drawn after its tab opens | 0.007 s | 0.006 s |
+
+- **Milo's first question** in each run is the cold one (the server reads the page's context for it). The same tree
+  measured 0.23 s for it at 07:03, so 0.57 against 0.99 s is inside one tree's spread; the warm questions answer in
+  0.16 to 0.22 s on both.
+- **The baseline's Milo figure** is not used: the tool read the drafted question as Milo's first words (0.001 s),
+  fixed before the A/B.
+- **Shipped code** (from disk): v2 is 118 modules, 2,197 KB raw and 753 KB gzipped (2,189 and 750 at the baseline);
+  the largest is `ui/milo.js` at 125 KB (40 gzipped). v2's CSS is 336 KB (73). Classic's `app.js` is 2,609 KB (836),
+  `charts.js` 208 KB (67) and `styles.css` 824 KB (220). v2 has no build step by design; a page loads the modules
+  its route imports.
+
+### Server-side measurements
+
+Search (`tools/phase10_search.py OUT`; raw `search/search.json`, 13:00 ET). The Phase 09 search and this tree's
+answered 8,139 query and limit pairs identically: 2,713 queries times limits 1, 8 and 20, on 2026-10-30's
+12,877-row directory. One search, medians of five:
+
+| Query | Phase 09 ms | Now, cold ms | Now, repeated ms |
+|---|---|---|---|
+| a | 57.27 | 19.86 | 0.006 |
+| aa | 21.74 | 15.57 | 0.006 |
+| app | 21.62 | 15.52 | 0.006 |
+| apple | 24.99 | 15.77 | 0.006 |
+| t | 57.83 | 20.88 | 0.006 |
+| tes | 22.80 | 15.59 | 0.008 |
+| tsla | 21.63 | 15.84 | 0.007 |
+| nvda | 21.52 | 15.58 | 0.006 |
+| google | 24.89 | 15.46 | 0.005 |
+| brk b | 20.90 | 15.24 | 0.005 |
+| semiconductor | 20.47 | 14.96 | 0.006 |
+| zzzzqx | 20.61 | 14.87 | 0.004 |
+
+The per-directory preparation costs 117 ms once a day, on the first search after the directory loads, in a worker
+thread (`/api/search` runs through `_run`).
+
+The event loop (`tools/loop_stall.py OUT`; raw `loop/loop-stall.json`, 13:00 ET). This is the longest stall of the
+server's event loop while a chat question's symbols are found ("Should I compare NVDA, AMD and INTC against SPY and
+QQQ before the FOMC on CPI day?"), medians of five rounds:
+
+| Case | Longest stall ms | Work ms |
+|---|---|---|
+| Phase 09 search, on the loop | 111.7 | 111.3 |
+| This tree's search, cold, on the loop | 79.3 | 78.9 |
+| This tree's search, cold, in a worker thread (what the chat route does now) | 15.7 | 78.8 |
+| The same question again | 1.2 | 0.3 |
+
+The symbols found are NVDA, AMD, INTC, SPY and QQQ (FOMC and CPI are not taken for symbols). An earlier run of the
+same tool, at about 07:00 ET on a busier machine, gave 87 ms before and 24 ms after; its output was not kept, so the
+figures above are the record.
+
+Unused code (`tools/phase10_unused.py REPO`; raw `hygiene/`). Unused imports in `app/` went from 42 to 1; the one
+left is `webauthn`, imported inside `passkeys_status` to test that it is installed. Unused locals went from 86 to
+78: the eight that were leftovers were removed (regime, scenarios, session_rules, paper, earnings_view,
+swing_setup, and the desk's assemble and outline), and the rest were not changed.
+
+### Accessibility (`tools/phase10_a11y.py OUT`; raw `a11y/` for 25 routes, `a11y-2/` for 14 re-run after the fixes)
+
+The first run (07:47 ET) covered 25 routes at 1440 and 390.
+
+- **Contrast:** 9,517 texts measured, none under AA (4.5 to 1, or 3 to 1 for large text). 984 were not measured
+  (text over an image or a gradient).
+- **Structure:** no unnamed control. Every route has exactly one h1, no skipped heading level, a main landmark, a
+  skip link, `lang="en"` and a title.
+- **Targets under 24 px:** 304 reported, nearly all glossary terms inside sentences (`button.term`), which WCAG 2.5.8
+  excepts as inline; the checker applied neither the inline nor the spacing exception. With them applied
+  (`a11y-2`), one remained: the Earnings week's company links, 23 px on a phone. They were raised to 24 px, and
+  `tools/phase10_followups.py` measured all 26 at 24 px or more at 390 (13:00 ET; raw `followups/`).
+- **Focus:** 596 stops visited. The nine with "no visible change" were inputs whose ring is drawn on their wrapper
+  (`:focus-within`), which the checker then counted; none in the re-run.
+- **Reflow at 320 px:** no route scrolls sideways. The wide items found sit in strips that scroll on their own.
+- **Reduced motion:** no transition or animation longer than 0.2 s on the eight routes checked.
+- **The palette:** opens with focus inside, closes on Escape and returns focus to the search button. In the re-run it
+  reports `role="dialog"`, `aria-modal` and its label; the first run had read the outer element.
+- **The Milo panel:** focus moves in. It is a complementary region labelled by its title, the conversation is a log,
+  and focus returns to the top bar's Ask Milo.
+- **The level slider:** a native range input labelled "Explain things for", with value text "Advanced, level 4 of 5";
+  the arrow key moves it to "Expert, level 5 of 5".
+
+Focus after editing an alert (`tools/phase10_focus.py OUT`; raw `focus/`): PASS at 390 and 1440. The drawer takes
+focus and closes on save, and focus returns to that alert's Edit button (BUG-015).
+
+Large text (Settings, Large) on eight routes: screenshots are in `large/`. On a phone, Insiders' House trades and
+federal contracts rows went from 199 to 69 px tall (224 to 78 px at Large text) once those tables scroll sideways in
+their own strips instead of squeezing (BUG-014).
+
+Not verified: a screen reader (VoiceOver or NVDA), a real phone, the contrast of text over images, and the charts'
+text alternatives route by route.
+
+### The visual sweep (`tools/phase10_sweep.py OUT`; raw `sweep/sweep.json`, 08:27 ET)
+
+The sweep runs `~/Optic/work/v2-overnight/sweep2.py` against :8250 on 29 routes at 1440, 1280, 768 and 390, 116
+checks in all. It found no console error, no raw provider text, no clipped tab row and no page overflow. 91 checks
+were clean; each of the 25 flagged was followed up:
+
+- **19 "wider than the view":** the Dossier's section chips. They sit in a strip that scrolls sideways on its own
+  (`.sec-list`, overflow-x auto), and the page itself does not scroll (`tools/phase10_secchip.py`: the strip scrolls
+  1,224 to 1,654 px, the page 0, at 1440, 1280 and 390).
+- **4 "text under 12 px":** the position builder's "optional" at 11.7 px (BUG-014), now 12 px
+  (`tools/phase10_optsmall.py`).
+- **2 "em dash":** on Home at 1440 and 1280, inside a CNBC headline in the news list. That is the publisher's own
+  wording, shown as written (`tools/phase10_followups.py`); Optic's own copy has none.
+- **Skeletons** are not counted as flags by the sweep, but it read some on SPY's Overview and Options at 1280 at its
+  8 s mark. None were there at 8 s or at 20 s at 13:00 ET (`phase10_followups.py`), so they were loads still in
+  progress.
+
+### Loading and error states in the browser
+
+| Check | Tool and raw | Result |
+|---|---|---|
+| Earnings week while its list is built: the server's "building" answer substituted twice | `phase10_building.py`, `building/` | PASS: "Gathering report dates for about 150 companies..." with `aria-busy` true, polled every 5 s, then filled in by itself (31 rows, `aria-busy` false) on the third answer (BUG-016) |
+| The Dossier's header while XOM's quote is held 6 s | `phase10_coldhead.py`, `coldhead/` | Held then loaded heights: 38 to 78 px at 1440, 148 to 149 at 1024, 158 to 159 at 800, 158 to 183 at 390. 1024 and 800 hold their rows; 1440 and 390 still grow when the price arrives (BUG-173, OPEN, the owner's call against the one-line header) |
+| Read and Macro with every source failing | `phase10_blank.py`, `blank/` | PASS: each section states its failure; nothing silent or loading for ever |
+| A Milo answer cut off mid-stream | `phase10_partial.py`, `partial/` | PASS: the first half stays, marked "The connection ended before Milo finished. This answer is incomplete.", with Copy, Ask again and Report a problem; a report form opened from it is closed by New chat |
+| A guest's things when they sign in | `phase10_keepsheet.py`, `keepsheet/` | PASS: the "Keep what you made on this browser?" sheet says "Closing this leaves them for the next guest."; closing it hands the browser to the account and takes the guest's list out |
+
+### Failure resilience (`tools/phase10_resilience.py OUT`; raw `resilience/`, `resilience-2/`, `resilience-3/`)
+
+Faults were injected in the browser: CDP Fetch rules that fail, hold, or substitute a body or status, and
+`Network.emulateNetworkConditions` for offline and slow.
+
+| Case | Final | Notes |
+|---|---|---|
+| R1 No internet | PASS | run 1 |
+| R2 Slow network (1.2 s latency, 60 KB/s) | PASS | run 1 |
+| R3 Market data failing (503) | PASS | run 1 |
+| R4 The AI provider failing | PASS | run 3. Runs 1 and 2 failed on the check's own errors: it asked as a guest, who must sign in to ask, and read the wrong element |
+| R5 An expired sign-in | PASS | run 1 |
+| R6 An expired brokerage connection | PASS | run 2: the page says so and offers Reconnect. NOT TESTED in run 1, as the demo account had no linked connection to expire |
+| R7 Rate limited (429) | PASS | run 3; runs 1 and 2 as R4 |
+| R8 An invalid response | PASS | run 2. In run 1 its unreadable body reached R11 as a script error: `core/api.js` resolved null; it now throws a stated failure (BUG-174) |
+| R9 Empty data | PASS | run 2, a week with no reports. Run 1's rule never touched the data it meant to empty |
+| R10 A request that never answers | PASS | run 1: the page stops waiting and offers Try again |
+| R11 Rapid repeated interactions (12 tab changes in 1.5 s) | PASS | run 2: one view, the last tab, no script error (run 1 failed on R8's error) |
+| R12 A refresh while loading | PASS | run 1 |
+| No uncaught script exceptions | PASS | every run |
+
+### Security, cost and analytics
+
+- **Security:** SECURITY_REVIEW.md has 17 findings (1 High, 6 Medium, 10 Low), each checked against the code. 12 are
+  fixed and tested, and 5 are escalated to the owner with reasons (BLOCKERS BL-10 to BL-13). Nothing was run against
+  production or a third party.
+- **Cost:** COST_AUDIT.md, with stated assumptions; prices read on official pages on 2026-10-30, or marked PROVISIONAL.
+- **Analytics:** ANALYTICS_REVIEW.md.
+
+Installed dependencies (SEC-07; full list in `security/pip-freeze.txt`, 70 packages):
+
+- **Here:** Python 3.9.6, yfinance 1.2.0, fastapi 0.128.8 (starlette 0.49.3), uvicorn 0.39.0, pandas 2.3.3, numpy 2.0.2,
+  scipy 1.13.1, requests 2.32.5 (urllib3 2.6.3, certifi 2026.7.22, idna 3.18), anthropic 0.120.2, argon2-cffi 25.1.0,
+  PyJWT 2.13.0, webauthn 2.7.1, pypdf 6.19.0, h11 0.16.0, anyio 4.12.1 and pydantic-core 2.46.4.
+- **Production:** the image (`python:3.12-slim`) installs `requirements.txt`'s ranges at build time, so it runs whatever
+  was newest at its last build, and no lock file records which.
+- **Not scanned** for known vulnerabilities: no scanner is installed, and downloading one needs the owner's approval
+  (BL-12).
+
+### Tests and suite
+
+- `tests/test_phase10_hardening.py` (new): 47 tests covering the fixes.
+- Updated for the deliberate changes: `test_ai_credits`, `test_auth_providers`, `test_desk_freshness`,
+  `test_earnings_week_estimates` (its own store per test, BUG-172), `test_feedback`, `test_feedback_resolve`,
+  `test_health_refused_key`, `test_health_version`, `test_reports_view`, `test_thesis_sync`,
+  `test_v2_overview_classic_port`, `test_v2_parity_b6a`, `test_v2_search_rows` and `test_valuation_inputs`.
+- An intermediate full run at 07:00 ET (`pytest-full-0700.txt`) had 8 failed and 8,038 passed:
+  - Four were tests pinned to the feedback and reports routes' old write-token guard. They now sign in as the owner.
+  - Four came from escaping the apostrophe in Classic's `esc`, which changed text the tests pin. That change was
+    reverted, and the one single-quoted attribute was double-quoted instead (D-080).
+- Full suite on the final Phase 10 code (12:40 ET, `pytest-full.txt`): 8,068 passed, 1 skipped, 0 failed, in
+  275 s. Again on the final tree with these documents (13:16 ET, `pytest-full-final.txt`): 8,068 passed, 1 skipped,
+  0 failed, in 300 s.
+

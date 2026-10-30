@@ -21,6 +21,8 @@ address can lock its owner out on demand. The window here expires on its own.
 from __future__ import annotations
 
 import hashlib
+import ipaddress
+import os
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Optional, Tuple
 
@@ -64,17 +66,40 @@ FRIENDLY = {
 }
 
 
+# Who wrote the address this server trusts (BUG-054, Phase 10). theopticterminal.com is proxied by Cloudflare (its
+# name servers and addresses are Cloudflare's, checked 2026-10-30), which sets CF-Connecting-IP to the address that
+# connected to it and overwrites any value a client sent. The first X-Forwarded-For hop, used alone before, is
+# whatever the client wrote, so a spray of sign-ins could take a new bucket per request. CLIENT_IP_HEADER names a
+# different header for a different edge ("" for none); TRUSTED_PROXY_HOPS counts the proxies that append to
+# X-Forwarded-For, read from the right. With neither, the first hop as before. A request sent to the platform's own
+# address rather than through Cloudflare can still write the header: closing that is the owner's (BLOCKERS).
+CLIENT_IP_HEADER = os.environ.get("CLIENT_IP_HEADER", "cf-connecting-ip").strip().lower()
+TRUSTED_PROXY_HOPS = int(os.environ.get("TRUSTED_PROXY_HOPS", "0") or 0)
+
+
+def _ip(value: str) -> Optional[str]:
+    try:
+        return str(ipaddress.ip_address(value.strip()))
+    except ValueError:
+        return None
+
+
 def client_ip(request: Request) -> str:
     """The caller's address as best it can be known.
 
-    Behind Railway's proxy the socket peer is the proxy, so the first hop of the
-    forwarded chain is preferred. It is spoofable — which is why the email bucket
-    exists alongside it — but bucketing every visitor together under one proxy
-    address would throttle the whole site the moment one caller misbehaved."""
-    forwarded = request.headers.get("x-forwarded-for", "")
-    first = forwarded.split(",")[0].strip()
-    if first:
-        return first[:64]
+    Behind the proxies the socket peer is a proxy, so a header is preferred: the
+    edge's own (above), else the forwarded chain. Bucketing every visitor together
+    under one proxy address would throttle the whole site the moment one caller
+    misbehaved, which is why the email bucket exists alongside this one."""
+    if CLIENT_IP_HEADER:
+        edge = _ip(request.headers.get(CLIENT_IP_HEADER, ""))
+        if edge:
+            return edge
+    hops = [h.strip() for h in request.headers.get("x-forwarded-for", "").split(",") if h.strip()]
+    if hops and TRUSTED_PROXY_HOPS > 0:
+        return hops[-min(TRUSTED_PROXY_HOPS, len(hops))][:64]
+    if hops:
+        return hops[0][:64]
     return (request.client.host if request.client else "unknown")[:64]
 
 

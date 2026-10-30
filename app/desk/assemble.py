@@ -45,7 +45,7 @@ def build(bundle: Dict[str, Any], outline: Dict[str, Any]) -> Dict[str, Any]:
     sym = lambda s, kind=None: next((e for e in evm.values() if e.get("symbol") == s
                                      and (kind is None or e.get("kind") == kind)), None)
     spy, qqq, iwm = sym("SPY", "index"), sym("QQQ", "index"), sym("IWM", "index")
-    tnx, vix, dxy = sym("^TNX"), sym("^VIX"), sym("DX-Y.NYB")
+    tnx, vix = sym("^TNX"), sym("^VIX")
     tension = outline.get("tension")
     companies = [evm[c] for c in outline.get("companies") or [] if c in evm]
     lead_co = max(companies, key=lambda e: salience(e) if e.get("kind") == "company" else 0, default=None)

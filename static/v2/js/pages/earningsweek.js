@@ -28,6 +28,8 @@ function row(r) {
 function body() {
   if (err) return failed('The earnings calendar', err, { retry: 'week' });
   if (!D) return skeleton('rows', 6, 'Loading the week');
+  // a first build of the week takes the server tens of seconds: it says so, and the page asks again (BUG-016)
+  if (D.building) return html`<p class="asof" role="status">${clean(D.reason || 'Gathering the report dates.')} The list appears here when it is done.</p>${skeleton('rows', 6, 'Building the week')}`;
   if (D.available === false) return html`<p>${clean(D.reason || 'The earnings calendar is not available right now.')}</p>`;
   const days = D.days || [];
   const scanned = Number(D.universe || D.checked) || 0;
@@ -48,15 +50,25 @@ function paint() {
   document.title = `Earnings ${which}, Optic`;
   draw(mainEl, html`<header class="page-head"><h1 class="t-display-m">Earnings ${which}</h1>
       <div class="seg" role="group" aria-label="Week">${[[-1, 'Last week'], [0, 'This week'], [1, 'Next week']].map(([k, l]) => html`<button type="button" data-v2-ew="${k}" aria-pressed="${offset === k}">${l}</button>`)}</div></header>
-    <div aria-live="polite" aria-busy="${D ? 'false' : 'true'}">${body()}</div>`);
+    <div aria-live="polite" aria-busy="${!D || D.building ? 'true' : 'false'}">${body()}</div>`);
 }
 
-async function load() {
-  const my = ++seq; D = null; err = null; paint();
+// `quick`: on a cold server the first build of a week took over 30 s behind seven skeletons and no word of why
+// (BUG-016, Phase 10). The server answers "building" after a few seconds instead, and the page asks again every few
+// seconds until the week is there; an answer that is still building is not kept in the page's cache.
+const BUILD_POLL_MS = 5000, BUILD_POLL_MAX = 48;
+async function load(again = 0) {
+  const my = again ? seq : ++seq;
+  if (!again) { D = null; err = null; paint(); }
+  const url = `/api/earnings-week?offset=${offset}&quick=1`;
   try {
-    const d = await api.get(`/api/earnings-week?offset=${offset}`, { ttl: 600000, timeout: 90000 });
+    const d = await api.get(url, { ttl: 600000, timeout: 90000, force: again > 0 });
     if (!live || my !== seq) return;
     D = d;
+    if (d && d.building) {
+      api.invalidate(url);
+      if (again < BUILD_POLL_MAX) setTimeout(() => { if (live && my === seq) load(again + 1); }, BUILD_POLL_MS);
+    }
   } catch (e) { if (!live || my !== seq) return; err = e; }
   paint();
 }

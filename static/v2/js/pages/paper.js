@@ -14,6 +14,7 @@ import { mountCharts } from '../ui/chart.js';
 import { provideContext } from '../ui/milo.js';
 import { sectionHead } from './tabs.js';
 import { etStamp } from '../core/marketTime.js';
+import { poll } from '../core/poll.js';
 import * as J from '../core/journal.js';
 import * as RP from './paper-replay.js';
 import { hrefFor } from '../nav.js';
@@ -60,7 +61,7 @@ export function health(open, marks, today = etToday()) {
 
 /* ---------------- state ---------------- */
 let book = { open: [], closed: [] }, ticket = blankTicket(), chain = null, chainFor = '', chainState = 'idle', chainErr = '';
-let markedAt = null, marks = {}, marking = false, markFailed = false, armed = false, note = '', reads = {}, live = true, mainEl = null, health0 = null, fromDraft = '';
+let markedAt = null, marks = {}, marking = false, markFailed = false, armed = false, note = '', reads = {}, live = true, mainEl = null, health0 = null, fromDraft = '', leftOut = '', remark = null;
 function blankTicket() { return { ticker: '', instrument: 'shares', direction: 'long', qty: '', entry: '', stop: '', target: '', thesis: '', expiry: '', strike: '', optionType: 'call',
   // the journal's plan (core/journal.js): frozen on the trade when it opens
   setup: 'other', evidence: [{ text: '', family: 'trend' }, { text: '', family: 'momentum' }], against: '', catalyst: '', catalyst_date: '', hold_through: false, trigger: '', invalidation: '', hold_days: '', entry_note: '', source: '' }; }
@@ -196,7 +197,7 @@ function openTable() {
           <td class="pt-src">${m.mark_source ? m.mark_source : html`<span class="t-muted">${m.reason || (marking ? 'pricing…' : 'not marked')}</span>`}</td><td class="${cls}">${isNum(pnl) ? money2(pnl) : 'n/a'}</td><td class="${cls}">${rText(r)}</td>
           <td>${p.read ? html`<span class="${ag === null ? 't-muted' : ag ? 'up' : 'down'}" title="${p.read.summary || ''}">${p.read.stance}${ag === null ? '' : ag ? ', with' : ', against'}</span>` : html`<span class="t-muted">n/a</span>`}</td>
           <td><button type="button" class="btn btn-sm" data-v2-pt-close="${p.id}" ${isNum(m.mark_price) ? '' : 'disabled'} title="Close at the current mark" aria-label="Close ${posLabel(p)} at the current mark">Close</button></td></tr>`; })}</tbody></table></div>
-      <p class="asof">${markedAt ? `Marks taken ${etStamp(markedAt)}; a mark is a quote, delayed up to 15 minutes in session and the last close outside it. ` : ''}Closing takes the current mark: the last trade for shares, the chain's mid for an option, or a model's estimate when the contract has no quote. A real fill would be at the bid or the ask.</p>`
+      <p class="asof">${leftOut ? `Not everything was priced: ${leftOut} ` : ''}${markedAt ? `Marks taken ${etStamp(markedAt)}; a mark is a quote, delayed up to 15 minutes in session and the last close outside it. ` : ''}Closing takes the current mark: the last trade for shares, the chain's mid for an option, or a model's estimate when the contract has no quote. A real fill would be at the bid or the ask.</p>`
       : html`<p class="quiet">No open positions. The ticket above opens one.</p>`}${o.length ? html`<div class="pt-revs">${o.map(planEditRow)}</div>` : ''}</section>`;
 }
 
@@ -283,7 +284,15 @@ function paint() {
 async function mark() {
   if (marking || !book.open.length) return;
   marking = true; markFailed = false; paint();
-  try { const out = await api.post('/api/paper/mark', { positions: book.open }, { timeout: 60000 }); marks = {}; markedAt = out.marked_at || new Date().toISOString(); (out.marks || []).forEach((m) => { marks[m.id] = m; }); }
+  try {
+    const out = await api.post('/api/paper/mark', { positions: book.open }, { timeout: 60000 }); marks = {}; markedAt = out.marked_at || new Date().toISOString(); (out.marks || []).forEach((m) => { marks[m.id] = m; });
+    // what the server left out, said: it priced at most max_positions and skipped any it could not read, and the page
+    // drew the rest as if that were the whole book (BUG-073, Phase 10)
+    const why = [];
+    if (out.capped) why.push(`only the first ${out.max_positions} positions are priced`);
+    if (out.dropped && !out.capped) why.push(`${plural(out.dropped, 'position')} could not be read and ${out.dropped === 1 ? 'is' : 'are'} left out`);
+    leftOut = why.length ? `${why.join('; ')}.` : '';
+  }
   catch (e) { markFailed = true; note = `Could not price the book just now (${api.explain(e, 'The pricing')}).`; }
   marking = false; paint();
 }
@@ -339,6 +348,10 @@ export async function render(main, route) {
   provideContext(() => ({ view: 'paper', reader_holdings: book.open.slice(0, 30).map((p) => ({ ticker: p.ticker, instrument: p.instrument, direction: p.direction, qty: p.qty, entry_price: p.entry_price, stop: p.stop, pnl: (marks[p.id] || {}).pnl })), journal: J.forMilo(book.closed) }));
   if (fromDraft && ticket.instrument === 'option' && ticket.ticker) loadChain(ticket.ticker);
   api.get('/api/health', { ttl: 60000 }).then((h) => { health0 = h; paint(); }, () => {});
+  // marked again while the page is open, every two minutes in the trading day and ten outside it, paused while hidden:
+  // they were taken on load and after a trade only (BUG-073)
+  if (remark) remark.stop();
+  remark = poll(async (current) => { if (live && current() && book.open.length && !marking) await mark(); }, { every: 120000, closed: 600000 });
   main.addEventListener('input', (e) => {
     const ev = e.target.dataset.v2PtEvText;
     if (ev !== undefined) { ticket.evidence[Number(ev)].text = e.target.value; return; }
@@ -397,6 +410,6 @@ export async function render(main, route) {
   });
   paint(); mark();
 }
-export function dispose() { live = false; RP.dispose(); }
+export function dispose() { live = false; RP.dispose(); if (remark) { remark.stop(); remark = null; } }
 export const retry = RP.retry;
 export function onAuth() { if (live) { loadBook(); marks = {}; paint(); mark(); } }

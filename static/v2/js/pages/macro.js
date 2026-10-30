@@ -59,6 +59,9 @@ function expected(em) {
 
 /* ---------------- tabs ---------------- */
 function breadth() {
+  // its figures come with the macro picture: when that did not load, say so rather than draw two "n/a" (BUG-039)
+  if (D.err || (D.m && D.m.available === false)) return html`<p class="t-muted">Breadth comes with the macro picture above, which did not load. It shows here when that does.</p>`;
+  if (!D.m) return html`<p class="t-muted" role="status">Breadth comes with the macro picture, which is still loading.</p>`;
   const s = (D.m || {}).sectors || {}, b = s.breadth || {}, evc = b.equal_vs_cap || {}, sp = s.suggested_pair;
   return html`${kv([['Sectors above the 200-day', pct(b.pct_sectors_above_200sma, 0)], ['Sectors above the 50-day', pct(b.pct_sectors_above_50sma, 0)]], 2)}<p>${clean(b.note || '')}</p>
     ${s.rotation_note ? html`<p><b>Rotation.</b> ${clean(s.rotation_note)}</p>` : ''}${sp ? html`<p><b>Strongest and weakest sector right now:</b> ${sp.long} and ${sp.short}. ${clean(sp.note || '')}</p>` : ''}

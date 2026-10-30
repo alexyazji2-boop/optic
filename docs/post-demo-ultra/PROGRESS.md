@@ -4,13 +4,187 @@ Read this and [REQUIREMENTS_MATRIX.md](REQUIREMENTS_MATRIX.md) before changing a
 
 ## Current state
 
-- **Current phase:** 10 Performance, security, accessibility and polish (next). Phases 01 to 09 complete (reports below).
+- **Current phase:** 11 Adversarial final audit (next). Phases 01 to 10 complete (reports below).
 - **Branch / worktree:** `post-demo-ultra` in `~/Optic/wt-ultra`, from `9fa0f36` (tag `post-demo-ultra-baseline`). Upstream unset; nothing pushed or deployed.
-- **Commits:** `fce3e71` setup; `8040f8a` and `795325a` Phase 01; `d4a2b1a` Phase 01 report; `ce60b16` Phase 02 policy module (WIP); `c6724ff` Milo portfolio privacy (cherry-pick of 2236205); `a76916b` Phase 02; `6f2e814` its commit id; `7b14b56` Phase 03; `2f6a548` its commit id; `381a018` Phase 04; `b07e181` its commit id; `e64a5ee` Phase 05; `448e633` its commit id; `0448900` Phase 06; `1652e14` its commit id; `874c109` Phase 07; `f26af09` its commit id; `ab5a2ae` Phase 08; `0268f7f` its commit id; `17024f0` Phase 09.
-- **Local server:** launch config `optic-ultra` (:8250, stand-in model :8251 from `tools/milo_standin_ultra.py`, which adds an `ADVISE` keyword that makes the answer break the policy and, since Phase 05, writes a Sector Read and a portfolio briefing in their writers' shapes; data `~/Optic/ultra-data`, sandbox brokerage, jobs off, no real model key). Seed password in `~/Optic/ultra-data/seed-output.txt` (never print it). The server does not reload Python: restart it after editing server code. The desktop app stops it when the session is paused; start it again with preview_start.
-- **Working folder (outside the repo):** `~/Optic/work/post-demo-ultra-2026-10-29/` (tools/, crawl1/, dead/, sheets/, baseline/, milo/, registry/, phase02/ to phase08/; the five-level proxy run in phase05/proxy/; Phase 08's stand-in rounds in phase08/proxy, proxy-r2 and proxy-r3, and advice set C in phase08/).
+- **Commits:** `fce3e71` setup; `8040f8a` and `795325a` Phase 01; `d4a2b1a` Phase 01 report; `ce60b16` Phase 02 policy module (WIP); `c6724ff` Milo portfolio privacy (cherry-pick of 2236205); `a76916b` Phase 02; `6f2e814` its commit id; `7b14b56` Phase 03; `2f6a548` its commit id; `381a018` Phase 04; `b07e181` its commit id; `e64a5ee` Phase 05; `448e633` its commit id; `0448900` Phase 06; `1652e14` its commit id; `874c109` Phase 07; `f26af09` its commit id; `ab5a2ae` Phase 08; `0268f7f` its commit id; `17024f0` Phase 09; `3698975` its commit id; `P10_COMMIT_ID` Phase 10.
+- **Local server:** launch config `optic-ultra` (:8250, stand-in model :8251 from `tools/milo_standin_ultra.py`, which adds an `ADVISE` keyword that makes the answer break the policy and, since Phase 05, writes a Sector Read and a portfolio briefing in their writers' shapes; data `~/Optic/ultra-data`, sandbox brokerage, jobs off, no real model key). Seed password in `~/Optic/ultra-data/seed-output.txt` (never print it). The server does not reload Python: restart it after editing server code. The desktop app stops it when the session is paused; start it again with preview_start. `optic-ultra-p09` (:8252) serves the Phase 09 commit from a scratch worktree for A/B runs.
+- **Working folder (outside the repo):** `~/Optic/work/post-demo-ultra-2026-10-29/` (tools/, crawl1/, dead/, sheets/, baseline/, milo/, registry/, phase02/ to phase10/; the five-level proxy run in phase05/proxy/; Phase 08's stand-in rounds in phase08/proxy, proxy-r2 and proxy-r3, and advice set C in phase08/; Phase 10's measurements in phase10/ by kind, each from a `tools/phase10_*.py`, `loop_stall.py` or `ab_table.py`).
 - **Resource rule:** at most two subagents at a time (DECISIONS D-007). One proxy answer costs about 180,000 agent tokens.
-- **Next action:** Phase 10 (performance, security, accessibility and polish): read `directives/10-performance-security-a11y-polish.md`, the R10 rows and the register's rows for Phase 10 (BUG-006, BUG-031, BUG-037, BUG-112, BUG-113 and the rest marked 10), and the cache audit's S01, S09, S16 and S19 (DATA_PATHWAYS.md). Phase 09's tools: `tools/phase09_recon.py` (the reconciliation), `tools/phase09_recon_doc.py` (its document), `tools/phase09_scenarios.py` (scenarios A to H). Phase 11 owes a fresh advice set for the widened check (BUG-132).
+- **Next action:** Phase 11 (adversarial final audit): read `directives/11-adversarial-final-audit.md` and directive 00's final reporting. It ends in FINAL_REPORT.md with the directive's items and a READY or NOT READY verdict. It owes a fresh, agent-written, unseen advice set for the widened output check (BUG-132; measured only on unseen sets, D-015). The open row (BUG-173, the owner's call), the BLOCKED rows and BL-01 to BL-13 go into the verdict.
+
+## Phase 10 report (directive 10; reporting format of directive 00)
+
+1. **Inspected.**
+   - **Performance:** seven routes and six interactions in headless Chrome, at the baseline, after the fixes and in two
+     A/B runs against the Phase 09 commit; search and the event loop measured in the server's own process.
+   - **Cost and scale:** every paid or rate-limited provider and its call paths (COST_AUDIT.md).
+   - **Visual consistency and motion:** 29 routes at four widths (116 checks), Large text on eight routes, reduced
+     motion on eight.
+   - **Accessibility:** 25 routes at 1440 and 390 against WCAG 2.2 AA checks; the palette, the Milo panel, the level
+     slider and focus after an alert edit.
+   - **Security:** the fifteen listed areas, read in the code, with nothing run against production or a third party
+     (SECURITY_REVIEW.md).
+   - **Resilience:** the twelve listed conditions, injected in the browser.
+   - **Analytics:** what the terminal records today and could record without new tracking (ANALYTICS_REVIEW.md).
+   - **Left from earlier phases:** the register's rows marked 10, and the cache audit's S01, S09, S16 and S19.
+2. **Problems discovered.** 28 new rows (BUG-152 to BUG-179), and 31 earlier rows taken up.
+   - **Spend:**
+     - no Milo ceiling that free accounts could not walk around (BUG-152, High);
+     - a page load writing the desk note through a paid call (BUG-032);
+     - Classic's catalyst panel writing a paid read when opened (BUG-175);
+     - the ledger's price for Sonnet 5.5 cache hits (BUG-176);
+     - the first ceiling counting paying readers (BUG-178).
+   - **Security:**
+     - tokens in logged query strings (BUG-153);
+     - no body limit (BUG-154);
+     - a pre-account hijack (BUG-155);
+     - the data-not-instructions rule not covering tool results and links (BUG-156);
+     - the logo proxy (BUG-157);
+     - unpinned dependencies (BUG-158);
+     - Google's unbound sign-in state (BUG-159);
+     - a report-only CSP (BUG-160);
+     - fonts without integrity (BUG-161);
+     - 500s on a non-ASCII token (BUG-162) and on a line break in an address (BUG-163);
+     - passkeys without user verification (BUG-164);
+     - sliding sessions and cookie names (BUG-165);
+     - Classic's escaping (BUG-166);
+     - exception text in answers (BUG-167);
+     - addresses in mail logs (BUG-168).
+   - **Performance:**
+     - layout shift on four routes;
+     - search's per-row work on every keystroke (BUG-053);
+     - the chat route finding symbols on the event loop (BUG-113);
+     - the adapter cache (BUG-169);
+     - dead feed hosts (BUG-170);
+     - the directory's retries (BUG-171).
+   - **Reliability:** an unreadable answer breaking the Dossier (BUG-174), and an order-dependent test (BUG-172).
+   - **Accessibility and visual:**
+     - an 11.7 px label, and Insiders' tables squeezed on phones (BUG-014);
+     - focus lost after an alert edit (BUG-015);
+     - 23 px links (BUG-179);
+     - Settings' Motion: Reduce not reaching two scrollers (BUG-177);
+     - the header growing as a cold quote arrives (BUG-031, BUG-173).
+3. **Root causes.**
+   - **Limits:** counted per account or per address only, which a new free account or a new address resets.
+   - **Reads that wrote:** a page's reads allowed to make paid writes.
+   - **Work redone on every request** that can be done once: search's per-row preparation, the screener ranking read
+     from disk. It ran on the only event loop.
+   - **Caches:** no bound, and failures not remembered (the adapter, feed hosts, the directory).
+   - **Framework defaults trusted:** the access log prints the whole target; no body limit; exception text passed
+     through.
+   - **Sign-in flows written for the happy path:** a state not bound to its browser, an unverified address that could
+     be linked, sessions that never ended.
+   - **The page frame:** the main region collapsed while a route loaded, and the API client turned an unreadable body
+     into null.
+4. **Fixes implemented** (D-076 to D-094).
+   - **Spend:**
+     - a server-wide Milo ceiling, the owner's number, that paying readers and owners do not count against (D-076);
+     - the desk note written by the keep-warm job only (D-091);
+     - Classic's catalyst panel reads what is kept.
+   - **Access:**
+     - the client address from the edge (D-078);
+     - problem reports for the signed-in owner only (D-079);
+     - the body limit and the question length (D-089);
+     - per-address limits on search, alert checks and wrong write tokens;
+     - the logo proxy limited to listed symbols within a budget.
+   - **Sign-in:**
+     - Google's and Apple's state bound to the browser;
+     - no linking by email to an address with a password;
+     - an absolute 90-day session limit (D-082);
+     - Permissions-Policy and the opener policy (D-083).
+   - **Leaks:**
+     - secrets and search text out of the access log;
+     - masked addresses in mail logs;
+     - exception text scrubbed (D-088);
+     - the data-not-instructions rule over everything the model reads, and links showing their host;
+     - the reader's own blocks only with questions about them (D-093).
+   - **Speed:**
+     - search prepared once a directory, with answers kept (D-090);
+     - symbols found in a worker thread;
+     - the adapter cache swept and capped;
+     - failed hosts and directory refreshes remembered;
+     - shared Yahoo reads;
+     - the main region's height kept while a route loads.
+   - **States:**
+     - Earnings week's building state;
+     - Macro's breadth states;
+     - the Dossier's quiet refreshes;
+     - an unreadable answer stated as a failure (BUG-174);
+     - a cut-off Milo answer kept and marked;
+     - brokerage Reconnect;
+     - the guest sheet's Close.
+   - **Accessibility:**
+     - 12 px labels and 24 px links;
+     - focus back to the edited alert;
+     - dialog roles on the palette and drawers;
+     - Motion: Reduce reaching every scroller;
+     - phone tables that scroll in their own strips.
+   - **Hygiene:** 41 unused imports and 8 leftover locals removed.
+5. **Files changed** (106 modified, 5 new).
+   - **Server:**
+     - `app/main.py`, `app/ai.py`, `app/ai_store.py`, `app/metrics.py`, `app/universe.py`, `app/feeds.py`,
+       `app/providers/yf.py`, `app/feedback.py`, `app/billing.py`;
+     - `app/auth/` (`routes.py`, `linking.py`, `store.py`, `config.py`, `ratelimit.py`, `mailer.py`);
+     - `app/brokerage/` (`snaptrade.py` and three more), `app/valuation/store.py` and four more;
+     - `app/public_errors.py` (new);
+     - 33 files with unused imports or leftover locals removed (the rest of `app/analytics`, `app/research`,
+       `app/desk` and others).
+   - **v2:**
+     - core: `core/api.js`, `core/device.js`, `core/milo-text.js`, `app.js`;
+     - ui: `ui/milo.js`, `ui/sections.js`, `ui/strips.js`;
+     - pages: brokerage, dossier, earningsweek, indices, insiders, macro, paper, read, retirement, scan, settings,
+       tracker and watchlist;
+     - CSS: `components.css`, `pages.css`.
+   - **Classic:** `static/app.js`.
+   - **Tests:** `tests/test_phase10_hardening.py` (new, 47 tests), and 14 tests updated for the deliberate changes.
+   - **Docs:**
+     - new: SECURITY_REVIEW.md, COST_AUDIT.md, ANALYTICS_REVIEW.md;
+     - DECISIONS D-076 to D-094;
+     - BUG_REGISTER BUG-152 to BUG-179, with 31 earlier rows closed;
+     - BLOCKERS BL-10 to BL-13;
+     - REQUIREMENTS_MATRIX R10;
+     - TEST_RESULTS;
+     - DATA_PATHWAYS (S01, S09, S16 and S19 fixed);
+     - FEATURE_REGISTRY;
+     - COMPLIANCE_REVIEW section 10.
+6. **Tests executed.**
+   - The full suite.
+   - The performance runs: a baseline, after the fixes, and two A/B runs against the Phase 09 commit.
+   - The search equivalence and timing.
+   - The event-loop stall.
+   - The accessibility checks, twice.
+   - The 116-check visual sweep and its follow-ups.
+   - The twelve resilience cases, over three runs.
+   - The focus, building, header, blank, cut-off and guest-sheet checks.
+   - The unused-code scan.
+7. **Passed / failed.**
+   - **Suite:** 8,068 passed, 1 skipped, 0 failed. An intermediate run had 8 failures, all fixed (TEST_RESULTS).
+   - **Search:** 8,139 of 8,139 pairs identical.
+   - **Accessibility:** 0 contrast failures in 9,517 texts, 0 unnamed controls, 0 targets under 24 px after the fix.
+   - **Resilience:** 12 of 12 PASS, no uncaught exception.
+   - **Sweep:** 116 checks, 91 clean, the 25 flagged each explained or fixed.
+   - **The register:** 162 VERIFIED, 3 FIXED, 11 BLOCKED, 1 WONTFIX, 1 OPEN (BUG-173, the owner's call).
+8. **Browser verification.**
+   - **What ran:** headless Chrome 156 on live delayed data against the local server, with screenshots for the sweep,
+     Large text, the header, the focus check and the building state.
+   - **What it showed:** no regression in the A/B; layout shift at 0 on Home, Dossier, Compare, Markets and Earnings
+     week; every failure condition with a stated recovery; focus and dialogs correct.
+9. **Outstanding.**
+   - **Escalated to the owner** (BLOCKERS BL-10 to BL-13):
+     - the Milo ceiling's number and an outside spend stop;
+     - closing the origin to traffic around Cloudflare;
+     - downloading a dependency scanner and pinned fonts;
+     - the cookie rename, the session-bound CSRF value, passkey verification and the full CSP.
+   - **Open:** BUG-173, the header growing at 1440 and 390 as a cold quote arrives.
+   - **Not verified:**
+     - a screen reader;
+     - a real phone;
+     - a real model (BL-01);
+     - Apple's sign-in live;
+     - dependency vulnerabilities.
+   - **Phase 11** owes a fresh unseen advice set (BUG-132).
+10. **Commit and next phase.** Committed as `P10_COMMIT_ID` on `post-demo-ultra` (not pushed, not deployed); next is
+    Phase 11.
 
 ## Phase 09 report (directive 09; reporting format of directive 00)
 
@@ -75,7 +249,7 @@ Read this and [REQUIREMENTS_MATRIX.md](REQUIREMENTS_MATRIX.md) before changing a
    - The session tests against NYSE's calendar.
    - The new integrity tests.
 7. **Passed / failed.**
-   - **Suite:** SUITE_LINE.
+   - **Suite:** 8,015 passed, 1 skipped, 0 failed (`phase09/pytest-full-2.txt`).
    - **Reconciliation:** 278 rows, 277 PASS, 1 UNVERIFIED (the first run's 9 failures: 6 the reference's definitions, 3 Optic's yield).
    - **Scenarios:** A to H all PASS, no script exceptions.
 8. **Browser verification.**
@@ -427,3 +601,12 @@ Read this and [REQUIREMENTS_MATRIX.md](REQUIREMENTS_MATRIX.md) before changing a
 
 ### 2026-10-29 Phase 07
 - The fourteen stages traced and measured before and after; the route starts at once and times every answer; the answer drawn as it arrives, a finished paragraph once, the chart once, the arriving paragraph as markdown; following the end left to the reader; New conversation and history wait for an answer and say why, Close leaves it running, reopening restores the place; history local and per account (documented); the limit said, pasted images attached; small phones given room; Classic unchanged; 28 of 28 browser checks (20 before), suite green; committed (not pushed).
+
+### 2026-10-30 Phase 08 (to 01:43 ET)
+- The 137-case evaluation suite, Milo's four data tools, freshness on every tool result, the research pack following the named symbol, stand-in rounds and advice set C; suite green; committed (not pushed).
+
+### 2026-10-30 Phase 09 (to 02:50 ET)
+- Every pathway and cache documented, the reconciliation (277 of 278 PASS, 1 UNVERIFIED), the session against NYSE's calendar, scenarios A to H, eleven cache risks fixed; suite green; committed (not pushed).
+
+### 2026-10-30 Phase 10 (02:50 to about 13:30 ET)
+- Performance baseline, fixes and two A/B runs; the cost audit; the security review (12 fixed, 5 escalated); 25 routes checked for accessibility; the 116-check sweep; twelve resilience cases; the analytics review; 28 new rows and 31 earlier ones closed; suite green; committed (not pushed).

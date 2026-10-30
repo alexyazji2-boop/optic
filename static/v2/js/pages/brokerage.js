@@ -116,13 +116,14 @@ function acctState(a) {
   if (s === 'pending') return a.sync_note || 'Waiting for first data';
   return '';
 }
+const RECONNECT = ['expired', 'closed', 'error'];
 function connCard(c) {
   const [tone, label] = STATUS[c.status] || ['off', capFirst(c.status || 'unknown')];
-  const ent = (S.status || {}).entitlement || {}, armed = S.armed === c.id;
-  const reconnect = ['expired', 'closed', 'error'].includes(c.status) && ent.can_link, canSync = ent.can_link && !['expired', 'closed', 'paused', 'unsupported'].includes(c.status);
+  const st = S.status || {}, ent = st.entitlement || {}, armed = S.armed === c.id, needAgree = st.consent && !st.consent.accepted && !S.agreed;
+  const reconnect = RECONNECT.includes(c.status) && ent.can_link, canSync = ent.can_link && !['expired', 'closed', 'paused', 'unsupported'].includes(c.status);
   return html`<div class="bk-conn"><div class="split"><p><b>${c.institution || 'Brokerage'}</b> ${tag(tone, label)}</p>
       <div class="cluster">${canSync ? html`<button type="button" class="btn btn-sm" data-v2-bk-sync="${c.id}" ${S.syncing === c.id ? 'disabled' : ''}>${S.syncing === c.id ? 'Syncing...' : 'Sync now'}</button>` : ''}
-        ${reconnect ? html`<button type="button" class="btn btn-sm btn-primary" data-v2-bk-reconnect="${c.id}">Reconnect</button>` : ''}
+        ${reconnect ? html`<button type="button" class="btn btn-sm btn-primary" data-v2-bk-reconnect="${c.id}" ${needAgree ? 'disabled aria-disabled="true"' : ''}>Reconnect</button>` : ''}
         ${armed ? html`<button type="button" class="btn btn-sm btn-danger" data-v2-bk-disconnect="${c.id}" data-v2-confirm="1">Disconnect and delete</button><button type="button" class="btn btn-sm" data-v2-bk-disarm>Keep</button>` : html`<button type="button" class="btn btn-sm" data-v2-bk-disconnect="${c.id}">Disconnect</button>`}</div></div>
     <p class="asof">Last successful sync: ${when(c.last_sync_at)}${c.status_reason ? `. ${c.status_reason}` : ''}${armed ? '. Disconnecting removes it at the provider and deletes Optic\'s copy of its data now.' : ''}</p>
     <ul class="bk-accts">${(c.accounts || []).map((a) => (S.renaming === a.id ? html`<li class="bk-renaming"><label class="field field-sm"><span class="sr">Name for ${a.broker_name || a.name || 'Account'} ${a.number_mask || ''}</span><input maxlength="40" value="${a.nickname || ''}" placeholder="${a.broker_name || a.name || 'Account'}" autocomplete="off" data-v2-bk-rename-input="${a.id}"></label>
@@ -136,12 +137,12 @@ function connections() {
   const canAdd = ent.can_link && active.length < (ent.max_connections || 0), needAgree = st.consent && !st.consent.accepted && !S.agreed;
   return html`${st.paused_at ? html`<section class="section"><h2 class="t-h2">Syncing is paused</h2><p>Your paid plan ended, so these accounts stopped updating on ${new Date(st.paused_at).toLocaleDateString()}. What you see is the last sync. ${st.provider_closed_at ? 'The connection has been closed at the provider; reconnect after upgrading to resume.' : 'Resubscribe within 7 days to resume where you left off. After 7 days the connection is closed at the provider, and after 30 days Optic deletes its copy.'} You can disconnect or delete everything now on any plan.</p><button type="button" class="btn" data-v2-bill="checkout">Resume with Pro</button></section>` : ''}
     <section class="section ${linked() ? '' : 'first'}" aria-labelledby="bc-h"><div class="section-head"><h2 class="t-h2" id="bc-h">Connections</h2>${canAdd ? html`<button type="button" class="btn btn-primary" data-v2-bk-connect ${needAgree ? 'disabled aria-disabled="true"' : ''}>Connect a brokerage</button>` : ''}</div>
-      ${ent.can_link && canAdd ? consent(st.consent || {}) : ''}
+      ${ent.can_link && (canAdd || conns.some((c) => RECONNECT.includes(c.status))) ? consent(st.consent || {}) : ''}
       <p class="section-sub">${ent.can_link ? `Your plan links up to ${ent.max_connections} connection${ent.max_connections === 1 ? '' : 's'} and ${ent.max_accounts} accounts. Accounts sync on their own once a day; Sync now is limited to ${ent.manual_syncs_per_day} a day.` : 'Linking and syncing are part of the paid plan. Your stored data stays until you delete it or the retention period ends.'}</p>
       ${conns.length ? conns.map(connCard) : html`<p class="quiet">Nothing linked yet. Connect a brokerage to see your holdings here.</p>`}
       ${conns.length ? '' : html`<p class="asof">After you finish at the provider, it brings you back to this page.</p>`}</section>
     ${permissions(st, !conns.length)}
-    ${conns.length ? html`<section class="section set-danger" aria-labelledby="bd-h"><h2 class="t-h2" id="bd-h">Delete all brokerage data</h2><p>Disconnects every brokerage at the provider and deletes everything Optic stored about them, including the encryption key, so backups cannot be read either. Your Optic account stays.</p>
+    ${conns.length ? html`<section class="section set-danger" aria-labelledby="bd-h"><h2 class="t-h2" id="bd-h">Delete all brokerage data</h2><p>Disconnects every brokerage at the provider and deletes the accounts, holdings, history, alerts and briefings Optic stored about them, with the encryption key, so backups cannot be read either. Kept: your Optic account, your alert settings, the record that you agreed to the linking terms, and anything you saved yourself, such as a thesis or a Milo answer, which you delete where you saved it.</p>
       ${S.armed === 'all' ? html`<div class="cluster"><button type="button" class="btn btn-danger" data-v2-bk-delete="confirm">Yes, delete all brokerage data</button><button type="button" class="btn" data-v2-bk-disarm>Keep it</button></div>` : html`<button type="button" class="btn btn-danger" data-v2-bk-delete>Delete all brokerage data</button>`}</section>` : ''}`;
 }
 
@@ -564,11 +565,13 @@ function wire(main) {
     }
     if ((b = t('[data-v2-bk-disconnect]'))) {
       if (!b.dataset.v2Confirm) { S.armed = b.dataset.v2BkDisconnect; paint(`[data-v2-bk-disconnect="${CSS.escape(S.armed)}"]`); return; }
+      b.disabled = true;
       await act(() => api.post(`/api/brokerage/connections/${encodeURIComponent(b.dataset.v2BkDisconnect)}/disconnect`, {}), (x) => (x.provider_removal_queued ? 'Disconnected and deleted from Optic. The provider did not answer, so Optic will keep asking it to remove the connection.' : 'Disconnected. Optic\'s copy of that data is deleted.'), 'Could not disconnect.');
       S.armed = null; W.scopeKey = null; loadAll(true); return;
     }
     if ((b = t('[data-v2-bk-delete]'))) {
       if (b.dataset.v2BkDelete !== 'confirm') { S.armed = 'all'; paint('[data-v2-bk-delete="confirm"]'); return; }
+      b.disabled = true;
       await act(() => api.post('/api/brokerage/delete-data', {}), 'All brokerage data deleted.', 'Could not delete.');
       S.armed = null; W.scopeKey = null; loadAll(true); return;
     }

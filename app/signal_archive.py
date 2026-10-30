@@ -45,7 +45,7 @@ import os
 import random
 import sqlite3
 import threading
-from datetime import date, datetime, time as dtime, timezone
+from datetime import datetime, time as dtime, timezone
 from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence
 from zoneinfo import ZoneInfo
 

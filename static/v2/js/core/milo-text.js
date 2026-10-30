@@ -46,6 +46,13 @@ export function sourceHref(view, symbol) {
   return PLAIN_VIEWS[view] || null;
 }
 
+/** " (host)" after a link whose text does not already name its host; the text is escaped already. */
+export function linkHost(label, url) {
+  const m = /^https?:\/\/([^/?#:]+)/i.exec(url); if (!m) return '';
+  const host = m[1].toLowerCase().replace(/^www\./, '');
+  return String(label).toLowerCase().includes(host) ? '' : ` <span class="milo-host">(${host})</span>`;
+}
+
 /** The classic mdLite: escape first, then a small, safe subset of markdown. Links must be http(s). */
 export function mdLite(text) {
   let out = esc(text);
@@ -57,7 +64,8 @@ export function mdLite(text) {
   out = out.replace(/^\s*[-*] (.*)$/gm, '<span class="milo-li">$1</span>');
   // numbered steps keep their numbers (2026-10-20: the redesign renders lists, tables and code as written)
   out = out.replace(/^\s*(\d{1,2})[.)] (.*)$/gm, '<span class="milo-li milo-oli"><span class="milo-n">$1.</span> $2</span>');
-  out = out.replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+  // the destination's host beside each link the model wrote, so a link a page or headline talked it into shows where it goes (SEC-05)
+  out = out.replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, (m, label, url) => `<a href="${url}" target="_blank" rel="noopener">${label}</a>${linkHost(label, url)}`);
   // tables: lines that start and end with "|", the second a separator row ("|---|:---:|"); figures right-aligned
   out = out.replace(/(^|\n)((?:[ \t]*\|[^\n]*\|[ \t]*(?:\n|$)){2,})/g, (m, lead, block) => {
     const rows = block.trim().split('\n').map((l) => l.trim().replace(/^\||\|$/g, '').split('|').map((c) => c.trim()));

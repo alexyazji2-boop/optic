@@ -303,7 +303,9 @@ function wire(main) {
       try {
         const r = await api.post('/api/auth/change-password', { current_password: f.current_password ? f.current_password.value : '', new_password: f.new_password.value, confirm_password: f.confirm_password.value });
         ui.pw = false; toast(r && r.other_sessions_ended !== undefined ? `Password changed. ${r.other_sessions_ended} other session${r.other_sessions_ended === 1 ? '' : 's'} signed out.` : 'Password changed.'); await store.loadMe(); loadSecurity();
-      } catch (err) { ui.pwErr = err.message && err.kind === 'bad' ? err.message : api.explain(err, 'The password'); paint(); }
+      // a signed-in reader's 401 here is a wrong password, said in the server's words; it read "Sign in to see the
+      // password" (BUG-048)
+      } catch (err) { ui.pwErr = err.message && (err.kind === 'bad' || (err.status === 401 && store.signedIn())) ? err.message : api.explain(err, 'The password'); paint(); }
       return;
     }
     if (f.matches('[data-v2-pk-rename]')) {
@@ -315,7 +317,7 @@ function wire(main) {
         await api.post('/api/auth/delete-account', { confirm_email: f.confirm_email.value.trim(), password: f.password ? f.password.value : '' });
         handDeviceSessionToGuest(); toast('Account deleted. The terminal stays open.');
         if (appRef) appRef.settleAuth({ next: '#/' });
-      } catch (err) { ui.delErr = err.message && err.kind === 'bad' ? err.message : api.explain(err, 'Deleting the account'); paint(); }
+      } catch (err) { ui.delErr = err.message && (err.kind === 'bad' || (err.status === 401 && store.signedIn())) ? err.message : api.explain(err, 'Deleting the account'); paint(); }
     }
   });
 }

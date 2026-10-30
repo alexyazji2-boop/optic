@@ -36,7 +36,7 @@ import concurrent.futures as cf
 import logging
 import math
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Callable, Dict, List, Optional
 

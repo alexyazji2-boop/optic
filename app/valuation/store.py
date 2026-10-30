@@ -18,9 +18,10 @@ from __future__ import annotations
 import json
 import math
 import re
-from typing import Any, Dict, List
+from typing import Any, Dict
 
 from fastapi import APIRouter, Body, HTTPException, Request
+from starlette.concurrency import run_in_threadpool
 
 from .. import db
 from ..auth import deps
@@ -157,6 +158,7 @@ async def delete_model(model_id: str, request: Request) -> Dict[str, Any]:
 
 @router.post("/valuation-models/replay")
 async def replay_unsaved(payload: Dict[str, Any] = Body(default={})) -> Dict[str, Any]:
-    """Replay a snapshot held in the browser (a guest's saved model)."""
+    """Replay a snapshot held in the browser (a guest's saved model). Off the event loop: the engine ran on it, and
+    anyone may send one (BUG-072, Phase 10)."""
     snap = validate_snapshot(payload)
-    return replay(snap)
+    return await run_in_threadpool(replay, snap)

@@ -38,6 +38,8 @@ def logos(tmp_path, monkeypatch):
         calls.append(sym)
         return {"AAPL": (b"<svg xmlns='http://www.w3.org/2000/svg'/>", "image/svg+xml"), "HOOD": (b"\x89PNG....", "image/png")}.get(sym)
     monkeypatch.setattr(m, "_logo_fetch", fetch)
+    # every symbol here counts as listed: an unlisted one is refused before a fetch (SEC-06, tests/test_phase10_hardening.py)
+    monkeypatch.setattr(m.universe_mod, "known_symbol", lambda sym: True)
     return calls
 
 

@@ -19,7 +19,7 @@ Kinds:
 
 from __future__ import annotations
 
-from statistics import mean, median
+from statistics import mean
 from typing import Any, Dict, List, Optional, Tuple
 
 from . import engine

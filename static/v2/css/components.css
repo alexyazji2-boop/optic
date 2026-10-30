@@ -424,6 +424,7 @@ ul.plain { margin: 0; padding-left: 18px; } ul.plain li { margin-bottom: 7px; }
 .milo-bubble .milo-li + br { display: none; }   /* each item is its own line already; the line break after it left a gap */
 .milo-bubble .milo-oli { padding-left: 22px; } .milo-bubble .milo-oli::before { content: none; } .milo-bubble .milo-n { position: absolute; left: 0; color: var(--c-ink-3); font-variant-numeric: tabular-nums; }
 .milo-bubble .milo-h { display: block; margin: 6px 0 2px; font-size: var(--t-lg); }
+.milo-bubble .milo-host { color: var(--c-ink-3); font-size: var(--t-sm); }   /* where a model-written link goes (SEC-05) */
 .milo-bubble a { color: var(--c-ink); text-decoration: underline; text-underline-offset: 2px; }
 .milo-bubble code { padding: 1px 4px; border-radius: var(--r-xs); background: var(--c-sunk); font-size: .92em; }
 .milo-code { margin: 0 0 10px; padding: 10px; border-radius: var(--r-md); background: var(--c-sunk); overflow-x: auto; font-size: var(--t-sm); white-space: pre; }
@@ -829,6 +830,10 @@ table.st td a { text-decoration: none; font-weight: 600; } table.st td a:hover {
    phone's screen, and every page load pushed it away: layout shift 0.14 to 0.22 on desktop and 0.58 to 0.63 on
    phones, from this footer alone (motion check 2026-10-24). Arriving under the page is not a shift. */
 #main:empty + .legal { display: none; }
+/* ...and while a page is still loading, its short skeleton left the footer in view, so the content arriving pushed
+   it off: layout shift 0.10 to 0.22 on Markets, Compare and Earnings, from the footer alone (Phase 09-10 measure).
+   The page area is at least a screen tall, so the footer starts below the fold and stays there. */
+#main { min-height: calc(100vh - var(--topbar-h, 72px)); min-height: calc(100dvh - var(--topbar-h, 72px)); }
 @media (max-width: 860px) { .legal { padding: 16px 16px 110px; } }
 .legal p { margin: 0 0 8px; max-width: 90ch; } .legal .textlink { font-size: var(--t-md); min-height: 32px; }
 @media (pointer: coarse), (max-width: 860px) { .legal .textlink { min-height: var(--tap); } }

@@ -27,7 +27,7 @@ out it was nothing.
 from __future__ import annotations
 
 from datetime import date, datetime, timezone
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 from . import setups as setups_mod
 

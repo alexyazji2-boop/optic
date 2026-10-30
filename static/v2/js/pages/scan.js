@@ -262,6 +262,9 @@ function saveSpec() {
   if (b) { const n = S.spec.filters.filter((x) => x.min != null || x.max != null).length + S.spec.states.length; b.textContent = n ? `${n} condition${n === 1 ? '' : 's'} on` : 'No conditions on'; }
 }
 function wire(main) {
+  // once per page view: Try again draws into the same view, and wiring it again doubled every press (BUG-037)
+  if (main.__v2Wired) return;
+  main.__v2Wired = true;
   main.addEventListener('submit', (e) => {
     if (e.target.closest('[data-v2-ask]')) { e.preventDefault(); runAsk(e.target.text.value); return; }
     if (e.target.closest('[data-v2-screen]')) { e.preventDefault(); runScreen(); }

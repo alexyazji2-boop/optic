@@ -159,7 +159,8 @@ def test_the_data_is_guarded_server_side_and_not_only_hidden():
     route = MAIN[MAIN.index('@app.get("/api/feedback")'):]
     route = route[:route.index("\n@app.")]
     code = re.sub(r'""".*?"""', " ", route, flags=re.S)
-    assert "_write_guard(request)" in code
+    # the signed-in owner, not the write token: each report carries its reporter's email (BUG-030, Phase 10)
+    assert "_owner_session_guard(request)" in code and "_write_guard(request)" not in code
 
 
 # ------------------------------------------------------------- the fetch

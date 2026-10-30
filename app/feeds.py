@@ -40,6 +40,7 @@ from urllib.parse import urlparse
 from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
 from typing import Any, Dict, List, Optional, Tuple
+from . import public_errors
 
 _DATA_DIR = os.environ.get(
     "TRACKER_DATA_DIR",
@@ -112,6 +113,10 @@ _ATOM = "{http://www.w3.org/2005/Atom}"
 _LOCK = threading.RLock()
 _MEM: Dict[str, Dict[str, Any]] = {}
 _LAST_HIT: Dict[str, float] = {}
+# A host that just failed, and when (S16, Phase 10): nothing remembered a failure, so a dead FRED, BLS or wire host
+# cost its whole timeout on every call that asked. For HOST_DOWN_SECONDS the next call fails at once, the same way.
+_DOWN: Dict[str, float] = {}
+HOST_DOWN_SECONDS = 60.0
 
 # ---------------------------------------------------------------- source table
 
@@ -544,6 +549,11 @@ def _fetch(url: str, accept: str, user_agent: Optional[str] = None,
     """
     host = urlparse(url).netloc or url
     with _LOCK:
+        down = _DOWN.get(host)
+    if down and time.time() - down < HOST_DOWN_SECONDS:
+        raise urllib.error.URLError("{} failed {:.0f} seconds ago; asked again after {:.0f}".format(
+            host, time.time() - down, HOST_DOWN_SECONDS))
+    with _LOCK:
         last = _LAST_HIT.get(host, 0.0)
         wait = POLITE_GAP_SECONDS - (time.time() - last)
     if wait > 0:
@@ -561,10 +571,23 @@ def _fetch(url: str, accept: str, user_agent: Optional[str] = None,
     try:
         with urllib.request.urlopen(
                 request, timeout=timeout or TIMEOUT_SECONDS) as response:
-            return response.read()
+            body = response.read()
+    except urllib.error.HTTPError as exc:
+        # the host answered: a 404 is that document's, not the host's; a refusal or a server error is the host's
+        if exc.code in (403, 429) or exc.code >= 500:
+            with _LOCK:
+                _DOWN[host] = time.time()
+        raise
+    except (urllib.error.URLError, OSError):
+        with _LOCK:
+            _DOWN[host] = time.time()
+        raise
     finally:
         with _LOCK:
             _LAST_HIT[host] = time.time()
+    with _LOCK:
+        _DOWN.pop(host, None)
+    return body
 
 
 # ------------------------------------------------------------------ disk cache
@@ -818,7 +841,7 @@ def load_source(source: Dict[str, Any], force: bool = False) -> Dict[str, Any]:
         # headlines plus a warning than by a blank section.
         stale = _MEM.get(key) or _load_disk().get(key) or {}
         entry = {"at": stale.get("at", 0), "entries": stale.get("entries", []),
-                 "error": f"{type(exc).__name__}: {str(exc)[:120]}",
+                 "error": f"{type(exc).__name__}: {public_errors.public(exc)}",
                  "ms": int((time.time() - started) * 1000)}
         with _LOCK:
             _MEM[key] = entry
@@ -1318,7 +1341,7 @@ def load_ics(key: str, url: str, force: bool = False) -> Dict[str, Any]:
             ValueError, OSError) as exc:
         stale = _MEM.get(cache_key) or _load_disk().get(cache_key) or {}
         entry = {"at": stale.get("at", 0), "events": stale.get("events", []),
-                 "error": f"{type(exc).__name__}: {str(exc)[:120]}",
+                 "error": f"{type(exc).__name__}: {public_errors.public(exc)}",
                  "ms": int((time.time() - started) * 1000)}
         with _LOCK:
             _MEM[cache_key] = entry
@@ -1344,7 +1367,7 @@ def load_html(key: str, url: str, force: bool = False) -> Dict[str, Any]:
             ValueError, OSError) as exc:
         stale = _MEM.get(cache_key) or _load_disk().get(cache_key) or {}
         entry = {"at": stale.get("at", 0), "text": stale.get("text", ""),
-                 "error": f"{type(exc).__name__}: {str(exc)[:120]}",
+                 "error": f"{type(exc).__name__}: {public_errors.public(exc)}",
                  "ms": int((time.time() - started) * 1000)}
         with _LOCK:
             _MEM[cache_key] = entry

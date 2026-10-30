@@ -17,7 +17,7 @@ reason a particular company's shares will rise, and the note says so.
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 from .sectors import SECTORS
 from . import sector_board

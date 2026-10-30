@@ -24,12 +24,12 @@ is a fact about how it is used, not a claim that crossing it predicts anything.
 from __future__ import annotations
 
 import logging
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 import numpy as np
 import pandas as pd
 
-from .technicals import atr, bollinger as bollinger_bands, ema, sma
+from .technicals import atr, bollinger as bollinger_bands, ema
 
 log = logging.getLogger(__name__)
 

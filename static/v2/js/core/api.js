@@ -60,13 +60,16 @@ async function request(method, path, { body, timeout = 20000, signal } = {}) {
   try { window.dispatchEvent(new CustomEvent('optic:reached')); } catch (e) { /* no window in tests */ }
   // v2 closed to this reader (owner-only preview or emergency shutdown): core/build.js offers the classic app
   if (res.headers.get('X-Optic-V2') === 'closed') { try { window.dispatchEvent(new CustomEvent('optic:v2-closed')); } catch (e) { /* no window in tests */ } }
-  let data = null;
+  let data = null, unreadable = false;
   const text = await res.text();
-  try { data = text ? JSON.parse(text) : null; } catch (e) { data = null; }
+  try { data = text ? JSON.parse(text) : null; } catch (e) { data = null; unreadable = true; }
   if (!res.ok) {
     const msg = (data && (data.detail || data.error || data.message)) || res.statusText || 'Request failed';
     throw new ApiError(classify(res.status), res.status, typeof msg === 'string' ? msg : 'Request failed', data);
   }
+  // A 200 whose body is not JSON is a failure, not an empty answer: it resolved null, and a page reading `d.quote`
+  // threw and left its skeletons running (Phase 10 resilience check R8)
+  if (unreadable) throw new ApiError('server', res.status, 'The server sent an answer Optic could not read.');
   return data;
 }
 
