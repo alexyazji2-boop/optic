@@ -222,7 +222,7 @@ Engineering cannot settle these; each is written up for qualified counsel in COM
 | ab5a2ae, 0268f7f | Phase 08: Milo's grounding and the evaluation suite |
 | 17024f0, 3698975 | Phase 09: market data integrity |
 | 3971e7f, a0e60f8 | Phase 10: performance, security, accessibility and failure states |
-| Phase 11 | this audit and its fixes: the commit that adds this report, with its id recorded in PROGRESS.md |
+| e0dd2ff and the commit after it | Phase 11: the final audit, its fixes and this report (the second commit records the first one's id) |
 
 ## 17. Production readiness recommendation
 
