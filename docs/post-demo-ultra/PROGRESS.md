@@ -6,7 +6,7 @@ Read this and [REQUIREMENTS_MATRIX.md](REQUIREMENTS_MATRIX.md) before changing a
 
 - **Current phase:** 11 Adversarial final audit (next). Phases 01 to 10 complete (reports below).
 - **Branch / worktree:** `post-demo-ultra` in `~/Optic/wt-ultra`, from `9fa0f36` (tag `post-demo-ultra-baseline`). Upstream unset; nothing pushed or deployed.
-- **Commits:** `fce3e71` setup; `8040f8a` and `795325a` Phase 01; `d4a2b1a` Phase 01 report; `ce60b16` Phase 02 policy module (WIP); `c6724ff` Milo portfolio privacy (cherry-pick of 2236205); `a76916b` Phase 02; `6f2e814` its commit id; `7b14b56` Phase 03; `2f6a548` its commit id; `381a018` Phase 04; `b07e181` its commit id; `e64a5ee` Phase 05; `448e633` its commit id; `0448900` Phase 06; `1652e14` its commit id; `874c109` Phase 07; `f26af09` its commit id; `ab5a2ae` Phase 08; `0268f7f` its commit id; `17024f0` Phase 09; `3698975` its commit id; `P10_COMMIT_ID` Phase 10.
+- **Commits:** `fce3e71` setup; `8040f8a` and `795325a` Phase 01; `d4a2b1a` Phase 01 report; `ce60b16` Phase 02 policy module (WIP); `c6724ff` Milo portfolio privacy (cherry-pick of 2236205); `a76916b` Phase 02; `6f2e814` its commit id; `7b14b56` Phase 03; `2f6a548` its commit id; `381a018` Phase 04; `b07e181` its commit id; `e64a5ee` Phase 05; `448e633` its commit id; `0448900` Phase 06; `1652e14` its commit id; `874c109` Phase 07; `f26af09` its commit id; `ab5a2ae` Phase 08; `0268f7f` its commit id; `17024f0` Phase 09; `3698975` its commit id; `3971e7f` Phase 10.
 - **Local server:** launch config `optic-ultra` (:8250, stand-in model :8251 from `tools/milo_standin_ultra.py`, which adds an `ADVISE` keyword that makes the answer break the policy and, since Phase 05, writes a Sector Read and a portfolio briefing in their writers' shapes; data `~/Optic/ultra-data`, sandbox brokerage, jobs off, no real model key). Seed password in `~/Optic/ultra-data/seed-output.txt` (never print it). The server does not reload Python: restart it after editing server code. The desktop app stops it when the session is paused; start it again with preview_start. `optic-ultra-p09` (:8252) serves the Phase 09 commit from a scratch worktree for A/B runs.
 - **Working folder (outside the repo):** `~/Optic/work/post-demo-ultra-2026-10-29/` (tools/, crawl1/, dead/, sheets/, baseline/, milo/, registry/, phase02/ to phase10/; the five-level proxy run in phase05/proxy/; Phase 08's stand-in rounds in phase08/proxy, proxy-r2 and proxy-r3, and advice set C in phase08/; Phase 10's measurements in phase10/ by kind, each from a `tools/phase10_*.py`, `loop_stall.py` or `ab_table.py`).
 - **Resource rule:** at most two subagents at a time (DECISIONS D-007). One proxy answer costs about 180,000 agent tokens.
@@ -183,7 +183,7 @@ Read this and [REQUIREMENTS_MATRIX.md](REQUIREMENTS_MATRIX.md) before changing a
      - Apple's sign-in live;
      - dependency vulnerabilities.
    - **Phase 11** owes a fresh unseen advice set (BUG-132).
-10. **Commit and next phase.** Committed as `P10_COMMIT_ID` on `post-demo-ultra` (not pushed, not deployed); next is
+10. **Commit and next phase.** Committed as `3971e7f` on `post-demo-ultra` (not pushed, not deployed); next is
     Phase 11.
 
 ## Phase 09 report (directive 09; reporting format of directive 00)
