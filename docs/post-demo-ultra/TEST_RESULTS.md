@@ -1429,3 +1429,27 @@ holding a report that had happened. KO's resolved catalyst events keep 2026-10-2
   were of its first id, `543a6e5`. Its suite (`~/Optic/work/hotfix-report-date-2026-10-30/pytest-full-rebased.txt`):
   7,158 passed, 1 skipped, 0 failed. `git merge-tree --write-tree` of this branch with the hotfix and with live main:
   no conflict.
+
+### On the live site after the ship (2026-10-31, about 15:40 ET)
+
+On the owner's yes, `8e2cbf4` was pushed onto live main `a10eaba` at 19:40:28 UTC; the live site booted it at 19:41:43
+UTC. `~/Optic/work/hotfix-report-date-2026-10-30/ship/live_check.py` asked theopticterminal.com for `/api/health` and
+`/api/ticker/<SYM>` just before the push (`before.json`) and once the new commit answered (`after.json`). The market was
+closed (a Saturday).
+
+| Symbol | Before (`a10eaba`): next report, surface event, expiries marked | After (`8e2cbf4`): next report, surface event, expiries marked |
+|---|---|---|
+| NVDA | missing, 2026-11-17, 3 | 2026-11-17, 2026-11-17, 3 |
+| MSFT | missing, 2027-01-27, 0 | 2027-01-27, 2027-01-27, 0 |
+| AAPL | missing, 2026-11-02, 4 | 2026-11-02, 2026-11-02, 4 |
+| KO | missing, 2026-10-27 (past), 4 | none, none, 0 |
+| META | missing, 2026-10-21 (past), 4 | none, none, 0 |
+
+- **Expiries marked:** the surface's expiries with `contains_event` true (`app/analytics/vol_surface.py`).
+- **The surface's event before the push:** `before.json` kept the answer's event dates in order without their paths;
+  `after.json` has the same number of dates in the same order with their paths, which puts KO's and META's past dates
+  at `vol_surface.event_date`.
+- **AAPL:** 2026-11-02 is the date Apple announced for its fiscal fourth quarter.
+- **MSFT:** its report of 2026-10-28 stays in its resolved catalyst events on both, as it should.
+- **What else could change:** nothing. The changed code runs only inside `_swing_snapshot`. Earnings this week, the
+  weekly digest and the Desk edition read the provider, which the hotfix does not touch.

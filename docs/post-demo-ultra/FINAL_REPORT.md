@@ -73,7 +73,8 @@ Phase 11 found 23 of them (BUG-180 to BUG-202, the last after this report was fi
 
 The ones that mattered most:
 - **BUG-200 (P1):** `/api/ticker` lost the next report date whenever a company's option chain was complete, in the
-  build the investors saw since 2026-10-13. Milo's context and "what matters next" had no report date.
+  build the investors saw since 2026-10-13. Milo's context and "what matters next" had no report date. Fixed on the
+  live site on 2026-10-31, with BUG-201, by a hotfix from live main (section 17).
 - **BUG-201 (P1):** with the date back, a report that had already happened read as the next one (KO).
 - **BUG-202 (P1, never live):** BUG-201's first fix, made in the provider, would have taken the week's earlier reports, and
   their results, out of Earnings this week. The fix now sits where the next report is read. Found while preparing a
@@ -256,8 +257,11 @@ the risks in section 8 for a staging audience. These manual and outside checks a
 
 Do not deploy from this branch without those, and only on the owner's word.
 
-**One fix can go live on its own.** BUG-200 (the lost next report date) has been live since 2026-10-13. A hotfix of it and
-BUG-201, built from live main, is on branch `hotfix-next-report-date` (`8e2cbf4`, worktree `~/Optic/wt-hotfix-report-date`),
-rebased onto live main's `a10eaba` after WaveTrend shipped: one commit, its suite green (7,158 passed, 1 skipped), checked on
-a local server with real data. It is not pushed: shipping
-it is the owner's call.
+**One fix went live on its own.** BUG-200 (the lost next report date) was live from 2026-10-13. A hotfix of it and
+BUG-201, built from live main, went on branch `hotfix-next-report-date` (`8e2cbf4`, worktree
+`~/Optic/wt-hotfix-report-date`), rebased onto live main's `a10eaba` after WaveTrend shipped: one commit, its suite green
+(7,158 passed, 1 skipped), checked on a local server with real data. On the owner's yes it was pushed on 2026-10-31
+(`a10eaba..8e2cbf4`, 19:40 UTC) and the live site served it 90 seconds later. There, NVDA, MSFT and AAPL now carry their
+next reports (2026-11-17, 2027-01-27, 2026-11-02), where the field had been missing, and KO's and META's past reports are
+no longer the next report or the volatility surface's event (TEST_RESULTS, after Phase 11). Nothing else from this branch
+went with it (D-101). This branch carries the same code and test file, and merges with the new live main without conflict.

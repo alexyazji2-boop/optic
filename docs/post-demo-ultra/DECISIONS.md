@@ -768,3 +768,8 @@ advice safeguards measured weak and the model's own behaviour unmeasured) and th
 BUG-023), the blocking issues are P0 and none can be closed by engineering alone. Everything else passed or is
 recorded. The decision names what would unblock each, and the manual checks a human staging review needs
 (FINAL_REPORT sections 8 and 17).
+
+**D-101 (after Phase 11) The report-date hotfix shipped on its own.** On 2026-10-31 the owner said yes to shipping the
+hotfix of BUG-200 and BUG-201 while this branch stays held (D-100). It went from its own branch, cut from live main and
+rebased onto `a10eaba`, so nothing else from this branch reached the live site. This branch carries the same code and
+the same test file, so merging it later changes nothing for these two defects.
