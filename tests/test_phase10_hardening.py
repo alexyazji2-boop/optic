@@ -503,13 +503,10 @@ def test_the_earnings_week_says_it_is_building_instead_of_waiting_silently():
 def test_the_calendar_and_info_are_read_once_for_their_readers(monkeypatch):
     """S09: the next report date and the consensus band read Yahoo's calendar separately, and the fund facts and the
     futures month each re-read `.info` beside the quote's own read."""
-    import datetime as dt
     import app.providers.yf as y
     from app.main import YF_PROVIDER as P
     monkeypatch.setattr(y, "_CACHE", {})
     monkeypatch.setattr(y, "_wait_turn", lambda: None)
-    # the date is pinned: the next report must not have passed (BUG-201), and 2026-11-19 will
-    monkeypatch.setattr(y.session_mod, "market_today", lambda now=None: dt.date(2026, 10, 30))
     calls = {"calendar": 0}
 
     class Stub:

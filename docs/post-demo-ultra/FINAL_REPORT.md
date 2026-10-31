@@ -58,15 +58,15 @@ refusal, the audit's own load, or a check that was wrong. The open P2s (section 
 
 ## 7. Bugs fixed
 
-The register has 200 rows (BUG-001 to BUG-201; 140 was never assigned):
-- 179 VERIFIED;
+The register has 201 rows (BUG-001 to BUG-202; 140 was never assigned):
+- 180 VERIFIED;
 - 3 FIXED and awaiting what only a live environment or a browser timing can show;
 - 11 BLOCKED on outside parties;
 - 2 WONTFIX, with reasons;
 - 5 OPEN.
 
-Phase 11 found 22 of them (BUG-180 to BUG-201):
-- fixed 18: 17 VERIFIED, and BUG-182 FIXED with a source-level test, its two-minute timing being impractical to drive
+Phase 11 found 23 of them (BUG-180 to BUG-202, the last after this report was first written):
+- fixed 19: 18 VERIFIED, and BUG-182 FIXED with a source-level test, its two-minute timing being impractical to drive
   in a browser;
 - decided not to fix 1 (BUG-192);
 - left 3 OPEN, all P2.
@@ -75,6 +75,9 @@ The ones that mattered most:
 - **BUG-200 (P1):** `/api/ticker` lost the next report date whenever a company's option chain was complete, in the
   build the investors saw since 2026-10-13. Milo's context and "what matters next" had no report date.
 - **BUG-201 (P1):** with the date back, a report that had already happened read as the next one (KO).
+- **BUG-202 (P1, never live):** BUG-201's first fix, made in the provider, would have taken the week's earlier reports, and
+  their results, out of Earnings this week. The fix now sits where the next report is read. Found while preparing a
+  hotfix of BUG-200 and BUG-201 for live main (section 17).
 - **BUG-181 (P1):** Phase 10 had broken the owner's `publish.sh` deploy check.
 - **BUG-193 (P1):** the Options page stayed loading for good after a failed load.
 - **BUG-197:** a level changed in another tab left the open page in its old wording.
@@ -135,7 +138,7 @@ There is no open P1 defect in Optic's code. The open P2s:
     - a quote Yahoo refused that moment and Optic served marked partial;
     - TSM's yield, which Yahoo works at the previous close on a day the stock fell 5.9%.
   - **Two real defects it found, fixed:** the lost next report date (BUG-200) and a past report shown as next
-    (BUG-201).
+    (BUG-201). BUG-201's first fix was itself moved (BUG-202).
 - **Across features:** one SPY price on the quote, chart, Dossier and Milo (Phase 09's A, rerun). Late answers never
   reach the next symbol's page (Phase 09's B; X01, X08).
 - **Conditions seen:** Yahoo refused some requests during the audit. Every page that met a refusal stated it and
@@ -251,3 +254,8 @@ the risks in section 8 for a staging audience. These manual and outside checks a
   - whether to build the analytics design.
 
 Do not deploy from this branch without those, and only on the owner's word.
+
+**One fix can go live on its own.** BUG-200 (the lost next report date) has been live since 2026-10-13. A hotfix of it and
+BUG-201, built from live main, is on branch `hotfix-next-report-date` (`543a6e5`, worktree `~/Optic/wt-hotfix-report-date`):
+one commit, its suite green (7,112 passed, 1 skipped), checked on a local server with real data. It is not pushed: shipping
+it is the owner's call.

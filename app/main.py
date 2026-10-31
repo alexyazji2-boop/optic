@@ -585,6 +585,15 @@ class _Legs:
         return value
 
 
+def _upcoming(day: Any) -> Optional[str]:
+    """A report date not yet past, else None. Yahoo keeps a report that has happened in its calendar until it posts the
+    next one, so KO's of 2026-10-27 read as its next report, and as the event inside every expiry, on 2026-10-30
+    (BUG-201). The provider's date stays unfiltered: Earnings this week shows the results of the week's past days."""
+    if not day:
+        return None
+    return day if str(day)[:10] >= session_mod.market_today().isoformat() else None
+
+
 def _sector_confirm(ticker: str) -> Dict[str, Any]:
     prof = YF_PROVIDER.profile(ticker) or {}
     return sector_confirm_mod.build(YF_PROVIDER, ticker, prof.get("sector"))
@@ -849,7 +858,7 @@ def _swing_snapshot(
     event_date = None
     if chain is not None and not chain.empty and not partial:
         try:
-            event_date = legs.get("earnings_date")
+            event_date = _upcoming(legs.get("earnings_date"))
         except Exception:                                         # noqa: BLE001
             event_date = None
         if not event_date:
@@ -1080,9 +1089,7 @@ def _swing_snapshot(
     # matters next" without it would be missing the obvious answer. Cached by
     # the provider and best-effort, like the calendar.
     try:
-        nxt = legs.get("earnings_date")
-        # a date kept from before midnight that has since passed is not the next report (BUG-201)
-        payload["next_earnings_date"] = nxt if not nxt or str(nxt) >= session_mod.market_today().isoformat() else None
+        payload["next_earnings_date"] = _upcoming(legs.get("earnings_date"))
     except Exception as exc:
         logging.getLogger("uvicorn.error").warning(
             "next earnings date unavailable for %s: %s", ticker, exc)

@@ -1375,3 +1375,53 @@ Its "no real defect" list covered:
   extend their existing tests: health, the feed host, logos (three files), the desk note, the report form, the
   calendar test's pinned date.
 - Full suite on the final tree (`phase11/pytest-full-final.txt`): 8,084 passed, 1 skipped, 0 failed, in 234 s.
+
+## After Phase 11: the hotfix of BUG-200 and BUG-201, and BUG-202 (2026-10-30, about 20:00 to 21:45 ET)
+
+The owner asked for a hotfix of the next report date for live main. Porting it showed that Phase 11's BUG-201 fix, made
+in the provider, would have taken the week's earlier reports out of Earnings this week (BUG-202). Both branches now
+carry the same fix where the next report is read, and the same test file.
+
+### Tests
+
+`tests/test_next_report_date.py` (four tests) was copied to a scratch folder and run against each tree's `app`, with
+`.venv/bin/python -m pytest -q -p no:cacheprovider <scratch>/test_next_report_date.py` from the tree's root:
+
+| Tree | Result |
+|---|---|
+| Live main's code (`9fa0f36`) | 3 failed (a leg read twice, the source check, `_upcoming`), 1 passed (the week: live never filtered the provider) |
+| This branch at `e0dd2ff` | the week test failed: the provider answered None for a report three days old (BUG-202) |
+| The hotfix (`543a6e5`) and this branch after the fix | 4 passed |
+
+- **The hotfix's suite** (`~/Optic/work/hotfix-report-date-2026-10-30/pytest-full.txt`): 7,112 passed, 1 skipped,
+  0 failed, in 224 s.
+- **This branch's suite after the fix** (`phase11/pytest-full-bug202.txt`): 8,085 passed, 1 skipped, 0 failed, in 242 s (one more than Phase 11's: four tests in the shared file, three moved out of
+  `test_phase11_fixes.py`).
+- **The move:** the three report-date tests left `tests/test_phase11_fixes.py` (now 10 tests) for the shared file. The
+  Phase 10 calendar test no longer pins the date.
+
+### Real data on local servers
+
+`~/Optic/work/hotfix-report-date-2026-10-30/compare.py` asked `/api/ticker/<SYM>` of live main's code (:8253, an
+empty data folder) and of the hotfix (:8254), after the close on 2026-10-30, with every chain complete (`run1.json`):
+
+| Symbol | Live main's code: next report, surface event | Hotfix: next report, surface event |
+|---|---|---|
+| NVDA | missing, 2026-11-17 | 2026-11-17, 2026-11-17 |
+| MSFT | missing, 2027-01-27 | 2027-01-27, 2027-01-27 |
+| AAPL | missing, 2026-11-02 | 2026-11-02, 2026-11-02 |
+| KO | missing, 2026-10-27 (past) | none, none |
+| META | missing, 2026-10-21 (past) | none, none |
+
+"Missing" is BUG-200: the field is absent from the answer. A past surface event is BUG-201: every expiry was marked as
+holding a report that had happened. KO's resolved catalyst events keep 2026-10-27 on both, as they should.
+
+- **This branch's server after the fix (:8250):** Yahoo refused this machine by then (401 "Invalid Crumb" and "User is
+  unable to access this feature" in the server log), so KO, NVDA, META and AAPL all came back without a date
+  (`overhaul-ticker.json`). That is a condition (D-098), not a result.
+- **Earnings this week:** on the hotfix's server (`week-hotfix-final.json`, built 20:56 ET, 144 of 144 names checked, none failed),
+  the week keeps its past days with their results: Monday VZ; Tuesday HOOD, KO, NXPI, PYPL, SOFI; Wednesday GOOGL,
+  CMG, F, FDX, PSX, VRT; Thursday AMZN, LLY, BMY, COIN, GILD, LIN, MRK, MSTR, RBLX, RIVN; Friday XOM, ABBV, CVX, REGN.
+  The provider filter of `e0dd2ff` would have dropped all 22 rows from Monday to Thursday (BUG-202).
+  On this branch's server, rebuilt with the fix (`week-overhaul-final.json`, built 20:58 ET, 144 of 144 names), the same
+  26 rows. Its first answer was a build kept on disk from 17:37 ET, before the BUG-201 fix, and was not counted.

@@ -7,6 +7,7 @@ The others are pinned where their code already had tests:
 - BUG-185: tests/test_phase10_hardening.py
 - BUG-186: tests/test_desk_freshness.py
 - BUG-180: tests/milo_eval/run.py's price line
+- BUG-200, BUG-201 and BUG-202 (the next report date): tests/test_next_report_date.py
 """
 from __future__ import annotations
 
@@ -127,56 +128,3 @@ def test_the_offline_and_refused_sentences_fit_any_subject():
     assert "case 'offline': return `Optic needs a connection for ${what.toLowerCase()}. It will try again when you are back online.`;" in src
     assert "case 'forbidden': return `${what}: not available on this account.`;" in src
     assert "needs a connection. Optic" not in src and "is not available on this account" not in src
-
-
-def test_a_leg_read_twice_answers_twice():
-    """BUG-200: the earnings date leg is read by the volatility surface and again for next_earnings_date; the second read
-    raised KeyError, so /api/ticker lost the next report date whenever the chain was complete (since 2026-10-13)."""
-    import pytest
-    from app import main
-    for parallel in (False, True):
-        legs = main._Legs(parallel)
-        calls = []
-        legs.start("earnings_date", lambda t: calls.append(t) or "2026-11-17", "NVDA")
-        assert legs.get("earnings_date") == "2026-11-17" and legs.get("earnings_date") == "2026-11-17"
-        assert calls == ["NVDA"]                                     # fetched once, read twice
-
-        def refused(t):
-            raise RuntimeError("refused")
-        legs.start("calendar", refused, "NVDA")
-        for _ in range(2):
-            with pytest.raises(RuntimeError):
-                legs.get("calendar")                                   # the same failure each time, never a KeyError
-
-
-def test_the_snapshot_keeps_the_next_report_date_when_the_surface_reads_it_first():
-    """BUG-200, at the route: both reads of the earnings date in _swing_snapshot are of one leg."""
-    src = read("app/main.py")
-    assert src.count('legs.get("earnings_date")') == 2
-    assert 'legs.start("earnings_date", YF_PROVIDER.earnings_date, ticker)' in src
-
-
-def test_a_report_that_has_passed_is_not_the_next_one(monkeypatch):
-    """BUG-201: Yahoo keeps a report that has happened until it posts the next one; KO's of 2026-10-27 was shown as its
-    next report on 2026-10-30. Seen once BUG-200 put the date back (tools/phase09_recon.py, phase11/regress)."""
-    import datetime as dt
-    import pandas as pd
-    import app.providers.yf as y
-    from app.main import YF_PROVIDER as P
-    monkeypatch.setattr(y, "_CACHE", {})
-    monkeypatch.setattr(y, "_wait_turn", lambda: None)
-    monkeypatch.setattr(y.session_mod, "market_today", lambda now=None: dt.date(2026, 10, 30))
-    answers = {"ZZPAST": [pd.Timestamp("2026-10-27")], "ZZBOTH": [pd.Timestamp("2026-10-27"), pd.Timestamp("2027-02-10")],
-               "ZZTODAY": [pd.Timestamp("2026-10-30")]}
-
-    class Stub:
-        def __init__(self, sym, *a, **k):
-            self.sym = sym
-
-        @property
-        def calendar(self):
-            return {"Earnings Date": answers[self.sym]}
-    monkeypatch.setattr(y.yf, "Ticker", Stub)
-    assert P.earnings_date("ZZPAST") is None
-    assert P.earnings_date("ZZBOTH") == "2027-02-10"
-    assert P.earnings_date("ZZTODAY") == "2026-10-30"           # a report today is still the next one
