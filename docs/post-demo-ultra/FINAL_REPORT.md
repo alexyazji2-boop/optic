@@ -226,6 +226,7 @@ Engineering cannot settle these; each is written up for qualified counsel in COM
 | 17024f0, 3698975 | Phase 09: market data integrity |
 | 3971e7f, a0e60f8 | Phase 10: performance, security, accessibility and failure states |
 | e0dd2ff and the commit after it | Phase 11: the final audit, its fixes and this report (the second commit records the first one's id) |
+| 537e101 and the commit after it | After Phase 11: BUG-202, the report-date fix moved out of the provider (the second records the first one's id) |
 
 ## 17. Production readiness recommendation
 
