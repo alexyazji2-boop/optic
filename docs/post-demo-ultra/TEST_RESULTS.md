@@ -1425,3 +1425,7 @@ holding a report that had happened. KO's resolved catalyst events keep 2026-10-2
   The provider filter of `e0dd2ff` would have dropped all 22 rows from Monday to Thursday (BUG-202).
   On this branch's server, rebuilt with the fix (`week-overhaul-final.json`, built 20:58 ET, 144 of 144 names), the same
   26 rows. Its first answer was a build kept on disk from 17:37 ET, before the BUG-201 fix, and was not counted.
+- **After WaveTrend shipped** (live main `a10eaba`): the hotfix rebased without conflict as `8e2cbf4`; the runs above
+  were of its first id, `543a6e5`. Its suite (`~/Optic/work/hotfix-report-date-2026-10-30/pytest-full-rebased.txt`):
+  7,158 passed, 1 skipped, 0 failed. `git merge-tree --write-tree` of this branch with the hotfix and with live main:
+  no conflict.

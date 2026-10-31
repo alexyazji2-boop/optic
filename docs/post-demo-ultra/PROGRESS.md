@@ -10,7 +10,7 @@ Read this and [REQUIREMENTS_MATRIX.md](REQUIREMENTS_MATRIX.md) before changing a
 - **Local server:** launch config `optic-ultra` (:8250, stand-in model :8251 from `tools/milo_standin_ultra.py`, which adds an `ADVISE` keyword that makes the answer break the policy and, since Phase 05, writes a Sector Read and a portfolio briefing in their writers' shapes; data `~/Optic/ultra-data`, sandbox brokerage, jobs off, no real model key). Seed password in `~/Optic/ultra-data/seed-output.txt` (never print it). The server does not reload Python: restart it after editing server code. The desktop app stops it when the session is paused; start it again with preview_start. `optic-ultra-p09` (:8252) serves the Phase 09 commit and `optic-ultra-base` (:8253) the demo-day build, from scratch worktrees, for A/B runs.
 - **Working folder (outside the repo):** `~/Optic/work/post-demo-ultra-2026-10-29/` (tools/, phase02/ to phase11/ and the earlier folders). Phase 11's tools are `tools/phase11_*.py` and `tools/phase11_batch.sh`; its results are in `phase11/`.
 - **Resource rule:** at most two subagents at a time (DECISIONS D-007).
-- **Next action:** the owner's. FINAL_REPORT.md sections 8 and 17 list what only the owner, counsel and outside providers can do: a working model key and the model-based check (BUG-132), licensed data (BUG-022, BUG-023), the security decisions (BL-10 to BL-13), SMTP, and a human run of the demo on real devices. Nothing here is to be pushed or deployed without the owner's word. A hotfix of BUG-200 and BUG-201 for live main is ready and not pushed: branch `hotfix-next-report-date` (`543a6e5`) in `~/Optic/wt-hotfix-report-date`; shipping it is the owner's call (FINAL_REPORT section 17).
+- **Next action:** the owner's. FINAL_REPORT.md sections 8 and 17 list what only the owner, counsel and outside providers can do: a working model key and the model-based check (BUG-132), licensed data (BUG-022, BUG-023), the security decisions (BL-10 to BL-13), SMTP, and a human run of the demo on real devices. Nothing here is to be pushed or deployed without the owner's word. A hotfix of BUG-200 and BUG-201 for live main is ready and not pushed: branch `hotfix-next-report-date` (`8e2cbf4`, on live main `a10eaba`) in `~/Optic/wt-hotfix-report-date`; shipping it is the owner's call (FINAL_REPORT section 17).
 
 ## Phase 11 report (directive 11; reporting format of directive 00)
 
@@ -145,7 +145,7 @@ Read this and [REQUIREMENTS_MATRIX.md](REQUIREMENTS_MATRIX.md) before changing a
    - **The P0s:** BUG-132 (the owner's: BL-07, BL-01), and BUG-022 and BUG-023 (the owner's and counsel's: BL-09).
    - **Open P2s:** BUG-173, BUG-187, BUG-195, BUG-198.
    - **Not testable here:** a real model, real providers, real devices, a screen reader, and counsel.
-   - **The hotfix:** BUG-200 and BUG-201 for live main, ready on `hotfix-next-report-date` (`543a6e5`), not pushed.
+   - **The hotfix:** BUG-200 and BUG-201 for live main, ready on `hotfix-next-report-date` (`8e2cbf4`, on live main `a10eaba`), not pushed.
 10. **Commit and next phase.** Committed on `post-demo-ultra` as `e0dd2ff` (not pushed, not deployed); the commit
     after it records the id. There is no next phase: the decision is the owner's.
 
@@ -755,4 +755,4 @@ Read this and [REQUIREMENTS_MATRIX.md](REQUIREMENTS_MATRIX.md) before changing a
 - On the owner's yes, a hotfix of BUG-200 and BUG-201 for live main: branch `hotfix-next-report-date` from origin/main `9fa0f36` in `~/Optic/wt-hotfix-report-date`, one commit (`543a6e5`), suite 7,112 passed, 1 skipped; not pushed.
 - Tracing the provider's other readers while porting showed BUG-202: Phase 11's BUG-201 fix, made in the provider, would have taken the week's earlier reports out of Earnings this week and the weekly digest. The fix moved to `_upcoming` in `_swing_snapshot` on both branches, with identical code and one shared test file so they merge cleanly; the provider gives Yahoo's date again.
 - Real data on local servers after the close: live main's code had no next report for NVDA, MSFT, AAPL, KO or META, and took KO's and META's past reports as the surface's event; the hotfix has NVDA 2026-11-17, MSFT 2027-01-27 and AAPL 2026-11-02, and nothing past. Yahoo then refused this machine's quote and chain requests (401), so this branch's `/api/ticker` could not be read again; its Earnings this week, rebuilt with the fix, kept the week's 22 past reports with their results, as the hotfix's did (TEST_RESULTS, after Phase 11).
-
+- Live main moved to `a10eaba` (WaveTrend shipped). The hotfix rebased onto it without conflict as `8e2cbf4`; suite 7,158 passed, 1 skipped. `git merge-tree` of this branch with the hotfix and with live main: no conflict.

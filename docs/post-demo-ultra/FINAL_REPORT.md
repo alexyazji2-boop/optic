@@ -257,6 +257,7 @@ the risks in section 8 for a staging audience. These manual and outside checks a
 Do not deploy from this branch without those, and only on the owner's word.
 
 **One fix can go live on its own.** BUG-200 (the lost next report date) has been live since 2026-10-13. A hotfix of it and
-BUG-201, built from live main, is on branch `hotfix-next-report-date` (`543a6e5`, worktree `~/Optic/wt-hotfix-report-date`):
-one commit, its suite green (7,112 passed, 1 skipped), checked on a local server with real data. It is not pushed: shipping
+BUG-201, built from live main, is on branch `hotfix-next-report-date` (`8e2cbf4`, worktree `~/Optic/wt-hotfix-report-date`),
+rebased onto live main's `a10eaba` after WaveTrend shipped: one commit, its suite green (7,158 passed, 1 skipped), checked on
+a local server with real data. It is not pushed: shipping
 it is the owner's call.
