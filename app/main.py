@@ -447,24 +447,49 @@ class _Legs:
         self.parallel = parallel
         self.timings = timings
         self._legs: Dict[str, Any] = {}
+        # A leg read a second time gets the first read's answer, or its exception again. The earnings date is read by
+        # the volatility surface and again for "what matters next"; the second read found the leg gone (KeyError), so
+        # /api/ticker lost next_earnings_date whenever the chain was complete, since 2026-10-13 (BUG-200, Phase 11).
+        self._read: Dict[str, Tuple[bool, Any]] = {}
 
     def start(self, name: str, fn, *args, **kwargs) -> None:
         if self.timings is not None:
             fn = self.timings.wrap(name, fn)
+        self._read.pop(name, None)
         self._legs[name] = (_LEG_POOL.submit(fn, *args, **kwargs) if self.parallel
                             else (fn, args, kwargs))
 
     def get(self, name: str) -> Any:
+        if name in self._read:
+            ok, value = self._read[name]
+            if ok:
+                return value
+            raise value
         leg = self._legs.pop(name)
         began = time.perf_counter()
         try:
             if not self.parallel:
                 fn, args, kwargs = leg
-                return fn(*args, **kwargs)
-            return leg.result()
+                value = fn(*args, **kwargs)
+            else:
+                value = leg.result()
+        except Exception as exc:
+            self._read[name] = (False, exc)
+            raise
         finally:
             if self.timings is not None:
                 self.timings.blocked += time.perf_counter() - began
+        self._read[name] = (True, value)
+        return value
+
+
+def _upcoming(day: Any) -> Optional[str]:
+    """A report date not yet past, else None. Yahoo keeps a report that has happened in its calendar until it posts the
+    next one, so KO's of 2026-10-27 read as its next report, and as the event inside every expiry, on 2026-10-30
+    (BUG-201). The provider's date stays unfiltered: Earnings this week shows the results of the week's past days."""
+    if not day:
+        return None
+    return day if str(day)[:10] >= session_mod.market_today().isoformat() else None
 
 
 def _sector_confirm(ticker: str) -> Dict[str, Any]:
@@ -731,7 +756,7 @@ def _swing_snapshot(
     event_date = None
     if chain is not None and not chain.empty and not partial:
         try:
-            event_date = legs.get("earnings_date")
+            event_date = _upcoming(legs.get("earnings_date"))
         except Exception:                                         # noqa: BLE001
             event_date = None
         if not event_date:
@@ -957,7 +982,7 @@ def _swing_snapshot(
     # matters next" without it would be missing the obvious answer. Cached by
     # the provider and best-effort, like the calendar.
     try:
-        payload["next_earnings_date"] = legs.get("earnings_date")
+        payload["next_earnings_date"] = _upcoming(legs.get("earnings_date"))
     except Exception as exc:
         logging.getLogger("uvicorn.error").warning(
             "next earnings date unavailable for %s: %s", ticker, exc)
