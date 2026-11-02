@@ -3,6 +3,11 @@
 Written in Phase 11 (directive 11, sections 11 and 12), 2026-10-30, on branch `post-demo-ultra`. Nothing was pushed or
 deployed.
 
+**Deployed on 2026-11-01.** The owner asked in chat to "push all new changes and make them live". This branch went to
+production that day, merged onto live main `8e2cbf4` (WaveTrend and the report-date hotfix) as `23b435a` on branch
+`release-2026-11-01`. The checks section 17 asks for before production were not done first. The decision below stands,
+and those checks remain open.
+
 ## Decision: NOT READY: BLOCKING ISSUES REMAIN
 
 The terminal is simpler, more reliable and more accurate than the build the investors saw. Every step of the demo
