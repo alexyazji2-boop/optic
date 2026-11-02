@@ -16,10 +16,11 @@ figure is a gap in the evidence, not evidence against the company.
 
 from __future__ import annotations
 
-from statistics import mean, median, pstdev
+from statistics import mean, median
 from typing import Any, Dict, List, Optional, Tuple
 
 from . import policy as policy_mod
+from . import words
 
 LETTERS = [(3.5, "A"), (2.75, "B"), (2.0, "C"), (1.25, "D"), (-1.0, "F")]
 
@@ -940,8 +941,8 @@ def conviction(quality: Dict[str, Any], val: Dict[str, Any], chart: Dict[str, An
         label = "Weak Structure" if chart.get("state") == "broken" else "Neutral"
         applied.append(policy_mod.describe("quality_cap_grade", values))
         return {"label": label, "rules": applied,
-                "why": "Business quality grades {}, below {}, which caps conviction at Neutral under this "
-                       "framework's policy{}.".format(
+                "why": "Business quality grades {}, below {}, which holds the long-term reading at neutral under "
+                       "this framework's policy{}.".format(
                            g, cap, "; the long-term trend is also broken" if label == "Weak Structure" else "")}
     # Quality at or above the cap grade.
     if chart.get("state") == "broken":
@@ -950,13 +951,15 @@ def conviction(quality: Dict[str, Any], val: Dict[str, Any], chart: Dict[str, An
                        "not by itself a failed business thesis; the next results decide which it is.".format(g)}
     if vlabel is None:
         label = "Constructive"
-        why = ("Business quality grades {}; valuation could not be graded, so conviction stops at "
-               "Constructive.".format(g))
+        why = ("Business quality grades {}; valuation could not be graded, so the long-term reading stops "
+               "at positive.".format(g))
     elif vlabel in ("Attractive", "Fair"):
         label = "High Conviction" if g == "A" else "Constructive"
-        why = "Business quality {} and {} {} valuation{}.".format(
-            g, "an" if vlabel.lower()[0] in "aeiou" else "a", vlabel.lower(),
-            "" if g == "A" else "; High Conviction needs an A")
+        # The reader's words, not the labels: "an attractive valuation" and "High Conviction needs an A"
+        # read as an endorsement (advice policy, 2026-10-29).
+        why = "Business quality {}, and the valuation rules grade the price {}{}.".format(
+            g, words.valuation(vlabel).lower(),
+            "" if g == "A" else "; the strongest reading needs a business grade of A")
     elif vlabel == "Full":
         label = "Constructive" if g == "A" else "Neutral"
         why = "Business quality {} at a full valuation: the price already assumes much of the quality.".format(g)
@@ -965,7 +968,7 @@ def conviction(quality: Dict[str, Any], val: Dict[str, Any], chart: Dict[str, An
         why = "Business quality {} but a stretched valuation: a good business at a price that leaves little room.".format(g)
     if chart.get("state") == "damaged" and label == "High Conviction":
         label = "Constructive"
-        why += " The intermediate trend is in a pullback, so this stops at Constructive until it repairs."
+        why += " The intermediate trend is in a pullback, so the reading stops at positive until it repairs."
     return {"label": label, "rules": applied, "why": why}
 
 
@@ -975,8 +978,8 @@ def accumulation_zones(lt: Dict[str, Any], quality: Dict[str, Any], val: Dict[st
     at all. Each zone says what it is and what would have to stay true."""
     if conv.get("label") not in ("High Conviction", "Constructive"):
         return {"offered": False,
-                "reason": "No accumulation zones: conviction is {}, and zones are offered only at Constructive "
-                          "or above.".format(conv.get("label"))}
+                "reason": "No price levels marked: the long-term reading is {}, and levels are marked only when "
+                          "it is positive or stronger.".format(words.conviction(conv.get("label")))}
     price = _v((lt or {}).get("price"))
     zones: List[Dict[str, Any]] = []
     trend = (lt or {}).get("long_trend") or {}
@@ -1001,10 +1004,10 @@ def accumulation_zones(lt: Dict[str, Any], quality: Dict[str, Any], val: Dict[st
         return {"offered": False, "reason": "No support level or value estimate below the price within 40%."}
     weakest = quality.get("weakest")
     return {"offered": True, "zones": zones,
-            "condition": ("Zones are conditional: they are levels to reassess at, if the business evidence "
-                          "still holds when price gets there (the next results confirming the {} measure "
-                          "has not deteriorated). They are not targets, and no allocation is implied "
-                          "without your portfolio's context.".format(
+            "condition": ("Levels the long-term model marks from price history and its value estimates, read "
+                          "again only if the business evidence still holds when price gets there (the next "
+                          "results confirming the {} measure has not deteriorated). They are not targets or "
+                          "prices to buy at, and Optic does not say whether or how much to own.".format(
                               next((c["label"].lower() for c in quality.get("components") or []
                                     if c["id"] == weakest), "weakest")))}
 

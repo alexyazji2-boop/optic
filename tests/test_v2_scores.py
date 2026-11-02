@@ -33,7 +33,8 @@ def test_the_rules(tmp_path):
 
 def test_the_pages_use_them():
     uses = {
-        "pages/investing.js": "${scoreLine(s)}",
+        # the long-term score with its own model's bands since Phase 09 (BUG-064), as the Overview colours it
+        "pages/investing.js": "${scoreLine(s, { tone })}",
         "pages/options-panels.js": "${scoreLine(s)}",
         "pages/read.js": "scoreLine(s.score, { tone: toneBand(s.label) })",
         "pages/workspace.js": "${signedLine(m.risk_score)}",

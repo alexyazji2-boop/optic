@@ -14,7 +14,8 @@ import * as api from '../core/api.js';
 import * as store from '../core/store.js';
 import { num, clean, capFirst, ago, isNum, billingOff } from '../core/format.js';
 import * as RP from '../core/reports.js';
-import { stamp } from '../core/prefs.js';
+import { stamp, knowledge } from '../core/prefs.js';
+import { catalogue as levels, levelLabel } from '../ui/levelslider.js';
 import { skeleton } from '../ui/states.js';
 import { lineChart, mountCharts } from '../ui/chart.js';
 import { button as miloButton, provideContext } from '../ui/milo.js';
@@ -115,13 +116,14 @@ function acctState(a) {
   if (s === 'pending') return a.sync_note || 'Waiting for first data';
   return '';
 }
+const RECONNECT = ['expired', 'closed', 'error'];
 function connCard(c) {
   const [tone, label] = STATUS[c.status] || ['off', capFirst(c.status || 'unknown')];
-  const ent = (S.status || {}).entitlement || {}, armed = S.armed === c.id;
-  const reconnect = ['expired', 'closed', 'error'].includes(c.status) && ent.can_link, canSync = ent.can_link && !['expired', 'closed', 'paused', 'unsupported'].includes(c.status);
+  const st = S.status || {}, ent = st.entitlement || {}, armed = S.armed === c.id, needAgree = st.consent && !st.consent.accepted && !S.agreed;
+  const reconnect = RECONNECT.includes(c.status) && ent.can_link, canSync = ent.can_link && !['expired', 'closed', 'paused', 'unsupported'].includes(c.status);
   return html`<div class="bk-conn"><div class="split"><p><b>${c.institution || 'Brokerage'}</b> ${tag(tone, label)}</p>
       <div class="cluster">${canSync ? html`<button type="button" class="btn btn-sm" data-v2-bk-sync="${c.id}" ${S.syncing === c.id ? 'disabled' : ''}>${S.syncing === c.id ? 'Syncing...' : 'Sync now'}</button>` : ''}
-        ${reconnect ? html`<button type="button" class="btn btn-sm btn-primary" data-v2-bk-reconnect="${c.id}">Reconnect</button>` : ''}
+        ${reconnect ? html`<button type="button" class="btn btn-sm btn-primary" data-v2-bk-reconnect="${c.id}" ${needAgree ? 'disabled aria-disabled="true"' : ''}>Reconnect</button>` : ''}
         ${armed ? html`<button type="button" class="btn btn-sm btn-danger" data-v2-bk-disconnect="${c.id}" data-v2-confirm="1">Disconnect and delete</button><button type="button" class="btn btn-sm" data-v2-bk-disarm>Keep</button>` : html`<button type="button" class="btn btn-sm" data-v2-bk-disconnect="${c.id}">Disconnect</button>`}</div></div>
     <p class="asof">Last successful sync: ${when(c.last_sync_at)}${c.status_reason ? `. ${c.status_reason}` : ''}${armed ? '. Disconnecting removes it at the provider and deletes Optic\'s copy of its data now.' : ''}</p>
     <ul class="bk-accts">${(c.accounts || []).map((a) => (S.renaming === a.id ? html`<li class="bk-renaming"><label class="field field-sm"><span class="sr">Name for ${a.broker_name || a.name || 'Account'} ${a.number_mask || ''}</span><input maxlength="40" value="${a.nickname || ''}" placeholder="${a.broker_name || a.name || 'Account'}" autocomplete="off" data-v2-bk-rename-input="${a.id}"></label>
@@ -135,12 +137,12 @@ function connections() {
   const canAdd = ent.can_link && active.length < (ent.max_connections || 0), needAgree = st.consent && !st.consent.accepted && !S.agreed;
   return html`${st.paused_at ? html`<section class="section"><h2 class="t-h2">Syncing is paused</h2><p>Your paid plan ended, so these accounts stopped updating on ${new Date(st.paused_at).toLocaleDateString()}. What you see is the last sync. ${st.provider_closed_at ? 'The connection has been closed at the provider; reconnect after upgrading to resume.' : 'Resubscribe within 7 days to resume where you left off. After 7 days the connection is closed at the provider, and after 30 days Optic deletes its copy.'} You can disconnect or delete everything now on any plan.</p><button type="button" class="btn" data-v2-bill="checkout">Resume with Pro</button></section>` : ''}
     <section class="section ${linked() ? '' : 'first'}" aria-labelledby="bc-h"><div class="section-head"><h2 class="t-h2" id="bc-h">Connections</h2>${canAdd ? html`<button type="button" class="btn btn-primary" data-v2-bk-connect ${needAgree ? 'disabled aria-disabled="true"' : ''}>Connect a brokerage</button>` : ''}</div>
-      ${ent.can_link && canAdd ? consent(st.consent || {}) : ''}
+      ${ent.can_link && (canAdd || conns.some((c) => RECONNECT.includes(c.status))) ? consent(st.consent || {}) : ''}
       <p class="section-sub">${ent.can_link ? `Your plan links up to ${ent.max_connections} connection${ent.max_connections === 1 ? '' : 's'} and ${ent.max_accounts} accounts. Accounts sync on their own once a day; Sync now is limited to ${ent.manual_syncs_per_day} a day.` : 'Linking and syncing are part of the paid plan. Your stored data stays until you delete it or the retention period ends.'}</p>
       ${conns.length ? conns.map(connCard) : html`<p class="quiet">Nothing linked yet. Connect a brokerage to see your holdings here.</p>`}
       ${conns.length ? '' : html`<p class="asof">After you finish at the provider, it brings you back to this page.</p>`}</section>
     ${permissions(st, !conns.length)}
-    ${conns.length ? html`<section class="section set-danger" aria-labelledby="bd-h"><h2 class="t-h2" id="bd-h">Delete all brokerage data</h2><p>Disconnects every brokerage at the provider and deletes everything Optic stored about them, including the encryption key, so backups cannot be read either. Your Optic account stays.</p>
+    ${conns.length ? html`<section class="section set-danger" aria-labelledby="bd-h"><h2 class="t-h2" id="bd-h">Delete all brokerage data</h2><p>Disconnects every brokerage at the provider and deletes the accounts, holdings, history, alerts and briefings Optic stored about them, with the encryption key, so backups cannot be read either. Kept: your Optic account, your alert settings, the record that you agreed to the linking terms, and anything you saved yourself, such as a thesis or a Milo answer, which you delete where you saved it.</p>
       ${S.armed === 'all' ? html`<div class="cluster"><button type="button" class="btn btn-danger" data-v2-bk-delete="confirm">Yes, delete all brokerage data</button><button type="button" class="btn" data-v2-bk-disarm>Keep it</button></div>` : html`<button type="button" class="btn btn-danger" data-v2-bk-delete>Delete all brokerage data</button>`}</section>` : ''}`;
 }
 
@@ -211,6 +213,7 @@ function briefing() {
   if (!b) return html`<section class="section"><h2 class="t-h2">Briefing</h2><p class="t-muted" role="status">Measuring what moved...</p></section>`;
   if (b.error) return html`<section class="section"><h2 class="t-h2">Briefing</h2><p>${b.error}</p></section>`;
   const rows = ((b.today || {}).rows || []).slice(0, 5), w = b.written, earlier = b.written_earlier;
+  // a write-up is kept per figures and per knowledge level (Phase 05): one for the same figures at another level is said so
   return html`<section class="section" aria-labelledby="bb-h"><h2 class="t-h2" id="bb-h">Briefing</h2>
     <div class="grid2"><div><h3>Measured: what moved today ${src('market')}</h3>
         ${rows.length ? html`<div class="tscroll"><table class="t"><thead><tr><th scope="col">Holding</th><th scope="col">Today</th><th scope="col">Contribution</th></tr></thead><tbody>${rows.map((r) => html`<tr><td>${r.symbol}</td><td>${sPct(r.change_pct)}</td><td>${signedMoney(r.contribution, 'USD')}</td></tr>`)}</tbody></table></div>` : html`<p class="t-muted">No quotes to measure with just now.</p>`}</div>
@@ -218,9 +221,13 @@ function briefing() {
         ${(b.drivers || []).length ? b.drivers.map((x) => html`<div class="bk-driver"><p><b>${x.symbol}</b> ${sPct(x.change_pct)}</p>${(x.headlines || []).length ? html`<ul class="plain">${x.headlines.map(newsItem)}</ul>` : ''}${x.note ? html`<p class="asof">${clean(x.note)}</p>` : ''}</div>`) : html`<p class="t-muted">No large movers to look for headlines about.</p>`}
         ${(b.market_context || []).length ? html`<div class="bk-driver"><h4>Market context, not about one holding</h4><ul class="plain">${b.market_context.map(newsItem)}</ul></div>` : ''}
         <p class="asof">Only stories that name the company are listed under it. They are matched by when they were published, which is not evidence that they caused the move.</p></div></div>
-    ${w ? html`<div class="bk-written"><p><b>${w.headline}</b></p>${['what_changed', 'drivers', 'ahead', 'attention'].map((k) => (w[k] ? html`<p>${clean(w[k])}</p>` : ''))}<p class="asof">Written by Milo from the measured figures on this page, ${ago(w.written_at)}.</p></div>`
-      : html`<p class="cluster">${earlier ? html`<span class="t-muted">An earlier write-up (${ago(earlier.written_at)}) was from different figures.</span>` : ''}<button type="button" class="btn btn-milo" data-v2-bk-write ${S.writing ? 'disabled' : ''}>${S.writing ? 'Writing...' : 'Write it up'}</button><span class="t-muted">Uses one Milo message. The same figures are kept and not charged again.</span></p>`}</section>`;
+    ${w ? html`<div class="bk-written"><p><b>${w.headline}</b></p>${['what_changed', 'drivers', 'ahead', 'attention'].map((k) => (w[k] ? html`<p>${clean(w[k])}</p>` : ''))}<p class="asof">Written by Milo, Optic's AI model, from the measured figures on this page, ${ago(w.written_at)}.${levelName(w.level) ? ` Worded for ${levelName(w.level)}.` : ''} It describes your holdings; it does not say what to do with them.</p></div>`
+      : html`<p class="cluster">${earlier ? html`<span class="t-muted">An earlier write-up (${ago(earlier.written_at)}) ${!sameFigures(earlier, b) ? 'was from different figures' : levelName(earlier.level) && levelName(knowledge()) ? `was worded for ${levelName(earlier.level)}; this one would be for ${levelName(knowledge())}` : 'was worded for another level'}.</span>` : ''}<button type="button" class="btn btn-milo" data-v2-bk-write ${S.writing ? 'disabled' : ''}>${S.writing ? 'Writing...' : 'Write it up'}</button><span class="t-muted">Uses one Milo message. The same figures at the same level are kept and not charged again.</span></p>`}</section>`;
 }
+
+// the level a write-up was worded for, by its name in the server's catalogue, which loadBriefing waits for
+const levelName = (id) => levelLabel(id);
+const sameFigures = (earlier, b) => !!(earlier && b && b.facts_key && String(earlier.facts_key || '').startsWith(`${b.facts_key}:`));
 
 /* ---------------- holdings & exposure ---------------- */
 function holdings(d) {
@@ -228,7 +235,7 @@ function holdings(d) {
   if ((d.cash || []).length || (d.cash_equivalents || []).length) others.push(html`<section class="section"><h2 class="t-h2">Cash</h2>${(d.cash || []).map((c) => html`<p>${c.currency} ${money(c.amount, c.currency)}</p>`)}${(d.cash_equivalents || []).length ? html`<p class="asof">Includes ${d.cash_equivalents.map((c) => c.symbol || c.description).join(', ')}, counted once as cash because your broker's cash balance already includes ${d.cash_equivalents.length === 1 ? 'it' : 'them'}.</p>` : ''}</section>`);
   if ((d.unsupported || []).length) others.push(html`<section class="section"><h2 class="t-h2">Not counted</h2><ul class="plain">${d.unsupported.map((u) => html`<li><b>${u.symbol || u.description}</b> ${u.account || ''}: ${clean(u.reason || '')}</li>`)}</ul></section>`);
   return html`<section class="section first" aria-labelledby="bh-h"><h2 class="t-h2" id="bh-h">Holdings</h2>
-      <p class="section-sub">${src('broker')} quantity, price and cost from your broker at its last sync; ${src('market')} Optic's quote beside it; ${src('optic')} weights and unrealised gain.</p>
+      <p class="section-sub">${src('broker')} quantity, price and cost from your broker at its last sync; ${src('market')} Optic's quote beside it; ${src('optic')} weights and unrealised gain. A weight is the holding's share of long holdings: stocks, funds and long options, with cash left out.</p>
       <div class="tscroll"><table class="t bk-hold"><thead><tr><th scope="col">Holding</th><th scope="col">Accounts</th><th scope="col">Qty</th><th scope="col">Broker price</th><th scope="col">Quote now</th><th scope="col">Value</th><th scope="col">Weight</th><th scope="col">Cost basis</th><th scope="col">Unrealised</th></tr></thead>
         <tbody>${(d.holdings || []).length ? d.holdings.map((h) => { const q = (d.quotes || {})[String(h.symbol || '').toUpperCase()] || {};
           return html`<tr><td>${h.symbol ? html`<a href="#/${h.symbol}"><b>${h.symbol}</b></a>` : ''} <small class="t-muted">${h.description || ''}${h.sector ? `, ${h.sector}${h.industry ? `, ${h.industry}` : ''}` : ''}</small></td><td>${(h.accounts || []).join(', ')}</td><td>${qty(h.quantity)}</td><td>${money(h.price, h.currency)}</td>
@@ -255,10 +262,21 @@ function exposure(e, d) {
     ${(e.etfs || []).length ? html`<h3>Funds</h3><ul class="plain">${e.etfs.map((f) => html`<li><b>${f.symbol}</b> ${pct(f.share_pct)} of your portfolio: ${f.status === 'looked_through' ? `holdings as of ${day(f.report_date)} from ${f.source || 'SEC Form N-PORT'}, ${pct(f.coverage_pct)} of the fund itemised${f.stale ? ' (an older copy: SEC could not be reached)' : ''}` : clean(f.reason || status[f.status] || 'not looked through')}${f.leveraged || f.inverse ? html` ${tag('warn', 'Leveraged or inverse')}` : ''}</li>`)}</ul>` : ''}
     ${limits(e.limitations)}</section>`;
 }
+// An assessment's inputs and weights as a reader reads them: names in words, figures as given, a list one level deep,
+// anything deeper on one line. They were printed as JSON ("Inputs: {"stocks_assessed":3,...}", BUG-190, Phase 11).
+const inWords = (k) => String(k).replace(/_pct$/, ' %').replace(/_/g, ' ');
+const inValue = (v) => (v === null || v === undefined ? 'none' : typeof v === 'boolean' ? (v ? 'yes' : 'no') : isNum(v) ? String(Math.round(v * 100) / 100) : String(v));
+const isLeaf = (v) => v === null || typeof v !== 'object';
+const inLine = (v) => (isLeaf(v) ? inValue(v) : Array.isArray(v) ? v.map(inLine).join(', ')
+  : Object.entries(v).map(([k, x]) => (isLeaf(x) ? `${inWords(k)} ${inValue(x)}` : `${inWords(k)} (${inLine(x)})`)).join(', '));
+function readable(v, depth = 0) {
+  if (isLeaf(v)) return inValue(v);
+  if (Array.isArray(v)) return v.every(isLeaf) ? v.map(inValue).join(', ') : html`<ul class="plain">${v.slice(0, 25).map((x) => html`<li>${depth >= 1 ? inLine(x) : readable(x, depth + 1)}</li>`)}</ul>`;
+  return html`<ul class="plain">${Object.entries(v).map(([k, x]) => html`<li>${inWords(k)}: ${depth >= 1 ? inLine(x) : readable(x, depth + 1)}</li>`)}</ul>`;
+}
 function scorecard(s) {
   if (!s) return html`<section class="section"><h2 class="t-h2">Optic scorecard</h2><p class="t-muted" role="status">Calculating the five assessments...</p></section>`;
   if (s.error) return html`<section class="section"><h2 class="t-h2">Optic scorecard</h2><p>${s.error}</p></section>`;
-  const txt = (v) => (typeof v === 'string' ? v : Array.isArray(v) ? v.join(', ') : JSON.stringify(v));
   return html`<section class="section" aria-labelledby="bs-h"><h2 class="t-h2" id="bs-h">Optic scorecard</h2>
     <p class="section-sub">${src('optic')} Five separate assessments of the portfolio as it stands, each with what it is built from and what it could not assess. There is no overall score.</p>
     <div class="bk-scores">${(s.assessments || []).length ? s.assessments.map((a) => { const scored = isNum(a.score);
@@ -267,7 +285,7 @@ function scorecard(s) {
       return html`<div class="bk-score"><div class="split"><p class="t-label">${a.label}</p>${scored ? html`<b class="bk-score-n">${Math.round(a.score)}</b>` : tag('off', 'Not scored')}</div><p class="bk-level">${a.level || ''}</p>
         ${scored ? html`<span class="bk-bar-t" aria-hidden="true"><span class="bk-bar-f" style="width:${Math.max(2, Math.min(100, a.score))}%"></span></span>` : ''}<p>${clean(a.summary || '')}</p>
         <p class="asof">Coverage ${pct(a.coverage_pct, 0)} of value.${drivers ? ` Driven by ${drivers}.` : ''}</p>${missing ? html`<p class="asof">Not assessed: ${missing}.</p>` : ''}
-        <details class="more-inline"><summary>Inputs and method</summary><p>${clean(a.method || '')}</p>${a.weights ? html`<p>Weights: ${txt(a.weights)}</p>` : ''}${a.inputs ? html`<p>Inputs: ${txt(a.inputs)}</p>` : ''}<p class="asof">${a.version || s.version || ''}</p></details></div>`; }) : html`<p>No assessments could be made.</p>`}</div>
+        <details class="more-inline"><summary>Inputs and method</summary><p>${clean(a.method || '')}</p>${a.weights ? html`<p>Weights:</p>${readable(a.weights)}` : ''}${a.inputs ? html`<p>Inputs:</p>${readable(a.inputs)}` : ''}<p class="asof">${a.version || s.version || ''}</p></details></div>`; }) : html`<p>No assessments could be made.</p>`}</div>
     <p class="asof">${clean(s.disclaimer || 'These describe the portfolio today. They are not forecasts of return and not validated probabilities.')}</p></section>`;
 }
 function optionsRisk(o) {
@@ -347,7 +365,7 @@ function eventRows(list, compact) {
   if (!list || !list.length) return html`<p class="t-muted">Nothing scheduled in the window for what you hold.</p>`;
   const kind = { earnings: 'Earnings', ex_dividend: 'Ex-dividend', option_expiry: 'Option expiry' };
   return html`<ul class="bk-events">${list.map((e) => html`<li><span class="bk-when">${day(e.date)}<small class="t-muted">${e.days_away === 0 ? 'today' : `in ${e.days_away} day${e.days_away === 1 ? '' : 's'}`}</small></span>
-    <span><b>${e.symbol}</b> ${kind[e.kind] || e.kind} ${e.kind === 'earnings' ? tag(e.confirmed ? 'on' : 'warn', e.confirmed ? 'Confirmed' : 'Estimated') : ''} ${RP.habitLine(e) ? html`<small class="t-muted">${RP.habitLine(e)}</small>` : ''} ${e.weight_pct ? html`<small class="t-muted">${pct(e.weight_pct)} of portfolio</small>` : ''} ${!compact && e.note ? html`<small class="t-muted">${clean(e.note)}</small>` : ''}</span>
+    <span><b>${e.symbol}</b> ${kind[e.kind] || e.kind} ${e.kind === 'earnings' ? tag(e.confirmed ? 'on' : 'warn', e.confirmed ? 'Confirmed' : 'Estimated') : ''} ${RP.habitLine(e) ? html`<small class="t-muted">${RP.habitLine(e)}</small>` : ''} ${e.weight_pct ? html`<small class="t-muted">${pct(e.weight_pct)} of long holdings</small>` : ''} ${!compact && e.note ? html`<small class="t-muted">${clean(e.note)}</small>` : ''}</span>
     ${!compact && e.links ? html`<span class="cluster">${e.links.earnings ? html`<a class="btn btn-sm" href="${v2href(e.links.earnings)}">Earnings analysis</a>` : ''}${e.links.overview ? html`<a class="btn btn-sm" href="${v2href(e.links.overview)}">Dossier</a>` : ''}${e.links.options ? html`<a class="btn btn-sm" href="${v2href(e.links.options)}">Options</a>` : ''}</span>` : ''}</li>`)}</ul>`;
 }
 // the server writes classic addresses ("#/AAPL/earnings"); they are the same in v2
@@ -372,7 +390,7 @@ function theses(th) {
     <div class="cluster"><button type="submit" class="btn btn-primary">Save thesis</button><button type="button" class="btn" data-v2-bk-thesis-cancel>Cancel</button></div></form>`;
   return html`<section class="section" aria-labelledby="bt-h"><h2 class="t-h2" id="bt-h">Your theses</h2>
     <p class="section-sub">Why you own each position, in your own words, and what has happened since. Shared with the Dossier's thesis for the same symbol.</p>
-    ${list.length ? list.map((t) => (W.thesisEdit === t.symbol ? form(t) : html`<div class="bk-thesis"><div class="split"><h3>${t.symbol} ${t.held ? html`<small class="t-muted">${pct(t.weight_pct)} of portfolio</small>` : tag('off', 'Not held')}</h3>
+    ${list.length ? list.map((t) => (W.thesisEdit === t.symbol ? form(t) : html`<div class="bk-thesis"><div class="split"><h3>${t.symbol} ${t.held ? html`<small class="t-muted">${pct(t.weight_pct)} of long holdings</small>` : tag('off', 'Not held')}</h3>
         <span class="cluster"><button type="button" class="btn btn-sm" data-v2-bk-thesis-edit="${t.symbol}">Edit</button>${W.thesisArmed === t.symbol ? html`<button type="button" class="btn btn-sm btn-danger" data-v2-bk-thesis-del="${t.symbol}" data-v2-confirm="1">Delete thesis</button>` : html`<button type="button" class="btn btn-sm" data-v2-bk-thesis-del="${t.symbol}">Delete</button>`}</span></div>
       <dl class="reads-dl">${THESIS_FIELDS.filter(([k]) => t[k]).map(([k, , label]) => html`<div><dt>${label}</dt><dd>${t[k]}</dd></div>`)}</dl>
       <p class="asof">Saved ${t.saved_at ? ago(t.saved_at) : 'n/a'}. Your words; Milo can comment on them but never changes them.</p>
@@ -458,7 +476,8 @@ async function loadBriefing() {
   const scope = W.scopeKey;
   if (W.extra.briefing || W.loading.briefing === scope) return;
   W.loading.briefing = scope;
-  let r; try { r = await api.get(`/api/brokerage/workspace/briefing${query()}`, { force: true, timeout: 60000 }); } catch (e) { r = { error: api.explain(e, 'The briefing') }; }
+  // with the level names (ui/levelslider.js), so the first paint can say who a write-up was worded for
+  let r; try { [r] = await Promise.all([api.get(`/api/brokerage/workspace/briefing${query({ level: knowledge() })}`, { force: true, timeout: 60000 }), levels()]); } catch (e) { r = { error: api.explain(e, 'The briefing') }; }
   if (W.scopeKey !== scope) return;
   W.loading.briefing = null; W.extra.briefing = r;
   if (live && S.section === 'overview') paint();
@@ -529,7 +548,7 @@ function wire(main) {
     if ((b = t('[data-v2-bk-period]'))) { W.period = b.dataset.v2BkPeriod; delete W.data.performance; paint(); loadSection(false); return; }
     if (t('[data-v2-bk-write]')) {
       S.writing = true; paint();
-      const r = await act(() => api.post('/api/brokerage/workspace/briefing/written', { accounts: scopeIds() }, { timeout: 90000 }), null, 'The briefing could not be written.');
+      const r = await act(() => api.post('/api/brokerage/workspace/briefing/written', { accounts: scopeIds(), level: knowledge() }, { timeout: 90000 }), null, 'The briefing could not be written.');
       S.writing = false; if (r && W.extra.briefing) W.extra.briefing.written = r.written; paint(); return;
     }
     if ((b = t('[data-v2-bill]'))) {
@@ -557,11 +576,13 @@ function wire(main) {
     }
     if ((b = t('[data-v2-bk-disconnect]'))) {
       if (!b.dataset.v2Confirm) { S.armed = b.dataset.v2BkDisconnect; paint(`[data-v2-bk-disconnect="${CSS.escape(S.armed)}"]`); return; }
+      b.disabled = true;
       await act(() => api.post(`/api/brokerage/connections/${encodeURIComponent(b.dataset.v2BkDisconnect)}/disconnect`, {}), (x) => (x.provider_removal_queued ? 'Disconnected and deleted from Optic. The provider did not answer, so Optic will keep asking it to remove the connection.' : 'Disconnected. Optic\'s copy of that data is deleted.'), 'Could not disconnect.');
       S.armed = null; W.scopeKey = null; loadAll(true); return;
     }
     if ((b = t('[data-v2-bk-delete]'))) {
       if (b.dataset.v2BkDelete !== 'confirm') { S.armed = 'all'; paint('[data-v2-bk-delete="confirm"]'); return; }
+      b.disabled = true;
       await act(() => api.post('/api/brokerage/delete-data', {}), 'All brokerage data deleted.', 'Could not delete.');
       S.armed = null; W.scopeKey = null; loadAll(true); return;
     }

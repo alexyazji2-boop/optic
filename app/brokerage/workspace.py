@@ -25,7 +25,7 @@ import json
 import logging
 import threading
 import time
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, timezone
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from . import alerts as alerts_mod

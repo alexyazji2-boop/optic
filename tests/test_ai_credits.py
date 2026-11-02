@@ -230,10 +230,10 @@ def _desk():
 def test_the_desk_is_written_once_and_a_deploy_does_not_pay_for_it(claude, monkeypatch):
     claude.default = _msg(DESK)
     monkeypatch.setattr(main, "_DESK_PROSE", {})
-    first = main._desk_prose(_desk())
+    first = main._desk_prose(_desk(), write=True)
     assert first["lead"] == ["Futures are flat."]
     monkeypatch.setattr(main, "_DESK_PROSE", {})        # a new process
-    again = main._desk_prose(_desk())
+    again = main._desk_prose(_desk(), write=True)
     assert len(claude.asked) == 1
     assert again["lead"] == first["lead"] and again["tape_marks"] == first["tape_marks"]
     assert again["written_at"] == first["written_at"], "what it was written against stands"
@@ -242,29 +242,30 @@ def test_the_desk_is_written_once_and_a_deploy_does_not_pay_for_it(claude, monke
 def test_a_desk_that_fails_is_tried_once_more_an_hour_later(claude, monkeypatch, clock):
     claude.default = _msg("no JSON here")
     monkeypatch.setattr(main, "_DESK_PROSE", {})
-    assert main._desk_prose(_desk()) is None
+    assert main._desk_prose(_desk(), write=True) is None
     clock[0] += 30 * 60
-    assert main._desk_prose(_desk()) is None
+    assert main._desk_prose(_desk(), write=True) is None
     monkeypatch.setattr(main, "_DESK_PROSE", {})        # a deploy does not retry it
-    assert main._desk_prose(_desk()) is None
+    assert main._desk_prose(_desk(), write=True) is None
     assert len(claude.asked) == 1
     clock[0] += 31 * 60
-    main._desk_prose(_desk())
+    main._desk_prose(_desk(), write=True)
     clock[0] += 3 * 3600
-    main._desk_prose(_desk())
+    main._desk_prose(_desk(), write=True)
     assert len(claude.asked) == 2
 
 
 def test_two_readers_on_a_new_day_pay_for_one_desk(claude, monkeypatch):
     claude.default, claude.delay = _msg(DESK), 0.3
     monkeypatch.setattr(main, "_DESK_PROSE", {})
-    threads = [threading.Thread(target=main._desk_prose, args=(_desk(),)) for _ in range(3)]
+    # writers arriving together (the keep-warm job in two processes, say); a reader's request writes nothing (BUG-032)
+    threads = [threading.Thread(target=main._desk_prose, args=(_desk(),), kwargs={"write": True}) for _ in range(3)]
     for t in threads:
         t.start()
     for t in threads:
         t.join()
     assert len(claude.asked) == 1
-    assert main._desk_prose(_desk())["lead"] == ["Futures are flat."]
+    assert main._desk_prose(_desk(), write=True)["lead"] == ["Futures are flat."]
 
 
 def test_of_requests_arriving_together_exactly_one_may_write():
@@ -458,7 +459,7 @@ def test_every_writer_asks_through_the_ledger():
 
 def test_the_price_list_prices_both_models_the_terminal_calls():
     assert ai_store.price_of(ai.MODEL) == (4.00, 5.00, 0.20, 20.00)
-    assert ai_store.price_of(ai.PULSE_MODEL) == (2.00, 2.50, 0.20, 10.00)
+    assert ai_store.price_of(ai.PULSE_MODEL) == (2.00, 2.50, 0.10, 10.00)   # Sonnet 5.5: 0.05x on a hit, pricing page 2026-10-30
     assert ai_store.price_of("claude-haiku-4-5-20251001") == (1.00, 1.25, 0.10, 5.00)
     assert ai_store.price_of("claude-opus-5-20260101") == (5.00, 6.25, 0.50, 25.00)
     assert ai_store.price_of("some-other-model") is None

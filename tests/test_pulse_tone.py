@@ -181,7 +181,8 @@ def test_the_tone_pass_did_not_drop_the_data_limits():
     """Delayed prices, the flow proxy and the dealer assumption are the three
     facts that make every number on screen an approximation. They were in the
     prompt before the rewrite and they have to be in it after."""
-    assert "delayed roughly 15 minutes" in SYSTEM
+    # "up to 15 minutes" since Phase 09: the feed's quotes run from real time to 15 minutes behind (BUG-098)
+    assert "delayed up to 15 minutes" in SYSTEM
     assert "proxy" in SYSTEM
     # The dealer assumption, stated the way gex.py computes it: long the calls
     # customers sold, short the puts they bought. It used to say the reverse
@@ -259,19 +260,23 @@ def test_the_registers_moved_to_the_knowledge_ladder():
     protecting, asserted where the behaviour lives.
 
     The one that matters: a plainer register may not buy its plainness with the
-    facts. Simple is the rung most able to lose a caveat, because softening is
-    what "explain it simply" sounds like it licenses."""
+    facts. New to Markets (Simple before Phase 05) is the rung most able to
+    lose a caveat, because softening is what "explain it simply" sounds like it
+    licenses. Every rung also ends with the shared invariant."""
     from app import knowledge
-    simple = knowledge.MODES["simple"]["prompt"].lower()
+    simple = knowledge.MODES["new"]["prompt"].lower()
     assert "never state a number you do not have" in simple
     assert "delayed data and inferred flow" in simple
-    assert "not that the facts are softer" in simple
+    assert "plain words, not softer facts" in simple
+    for mode in knowledge.ORDER:
+        assert knowledge.prompt_for(mode).endswith(knowledge.INVARIANT), mode
 
 
 def test_every_rung_still_explains_its_own_terms_or_says_why_not():
-    """The middle rungs gloss as they go; Professional deliberately does not,
-    and has to say what it keeps instead. A rung that dropped both the glossing
-    and the labelling would read as confident about an inference."""
+    """The middle rungs gloss as they go; Expert (Professional before Phase 05)
+    deliberately does not, and has to say what it keeps instead. A rung that
+    dropped both the glossing and the labelling would read as confident about
+    an inference."""
     from app import knowledge
-    pro = knowledge.MODES["professional"]["prompt"].lower()
+    pro = knowledge.MODES["expert"]["prompt"].lower()
     assert "proxy" in pro and "measured" in pro and "inferred" in pro

@@ -110,6 +110,21 @@ function bkwQuery(extra) {
   return s ? `?${s}` : '';
 }
 
+/* The written briefing is worded for the reader's knowledge level and kept per
+ * figures and per level (post-demo Phase 05), as in v2's pages/brokerage.js:
+ * the level is the one both apps share (components/knowledge.js), and a
+ * write-up says which level it was worded for. */
+function bkwLevel() {
+  return window.OpticKnowledge ? window.OpticKnowledge.mode() : 'intermediate';
+}
+function bkwLevelName(id) {
+  const found = window.OpticKnowledge ? window.OpticKnowledge.modes().filter((m) => m.id === id)[0] : null;
+  return found ? found.label : '';
+}
+function bkwSameFigures(earlier, b) {
+  return !!(earlier && b && b.facts_key && String(earlier.facts_key || '').startsWith(`${b.facts_key}:`));
+}
+
 function bkwPct(v, d = 1, signed = false) {
   if (v === null || v === undefined || !Number.isFinite(Number(v))) return 'n/a';
   const n = Number(v);
@@ -323,7 +338,7 @@ async function bkwLoadBriefing() {
   const scope = BKW.scopeKey;
   if (BKW.extra.briefing || BKW.loading.briefing === scope) return;
   BKW.loading.briefing = scope;
-  const r = await brokerFetch('GET', '/api/brokerage/workspace/briefing' + bkwQuery());
+  const r = await brokerFetch('GET', '/api/brokerage/workspace/briefing' + bkwQuery({ level: bkwLevel() }));
   if (BKW.scopeKey !== scope) return;
   BKW.loading.briefing = null;
   BKW.extra.briefing = r.ok ? r.data : { error: (r.data && r.data.detail) || 'The briefing could not be built.' };
@@ -415,9 +430,9 @@ function bkwBriefingHTML() {
   const w = b.written;
   const earlier = b.written_earlier;
   const written = w ? `<div class="bkw-written"><p><b>${esc(w.headline)}</b></p>${['what_changed', 'drivers', 'ahead', 'attention'].map((k) => w[k] ? `<p>${esc(w[k])}</p>` : '').join('')}
-      <p class="set-row-note">Written by Milo from the measured figures on this page, ${esc(agoWords(w.written_at))}.</p></div>`
-    : `<p class="set-row-note">${earlier ? `An earlier write-up (${esc(agoWords(earlier.written_at))}) was from different figures. ` : ''}
-      <button type="button" class="btn" data-bkw-write>Write it up</button> Uses one Milo message. The same figures are kept and not charged again.</p>`;
+      <p class="set-row-note">Written by Milo, Optic's AI model, from the measured figures on this page, ${esc(agoWords(w.written_at))}.${bkwLevelName(w.level) ? ` Worded for ${esc(bkwLevelName(w.level))}.` : ''} It describes your holdings; it does not say what to do with them.</p></div>`
+    : `<p class="set-row-note">${earlier ? `An earlier write-up (${esc(agoWords(earlier.written_at))}) ${!bkwSameFigures(earlier, b) ? 'was from different figures' : bkwLevelName(earlier.level) && bkwLevelName(bkwLevel()) ? `was worded for ${esc(bkwLevelName(earlier.level))}; this one would be for ${esc(bkwLevelName(bkwLevel()))}` : 'was worded for another level'}. ` : ''}
+      <button type="button" class="btn" data-bkw-write>Write it up</button> Uses one Milo message. The same figures at the same level are kept and not charged again.</p>`;
   return `<div class="panel span2"><h2>${hg('Briefing')}</h2>
     <div class="grid c2 bkw-grid"><div>
       <h3 class="bkw-h3">Measured: what moved today ${bkwSrc('market')}</h3>
@@ -791,7 +806,7 @@ async function bkwClick(evt) {
   if (t.matches('[data-bkw-period]')) { BKW.period = t.dataset.bkwPeriod; delete BKW.data.performance; bkwPaintPanel(); bkWorkspaceLoad(false); return; }
   if (t.matches('[data-bkw-write]')) {
     t.disabled = true;
-    const r = await brokerFetch('POST', '/api/brokerage/workspace/briefing/written', { accounts: bkScopeIds() });
+    const r = await brokerFetch('POST', '/api/brokerage/workspace/briefing/written', { accounts: bkScopeIds(), level: bkwLevel() });
     t.disabled = false;
     if (!r.ok) { bkwToast((r.data && r.data.detail) || 'The briefing could not be written.', 'bad'); return; }
     if (BKW.extra.briefing) BKW.extra.briefing.written = r.data.written;

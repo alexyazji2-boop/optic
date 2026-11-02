@@ -177,8 +177,6 @@
 .ovx-step:hover span:first-child { text-decoration: underline; } .ovx-step .t-muted { flex: none; font-size: var(--t-sm); }
 .ovx-steps + .btn-milo { margin-top: 10px; }
 .ovx-drv li { display: grid; gap: 2px; padding: 8px 0; border-bottom: 1px solid var(--c-line-2); }
-.ovx-block { padding: 14px 0 18px; border-top: 1px solid var(--c-line-2); } .ovx-block:first-of-type { border-top: 0; padding-top: 4px; }
-.ovx-block > h3 { margin: 0 0 6px; }
 .pl-lede { margin: 6px 0 10px; padding-left: 12px; border-left: 2px solid var(--c-line); font-size: var(--t-lead); color: var(--c-ink); max-width: 70ch; }
 .pl-lede.is-bullish { border-left-color: var(--c-pos); } .pl-lede.is-bearish { border-left-color: var(--c-neg); }
 .pl-cat { margin: 0 0 8px; color: var(--c-ink-2); max-width: 75ch; }
@@ -682,6 +680,10 @@ table.scen td { font-weight: 600; }
 .dhead.bar .name { font: 400 var(--t-base)/1.3 var(--f-sans); gap: 8px; margin: 0; }
 .dhead.bar .name .tick { font-size: var(--t-base); }
 .dhead.bar .dh-price { display: flex; align-items: baseline; gap: 4px 10px; margin: 0; flex-wrap: wrap; flex: 1 1 auto; min-width: 0; }
+/* Where the header wraps, the price has a row of its own whether it has arrived or not: the short loading placeholder
+   fitted beside the ticker, so the name and price arriving added two rows and pushed the page down about 70 px (BUG-031) */
+@media (max-width: 1100px) { .dhead.bar .dh-price { flex-basis: 100%; } }
+html.eff-1100 .dhead.bar .dh-price { flex-basis: 100%; }
 /* the actions keep their row; the price's time wraps inside its own space */
 @media (min-width: 861px) { .dhead.bar { flex-wrap: nowrap; } .dhead.bar .acts { flex: none; } }
 /* 861 to 1100 px of page (a 1024 window, or beside a docked Milo): one row squeezed the name and the price into
@@ -1205,7 +1207,8 @@ html.ch-max .ch-side, html.ch-max .ch-wrail { max-height: min(calc(100vh - 16px)
 .tl-bar { grid-column: 2; height: 4px; width: var(--w); background: var(--c-gold); border-radius: var(--r-pill); }
 /* Analysts */
 .an-filters { gap: 10px 16px; margin: 12px 0 16px; }
-.rt { font: 600 var(--t-sm)/1 var(--f-label); } .rt-buy { color: var(--c-pos); } .rt-sell { color: var(--c-neg); } .rt-hold { color: var(--c-ink-2); }
+/* a firm's rating is its opinion, not a direction of anything: one ink for Buy, Hold and Sell (BUG-077); the Action column carries the change */
+.rt { font: 600 var(--t-sm)/1 var(--f-label); color: var(--c-ink); }
 /* Instrument */
 #inst-chart { margin-top: 10px; }
 @media (max-width: 860px) {
@@ -1485,13 +1488,6 @@ tr.sh-notes td { padding-top: 0; font-size: var(--t-md); color: var(--c-ink-3); 
 .ws-grip { flex: none; width: 32px; height: 32px; border: 0; border-radius: var(--r-sm); background: none; color: var(--c-ink-3); cursor: grab; display: inline-grid; place-items: center; touch-action: none; }
 .ws-grip svg, .ws-hbtn svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; }
 .ws-grip:hover { background: var(--c-sunk); color: var(--c-ink); }
-.ws-linkchip { display: inline-flex; align-items: center; gap: 4px; min-height: 24px; font: 600 var(--t-xs)/1 var(--f-label); padding: 3px 7px; border-radius: var(--r-xs); border: 1px solid var(--c-gold); background: none; color: var(--c-gold-ink); cursor: pointer; white-space: nowrap; }
-.ws-linkchip svg { width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 1.8; flex: none; }
-.ws-linkchip:hover { background: var(--c-sunk); }
-/* unlinked: the panel keeps its own ticker; quieter and dashed, so it reads as apart from the link */
-.ws-linkchip.is-kept { border-style: dashed; border-color: var(--c-line); color: var(--c-ink-2); }
-.ws-linkchip.is-hint { cursor: default; } .ws-linkchip.is-hint:hover { background: none; }
-@media (pointer: coarse) { .ws-head .ws-linkchip { min-height: 32px; } }
 .ws-hbtn { min-height: 28px; padding: 0 8px; border: 0; border-radius: var(--r-sm); background: none; color: var(--c-ink-3); font: 500 var(--t-xs)/1 var(--f-label); cursor: pointer; display: inline-flex; align-items: center; }
 .ws-hbtn:hover, .ws-hbtn[aria-expanded="true"] { background: var(--c-sunk); color: var(--c-ink); }
 html[data-milo="off"] .ws-ask { opacity: .55; }
@@ -1573,7 +1569,8 @@ html[data-milo="off"] .ws-ask { opacity: .55; }
 .ws-kv dd { margin: 4px 0 0; font: 600 var(--t-lead)/1.15 var(--f-sans); font-variant-numeric: tabular-nums; }
 .ws-kv small { display: block; margin-top: 3px; font: 400 var(--t-xs)/1.3 var(--f-sans); color: var(--c-ink-3); }
 
-/* sector heatmap: colour carries direction and size, the figure carries the value */
+/* sector heatmap: colour carries direction and size, the figure carries the value. The tint is at most 28% and is
+   scaled to a fixed size of move for the period, not to the day's largest, so a quiet day looks quiet (BUG-077). */
 .ws-heat { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 6px; }
 .ws-heat-t { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; min-height: 64px; padding: 8px 10px; border: 1px solid var(--c-line); border-radius: var(--r-md); text-align: left; cursor: pointer; color: var(--c-ink); font-size: var(--t-sm);
   background: color-mix(in srgb, var(--c-raised) calc(100% - var(--mix, 10%)), var(--hue, var(--c-ink-3))); }
@@ -1739,6 +1736,10 @@ ul.cal-react { display: flex; flex-wrap: wrap; gap: 4px 18px; padding-left: 0; l
 .ins-t tr.is-amend td { background: var(--c-plane-2); }
 .ins-rowbtn { display: none; } .ins-detail td { background: var(--c-plane-2); white-space: normal; text-align: left; }
 @media (max-width: 640px) {
+  /* the House trades and federal contracts tables scroll sideways rather than squeeze: squeezed, the filing date and its
+     "0 days after the trade" took 51 px and every row stood about 200 px tall (BUG-014) */
+  .ins-scroll td { white-space: nowrap; }
+  .ins-scroll td small { display: inline-block; white-space: normal; min-width: 12em; max-width: 22em; }
   .ins-t .ins-wide { display: none; }
   .ins-rowbtn { display: inline-grid; width: var(--tap); height: var(--tap); vertical-align: middle; }
   .ins-rowbtn[aria-expanded="true"] svg { transform: rotate(90deg); }
@@ -1781,7 +1782,9 @@ ul.cal-react { display: flex; flex-wrap: wrap; gap: 4px 18px; padding-left: 0; l
 .legend-line i.ref-sw { width: 18px; height: 0; border-top: 2px dashed var(--c-ink-3); }
 
 /* Home for a newcomer (beginner brief, 2026-10-20, items 2 to 4) */
-.ws-onboard { grid-template-areas: "text done" "ways ways"; }
+.ws-onboard { grid-template-areas: "text done" "ways ways" "level level"; }
+/* the restored question (Phase 05): the level slider, one row under the three ways, part of the card, never a step */
+.ob-level { grid-area: level; display: grid; gap: var(--s-2); padding-top: var(--s-3); border-top: 1px solid var(--c-line-2); }
 .ob-ways { grid-area: ways; margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--s-3) var(--s-5); }
 .ob-ways li { display: grid; gap: var(--s-2); align-content: start; min-width: 0; } .ob-ways p { margin: 0; font-size: var(--t-md); line-height: 1.45; color: var(--c-ink-2); } .ob-ways b { color: var(--c-ink); }
 .ob-acts { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; }
@@ -1791,7 +1794,6 @@ ul.cal-react { display: flex; flex-wrap: wrap; gap: 4px 18px; padding-left: 0; l
 /* the company the linked panels show, right above the first of them */
 .ws-linkrow { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; padding: 6px 0; }
 .ws-linkrow .ws-linkform { flex-wrap: wrap; } .ws-linkrow .ws-linkhint { flex-basis: 100%; margin: 0; font-size: var(--t-sm); }
-.ws-linkhint .ws-linkchip { vertical-align: 1px; }
 .ws-cell .u { font: 500 var(--t-xs)/1.2 var(--f-label); color: var(--c-ink-3); }
 /* a futures move between the 6 PM reopen and the stock open says its base (investor audit, 2026-10-27) */
 .ws-cell .ws-basis { color: var(--c-ink-2); } .ws-cell .ws-nw { white-space: nowrap; }
@@ -1840,7 +1842,7 @@ ul.cal-react { display: flex; flex-wrap: wrap; gap: 4px 18px; padding-left: 0; l
 .ew-count { margin-left: auto; font: 400 var(--t-sm)/1 var(--f-sans); color: var(--c-ink-3); }
 .ew-list { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--c-line-2); }
 .ew-row { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1.3fr) minmax(0, 13rem); align-items: center; gap: 4px 16px; min-height: var(--tap); padding: 8px 0; border-bottom: 1px solid var(--c-line-2); font-variant-numeric: tabular-nums; }
-.ew-name { min-width: 0; color: var(--c-ink); text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ew-name { min-width: 0; min-height: 24px; line-height: 24px; color: var(--c-ink); text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }   /* 24 px: WCAG 2.5.8's target, 23 before (Phase 10) */
 .ew-name:hover span { text-decoration: underline; }
 .ew-tick { font: 600 var(--t-md)/1 var(--f-label); margin-right: 6px; }
 .ew-name span { color: var(--c-ink-2); }
@@ -1870,7 +1872,7 @@ ul.cal-react { display: flex; flex-wrap: wrap; gap: 4px 18px; padding-left: 0; l
 .pk-kv { --kv: 4; }
 .pk-form { display: grid; gap: var(--s-3); margin-bottom: var(--s-4); }
 .pk-row { display: flex; flex-wrap: wrap; gap: var(--s-3); align-items: end; }
-.pk-in { display: grid; gap: 4px; min-width: 0; } .pk-in small { color: var(--c-ink-3); font-weight: 400; }
+.pk-in { display: grid; gap: 4px; min-width: 0; } .pk-in small { color: var(--c-ink-3); font-weight: 400; font-size: var(--t-xs); }   /* the browser's "smaller" made it 11.7 px (BUG-014) */
 .pk-field { min-height: var(--tap); width: 10rem; max-width: 100%; }
 .pk-lead { margin: 0 0 var(--s-2); font: 500 var(--t-lg)/1.4 var(--f-sans); color: var(--c-ink); }
 .pk-list { margin: 0; padding: 0; list-style: none; border-top: 1px solid var(--c-line-2); }
@@ -2045,12 +2047,25 @@ html.eff-1100 .ob-ways { grid-template-columns: minmax(0, 1fr); }
 .dhead.bar .sym-logo { width: 32px; height: 32px; border-radius: var(--r-sm); }
 /* the Overview's header carries the stage and the switch too, so its actions take a second line when the first is full */
 .dhead.bar.is-wide { flex-wrap: wrap; justify-content: flex-start; } .dhead.bar.is-wide .dh-price { flex: 0 1 auto; } .dhead.bar.is-wide .dh-ext { white-space: nowrap; }
+@media (max-width: 1100px) { .dhead.bar.is-wide .dh-price { flex-basis: 100%; } }   /* the price's own row there, as above (BUG-031) */
+html.eff-1100 .dhead.bar.is-wide .dh-price { flex-basis: 100%; }
 /* "Show advanced analysis" at the end of the tab row, as in Classic; under the tabs on a phone */
 .dstick.has-tools { display: flex; flex-wrap: wrap; align-items: flex-end; }
 .dstick.has-tools > .dhead { flex: 1 1 100%; min-width: 0; }
 .dstick.has-tools > .tabs { flex: 1 1 auto; min-width: 0; }
 .dh-tools { flex: none; display: flex; align-items: center; padding: 0 0 5px 12px; border-bottom: 1px solid var(--c-line); }
-@media (max-width: 640px) { .dh-tools { flex: 1 1 100%; justify-content: flex-start; padding: 8px 0 0; border-bottom: 0; } .dh-tools .adv-switch { min-height: var(--tap); } }
+@media (max-width: 640px) { .dh-tools { flex: 1 1 100%; justify-content: flex-start; padding: 8px 0 0; border-bottom: 0; } .dh-tools .adv-toggle { min-height: var(--tap); } }
+/* The Overview's analysis area (post-demo Phase 06): one view at a time. A swap fades the new view in, quickly and with
+   no movement, so nothing jumps; the shared reduced-motion rules (base.css) turn the fade off. */
+.adv-toggle { white-space: nowrap; }
+.ov-analysis[data-swapped] { animation: ov-swap var(--m-content) var(--ease-out); }
+@keyframes ov-swap { from { opacity: 0; } to { opacity: 1; } }
+.ov-simple .sa-q { margin: 0 0 16px; max-width: 72ch; }
+.ov-simple .sa-q > h3 { margin: 0 0 4px; }
+.ov-simple .sa-q > p { margin: 0 0 6px; font-size: var(--t-lg); line-height: 1.55; } .ov-simple .sa-q > p:last-child { margin-bottom: 0; }
+.ov-simple .sa-next { margin-top: 20px; padding-top: 12px; border-top: 1px solid var(--c-line-2); max-width: 72ch; }
+.ov-simple .sa-next > .t-label { margin: 0 0 4px; }
+.sa-steps { list-style: none; margin: 0; padding: 0; }
 .dh-stage { display: flex; align-items: center; gap: 6px; margin: 0; flex: none; font-size: var(--t-sm); }
 .dh-stage .term { display: inline-flex; align-items: center; gap: 6px; min-height: 34px; font-weight: 600; text-decoration: none; }
 .dh-stage-tag { font-weight: 400; color: var(--c-ink-2); }
@@ -2059,14 +2074,6 @@ html.eff-1100 .ob-ways { grid-template-columns: minmax(0, 1fr); }
 .dh-stage.stage-3 .term { color: var(--c-warn); } .dh-stage.stage-3 .stage-dot { background: var(--c-warn); }
 .dh-stage.stage-4 .term { color: var(--c-neg); } .dh-stage.stage-4 .stage-dot { background: var(--c-neg); }
 .dh-stage .dh-explain { min-height: 30px; padding: 0 10px; font-size: var(--t-sm); }
-.adv-switch { display: inline-flex; align-items: center; gap: 8px; min-height: 34px; padding: 0 10px; border: 1px solid var(--c-line); border-radius: var(--r-ctl); background: none; color: var(--c-ink); font: 500 var(--t-md)/1 var(--f-sans); cursor: pointer; white-space: nowrap; }
-.adv-switch:hover { background: var(--c-sunk); } .adv-switch:focus-visible { outline: 2px solid var(--c-focus); outline-offset: 1px; }
-.adv-track { position: relative; width: 28px; height: 16px; border-radius: var(--r-xs); background: var(--c-sunk); border: 1px solid var(--c-line); transition: background-color var(--d-fast); }
-.adv-knob { position: absolute; top: 2px; left: 2px; width: 10px; height: 10px; border-radius: 2px; background: var(--c-ink-3); transition: transform var(--d-fast); }
-.adv-switch[aria-checked="true"] .adv-track { background: var(--c-active); border-color: var(--c-ink-3); }
-.adv-switch[aria-checked="true"] .adv-knob { transform: translateX(12px); background: var(--c-ink); }
-@media (prefers-reduced-motion: reduce) { .adv-track, .adv-knob { transition: none; } }
-html[data-motion="reduce"] .adv-track, html[data-motion="reduce"] .adv-knob { transition: none; }
 /* the past year's chart */
 .py-title { margin: 0 0 4px; font-size: var(--t-lg); font-weight: 600; color: var(--c-ink); }
 .ovx-marks td:first-child { white-space: nowrap; } .ovx-marks td:last-child { white-space: normal; text-align: left; }
@@ -2107,7 +2114,7 @@ html[data-motion="reduce"] .adv-track, html[data-motion="reduce"] .adv-knob { tr
 .nx-what { display: grid; gap: 2px; min-width: 0; } .nx-what .t-muted { font-size: var(--t-md); }
 .nx-step { display: flex; width: 100%; justify-content: space-between; align-items: center; gap: 12px; min-height: var(--tap); padding: 8px 10px; margin: 0 -10px; border: 0; border-bottom: 1px solid var(--c-line-2); border-radius: 0; background: none; color: var(--c-ink); font: inherit; text-align: left; text-decoration: none; cursor: pointer; box-sizing: content-box; }
 .nx-step:hover { background: var(--c-sunk); } .nx-step:focus-visible { outline: 2px solid var(--c-focus); outline-offset: -2px; }
-.nx-to { flex: none; color: var(--c-ink-3); font-size: var(--t-sm); }
+.nx-to { flex: none; display: inline-flex; align-items: center; gap: 4px; color: var(--c-ink-3); font-size: var(--t-sm); } .nx-to .ic { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.7; }
 /* the Optic Score: one column per horizon, divided, no boxes inside the panel */
 .osc-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .osc-card { display: flex; flex-direction: column; gap: 8px; min-width: 0; padding: 4px 24px 6px 0; }
@@ -2134,14 +2141,6 @@ html[data-motion="reduce"] .adv-track, html[data-motion="reduce"] .adv-knob { tr
 .osc-how { margin-top: auto; } .osc-t { width: 100%; margin: 6px 0; } .osc-t th { text-align: left; } .osc-t td:last-child { white-space: normal; }
 @media (max-width: 860px) { .osc-grid { grid-template-columns: minmax(0, 1fr); } .osc-card { padding: 4px 0 10px; } .osc-card + .osc-card { padding: 14px 0 6px; border-left: 0; border-top: 1px solid var(--c-line-2); } .osc-n { font-size: 34px; } }
 /* Optic's read, and the rest of Advanced research */
-.adv-fold > summary { display: flex; flex-direction: column; gap: 2px; padding: 2px 0; cursor: pointer; list-style: none; }
-.adv-fold > summary::-webkit-details-marker { display: none; }
-.adv-fold > summary .t-h2::after { content: ''; display: inline-block; width: 7px; height: 7px; margin: 0 0 3px 10px; border-right: 2px solid var(--c-ink-3); border-bottom: 2px solid var(--c-ink-3); transform: rotate(-45deg); transition: transform var(--d-fast); }
-.adv-fold[open] > summary .t-h2::after { transform: rotate(45deg); }
-.adv-fold > summary:focus-visible { outline: 2px solid var(--c-focus); outline-offset: 2px; border-radius: var(--r-xs); }
-.ovx-block { padding: 16px 0 18px; border-top: 1px solid var(--c-line-2); } .adv-fold > summary + .ovx-block { margin-top: 12px; }
-.ovx-block > .t-label, .pl-top .t-label { margin: 0 0 8px; text-transform: uppercase; letter-spacing: .06em; font-size: var(--t-xs); font-weight: 600; }
-.pl-top { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; } .pl-top .asof { margin: 0; }
 .pl-lede { margin: 6px 0 10px; padding-left: 12px; border-left: 2px solid var(--c-line); font-size: var(--t-lead); line-height: 1.4; color: var(--c-ink); max-width: 70ch; }
 .pl-lede.is-bullish, .pl-lede.is-leaning.bullish { border-left-color: var(--c-pos); } .pl-lede.is-bearish, .pl-lede.is-leaning.bearish { border-left-color: var(--c-neg); }
 .pl-cat { margin: 0 0 8px; padding-left: 12px; border-left: 2px dashed var(--c-line); color: var(--c-ink-2); max-width: 75ch; } .pl-cat b { color: var(--c-ink); }

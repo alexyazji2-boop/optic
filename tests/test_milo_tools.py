@@ -69,7 +69,8 @@ def snapshot(**over):
 # ------------------------------------------------------------------------------------- definitions
 def test_every_tool_is_typed_closed_and_says_when_to_call_it():
     names = [s["name"] for s in milo_tools.SPECS]
-    assert len(names) == len(set(names)) == 13
+    # 13, and the four data tools of post-demo Phase 08 (app/milo_data.py)
+    assert len(names) == len(set(names)) == 17
     for spec in milo_tools.SPECS:
         schema = spec["input_schema"]
         assert schema["type"] == "object" and schema["additionalProperties"] is False, spec["name"]
@@ -344,7 +345,13 @@ def test_the_chat_route_gives_milo_its_tools(monkeypatch):
     # one tool that reads them is not offered (2026-10-15); every other tool is.
     assert isinstance(box, milo_tools.Toolbox)
     assert set(box.runners) == set(milo_tools.TOOL_NAMES) - {"get_my_portfolio"}
+    # With context on, the portfolio tool is offered only for a question about the
+    # reader's own portfolio (2026-10-27): offered for "hi", it was there to be called
+    # for any question, and a Compare answer pulled the owner's holdings in unasked.
     TestClient(m.app).post("/api/chat", json={"messages": [{"role": "user", "content": "hi"}],
+                                              "context": {"focus": {"scope": "auto"}}})
+    assert set(seen["toolbox"].runners) == set(milo_tools.TOOL_NAMES) - {"get_my_portfolio"}
+    TestClient(m.app).post("/api/chat", json={"messages": [{"role": "user", "content": "What do I own in energy?"}],
                                               "context": {"focus": {"scope": "auto"}}})
     assert set(seen["toolbox"].runners) == set(milo_tools.TOOL_NAMES)
 

@@ -20,7 +20,7 @@ market-wide: they touch everything and nothing in particular.
 
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date
 from typing import Any, Callable, Dict, Iterable, List, Optional
 from .. import session as session_mod
 

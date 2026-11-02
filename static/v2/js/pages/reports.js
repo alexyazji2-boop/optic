@@ -26,7 +26,9 @@ function notOwner() {
   }
   return html`<p>This is for the owner of this site. Sign in with the owner's address to read it.</p>${store.signedIn() ? '' : html`<a class="btn btn-sm" href="#/signin">Sign in</a>`}`;
 }
-const refused = (e) => e && (e.status === 401 || e.status === 403 || e.status === 503);
+// a refusal is 401 or 403; a 503 is the server unable to answer ("The accounts database is unavailable"), which read
+// as "These are not yours to read" to the owner (BUG-194, Phase 11)
+const refused = (e) => e && (e.status === 401 || e.status === 403);
 function errorBlock(e, what) {
   if (refused(e)) return html`<div class="state err" role="alert"><p class="t-h3">${view === 'reports' ? 'These are not yours to read' : 'This is not yours to read'}</p><p>${clean(e.message)}</p></div>`;
   return failed(what, e, { retry: 'load' });

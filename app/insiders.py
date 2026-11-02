@@ -29,15 +29,14 @@ one picks up where it stopped. Nothing here blocks a page on a cold cache.
 
 from __future__ import annotations
 
-import json
 import logging
 import os
 import re
-import time
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
+from . import public_errors
 from . import feeds
 from .runtime import for_reader
 
@@ -301,7 +300,7 @@ def parse_filing(index_url: str, accession: str) -> Dict[str, Any]:
     try:
         root = ET.fromstring(body[start:end + len("</ownershipDocument>")])
     except ET.ParseError as exc:
-        return {"available": False, "reason": "unparsable Form 4 ({})".format(exc)}
+        return {"available": False, "reason": "unparsable Form 4 ({})".format(public_errors.public(exc))}
 
     issuer = root.find("issuer")
     owner = root.find("reportingOwner")

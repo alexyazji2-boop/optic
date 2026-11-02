@@ -17,7 +17,7 @@ import logging
 import math
 import time
 from datetime import date, datetime, timedelta, timezone
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional
 from zoneinfo import ZoneInfo
 
 from .model import Evidence, cluster, now_iso

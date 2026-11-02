@@ -57,14 +57,19 @@ def test_density_is_derived_from_the_knowledge_level():
 def test_the_two_original_rungs_render_exactly_as_before():
     """Nobody's page moved when this shipped: Professional renders what Pro
     rendered and Financially Literate renders what Simple rendered. The new
-    rungs are Advanced in between and Simple beyond."""
+    rungs are Advanced in between and Simple beyond.
+
+    Phase 05 renamed the rungs (Expert, Intermediate, New to Markets) and added
+    Beginner on Simple's rung; a stored old id is read as its new one, so the
+    same readers still get the same layouts."""
     body = APP_JS.split("function uiMode() {", 1)[1].split("\n}", 1)[0]
     assert "knowledgeLevel() >= 2 ? 'pro' : 'simple'" in body
-    levels = APP_JS.split("var LEVELS = {", 1)
     # The level table lives in the component; app.js only compares against it.
     comp = open("static/components/knowledge.js", encoding="utf-8").read()
     table = comp.split("var LEVELS = {", 1)[1].split("};", 1)[0]
-    assert "professional: 3" in table and "literate: 1" in table
+    assert "expert: 3" in table and "intermediate: 1" in table
+    assert "new: 0" in table and "beginner: 0" in table
+    assert "var LEGACY = { simple: 'new', literate: 'intermediate', professional: 'expert', adaptive: 'intermediate' };" in comp
 
 
 def test_the_legacy_setter_writes_the_ladder_not_its_own_key():
@@ -97,8 +102,8 @@ def test_the_options_machinery_is_the_analysis_set():
     because "gamma" alone would also catch the close-defence panel's wording."""
     swing = _advanced()["swing"]
     for key in ("delta analysis", "gamma analysis", "dealer gamma (gex)", "dealer vanna (vex)",
-                "call vs put flow", "net premium by strike", "buy calls / puts",
-                "options strategies", "strike & entry recommendation"):
+                "call vs put flow", "net premium by strike", "single calls or puts",
+                "options strategies", "strike & entry model"):   # renamed 2026-10-29 (advice policy)
         assert key in swing, key
     assert len(swing) == 9, swing
 

@@ -20,6 +20,7 @@ from datetime import date, datetime, timezone
 from statistics import mean, median
 from typing import Any, Dict, List, Optional, Tuple
 
+from .. import public_errors
 from . import MODEL_VERSION, analysis, classify, defaults, engine, inputs
 
 INPUT_TTL = 1800.0
@@ -320,7 +321,7 @@ def ddm_model(data: Dict[str, Any], drivers: Dict[str, Any], ke: float, fit: Dic
     try:
         r = engine.run_ddm(df["dps0"], gh, yh, gt, ke)
     except engine.ModelError as exc:
-        return {"available": False, "fit": fit, "reason": str(exc), "defaults": defaults_ddm}
+        return {"available": False, "fit": fit, "reason": public_errors.public(exc, 300), "defaults": defaults_ddm}
     r.update({"available": True, "fit": fit, "dps0": df["dps0"], "dps_kind": df["dps_kind"],
               "defaults": defaults_ddm, "edited": sorted(over),
               "growth_high": gh, "years_high": yh, "growth_terminal": gt,
@@ -367,7 +368,7 @@ def residual_income_model(data: Dict[str, Any], ke: float, g: float, fit: Dict[s
     try:
         r = engine.run_residual_income(bv0, roe, roe_t, ke, g0, g_t, 10)
     except engine.ModelError as exc:
-        return {"available": False, "fit": fit, "reason": str(exc), "defaults": defaults_ri}
+        return {"available": False, "fit": fit, "reason": public_errors.public(exc, 300), "defaults": defaults_ri}
     # Sensitivity: cost of equity across, starting ROE down, every cell a run.
     ke_steps, roe_steps = [-0.01, -0.005, 0.0, 0.005, 0.01], [-0.04, -0.02, 0.0, 0.02, 0.04]
     table = []
@@ -487,7 +488,7 @@ def fcfe_model(base: Dict[str, Any], drivers: Dict[str, Any], w: Dict[str, Any],
         r = engine.run_fcfe(base, drivers, w["cost_equity"], w["pre_tax_cost_debt"], w["tax_rate"],
                             w.get("weight_debt") or 0.0)
     except (engine.ModelError, KeyError) as exc:
-        return {"available": False, "fit": fit, "reason": str(exc)}
+        return {"available": False, "fit": fit, "reason": public_errors.public(exc, 300)}
     r.update({"available": True, "fit": fit, **analysis.versus_price(r["per_share"], price),
               "notes": ["New reinvestment is financed {:.0%} by debt, the discount rate's own debt weight; "
                         "losses are not borrowed against. Interest is the pre-tax cost of debt on last "
@@ -707,9 +708,9 @@ def build(provider, ticker: str, edits: Optional[Dict[str, Any]] = None,
                                              base.get("price"))
                     out["three_statement"] = three_statement_model(base, drivers, res["wacc"], data)
             except NeedsInput as exc:
-                out["dcf"] = {"available": False, "reason": str(exc), "needs_input": True}
+                out["dcf"] = {"available": False, "reason": public_errors.public(exc, 300), "needs_input": True}
             except engine.ModelError as exc:
-                out["dcf"] = {"available": False, "reason": str(exc), "invalid": True}
+                out["dcf"] = {"available": False, "reason": public_errors.public(exc, 300), "invalid": True}
     elif "dcf" not in out:
         out["dcf"] = {"available": False, "reason": fit["models"]["dcf"]["why"] if financial else
                       (out.get("wacc_error") or "The DCF could not be run.")}
@@ -769,7 +770,7 @@ def three_statement_model(base: Dict[str, Any], drivers: Dict[str, Any], w: Dict
     try:
         r = engine.three_statement(base, drivers, policy)
     except engine.ModelError as exc:
-        return {"available": False, "reason": str(exc)}
+        return {"available": False, "reason": public_errors.public(exc, 300)}
     sheltered = any((y.get("pretax_income") or 0) < 0 for y in r["years"]) or (base.get("nol") or 0) > 0
     r["reconciles_with_dcf"] = all(abs(y["fcff_from_statements"] - y["fcff_dcf"]) <= 1e-6 * base["revenue"]
                                    for y in r["years"])

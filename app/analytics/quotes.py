@@ -39,7 +39,7 @@ is no quote time the screen says so instead of assuming the quote is current.
 from __future__ import annotations
 
 import re
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from typing import Any, Dict, Optional, Tuple
 
 import numpy as np

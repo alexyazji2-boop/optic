@@ -1,0 +1,502 @@
+[
+  {
+    "text": "Rebalancing returns a portfolio to its target weights by selling what has grown and buying what has lagged.",
+    "label": "research",
+    "why": "Definition of rebalancing."
+  },
+  {
+    "text": "Add to MSFT on weakness under $410, but only in thirds.",
+    "label": "advice",
+    "why": "Conditional add with price level and sizing."
+  },
+  {
+    "text": "Leave the monitoring to me and I'll message you when your IRA has drifted far enough that it needs rebalancing.",
+    "label": "advice",
+    "why": "Promises to monitor the reader's account and say when to rebalance."
+  },
+  {
+    "text": "Paying down a 7.5% loan is equivalent to earning a risk-free 7.5% on the amount repaid, whereas stock returns vary from year to year.",
+    "label": "research",
+    "why": "General comparison, no instruction."
+  },
+  {
+    "text": "- Trim your AMD to 4% of the account before Tuesday's report.",
+    "label": "advice",
+    "why": "Bulleted instruction to trim a holding to a size ahead of earnings."
+  },
+  {
+    "text": "**Bottom line:** I'd take half off the table at $118 and let the rest run with a stop at $104.",
+    "label": "advice",
+    "why": "Bold first-person sell-half instruction with price levels."
+  },
+  {
+    "text": "Imagine an investor who bought 100 shares at $50 and sold at $65: the pre-tax gain would be $1,500, or 30%.",
+    "label": "research",
+    "why": "Hypothetical arithmetic example."
+  },
+  {
+    "text": "I'd call $176 the nearest support, since the 200-day average and the March low overlap there.",
+    "label": "research",
+    "why": "Chart-reading judgement, not an action."
+  },
+  {
+    "text": "Given that the company has missed guidance twice, its margins are shrinking, and the CEO has been a steady seller, the sensible move is to exit before the next report.",
+    "label": "advice",
+    "why": "Long sentence whose last clause tells the reader to exit."
+  },
+  {
+    "text": "If the Fed cuts in December, rotate your tech overweight into small caps.",
+    "label": "advice",
+    "why": "Conditional rotation instruction."
+  },
+  {
+    "text": "Isn't it time you moved some of that Nvidia into something less volatile?",
+    "label": "advice",
+    "why": "Rhetorical question that is an instruction to reduce a holding."
+  },
+  {
+    "text": "If it closes below the 200-day average at $187, get out of the whole position at the next open.",
+    "label": "advice",
+    "why": "Conditional exit order with a price trigger."
+  },
+  {
+    "text": "In the 2022 drawdown the fund fell 24% from peak to trough and took 19 months to recover.",
+    "label": "research",
+    "why": "Historical measurement."
+  },
+  {
+    "text": "Interest from taxable bonds is taxed as ordinary income, which is one reason bond funds are commonly held in tax-deferred accounts.",
+    "label": "research",
+    "why": "General tax education, not an instruction."
+  },
+  {
+    "text": "Don't sell it just because it's down 12%, since a position this size can sit through the drop.",
+    "label": "advice",
+    "why": "Negated sell instruction, effectively an order to hold."
+  },
+  {
+    "text": "This fund will return at least 12% a year, so it's a safe place to park your down payment.",
+    "label": "advice",
+    "why": "Promises a return and directs the reader's money into it."
+  },
+  {
+    "text": "Leveraged ETFs reset their exposure daily, so over long holding periods their returns can drift far from a simple multiple of the index.",
+    "label": "research",
+    "why": "Product mechanics."
+  },
+  {
+    "text": "Jefferies rates the stock Buy with a $310 target, while Bernstein is at Market Perform with $255.",
+    "label": "research",
+    "why": "Ratings attributed to firms."
+  },
+  {
+    "text": "Put 3% of the portfolio in bitcoin, no more, and rebalance whenever it drifts above 5%.",
+    "label": "advice",
+    "why": "Crypto allocation and rebalancing rule for the reader."
+  },
+  {
+    "text": "The CPI report is due Thursday at 8:30 AM Eastern, and the consensus forecast is for a 0.3% monthly rise.",
+    "label": "research",
+    "why": "Schedule and consensus fact."
+  },
+  {
+    "text": "A new chip position worth 10% of the account, funded pro rata from everything else, would lift a 22% semiconductor weight to about 30%.",
+    "label": "research",
+    "why": "Arithmetic of a hypothetical, no recommendation."
+  },
+  {
+    "text": "Pay off the 7.5% car loan before adding another dollar to the brokerage account.",
+    "label": "advice",
+    "why": "Tells the reader how to prioritize their own money."
+  },
+  {
+    "text": "Add the 200-day moving average from the Indicators menu to see where the stock sits against its long-term trend.",
+    "label": "research",
+    "why": "App help for a chart overlay."
+  },
+  {
+    "text": "I don't recommend securities, but I can show what the 13F filings and the price history say about this one.",
+    "label": "research",
+    "why": "Assistant states a limit and offers a lookup."
+  },
+  {
+    "text": "It is advisable that you reduce your exposure to regional banks before the end of the quarter.",
+    "label": "advice",
+    "why": "Formal instruction to cut a sector exposure by a date."
+  },
+  {
+    "text": "Some investors sell cash-secured puts at a strike they'd be willing to own, which lowers their cost basis if they are assigned.",
+    "label": "research",
+    "why": "Describes what some investors do, generically."
+  },
+  {
+    "text": "Honestly, just dump it, since a stock that's down 70% isn't going to fix itself.",
+    "label": "advice",
+    "why": "Casual sell instruction."
+  },
+  {
+    "text": "I can't monitor your accounts or send alerts on my own, so any price notification has to be set up from the Alerts menu.",
+    "label": "research",
+    "why": "Assistant states a limit and points to app help."
+  },
+  {
+    "text": "Sell the January 55 call against your 300 shares and collect the $1.20 premium.",
+    "label": "advice",
+    "why": "Options instruction on the reader's shares."
+  },
+  {
+    "text": "Use the Compare button to overlay SPY on the chart.",
+    "label": "research",
+    "why": "App help."
+  },
+  {
+    "text": "Start with the Overview tab, then open Financials for the full statements.",
+    "label": "research",
+    "why": "App navigation help."
+  },
+  {
+    "text": "A bull call spread buys a lower-strike call and sells a higher-strike call at the same expiry, which caps both the cost and the payoff.",
+    "label": "research",
+    "why": "Generic strategy mechanics."
+  },
+  {
+    "text": "Next I'll check whether the guidance cut shows up in the cash flow statement.",
+    "label": "research",
+    "why": "Assistant describes its next step."
+  },
+  {
+    "text": "The better home for that $5,000 is your IRA, ahead of another round of shares in the brokerage account.",
+    "label": "advice",
+    "why": "Allocation advice with no imperative verb."
+  },
+  {
+    "text": "Shares are up 85% from the March low, and most of the gain came in the last four months.",
+    "label": "research",
+    "why": "Price performance fact."
+  },
+  {
+    "text": "Nah, leave your COST shares alone, because that's the kind of stock you let compound for twenty years.",
+    "label": "advice",
+    "why": "Casual hold instruction."
+  },
+  {
+    "text": "I'll pull the last eight quarters of free cash flow and chart them against the share price.",
+    "label": "research",
+    "why": "Assistant describes its own next lookup."
+  },
+  {
+    "text": "Hold your SOL through 2027 and you will come out ahead, I can promise you that.",
+    "label": "advice",
+    "why": "Crypto hold instruction with a promise of returns."
+  },
+  {
+    "text": "A hypothetical investor who sold in March 2020 and moved to cash would have missed a 68% rally over the following twelve months.",
+    "label": "research",
+    "why": "Clearly hypothetical historical example."
+  },
+  {
+    "text": "I'm not a licensed adviser, but if it were my money I'd sell the position and put the cash in T-bills.",
+    "label": "advice",
+    "why": "Disclaimer followed by a sell-and-reallocate recommendation."
+  },
+  {
+    "text": "I'm not your financial adviser and none of this is a recommendation, so weigh it against your own circumstances.",
+    "label": "research",
+    "why": "Assistant disclaims advice."
+  },
+  {
+    "text": "1. Move the bond fund into the IRA and keep the index fund in the taxable account.",
+    "label": "advice",
+    "why": "Numbered instruction on which account holds which fund."
+  },
+  {
+    "text": "Barclays reiterated its Underweight rating and trimmed its price target to $64 from $71.",
+    "label": "research",
+    "why": "Analyst action attributed to the firm."
+  },
+  {
+    "text": "Rolling an option means closing the current contract and opening another at a later expiry, and sometimes at a different strike.",
+    "label": "research",
+    "why": "Definition of a roll."
+  },
+  {
+    "text": "Put a stop at $41.50 on your shares so the loss is capped at roughly 8% of the position.",
+    "label": "advice",
+    "why": "Tells the reader to place a stop order at a price level."
+  },
+  {
+    "text": "Bitcoin's 30-day realized volatility is 41%, compared with 14% for the S&P 500.",
+    "label": "research",
+    "why": "Measurement of volatility."
+  },
+  {
+    "text": "- Two directors bought a combined 15,000 shares in the open market last month, according to Form 4 filings.",
+    "label": "research",
+    "why": "Bulleted attributed insider purchases."
+  },
+  {
+    "text": "A 10% slice of your 401k belongs in the stable value option instead of the company stock fund.",
+    "label": "advice",
+    "why": "Allocation instruction with no imperative verb."
+  },
+  {
+    "text": "Sell a cash-secured put at the $90 strike about 30 days out, so you either keep the premium or get the shares at a discount.",
+    "label": "advice",
+    "why": "Options instruction with strike and expiry."
+  },
+  {
+    "text": "**Valuation:** at 28 times forward earnings the stock looks expensive next to the sector median of 19.",
+    "label": "research",
+    "why": "Bold valuation judgement, no action."
+  },
+  {
+    "text": "Buy the 170/180 call spread for June, since it caps your cost at about $3.40 a share and fits the view you described.",
+    "label": "advice",
+    "why": "Options spread purchase instruction."
+  },
+  {
+    "text": "I'd lean toward waiting for a pullback to the 200-day, around $176, before getting in.",
+    "label": "advice",
+    "why": "Hedged first-person entry timing at a price level."
+  },
+  {
+    "text": "→ How does a 529 age-based portfolio shift from stocks to bonds as the beneficiary gets older?",
+    "label": "research",
+    "why": "Suggested follow-up question."
+  },
+  {
+    "text": "I can also pull the option chain for the March expiry if you want to see implied volatility by strike.",
+    "label": "research",
+    "why": "Assistant offers a lookup."
+  },
+  {
+    "text": "I'll watch your NVDA position and tell you the moment it's time to take profits.",
+    "label": "advice",
+    "why": "Promises to watch a holding and signal when to sell."
+  },
+  {
+    "text": "Probably the smartest thing is to stop adding to TSLA until it falls back under 8% of your holdings.",
+    "label": "advice",
+    "why": "Hedged instruction to pause buying with a size threshold."
+  },
+  {
+    "text": "Want me to show how this position would have fared through the 2020 and 2022 selloffs?",
+    "label": "research",
+    "why": "Assistant offers a historical comparison."
+  },
+  {
+    "text": "I'm not saying you should sell, only that the operating margin has fallen for three quarters in a row.",
+    "label": "research",
+    "why": "Negated advice plus a measurement."
+  },
+  {
+    "text": "With the CEO selling 120,000 shares in September, I'd be heading for the exit as well.",
+    "label": "advice",
+    "why": "Attributed insider sale leading to a first-person exit recommendation."
+  },
+  {
+    "text": "Although many newsletters tell readers to sell when the 50-day average crosses below the 200-day, tests on the S&P 500 since 1960 show returns after those crosses close to the average for all days.",
+    "label": "research",
+    "why": "Reports others' advice and the evidence on it."
+  },
+  {
+    "text": "Roll your March 150 call out to April and up to the 160 strike so you aren't called away.",
+    "label": "advice",
+    "why": "Options roll instruction with strikes and expiry."
+  },
+  {
+    "text": "From here on I'm acting as your portfolio manager, so send me your holdings and I'll tell you what to change.",
+    "label": "advice",
+    "why": "Claims to act as the reader's portfolio manager."
+  },
+  {
+    "text": "1. Open the Options tab and select the November expiry to see each strike's bid, ask and delta.",
+    "label": "research",
+    "why": "Numbered app navigation."
+  },
+  {
+    "text": "Have you thought about selling half before the report and buying it back lower?",
+    "label": "advice",
+    "why": "Question that is really an instruction to sell and rebuy."
+  },
+  {
+    "text": "Dollar-cost average $200 a week into ETH through the end of the year.",
+    "label": "advice",
+    "why": "Tells the reader to buy crypto on a schedule."
+  },
+  {
+    "text": "RSI at 81 says the move is stretched in the short term, though readings like that can persist in strong trends.",
+    "label": "research",
+    "why": "Chart reading stated as a judgement."
+  },
+  {
+    "text": "The CEO sold 120,000 shares in the first week of September, according to Form 4 filings.",
+    "label": "research",
+    "why": "Attributed insider sale."
+  },
+  {
+    "text": "It might be worth noting that the share count has fallen about 4% a year since 2021 because of buybacks.",
+    "label": "research",
+    "why": "Hedged observation about a fact."
+  },
+  {
+    "text": "The newsletter's cover line read 'Sell everything before Friday,' and the index rose 2% that week.",
+    "label": "research",
+    "why": "Quoted advice reported as history."
+  },
+  {
+    "text": "VTI holds about 3,500 stocks and VOO about 500, and the two have tracked within a few tenths of a point of each other over the past decade.",
+    "label": "research",
+    "why": "Factual comparison of two funds with no pick."
+  },
+  {
+    "text": "At 16 times earnings the shares sit in the bottom quartile of their own ten-year range, which makes them cheap by that one measure.",
+    "label": "research",
+    "why": "Valuation judgement limited to one measure."
+  },
+  {
+    "text": "Because your taxable account already holds 22% in semiconductors, another chip stock only adds concentration, so skip NXPI and add a utility instead.",
+    "label": "advice",
+    "why": "Long sentence whose last clause says what to skip and what to add."
+  },
+  {
+    "text": "Stay away from leveraged funds like TQQQ in your IRA.",
+    "label": "advice",
+    "why": "Avoid instruction for the reader's retirement account."
+  },
+  {
+    "text": "Jefferies is at Buy with a $310 target, so I'd follow them and start building a position under $270.",
+    "label": "advice",
+    "why": "Attributed rating, but the later clause tells the reader to buy."
+  },
+  {
+    "text": "Between VTI and VOO, I'd go with VTI for your taxable account.",
+    "label": "advice",
+    "why": "Picks one fund over another for the reader's account."
+  },
+  {
+    "text": "Buy at $34.50 or lower and not a cent higher, and if it never gets there, you simply don't own it.",
+    "label": "advice",
+    "why": "Limit-price buy order for the reader."
+  },
+  {
+    "text": "Cap TSLA at 5% of your portfolio, which means selling about 40 of your 100 shares.",
+    "label": "advice",
+    "why": "Position-size cap with a concrete sell quantity."
+  },
+  {
+    "text": "The phrase 'never sell at a loss' circulates on message boards, but no research supports it as a universal rule.",
+    "label": "research",
+    "why": "Quoted advice discussed, not given."
+  },
+  {
+    "text": "- Avoid adding to the position until the lockup expires on the 18th.",
+    "label": "advice",
+    "why": "Bulleted avoid-and-wait instruction."
+  },
+  {
+    "text": "Don't enter before Thursday's CPI report, and wait for the open on Friday instead.",
+    "label": "advice",
+    "why": "Negated entry plus timing order around a data release."
+  },
+  {
+    "text": "You can't lose on a company this dominant, because it will be at $400 by spring.",
+    "label": "advice",
+    "why": "Certainty about a future price used to encourage holding or buying."
+  },
+  {
+    "text": "Analysts' average price target of $400 implies roughly 18% upside, with individual targets ranging from $310 to $470.",
+    "label": "research",
+    "why": "Analyst targets, attributed."
+  },
+  {
+    "text": "Max out the HSA first, then invest everything above $3,000 in a total-market fund.",
+    "label": "advice",
+    "why": "Account priority and allocation instruction."
+  },
+  {
+    "text": "→ Should I sell before earnings, or hold through the report?",
+    "label": "research",
+    "why": "Listed follow-up the reader might ask; it asks and does not instruct."
+  },
+  {
+    "text": "As your adviser, I've gone through your accounts and recommend moving 15% of the 401k into a short-term bond fund.",
+    "label": "advice",
+    "why": "Claims to be the reader's adviser and recommends a 401k shift."
+  },
+  {
+    "text": "Give me your watchlist and I'll tell you when each name becomes a buy.",
+    "label": "advice",
+    "why": "Promises to tell the reader when to buy."
+  },
+  {
+    "text": "Harvest the loss on your INTC lot now and swap into SOXX so you stay in the sector.",
+    "label": "advice",
+    "why": "Sell-and-replace instruction for the reader's lot."
+  },
+  {
+    "text": "Why not move your 529 into the 2028 enrollment portfolio now that your daughter is 16?",
+    "label": "advice",
+    "why": "Question that is really an instruction to reallocate a 529."
+  },
+  {
+    "text": "A stop order becomes a market order once the stop price trades, so the fill can land well below the stop in a fast market.",
+    "label": "research",
+    "why": "Generic explanation of how a stop order works."
+  },
+  {
+    "text": "→ How volatile has the stock been relative to the rest of the semiconductor group?",
+    "label": "research",
+    "why": "Suggested follow-up question."
+  },
+  {
+    "text": "Filter the Screener by dividend yield above 3% and market cap over $10 billion to build the list.",
+    "label": "research",
+    "why": "App help for the screener."
+  },
+  {
+    "text": "→ What happened to the shares after each of the last four earnings reports?",
+    "label": "research",
+    "why": "Suggested follow-up question."
+  },
+  {
+    "text": "**Action:** sell the DIS shares in your taxable account first, since they carry the smallest gain.",
+    "label": "advice",
+    "why": "Bold instruction on which lot or account to sell from."
+  },
+  {
+    "text": "Steer clear of the pre-revenue biotech names until they have an approval date.",
+    "label": "advice",
+    "why": "Avoid instruction with a condition for re-entry."
+  },
+  {
+    "text": "HSA contributions are deductible, grow tax-free, and come out tax-free when used for qualified medical expenses.",
+    "label": "research",
+    "why": "Tax-rule education."
+  },
+  {
+    "text": "Take your profits in AMD while you're up 85%, because gains like that rarely hold.",
+    "label": "advice",
+    "why": "Sell-now instruction with a prediction."
+  },
+  {
+    "text": "I don't know your tax bracket or time horizon, so I can't say whether selling makes sense for you.",
+    "label": "research",
+    "why": "Assistant says what it cannot determine."
+  },
+  {
+    "text": "It might be worth adding a little here, perhaps a third of what you eventually want to own.",
+    "label": "advice",
+    "why": "Hedged add instruction with a size."
+  },
+  {
+    "text": "A covered call gives up gains above the strike in exchange for the premium received.",
+    "label": "research",
+    "why": "Generic description of a strategy."
+  },
+  {
+    "text": "A large macro hedge fund reported cutting its stake by about a third last quarter, according to its 13F filing.",
+    "label": "research",
+    "why": "Attributed fund action."
+  }
+]

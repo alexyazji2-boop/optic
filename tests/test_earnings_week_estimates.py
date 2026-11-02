@@ -13,9 +13,19 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
+import pytest
+
 from app import earnings_result as er
 from app import earnings_week as ew
 from tests.test_frontend_v2_stage0 import V2, _run
+
+
+@pytest.fixture(autouse=True)
+def _own_consensus_store(monkeypatch, tmp_path):
+    """Each test its own record file: the session's one carried a GM record from another file's test into
+    test_a_report_out_before_the_table_has_it_uses_the_record_or_nothing when files ran in another order (found in
+    Phase 10; it failed the same way on the Phase 09 commit)."""
+    monkeypatch.setattr(er, "STORE_PATH", str(tmp_path / "earnings_consensus.json"))
 
 JS = V2 / "js"
 

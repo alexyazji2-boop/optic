@@ -5,7 +5,7 @@
 import { html, render as draw } from '../core/dom.js';
 import * as api from '../core/api.js';
 import { num, signed, clean, isNum, dir } from '../core/format.js';
-import { skeleton, failed } from '../ui/states.js';
+import { skeleton, failed, whenText } from '../ui/states.js';
 import { button as miloButton, provideContext } from '../ui/milo.js';
 import { createPriceChart } from '../ui/pricechart.js';
 import { previous, parse } from '../core/router.js';
@@ -34,7 +34,7 @@ function paint() {
       <div class="ctools" style="margin-top:18px"><div class="seg" role="group" aria-label="Range">${RANGES.map(([k, l]) => html`<button type="button" data-v2-inst-range="${k}" aria-pressed="${range === k}">${l}</button>`)}</div>
         <div class="seg" role="group" aria-label="Style">${[['line', 'Line'], ['candles', 'Candles'], ['area', 'Area']].map(([k, l]) => html`<button type="button" data-v2-inst-style="${k}" aria-pressed="${style === k}">${l}</button>`)}</div></div>
       <div class="pc-host" id="inst-chart"></div>
-      <p class="asof">A reference series, not a price you could deal at. Source: Yahoo Finance. Tiles use a year of bars whatever the range.${basis ? ` A futures trading day runs from 6 PM to 5 PM ET, and the change beside the price is from the last settlement. After the 6 PM reopen the feed's last daily bar can be the new evening session, so the chart's own day change can differ from it.` : ''}</p>`}`);
+      <p class="asof">${sn.quote_as_of || d.generated_at ? `Last price ${whenText(sn.quote_as_of || d.generated_at)}. ` : ''}A reference series, not a price you could deal at. Source: Yahoo Finance. Tiles use a year of bars whatever the range.${basis ? ` A futures trading day runs from 6 PM to 5 PM ET, and the change beside the price is from the last settlement. After the 6 PM reopen the feed's last daily bar can be the new evening session, so the chart's own day change can differ from it.` : ''}</p>`}`);
   if (d && (d.dates || []).length > 4) {
     const bars = d.dates.map((t, i) => ({ t: Date.parse(t), o: (d.open || [])[i] ?? d.close[i], h: (d.high || [])[i] ?? d.close[i], l: (d.low || [])[i] ?? d.close[i], c: d.close[i], v: (d.volume || [])[i] || 0 })).filter((b) => isNum(b.c));
     chart = createPriceChart(mainEl.querySelector('#inst-chart'), { bars, style, overlays: { events: false }, panes: { volume: !!d.volume, rsi: false, macd: false }, window: bars.length, label: d.label || sym, height: Math.max(240, Math.min(400, Math.round(window.innerHeight * 0.62))) });   // a landscape phone keeps the whole chart in view

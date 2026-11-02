@@ -347,7 +347,7 @@ ul.plain { margin: 0; padding-left: 18px; } ul.plain li { margin-bottom: 7px; }
 .milo-panel .drawer-head { align-items: center; gap: 8px; padding: 10px 10px 10px 20px; }
 .milo-panel .drawer-acts { display: flex; align-items: center; gap: 2px; }
 .milo-panel .drawer-acts .icon-btn.is-on { background: var(--c-active); color: var(--c-ink); }
-.milo-panel .drawer-acts .icon-btn:disabled { opacity: .45; cursor: default; }
+.milo-panel .drawer-acts .icon-btn:disabled, .milo-panel .drawer-acts .icon-btn[aria-disabled="true"] { opacity: .45; cursor: default; }
 .milo-id { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .milo-id .scout-compact { width: 32px; }
 .milo-panel .milo-id h2 { font: 600 var(--t-xl)/1.15 var(--f-sans); letter-spacing: -0.01em; margin: 0; }
@@ -424,6 +424,7 @@ ul.plain { margin: 0; padding-left: 18px; } ul.plain li { margin-bottom: 7px; }
 .milo-bubble .milo-li + br { display: none; }   /* each item is its own line already; the line break after it left a gap */
 .milo-bubble .milo-oli { padding-left: 22px; } .milo-bubble .milo-oli::before { content: none; } .milo-bubble .milo-n { position: absolute; left: 0; color: var(--c-ink-3); font-variant-numeric: tabular-nums; }
 .milo-bubble .milo-h { display: block; margin: 6px 0 2px; font-size: var(--t-lg); }
+.milo-bubble .milo-host { color: var(--c-ink-3); font-size: var(--t-sm); }   /* where a model-written link goes (SEC-05) */
 .milo-bubble a { color: var(--c-ink); text-decoration: underline; text-underline-offset: 2px; }
 .milo-bubble code { padding: 1px 4px; border-radius: var(--r-xs); background: var(--c-sunk); font-size: .92em; }
 .milo-code { margin: 0 0 10px; padding: 10px; border-radius: var(--r-md); background: var(--c-sunk); overflow-x: auto; font-size: var(--t-sm); white-space: pre; }
@@ -431,7 +432,8 @@ ul.plain { margin: 0; padding-left: 18px; } ul.plain li { margin-bottom: 7px; }
 .milo-tbl table { width: 100%; border-collapse: collapse; font-size: var(--t-sm); font-variant-numeric: tabular-nums; }
 .milo-tbl th, .milo-tbl td { padding: 6px 10px; border-bottom: 1px solid var(--c-line-2); text-align: left; white-space: nowrap; }
 .milo-tbl th { background: var(--c-plane-2); color: var(--c-ink-2); font-weight: 600; } .milo-tbl tr:last-child td { border-bottom: 0; } .milo-tbl td.n { text-align: right; }
-.milo-tail { margin: 0; white-space: pre-wrap; } .milo-status { margin: 4px 0 0; color: var(--c-ink-3); font-size: var(--t-md); }
+/* the answer still arriving: the finished paragraphs keep the gap under them, the arriving one follows it */
+.milo-bubble .milo-settled p:last-child { margin-bottom: 10px; } .milo-status { margin: 4px 0 0; color: var(--c-ink-3); font-size: var(--t-md); }
 .milo-src { display: inline-flex; align-items: center; min-height: 24px; padding: 0 7px; margin: 0 2px; border-radius: var(--r-xs); border: 1px solid var(--c-line); background: var(--c-raised); color: var(--c-ink-2); font: 500 var(--t-xs)/1 var(--f-label); text-decoration: none; vertical-align: 1px; cursor: pointer; }
 .milo-src:hover { border-color: var(--c-ink-3); color: var(--c-ink); }
 .milo-chart { margin: 8px 0; } .milo-chart-plot { min-height: 120px; }
@@ -456,6 +458,9 @@ ul.plain { margin: 0; padding-left: 18px; } ul.plain li { margin-bottom: 7px; }
 .milo-act-btn .ic { width: 15px; height: 15px; } .milo-act-btn:hover { background: var(--c-sunk); color: var(--c-ink); }
 .milo-note { margin: 0; font-size: var(--t-md); color: var(--c-ink-2); padding: 8px 10px; border-radius: var(--r-md); background: var(--c-sunk); }
 .gen-note, .milo-gen { margin: 0; font-size: var(--t-sm); line-height: 1.4; color: var(--c-ink-3); }
+/* "Explain it for X" sits in a text's meta line (ui/states.js reExplain), at that line's size, not a body link's */
+.re-explain { font-size: inherit; min-height: 32px; }
+@media (pointer: coarse), (max-width: 860px) { .re-explain { min-height: var(--tap); } }
 /* the drawer's own paragraph colour (.drawer-body p) is not Milo's: an answer's text is ink, each note keeps its own */
 .milo .milo-bubble p { color: inherit; }
 .milo .milo-who, .milo .milo-about, .milo .milo-gen, .milo .milo-assumed, .milo .milo-lens-blurb, .milo .milo-ctx-meta, .milo .milo-attached, .milo .milo-allow { color: var(--c-ink-3); }
@@ -557,6 +562,7 @@ ul.plain { margin: 0; padding-left: 18px; } ul.plain li { margin-bottom: 7px; }
 .milo-attached .ic { width: 14px; height: 14px; }
 .milo-attached span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .milo-allow { margin: 0; font-size: var(--t-sm); color: var(--c-ink-3); }
+.milo-limit { margin: 4px 0 0; font-size: var(--t-sm); color: var(--c-ink-2); }
 .milo-form[data-state="sending"] .milo-allow, .milo-form[data-state="streaming"] .milo-allow { color: var(--c-ink-2); }
 @media (pointer: coarse) {
   .milo-send, .milo-stop { width: var(--tap); height: var(--tap); }
@@ -594,6 +600,13 @@ ul.plain { margin: 0; padding-left: 18px; } ul.plain li { margin-bottom: 7px; }
   .milo-lens-blurb { display: none; }
   .scout-btn { width: 52px; } .milo-hello-h { margin-top: 2px; font-size: var(--t-xl); } .milo .milo-hi { margin-top: 2px; padding: 4px 12px; font-size: var(--t-base); }
   .milo-log { gap: 12px; padding-top: 10px; padding-bottom: 12px; }
+}
+/* a small phone upright (an iPhone SE's Safari is 375 x 549): the conversation had 36 px after an answer, one line.
+   The subtitle and the attached line go (the context bar names what is attached), the example question waits for a
+   taller screen and the persona row loses its padding; the data line and every control stay (post-demo Phase 07) */
+@media (max-width: 860px) and (max-height: 600px) {
+  .milo-sub, .milo-form-foot, .milo-suggest-slot { display: none; }
+  .milo-persona { padding-top: 0; padding-bottom: 0; }
 }
 
 /* ---------- states: loading, empty, stale, error ---------- */
@@ -817,6 +830,10 @@ table.st td a { text-decoration: none; font-weight: 600; } table.st td a:hover {
    phone's screen, and every page load pushed it away: layout shift 0.14 to 0.22 on desktop and 0.58 to 0.63 on
    phones, from this footer alone (motion check 2026-10-24). Arriving under the page is not a shift. */
 #main:empty + .legal { display: none; }
+/* ...and while a page is still loading, its short skeleton left the footer in view, so the content arriving pushed
+   it off: layout shift 0.10 to 0.22 on Markets, Compare and Earnings, from the footer alone (Phase 09-10 measure).
+   The page area is at least a screen tall, so the footer starts below the fold and stays there. */
+#main { min-height: calc(100vh - var(--topbar-h, 72px)); min-height: calc(100dvh - var(--topbar-h, 72px)); }
 @media (max-width: 860px) { .legal { padding: 16px 16px 110px; } }
 .legal p { margin: 0 0 8px; max-width: 90ch; } .legal .textlink { font-size: var(--t-md); min-height: 32px; }
 @media (pointer: coarse), (max-width: 860px) { .legal .textlink { min-height: var(--tap); } }
@@ -888,6 +905,8 @@ table.st td a { text-decoration: none; font-weight: 600; } table.st td a:hover {
 @media (prefers-reduced-motion: no-preference) { .gbar, .pdot { transition: stroke var(--d); } }
 /* a term explained where it is used (ui/term.js): the word, underlined with dots, opens a short definition */
 .term { display: inline; padding: 0; margin: 0; border: 0; background: none; color: inherit; font: inherit; text-align: inherit; cursor: help; text-decoration: underline dotted var(--c-ink-3); text-decoration-thickness: 1.5px; text-underline-offset: 3px; }
+/* New to Markets (Phase 05): a marked term's short definition sits beside it, quieter than the sentence it is in */
+.term-inline { color: var(--c-ink-2); }
 .term:hover, .term[aria-expanded="true"] { text-decoration-color: var(--c-ink); }
 .term:focus-visible { outline: 2px solid var(--c-focus); outline-offset: 2px; border-radius: 2px; }
 .term-pop { position: absolute; z-index: 90; display: grid; gap: 6px; padding: 12px 14px; background: var(--c-raised); color: var(--c-ink-2); border: 1px solid var(--c-line); border-radius: var(--r-lg); box-shadow: var(--sh-pop); font-size: var(--t-md); line-height: 1.45; text-align: left; }
@@ -1120,3 +1139,35 @@ html.eff-1100 .answers { grid-template-columns: 1fr 1fr; } html.eff-1100 .answer
 .milo-save:focus-visible { outline: 2px solid var(--c-focus); outline-offset: 1px; }
 @media (pointer: coarse) { .milo-save { min-height: var(--tap); padding: 0 12px; } }
 
+
+/* Advice policy (2026-10-29): the server's line for a question that asked for a personal decision, and the
+   note under an answer a sentence was removed from. Quiet, on the panel's own surface, never a banner. */
+.milo-policy, .milo-amended { margin: 6px 0 0; font-size: var(--t-sm); color: var(--c-ink-2); }
+.milo-amended { margin-top: 8px; }
+
+/* The knowledge-level slider (ui/levelslider.js, post-demo Phase 05): five steps on a quiet, squared track, the
+   chosen step an ink thumb (the active fill was too faint to see on the track), the level named beside it, and the
+   focus ring the one gold. Ticks mark the five positions; the ends are named under them. */
+.lvl { display: grid; gap: 8px; max-width: 620px; }
+.lvl-label { font: 600 var(--t-md)/1.3 var(--f-label); color: var(--c-ink); }
+.lvl-row { display: flex; align-items: flex-start; gap: 14px; }
+.lvl-track { position: relative; flex: 1; min-width: 0; }
+.lvl-in { -webkit-appearance: none; appearance: none; display: block; width: 100%; height: var(--tap); margin: 0; background: transparent; cursor: pointer; }
+.lvl-in::-webkit-slider-runnable-track { height: 6px; border-radius: 2px; background: var(--c-sunk); border: 1px solid var(--c-line); }
+.lvl-in::-moz-range-track { height: 6px; border-radius: 2px; background: var(--c-sunk); border: 1px solid var(--c-line); }
+.lvl-in::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 22px; height: 22px; margin-top: -9px; border-radius: var(--r-sm); background: var(--c-ink); border: 2px solid var(--c-plane); box-shadow: 0 0 0 1px var(--c-line); }
+.lvl-in::-moz-range-thumb { width: 18px; height: 18px; border-radius: var(--r-sm); background: var(--c-ink); border: 2px solid var(--c-plane); box-shadow: 0 0 0 1px var(--c-line); }
+.lvl-in:focus { outline: none; }
+.lvl-in:focus-visible::-webkit-slider-thumb { outline: 2px solid var(--c-focus); outline-offset: 2px; }
+.lvl-in:focus-visible::-moz-range-thumb { outline: 2px solid var(--c-focus); outline-offset: 2px; }
+.lvl-ticks { position: absolute; left: 11px; right: 11px; top: calc(var(--tap) / 2 + 7px); display: flex; justify-content: space-between; pointer-events: none; }
+.lvl-ticks i { width: 1px; height: 6px; background: var(--c-ink-3); }
+.lvl-ends { display: flex; justify-content: space-between; margin-top: 6px; font-size: var(--t-xs); color: var(--c-ink-3); }
+.lvl-now { flex: none; min-width: 8.5em; padding-top: 13px; font: 600 var(--t-md)/1.2 var(--f-label); color: var(--c-ink); }
+.lvl-blurb { margin: 0; font-size: var(--t-base); color: var(--c-ink-2); }
+.lvl-prev { margin: 0; font-size: var(--t-sm); color: var(--c-ink-2); }
+.lvl-prev .t-label { margin-right: 6px; }
+@media (max-width: 640px) {
+  .lvl-row { flex-direction: column; align-items: stretch; gap: 0; }
+  .lvl-now { order: -1; min-width: 0; padding-top: 0; }
+}

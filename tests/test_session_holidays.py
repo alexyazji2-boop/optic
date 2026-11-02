@@ -127,7 +127,10 @@ def test_the_half_day_regular_session_ends_at_one():
 
 def test_the_half_day_after_hours_ends_at_five():
     assert session.state(datetime(2026, 11, 27, 16, 30, tzinfo=ET))["phase"] == "after"
-    assert session.state(datetime(2026, 11, 27, 17, 30, tzinfo=ET))["phase"] == "overnight"
+    # nothing trades from 5pm until the overnight session at 8pm, and this Friday none follows; these hours read
+    # "overnight" until Phase 09
+    st = session.state(datetime(2026, 11, 27, 17, 30, tzinfo=ET))
+    assert st["phase"] == "closed" and st["label"] == "Closed after the half day"
 
 
 def test_a_full_day_still_ends_at_four():

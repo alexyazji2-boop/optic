@@ -41,7 +41,7 @@ def test_he_moves_on_milos_events_as_in_the_classic_panel():
     assert "scoutTo(ai, 'thinking', 'ack');" in MILO, "a question in: one acknowledging wave, then thinking"
     assert "scoutTo(ai, SEARCHING.has(String(p.state || '')) ? 'searching' : 'thinking')" in MILO
     assert "if (SC.i === ai && SC.state !== 'streaming') scoutTo(ai, 'streaming');" in MILO, "the first words: stillness"
-    end = MILO[MILO.index("const reply = S.live ? S.live.text : '';"):MILO.index("export function stop()")]
+    end = MILO[MILO.index("const reply = S.live ? S.live.text : '', liveWas = S.live;"):MILO.index("export function stop()")]
     assert "if (failed || ended === 'cut') Object.assign(SC, { i: ai, state: 'error', via: null });" in end, "a concerned face, as the classic panel's"
     assert "else if (ended === 'stopped') Object.assign(SC, { i: ai, state: 'idle', via: 'look' });" in end
     assert "via: reply.trim() ? 'nod' : null" in end, "a nod for an answer, nothing for an empty one"

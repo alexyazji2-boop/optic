@@ -149,31 +149,47 @@ def test_an_existing_database_gains_the_column_with_every_report_open(tmp_path, 
 # ------------------------------------------------------------ the routes
 
 
-def test_the_routes_resolve_and_reopen(accounts, token):
+def _owner(accounts, monkeypatch):
+    """The reports are read by the signed-in owner alone; the write token still resolves them (BUG-030, Phase 10)."""
+    from app.auth import admin, config
+    monkeypatch.setenv(admin.ENV_NAME, "owner@example.com")
+    http = TestClient(main.app)
+    http.post("/api/auth/register", json={"first_name": "Owner", "email": "owner@example.com",
+                                          "password": "tungsten-carbide-9", "confirm_password": "tungsten-carbide-9"})
+    accounts.execute("UPDATE users SET email_verified = 1 WHERE email = ?", ("owner@example.com",))
+    head = {"X-Optic-CSRF": http.cookies.get(config.CSRF_COOKIE) or ""}
+    return lambda url: http.get(url, headers=head)
+
+
+def test_the_routes_resolve_and_reopen(accounts, token, monkeypatch):
+    read = _owner(accounts, monkeypatch)
     a = fb.store("first")
     res = client.post("/api/feedback/%s/resolve" % a["id"], json={"resolved": True}, headers=TOKEN)
     assert res.status_code == 200 and res.json()["resolved_at"]
-    assert client.get("/api/feedback", headers=TOKEN).json()["reports"] == []
-    listed = client.get("/api/feedback?resolved=true", headers=TOKEN).json()
+    assert read("/api/feedback").json()["reports"] == []
+    listed = read("/api/feedback?resolved=true").json()
     assert [r["message"] for r in listed["reports"]] == ["first"]
     res = client.post("/api/feedback/%s/resolve" % a["id"], json={"resolved": False}, headers=TOKEN)
     assert res.json()["resolved_at"] is None
 
 
-def test_the_route_serves_each_tab_its_own_list(accounts, token):
+def test_the_route_serves_each_tab_its_own_list(accounts, token, monkeypatch):
+    read = _owner(accounts, monkeypatch)
     a = fb.store("done")
     fb.store("open")
     fb.resolve(a["id"])
-    resolved = client.get("/api/feedback?status=resolved", headers=TOKEN).json()
+    resolved = read("/api/feedback?status=resolved").json()
     assert [r["message"] for r in resolved["reports"]] == ["done"]
     assert resolved["status"] == "resolved" and (resolved["open"], resolved["resolved"]) == (1, 1)
-    opened = client.get("/api/feedback?status=open", headers=TOKEN).json()
+    opened = read("/api/feedback?status=open").json()
     assert [r["message"] for r in opened["reports"]] == ["open"]
 
 
-def test_a_bad_status_is_refused_but_only_after_the_guard(accounts, token):
-    assert client.get("/api/feedback?status=closed", headers=TOKEN).status_code == 400
+def test_a_bad_status_is_refused_but_only_after_the_guard(accounts, token, monkeypatch):
+    read = _owner(accounts, monkeypatch)
+    assert read("/api/feedback?status=closed").status_code == 400
     assert client.get("/api/feedback?status=closed").status_code == 401
+    assert client.get("/api/feedback?status=closed", headers=TOKEN).status_code == 401
 
 
 def test_resolve_all_route(accounts, token):

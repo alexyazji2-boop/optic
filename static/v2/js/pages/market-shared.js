@@ -4,7 +4,7 @@
 import { html, raw } from '../core/dom.js';
 import * as api from '../core/api.js';
 import { num, signed, clean, bolded, capFirst, isNum } from '../core/format.js';
-import { skeleton, empty, generated } from '../ui/states.js';
+import { skeleton, empty, generated, whenText } from '../ui/states.js';
 
 export function sectorBoard(board, readLabel) {
   if (board === undefined) return skeleton('rows', 4, 'Loading the board');
@@ -17,7 +17,7 @@ export function sectorBoard(board, readLabel) {
         <td>${num(r.price)} <small class="t-muted">${r.price_kind || ''}</small></td><td>${capFirst(r.trend)}${r.changed ? html` <small class="t-muted">changed</small>` : ''}</td>
         <td>${num(r.bull_above)} <small class="t-muted">${signed(r.to_break_pct)}</small></td><td>${num(r.bear_below)} <small class="t-muted">${signed(r.to_breakdown_pct)}</small></td>
         <td>${(r.rotation || {}).label || ''}</td><td><button type="button" class="btn btn-sm" data-v2-sread="${r.symbol}" aria-label="${readLabel} for ${r.symbol}">${readLabel}</button></td></tr>`)}</tbody></table></div>
-    <p class="asof">Levels from the prior session's range. ${/^[aeiou]/i.test(readLabel) ? 'An' : 'A'} ${readLabel} is written by an AI model when you ask for it, and kept for an hour.</p>`;
+    <p class="asof">${(board.basis || {}).price_as_of ? `Prices ${whenText(board.basis.price_as_of)}${board.basis.price_kind ? `, ${board.basis.price_kind}` : ''}. ` : ''}Levels from the prior session's range. ${/^[aeiou]/i.test(readLabel) ? 'An' : 'A'} ${readLabel} is written by an AI model when you ask for it, and kept for an hour.</p>`;
 }
 
 export function sectorReadBlock(sread) {

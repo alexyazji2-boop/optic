@@ -19,8 +19,8 @@ from __future__ import annotations
 import json
 from typing import Any, Dict, List, Optional, Tuple
 
-from .. import db
-from . import tokens
+from .. import db, knowledge
+from . import config, tokens
 
 # ------------------------------------------------------------------- helpers
 
@@ -239,6 +239,11 @@ def session_by_token(token: str) -> Optional[Dict[str, Any]]:
     Expiry is in the WHERE clause rather than checked afterwards. A caller who
     forgets the check is then unable to authenticate an expired session, instead
     of doing it silently."""
+    if config.SESSION_MAX_DAYS > 0:
+        # and never older than the absolute limit, whatever the slide says (SEC-14)
+        return db.row(
+            "SELECT * FROM sessions WHERE session_token_hash = ? AND expires_at > ? AND created_at > ?",
+            (tokens.token_hash(token), db.utcnow(), db.in_seconds(-config.SESSION_MAX_DAYS * 86400)))
     return db.row(
         "SELECT * FROM sessions WHERE session_token_hash = ? AND expires_at > ?",
         (tokens.token_hash(token), db.utcnow()))
@@ -590,20 +595,37 @@ DEFAULT_PREFERENCES = {
     "time_zone": "auto",
     "default_market": "US",
     "default_landing": "home",
+    # None until the reader chooses a level while signed in (Phase 05): the client then
+    # sends the browser's level up rather than replacing it with a default
+    "knowledge_level": None,
 }
 
 LANDING_VIEWS = ("home", "brief", "watchlist", "swing", "market", "chart", "scan")
 
 
 def preferences(user_id: str) -> Dict[str, Any]:
+    """The reader's preferences, with `updated_at`, the row's version (read-only).
+
+    A browser whose save failed sends its level up at the next load only if the
+    account has not changed since that browser last saw it (Phase 05), so it
+    needs the version; it is compared, never set, so no clock is compared."""
     found = db.row("SELECT * FROM user_preferences WHERE user_id = ?", (user_id,))
     if not found:
-        return dict(DEFAULT_PREFERENCES)
-    return {k: found.get(k) or DEFAULT_PREFERENCES[k] for k in DEFAULT_PREFERENCES}
+        return dict(DEFAULT_PREFERENCES, updated_at=None)
+    out = {k: found.get(k) or DEFAULT_PREFERENCES[k] for k in DEFAULT_PREFERENCES}
+    out["updated_at"] = found.get("updated_at")
+    return out
 
 
 def set_preferences(user_id: str, patch: Dict[str, Any]) -> Dict[str, Any]:
     fields = {k: v for k, v in patch.items() if k in DEFAULT_PREFERENCES}
+    # a level is stored as one of the five ids (an old id is mapped), and an unknown one is
+    # dropped like an unknown landing view, never stored as something no page can read
+    if "knowledge_level" in fields:
+        if knowledge.known(fields["knowledge_level"]):
+            fields["knowledge_level"] = knowledge.normalise(fields["knowledge_level"])
+        else:
+            fields.pop("knowledge_level")
     if "default_landing" in fields and fields["default_landing"] not in LANDING_VIEWS:
         # An unknown view would send the reader to a blank page on every visit,
         # so it is dropped rather than stored and discovered later.

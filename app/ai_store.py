@@ -104,15 +104,17 @@ FEATURES: Dict[str, str] = {
 }
 
 # List prices in USD per million tokens, from Anthropic's pricing page as read
-# on 2026-09-30: base input, 5-minute cache write, cache hit, output. The cache
-# hit on Opus 5.5 is 0.05x its input price where every other model's is 0.1x.
+# on 2026-10-30: base input, 5-minute cache write, cache hit, output. The cache
+# hit on Opus 5.5 and Sonnet 5.5 is 0.05x the input price, Fable 5.1's 0.025x,
+# every other model's 0.1x. Sonnet 5.5's hit read $0.20 here until 2026-10-30;
+# the page says $0.10 (Phase 10 cost audit).
 # Matched on the id's start, so a dated id such as `claude-haiku-4-5-20251001`
 # prices as its model. A model missing here is shown with no price rather than
 # a guessed one.
 PRICES: Dict[str, Tuple[float, float, float, float]] = {
     "claude-opus-5-5": (4.00, 5.00, 0.20, 20.00),
     "claude-opus-5": (5.00, 6.25, 0.50, 25.00),
-    "claude-sonnet-5-5": (2.00, 2.50, 0.20, 10.00),
+    "claude-sonnet-5-5": (2.00, 2.50, 0.10, 10.00),
     "claude-sonnet-5": (2.00, 2.50, 0.20, 10.00),
     "claude-haiku-4-5": (1.00, 1.25, 0.10, 5.00),
     "claude-fable-5-1": (10.00, 12.50, 0.25, 50.00),
@@ -244,6 +246,18 @@ def keep(kind: str, key: str, payload: Dict[str, Any]) -> bool:
                     kind, type(exc).__name__, exc)
         return False
     return True
+
+
+def attempts(kind: str, key: str) -> int:
+    """How many attempts `claim` has counted at a piece under kind/key; 0 before the first. So a page can tell a piece
+    not yet tried from one that failed (BUG-186, Phase 11)."""
+    try:
+        with closing(_connect()) as conn:
+            row = conn.execute("SELECT attempts FROM kept WHERE kind = ? AND key = ?", (kind, key)).fetchone()
+        return int(row["attempts"] or 0) if row else 0
+    except (sqlite3.Error, OSError):
+        with _MEMORY_LOCK:
+            return int((_MEMORY.get((kind, key)) or {}).get("attempts") or 0)
 
 
 def claim(kind: str, key: str, max_attempts: int, retry_seconds: float) -> bool:

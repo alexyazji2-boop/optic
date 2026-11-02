@@ -281,7 +281,7 @@ def test_the_written_briefing_is_metered_and_cached_per_facts(market, monkeypatc
     calls, guarded = [], []
     monkeypatch.setitem(main.brokerage_ws_routes.HOOKS, "spend_guard", lambda request: guarded.append(1))
     monkeypatch.setitem(main.brokerage_ws_routes.HOOKS, "write_brief",
-                        lambda facts: calls.append(facts) or {"available": True, "headline": "A quiet day.",
+                        lambda facts, level=None: calls.append(facts) or {"available": True, "headline": "A quiet day.",
                                                               "what_changed": "x", "drivers": "", "ahead": "",
                                                               "attention": ""})
     first = c.post("/api/brokerage/workspace/briefing/written", json={}).json()
@@ -343,21 +343,23 @@ def test_milos_portfolio_tool_reads_only_the_asking_reader(market, monkeypatch):
         import asyncio
         return asyncio.get_event_loop().run_until_complete(coro) if False else asyncio.run(coro)
 
+    # The tool is offered only in a thread about the reader's own portfolio (or from Brokerage).
+    asked = [{"role": "user", "content": "Where is my portfolio concentrated?"}]
     for who, expect, absent in ((ua, "VOO", "TSLA"), (ub, "TSLA", "VOO")):
         monkeypatch.setattr(main.auth_deps, "current_user", lambda request, who=who: who)
-        box = main._milo_toolbox(types.SimpleNamespace(), {"focus": {"scope": "auto"}})
+        box = main._milo_toolbox(types.SimpleNamespace(), {"focus": {"scope": "auto"}}, asked)
         body = run(box.run("get_my_portfolio", {"part": "summary"}))[0]
         assert expect in body and absent not in body
     # A scope naming the other reader's accounts reads nothing of theirs.
     theirs = [x["id"] for x in store.accounts(ub["id"])]
     monkeypatch.setattr(main.auth_deps, "current_user", lambda request: ua)
-    box = main._milo_toolbox(types.SimpleNamespace(), {"focus": {"scope": "auto"}, "brokerage_scope": theirs})
+    box = main._milo_toolbox(types.SimpleNamespace(), {"focus": {"scope": "auto"}, "brokerage_scope": theirs}, asked)
     body = run(box.run("get_my_portfolio", {"part": "summary"}))[0]
     assert "VOO" in body and "TSLA" not in body
     # Not signed in: no portfolio, and said plainly.
     monkeypatch.setattr(main.auth_deps, "current_user", lambda request: None)
-    body = json.loads(run(main._milo_toolbox(types.SimpleNamespace(), {}).run("get_my_portfolio",
-                                                                             {"part": "summary"}))[0])
+    body = json.loads(run(main._milo_toolbox(types.SimpleNamespace(), {}, asked).run("get_my_portfolio",
+                                                                                    {"part": "summary"}))[0])
     assert body["signed_in"] is False and "data" not in body
     with pytest.raises(milo_tools.InvalidInput):
         milo_tools.validate("get_my_portfolio", {"part": "everything"})

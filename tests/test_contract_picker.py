@@ -61,7 +61,7 @@ def test_up_to_three_contracts_that_fit_each_explained():
 
 def test_none_fits_is_said_with_the_reasons_and_nothing_is_forced():
     out = cp.pick(_frames(), 100.0, R, 0.0, _plan(max_premium=20.0), TODAY, None, None, "XYZ")
-    assert out["picks"] == [] and "cost more than your limit at the ask" in out["why_none"]
+    assert out["picks"] == [] and "cost more than the limit you set at the ask" in out["why_none"]
     one = cp.pick(_frames(dtes=(30,), strikes=(100,)), 100.0, R, 0.0, _plan(), TODAY, None, None, "XYZ")
     assert len(one["picks"]) == 1, "one eligible contract is one pick, not three"
 
@@ -71,8 +71,10 @@ def test_a_report_inside_the_hold_needs_the_plan_to_say_so():
     exits_before = cp.pick(_frames(), 100.0, R, 0.0, _plan(), TODAY, earn, None, "XYZ")
     assert exits_before["event_in_hold"] and exits_before["picks"] == []
     assert "held through the report on 2026-10-30" in exits_before["why_none"]
-    assert exits_before["conflict"] == ("The 2026-10-30 earnings report falls inside your 14-day hold. Either say you "
-                                        "mean to hold through it, or plan a hold of 7 days or fewer.")
+    # said as the screen's own filters, not as how to plan a trade (advice policy, 2026-10-29)
+    assert exits_before["conflict"] == ("The 2026-10-30 earnings report falls inside the 14-day window you set. Tick the box "
+                                        "for holding through the next report to include contracts held across it, or "
+                                        "choose a window of 7 days or fewer.")
     holds = cp.pick(_frames(), 100.0, R, 0.0, _plan(through_event=True), TODAY, earn, None, "XYZ")
     assert holds["picks"]
     sc = holds["picks"][0]["scenarios"]

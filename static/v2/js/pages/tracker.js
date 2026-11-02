@@ -17,7 +17,7 @@ import { sectionHead } from './tabs.js';
 import { scenariosSection } from '../ui/scenarios.js';
 import { sections } from '../ui/sections.js';
 
-let book = 'balanced', month = null, D = {}, live = true, mainEl = null, poll = null, scanning = false, notice = null;
+let book = 'balanced', month = null, D = {}, live = true, mainEl = null, poll = null, scanning = false, notice = null, pollFails = 0;
 const $0 = (v) => (isNum(v) ? money(v, 0) : 'n/a');
 const tone = (v) => (!isNum(v) ? '' : v > 0 ? 'up' : v < 0 ? 'down' : '');
 const tile = (k, v, note, cls = '') => html`<div><dt>${k}</dt><dd class="${cls}">${v}</dd>${note ? html`<p class="kv-note">${note}</p>` : ''}</div>`;
@@ -99,6 +99,12 @@ function books(d) {
     <p class="asof">They differ in the four things that actually change a risk profile: how selective the entry bar is, how much is risked per trade, which instruments are allowed, and how volatile a name may be. Nothing changes the analysis. A setup is a setup, and these decide what to do about it.</p></section>`;
 }
 
+// The figures above are as of the open positions' last marks: they carried no time (BUG-073, Phase 10)
+function markedLine(d) {
+  const at = (d.open || []).map((p) => p.marked_at).filter(Boolean).sort().pop();
+  return at ? html`<p class="asof">Open positions last marked ${stamp(at)}; the figures above are as of then.</p>` : '';
+}
+
 function ledger(d) {
   const s = d.summary || {}, cfg = d.config || {}, cap = d.capacity || {}, prog = d.progress || {}, run = scanning || !!prog.running;
   const name = ((d.books || []).find((b) => b.id === (d.book || book)) || {}).label || '';
@@ -113,10 +119,12 @@ function ledger(d) {
       <p class="asof">${hint}</p></details>`}
     ${notice ? html`<div class="state" role="status"><p>${notice}</p></div>` : ''}
     ${d.market_open ? '' : html`<p class="stale"><b>The market is closed.</b> Open positions are still re-marked at the closing price, but no new entries are taken while the tape is shut. A fill at a stale price isn't a trade anyone could have got. Scanning resumes at the next open (9:30am ET, weekdays).</p>`}
+    ${run && pollFails >= 3 ? html`<p class="stale" role="status">Progress has not updated for ${pollFails} tries${D.pollErr ? ` (${clean(api.explain(D.pollErr, 'The scan'))})` : ''}. It keeps asking; the scan itself runs on the server either way.</p>` : ''}
     ${run ? html`<div class="tk-progress" role="status"><p><b>${prog.stage || 'Working'}</b>${prog.note ? ` ${prog.note}` : ''}${prog.total ? ` ${prog.done} of ${prog.total}` : ''}${prog.trigger === 'scheduled' ? ' (scheduled)' : ''}</p>${prog.total ? html`<div class="build-bar"><span style="width:${Math.min(100, Math.round((prog.done / prog.total) * 100))}%"></span></div>` : ''}</div>` : ''}
     ${(d.feed || {}).throttled ? html`<p class="stale"><b>The price feed is rate-limiting right now.</b> A scan during a block takes fewer positions, not wrong ones: a blocked options request looks like a stock with no options, so Optic skips those names rather than recording a shares-only trade. Clears in about ${num(d.feed.seconds_remaining, 0)}s.</p>` : ''}
     <dl class="kv" style="--kv:4">${tile('Account value', $0(s.start_equity + s.total_pnl), `started at ${$0(s.start_equity)}`, tone(s.total_pnl))}${tile('Realised P&L', $0(s.realised_pnl), `${s.closed_count || 0} closed ${s.closed_count === 1 ? 'trade' : 'trades'}`, tone(s.realised_pnl))}
       ${tile('Unrealised P&L', $0(s.unrealised_pnl), `${s.open_count || 0} open now`, tone(s.unrealised_pnl))}${tile('Total return', signed(s.return_pct, 2), 'realised plus open marks', tone(s.return_pct))}</dl>
+    ${markedLine(d)}
     <details class="more-inline" ${advancedOn() ? 'open' : ''}><summary>How the book limits its risk</summary>
       <dl class="kv" style="--kv:5">${tile('Position slots', `${cap.open_positions || 0} / ${cfg.max_open_positions || 'n/a'}`, `${cap.position_slots_left || 0} left`)}${tile('Risk deployed', $0(cap.open_risk), `${num(cap.open_risk_pct, 1)}% of a ${num(cfg.max_portfolio_risk_pct, 0)}% budget`)}
         ${tile('Risk budget left', $0(cap.risk_budget_left), 'before the book stops adding')}${tile('Sizing base', $0(s.equity), 'closed trades only, so an open run-up cannot raise the next bet')}${tile('New per scan', num(cfg.max_new_per_scan, 0), 'so the book fills over days')}</dl>
@@ -271,8 +279,8 @@ async function load(quiet) {
   try {
     const d = await api.get(`/api/tracker?${q}`, { force: true, timeout: 45000 });
     if (!live) return;
-    D.d = d; D.err = null; scanning = !!(d.progress || {}).running;
-  } catch (e) { if (!quiet) D.err = e; }
+    D.d = d; D.err = null; scanning = !!(d.progress || {}).running; pollFails = 0; D.pollErr = null;
+  } catch (e) { if (!quiet) D.err = e; else { pollFails += 1; D.pollErr = e; } }
   paint();
   clearTimeout(poll);
   if (live && D.d && (D.d.progress || {}).running) poll = setTimeout(() => load(true), 4000);

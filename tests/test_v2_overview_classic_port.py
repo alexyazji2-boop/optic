@@ -221,8 +221,9 @@ def test_the_four_questions_grade_with_classics_words(tmp_path):
       print(JSON.stringify({{ html, wait, off }}));
     """)
     h = got["html"]
-    for want in ("Is it a strong business?", "Quality F", "Is the price attractive?", "Insufficient Data", "Is there a trade?", "No Setup",
-                 "What about earnings?", "Reports Oct 29", "Quality and price together: Not Investable. Business quality grades F.",
+    # the price and setup questions and the conviction label are said in plain words since 2026-10-29 (advice policy)
+    for want in ("Is it a strong business?", "Quality F", "How is it valued?", "Insufficient Data", "Is there a short-term setup?", "No Setup",
+                 "What about earnings?", "Reports Oct 29", "Quality and price together: fails the long-term rules. Business quality grades F.",
                  "Revenue was roughly flat in the latest fiscal year, and the company is not yet profitable.", "It lost about 1 cents on each dollar of sales.",
                  "Show the figures", "Why", "none has been shown to predict returns"):
         assert want in h, want
@@ -273,12 +274,14 @@ def test_key_figures_carry_classics_definitions_word_for_word():
     term = (JS / "ui/term.js").read_text()
     for k, v in classic.items():
         assert v in term, k
-    assert "export const OV_ESSENTIALS = ['market_cap', 'pe_trailing', 'revenue_growth', 'profit_margin', 'dividend_yield', 'high_52', 'low_52'];" in OVR
-    assert "Select a label for what it means. All eighteen figures are under Advanced research below." in OVR
+    # one section of every figure the feed has, in the advanced analysis (post-demo Phase 06): seven under Key figures
+    # and all eighteen again under Advanced research said the same figures twice
+    assert "export function keyStats(c) {" in OVR and '<h2 class="t-h2" id="kf-h">Key statistics</h2>${statList(rows, ids)}' in OVR
+    assert "OV_ESSENTIALS" not in OVR and "export function keyFigures" not in OVR
 
 
 def test_optic_read_keeps_its_inputs_scale_skill_line_and_method_fold():
-    read = OVR[OVR.index("export function opticRead(c) {"):OVR.index("/* ---------------- Advanced research")]
+    read = OVR[OVR.index("export function opticRead(c) {"):OVR.index("/* ---------------- the rest of the ticker and the method")]
     for want in ("Optic's read", "of inputs agree", "Each input scores from -100 to +100: a bar fills right of the line when the input leans bullish and left when it leans bearish.",
                  "skill.text", "dg.method ? how(", "role=\"group\" aria-label=\"How the ${p.factors_total || 5} inputs scored\""):
         assert want in read, want
@@ -289,9 +292,11 @@ def test_the_header_and_the_switch():
     assert "${raw(logoHTML(sym, { lazy: false }))}" in FRAME and "/api/logo/${encodeURIComponent(sym)}" in (JS / "ui/symbols.js").read_text()
     assert "main: `Stage ${r.stage} · ${r.name || ''}`.trim(), tag: r.transition_short || ''" in OVR, "Classic's 'Stage 3 · Topping' and 'breakdown'"
     assert "miloButton('Explain', { ask: st.ask(sym)" in FRAME, "Explain drafts the question; nothing is sent"
-    assert "role=\"switch\" aria-checked=\"${on}\" data-v2-adv-toggle" in FRAME and "Show advanced analysis" in FRAME
-    assert "if (e.target.closest('[data-v2-adv-toggle]')) { prefs.setAdvanced(!prefs.advancedOn()); return; }" in DOS, "Classic's keys (optic.knowledge.v1)"
-    assert '<details class="adv-fold" data-adv ${c.advanced ? \'open\' : \'\'}>' in OVR and '<details class="more-inline cs-fold" data-adv ${c.advanced ? \'open\' : \'\'}>' in OVR
+    # the switch swaps the analysis area and names the other view (post-demo Phase 06, BUG-001): it no longer opens folds
+    assert "${adv ? 'Show simple analysis' : 'Show advanced analysis'}</button>" in FRAME and 'data-v2-adv-toggle data-mode="${mode}" aria-controls="ov-analysis"' in FRAME
+    assert "if (e.target.closest('[data-v2-adv-toggle]')) { prefs.setAdvanced(!prefs.advancedOn()); return; }" in DOS, "one state: density"
+    assert "${mode === 'advanced' ? advancedView(sym, c, fund) : simpleView(sym, c)}" in DOS
+    assert "data-adv" not in OVR and "data-adv" not in DOS and 'role="switch"' not in FRAME
 
 
 def test_nothing_on_the_overview_calls_a_model_or_sends():
@@ -319,6 +324,8 @@ def logos(tmp_path, monkeypatch):
         calls.append(sym)
         return {"AAPL": (b"<svg xmlns='http://www.w3.org/2000/svg'/>", "image/svg+xml"), "INTC": (b"\x89PNG....", "image/png")}.get(sym)
     monkeypatch.setattr(m, "_logo_fetch", fetch)
+    # every symbol here counts as listed: an unlisted one is refused before a fetch (SEC-06, tests/test_phase10_hardening.py)
+    monkeypatch.setattr(m.universe_mod, "known_symbol", lambda sym: True)
     return calls
 
 
@@ -328,9 +335,10 @@ def test_the_logo_route(logos):
     assert a.status_code == 200 and a.headers["content-type"].startswith("image/svg+xml")
     assert "sandbox" in a.headers["content-security-policy"] and a.headers["x-content-type-options"] == "nosniff", "an SVG opened on its own runs nothing"
     assert c.get("/api/logo/AAPL").status_code == 200 and logos == ["AAPL"], "kept on disk: asked for once"
-    assert c.get("/api/logo/ZZZZ").status_code == 404 and c.get("/api/logo/ZZZZ").status_code == 404 and logos.count("ZZZZ") == 1, "no logo is remembered too"
+    # no logo is 204 No Content since Phase 11 (BUG-196): the page falls back to the initial without a console error
+    assert c.get("/api/logo/ZZZZ").status_code == 204 and c.get("/api/logo/ZZZZ").status_code == 204 and logos.count("ZZZZ") == 1, "no logo is remembered too"
     for bad in ("%5EGSPC", "ES%3DF", "..%2Fetc", "A" * 14):
-        assert c.get(f"/api/logo/{bad}").status_code == 404
+        assert c.get(f"/api/logo/{bad}").status_code in (204, 404)    # 404: a path the route never sees
     assert "^GSPC" not in logos and len(logos) == 2, "an index, a future or a path is never asked for"
 
 

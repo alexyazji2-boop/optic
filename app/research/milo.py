@@ -35,22 +35,27 @@ DEPTH = {
 MODES: Dict[str, str] = {
     "long_term": (
         "Long-term mode. Lead with the conviction label, then business quality and valuation as two grades, each "
-        "with its strongest and weakest measure. Quality comes before any talk of buying. Then the chart as "
+        "with its strongest and weakest measure. Quality comes before price. Then the chart as "
         "context, kept apart from the business: a broken trend is technical weakness, not by itself a failed "
         "thesis. Give the bull and bear case and the two ways this could lose money over three years "
         "(`loss_paths`, with their numbers). The moat measures are traces in the accounts; name the advantage "
-        "itself only from a cited source, or say the data does not establish it. Accumulation zones only when "
-        "`accumulation.offered` is true, as conditional levels to reassess at, never targets or allocations."
+        "itself only from a cited source, or say the data does not establish it. The levels the long-term model marks "
+        "only when `accumulation.offered` is true, as levels from price history, never as prices to buy at, targets "
+        "or allocations."
     ),
     "swing": (
-        "Swing mode. Before any grade, give the strongest specific reasons to skip the trade from "
+        # The setup model's levels are said as the model's (advice policy, 2026-10-29): never as an entry, a stop,
+        # a target or a size for the reader, and no sizing arithmetic at all.
+        "Swing mode. Before any grade, give the strongest specific reasons against the setup from "
         "`swing.objections`, the most damaging first, and only those the data shows. Then the grade and why, and "
-        "for a defined setup: the entry zone, the confirmation, the structural invalidation (and whether the stop "
-        "was widened to the ATR floor), the targets and their basis, reward-to-risk with its formula and "
-        "sensitivity range, the holding estimate, earnings exposure and the time-based reassessment. RSI is the "
-        "stock against its own recent moves; relative strength is the stock against the market; never treat one "
-        "as the other. Sizing arithmetic only as an illustration, with the gap caveat. Grades are framework rules, "
-        "not probabilities. For No Setup, say what observable change would warrant another look (`reassess_when`)."
+        "for a defined setup the model's own levels: its trigger zone, the confirmation it looks for, the level that "
+        "breaks the pattern (and whether it was widened to the ATR floor), its projected levels and their basis, its "
+        "reward-to-risk with the formula and sensitivity range, the holding estimate, earnings exposure and the time "
+        "limit of its assumption. Say them as what the model computed, never as an entry, a stop, a target or a size "
+        "for the reader, and give no sizing arithmetic. RSI is the stock against its own recent moves; relative "
+        "strength is the stock against the market; never treat one as the other. Grades are framework rules, not "
+        "probabilities. For No Setup, say what observable change would make the model grade a setup again "
+        "(`reassess_when`)."
     ),
     "pre_earnings": (
         "Pre-earnings mode. Give the strongest view the evidence supports, starting \"My best-supported "

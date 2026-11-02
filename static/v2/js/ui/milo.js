@@ -10,7 +10,9 @@
 // it names a different symbol from the one on screen. The label the reader
 // sees is built the same way, so it always names the page actually open.
 //
-// Nothing is sent until the reader presses Send. Every entry point drafts.
+// Nothing is sent until the reader presses Send, and every entry point elsewhere in the terminal drafts. The panel's
+// three opening starters and Deep research are the exceptions, by the owner's decision: a starter sends as it reads
+// ("must send meaningful requests", 2026-10-20), and Deep research is itself the ask (BUG-049).
 import { html, render, $, raw, announce, reducedMotion } from '../core/dom.js';
 import { makeDrawer } from './drawer.js';
 import { saveQuestion } from '../core/research.js';
@@ -22,15 +24,16 @@ import * as router from '../core/router.js';
 import { holds } from '../core/device.js';
 import { esc, compact } from '../core/format.js';
 import { GROUPS, SETTINGS } from '../nav.js';
-import { renderAnswer, streamingTail, sourcesAsText, STUDIES, SECTIONS as ACT_SECTIONS } from '../core/milo-text.js';
+import { renderAnswer, splitFollowUps, streamingHTML, settledEnd, FOLLOW_AT, sourcesAsText, STUDIES, SECTIONS as ACT_SECTIONS } from '../core/milo-text.js';
 import { lineChart, mountCharts } from './chart.js';
 import * as FF from './finfigs.js';
 import { CLASSIC } from '../core/classic.js';
 import { miloNotice } from '../core/legal.js';
 import { icon } from './icons.js';
+import { levelSlider } from './levelslider.js';
 
 const HISTORY_KEY = 'optic.pulse.history.v1', PERSONA_KEY = 'optic.pulse.persona.v1', HORIZON_KEY = 'optic.milo.horizon.v1', RESEARCH_KEY = 'optic.research.v1';
-const MAX_CONVERSATIONS = 30, MAX_MESSAGES = 60, MAX_CHARS = 12000;
+const MAX_CONVERSATIONS = 30, MAX_MESSAGES = 60, MAX_CHARS = 12000, MAX_Q = 4000;
 const DOSSIER = new Set(['overview', 'chart', 'swing', 'long', 'earnings', 'financials', 'news']);
 // a source's time as a reader says it: "2026-10-22T20:11:00+00:00" printed raw under every headline (audit 2026-10-22)
 const readWhen = (v) => { const t = /^\d{4}-\d{2}-\d{2}T/.test(String(v || '')) ? new Date(v) : null; return t && !Number.isNaN(t.getTime()) ? `published ${t.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' })} ET` : (v || ''); };
@@ -48,7 +51,12 @@ export const MILO_STATES = { submitted: 'Sending your question', preparing: 'Pre
 // stream looked frozen (motion proposal, 2026-10-24). It goes the moment anything arrives. It claims nothing more.
 const QUIET_MS = 30000;
 export const QUIET_TEXT = 'No reply from the server for 30 seconds. You can keep waiting or stop the answer.';
-const STEP_WORDS = { thinking: 'Thinking it through', 'searching the web': 'Searching the web', searching: 'Searching live sources', 'reading results': 'Reading what it found' };
+const STEP_WORDS = { thinking: 'Thinking it through', 'searching the web': 'Searching the web', searching: 'Searching live sources', 'reading results': 'Reading what it found',
+  // the server's own steps (post-demo Phase 07): it has the question and is gathering the page's figures; a round of the
+  // model has started, so what the reader waits for now is the model, not the tool whose line was showing
+  writing: 'Working out the answer' };
+const stepWords = (state, sym) => (state === 'gathering' ? (sym ? `Reading ${sym}'s figures` : 'Reading the figures for your question')
+  : STEP_WORDS[state] || String(state || '').replace(/^./, (x) => x.toUpperCase()));
 const SCOPES = { auto: 'This page', market: 'Market only', none: 'No page context' };
 
 /* ---------------- context ---------------- */
@@ -139,7 +147,10 @@ function saveHistory(list) {
 export const titleOf = (messages) => { const first = (messages || []).find((m) => m.role === 'user'); return (first && String(first.content || '').replace(/\s+/g, ' ').trim().slice(0, 70)) || 'Empty conversation'; };
 function persist() {
   if (!S.conv.messages.length) return;
-  const messages = S.conv.messages.slice(-MAX_MESSAGES).map((m) => ({ role: m.role, content: String(m.content || '').slice(0, MAX_CHARS) }));
+  // the advice-policy notes go with their answer, so a reopened conversation still says what was declined or removed
+  const from = Math.max(0, S.conv.messages.length - MAX_MESSAGES);
+  const messages = S.conv.messages.slice(-MAX_MESSAGES).map((m, k) => { const inf = meta.get(from + k) || {}, o = { role: m.role, content: String(m.content || '').slice(0, MAX_CHARS) };
+    if (inf.policyLine) o.policy = String(inf.policyLine).slice(0, 400); if (inf.amended) o.amended = String(inf.amended).slice(0, 400); if (inf.level) o.level = String(inf.level).slice(0, 20); return o; });
   const list = loadHistory().filter((c) => c.id !== S.conv.id);
   list.unshift({ id: S.conv.id, at: new Date().toISOString(), title: titleOf(messages), ticker: route.symbol || null, messages });
   saveHistory(list.slice(0, MAX_CONVERSATIONS));
@@ -147,7 +158,7 @@ function persist() {
 
 /* ---------------- state ---------------- */
 const blankConv = () => ({ id: newId(), messages: [], lastTicker: null });
-const S = { files: [], web: false, deepHint: false, conv: blankConv(), items: [], busy: false, abort: null, scope: 'auto', showHistory: false, showSettings: false, showInfo: false, allowance: null, personas: null, modes: null, draft: '', live: null, mounted: null, panel: null, toEnd: false, symbolAtAsk: null, dropped: new Set(), report: null };
+const S = { files: [], web: false, deepHint: false, conv: blankConv(), items: [], busy: false, abort: null, scope: 'auto', showHistory: false, showSettings: false, showInfo: false, allowance: null, personas: null, modes: null, draft: '', live: null, mounted: null, panel: null, toEnd: false, symbolAtAsk: null, dropped: new Set(), report: null, follow: true, view: null, lastTop: null, cutPaste: 0 };
 // items: what the log shows this session: {kind:'msg', i} for conv.messages[i], or {kind:'note', text}; meta per message index
 const meta = new Map();
 /* ---------------- attachments (Classic parity B4b; Classic's app.js:46216-46345) ----------------
@@ -390,20 +401,25 @@ function msgHTML(it) {
   const savable = String(m.content || '').trim().length > 12;
   if (m.role === 'user') return html`<div class="milo-msg milo-you${S.fresh === it.i ? ' is-new' : ''}"><p class="sr">You asked</p><div class="milo-bubble">${m.content}</div>${info.files ? html`<p class="milo-sent-files">${icon('clip')}<span>${info.files.join(', ')}</span></p>` : ''}${savable ? html`<p class="milo-you-acts"><button type="button" class="milo-save" data-v2-milo-save="${it.i}" ${info.saved ? html`disabled` : ''} title="Keep this question in Saved research, to ask again">${info.saved ? 'Saved' : 'Save'}</button></p>` : ''}</div>`;
   const shown = String(m.content || '').replace(/\n\n\[(Stopped by the reader|Cut off): incomplete\]$/, '');
-  const { html: body, ups } = renderAnswer(shown, info.symbol || null);
   const live = S.live && S.live.i === it.i;
+  // an answer still arriving, when the whole log is drawn (the panel opened again mid-answer): as the live drawing has
+  // it, so no half-written tag shows for the frame before paintLive takes it over
+  const { html: body, ups } = live ? { html: streamingHTML(shown, info.symbol || null), ups: [] } : renderAnswer(shown, info.symbol || null);
   // an answer sits on the panel's own surface: its name, what it was about, the text; sources and actions after it
   return html`<article class="milo-msg milo-bot" data-v2-milo-i="${it.i}" aria-label="Milo's answer"><p class="milo-who">Milo</p>
     ${aboutLine(info)}
     ${info.assumed ? html`<p class="milo-assumed">${info.assumed}</p>` : ''}
+    ${levelNote(info, live)}
     ${info.deep ? html`<p class="milo-assumed">Deep research: read from live web sources.</p>` : info.web ? html`<p class="milo-assumed">Web search was on for this answer.</p>` : ''}
     ${info.notSent && info.notSent.length ? html`<p class="milo-not-sent" role="note"><b>Not sent with this question:</b> ${info.notSent.join('; ')}.</p>` : ''}
+    ${info.policyLine ? html`<p class="milo-policy" role="note">${info.policyLine}</p>` : ''}
     <div class="milo-bubble">${raw(body)}</div>
+    ${info.amended ? html`<p class="milo-amended" role="note">${info.amended}</p>` : ''}
     ${live ? html`<span class="activity" role="progressbar" aria-label="Milo is working on this answer"></span>` : ''}
     ${info.ended || /\[(Stopped by the reader|Cut off): incomplete\]$/.test(m.content || '') ? html`<p class="milo-ended" role="note">${(info.ended || (/Stopped by the reader/.test(m.content) ? 'stopped' : 'cut')) === 'stopped' ? 'Stopped by you. This answer is incomplete.' : 'The connection ended before Milo finished. This answer is incomplete.'}</p>` : ''}
     ${live ? '' : html`${ups.length ? html`<div class="milo-ups" role="group" aria-label="Follow-up questions">${ups.map((q) => html`<button type="button" class="milo-up" data-v2-milo-follow="${q}">${q}</button>`)}</div>` : ''}
       <div class="milo-foot">${sourceLists(info)}<div class="milo-acts"><button type="button" class="milo-act-btn" data-v2-milo-copy="${it.i}">${icon('copy')}<span>Copy</span></button>${info.question ? html`<button type="button" class="milo-act-btn" data-v2-milo-again="${it.i}" title="Put the question back in the box">${icon('retry')}<span>Ask again</span></button>` : ''}<button type="button" class="milo-act-btn" data-v2-milo-report="${it.i}" aria-expanded="${S.report && S.report.i === it.i ? 'true' : 'false'}" title="Tell Optic this answer has a wrong figure or a mistake">${icon('flag')}<span>Report a problem</span></button></div></div>
-      ${S.report && S.report.i === it.i ? reportHTML(it.i) : ''}
+      ${S.report && S.report.i === it.i && S.report.conv === S.conv.id ? reportHTML(it.i) : ''}
       <p class="milo-gen">Generated by an AI model from Optic's data. It can be wrong; check the figures against the sources.</p>`}</article>`;
 }
 // A problem with one answer, sent to the operator's problem reports (/api/feedback) with the question and the answer
@@ -420,11 +436,14 @@ function reportHTML(i) {
 async function sendReport(i, text) {
   const q = String((S.conv.messages[i - 1] || {}).content || ''), a = String((S.conv.messages[i] || {}).content || '');
   const head = `${text.trim().slice(0, 600)}\n\nMilo answer report\nQuestion: ${q.slice(0, 300)}\nAnswer: `;
-  S.report = { i, text, busy: true }; paintLog(false);
+  // the conversation it was written in, taken now: read after the request, a report sent before New conversation
+  // showed its outcome under the new one's answer at the same place (BUG-185, Phase 11)
+  const conv = S.conv.id;
+  S.report = { conv, i, text, busy: true }; paintLog(false);
   try {
     await api.post('/api/feedback', { message: head + a.slice(0, Math.max(200, 1990 - head.length)), page: `Milo, ${contextLabel('auto')}`.slice(0, 200) });
-    S.report = { i, sent: true };
-  } catch (e) { S.report = { i, text, err: api.explain(e, 'The report') }; }
+    S.report = { conv, i, sent: true };
+  } catch (e) { S.report = { conv, i, text, err: api.explain(e, 'The report') }; }
   paintLog(false);
 }
 /** The instruments an answer's data concerns: what the server loaded for the question and what Milo looked up,
@@ -503,14 +522,13 @@ function personaHTML() {
 function settingsHTML() {
   if (!S.showSettings) return '';
   const pp = S.personas || {}, hz = ((pp.horizons || {}).horizons) || [], ms = (S.modes || {}).modes || [];
-  const h = hz.find((x) => x.id === horizon()) || hz[0] || null, mode = ms.find((m) => m.id === prefs.knowledge()) || null;
+  const h = hz.find((x) => x.id === horizon()) || hz[0] || null;
   const list = (rows, head) => (rows && rows.length ? html`<p class="t-label">${head}</p><ul class="plain">${rows.map((r) => html`<li>${r}</li>`)}</ul>` : '');
   // the classic order: the level first, then the timeframe
   return html`<div class="milo-sheet-scrim" data-v2-milo-settings-done aria-hidden="true"></div>
     <div class="milo-settings" id="milo-settings" role="dialog" aria-modal="false" aria-labelledby="milo-set-h">
     <div class="milo-set-head"><h3 id="milo-set-h" tabindex="-1">Response settings</h3><button type="button" class="icon-btn" data-v2-milo-settings-done aria-label="Close Response settings" title="Close">${icon('close')}</button></div>
-    ${ms.length ? html`<label class="select milo-level"><span class="t-label">Level</span><select data-v2-milo-mode>${ms.map((m) => html`<option value="${m.id}" ${prefs.knowledge() === m.id ? 'selected' : ''}>${m.label}</option>`)}</select></label>
-      ${mode && mode.blurb ? html`<p class="milo-lens-blurb">${mode.blurb}</p>` : ''}` : ''}
+    ${ms.length ? html`<div class="milo-level">${levelSlider({ id: 'milo-lvl', label: 'Level', compact: true })}</div>` : ''}
     ${hz.length ? html`<div class="milo-hz" role="group" aria-labelledby="milo-hz-lab"><span class="t-label" id="milo-hz-lab">Timeframe</span>
       <div class="seg">${hz.map((x) => html`<button type="button" aria-pressed="${h && x.id === h.id ? 'true' : 'false'}" data-v2-milo-hz="${x.id}" title="${x.blurb || ''}">${HZ_SHORT[x.id] || x.label}</button>`)}</div></div>
     ${h && h.blurb ? html`<p class="milo-lens-blurb">${h.blurb}</p>` : ''}` : ''}
@@ -553,7 +571,7 @@ export function exampleAsk(r = route, scope = S.scope) {
 }
 /* Follow-ups above the box once a symbol's options read is on screen, word for word Classic's (app.js:44016); quiet
  * buttons, not chips (owner's amendment 3), and each only drafts, never sends. */
-export const OPTIONS_FOLLOWUPS = ['Why did the ranker pick that strike over a cheaper OTM one?', 'What does the gamma profile imply for a swing long here?', 'Is the flow confirming or fighting the chart?', 'Walk me through the entry zone and what invalidates it.', 'Does the short interest or insider activity change the read?', 'How does the earnings record affect holding through the print?'];
+export const OPTIONS_FOLLOWUPS = ['Why does the model score that strike above a cheaper out-of-the-money one?', 'What does the gamma profile say about how the price may move here?', 'Is the flow confirming or fighting the chart?', "Walk me through the model's trigger zone and what breaks the setup.", 'Does the short interest or insider activity change the read?', 'How has the stock moved after past earnings reports?'];
 function suggestHTML(empty) {
   if (!empty || S.busy || blocked() || !(S.conv.messages || []).length) return '';
   const follow = route.view === 'swing' && onSymbol() && S.scope === 'auto' ? OPTIONS_FOLLOWUPS : [];
@@ -691,23 +709,52 @@ function logHTML() {
   return html`${S.items.map(msgHTML)}`;
 }
 function paintChrome() { const h = host(); if (!h) return; draw($('.milo-chrome', h), chromeHTML()); paintHead(); paintForm(); }
-// the header's buttons (outside the panel's body): whether history is open, and no new conversation mid-answer
+// The header's buttons (outside the panel's body): whether history is open, and neither history nor a new conversation
+// mid-answer. The answer being written belongs to the conversation on screen, so while Milo answers nothing else can
+// take its place. Both buttons stay where a keyboard or a screen reader finds them (aria-disabled, not disabled) and a
+// press says why (post-demo Phase 07).
 function paintHead() {
   const hb = S.panel && $('.drawer-head [data-v2-milo-history]', S.panel), nb = S.panel && $('.drawer-head [data-v2-milo-new]', S.panel);
-  if (hb) { hb.setAttribute('aria-expanded', String(!!S.showHistory)); hb.classList.toggle('is-on', !!S.showHistory); }
-  if (nb) { nb.disabled = S.busy; nb.title = S.busy ? 'New conversation (stop the answer first)' : 'New conversation'; }
+  if (hb) { hb.setAttribute('aria-expanded', String(!!S.showHistory)); hb.classList.toggle('is-on', !!S.showHistory); hb.setAttribute('aria-disabled', String(!!S.busy)); hb.title = S.busy ? 'Conversation history (stop the answer first)' : 'Conversation history'; }
+  if (nb) { nb.setAttribute('aria-disabled', String(!!S.busy)); nb.title = S.busy ? 'New conversation (stop the answer first)' : 'New conversation'; }
 }
+const WAIT_HISTORY = 'Milo is still answering. Stop the answer first, then open your history.';
+const WAIT_NEW = 'Milo is still answering. Stop the answer first, then start a new conversation.';
 function paintLog(stick = true) {
   const h = host(); if (!h) return;
-  const log = $('.milo-log', h), pinned = !log || log.scrollHeight - log.scrollTop - log.clientHeight < 60;
+  const log = $('.milo-log', h);
   draw(log, logHTML());
   S.fresh = null;   // the question just sent enters once, not on every repaint
   mountAnswerCharts(log); mountAnswerFigures(log);
-  // the reader's own question always comes into view; new output follows only a reader already at the end
-  if (S.toEnd || (stick && pinned)) log.scrollTop = log.scrollHeight;
+  // the reader's own question always comes into view; new output follows only a reader following the end
+  if (S.toEnd || (stick && S.follow)) log.scrollTop = log.scrollHeight;
   if (S.showHistory || !S.items.length) log.scrollTop = 0;
   S.toEnd = false;
   scoutAfterPaint(); syncLatest();
+}
+// Whether new output follows (post-demo Phase 07). A reader at the end of the conversation is followed; one who has
+// moved up is left where they are, however near the end, so the answer arriving never pulls the view back down. Optic
+// only ever scrolls to the end, so a view that moved up was moved by the reader; the browser pulling it in when the
+// content gets shorter leaves it at the end, which is still following. Within 60 px of the end is the end again.
+// Measured against where the view was before a frame's changes, not after: a chart or a paragraph taller than the
+// old allowance (120 px) used to leave a following reader behind.
+function noteScroll(l) {
+  if (S.showHistory || !S.items.length) return;
+  const d = l.scrollHeight - l.scrollTop - l.clientHeight, was = S.lastTop === null ? l.scrollTop : S.lastTop;
+  if (l.scrollTop < was - 1 && d > 4) S.follow = false;
+  else if (d < 60) S.follow = true;
+  S.lastTop = l.scrollTop; S.view = { top: l.scrollTop, end: S.follow };
+}
+// a chart or a figure is drawn once its data comes, after its answer: a reader following the end stays at it
+function keepEnd() { const h = host(), log = h && $('.milo-log', h); if (log && S.follow && !S.showHistory && S.items.length) log.scrollTop = log.scrollHeight; }
+// Back where the reader was, when the panel opens again or history gives the conversation back: following the end, or
+// at the place they had scrolled up to
+function restoreView() {
+  const h = host(), log = h && $('.milo-log', h); if (!log || S.showHistory || !S.items.length) return;
+  const v = S.view; S.lastTop = null;
+  S.follow = !v || v.end;
+  log.scrollTop = S.follow ? log.scrollHeight : v.top;
+  syncLatest();
 }
 // "Latest": back to the end of the conversation, offered only when the reader has scrolled away from it
 function syncLatest() {
@@ -722,9 +769,19 @@ function grow(ta) {
   ta.style.height = `${Math.min(ta.scrollHeight + 2, max)}px`;
   ta.style.overflowY = ta.scrollHeight + 2 > max ? 'auto' : 'hidden';
 }
+// The box holds a question of up to MAX_Q characters and cuts anything longer, as typed or pasted: when it is full it
+// says so, and how much of a paste was left out (post-demo Phase 07; the cut was silent)
+function paintLimit(ta) {
+  const n = host() && $('#milo-limit', host()); if (!n || !ta) return;
+  const full = ta.value.length >= MAX_Q, max = MAX_Q.toLocaleString('en-US');
+  if (!full) S.cutPaste = 0;
+  const text = !full ? '' : S.cutPaste ? `A question can be up to ${max} characters, so the last ${S.cutPaste.toLocaleString('en-US')} characters of what you pasted were left out.` : `That is ${max} characters, the most a question can hold.`;
+  n.hidden = !full; if (n.textContent !== text) n.textContent = text;
+}
 function paintForm() {
   const h = host(); if (!h) return;
   const b = blocked(), send = $('[data-v2-milo-send]', h), stop = $('[data-v2-milo-stop]', h), ta = $('#milo-q', h);
+  paintLimit(ta);
   const hadFocus = document.activeElement;
   if (send) { send.disabled = S.busy || !!b; send.hidden = S.busy; }
   if (stop) stop.hidden = !S.busy;
@@ -744,22 +801,69 @@ function paintForm() {
 }
 const draw = (el, tpl) => { if (el) render(el, tpl); };
 
-// the answer still streaming: settled paragraphs drawn, the tail as plain text
+// The answer still streaming (post-demo Phase 07). Paragraphs that are finished are drawn once and appended, and only
+// the paragraph still arriving is drawn again each frame, so a finished paragraph, a chart or a figure inside it, and
+// text the reader has selected are never torn down and drawn again. Answer markdown is drawn paragraph by paragraph
+// (core/milo-text.js mdLite), and settledEnd only ends the finished part where drawing it in pieces gives what drawing
+// the whole answer gives, so the answer reads the same while it arrives, when it ends and when it is drawn again from
+// history. The arriving paragraph is drawn as markdown too (streamingHTML). At most one paint a frame, however many
+// events arrived in it.
+function liveLinesHTML(L) {
+  const got = (L.got || []).filter((r) => r && r.ok !== false).map((r) => r.label || (r.symbols || []).join(', ')).filter(Boolean);
+  return `${L.status ? `<p class="milo-status" role="status">${esc(L.status)}…</p>` : ''}${L.quiet ? `<p class="milo-quiet" role="status">${esc(QUIET_TEXT)}</p>` : ''}${got.length ? `<p class="milo-sofar">Looked up so far: ${esc([...new Set(got)].join('; '))}. Every source is listed when the answer is complete.</p>` : ''}`;
+}
 let liveFrame = null;
 function paintLive() {
   if (liveFrame) return;
   liveFrame = requestAnimationFrame(() => {
     liveFrame = null;
-    const h = host(), L = S.live; if (!h || !L) return;
+    const h = host(), L = S.live; if (!h || !L || S.showHistory) return;
     const node = $(`[data-v2-milo-i="${L.i}"] .milo-bubble`, h); if (!node) { paintLog(); return; }
-    const text = L.text, cut = text.lastIndexOf('\n\n');
-    const settled = cut > 0 ? renderAnswer(text.slice(0, cut), L.symbol).html : '';
-    const got = (L.got || []).filter((r) => r && r.ok !== false).map((r) => r.label || (r.symbols || []).join(', ')).filter(Boolean);
-    node.innerHTML = `${settled}<p class="milo-tail">${esc(streamingTail(cut > 0 ? text.slice(cut + 2) : text))}</p>${L.status ? `<p class="milo-status" role="status">${esc(L.status)}…</p>` : ''}${L.quiet ? `<p class="milo-quiet" role="status">${esc(QUIET_TEXT)}</p>` : ''}${got.length ? `<p class="milo-sofar">Looked up so far: ${esc([...new Set(got)].join('; '))}. Every source is listed when the answer is complete.</p>` : ''}`;
-    mountAnswerCharts(node); mountAnswerFigures(node);
-    const log = $('.milo-log', h); if (log && log.scrollHeight - log.scrollTop - log.clientHeight < 120) log.scrollTop = log.scrollHeight;
-    syncLatest(); paintForm();
+    if (node.dataset.v2Live !== String(L.i)) {
+      // first paint into this bubble (or the log was redrawn): its parts, and the finished paragraphs so far, once
+      node.dataset.v2Live = String(L.i); L.cut = 0; L.seen = {};
+      node.innerHTML = '<div class="milo-settled"></div><div class="milo-tail"></div><div class="milo-live-lines"></div>';
+    }
+    const text = L.text, followAt = text.search(FOLLOW_AT), end = settledEnd(text, followAt);
+    if (end > L.cut) {
+      const settled = $('.milo-settled', node);
+      settled.insertAdjacentHTML('beforeend', renderAnswer(text.slice(L.cut, end), L.symbol, L.seen).html);
+      L.cut = end;
+      mountAnswerCharts(settled); mountAnswerFigures(settled);
+    }
+    const tail = $('.milo-tail', node), th = streamingHTML(text.slice(L.cut, followAt >= 0 ? Math.max(L.cut, followAt) : text.length), L.symbol);
+    if (tail.v2Html !== th) { tail.innerHTML = th; tail.v2Html = th; }
+    const lines = $('.milo-live-lines', node), lh = liveLinesHTML(L);
+    if (lines.dataset.html !== lh) { lines.innerHTML = lh; lines.dataset.html = lh; }
+    const log = $('.milo-log', h); if (log && S.follow) log.scrollTop = log.scrollHeight;
+    syncLatest();
+    // the form changes twice in an answer (sending, then streaming), not every frame
+    const fs = L.text ? 'streaming' : 'sending'; if (L.formState !== fs) { L.formState = fs; paintForm(); }
   });
+}
+/** The answer just finished, drawn in its final form in place: the finished paragraphs already on screen stay (with
+ *  any chart in them), the last one is added, and only what sits around the text (follow-ups, sources, actions, the
+ *  incomplete note) is drawn new. The rest of the conversation is not touched. False when it cannot be done in place
+ *  (the text was amended, or the bubble is not the live one), and the caller draws the log instead. */
+function paintFinished(i, live) {
+  const h = host(); if (!h || !live || live.amended) return false;
+  const el = $(`[data-v2-milo-i="${i}"]`, h), it = S.items.find((x) => x.kind === 'msg' && x.i === i);
+  const old = el && $('.milo-bubble', el);
+  if (!el || !it || !old || old.dataset.v2Live !== String(i) || S.items[S.items.length - 1] !== it) return false;
+  const shown = String((S.conv.messages[i] || {}).content || '').replace(/\n\n\[(Stopped by the reader|Cut off): incomplete\]$/, '');
+  const { body } = splitFollowUps(shown);
+  const settled = $('.milo-settled', old);
+  if (body.length > live.cut) settled.insertAdjacentHTML('beforeend', renderAnswer(body.slice(live.cut), live.symbol, live.seen || {}).html);
+  settled.replaceWith(...settled.childNodes);
+  ['.milo-tail', '.milo-live-lines'].forEach((q) => { const n = $(q, old); if (n) n.remove(); });
+  delete old.dataset.v2Live;
+  const tmp = document.createElement('div'); render(tmp, msgHTML(it));
+  const fresh = tmp.firstElementChild, nb = fresh && $('.milo-bubble', fresh);
+  if (!fresh || !nb) return false;
+  nb.replaceWith(old);
+  el.replaceWith(fresh);
+  mountAnswerCharts(fresh); mountAnswerFigures(fresh);
+  return true;
 }
 
 /* ---------------- figures inside answers: Optic's own data, never the model's numbers ---------------- */
@@ -774,6 +878,7 @@ function mountAnswerFigures(root) {
       render(fig, html`<figcaption><p class="milo-fig-h">${f.title}</p><p class="fv-take">${f.take}</p>${f.keyHTML || ''}<p class="fv-unit">${f.unit}. From ${f.source}; drawn by Optic, not by Milo.</p></figcaption>
         ${f.html ? raw(f.html) : html`<div class="chart-slot" data-chart="fig"></div>`}${f.table}`);
       if (f.chart) mountCharts(fig, { fig: f.chart });
+      keepEnd();
     });
   });
 }
@@ -783,15 +888,20 @@ function mountAnswerCharts(root) {
   root.querySelectorAll('[data-v2-milo-chart]:not([data-mounted])').forEach((fig) => {
     fig.dataset.mounted = '1';
     const sym = fig.dataset.v2MiloChart, span = fig.dataset.span, key = `${sym} ${span}`, plot = $('.milo-chart-plot', fig);
-    if (!chartCache.has(key)) chartCache.set(key, api.get(`/api/take-chart/${encodeURIComponent(sym)}?span=${encodeURIComponent(span)}`, { ttl: 600000, timeout: 30000 }).catch(() => null));
-    chartCache.get(key).then((tc) => {
+    // re-asked after ten minutes, and a failure is not kept (Phase 09 cache audit, B04)
+    const hit = chartCache.get(key);
+    if (!hit || Date.now() - hit.at > 600000) {
+      chartCache.set(key, { at: Date.now(), p: api.get(`/api/take-chart/${encodeURIComponent(sym)}?span=${encodeURIComponent(span)}`, { ttl: 600000, timeout: 30000 }).catch(() => { chartCache.delete(key); return null; }) });
+    }
+    chartCache.get(key).p.then((tc) => {
       if (!document.contains(plot)) return;
       const c = tc && tc.available ? tc.chart : null;
-      if (!c || !(c.close || []).length) { plot.innerHTML = `<p class="t-muted">No price history for ${esc(sym)}.</p>`; return; }
+      if (!c || !(c.close || []).length) { plot.innerHTML = `<p class="t-muted">No price history for ${esc(sym)}.</p>`; keepEnd(); return; }
       const levels = [...(tc.supports || []).slice(0, 2), ...(tc.resistances || []).slice(0, 1)].map((l) => l.price).filter(Number.isFinite);
       plot.innerHTML = '<div class="chart-slot" data-chart="take"></div>';
       mountCharts(plot, { take: (w) => lineChart(c.dates.map((d, i) => ({ d, c: c.close[i] })), { w, h: 220, label: `${sym} daily closes`, overlays: levels.map((v) => ({ values: c.dates.map(() => v), cls: 'c0' })), summary: `${sym} daily closes over ${tc.span_words || span}, through ${tc.as_of || ''}${levels.length ? `, with support and resistance at ${levels.map((v) => v.toFixed(2)).join(', ')}` : ''}.` }) });
       const cap = $('figcaption', fig); if (cap) cap.textContent = `${sym}, daily closes over ${tc.span_words || span}, through ${tc.as_of || ''}. Dashed: support and resistance, where price turned before. Source: Yahoo Finance.`;
+      keepEnd();
     });
   });
 }
@@ -819,9 +929,9 @@ export async function send(text, { deep = false } = {}) {
   if (focusTicker) S.conv.lastTicker = focusTicker;
   const ai = S.conv.messages.length; // index the answer will take
   S.conv.messages.push({ role: 'assistant', content: '' }); S.items.push({ kind: 'msg', i: ai });
-  meta.set(ai, { question: text, symbol: focusTicker || route.symbol || null, context, deep, web: !deep && !!S.web });
+  meta.set(ai, { question: text, symbol: focusTicker || route.symbol || null, context, deep, web: !deep && !!S.web, level: prefs.knowledge() });
   S.busy = true; S.live = { i: ai, text: '', status: MILO_STATES.submitted, symbol: focusTicker || route.symbol || null, lastAt: performance.now(), quiet: false };
-  if (ta) { ta.value = ''; grow(ta); } S.draft = ''; S.showHistory = false; S.showSettings = false; S.toEnd = true;
+  if (ta) { ta.value = ''; grow(ta); } S.draft = ''; S.showHistory = false; S.showSettings = false; S.toEnd = true; S.follow = true;
   paintChrome(); paintLog(); paintForm(); paintLive();
   scoutTo(ai, 'thinking', 'ack');
   const ctl = new AbortController(); S.abort = ctl; S.sentAt = performance.now();
@@ -834,12 +944,13 @@ export async function send(text, { deep = false } = {}) {
       method: 'POST', credentials: 'same-origin', signal: ctl.signal,
       headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream', 'X-Optic-CSRF': (document.cookie.match(/(?:^|; )optic_csrf=([^;]*)/) || [])[1] || '' },
       body: JSON.stringify(deep
-        ? { ticker: focusTicker || sym0 || null, question: askedText || (focusTicker || sym0 ? null : MARKET_BRIEF), context }
+        ? { ticker: focusTicker || sym0 || null, question: askedText || (focusTicker || sym0 ? null : MARKET_BRIEF), context, mode: prefs.knowledge() }
         : { messages: S.conv.messages.slice(0, ai).map((m) => ({ role: m.role, content: m.content })), context, web: !!S.web, attachments, persona: persona(), mode: prefs.knowledge(), horizon: horizon() }),
     });
-    // the server has the question and has put its context together: the answer is being prepared
+    // the server has the question (and says its own first step at once)
     heard();
-    if (res.ok && S.live && !S.live.text) { S.live.status = MILO_STATES.preparing; paintLive(); }
+    // the chat route says its own first step at once ("gathering"); deep research has none, so the panel says this one
+    if (deep && res.ok && S.live && !S.live.text) { S.live.status = MILO_STATES.preparing; paintLive(); }
     if (!res.ok || !res.body) {
       let d = null; try { d = await res.json(); } catch (e) { /* not json */ }
       const msg = (d && (d.detail || d.message)) || '';
@@ -860,10 +971,14 @@ export async function send(text, { deep = false } = {}) {
           if (!data) continue;
           let p; try { p = JSON.parse(data); } catch (e) { continue; }
           if (ev === 'delta') { S.live.text += p.text || ''; S.live.status = ''; S.conv.messages[ai].content = S.live.text; paintLive(); if (SC.i === ai && SC.state !== 'streaming') scoutTo(ai, 'streaming'); }
-          else if (ev === 'status') { const w = STEP_WORDS[String(p.state || '')] || String(p.state || '').replace(/^./, (x) => x.toUpperCase()); S.live.status = w; paintLive(); if (SC.i === ai && SC.state !== 'streaming') scoutTo(ai, SEARCHING.has(String(p.state || '')) ? 'searching' : 'thinking'); }
-          else if (ev === 'attachments') { const m = meta.get(ai); if (m && Array.isArray(p.problems)) m.notSent = p.problems.map(String).slice(0, 5); }
+          else if (ev === 'status') { const w = stepWords(String(p.state || ''), S.live.symbol); S.live.status = w; paintLive(); if (SC.i === ai && SC.state !== 'streaming') scoutTo(ai, SEARCHING.has(String(p.state || '')) ? 'searching' : 'thinking'); }
+          else if (ev === 'attachments') { const m = meta.get(ai); if (m && Array.isArray(p.problems)) m.notSent = [...(m.notSent || []), ...p.problems.map(String)].slice(0, 6); }   // files the model refused, and the reader's own blocks left out (BUG-071)
           else if (ev === 'assumed') { const hz = (((S.personas || {}).horizons || {}).horizons || []).find((x) => x.id === p.horizon); if (hz && p.horizon_source === 'question' && p.horizon !== horizon()) meta.get(ai).assumed = `Answered for a ${hz.label.toLowerCase()} timeframe, from your question. Your setting is unchanged.`; }
           else if (ev === 'retrieved') { S.live.got = Array.isArray(p.items) ? p.items : []; paintLive(); }
+          // the advice policy (app/ai_policy.py): the server's own line for a question that asked for a personal decision,
+          // and, after the stream, the answer with any sentence that read as personal advice taken out, said in a note
+          else if (ev === 'notice') { if (p.kind === 'policy' && p.text) { meta.get(ai).policyLine = String(p.text); paintLive(); } }
+          else if (ev === 'amend') { if (typeof p.text === 'string') { S.live.text = p.text; S.live.amended = true; S.conv.messages[ai].content = p.text; meta.get(ai).amended = String(p.note || 'Milo removed a sentence that read as personal investment advice.'); paintLive(); } }
           else if (ev === 'error') { finished = true; failed = { text: p.message || 'Milo could not answer.' }; }
           else if (ev === 'done') { finished = true; Object.assign(meta.get(ai), { citations: p.sources || p.citations || [], read: Array.isArray(p.read) ? p.read : [], retrieved: Array.isArray(p.retrieved) ? p.retrieved : [], loaded: Array.isArray(p.loaded) ? p.loaded : [], named: p.named && typeof p.named === 'object' ? p.named : null }); }
         }
@@ -875,7 +990,7 @@ export async function send(text, { deep = false } = {}) {
     else failed = { text: offlineOr('') };
   }
   clearInterval(quietT);
-  const reply = S.live ? S.live.text : '';
+  const reply = S.live ? S.live.text : '', liveWas = S.live;
   S.live = null; S.busy = false; S.abort = null;
   if (failed && !reply) {
     // nothing came back: take the exchange out, and give the question back
@@ -894,10 +1009,16 @@ export async function send(text, { deep = false } = {}) {
     else if (ended === 'stopped') Object.assign(SC, { i: ai, state: 'idle', via: 'look' });
     else Object.assign(SC, { i: ai, state: 'idle', via: reply.trim() ? 'nod' : null });
     if (failed) S.items.push({ kind: 'note', text: failed.text });
+    // part of an answer, then a failure: kept, and marked as cut off rather than saved as if it were complete (BUG-051)
+    if (failed && !ended) ended = 'cut';
     if (ended) { meta.get(ai).ended = ended; S.conv.messages[ai].content = `${reply}\n\n[${ended === 'stopped' ? 'Stopped by the reader' : 'Cut off'}: incomplete]`; }
     persist();
   }
-  paintLog(); paintForm(); loadAllowance();
+  // the finished answer in place when it can be, so the rest of the conversation is not drawn again; a reader at the end
+  // of the conversation stays at it
+  const lg = host() && $('.milo-log', host());
+  if (paintFinished(ai, liveWas)) { if (S.follow) lg.scrollTop = lg.scrollHeight; scoutAfterPaint(); syncLatest(); } else paintLog();
+  paintForm(); loadAllowance();
   // the state, for a screen reader: the log reads the answer itself
   announce(failed ? 'Milo could not answer. Your question is back in the box.' : ended === 'stopped' ? 'Stopped. The answer is incomplete.' : ended === 'cut' ? 'The answer was cut off.' : 'Milo has answered.');
 }
@@ -957,7 +1078,8 @@ async function runAction(a, card, i) {
   if (a.kind === 'open') { router.go(`#/${a.sym}${slug[a.section]}`); return; }
   if (a.kind === 'compare') { router.go(`#/compare?t=${a.syms.join(',')}`); return; }
   if (a.kind === 'valuation') { if (!sym) { say('Open a company first; the model needs a symbol.', false); return; } router.go(`#/${sym}/investing`); return; }
-  if (a.kind === 'screen') { router.go(`#/scan?q=${encodeURIComponent(a.words)}`); return; }
+  // the card says it may use a Milo message, so pressing it is the go-ahead the Scan page checks for (scan.js, SCAN_GO)
+  if (a.kind === 'screen') { try { sessionStorage.setItem('optic.scan.go.v1', String(a.words || '').trim().slice(0, 300)); } catch (e) { /* private mode */ } router.go(`#/scan?q=${encodeURIComponent(a.words)}`); return; }
   if (a.kind === 'chart' || a.kind === 'indicator') {
     if (!sym) { say('Load a ticker first; the chart needs a symbol.', false); return; }
     if (a.kind === 'chart') { router.go(`#/${sym}/chart?interval=${a.interval}&range=${chartRange[a.range]}`); return; }
@@ -1054,7 +1176,7 @@ export async function openMilo({ question = '', opener, send: sendNow = false, a
     return;
   }
   S.showSettings = false; S.showInfo = false;
-  let vvOff = null, gripOff = null;
+  let vvOff = null, gripOff = null, sizeOff = null;
   drawer.open({
     title: 'Milo', opener, dock: dockFit(window.innerWidth, railW(), storedWidth() || W_DEFAULT, isPhoneNow()) > 0,
     // the redesign's compact header: Milo beside his name, and history, a new conversation and close as icons
@@ -1067,9 +1189,10 @@ export async function openMilo({ question = '', opener, send: sendNow = false, a
       <form class="milo-form" data-v2-milo-form data-state="idle"><div class="milo-suggest-slot" data-v2-milo-suggest></div><div data-v2-milo-tools>${toolsHTML()}</div><div data-v2-milo-files>${filesHTML()}</div><div class="milo-compose">
         <button type="button" class="milo-attach" data-v2-milo-attach aria-label="Attach an image or PDF" title="Attach an image or PDF: PNG, JPEG, GIF, WebP or PDF, up to 4 files of 5 MB each. You can also drop them here.">${icon('clip')}</button>
         <input type="file" hidden multiple accept="${Object.keys(ATTACH_TYPES).join(',')}" data-v2-milo-file tabindex="-1"><label class="sr" for="milo-q">Your question to Milo</label>
-        <textarea id="milo-q" rows="1" maxlength="4000" placeholder="${placeholder()}" aria-describedby="milo-attached milo-allow">${S.draft}</textarea>
+        <textarea id="milo-q" rows="1" maxlength="${MAX_Q}" placeholder="${placeholder()}" aria-describedby="milo-attached milo-allow milo-limit">${S.draft}</textarea>
         <button type="submit" class="milo-send" data-v2-milo-send aria-label="Send" title="Send (Enter). Shift and Enter for a new line">${icon('send')}</button>
         <button type="button" class="milo-stop" data-v2-milo-stop aria-label="Stop the answer" title="Stop the answer" hidden>${icon('stop')}</button></div>
+        <p class="milo-limit" id="milo-limit" role="status" hidden></p>
         <div class="milo-form-foot"><p class="milo-attached" id="milo-attached">${icon('link')}<span>${attachedLine()}</span></p><p class="milo-allow" id="milo-allow" aria-live="polite"></p></div></form></div>`,
     mount: (b) => {
       S.mounted = $('.milo', b) || b;
@@ -1084,7 +1207,11 @@ export async function openMilo({ question = '', opener, send: sendNow = false, a
       }
       wire(S.mounted);
       const head = panel && $('.drawer-head', panel); if (head) wireHead(head);
-      paintLog(); paintForm();
+      paintLog(); restoreView(); paintForm();
+      // the log gets shorter when the composer grows under it (suggestions, files, a line of text) or a phone's keyboard
+      // opens: a reader following the end stays at it, where before the view was left up to 56 px short
+      const lg = $('.milo-log', S.mounted);
+      if (lg && typeof ResizeObserver === 'function') { const ro = new ResizeObserver(() => keepEnd()); ro.observe(lg); sizeOff = () => ro.disconnect(); }
       const w = OS() && welcomeEl(S.mounted);
       if (w && Date.now() - SC.lastWave > 20000) { const c = OS().attach(w, { slot: 'welcome' }); if (c) { SC.lastWave = Date.now(); c.gesture('wave'); } }
       const ta = $('#milo-q', S.mounted); grow(ta);
@@ -1093,7 +1220,7 @@ export async function openMilo({ question = '', opener, send: sendNow = false, a
       api.get('/api/health', { ttl: 60000 }).then((hh) => { S.health = hh; paintChrome(); }, () => {});
       if (sendNow && S.draft) send(S.draft);
     },
-    closed: () => { if (vvOff) vvOff(); if (gripOff) { gripOff(); gripOff = null; } S.panel = null; S.web = false; S.deepHint = false; layout(); const ta = S.mounted && $('#milo-q', S.mounted); if (ta) S.draft = ta.value; SC.menu = false; S.showSettings = false; S.mounted = null; S.panel = null; },
+    closed: () => { if (vvOff) vvOff(); if (sizeOff) { sizeOff(); sizeOff = null; } if (gripOff) { gripOff(); gripOff = null; } S.panel = null; S.web = false; S.deepHint = false; layout(); const ta = S.mounted && $('#milo-q', S.mounted); if (ta) S.draft = ta.value; SC.menu = false; S.showSettings = false; S.mounted = null; S.panel = null; },
   });
 }
 // Milo's panel is as wide as the reader drags it, as in the classic app: a grip on its left edge, the arrow
@@ -1155,14 +1282,16 @@ function resizable(panel) {
 
 // History and a new conversation, from the header's icons or the moved-symbol note; neither touches the draft
 function toggleHistory(open = !S.showHistory) {
+  if (open && S.busy) { toast(WAIT_HISTORY); return; }
   S.showHistory = open; S.showSettings = false;
   paintChrome(); paintLog(false);
+  if (!open) restoreView();
   const h = host(); if (open && h) { const hd = $('#milo-hist-h', h); if (hd) { hd.setAttribute('tabindex', '-1'); hd.focus({ preventScroll: true }); } }
   else { const hb = S.panel && $('.drawer-head [data-v2-milo-history]', S.panel); if (hb) hb.focus({ preventScroll: true }); }
 }
 function newConversation() {
-  if (S.busy) return;
-  S.conv = blankConv(); S.items = []; meta.clear(); SC.i = null; S.showHistory = false;
+  if (S.busy) { toast(WAIT_NEW); return; }
+  S.conv = blankConv(); S.items = []; meta.clear(); SC.i = null; S.showHistory = false; S.follow = true; S.view = null; S.report = null;   // a report form belongs to its own conversation (BUG-051)
   paintChrome(); paintLog();
   const ta = host() && $('#milo-q', host()); if (ta) ta.focus();
   announce('New conversation');
@@ -1180,14 +1309,36 @@ function setSettings(open, refocus = true) {
   else if (refocus) { const b = $('[data-v2-milo-settings]', h); if (b) b.focus({ preventScroll: true }); }
 }
 
+// An answer keeps the level it was written for (Phase 05, directive 05 section 6). When the reader has moved since, it
+// says so and offers to ask again at the new level: drafted into the box, sent only when the reader presses Send, and
+// the answer itself is never rewritten.
+const levelLabel = (id) => ((((S.modes || {}).modes) || []).find((m) => m.id === id) || {}).label || '';
+function levelNote(info, live) {
+  if (live || !info || !info.level || info.deep) return '';
+  const now = prefs.knowledge(), was = levelLabel(info.level), is = levelLabel(now);
+  if (info.level === now || !was || !is) return '';
+  const q = String(info.question || '').replace(/\s+/g, ' ').trim().slice(0, 90);
+  return html`<p class="milo-assumed milo-level-was">Explained for ${was}. Your level is now ${is}. <button type="button" class="textlink" data-v2-milo-follow="${q ? `Explain your answer to "${q}" again, for the ${is} level.` : `Explain that again, for the ${is} level.`}">Ask again for ${is}</button></p>`;
+}
+
+// the level moved while a conversation is open: say where the change starts, and leave what was written alone.
+// Registered once, here: wire() runs on every open of the panel.
+prefs.onChange((what) => {
+  if ((what !== 'knowledge' && what !== 'knowledge-synced') || !S.conv.messages.length) return;
+  const is = levelLabel(prefs.knowledge());
+  if (!is) return;
+  S.items.push({ kind: 'note', text: `From here on Milo explains for ${is}. Earlier answers stay as they were written.` });
+  if (S.mounted && S.mounted.isConnected) paintLog();
+});
+
 function wire(root) {
   root.addEventListener('submit', (e) => {
-    if (e.target.closest('[data-v2-milo-form]')) { e.preventDefault(); send($('#milo-q', root).value); return; }
+    if (e.target.closest('[data-v2-milo-form]')) { e.preventDefault(); const ta = $('#milo-q', root); if (!ta.value.trim()) { ta.focus(); return; } send(ta.value); return; }
     const rf = e.target.closest('[data-v2-milo-report-form]');
     if (rf) {
       e.preventDefault();
       const i = Number(rf.dataset.v2MiloReportForm), text = ($('textarea', rf) || {}).value || '';
-      if (!text.trim()) { S.report = { i, text, err: 'Say what is wrong first, in a few words.' }; paintLog(false); const ta = $('.milo-report textarea', root); if (ta) ta.focus(); return; }
+      if (!text.trim()) { S.report = { conv: S.conv.id, i, text, err: 'Say what is wrong first, in a few words.' }; paintLog(false); const ta = $('.milo-report textarea', root); if (ta) ta.focus(); return; }
       sendReport(i, text);
     }
   });
@@ -1229,11 +1380,20 @@ function wire(root) {
   root.addEventListener('dragover', (e) => { if (!e.dataTransfer || ![...(e.dataTransfer.types || [])].includes('Files') || blocked()) return; e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; root.classList.add('is-drop'); });
   root.addEventListener('dragleave', (e) => { if (!root.contains(e.relatedTarget)) root.classList.remove('is-drop'); });
   root.addEventListener('drop', (e) => { if (!e.dataTransfer || !e.dataTransfer.files || !e.dataTransfer.files.length) return; e.preventDefault(); root.classList.remove('is-drop'); if (!blocked()) addFiles(e.dataTransfer.files); });
-  root.addEventListener('input', (e) => { if (e.target.id === 'milo-q') { const was = !S.draft.trim(), now = !e.target.value.trim(); S.draft = e.target.value; grow(e.target); scoutListen(e.target.value); if (was !== now) paintSuggest(); } });
-  root.addEventListener('scroll', (e) => { if (e.target.classList && e.target.classList.contains('milo-log')) syncLatest(); }, true);
+  root.addEventListener('input', (e) => { if (e.target.id === 'milo-q') { const was = !S.draft.trim(), now = !e.target.value.trim(); S.draft = e.target.value; grow(e.target); scoutListen(e.target.value); paintLimit(e.target); if (was !== now) paintSuggest(); } });
+  // a pasted image is attached, as a dropped one is; pasted text past the limit is measured, to say how much was cut
+  root.addEventListener('paste', (e) => {
+    const ta = e.target; if (ta.id !== 'milo-q' || !e.clipboardData) return;
+    const files = [...(e.clipboardData.files || [])], text = e.clipboardData.getData('text/plain') || '';
+    if (files.length && !text) { e.preventDefault(); if (!blocked()) addFiles(files); return; }
+    const room = MAX_Q - (ta.value.length - Math.abs((ta.selectionEnd || 0) - (ta.selectionStart || 0)));
+    S.cutPaste = text.length > room ? text.length - Math.max(0, room) : 0;
+  });
+  root.addEventListener('scroll', (e) => { if (e.target.classList && e.target.classList.contains('milo-log')) { noteScroll(e.target); syncLatest(); } }, true);
+  // a wheel turned up is a reader going back to read, before the view has even moved
+  root.addEventListener('wheel', (e) => { const l = e.deltaY < 0 && e.target.closest && e.target.closest('.milo-log'); if (l && l.scrollTop > 0) S.follow = false; }, { passive: true });
   root.addEventListener('change', (e) => {
     const t = e.target;
-    if (t.matches('[data-v2-milo-mode]')) { prefs.setKnowledge(t.value); paintChrome(); const sel = $('[data-v2-milo-mode]', root); if (sel) sel.focus(); }
   });
   root.addEventListener('click', async (e) => {
     const t = (s) => e.target.closest(s); let b;
@@ -1258,7 +1418,7 @@ function wire(root) {
     if ((b = t('[data-v2-milo-pp]'))) { pickPersona(b.dataset.v2MiloPp, root, true); return; }
     if ((b = t('[data-v2-milo-hz]'))) { setPref(HORIZON_KEY, b.dataset.v2MiloHz); paintChrome(); const hb = $(`[data-v2-milo-hz="${b.dataset.v2MiloHz}"]`, root); if (hb) hb.focus(); return; }
     if ((b = t('[data-v2-milo-start]'))) { send(b.dataset.v2MiloStart); return; }
-    if (t('[data-v2-milo-latest]')) { const log = $('.milo-log', root); if (log) log.scrollTo({ top: log.scrollHeight, behavior: reducedMotion() ? 'auto' : 'smooth' }); return; }
+    if (t('[data-v2-milo-latest]')) { const log = $('.milo-log', root); S.follow = true; if (log) log.scrollTo({ top: log.scrollHeight, behavior: reducedMotion() ? 'auto' : 'smooth' }); return; }
     if (t('[data-v2-milo-stop]')) { stop(); return; }
     if (t('[data-v2-milo-history-close]')) { toggleHistory(false); return; }
     if (t('[data-v2-milo-history]')) { toggleHistory(); return; }
@@ -1266,12 +1426,12 @@ function wire(root) {
     if ((b = t('[data-v2-milo-open]'))) {
       if (S.busy) return;
       const c = loadHistory().find((x) => x.id === b.dataset.v2MiloOpen); if (!c) return;
-      S.conv = { id: c.id, messages: (c.messages || []).map((m) => ({ role: m.role, content: m.content })), lastTicker: c.ticker || null };
+      S.conv = { id: c.id, messages: (c.messages || []).map((m) => ({ role: m.role, content: m.content })), lastTicker: c.ticker || null }; S.report = null;
       meta.clear(); SC.i = null; S.items = S.conv.messages.map((m, i) => ({ kind: 'msg', i }));
-      S.conv.messages.forEach((m, i) => { if (m.role === 'assistant') meta.set(i, { question: (S.conv.messages[i - 1] || {}).content || '', symbol: c.ticker || null }); });
-      S.showHistory = false; S.toEnd = true; paintChrome(); paintLog(); const ta = $('#milo-q', root); if (ta) ta.focus(); return;
+      S.conv.messages.forEach((m, i) => { if (m.role === 'assistant') { const saved = (c.messages || [])[i] || {}; meta.set(i, { question: (S.conv.messages[i - 1] || {}).content || '', symbol: c.ticker || null, policyLine: saved.policy || '', amended: saved.amended || '', level: saved.level || '' }); } });
+      S.showHistory = false; S.toEnd = true; S.follow = true; S.view = null; paintChrome(); paintLog(); const ta = $('#milo-q', root); if (ta) ta.focus(); return;
     }
-    if ((b = t('[data-v2-milo-del]'))) { const id = b.dataset.v2MiloDel; saveHistory(loadHistory().filter((c) => c.id !== id)); if (S.conv.id === id && !S.busy) { S.conv = blankConv(); S.items = []; meta.clear(); } paintChrome(); paintLog(false); const hd = $('#milo-hist-h', root); if (hd) { hd.setAttribute('tabindex', '-1'); hd.focus({ preventScroll: true }); } return; }
+    if ((b = t('[data-v2-milo-del]'))) { const id = b.dataset.v2MiloDel; if (S.busy && id === S.conv.id) { toast(WAIT_HISTORY); return; } saveHistory(loadHistory().filter((c) => c.id !== id)); if (S.conv.id === id && !S.busy) { S.conv = blankConv(); S.items = []; meta.clear(); } paintChrome(); paintLog(false); const hd = $('#milo-hist-h', root); if (hd) { hd.setAttribute('tabindex', '-1'); hd.focus({ preventScroll: true }); } return; }
     if ((b = t('[data-v2-milo-save]'))) {
       const i = Number(b.dataset.v2MiloSave), q = (S.conv.messages[i] || {}).content, ans = meta.get(i + 1) || {};
       b.disabled = true;
@@ -1292,7 +1452,7 @@ function wire(root) {
     if ((b = t('[data-v2-milo-again]'))) { const q = (meta.get(Number(b.dataset.v2MiloAgain)) || {}).question; const ta = $('#milo-q', root); if (q && ta) { ta.value = q; S.draft = q; grow(ta); ta.focus(); } return; }
     if ((b = t('[data-v2-milo-report]'))) {
       const i = Number(b.dataset.v2MiloReport);
-      S.report = S.report && S.report.i === i ? null : { i, text: '' }; paintLog(false);
+      S.report = S.report && S.report.i === i && S.report.conv === S.conv.id ? null : { conv: S.conv.id, i, text: '' }; paintLog(false);
       const form = S.report && $(`[data-v2-milo-report-form="${i}"]`, root);
       if (form) { form.scrollIntoView({ block: 'nearest' }); $('textarea', form).focus({ preventScroll: true }); }
       return;

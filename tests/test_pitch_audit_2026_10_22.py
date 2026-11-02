@@ -13,9 +13,9 @@ OVR = (JS / "pages/overview-research.js").read_text()
 
 
 def test_every_valuation_state_is_described_not_answered_yes_or_no():
-    # Since 2026-10-25 a company's price question is Classic's "Is the price attractive?" (the owner's screenshots),
-    # answered by the framework's own valuation label or "Insufficient Data", never yes or no.
-    assert "tile('price', 'Is the price attractive?', v.status === 'scored' ? v.label : 'Insufficient Data', sub, more, c)" in OVR
+    # Since 2026-10-25 a company's price question is Classic's; since 2026-10-29 (advice policy) it is asked as "How is it
+    # valued?" and answered by the framework's own valuation label in plain words or "Insufficient Data", never yes or no.
+    assert "tile('price', 'How is it valued?', v.status === 'scored' ? valuationWord(v.label) : 'Insufficient Data', sub, more, c)" in OVR
     assert "'Is the share price expensive?'" not in OV + OVR and "Yes, " not in OVR.split("function tile(")[1].split("function businessTile")[0]
 
 
@@ -37,7 +37,7 @@ def test_four_stars_is_not_called_below_the_range(tmp_path):
 
 
 def test_fund_drawers_carry_the_fund_questions():
-    wire = OV[OV.index("function wire(main, sym) {"):]
+    wire = OV[OV.index("function wire(main) {"):]   # wired once per page element since Phase 06 (BUG-094)
     assert "if (isFundHere(sym)) Object.assign(titles, { quality: 'What is it?', price: 'What do its holdings cost?', next: 'What does it pay?' });" in wire
 
 
@@ -196,9 +196,8 @@ def test_every_surface_shows_the_atr_converted_beside_the_ratio():
     assert "<dt>Typical day lately</dt><dd>±${num(em.realized_pct)}%" in body and "14-day ATR ${num(em.atr_pct)}% ÷ 1.6" in body
     assert "<dt>Recently delivered</dt><dd>${num(em.atr_pct)}%" not in body
     mac = (JS / "pages/macro.js").read_text()
-    assert "html`${num(em.atr_pct, 2)}% a day" not in mac and "['Its typical day lately', html`±${num(em.realized_pct, 2)}%" in mac
-    home = (JS / "pages/home.js").read_text()
-    assert "30-day implied volatility as one day's move, an approximation" in home
+    assert "html`${num(em.atr_pct, 2)}% a day" not in mac and "['Typical day lately', html`±${num(em.realized_pct, 2)}%" in mac   # Home's label too (Phase 04, X-7)
+    # the third surface, the unrouted Home page's expected-move scene, was removed in Phase 04 (registry B X-2)
 
 
 # ---------------------------------------------------------------- 4. the flow proxy claims no buyers or openings

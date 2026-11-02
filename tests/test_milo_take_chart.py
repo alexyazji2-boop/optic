@@ -112,8 +112,10 @@ def test_milo_is_told_the_take_shape():
                    "What drives the business, and what that means for the stock",
                    "Specific to this company, never a generic line that would fit any stock",
                    "as plain prices from `chart_levels`",
-                   "a business you would want to own for years, as your own read with the reason",
-                   "When a well-known peer suits the long-term case better, name it with the business reason",
+                   # the long-term part is a read on the case, never an endorsement (advice policy, 2026-10-29)
+                   "what the long-term case rests on and what it would need, as your own read with the reason",
+                   "never say you would buy, own or avoid it, and never tell the reader to",
+                   "as a comparison of business models, never as a better buy",
                    "One closing line, in your own words, that splits the timeframes",
                    "About 150 to 180 words and never more than 200, even when a framework block allows more",
                    "no more than six numbers in all",
@@ -123,7 +125,8 @@ def test_milo_is_told_the_take_shape():
         assert phrase in sp, phrase
     fmt = " ".join(ai.FORMAT_PROMPT.split())
     assert "one of 1m, 3m, 6m, 1y, 2y or 5y" in fmt and "use its `chart_tag` exactly" in fmt
-    assert "stop_check, chart_levels, retrieved and pairs" in fmt
+    # auto_loaded joined the citable keys in Phase 08 (D-060)
+    assert "stop_check, chart_levels, auto_loaded, retrieved and pairs" in fmt
     assert "—" not in ai.SYSTEM_PROMPT and "—" not in ai.FORMAT_PROMPT
 
 

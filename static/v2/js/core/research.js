@@ -44,6 +44,7 @@ export async function saveQuestion({ question, symbol = null }) {
       if (have.items.some((x) => sameQuestion(x.question, q))) return { ok: true, already: true, where: 'account', text: 'That question is already in Saved research.' };
       await api.post('/api/saved-research', { title: q.slice(0, 200), symbol: sym, content: q, research_type: 'pulse' });
       api.invalidate('/api/saved-research');
+      window.dispatchEvent(new Event('v2:research-saved'));   // the palette's per-symbol rows read the list again
       return { ok: true, where: 'account', text: 'Saved to Saved research.' };
     } catch (e) { return { ok: false, text: api.explain(e, 'Saving') }; }
   }
@@ -60,6 +61,7 @@ export async function forget(item) {
   if (item.where === 'account') {
     await api.del(`/api/saved-research/${encodeURIComponent(item.id)}`);
     api.invalidate('/api/saved-research');
+    window.dispatchEvent(new Event('v2:research-saved'));
     return () => saveQuestion({ question: item.question, symbol: item.symbol });
   }
   const all = local(), k = all.findIndex((r) => sameQuestion(r.question, item.question));

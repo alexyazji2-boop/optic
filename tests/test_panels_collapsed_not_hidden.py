@@ -27,7 +27,7 @@ JSC = "/System/Library/Frameworks/JavaScriptCore.framework/Versions/A/Helpers/js
 
 NINE = ["Delta analysis", "Gamma analysis", "Options positioning: dealer gamma (GEX)",
         "Options positioning: dealer vanna (VEX)", "Call vs put flow", "Net premium by strike",
-        "Buy calls / puts", "Options strategies", "Strike & entry recommendation"]
+        "Single calls or puts", "Options strategies", "Strike & entry model"]   # renamed 2026-10-29 (advice policy)
 
 
 def _piece(name):

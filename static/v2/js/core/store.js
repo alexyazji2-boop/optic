@@ -8,6 +8,7 @@
 // person's list off another person's page.
 import * as api from './api.js';
 import { holds } from './device.js';
+import * as prefs from './prefs.js';
 
 const WATCH_KEY = 'optic.chart.watch.v1';
 const WATCHLISTS_KEY = 'optic.watchlists.v1';
@@ -53,7 +54,47 @@ export async function loadMe() {
     state.me = null; state.user = null; state.auth = 'unknown';
   }
   emit('auth');
+  if (state.user) pullLevel(state.me);
   return state;
+}
+
+/* ---------------- the knowledge level on the account (post-demo Phase 05) ---------------- */
+// One value. A guest's lives in this browser (core/prefs.js, Classic's key). A signed-in reader's lives on the
+// account (/api/auth/preferences, user_preferences.knowledge_level): at sign-in an account that has a level wins and
+// is written here; an account that never chose takes this browser's, if the reader chose one here. A change while
+// signed in is sent (ui/levelslider.js); if it cannot be, this browser keeps it and the slider says so. The failed
+// save is remembered with the account and the version of its preferences this browser last saw (`updated_at`,
+// compared, never a clock): at the next load this browser's level goes up only if nothing has changed the account
+// since; if something has, the account's newer level wins. Classic follows the same rule
+// (static/components/knowledge.js), under the same key.
+const PENDING_KEY = 'optic.knowledge.pending.v1';
+let acctAt = null;   // the version of the account's preferences this page last saw
+function pending() { try { return JSON.parse(localStorage.getItem(PENDING_KEY) || 'null'); } catch (e) { return null; } }
+function setPending(v) { try { if (v) localStorage.setItem(PENDING_KEY, JSON.stringify(v)); else localStorage.removeItem(PENDING_KEY); } catch (e) { /* private mode */ } }
+async function pullLevel(me) {
+  try {
+    // the session's answer carries the account's preferences; they are asked for only when it does not
+    const r = me && me.preferences ? me : await api.get('/api/auth/preferences', { force: true, timeout: 10000 });
+    const p = (r && r.preferences) || {}, lv = p.knowledge_level || null, was = pending();
+    acctAt = p.updated_at || null;
+    // the unsaved level itself, not the browser's current one: another account may have used this browser since
+    if (was && was.user === state.user.id && (was.base || null) === acctAt) { if (was.level) prefs.setKnowledge(was.level, { quiet: true }); await pushLevel(); }
+    else if (lv) { setPending(null); prefs.setKnowledge(lv, { quiet: true }); }
+    else if (prefs.knowledgeChosen()) await pushLevel();
+  } catch (e) { /* the browser's level stands; the next change or load sends it */ }
+}
+/** Send this browser's level to the account. {ok, local} when there is no account to send it to. */
+export async function pushLevel() {
+  if (!state.user) return { ok: true, local: true };
+  const user = state.user.id;
+  try {
+    const r = await api.patch('/api/auth/preferences', { knowledge_level: prefs.knowledge() }, { timeout: 10000 });
+    acctAt = ((r || {}).preferences || {}).updated_at || acctAt; setPending(null);
+    return { ok: true };
+  } catch (e) {
+    const was = pending(); setPending({ user, base: was && was.user === user ? was.base : acctAt, level: prefs.knowledge() });
+    return { ok: false, error: e };
+  }
 }
 
 export function plan() {
@@ -71,6 +112,11 @@ export async function signOut() {
 }
 
 /* ---------------- recent symbols ---------------- */
+// The market's default symbol: Home's company panels show it, and a place that needs a company opens it, until the
+// reader chooses another (Phase 03, 2026-10-29). Precedence, everywhere a page needs one: the address's symbol, the
+// company opened on this visit (openedNow, for the palette and the Dossier link), the reader's saved choice where a
+// page keeps one (Home's linked panels), then this. Never the Recent list or the watchlist on their own.
+export const DEFAULT_SYMBOL = 'SPY';
 export function recent() {
   const r = readJSON(RECENT_KEY, []);
   return Array.isArray(r) ? r.map((x) => String(typeof x === 'string' ? x : x && x.symbol || '').toUpperCase()).filter(Boolean).slice(0, 8) : [];

@@ -19,6 +19,8 @@ redistributes rather than counting as zero.
 
 from __future__ import annotations
 
+import math
+
 from typing import Any, Dict, List, Optional
 
 # Weights. Trend leads because it is the thing being asked about; breadth is next
@@ -88,7 +90,6 @@ def score(overview: Dict[str, Any]) -> Dict[str, Any]:
         return {"available": False}
 
     spy = indices.get("SPY") or {}
-    qqq = indices.get("QQQ") or {}
     iwm = indices.get("IWM") or {}
     vix = indices.get("^VIX") or indices.get("VIX") or {}
 
@@ -126,7 +127,8 @@ def score(overview: Dict[str, Any]) -> Dict[str, Any]:
         if above is not None and measured:
             notes.append("{:.0f} of {:.0f} sectors above their 200-day".format(above, measured))
         else:
-            notes.append("{:.0f}% of sectors above their 200-day".format(breadth))
+            # half up, as the page rounds the same figure (a payload's 54.5 read 54 here and 55 there, BUG-012)
+            notes.append("{}% of sectors above their 200-day".format(int(math.floor(float(breadth) + 0.5))))
 
     # -- volatility: level, and which way it moved today ----------------------
     vix_last, vix_day = _num(vix.get("last")), _num(vix.get("day"))

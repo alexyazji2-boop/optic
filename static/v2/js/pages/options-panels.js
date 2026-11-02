@@ -57,7 +57,7 @@ export function pricing(t, sym) {
       <thead><tr><th>Expiry</th><th>Days</th><th>ATM IV</th><th>Straddle move</th><th>1-SD move</th><th>Put skew</th><th>Quoted</th><th>Report inside</th></tr></thead>
       <tbody>${(vs.expiries || []).map((e) => html`<tr><td>${shortDate(e.expiry)}</td><td>${e.dte}</td><td>${pct(e.atm_iv_pct)}</td><td>±${num(e.straddle_move_pct, 2)}%</td><td>±${num(e.one_sd_move_pct, 2)}%</td><td>${signed(e.rr25_pts, 1, '')}</td><td>${e.two_sided} of ${e.contracts}</td><td>${e.contains_event ? 'Yes' : 'No'}</td></tr>`)}</tbody></table></div>
       ${(vs.notes || []).map((n) => note(n))}</details>
-    ${note(`${vs.clock || ''} ${(t.rate || {}).label ? 'Rate ' + t.rate.label + '.' : ''}`)}
+    ${note(`${vs.clock || ''} ${(t.rate || {}).label ? 'Rate ' + t.rate.label + '.' : ''}${(t.carry || {}).assumed_none ? ' No dividend yield came back from the feed, so these implied volatilities assume no dividend.' : ''}`)}
     ${how(r && isNum(r.straddle_move_pct) ? html`<p>A straddle's price and one standard deviation are what options cost, not limits on the price: a move that size or larger happens about a third of the time.</p>` : '',
       term.available ? html`<p>The term structure compares the front expiry's implied volatility with a later one's.</p>` : '',
       r && isNum(r.rr25_pts) ? html`<p>The risk reversal is the 25-delta put's implied volatility less the 25-delta call's: positive means downside puts cost more than upside calls.</p>` : '',
@@ -155,7 +155,8 @@ export function greeksPanel(t, sym) {
 /* ---------- ideas: single options and strategies, with the budget ---------- */
 const BUDGETS = [0, 100, 250, 500, 1000, 2500];
 export function ideas(t, sym, budget) {
-  const all = [...(t.naked_ideas || []).map((i) => Object.assign({ group: 'Buy calls or puts' }, i)), ...(t.strategy_ideas || []).map((i) => Object.assign({ group: 'Strategies' }, i))];
+  // "Buy calls or puts" was a group heading worded as an order (advice policy, 2026-10-29)
+  const all = [...(t.naked_ideas || []).map((i) => Object.assign({ group: 'Single calls or puts' }, i)), ...(t.strategy_ideas || []).map((i) => Object.assign({ group: 'Strategies' }, i))];
   const fits = all.filter((i) => i.fits_budget !== false), over = all.filter((i) => i.fits_budget === false);
   return html`<div class="budget"><p class="t-label">Most you'll risk on one contract</p>
       <div class="seg" role="group" aria-label="Budget">${BUDGETS.map((b) => html`<button type="button" data-v2-budget="${b}" aria-pressed="${(budget || 0) === b}">${b ? money(b, 0) : 'No limit'}</button>`)}</div>
@@ -163,7 +164,7 @@ export function ideas(t, sym, budget) {
     ${over.length ? html`<p class="asof">Over your budget: ${over.map((i) => i.name).join(', ')}.</p>` : ''}
     ${fits.length ? fits.map((i, n) => idea(i, n)) : empty('No idea fits', budget ? 'Nothing fits this budget. Raise it or choose No limit.' : 'The setup has no directional idea right now.')}
     <p class="asof">Example structures for this setup, sized to one contract at the mid. Model output, not a recommendation to trade. ${clean(t.disclaimer_area || '')}</p>
-    ${ask(sym, 'Ask Milo about these ideas', `Which of these option ideas for ${sym} fits a two-to-eight-week swing, and why?`)}`;
+    ${ask(sym, 'Ask Milo about these structures', `How do these option structures for ${sym} differ in cost, breakeven, what each needs the stock to do, and risk?`)}`;
 }
 function idea(i, n) {
   if (i.conceptual) return html`<article class="idea"><h3>${i.name}</h3><p>${clean(i.rationale || i.note || '')}</p></article>`;
@@ -173,7 +174,7 @@ function idea(i, n) {
   const ml = usd(i.risk_for_one ?? (isNum(i.max_loss) ? Math.abs(i.max_loss) * 100 : null));
   return html`<article class="idea"><p class="t-label">${i.group}, ${i.structure || ''}${i.expiry ? `, ${shortDate(i.expiry)}, ${dayCount(i.dte)}` : ''}</p><h3>${i.name}</h3>
     <p>${clean(i.rationale || '')}</p>
-    <p class="legs">${(i.legs || []).map((l) => `${l.action === 'SELL' ? 'Sell' : 'Buy'} ${num(l.strike, 0)} ${(l.type || '').toLowerCase()} at ${num(l.mid)}`).join(', ')}.</p>
+    <p class="legs">${(i.legs || []).map((l) => `${l.action === 'SELL' ? 'Short' : 'Long'} ${num(l.strike, 0)} ${(l.type || '').toLowerCase()}, mid ${num(l.mid)}`).join('; ')}.</p>
     ${kv([[debit ? 'Cost for one' : 'Credit for one', usd(i.cost_for_one ?? i.credit_for_one ?? (isNum(i.net_debit) ? i.net_debit * 100 : isNum(i.net_credit) ? i.net_credit * 100 : null))], ['Most it can make', mp], ['Most it can lose', ml], ['Breakeven', be || 'n/a']], 4)}
     <div class="chart-slot" data-chart="idea${n}"></div>
     ${i.assignment_note ? note(i.assignment_note) : ''}${i.risk_plan ? note(`${i.risk_plan.invalidation || ''} ${i.risk_plan.sizing_note || ''}`) : ''}</article>`;
@@ -207,26 +208,27 @@ export function entry(t, sym) {
   }
   const r = ep.recommended || {}, og = ep.order_guidance || {}, tg = ep.target || {}, rk = ep.risk || {};
   return html`<p><b>${clean(ep.headline || '')}</b></p>
-    ${kv([['Contract', `${num(r.strike, 0)} ${ep.direction === 'short' ? 'put' : 'call'}, ${shortDate(r.expiry)} (${dayCount(r.dte)})`], ['Limit price', html`${num(og.limit_price ?? r.entry_mid)}${og.never_pay_more_than ? html` <span class="t-muted">never above ${num(og.never_pay_more_than)}</span>` : ''}`], ['Cost per contract', usd(r.capital_per_contract)], ['Breakeven', num(r.breakeven)], ['If the target is hit', signed(r.return_at_target_pct, 0)], ['If IV drops 20%', signed(r.return_if_iv_drops_20pct, 0)]], 3)}
+    ${kv([['Example contract', `${num(r.strike, 0)} ${ep.direction === 'short' ? 'put' : 'call'}, ${shortDate(r.expiry)} (${dayCount(r.dte)})`], ['Quote', html`mid ${num(r.entry_mid ?? og.limit_price)}${isNum(r.ask) ? html` <span class="t-muted">ask ${num(r.ask)}</span>` : ''}`], ['Cost per contract at the mid', usd(r.capital_per_contract)], ['Breakeven', num(r.breakeven)], ['At the model\'s projected level', signed(r.return_at_target_pct, 0)], ['If IV drops 20%', signed(r.return_if_iv_drops_20pct, 0)]], 3)}
     ${(ep.entry_options || []).length ? html`<h3>Setups and where each stands</h3><ul class="plain">${ep.entry_options.map((o) => html`<li><b>${capFirst(o.style || '')}${o.state ? html` <span class="chip-tag">${capFirst(o.state)}</span>` : ''}.</b> ${clean(o.state_detail || '')} ${clean(o.detail || '')} ${clean(o.confirmation || '')}</li>`)}</ul>${note(ep.ledger_note)}` : ''}
-    <h3>Target and risk</h3>${kv([['Target', html`${num(tg.target_price)} <span class="t-muted">(${signed(tg.move_required_pct)}, ${clean(tg.target_source || '')})</span>`], ['Stock stop', html`${num(rk.underlying_stop)} <span class="t-muted">${clean(rk.stop_basis || '')}</span>`], ['Typical time', isNum(tg.estimated_trading_days) ? `${tg.estimated_trading_days} sessions` : 'n/a']], 3)}
+    <h3>The model's levels for the stock</h3>${kv([['Projected level', html`${num(tg.target_price)} <span class="t-muted">(${signed(tg.move_required_pct)}, ${clean(tg.target_source || '')})</span>`], ['Level that breaks the setup', html`${num(rk.underlying_stop)} <span class="t-muted">${clean(rk.stop_basis || '')}</span>`], ['Typical time', isNum(tg.estimated_trading_days) ? `${tg.estimated_trading_days} sessions` : 'n/a']], 3)}
+    <p class="t-muted">Model output from price history and the chain, for research. Not an order, a forecast or a recommendation to trade.</p>
     <p>${clean(rk.invalidation || '')}</p>
-    ${(ep.candidates || []).length ? html`<details class="more-inline"><summary>Candidate strikes, ranked</summary><div class="tscroll"><table class="t"><thead><tr><th>Rank</th><th>Strike</th><th>Expiry</th><th>Mid</th><th>Cost</th><th>Spread</th><th>Delta</th><th>Breakeven</th><th>At target</th><th>Flat</th></tr></thead>
+    ${(ep.candidates || []).length ? html`<details class="more-inline"><summary>Other strikes the model scored</summary><div class="tscroll"><table class="t"><thead><tr><th>Rank</th><th>Strike</th><th>Expiry</th><th>Mid</th><th>Cost</th><th>Spread</th><th>Delta</th><th>Breakeven</th><th>At projected level</th><th>Flat</th></tr></thead>
       <tbody>${ep.candidates.map((c) => html`<tr><td>${c.rank}</td><td>${num(c.strike, 0)}</td><td>${shortDate(c.expiry)}</td><td>${num(c.entry_mid)}</td><td>${usd(c.cost_per_contract)}</td><td>${pct(c.spread_pct)}</td><td>${num(c.delta, 2)}</td><td>${num(c.breakeven)}</td><td>${signed(c.return_at_target_pct, 0)}</td><td>${signed(c.return_if_flat_pct, 0)}</td></tr>`)}</tbody></table></div></details>` : ''}
     ${(ep.warnings || []).map((w) => html`<p class="stale">${clean(w)}</p>`)}${note(og.note)}${(ep.assumptions || []).map(note)}
-    ${volBlock}${ask(sym, 'Ask Milo about this entry', `Walk me through the suggested ${sym} entry and what would invalidate it.`)}`;
+    ${volBlock}${ask(sym, 'Ask Milo about this setup', `Walk me through how Optic's rules picked this example ${sym} contract, what it assumes, and what would break the setup.`)}`;
 }
 
 /* ---------- swing verdict and Optic's perspective ---------- */
 export function verdict(t, sym) {
   const v = t.verdict || {}, c = t.cases || {};
   const s = score100(v.composite_score);
-  return html`<p><b>${capFirst(v.stance || '')}, ${v.conviction || ''} conviction.</b> ${clean(v.summary || '')}</p>
+  return html`<p><b>${capFirst(v.stance || '')}${v.conviction ? `, ${v.conviction === 'none' ? 'no' : v.conviction} conviction` : ''}.</b> ${clean(v.summary || '')}</p>
     ${kv([['Composite', isNum(s) ? html`<span class="${tone100(s)}">${num(s, 0)} of 100</span>${scoreLine(s)}` : 'n/a'], ['Signal agreement', pct(v.signal_agreement_pct, 0)]], 2)}${note(v.agreement_note)}
     ${TR.slot('composite')}
     <div class="tscroll"><table class="t"><thead><tr><th>Input</th><th>Score</th><th>Weight</th><th>Adds</th><th>Status</th></tr></thead>
       <tbody>${(v.breakdown || []).map((b) => html`<tr><td>${capFirst(b.component)}</td><td class="${dir(b.score)}">${signed(b.score, 0, '')}</td><td>${num(b.weight_pct, 0)}%${Math.abs((b.nominal_weight_pct || 0) - (b.weight_pct || 0)) >= 1 ? html` <span class="t-muted">(of ${num(b.nominal_weight_pct, 0)}%)</span>` : ''}</td><td class="${dir(b.contribution)}">${signed(b.contribution, 1, '')}</td><td>${b.unavailable ? clean(b.status_reason || 'Excluded') : 'Included'}</td></tr>`)}</tbody></table></div>
-    <p class="asof">50 is no edge either way. Bullish at +30, leaning at +10 on the composite's own scale. ${clean(v.scale_note || '')}</p>
+    <p class="asof">The same score the Overview shows as its short-term reading. 50 is its neutral midpoint, where the inputs balance; it is not a measured break-even. It reads bullish from 65 and leaning bullish from 55 (+30 and +10 on the composite's own -100 to +100 scale), and the same distances below 50 read bearish. ${clean(v.scale_note || '')}</p>
     <details class="more-inline"><summary>What each input measures</summary><ul class="plain">${(v.breakdown || []).map((b) => html`<li><b>${capFirst(b.component)}.</b> ${clean(b.measures || '')}</li>`)}</ul></details>
     ${t.why && t.why.available ? html`<h3>What's pulling hardest</h3><ul class="plain">${t.why.reasons.map((r) => html`<li><b class="${r.direction === 'up' ? 'up' : r.direction === 'down' ? 'down' : ''}">${clean(r.headline)}.</b> ${(r.evidence || []).map(clean).join('; ')}</li>`)}</ul>` : ''}
     ${c.available ? html`<h3>Optic's perspective</h3><div class="cases"><div><p class="case-h up">Bull case</p><ul class="plain">${c.bull.map((x) => html`<li><b>${clean(x.claim)}.</b> ${clean(x.detail)} <span class="t-muted">${x.source}</span></li>`)}</ul></div><div><p class="case-h down">Bear case</p><ul class="plain">${c.bear.map((x) => html`<li><b>${clean(x.claim)}.</b> ${clean(x.detail)} <span class="t-muted">${x.source}</span></li>`)}</ul></div></div>${note(c.balance)}` : ''}
@@ -390,7 +392,7 @@ export function swingSetups(t, sym) {
 }
 
 /* ---------- chart patterns, each beside what followed it (Classic's renderPatterns and baseRateCell) ---------- */
-/** What followed a pattern across 43 names and ten years, 21 sessions on: its hit rate against 50%, and its edge
+/** What followed a pattern in the base-rate study (43 names and ten years as built), 21 sessions on: its hit rate against 50%, and its edge
  *  over the stock's own drift. A pattern still forming has nothing to measure. */
 export function baseRate(rates, name, state) {
   const entry = ((rates && rates.patterns) || {})[`${name}|${state}`], h = entry && entry.h21;
@@ -399,22 +401,48 @@ export function baseRate(rates, name, state) {
   return { text: `${num(h.hit_rate * 100, 0)}% of ${num(h.n, 0)}`, edge: `${h.edge_mean_pct > 0 ? '+' : ''}${num(h.edge_mean_pct, 2)}% against its own drift`, tone: h.hit_rate > 0.53 ? 'up' : h.hit_rate < 0.47 ? 'down' : 'flat' };
 }
 const rateCell = (r) => html`<span class="pat-rate ${r.tone}">${r.text}${r.edge ? html` <span class="t-muted">${r.edge}</span>` : ''}</span>`;
+/** The study's own figures for the panel's sentences about it: its size, and the range each kind of pattern measured.
+ *  These were typed into the copy and drifted from the data (BUG-067: "confirmed structures land between 51% and 55%"
+ *  beside a study measuring 49% to 53%), so they come from the base rates, and a sentence with no rates says no figure. */
+export function rateRanges(rates) {
+  const pats = (rates && rates.available && rates.patterns) || {};
+  const pick = (state) => Object.entries(pats).filter(([k]) => k.endsWith(`|${state}`)).map(([, v]) => (v || {}).h21).filter((h) => h && isNum(h.hit_rate));
+  const span = (hs) => (hs.length ? { lo: Math.min(...hs.map((h) => h.hit_rate * 100)), hi: Math.max(...hs.map((h) => h.hit_rate * 100)),
+    nlo: Math.min(...hs.map((h) => h.n)), nhi: Math.max(...hs.map((h) => h.n)), count: hs.length } : null);
+  return { confirmed: span(pick('confirmed')), unconfirmed: span(pick('unconfirmed')), candle: span(pick('candle')),
+    names: rates && rates.available ? rates.universe_size : null, years: rates && rates.available ? Number(String(rates.history || '').replace(/y$/, '')) : null };
+}
+const YEAR_WORDS = ['', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten'];
+const studyWords = (r) => (isNum(r.names) && isNum(r.years) && r.years > 0 ? `across ${num(r.names, 0)} names and ${YEAR_WORDS[r.years] || num(r.years, 0)} years` : 'in Optic\'s study of past occurrences');
+function confirmLine(r) {
+  const c = r.confirmed, u = r.unconfirmed;
+  if (!c || !u) return '';
+  const range = (x) => (num(x.lo, 0) === num(x.hi, 0) ? `at ${num(x.lo, 0)}%` : `between ${num(x.lo, 0)}% and ${num(x.hi, 0)}%`);
+  return c.lo > u.hi ? ` Confirmation is the whole difference on this data: confirmed structures land ${range(c)}, unconfirmed ones at or below ${num(u.hi, 0)}%.`
+    : ` On this data confirmed structures land ${range(c)} and unconfirmed ones ${range(u)}.`;
+}
+function candleLine(r) {
+  const c = r.candle;
+  if (!c) return '';
+  const coin = c.lo >= 45 && c.hi <= 55;
+  return `Every candlestick pattern here measures between ${num(c.lo, 0)}% and ${num(c.hi, 0)}% on samples of ${num(c.nlo, 0)} to ${num(c.nhi, 0)}.${coin ? ' That is a coin toss, and it is the most useful thing this panel can tell you about them: they describe what the bar did, and on this evidence they do not forecast what the next twenty do.' : ''}`;
+}
 export function ratesMissing(rates) {
   if (!rates) return 'Base rates are on their way, so the measured column is empty for now. With none cached, the server builds them from ten years of daily bars first, which takes about ninety seconds, and the column fills in when they land.';
   if (rates.failed) return 'Base rates could not be loaded, so the measured column is empty. They are asked for again when the page is reloaded.';
   return `${clean(rates.reason || 'Base rates are not available.')} The measured column stays empty until they are.`;
 }
 export function patterns(t, sym, extra) {
-  const p = t.patterns || {}, rates = extra.rates, se = extra.seasonality, rp = extra.relperf;
+  const p = t.patterns || {}, rates = extra.rates, se = extra.seasonality, rp = extra.relperf, rr = rateRanges(rates);
   const loading = extra.loading === undefined;
   const pats = !p.available ? html`<p class="t-muted">${clean(p.reason || 'Not enough history to read structure.')}</p>` : html`
-    <p class="section-sub">Structure, candles and zones read mechanically off the daily bars, each beside what actually happened afterwards across 43 names and ten years. The two often disagree, and this panel does not resolve that for you.</p>${TR.historySlot('candles')}
+    <p class="section-sub">Structure, candles and zones read mechanically off the daily bars, each beside what actually happened afterwards ${studyWords(rr)}. The two often disagree, and this panel does not resolve that for you.</p>${TR.historySlot('candles')}
     ${(p.chart_patterns || []).length ? html`<h3>Structure</h3><div class="tscroll"><table class="t pat-t"><thead><tr><th class="l">Pattern</th><th class="l">State</th><th>Conventional reading held, 21 sessions</th></tr></thead>
       <tbody>${p.chart_patterns.slice().reverse().map((x) => { const st = x.confirmed === null ? 'candle' : x.confirmed ? 'confirmed' : 'unconfirmed';
         return html`<tr><td class="l"><b>${x.name}</b><span class="t-muted pat-sub">${shortDate(x.start_date)} to ${shortDate(x.end_date)}, ${num(x.span_bars, 0)} bars${isNum(x.amplitude_atr) ? `, ${num(x.amplitude_atr, 1)} times a typical day's range` : ''}</span><span class="pat-sub">Conventionally: ${x.conventional}</span></td>
           <td class="l">${x.confirmed === null ? 'Forming' : x.confirmed ? `Confirmed${x.confirmed_on ? ` ${shortDate(x.confirmed_on)}` : ''}` : 'Not confirmed'}</td>
           <td>${x.confirmed === null ? html`<span class="t-muted">nothing to measure until it resolves</span>` : rateCell(baseRate(rates, x.name, st))}</td></tr>`; })}</tbody></table></div>
-      ${note('A reversal pattern is only confirmed once a close has cleared its neckline, and cleared it promptly; a crossing months later is a coincidence, not a resolution. Confirmation is the whole difference on this data: confirmed structures land between 51% and 55%, unconfirmed ones at or below 50%. A pattern that fails to confirm is not a weaker version of the same signal, it is the trend carrying on.')}`
+      ${note(`A reversal pattern is only confirmed once a close has cleared its neckline, and cleared it promptly; a crossing months later is a coincidence, not a resolution.${confirmLine(rr)} A pattern that fails to confirm is not a weaker version of the same signal, it is the trend carrying on.`)}`
     : html`<p class="t-muted">No structural pattern currently passes the size, prior-move and freshness tests over the last year.</p>`}
     ${(p.zones || []).length ? html`<h3>Supply and demand</h3><div class="tscroll"><table class="t pat-t"><thead><tr><th class="l">Zone</th><th>Range</th><th>From the price</th></tr></thead>
       <tbody>${p.zones.map((z) => html`<tr><td class="l"><b>${z.side === 'supply' ? 'Supply' : 'Demand'} zone</b><span class="t-muted pat-sub">Based ${shortDate(z.formed)}, left ${shortDate(z.left_on)} on a move of ${num(z.departure_atr, 1)} times a typical day's range over ${num(z.base_bars, 0)} bars of base</span><span class="pat-sub">${z.side === 'supply' ? 'Sellers were waiting here and price could not hold above it.' : 'Buyers were waiting here and price could not stay below it.'}</span></td>
@@ -423,7 +451,7 @@ export function patterns(t, sym, extra) {
     ${(p.candles || []).length ? html`<h3>Recent candles</h3><div class="tscroll"><table class="t pat-t"><thead><tr><th class="l">Bar</th><th class="l">Direction</th><th>That direction held, 21 sessions</th></tr></thead>
       <tbody>${p.candles.slice(0, 6).map((c) => html`<tr><td class="l"><b>${c.name}</b><span class="t-muted pat-sub">${shortDate(c.date)}, ${c.bar_offset === 0 ? 'the latest bar' : `${num(c.bar_offset, 0)} bars ago`}. ${clean(c.note)}</span><span class="pat-sub">Conventionally: ${c.conventional}</span></td>
         <td class="l ${c.direction === 'bullish' ? 'up' : c.direction === 'bearish' ? 'down' : ''}">${capFirst(c.direction)}</td><td>${rateCell(baseRate(rates, c.name, 'candle'))}</td></tr>`)}</tbody></table></div>
-      ${note('Every candlestick pattern here measures between 46% and 51% on samples of two to twelve thousand. That is a coin toss, and it is the most useful thing this panel can tell you about them: they describe what the bar did, and on this evidence they do not forecast what the next twenty do.')}` : ''}
+      ${rr.candle ? note(candleLine(rr)) : ''}` : ''}
     ${how(html`<p>${clean(p.method || '')}</p>${rates && rates.available ? html`<p>Base rates: ${clean(rates.method || '')} Cached, ${num(rates.cache_age_days || 0, 0)} days old.</p>` : html`<p>${ratesMissing(rates)}</p>`}`)}
     ${rates && rates.available ? '' : html`<p class="asof" role="status">${loading ? 'Loading the base rates…' : ratesMissing(rates)}</p>`}`;
   return html`${pats}

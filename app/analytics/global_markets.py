@@ -31,7 +31,6 @@ from __future__ import annotations
 import logging
 from typing import Any, Dict, List, Optional
 
-import numpy as np
 import pandas as pd
 
 from .series_stats import apply_quote, live_quotes

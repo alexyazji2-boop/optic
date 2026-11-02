@@ -61,7 +61,7 @@ def test_no_section_chip_is_cut_mid_word(tmp_path):
     got = _run(tmp_path, f"""
       const s = await import('{(V2 / "js/ui/sections.js").as_posix()}');
       const titles = ['Four questions, answered separately', 'Long-term trend score, from price history', 'The multiple against its own history',
-        'Fair-value model, discounted cash flow', 'Valuation and accumulation levels', 'The business behind the reports', 'What options price for the report'];
+        'Fair-value model, discounted cash flow', 'Valuation and long-term price levels', 'The business behind the reports', 'What options price for the report'];
       print(JSON.stringify(titles.map(s.chipLabel)));
     """)
     assert all(len(t) <= 28 and not t.endswith("…") for t in got), got

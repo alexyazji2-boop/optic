@@ -13,7 +13,7 @@ could survive into production by accident.
 from __future__ import annotations
 
 import os
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 from urllib.parse import urlparse
 
 from ..runtime import base_url, for_reader, is_hosted
@@ -27,6 +27,9 @@ CSRF_COOKIE = "optic_csrf"
 # back to weekly, not a bank; the mitigation for a long-lived session is that it
 # can be revoked from Settings and is destroyed by a password change.
 SESSION_TTL = int(os.environ.get("SESSION_TTL_SECONDS", str(30 * 24 * 3600)))
+# However much a session is used, it ends this long after it began (SEC-14, Phase 10): the slide above had no end,
+# so a stolen cookie lasted as long as it kept being used. 0 leaves only the slide.
+SESSION_MAX_DAYS = int(os.environ.get("SESSION_MAX_DAYS", "90"))
 
 # A session signed in without "Remember me": its cookie goes when the browser
 # closes, and the server lets it go after a day unused, because a browser that

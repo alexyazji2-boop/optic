@@ -16,6 +16,7 @@ import { clean, billingOff } from '../core/format.js';
 import { skeleton } from '../ui/states.js';
 import * as drawer from '../ui/drawer.js';
 import { toast } from '../ui/toast.js';
+import { levelSlider } from '../ui/levelslider.js';
 
 let D = {}, live = true, mainEl = null, appRef = null, ui = {};
 const me = () => store.state.me || {};
@@ -30,6 +31,7 @@ const tag = (on, text) => html` <span class="set-tag ${on ? 'on' : 'off'}">${tex
 const seg = (label, items, cur, attr) => html`<div class="seg" role="group" aria-label="${label}">${items.map(([v, l]) => (attr === 'theme'
   ? html`<button type="button" data-v2-theme="${v}" aria-pressed="${cur === v}">${l}</button>`
   : attr === 'motion' ? html`<button type="button" data-v2-motion="${v}" aria-pressed="${cur === v}">${l}</button>`
+  : attr === 'density' ? html`<button type="button" data-v2-density="${v}" aria-pressed="${cur === v}">${l}</button>`
   : html`<button type="button" data-v2-scale="${v}" aria-pressed="${cur === v}">${l}</button>`))}</div>`;
 
 /* ---------------- account ---------------- */
@@ -138,11 +140,14 @@ function preferences() {
       ${row('Size', 'Default is 15% larger than the terminal shipped with. Compact is that original density, for a small screen or a reader who wants more on it at once.', seg('Text size', [['compact', 'Compact'], ['default', 'Default'], ['large', 'Large']], prefs.scale(), 'scale'))}</section>
     <section class="section" aria-labelledby="kb-h"><h2 class="t-h2" id="kb-h">Keyboard</h2>
       ${row('Shortcuts', 'Every key the terminal answers to, in one list. Press ? anywhere outside a field to open it.', html`<button type="button" class="btn btn-sm" data-v2-shortcuts>Show the shortcuts</button>`)}</section>
-    <!-- the level changes Milo's answers and nothing on the pages; it was described as changing every page (beginner audit, 2026-10-20) -->
-    <section class="section" aria-labelledby="hm-h"><h2 class="t-h2" id="hm-h">How Milo explains things</h2>
-      <p class="section-sub">This sets the level Milo pitches its answers at, the Level in Milo's Response settings. The pages are the same at every level: each leads with a plain finding, then its figures, with methods one step away.</p>
-      ${row('Advanced answers', 'On is Advanced or Professional, off is Simple, Financially Literate or Adaptive. Turning it off returns Milo to the level you had chosen. On also opens the paper portfolio\'s risk rules by default.',
-        html`<label class="switch"><input type="checkbox" role="switch" data-v2-adv ${prefs.advancedOn() ? 'checked' : ''}> <span>Advanced answers from Milo</span></label>`)}</section>
+    <!-- two settings, kept apart (Phase 04, D-019): what a page shows, and how Milo explains it -->
+    <section class="section" aria-labelledby="dn-h"><h2 class="t-h2" id="dn-h">How much each page shows</h2>
+      <p class="section-sub">Simple leads with each page's main finding and folds the specialist research one press away. Advanced opens it, and Home shows every panel of its layout.</p>
+      ${row('View', 'The Dossier\'s "Show advanced analysis" switch is the same setting. It does not change how Milo explains things.', seg('View', [['simple', 'Simple'], ['advanced', 'Advanced']], prefs.density(), 'density'))}</section>
+    <!-- the knowledge level (Phase 05): one slider, the same one Home's first visit and Milo's Response settings show -->
+    <section class="section" aria-labelledby="hm-h"><h2 class="t-h2" id="hm-h">How Optic explains things</h2>
+      <p class="section-sub">Milo's answers, deep research and the written portfolio briefing are worded for this level, and terms on the pages explain themselves to match. It changes the words, never the figures, sources or caveats, and it does not change what a page shows. ${store.signedIn() ? 'Saved to your account.' : 'Kept in this browser; sign in to keep it on your account.'}</p>
+      ${levelSlider({ id: 'set-lvl', label: 'Explain things for' })}</section>
     <section class="section" aria-labelledby="tz-h"><h2 class="t-h2" id="tz-h">Time zone</h2>
       <p class="section-sub"><b>US market hours are defined in Eastern Time and don't move.</b> This setting only changes the clock they're displayed against, so you can see when the open and close land where you are.</p>
       ${row('Show times in', `Currently ${z} (${prefs.zoneAbbrev(z)})${onMarket ? '. The same as market time, so nothing is converted.' : '.'}`,
@@ -157,7 +162,7 @@ function about() {
   const h = D.health, signed = store.signedIn();
   const feed = (p) => ({ yfinance: 'Yahoo Finance', yahoo: 'Yahoo Finance', tradier: 'Tradier' }[String(p || 'yfinance').toLowerCase()] || p);
   const rows = [
-    ['Data source', h && h.realtime_chain ? `Real-time option chains via ${feed(h.provider)}; other quotes may be delayed` : 'Yahoo Finance. Quotes delayed roughly 15 minutes'],
+    ['Data source', h && h.realtime_chain ? `Real-time option chains via ${feed(h.provider)}; other quotes may be delayed` : 'Yahoo Finance. Quotes delayed up to 15 minutes'],
     ['Assistant', !h ? 'Checking…' : (h.assistant || {}).enabled ? 'Milo is configured and answering' : 'Milo is switched off in this build'],
     ['Optic Portfolio', 'One shared simulated ledger, no real money'],
     ['Stored on this device', signed ? 'Theme, time zone, chart preferences, recent symbols, Milo chats, drawings, notes, Paper Desk trades and Retirement holdings' : GUEST_STORED],
@@ -246,6 +251,7 @@ function wire(main) {
     if ((b = t('[data-v2-theme]'))) { prefs.setTheme(b.dataset.v2Theme); paint(); return; }
     if ((b = t('[data-v2-motion]'))) { prefs.setMotion(b.dataset.v2Motion); paint(); const again = mainEl.querySelector(`[data-v2-motion="${b.dataset.v2Motion}"]`); if (again) again.focus(); return; }
     if ((b = t('[data-v2-scale]'))) { prefs.setScale(b.dataset.v2Scale); paint(); const again = mainEl.querySelector(`[data-v2-scale="${b.dataset.v2Scale}"]`); if (again) again.focus(); return; }
+    if ((b = t('[data-v2-density]'))) { prefs.setDensity(b.dataset.v2Density); paint(); const again = mainEl.querySelector(`[data-v2-density="${b.dataset.v2Density}"]`); if (again) again.focus(); return; }
     if (t('[data-v2-report]')) { openReport(t('[data-v2-report]')); return; }
     if (t('[data-v2-set-recheck]')) { await store.loadMe(); if (appRef) appRef.settleAuth(); return; }
     if (t('[data-v2-set-resend]')) { await act(() => api.post('/api/auth/resend-verification', {}), (r) => (r && r.already_verified ? 'This address is already confirmed.' : r && r.mail && r.mail.available === false ? 'Email is not switched on here yet, so no link could be sent.' : 'A new confirmation link is on its way.')); return; }
@@ -285,7 +291,6 @@ function wire(main) {
   main.addEventListener('change', (e) => {
     const t = e.target;
     if (t.matches('[data-v2-tz]')) { prefs.setTimezone(t.value); paint(); const s = mainEl.querySelector('[data-v2-tz]'); if (s) s.focus(); return; }
-    if (t.matches('[data-v2-adv]')) { prefs.setAdvanced(t.checked); toast(t.checked ? 'Milo will give advanced answers.' : 'Milo will explain at your chosen level.'); }
   });
   main.addEventListener('submit', async (e) => {
     const f = e.target; e.preventDefault();
@@ -298,7 +303,9 @@ function wire(main) {
       try {
         const r = await api.post('/api/auth/change-password', { current_password: f.current_password ? f.current_password.value : '', new_password: f.new_password.value, confirm_password: f.confirm_password.value });
         ui.pw = false; toast(r && r.other_sessions_ended !== undefined ? `Password changed. ${r.other_sessions_ended} other session${r.other_sessions_ended === 1 ? '' : 's'} signed out.` : 'Password changed.'); await store.loadMe(); loadSecurity();
-      } catch (err) { ui.pwErr = err.message && err.kind === 'bad' ? err.message : api.explain(err, 'The password'); paint(); }
+      // a signed-in reader's 401 here is a wrong password, said in the server's words; it read "Sign in to see the
+      // password" (BUG-048)
+      } catch (err) { ui.pwErr = err.message && (err.kind === 'bad' || (err.status === 401 && store.signedIn())) ? err.message : api.explain(err, 'The password'); paint(); }
       return;
     }
     if (f.matches('[data-v2-pk-rename]')) {
@@ -310,7 +317,7 @@ function wire(main) {
         await api.post('/api/auth/delete-account', { confirm_email: f.confirm_email.value.trim(), password: f.password ? f.password.value : '' });
         handDeviceSessionToGuest(); toast('Account deleted. The terminal stays open.');
         if (appRef) appRef.settleAuth({ next: '#/' });
-      } catch (err) { ui.delErr = err.message && err.kind === 'bad' ? err.message : api.explain(err, 'Deleting the account'); paint(); }
+      } catch (err) { ui.delErr = err.message && (err.kind === 'bad' || (err.status === 401 && store.signedIn())) ? err.message : api.explain(err, 'Deleting the account'); paint(); }
     }
   });
 }

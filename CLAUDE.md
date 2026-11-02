@@ -5,6 +5,24 @@ A market research web app. FastAPI + vanilla JS/SVG. **No framework, no build st
 
 Live at https://theopticterminal.com (Railway, auto-deploys from `main`).
 
+## Post-demo overhaul (branch `post-demo-ultra`, from 2026-10-29)
+
+After the 2026-10-28 investor demo the owner set an eleven-phase overhaul: advice safeguards, search and
+ticker state, simplicity, a five-level knowledge slider, Dossier, Milo streaming and grounding, data
+integrity, then performance, security and accessibility. The directives are saved verbatim in
+`docs/post-demo-ultra/directives/`. Before changing anything for this work, read
+`docs/post-demo-ultra/PROGRESS.md` and `REQUIREMENTS_MATRIX.md`. Record defects in `BUG_REGISTER.md`,
+commands and outcomes in `TEST_RESULTS.md`, choices in `DECISIONS.md`, and external dependencies in `BLOCKERS.md`.
+
+Rules for this work: one phase at a time, each finished before the next. No deploy, no push to `main`, no
+production data, billing or brokerage changes. No fabricated data or test evidence. Stand-in model checks are
+labelled as such. Legal text is proposed for counsel, never rewritten in substance. Status words are PASS,
+FAIL, PARTIAL, BLOCKED and NOT TESTED; implemented is not verified.
+
+Validation: `.venv/bin/python -m pytest -q` (read the summary line; never pipe it into a push),
+`/opt/homebrew/bin/node --check <file>` for edited JS, and browser checks against a local server. The
+v2 front end lives in `static/v2/` (ES modules, no build); Classic is `static/app.js` at `/classic`.
+
 ## Running it
 
 ```bash

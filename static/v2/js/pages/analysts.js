@@ -11,14 +11,16 @@ import { sectionHead } from './tabs.js';
 
 const SHOWS = [['', 'All'], ['upgrades', 'Upgrades'], ['downgrades', 'Downgrades'], ['initiations', 'Initiations'], ['raised', 'Target raised'], ['lowered', 'Target lowered']];
 const RATINGS = [['', 'Any'], ['buy', 'Buy'], ['hold', 'Hold'], ['sell', 'Sell']];
-let Q = { show: '', rating: '', days: 7, ticker: '' }, D = {}, live = true, mainEl = null, seq = 0, sort = { key: 'at', dir: 'desc' };
+let Q = { show: '', rating: '', days: 7, ticker: '' }, D = {}, live = true, mainEl = null, seq = 0, sort = { key: 'at', dir: 'desc' }, showAll = false;
+// the first rows of a week's actions, the rest one press away: the whole list drew 14,600 px of table on a first visit (Phase 04)
+const FIRST = 40;
 
 const COLS = [
   { key: 'at', label: 'Date', sort: (r) => Date.parse(r.at), cell: (r) => html`${new Date(r.at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}<br><small class="t-muted">${ago(r.at)}</small>` },
   { key: 'ticker', label: 'Symbol', cell: (r) => html`<a href="#/${r.ticker}">${r.ticker}</a>` },
   { key: 'firm', label: 'Analyst', cell: (r) => r.firm },
   { key: 'prior_target', label: 'Prior target', num: true, hideOnPhone: true, cell: (r) => (r.action === 'init' ? 'New' : r.prior_target ? num(r.prior_target) : 'Not given') },
-  { key: 'target', label: 'Target', num: true, cell: (r) => html`${r.target ? num(r.target) : 'Not given'}${r.target_action === 'Raises' ? html` <span class="up">↑</span>` : r.target_action === 'Lowers' ? html` <span class="down">↓</span>` : ''}` },
+  { key: 'target', label: 'Target', num: true, cell: (r) => html`${r.target ? num(r.target) : 'Not given'}${r.target_action === 'Raises' ? html` <span class="t-muted" title="Raised">↑</span>` : r.target_action === 'Lowers' ? html` <span class="t-muted" title="Lowered">↓</span>` : ''}` },
   { key: 'action_label', label: 'Action', cell: (r) => html`<span class="${r.action === 'up' ? 'up' : r.action === 'down' ? 'down' : ''}">${r.action_label || r.action}</span>` },
   { key: 'rating', label: 'Rating', cell: (r) => html`<span class="rt rt-${r.rating_class || ''}" title="${r.prior_rating && r.prior_rating !== r.rating ? `From ${r.prior_rating}` : ''}">${r.rating || ''}</span>` },
 ];
@@ -34,7 +36,7 @@ function body() {
   // how old the list is, and what its dates are: when the firm's action was recorded, not when it was read
   const age = d.read_at || d.generated_at;
   return html`<p class="section-sub">${lead}</p>
-    ${table(rows, COLS, { id: 'an', sort, caption: 'Analyst actions' })}<p class="asof">${age ? `Read ${ago(age)}. ` : ''}Each date is when Yahoo Finance recorded the firm's action, usually the day it was announced. ${clean(d.method || '')}</p>`;
+    ${table(rows, COLS, { id: 'an', sort, caption: 'Analyst actions', limit: showAll ? 0 : FIRST })}${!showAll && rows.length > FIRST ? html`<p><button type="button" class="btn btn-sm" data-v2-an-all>Show all ${rows.length}</button></p>` : ''}<p class="asof">${age ? `Read ${ago(age)}. ` : ''}Each date is when Yahoo Finance recorded the firm's action, usually the day it was announced. ${clean(d.method || '')}</p>`;
 }
 
 function paint() {
@@ -51,7 +53,7 @@ function paint() {
 }
 
 async function load() {
-  const my = ++seq; D.d = null; D.err = null; paint();
+  const my = ++seq; D.d = null; D.err = null; showAll = false; paint();
   const q = new URLSearchParams({ days: Q.days }); if (Q.show) q.set('show', Q.show); if (Q.rating) q.set('rating', Q.rating);
   try {
     const d = Q.ticker ? await api.get(`/api/analysts/${encodeURIComponent(Q.ticker)}?limit=200&${q}`, { ttl: 300000, timeout: 30000 }) : await api.get(`/api/analysts/latest?${q}`, { ttl: 120000 });
@@ -69,6 +71,7 @@ export async function render(main) {
     if ((b = t('[data-v2-an-show]'))) { Q.show = b.dataset.v2AnShow; load(); return; }
     if ((b = t('[data-v2-an-rating]'))) { Q.rating = b.dataset.v2AnRating; load(); return; }
     if ((b = t('[data-v2-an-days]'))) { Q.days = Number(b.dataset.v2AnDays); load(); return; }
+    if (t('[data-v2-an-all]')) { showAll = true; paint(); const next = mainEl.querySelector(`#an tbody tr:nth-child(${FIRST + 1}) a`); if (next) next.focus(); return; }
     if (t('[data-v2-an-clear]')) { Q.ticker = ''; if (Q.days === 365) Q.days = 30; load(); return; }
     if ((b = t('[data-v2-sort]'))) { const [, k] = b.dataset.v2Sort.split(':'); sort = nextSort(sort, k, COLS); paint(); const again = mainEl.querySelector(`[data-v2-sort="an:${k}"]`); if (again) again.focus(); }
   });

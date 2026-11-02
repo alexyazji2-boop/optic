@@ -24,12 +24,12 @@ is a fact about how it is used, not a claim that crossing it predicts anything.
 from __future__ import annotations
 
 import logging
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 import numpy as np
 import pandas as pd
 
-from .technicals import atr, bollinger as bollinger_bands, ema, sma
+from .technicals import atr, bollinger as bollinger_bands, ema
 
 log = logging.getLogger(__name__)
 
@@ -76,7 +76,10 @@ def vwap(df: pd.DataFrame, anchor: Optional[str] = None) -> pd.Series:
     which a session VWAP on a daily chart cannot.
     """
     typical = (df["High"] + df["Low"] + df["Close"]) / 3.0
-    volume = df["Volume"].astype(float) if "Volume" in df else pd.Series(1.0, index=df.index)
+    # No volume, no VWAP: weighting every bar 1.0 drew a plain average of typical prices under VWAP's name (Phase 09)
+    if "Volume" not in df:
+        return pd.Series(np.nan, index=df.index)
+    volume = df["Volume"].astype(float)
     if anchor:
         mask = df.index >= anchor_stamp(df.index, anchor)
         typical, volume = typical[mask], volume[mask]
@@ -494,6 +497,8 @@ def _one(df: pd.DataFrame, key: str, bench: Optional[pd.Series],
 
     if key == "vwap":
         line = vwap(df, anchor=anchor)
+        if "Volume" not in df:
+            return {**base, "available": False, "reason": "These bars carry no volume, so there is no VWAP."}
         # The first bar actually in the average, which is the date to print:
         # an anchor on a weekend or a holiday starts on the next session.
         started = line.dropna()

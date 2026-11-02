@@ -1,6 +1,6 @@
 // Optic v2: boot, routing and the app-wide controls. device.js is imported
 // first so a pending account switch is finished before any store is read.
-import { keepDeviceSession, bringGuestThings, keepGuestThingsOut, switchedSaid } from './core/device.js';
+import { keepDeviceSession, bringGuestThings, keepGuestThingsOut, switchedSaid, askIsPending } from './core/device.js';
 import { CLASSIC } from './core/classic.js';
 import { $, html, render, announce } from './core/dom.js';
 import * as api from './core/api.js';
@@ -17,7 +17,6 @@ import { openMilo, resetContext, checkAvailability, markButtons, panelFigures } 
 import { toggleWatch } from './ui/company.js';
 import { linkHome } from './core/homelink.js';
 import { toast } from './ui/toast.js';
-import { hrefFor } from './nav.js';
 import * as settingsPage from './pages/settings.js';
 import * as signin from './pages/signin.js';
 import { startReset } from './pages/signin.js';
@@ -31,6 +30,7 @@ import { watchTables } from './ui/align.js';
 import { startUnread } from './core/unread.js';
 import { startStrips } from './ui/strips.js';
 import { watch as watchGlossary } from './ui/glossmark.js';
+import { catalogue as levelCatalogue } from './ui/levelslider.js';
 import { wire as wireTypeahead } from './ui/typeahead.js';
 
 // Home is the research workspace (Market Overview by default); pages/home.js supplies its blocks
@@ -92,13 +92,20 @@ const app = {
   },
 };
 
+// Closing the sheet without an answer left the browser between the guest and the account: the account's own settings
+// could not be read and Milo's history stopped saving, without a word (BUG-047, Phase 10). Closed unanswered, it now
+// leaves the guest's things for the next guest, the choice that keeps the account clean, and the sheet says so.
+let guestAnswering = false;
 async function deviceCheck() {
   return keepDeviceSession(store.state.user, (ask) => {
+    guestAnswering = false;
     drawer.open({
       kicker: 'Welcome back', title: 'Keep what you made on this browser?', keep: true,
       body: html`<p>This browser has ${ask.things.join(', ')} from before you signed in.</p>
         <div class="cluster"><button type="button" class="btn btn-primary" data-v2-guest="bring">Bring them into my account</button>
-        <button type="button" class="btn" data-v2-guest="keep">Leave them for the next guest</button></div>`,
+        <button type="button" class="btn" data-v2-guest="keep">Leave them for the next guest</button></div>
+        <p class="asof">Closing this leaves them for the next guest.</p>`,
+      closed: () => { if (!guestAnswering && askIsPending()) keepGuestThingsOut(); },
     });
   });
 }
@@ -143,7 +150,7 @@ async function show(route) {
     try { page = await load(); }
     catch (e) {
       if (my !== SHOW) return;
-      const v = $('#main'); render(v, html`<div class="page-view"><div class="state err" role="alert"><p class="t-h3">This page did not load</p><p>Its code could not be fetched. Check the connection and try again.</p><a class="btn" href="${hrefFor(route.view, route.symbol)}">Try again</a></div></div>`);
+      const v = $('#main'); render(v, html`<div class="page-view"><div class="state err" role="alert"><p class="t-h3">This page did not load</p><p>Its code could not be fetched. Check the connection and try again.</p><button type="button" class="btn" data-v2-reload>Try again</button></div></div>`);
       return;
     }
     if (my !== SHOW) return;
@@ -184,13 +191,16 @@ async function show(route) {
   rendered.then(warmLater, () => {});
   rendered.catch((e) => {
     console.error(e);
-    render(view, html`<div class="state err" role="alert"><p class="t-h3">This page did not load</p><p>${e.message || 'An error stopped it.'}</p><a class="btn" href="${hrefFor(route.view, route.symbol)}">Try again</a></div>`);
+    // a button that draws the page again: a link to the address already open did nothing (BUG-046)
+    render(view, html`<div class="state err" role="alert"><p class="t-h3">This page did not load</p><p>${e.message || 'An error stopped it.'}</p><button type="button" class="btn" data-v2-retry="page">Try again</button></div>`);
   });
   // a tab strip's bar slides (if the press has not moved it already) and the content fades in, once drawn (ui/motion.js)
   if (tabsWere) whenDrawn(view, 'nav.tabs', () => motion.tabsAfter(view, tabsWere));
-  // Focus the page's heading so a screen reader hears where it landed.
+  // Focus the page's heading so a screen reader hears where it landed, unless the reader is in the search or a drawer:
+  // this frame can come after a search was opened, and taking focus from it sent the next Enter nowhere (post-demo
+  // Phase 06, BUG-093)
   requestAnimationFrame(() => {
-    const h = drawer.isOpen() ? null : view.querySelector('h1');
+    const h = drawer.isOpen() || palette.isOpen() ? null : view.querySelector('h1');
     if (h) { h.setAttribute('tabindex', '-1'); h.focus({ preventScroll: true }); }
     announce(document.title.replace(', Optic', ''));
   });
@@ -239,6 +249,8 @@ function wireGlobal() {
     if ((b = t('[data-v2-shortcuts]'))) { openShortcuts(b); return; }
     if ((b = t('[data-v2-copy]')) || (b = t('[data-v2-copy-price]'))) { copyFrom(b); return; }
     if ((b = t('[data-v2-open-palette]'))) { e.preventDefault(); palette.open(b, { symbol: current && current.route.symbol }); return; }
+    // Skip to content moves focus, not the address: "#main" read as a route opened the ticker MAIN (BUG-044)
+    if (t('a.skip')) { e.preventDefault(); const m = $('#main'); if (m) { m.focus(); m.scrollIntoView({ block: 'start' }); } return; }
     if ((b = t('[data-v2-milo]'))) {
       // the panel's own figures go with it (B4a.3); the top bar's Ask Milo sits in no panel and sends none
       openMilo({ question: b.dataset.v2Milo || '', opener: b, about: b.dataset.v2MiloCtx || '', symbol: b.dataset.v2MiloSym || '', figures: panelFigures(b) });
@@ -248,13 +260,14 @@ function wireGlobal() {
     if ((b = t('[data-v2-homelink]'))) {
       const sym = b.dataset.v2Homelink, onHome = current && current.route.view === 'home';
       drawer.close({ silent: true });
-      if (linkHome(sym)) { toast(`Home's linked panels now follow ${sym}.`); if (!onHome) router.go('#/'); }
+      if (linkHome(sym)) { toast(`Home's company panels now show ${sym}.`); if (!onHome) router.go('#/'); }
       return;
     }
     if ((b = t('[data-v2-account]'))) { drawer.open({ kicker: 'Account', title: store.state.user ? (store.state.user.first_name || 'Your account') : 'Not signed in', body: accountBody(), opener: b }); return; }
     if ((b = t('[data-v2-more]'))) { drawer.open({ kicker: 'Sections', title: 'More', body: shell.moreBody(), opener: b }); return; }
     if (t('[data-v2-signout]')) { drawer.close({ silent: true }); await store.signOut(); await app.settleAuth({ said: 'out', next: '#/' }); return; }
     if ((b = t('[data-v2-guest]'))) {
+      guestAnswering = true;
       drawer.close({ silent: true, force: true });
       if (b.dataset.v2Guest === 'keep') { keepGuestThingsOut(); return; }
       bringGuestThings();
@@ -277,6 +290,8 @@ function wireGlobal() {
       if (current) show(current.route);
       return;
     }
+    // the page's own code could not be fetched: fetch everything again (BUG-046)
+    if (t('[data-v2-reload]')) { location.reload(); return; }
     if ((b = t('[data-v2-retry]')) && current) {
       const fn = current.page.retry && current.page.retry[b.dataset.v2Retry];
       if (fn) fn(current.view, current.route); else show(current.route);
@@ -337,6 +352,7 @@ async function boot() {
   startUnread(shell.setUnread);
   wireTypeahead(document);   // suggestions under every symbol box that opts in with data-v2-ta (ui/typeahead.js)
   watchGlossary($('#main'));   // glossary terms marked on eligible text, once per section (Classic parity B9.1)
+  levelCatalogue();   // the five levels' names, for the slider and "Explain it for" (Phase 05); one cached request
   startStrips();   // sideways strips: edge arrows, the wheel and a mouse drag (Classic parity B3)   // the bell and the phone bar's Watchlist count (signed in only)
   scrollmem.start();
   router.onRoute(show);

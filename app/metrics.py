@@ -36,7 +36,9 @@ log = logging.getLogger("optic.metrics")
 WEEKS = 12
 RETENTION_DAYS = 28
 KINDS = {"chat": "Milo chat", "research": "Deep research", "scan": "Scan requests",
-         "portfolio": "Portfolio briefings (Brokerage)"}
+         "portfolio": "Portfolio briefings (Brokerage)",
+         # counted since the earnings brief went through the allowance; it showed as its raw id (Phase 10 analytics review)
+         "earnings_brief": "Earnings briefs"}
 
 
 # ------------------------------------------------------------------ recording
@@ -59,6 +61,36 @@ def note_question(user_id: Optional[str], kind: str) -> None:
                    (db.utcnow(), user_id or None, kind))
     except Exception as exc:                                     # noqa: BLE001
         log.warning("Milo question not recorded: %s", exc)
+
+
+def paid_user_ids() -> List[str]:
+    """Accounts on a paid plan that is in force, read as `auth_store.subscription` reads one (the newest row)."""
+    latest: Dict[str, Dict[str, Any]] = {}
+    for r in db.rows("SELECT user_id, plan, status FROM subscriptions ORDER BY created_at"):
+        latest[r["user_id"]] = r
+    return sorted(uid for uid, r in latest.items()
+                  if r["plan"] in auth_store.PLANS and r["plan"] != "free" and r["status"] in auth_store.ENTITLED_STATUSES)
+
+
+def questions_since(since: str) -> Optional[int]:
+    """Questions to Milo at or after `since` (the `db.utcnow()` format) from guests and free accounts, or None when
+    the table cannot be read. What the server-wide daily ceiling counts (SEC-01, Phase 10): the owner's are left out,
+    and so are paying readers', who have their plan's own caps and are not refused by the ceiling (cost audit)."""
+    owners = sorted(auth_admin.emails())
+    sql = "SELECT COUNT(*) AS n FROM milo_questions q LEFT JOIN users u ON u.id = q.user_id WHERE q.at >= ?"
+    params: List[Any] = [since]
+    if owners:
+        sql += " AND (u.email IS NULL OR lower(u.email) NOT IN ({}))".format(",".join("?" for _ in owners))
+        params += owners
+    try:
+        paid = paid_user_ids()
+        if paid:
+            sql += " AND (q.user_id IS NULL OR q.user_id NOT IN ({}))".format(",".join("?" for _ in paid))
+            params += paid
+        return int(db.rows(sql, params)[0]["n"] or 0)
+    except Exception as exc:                                     # noqa: BLE001
+        log.warning("Milo questions not counted: %s", exc)
+        return None
 
 
 # ------------------------------------------------------------------ reading

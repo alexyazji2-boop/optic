@@ -685,11 +685,11 @@ def _refit_to_budget(report: Dict[str, Any], fitted: List[Dict[str, Any]],
                     "contract.".format(limit))
         return {**report, "candidates": [], "cheapest": floor, "note": note}
     if report["hidden"] >= total:
-        note = ("The top picks for this setup cost more than {} for one contract, so "
-                "the plan uses the best that cost {} or less.".format(limit, limit))
+        note = ("The highest-scoring contracts for this setup cost more than {} for one contract, so "
+                "the list shows the highest-scoring ones that cost {} or less.".format(limit, limit))
     else:
-        note = ("{} of the {} top picks cost more than {} for one contract, so the "
-                "plan is re-ranked to what fits.".format(report["hidden"], total, limit))
+        note = ("{} of the {} highest-scoring contracts cost more than {} for one contract, so the "
+                "list is re-ranked to what fits.".format(report["hidden"], total, limit))
     if any(c.get("outside_band") for c in fitted):
         note += (" None at the usual distance from the price fits, so these are "
                  "further out. They cost less because the stock has to move further "
@@ -843,7 +843,7 @@ def build_plan(
             "stance": stance,
             # Said as what was measured: a neutral composite is not always a disagreement,
             # and the cases panel already lists the disagreements one by one.
-            "headline": "No directional entry: the composite is inside its neutral band.",
+            "headline": "No directional setup: the composite is inside its neutral band.",
             "reasoning": [
                 "The composite sits at {:+.0f}, inside the neutral band, so a directional option is a "
                 "coin flip paying theta for the privilege.".format((verdict or {}).get("composite_score") or 0),
@@ -1208,10 +1208,11 @@ def build_plan(
                           "from the current price".format(_usd(atr * 1.5)),
             "target_price": target.get("target_price"),
             "target_source": target.get("target_source"),
-            "invalidation": "Close beyond the stop, loss of the entry zone on a closing basis, or a flip "
-            "in the dealer gamma regime.",
-            "position_sizing": "Max loss is the full premium. Size so that a total loss is a fraction of "
-            "the account you are willing to repeat. The allocation decision is yours.",
+            "invalidation": "A close beyond the model's level, loss of the trigger zone on a closing basis, or a "
+            "flip in the dealer gamma regime.",
+            # A fact about the risk, not advice on how much to put in (advice policy, 2026-10-29).
+            "position_sizing": "A bought option can lose its full premium, and this example's premium is the most "
+            "one contract can lose.",
         },
         "warnings": warnings,
         # The events behind those warnings, each with its date basis and headline

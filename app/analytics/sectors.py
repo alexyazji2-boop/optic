@@ -232,22 +232,25 @@ def _pair_rows(frames: Dict[str, pd.DataFrame]) -> List[Dict[str, Any]]:
             bool(line.iloc[-1] > sma50.dropna().iloc[-1]) if not sma50.dropna().empty else None
         )
 
-        # Two honest ways to trade a ratio: ride the trend, or fade a stretch.
-        # Say which one the current reading supports instead of picking one.
+        # What the ratio is doing, described: stretched against its own mean, or trending against its 50-day.
+        # It used to be written as a position to take ("Mean-reversion long of the ratio (buy X vs Y)",
+        # "Momentum long X / short Y"), which is an instruction (advice policy, 2026-10-29).
         if z >= 2:
-            setup = "stretched. Mean-reversion short of the ratio (fade {} vs {})".format(
-                spec["long"], spec["short"]
+            setup = "stretched. {} has run well ahead of {}: the ratio is {:.1f} standard deviations above its 60-day mean".format(
+                spec["long"], spec["short"], z
             )
         elif z <= -2:
-            setup = "stretched. Mean-reversion long of the ratio (buy {} vs {})".format(
-                spec["long"], spec["short"]
+            setup = "stretched. {} has fallen well behind {}: the ratio is {:.1f} standard deviations below its 60-day mean".format(
+                spec["long"], spec["short"], abs(z)
             )
         elif above_50 and (trend_20 or 0) > 1:
-            setup = "trending. Momentum long {} / short {}".format(spec["long"], spec["short"])
+            setup = "trending. {} is leading {}: the ratio is above its 50-day average and up over 20 sessions".format(
+                spec["long"], spec["short"])
         elif above_50 is False and (trend_20 or 0) < -1:
-            setup = "trending. Momentum long {} / short {}".format(spec["short"], spec["long"])
+            setup = "trending. {} is leading {}: the ratio is below its 50-day average and down over 20 sessions".format(
+                spec["short"], spec["long"])
         else:
-            setup = "no edge. Ratio is range-bound near its mean"
+            setup = "range-bound. The ratio is near its mean, with no clear trend"
 
         rows.append(
             {
@@ -336,15 +339,18 @@ def analyse(provider) -> Dict[str, Any]:
     # Breadth proxy: how much of the sector complex is above its own 200-day.
     above_200 = [r for r in sector_rows if r.get("above_sma200")]
     above_50 = [r for r in sector_rows if r.get("above_sma50")]
-    breadth_200 = round(len(above_200) / max(len(sector_rows), 1) * 100.0, 1)
+    share_200 = len(above_200) / max(len(sector_rows), 1) * 100.0
+    breadth_200 = round(share_200, 1)
     breadth_50 = round(len(above_50) / max(len(sector_rows), 1) * 100.0, 1)
 
+    # The note's whole percent comes from the unrounded share: 6 of 11 is 54.5% in the payload, which Python's
+    # format would then round to 54 (half to even) beside the page's 55 (BUG-012, Phase 09)
     if breadth_200 >= 70:
-        breadth_note = "Broad participation: {:.0f}% of sectors above their 200-day. Breakouts have follow-through.".format(breadth_200)
+        breadth_note = "Broad participation: {:.0f}% of sectors above their 200-day. Breakouts have follow-through.".format(share_200)
     elif breadth_200 >= 45:
-        breadth_note = "Mixed participation ({:.0f}% above 200-day). Leadership is narrowing: fewer sectors are carrying the market.".format(breadth_200)
+        breadth_note = "Mixed participation ({:.0f}% above 200-day). Leadership is narrowing: fewer sectors are carrying the market.".format(share_200)
     else:
-        breadth_note = "Narrow tape, only {:.0f}% of sectors above their 200-day. Long setups are fighting the current.".format(breadth_200)
+        breadth_note = "Narrow tape, only {:.0f}% of sectors above their 200-day. Long setups are fighting the current.".format(share_200)
 
     breakouts = sorted(
         [r for r in sector_rows + theme_rows + niche_rows if r["breakout_score"] >= 45],

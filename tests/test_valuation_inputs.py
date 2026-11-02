@@ -209,7 +209,7 @@ class Prices:
     """Monthly closes where the stock moves 1.5x the benchmark."""
     def __init__(self, months=60):
         import pandas as pd
-        idx = pd.date_range("2021-10-31", periods=months, freq="M")
+        idx = pd.date_range("2021-10-31", periods=months, freq="ME")   # month end; "M" is deprecated (BUG-020)
         bench = [100.0]
         for i in range(1, months):
             bench.append(bench[-1] * (1 + (0.03 if i % 3 else -0.04)))

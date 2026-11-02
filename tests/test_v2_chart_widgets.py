@@ -85,7 +85,9 @@ def test_each_widget_draws_from_a_real_ticker_payload(tmp_path):
     o = got["out"]
     # those waiting on their own endpoint say so (nothing is fetched in this stub): the analysts' latest actions
     # and the stop check's answer under figures already drawn, the others in place of them
-    assert sorted(k for k, v in got["asks"].items() if v) == ["alerts", "analysts", "backtest", "seasonality", "stopcheck", "trading", "watchlist"]
+    # the stop check waits for the reader's own stop since 2026-10-29 (advice policy), so with none typed it has
+    # nothing to ask Milo about
+    assert sorted(k for k, v in got["asks"].items() if v) == ["alerts", "analysts", "backtest", "seasonality", "trading", "watchlist"]
     for id_, words in o.items():
         assert "could not be drawn" not in words, id_
         assert words or got["asks"][id_], id_
@@ -99,7 +101,8 @@ def test_each_widget_draws_from_a_real_ticker_payload(tmp_path):
     assert "Double top not confirmed" in o["patterns"] and "Inverted hammer" in o["patterns"]
     assert "276.13 Support −19.3% 61" in o["levels"]
     assert "Mildly bullish, 12 stories." in o["news"]
-    assert "Stop from the entry plan" in o["stopcheck"]
+    # the reader's own stop only: never pre-filled from Optic's entry plan (advice policy, 2026-10-29)
+    assert "Stop from the entry plan" not in o["stopcheck"] and "Optic does not suggest one" in o["stopcheck"]
     assert "0 of 7 for AAPL." in o["checklist"]
     assert "118 terms." in o["learn"] or " terms." in o["learn"], "the count of glossary terms"
     assert all(got["waiting"].values()), "a widget that reads the payload says it is loading until it arrives"

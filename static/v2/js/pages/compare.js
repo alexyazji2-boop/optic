@@ -12,6 +12,7 @@ import { hbars } from '../ui/bars.js';
 import { button as miloButton, provideContext } from '../ui/milo.js';
 import { icon } from '../ui/icons.js';
 import { scoreLine, tone100 } from '../ui/score.js';
+import { asOfLine } from '../ui/states.js';
 
 const MAX = 4, TIE = 5;
 export const GROUPS = [
@@ -150,12 +151,14 @@ const stale = () => !!(result && result.available && result.tickers && result.ti
 
 function controls() {
   const recent = store.recent().filter((s) => !inputs.map((x) => x.toUpperCase()).includes(s)).slice(0, 6);
+  // with every box filled at the most Compare takes, a chip has nowhere to go, so none is offered (it pressed to nothing, BUG-075)
+  const full = inputs.length >= MAX && inputs.every((x) => x.trim());
   return html`<form class="cmp-form" data-v2-cmp-form aria-label="Tickers to compare">
       <div class="cmp-inputs">${inputs.map((v, i) => html`<div class="cmp-in" data-v2-ta-host><label class="field field-sm"><span class="sr">Ticker ${i + 1}</span><input id="cmp-${i}" data-v2-cmp-input="${i}" data-v2-ta value="${v}" placeholder="Ticker ${i + 1}" title="A ticker, or a company name" maxlength="24" autocomplete="off" autocapitalize="characters" spellcheck="false"></label>
         ${inputs.length > 2 ? html`<button type="button" class="icon-btn" data-v2-cmp-drop="${i}" aria-label="Remove ticker ${i + 1}${v ? ` (${v.toUpperCase()})` : ''}">${icon('close')}</button>` : ''}</div>`)}</div>
       <div class="cluster"><button type="submit" class="btn btn-primary" ${running ? 'disabled' : ''}>${running ? 'Comparing…' : 'Compare'}</button>${inputs.length < MAX ? html`<button type="button" class="btn" data-v2-cmp-add>Add ticker</button>` : ''}</div>
     </form>
-    ${recent.length ? html`<div class="cmp-recent" role="group" aria-labelledby="cmp-recent-h"><p class="t-label" id="cmp-recent-h">Recently viewed</p><div class="chips">${recent.map((s) => html`<button type="button" class="chip" data-v2-cmp-pick="${s}">${s}</button>`)}</div></div>` : result ? '' : html`<p class="asof">Nothing is fetched until you press Compare.</p>`}`;
+    ${recent.length && !full ? html`<div class="cmp-recent" role="group" aria-labelledby="cmp-recent-h"><p class="t-label" id="cmp-recent-h">Recently viewed</p><div class="chips">${recent.map((s) => html`<button type="button" class="chip" data-v2-cmp-pick="${s}">${s}</button>`)}</div></div>` : result ? '' : html`<p class="asof">Nothing is fetched until you press Compare.</p>`}`;
 }
 
 function take(c) {
@@ -163,18 +166,20 @@ function take(c) {
   if (!t.available) return '';
   const hz = Object.fromEntries((c.horizons || []).map((h) => [h.id, h]));
   return html`<section class="section" aria-labelledby="ct-h"><div class="section-head"><div><h2 class="t-h2" id="ct-h">Optic's take</h2>${t.agreement ? html`<p class="section-sub">${clean(t.agreement)}</p>` : ''}</div>
-      ${miloButton('Ask Milo about this comparison', { ask: `Compare ${c.tickers.join(', ')}. ${t.headline || ''} Which would you look at first for my timeframe, and what is each one's biggest risk?`, context: 'Compare' })}</div>
+      ${miloButton('Ask Milo about this comparison', { ask: `Compare ${c.tickers.join(', ')}. ${t.headline || ''} What does each one's score rest on for this timeframe, and what is each one's biggest risk?`, context: 'Compare' })}</div>
     <p class="lead-line">${clean(t.headline || '')}</p>
     <div class="cmp-winners">${Object.entries(t.winners || {}).map(([hid, w]) => html`<div class="cmp-win ${w.decisive ? '' : 'is-close'}"><p class="t-label">${(hz[hid] || {}).name || w.name || hid}</p><p class="cmp-win-t">${w.decisive ? w.ticker : 'Level'}</p><p class="t-muted">${w.decisive ? `ahead by ${num(w.gap, 1)} points` : `${num(w.gap, 1)} points apart, under ${TIE}: not a ranking`}</p></div>`)}</div>
     ${(t.standouts || []).length ? html`<ul class="plain">${t.standouts.map((s) => html`<li><b>${s.ticker}</b> has ${clean(s.phrase)}</li>`)}</ul>` : ''}
-    ${t.method ? html`<p class="asof">${clean(t.method)}</p>` : ''}</section>`;
+    ${t.method ? html`<p class="asof">${clean(t.method)}</p>` : ''}
+    <p class="asof">These are Optic's own scores, which have not been shown to predict returns. The highest score is not a recommendation to buy it.</p></section>`;
 }
 
 function perf(c) {
   const p = c.performance || {}, s = p.series || [];
   if (s.length < 2) return html`<section class="section"><h2 class="t-h2">How they have moved</h2><p class="quiet">Not enough shared history to draw.</p></section>`;
   const sorted = s.slice().sort((a, b) => b.change_pct - a.change_pct), best = sorted[0], worst = sorted[sorted.length - 1];
-  const verb = (x) => (isNum(x.change_pct) ? `${x.ticker} ${x.change_pct >= 0 ? 'rose' : 'fell'} ${num(Math.abs(x.change_pct), 0)}%` : `${x.ticker}'s move is not reported`);
+  // one decimal, as the legend beside it ("rose 2%" sat over "+1.5%", BUG-012)
+  const verb = (x) => (isNum(x.change_pct) ? `${x.ticker} ${x.change_pct >= 0 ? 'rose' : 'fell'} ${num(Math.abs(x.change_pct), 1)}%` : `${x.ticker}'s move is not reported`);
   return html`<section class="section" aria-labelledby="cp-h"><h2 class="t-h2" id="cp-h">How they have moved</h2>
     <p class="lead-line">${verb(best)} over the period; ${verb(worst)}.</p>
     <p class="section-sub">Each close divided by its close on ${fullDate(p.start)}, times 100, to ${fullDate(p.end)}: ${p.sessions} sessions, one point a week. Price only: dividends are not included.</p>
@@ -193,7 +198,7 @@ function perfChart(c) {
 function bars(c) {
   const rows = c.rows || [];
   if (rows.length < 2) return '';
-  return html`<section class="section" aria-labelledby="cb-h"><h2 class="t-h2" id="cb-h">Where each name leads</h2>
+  return html`<section class="section" aria-labelledby="cb-h"><h2 class="t-h2" id="cb-h">Where each name scores highest</h2>
     <p class="section-sub">Every bar is the same 0-100 composite for its horizon, so the bars compare across names within a horizon. Two scores within ${TIE} points are treated as level.</p>
     <div class="cmp-bars">${(c.horizons || []).map((h) => { const r = ((c.ranks || {})[h.id] || []).slice().sort((a, b) => b.score - a.score); const gap = r.length > 1 ? gapOf(r[0].score, r[1].score) : 0;
       return html`<div class="cmp-hz ${gap >= TIE ? 'is-clear' : ''}"><h3>${h.name} <span class="t-muted">${h.horizon}</span></h3><p class="t-muted">${gap < TIE ? `level: ${num(gap, 1)} point${num(gap, 1) === '1.0' ? '' : 's'} apart, under ${TIE}` : `${r[0].ticker} ${num(gap, 1)} points clear`}</p>
@@ -211,7 +216,7 @@ function grid(c) {
       <thead><tr><th scope="col">Metric</th>${rows.map((r) => html`<th scope="col"><a href="#/${r.ticker}">${r.ticker}</a>${r.name && r.name !== r.ticker ? html`<small class="t-muted cmp-name">${r.name}</small>` : ''}${what(r) ? html`<small class="t-muted cmp-sector">${what(r)}</small>` : ''}</th>`)}</tr></thead>
       <tbody>${(c.horizons || []).map((h) => { const rk = (c.ranks || {})[h.id] || [];
         const st = standing(rk);
-        return html`<tr class="cmp-rank"><th scope="row">${h.name}<small class="t-muted cmp-means">${rankRead(rk.slice().sort((x, y) => y.score - x.score))}</small></th>${rows.map((r) => { const x = rk.find((y) => y.ticker === r.ticker), w = x ? st[x.ticker] : ''; const part = x && x.inputs && x.inputs[0] < x.inputs[1]; return html`<td>${x ? html`<span class="${w === 'best' ? 'cmp-best' : w === 'level' ? 'cmp-level' : 't-muted'}">${w}</span> <span class="${tone100(x.score)}">${num(x.score, 0)}</span>${scoreLine(x.score)}${part ? html`<small class="t-muted cmp-part">from ${x.inputs[0]} of ${x.inputs[1]} inputs</small>` : ''}` : 'n/a'}</td>`; })}</tr>`; })}
+        return html`<tr class="cmp-rank"><th scope="row">${h.name}<small class="t-muted cmp-means">${rankRead(rk.slice().sort((x, y) => y.score - x.score))}</small></th>${rows.map((r) => { const x = rk.find((y) => y.ticker === r.ticker), w = x ? st[x.ticker] : ''; const part = x && x.inputs && x.inputs[0] < x.inputs[1]; return html`<td>${x ? html`<span class="${w === 'best' ? 'cmp-best' : w === 'level' ? 'cmp-level' : 't-muted'}">${w === 'best' ? 'highest' : w}</span> <span class="${tone100(x.score)}">${num(x.score, 0)}</span>${scoreLine(x.score)}${part ? html`<small class="t-muted cmp-part">from ${x.inputs[0]} of ${x.inputs[1]} inputs</small>` : ''}` : 'n/a'}</td>`; })}</tr>`; })}
       ${GROUPS.map((g) => html`<tr class="cmp-group"><th scope="rowgroup" colspan="${rows.length + 1}">${g.title}</th></tr>
         ${g.rows.map((m) => { const lead = leader(m, rows, c.leaders);
           return html`<tr><th scope="row">${m.label}${m.note ? html` <small class="t-muted">${m.note}</small>` : ''}<small class="t-muted cmp-means">${m.means}</small></th>${rows.map((r) => html`<td>${cell(m.kind, r[m.key], (r.why_na || {})[m.key])}${lead === r.ticker ? html` <span class="cmp-dot" title="${m.lead === 'high' ? 'Higher' : 'Lower'} on this measure">·<span class="sr">, leads this row</span></span>` : ''}${m.sub && r[m.sub] ? html`<br><small class="t-muted">${clean(r[m.sub])}</small>` : ''}</td>`)}</tr>`; })}`)}</tbody></table></div>
@@ -230,7 +235,7 @@ function paint() {
         <p class="t-muted cmp-own">These are Compare's own scores, built only from inputs every compared name has. A Dossier's short- and long-term readings weigh more (options activity, news tone, the business's filings), so their numbers differ from these.</p>` : ''}</section>
     <div aria-live="polite">${running ? html`<div class="sk-wrap" role="status" aria-label="Comparing"><p>Pulling ${inputs.filter(Boolean).map((x) => x.toUpperCase()).join(' and ')} in full. The same analysis the Options and Investing tabs run, for each name.</p><div class="sk sk-row"></div><div class="sk sk-row"></div><div class="sk sk-row"></div></div>`
       : !c ? '' : !c.available ? html`<div class="state err" role="alert"><p class="t-h3">Not compared</p><p>${clean(c.reason || 'Not enough names loaded to compare.')}</p>${(c.failed || []).map((f) => html`<p class="t-muted">${f.ticker}: ${clean(f.reason)}</p>`)}${inputs.filter((x) => x.trim()).length >= 2 ? html`<button type="button" class="btn btn-sm" data-v2-cmp-again>Try again</button>` : ''}</div>`
-        : html`${stale() ? html`<div class="stale cmp-stale" role="status"><p>These results are for ${c.tickers.join(', ')}. ${wanted().length >= 2 ? html`Press Compare for ${wanted().join(', ')}.` : 'Add a second name to compare again.'}</p>${wanted().length >= 2 ? html`<button type="button" class="btn btn-sm" data-v2-cmp-again>Compare ${wanted().join(', ')}</button>` : ''}</div>` : ''}<div class="${stale() ? 'cmp-old' : ''}">${take(c)}${perf(c)}${bars(c)}${grid(c)}</div>`}</div>`);
+        : html`${stale() ? html`<div class="stale cmp-stale" role="status"><p>These results are for ${c.tickers.join(', ')}. ${wanted().length >= 2 ? html`Press Compare for ${wanted().join(', ')}.` : 'Add a second name to compare again.'}</p>${wanted().length >= 2 ? html`<button type="button" class="btn btn-sm" data-v2-cmp-again>Compare ${wanted().join(', ')}</button>` : ''}</div>` : ''}<div class="${stale() ? 'cmp-old' : ''}">${take(c)}${perf(c)}${bars(c)}${grid(c)}${asOfLine(c.generated_at, { what: 'Compared', note: 'From delayed quotes and daily closes.' })}</div>`}</div>`);
   // a phone's table header sticks under the top bar, whatever its height
   const bar = document.querySelector('.topbar'); if (bar && mainEl) mainEl.style.setProperty('--cmp-top', `${Math.round(bar.getBoundingClientRect().height)}px`);
   if (c && c.available && ((c.performance || {}).series || []).length >= 2) mountCharts(mainEl, { cmp: perfChart(c) });

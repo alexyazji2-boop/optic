@@ -183,7 +183,8 @@ def test_zones_only_when_conviction_allows_and_never_an_allocation():
     assert z["offered"] is False
     z = quality.accumulation_zones(lt, q, {"components": []}, {"label": "Constructive"})
     assert z["offered"] and z["zones"][0]["price"] == 92.0
-    assert "no allocation" in z["condition"]
+    assert "Optic does not say whether or how much to own" in z["condition"]   # advice policy, 2026-10-29
+    assert "not targets or prices to buy at" in z["condition"]
 
 
 def test_two_loss_paths_with_numbers():

@@ -1,0 +1,402 @@
+[
+ {
+  "text": "Nothing here is a recommendation to buy or sell DKNG; it's a summary of what the filings and price history show.",
+  "label": "research",
+  "why": "explicitly negated advice"
+ },
+ {
+  "text": "Under the 1%-risk rule some traders follow, a $50,000 account with a $2 stop distance would be sized at 250 shares.",
+  "label": "research",
+  "why": "generic sizing rule worked on a hypothetical account"
+ },
+ {
+  "text": "The viral post simply said 'sell everything,' which is a slogan, not an analysis of any company.",
+  "label": "research",
+  "why": "quotes advice in order to critique it"
+ },
+ {
+  "text": "Give your TSLA stake a haircut above $250 and bank most of the gain.",
+  "label": "advice",
+  "why": "idiomatic trim instruction with a price trigger"
+ },
+ {
+  "text": "Three directors bought a combined 85,000 shares of KSS in the open market last week, the largest insider purchase there since 2020.",
+  "label": "research",
+  "why": "reports what insiders did"
+ },
+ {
+  "text": "My rating for you is Hold: keep the shares, but don't add until margins turn.",
+  "label": "advice",
+  "why": "assistant's own rating aimed at the reader, with hold and don't-add instructions"
+ },
+ {
+  "text": "Your best bet is to stake the ETH you're holding instead of letting it sit idle on the exchange.",
+  "label": "advice",
+  "why": "instruction about the reader's crypto holdings"
+ },
+ {
+  "text": "A 60/40 allocation lost about 16% in 2022, when stocks and bonds fell together.",
+  "label": "research",
+  "why": "historical fact about an allocation"
+ },
+ {
+  "text": "Target-date funds sell stocks and buy bonds automatically as the retirement year nears, following a preset glide path.",
+  "label": "research",
+  "why": "explains how a retirement product works"
+ },
+ {
+  "text": "Should it gap below $62 on the report, cut it loose at the open.",
+  "label": "advice",
+  "why": "conditional exit order; 'should' means 'if'"
+ },
+ {
+  "text": "If it closes below the 200-day average, I'd be out of the whole position by the next open.",
+  "label": "advice",
+  "why": "first-person conditional exit instruction"
+ },
+ {
+  "text": "- Buy 50 shares of JPM at or below $238 and leave the order good until canceled.",
+  "label": "advice",
+  "why": "bulleted buy order with a limit price"
+ },
+ {
+  "text": "- Model levels: entry zone $41-$43, stop $38.50, target $49, as drawn from the flag pattern.",
+  "label": "research",
+  "why": "bulleted model output, not an order to the reader"
+ },
+ {
+  "text": "Selling a cash-secured put obligates the seller to buy 100 shares per contract at the strike if assigned, which is why the cash has to be set aside up front.",
+  "label": "research",
+  "why": "mechanics of an option strategy"
+ },
+ {
+  "text": "You could top up your COST position if it slips back toward $880.",
+  "label": "advice",
+  "why": "hedged add suggestion tied to a price level"
+ },
+ {
+  "text": "Between KO and PEP, PEP is the better buy for you at today's prices.",
+  "label": "advice",
+  "why": "recommends one security over another as a purchase"
+ },
+ {
+  "text": "If you hold a 3x leveraged ETF for months, daily resets can leave you down even when the underlying index finishes flat.",
+  "label": "research",
+  "why": "generic risk mechanism, no instruction"
+ },
+ {
+  "text": "You could do worse than parking half your idle cash in BIL until rate cuts actually show up.",
+  "label": "advice",
+  "why": "understatement that recommends where to put the reader's cash"
+ },
+ {
+  "text": "With the $40,000 you're rolling over, I'd split it 60/40 between VTI and BND.",
+  "label": "advice",
+  "why": "first-person allocation of the reader's rollover money"
+ },
+ {
+  "text": "You asked whether you should sell your NVDA before earnings, so here is what the options market is pricing for the move.",
+  "label": "research",
+  "why": "restates the reader's question, then gives data"
+ },
+ {
+  "text": "Don't sell your META here; the dip is noise, and you'll regret letting those shares go.",
+  "label": "advice",
+  "why": "negated imperative that is really a hold instruction"
+ },
+ {
+  "text": "Buy it at the model's $73.50 support and you're getting in where the risk is smallest.",
+  "label": "advice",
+  "why": "uses a model level as the reader's entry"
+ },
+ {
+  "text": "Morningstar's analysts see PEP as the cheaper of the two against their fair-value estimates, though both trade within 10% of fair value.",
+  "label": "research",
+  "why": "valuation comparison attributed to analysts"
+ },
+ {
+  "text": "Unload the rest of those IPO shares before the lockup expires next month.",
+  "label": "advice",
+  "why": "sell instruction on the reader's shares, timed to the lockup"
+ },
+ {
+  "text": "In a hypothetical example, a trader who sells a $50 put for $2 and gets assigned ends up owning the shares at an effective cost of $48.",
+  "label": "research",
+  "why": "clearly marked hypothetical about a generic trader"
+ },
+ {
+  "text": "Jefferies' strategists argue that investors should rotate out of megacap tech and into industrials, though the note concedes the timing is uncertain.",
+  "label": "research",
+  "why": "a third party's 'should', reported with attribution"
+ },
+ {
+  "text": "Optic is a research tool, not a registered investment adviser, and it doesn't see your full financial picture.",
+  "label": "research",
+  "why": "disclaims an advisory role"
+ },
+ {
+  "text": "If you sold at a loss today, the wash-sale rule would disallow the deduction should you buy the shares back within 30 days.",
+  "label": "research",
+  "why": "explains a tax rule; 'should you buy' is conditional"
+ },
+ {
+  "text": "Sell the December $95 puts on DIS and collect the premium while you wait for a lower entry.",
+  "label": "advice",
+  "why": "options instruction with strike and expiry"
+ },
+ {
+  "text": "- Step 2: put the remaining $8,000 into VXUS so you aren't all-in on one country.",
+  "label": "advice",
+  "why": "bulleted allocation step for the reader's money"
+ },
+ {
+  "text": "When you buy a bond fund, you're buying a portfolio whose duration, not any maturity date, drives how far it falls when rates rise.",
+  "label": "research",
+  "why": "generic second-person mechanics"
+ },
+ {
+  "text": "This isn't a recommendation, but if it were my account I'd be selling into this rally.",
+  "label": "advice",
+  "why": "disclaimer followed by a first-person sell call"
+ },
+ {
+  "text": "'Sell in May and go away' refers to the historically weaker May-to-October stretch, an effect that has been unreliable in recent decades.",
+  "label": "research",
+  "why": "explains a quoted market saying"
+ },
+ {
+  "text": "It's probably wise to keep PLTR under 3% of your portfolio, given how violently it trades.",
+  "label": "advice",
+  "why": "hedged position-size cap for the reader's portfolio"
+ },
+ {
+  "text": "Hypothetically, if you bought here and held for two years, you'd almost certainly be up.",
+  "label": "advice",
+  "why": "marked hypothetical that still promises the reader a gain"
+ },
+ {
+  "text": "I'd point out that the 9% yield reflects a 40% fall in the share price, not a bigger payout.",
+  "label": "research",
+  "why": "first-person analytical point, no instruction"
+ },
+ {
+  "text": "Visa deserves a permanent place in your portfolio.",
+  "label": "advice",
+  "why": "recommends owning a stock without any trade verb"
+ },
+ {
+  "text": "As your financial adviser, my recommendation is to move the 401(k) balance into the 2055 target-date fund.",
+  "label": "advice",
+  "why": "claims to be the reader's adviser and directs a retirement account"
+ },
+ {
+  "text": "Rolling a short call up and out means buying back the current contract and selling one with a higher strike and a later expiry, often for a net credit.",
+  "label": "research",
+  "why": "generic definition of rolling, no instruction"
+ },
+ {
+  "text": "Bottom line: make bitcoin a 10% allocation of your savings and don't check the price for five years.",
+  "label": "advice",
+  "why": "crypto allocation of the reader's savings"
+ },
+ {
+  "text": "Nobody can say where NVDA will trade in a year; the options market implies a one-standard-deviation range of roughly $120 to $260.",
+  "label": "research",
+  "why": "rejects certainty and reports an implied range"
+ },
+ {
+  "text": "Bottom line: the stock looks cheap on earnings but expensive on free cash flow, because so much of its software spending is capitalized.",
+  "label": "research",
+  "why": "valuation conclusion, not an action"
+ },
+ {
+  "text": "Your stop belongs at $118, which caps the damage at about 7% from here.",
+  "label": "advice",
+  "why": "sets a stop on the reader's position without an imperative verb"
+ },
+ {
+  "text": "Personally, I wouldn't touch BA until it reclaims $190, and neither should you.",
+  "label": "advice",
+  "why": "negated instruction gated on a price level"
+ },
+ {
+  "text": "- Risk: a dividend cut would remove the main reason income buyers hold the stock.",
+  "label": "research",
+  "why": "bulleted risk explanation"
+ },
+ {
+  "text": "Optic can't tell you whether TSLA belongs in your portfolio, because that depends on your goals, time horizon and tolerance for big swings.",
+  "label": "research",
+  "why": "declines to give personal advice"
+ },
+ {
+  "text": "Staking ETH locks the coins up to help validate the network, and the yield comes with slashing and withdrawal-queue risk.",
+  "label": "research",
+  "why": "explains staking mechanics and risks"
+ },
+ {
+  "text": "If I were in your shoes, I'd write the March calls against your shares and keep collecting premium.",
+  "label": "advice",
+  "why": "'if I were you' framing around an options instruction"
+ },
+ {
+  "text": "I can walk through how a collar works, but I can't say whether one fits your position.",
+  "label": "research",
+  "why": "first-person refusal to judge fit"
+ },
+ {
+  "text": "NVDA will be trading above $250 by the end of the first quarter, full stop.",
+  "label": "advice",
+  "why": "asserts certainty about a future price"
+ },
+ {
+  "text": "The CEO sold 50,000 shares under a 10b5-1 plan adopted in February, a pre-scheduled sale rather than a discretionary one.",
+  "label": "research",
+  "why": "reports an insider sale and its plan type"
+ },
+ {
+  "text": "A sell-stop at $50 sits dormant until a trade prints at or below $50, then becomes a market order, so in a gap the fill can land well under the stop.",
+  "label": "research",
+  "why": "generic stop-order mechanics"
+ },
+ {
+  "text": "Swap your Intel shares for TSMC: same theme, better horse.",
+  "label": "advice",
+  "why": "idiomatic instruction to switch holdings"
+ },
+ {
+  "text": "Hold off until Wednesday's Fed decision, then put your cash to work in three equal tranches.",
+  "label": "advice",
+  "why": "timing instruction for deploying the reader's cash"
+ },
+ {
+  "text": "Roll your short $150 calls up and out to the January $165s before they go in the money.",
+  "label": "advice",
+  "why": "instruction to roll the reader's short calls"
+ },
+ {
+  "text": "The model marks support at $182 and resistance at $196, levels the stock has respected three times since July.",
+  "label": "research",
+  "why": "describes model levels as levels"
+ },
+ {
+  "text": "Set a limit bid at $47.20 on KMI and let the sellers come to you.",
+  "label": "advice",
+  "why": "specific limit-order instruction"
+ },
+ {
+  "text": "Several large hedge funds sold their entire BABA positions during the second quarter, according to their 13F filings.",
+  "label": "research",
+  "why": "reports what funds did"
+ },
+ {
+  "text": "In Optic's backtest, buying the breakout and exiting at the 20-day low won 41% of trades with an average gain of 1.6R.",
+  "label": "research",
+  "why": "reports backtest results of a rule"
+ },
+ {
+  "text": "For a 26-year-old with your income, an all-equity mix is the right call.",
+  "label": "advice",
+  "why": "allocation recommendation personalized by age and income"
+ },
+ {
+  "text": "- Analysts: 19 rate it a Buy, 6 a Hold and 1 a Sell, with a median target of $88.",
+  "label": "research",
+  "why": "bulleted ratings attributed to analysts"
+ },
+ {
+  "text": "Compare the forward P/E of 24 with its five-year median of 19 before reading too much into the recent pullback.",
+  "label": "research",
+  "why": "imperative about analysis, not about money"
+ },
+ {
+  "text": "Grab a handful of the March $60 calls on UBER; the most you can lose is what you pay.",
+  "label": "advice",
+  "why": "options purchase instruction; the risk clause does not make it research"
+ },
+ {
+  "text": "The fix is a rebalance back to 70/30 this week, which means selling about $12,000 of your stock funds.",
+  "label": "advice",
+  "why": "rebalancing instruction with a dollar amount, phrased as a noun"
+ },
+ {
+  "text": "Your AAPL position is now 18% of the portfolio after the rally, up from 11% in January.",
+  "label": "research",
+  "why": "fact about the reader's holdings with no instruction"
+ },
+ {
+  "text": "Goldman's upgrade is your cue to get long before the rest of the Street catches on.",
+  "label": "advice",
+  "why": "turns an analyst upgrade into an instruction to buy"
+ },
+ {
+  "text": "The lockup on early investors' shares expires December 9, which can add selling pressure as those holders become free to sell.",
+  "label": "research",
+  "why": "explains a lockup expiry's market effect"
+ },
+ {
+  "text": "Max out your Roth IRA with SCHD before the April filing deadline.",
+  "label": "advice",
+  "why": "retirement-account purchase instruction with a deadline"
+ },
+ {
+  "text": "Heading into retirement, you should shift the IRA from 90% stocks to roughly 60%.",
+  "label": "advice",
+  "why": "retirement allocation instruction"
+ },
+ {
+  "text": "At a 6% yield and nine times earnings, why wouldn't you add to your VZ position?",
+  "label": "advice",
+  "why": "rhetorical question urging the reader to add"
+ },
+ {
+  "text": "HIMS is a lock to double by next summer; I'd call it as close to guaranteed as this market gets.",
+  "label": "advice",
+  "why": "slang promise of a return, called near-guaranteed"
+ },
+ {
+  "text": "Bitcoin has fallen more than 70% from a peak at least four times, so holders following a 'never sell' approach have sat through brutal stretches.",
+  "label": "research",
+  "why": "crypto history; quoted approach described, not urged"
+ },
+ {
+  "text": "Selling the shares now would realize a short-term gain, since they've been held for less than a year.",
+  "label": "research",
+  "why": "tax consequence of a sale, with no recommendation"
+ },
+ {
+  "text": "- Trim AVGO back to your 5% target weight by Friday's close.",
+  "label": "advice",
+  "why": "bulleted trim to a target weight with a deadline"
+ },
+ {
+  "text": "Treat me as your portfolio manager on this one: we're going to 15% cash until volatility settles.",
+  "label": "advice",
+  "why": "claims a portfolio-manager role and sets the reader's cash level"
+ },
+ {
+  "text": "Per management's guidance, gross margin should benefit from the July price increase by roughly a point in the second half.",
+  "label": "research",
+  "why": "'should' as an attributed expectation, not a directive"
+ },
+ {
+  "text": "Goldman upgraded UBER to Buy this morning and set a $105 price target.",
+  "label": "research",
+  "why": "analyst rating attributed to the analyst"
+ },
+ {
+  "text": "Ride shotgun with the insiders and pick up shares near the same $41 they paid.",
+  "label": "advice",
+  "why": "buy instruction that borrows insider activity"
+ },
+ {
+  "text": "No dividend is guaranteed; a board can cut or suspend it at any meeting, as dozens of REITs did in 2020.",
+  "label": "research",
+  "why": "risk explanation that uses 'guaranteed'"
+ },
+ {
+  "text": "If you're comparing the two funds, you should know that QQQ holds only Nasdaq-listed companies while VOO tracks the S&P 500.",
+  "label": "research",
+  "why": "'you should know' introduces a fact"
+ }
+]

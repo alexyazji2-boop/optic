@@ -174,7 +174,9 @@ def test_the_scan_section_shows_the_empty_answer_and_each_entrys_evidence(tmp_pa
     """)
     assert "Nothing qualified on that close" in got["empty"] and "normal answer" in got["empty"]
     f = got["full"]
-    for s in ("Falling setup", "Armed, waiting", "Trigger at 99.00", "A close above 104.00 invalidates it", "Not in place: market rule",
+    # the rule's levels are said as the rule's, not as an entry and a stop (advice policy, 2026-10-29)
+    for s in ("Falling setup", "Armed, waiting", "trigger level is 99.00", "treats a close above 104.00 as breaking the pattern",
+              "not a recommendation or a forecast", "Not in place: market rule",
               "Reports Oct 28, 2026", "Older data: through the", "Also qualified, not shown: ZZZ", SL.SELECTION_VERSION, "not a probability"):
         assert s in f, s
     assert "No prices came back." in got["none"]

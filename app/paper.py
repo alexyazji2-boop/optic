@@ -1189,7 +1189,6 @@ def run_scan(snapshot_fn: Callable[[str], Dict[str, Any]], provider,
         marks = mark_open_positions(provider, rate)
         held = {r["ticker"] for r in _rows(
             "SELECT ticker FROM positions WHERE status='open' AND " + LIVE)}
-        equity = summary()["equity"]
 
         # Marking a closed market is harmless — it just re-reads the last close.
         # Opening a position is not: the fill would be a stale price nobody could

@@ -155,6 +155,17 @@ def test_the_email_body_carries_what_makes_a_report_reproducible(accounts, monke
         assert expected in body
 
 
+def test_the_server_stamps_its_own_build_on_a_report(accounts, monkeypatch):
+    """A visitor's browser no longer learns the commit from /api/health (BUG-052),
+    so the build that makes a report reproducible comes from the server."""
+    sent = []
+    monkeypatch.setattr(fb, "FEEDBACK_TO", "ops@example.com")
+    monkeypatch.setattr(fb, "configured", lambda: {"available": True, "reason": ""})
+    monkeypatch.setattr(fb.mailer, "send", lambda to, subject, body: sent.append(body) or True)
+    fb.submit("Something broke.", page="view-swing", build="abc123def456")
+    assert sent and "Server build: abc123def456" in sent[0]
+
+
 # ------------------------------------------------------------------ flush
 
 
@@ -427,22 +438,34 @@ def test_the_response_varies_on_origin(accounts):
     a cache that missed that would hand one origin a decision about another."""
     res = client.post("/api/feedback", json={"message": "vary"},
                       headers={"Origin": "https://evil.example"})
-    assert res.headers["vary"] == "Origin"
+    # (every /api/ answer also varies on the cookie since Phase 09's cache audit)
+    assert "Origin" in [v.strip() for v in res.headers["vary"].split(",")]
     assert "access-control-allow-origin" not in res.headers
 
 
 # ------------------------------------------------- reading the reports
 
 
+def _owner_client(accounts, monkeypatch):
+    """The signed-in, verified owner: the reports are theirs alone (BUG-030, Phase 10)."""
+    from app.auth import admin, config
+    monkeypatch.setenv(admin.ENV_NAME, "owner@example.com")
+    http = TestClient(main.app)
+    http.post("/api/auth/register", json={"first_name": "Owner", "email": "owner@example.com",
+                                          "password": "tungsten-carbide-9", "confirm_password": "tungsten-carbide-9"})
+    accounts.execute("UPDATE users SET email_verified = 1 WHERE email = ?", ("owner@example.com",))
+    return http, {"X-Optic-CSRF": http.cookies.get(config.CSRF_COOKIE) or ""}
+
+
 def test_the_reports_are_readable_without_a_mail_relay(accounts, monkeypatch):
     """Emailing a report needs FEEDBACK_EMAIL_TO *and* SMTP_HOST *and*
     EMAIL_FROM. Until all three exist every report is in SQLite, and before
     this endpoint the only way to read one was a Python shell on the server."""
-    monkeypatch.setattr(main, "WRITE_TOKEN", "test-write-token")
     fb.store("first problem", page="view-chart")
     fb.store("second problem", page="view-insiders")
 
-    res = client.get("/api/feedback", headers={"X-Optic-Token": "test-write-token"})
+    owner, head = _owner_client(accounts, monkeypatch)
+    res = owner.get("/api/feedback", headers=head)
     assert res.status_code == 200
     out = res.json()
     assert out["total"] == 2
@@ -458,10 +481,15 @@ def test_the_reports_are_not_readable_by_anybody_else(accounts, monkeypatch):
     """What this protects is other people's words. A reader filing a problem is
     writing to the operator, not to the web."""
     monkeypatch.setattr(main, "WRITE_TOKEN", "test-write-token")
+    owner, head = _owner_client(accounts, monkeypatch)
     fb.store("a reader's words")
-    assert client.get("/api/feedback").status_code == 401
+    assert client.get("/api/feedback").status_code in (401, 403)
     assert client.get("/api/feedback",
-                      headers={"X-Optic-Token": "wrong"}).status_code == 401
+                      headers={"X-Optic-Token": "wrong"}).status_code in (401, 403)
+    # nor by the write token: each report carries its reporter's email (BUG-030, Phase 10)
+    assert client.get("/api/feedback",
+                      headers={"X-Optic-Token": "test-write-token"}).status_code in (401, 403)
+    assert owner.get("/api/feedback").status_code == 403          # the owner's session wants the CSRF header too
 
 
 def test_the_log_says_which_reports_went_out(accounts, monkeypatch):
@@ -642,35 +670,30 @@ def test_the_manual_flush_instruction_is_not_left_behind(accounts):
 
 
 def test_a_refused_read_is_not_told_it_tried_to_write(accounts, monkeypatch):
-    """`_write_guard` phrases every refusal as being about changing the ledger,
-    because until this route existed every caller it turned away was. Shipped
-    unchanged, a reader asking for the reports on a deployment with no token
-    was told "Writes are disabled... it refuses to let anonymous callers change
-    the ledger", and went looking for a write they never made."""
-    # No token and no admin: the fail-closed branch a fresh deployment hits.
+    """`_write_guard` phrased every refusal as being about changing the ledger.
+    The reports are the signed-in owner's now (BUG-030, Phase 10), and a refusal
+    still says nothing about a write the reader never made."""
     monkeypatch.setattr(main, "WRITE_TOKEN", "")
     monkeypatch.setattr(main, "is_hosted", lambda: True)
     res = client.get("/api/feedback")
-    assert res.status_code == 503
-    detail = res.json()["detail"]
-    assert "OPTIC_WRITE_TOKEN" in detail, "it still has to say what to set"
-    assert "write" not in detail.lower().replace("optic_write_token", ""), \
-        "the reader asked to read"
-    assert "ledger" not in detail.lower()
+    assert res.status_code == 403
+    detail = res.json()["detail"].lower()
+    assert "write" not in detail and "ledger" not in detail
 
 
 def test_a_refused_read_still_says_what_would_let_it_through(accounts, monkeypatch):
-    monkeypatch.setattr(main, "WRITE_TOKEN", "test-write-token")
+    from app.auth import admin
+    monkeypatch.setenv(admin.ENV_NAME, "owner@example.com")
     res = client.get("/api/feedback", headers={"X-Optic-Token": "wrong"})
     assert res.status_code == 401
-    assert "write token" in res.json()["detail"].lower()
+    assert "sign in with the owner's account" in res.json()["detail"].lower()
 
 
-def test_the_read_copy_does_not_change_the_guards_verdict(accounts, monkeypatch):
-    """Only the wording is this route's. Rewriting a status as well would make
-    two answers to "is this the operator" that could drift apart."""
+def test_the_write_token_no_longer_reads_other_peoples_words(accounts, monkeypatch):
+    """Each report carries its reporter's email; a leaked token read them all (BUG-030, Phase 10)."""
     monkeypatch.setattr(main, "WRITE_TOKEN", "test-write-token")
     fb.store("a reader's words")
-    assert client.get("/api/feedback").status_code == 401
-    ok = client.get("/api/feedback", headers={"X-Optic-Token": "test-write-token"})
+    assert client.get("/api/feedback", headers={"X-Optic-Token": "test-write-token"}).status_code in (401, 403)
+    owner, head = _owner_client(accounts, monkeypatch)
+    ok = owner.get("/api/feedback", headers=head)
     assert ok.status_code == 200 and ok.json()["total"] == 1

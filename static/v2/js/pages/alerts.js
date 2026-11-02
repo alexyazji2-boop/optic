@@ -1,7 +1,7 @@
 // Alerts. Three kinds, kept apart because they answer to different people:
 //   your alerts     conditions you set on a symbol (watches: /api/watches, or this browser's optic.watches.v1),
 //                   and the signal history of the swing-setup ones that fired (pages/signals.js)
-//   Optic's book    trade ideas and closes from the paper book Optic keeps for its scans (/api/alerts), the same for
+//   Optic's book    simulated opens and closes from the paper book Optic keeps for its scans (/api/alerts), the same for
 //                   everyone, grouped by urgency as Classic does (Classic parity B5); its read state is the owner's
 //   your portfolio  situations in a linked brokerage account, kept on Brokerage
 //
@@ -145,7 +145,7 @@ function whyFired(h) {
 /* ---------------- sections ---------------- */
 function scheduleLine() {
   if (!store.signedIn()) return 'In this browser. Checked only while this page is open, when you press Check now. Sign in to have Optic check them for you and keep what fired.';
-  return 'On your account. Optic checks them on market days about every 30 minutes from 9:30 to 4:00 ET and once after the close, skipping exchange holidays. Prices are about 15 minutes behind the exchange. What fires is shown here; Optic does not send email or push notifications.';
+  return 'On your account. Optic checks them on market days about every 30 minutes from 9:30 to 4:00 ET and once after the close, skipping exchange holidays. Prices can be up to 15 minutes behind the exchange. What fires is shown here; Optic does not send email or push notifications.';
 }
 
 function watchesBlock() {
@@ -247,7 +247,7 @@ function ledger() {
   if (!S.alerts) return skeleton('rows', 3, 'Loading Optic\'s book');
   const all = S.alerts.alerts || [], kinds = S.alerts.kinds || {}, owner = isOwner();
   const note = deliveryNote(S.alerts.delivery, owner);
-  if (!all.length) return html`${note}${empty('Nothing from the book yet', 'A new paper trade idea, a closed position, a confirmed pattern or a risk cap appears here when Optic\'s scheduled scan records one. An empty list means nothing crossed a threshold, which is the common case.')}`;
+  if (!all.length) return html`${note}${empty('Nothing from the book yet', 'A position the paper book opens or closes, a confirmed pattern or a risk cap appears here when Optic\'s scheduled scan records one. An empty list means nothing crossed a threshold, which is the common case.')}`;
   const counts = {}; all.forEach((x) => { counts[x.kind] = (counts[x.kind] || 0) + 1; });
   const kindIds = Object.keys(counts), kind = counts[S.bookKind] ? S.bookKind : 'all';
   const unread = all.filter((x) => !x.seen).length;
@@ -286,7 +286,7 @@ function formBody(f) {
   if (!c) return S.catErr ? failed('The list of conditions', S.catErr, { retry: 'catalogue' }) : skeleton('lines', 2, 'Loading the conditions');
   const p = c.param;
   return html`<form class="stack al-form" data-v2-al-form="${f.id || 'new'}" novalidate>
-    <label class="field"><span class="sr">Symbol</span><input name="symbol" value="${f.symbol || ''}" data-v2-ta="submit" placeholder="Symbol, such as AAPL" maxlength="12" required autocomplete="off" autocapitalize="characters" spellcheck="false" enterkeyhint="next" ${f.id ? 'readonly' : ''}></label>
+    <label class="field"><span class="sr">Symbol</span><input name="symbol" value="${f.symbol || ''}" data-v2-ta="submit" placeholder="Symbol, such as AAPL" maxlength="40" required autocomplete="off" autocapitalize="characters" spellcheck="false" enterkeyhint="next" ${f.id ? 'readonly' : ''}></label>
     <label class="select"><span class="t-label">When</span><select name="kind" data-v2-al-kind ${f.id ? 'disabled' : ''}>${GROUPS.map(([g, fam]) => html`<optgroup label="${g}">${cat().filter((x) => (FAMILY[x.id] || 'research') === fam).map((x) => html`<option value="${x.id}" ${x.id === c.id ? 'selected' : ''}>${x.label}</option>`)}</optgroup>`)}</select></label>
     ${p ? (p.choices ? html`<label class="select"><span class="t-label">${p.label}</span><select name="param" data-v2-al-param>${p.choices.map((ch) => html`<option value="${ch.value}" ${String(ch.value) === String(f.param ?? p.default) ? 'selected' : ''}>${ch.label}</option>`)}</select></label>`
     : html`<label class="field"><span class="t-label">${p.label}</span><input name="param" data-v2-al-param inputmode="decimal" enterkeyhint="done" value="${f.param ?? p.default ?? ''}" placeholder="${p.label}" required></label>`) : ''}
@@ -316,7 +316,7 @@ function summary(f, c) {
     what = `${sym}: ${c.label.toLowerCase()}${pv ? ` ${pv}` : ''}. ${CROSSINGS.has(c.id) ? 'Its first check arms it; it fires when that changes, and again only after it has changed back.' : 'It fires once for each new occurrence.'}${now ? ` ${now}.` : ''}`;
   }
   const when = store.signedIn() ? 'Checked on market days about every 30 minutes, 9:30 to 4:00 ET, and once after the close.' : 'Checked only while the Alerts page is open, when you press Check now.';
-  return html`<p><b>${what}</b></p><p class="t-muted">${when} Prices are about 15 minutes behind the exchange. Shown in Optic only: no email or push.</p>`;
+  return html`<p><b>${what}</b></p><p class="t-muted">${when} Prices can be up to 15 minutes behind the exchange. Shown in Optic only: no email or push.</p>`;
 }
 
 async function quoteFor(f) {

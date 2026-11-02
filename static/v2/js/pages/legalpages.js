@@ -24,7 +24,7 @@ const PRIVACY = [
       'Your email address, first name, an optional last name and a password. The password is stored only as an Argon2id hash, so Optic cannot read it.',
       'If you sign in with Google: an identifier from Google, the email address and name on that account, the address of its picture and whether Google has verified the email. With Apple: an identifier, the email address Apple shares and, the first time, your name.',
       'If you add a passkey: its public key and identifiers, the name you give it, and when it was made and last used. The private key stays on your device.',
-      'Your choices of time zone, default market and the page Optic opens on.',
+      'Your choices of time zone, default market and the page Optic opens on, and the level Optic explains things at (from New to Markets to Expert) once you set it while signed in.',
     ),
   ]],
   ['What Optic keeps while you use it', [

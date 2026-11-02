@@ -69,6 +69,13 @@ from app.analytics import sec_facts
 from app import earnings_result
 
 
+def pytest_configure(config):
+    # The marks that let a test run Milo's real research-pack and framework steps, with data it brings itself
+    # (tests/test_research_milo.py, tests/test_milo_eval.py); unregistered, every use warned (post-demo Phase 08)
+    config.addinivalue_line("markers", "research_live: run main._with_research as it is (the test supplies its data)")
+    config.addinivalue_line("markers", "framework_live: run main._with_framework as it is (the test supplies its data)")
+
+
 @pytest.fixture(scope="session", autouse=True)
 def _real_data_out_of_the_way(tmp_path_factory):
     """Every database the suite can reach, pointed somewhere disposable.

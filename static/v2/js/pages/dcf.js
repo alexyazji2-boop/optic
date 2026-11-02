@@ -231,8 +231,8 @@ function tiles(d) {
   return html`<dl class="kv dcf-tiles">
     <div><dt>Model value, base case</dt><dd>${money(dcf.per_share)}</dd><dd class="note">${money((sc.bear || {}).per_share)} bear, ${money((sc.bull || {}).per_share)} bull</dd></div>
     <div><dt>Market price</dt><dd>${money(m.price, m.currency)}</dd><dd class="note">${priceWhen(m)}</dd></div>
-    <div><dt>Upside to the base value</dt><dd>${signedPct(dcf.upside)}</dd><dd class="note">Base value ÷ price − 1: how far the price would move to reach it</dd></div>
-    <div><dt>Margin of safety</dt><dd>${has(mos) && mos > 0 ? pct(mos, 0) : 'None'}</dd><dd class="note">${has(mos) && mos > 0 ? '1 − price ÷ value: the cushion below the estimate' : 'The price is at or above the estimate, so there is no cushion'}</dd></div></dl>
+    <div><dt>Gap to the model's base value</dt><dd>${signedPct(dcf.upside)}</dd><dd class="note">Base value ÷ price − 1, under these assumptions; not a forecast or a target</dd></div>
+    <div><dt>Price below the model's value</dt><dd>${has(mos) && mos > 0 ? pct(mos, 0) : 'None'}</dd><dd class="note">${has(mos) && mos > 0 ? '1 − price ÷ value, the measure value investors call a margin of safety' : 'The price is at or above the model\'s value'}</dd></div></dl>
     <p class="dcf-tv">${dcf.terminal_share > 1 ? html`<b>All of the value, and more, comes after year ${dcf.rows.length}:</b> the forecast years consume cash (their present value is ${big(dcf.pv_forecast)}).`
       : html`<b>${pct(dcf.terminal_share, 0)} of enterprise value</b> comes from the years after the ${dcf.rows.length}-year forecast (the terminal value).`}${dcf.terminal_share > 0.75 ? ' The result depends mostly on the long-run assumptions.' : ''}</p>`;
 }
@@ -404,7 +404,7 @@ const formulas = () => html`<ul class="plain dcf-formulas">
   <li><b>Terminal value</b> = NOPAT in year N+1 × (1 − g ÷ RONIC) ÷ (WACC − g), valued at the end of year N (half a year sooner under mid-year). Growth at or above WACC is refused.</li>
   <li><b>Equity</b> = enterprise value + cash + investments − debt − finance leases − preferred − non-controlling interests − unfunded pensions. <b>Per share</b> = equity ÷ diluted shares.</li>
   <li><b>WACC</b> = E/V × (risk-free + β × ERP) + D/V × cost of debt × (1 − t).</li>
-  <li><b>Upside</b> = value ÷ price − 1. <b>Margin of safety</b> = 1 − price ÷ value.</li>
+  <li><b>Gap to value</b> = value ÷ price − 1. <b>Price below value</b> (a margin of safety) = 1 − price ÷ value. Both follow from the assumptions above; neither is a forecast.</li>
   <li><b>Residual income</b>: value = book + Σ (ROE − cost of equity) × opening book, discounted; justified P/B = (ROE − g) ÷ (cost of equity − g).</li>
   <li><b>Dividend discount</b>: two stages, dividends discounted at the cost of equity, a growing perpetuity after five years.</li>
   <li>Full notes: app/valuation/METHODS.md in the source.</li></ul>`;
@@ -799,7 +799,8 @@ export function mountDcf(root, sym) {
     Object.assign(V, { sym, data: null, defaults: null, edits: null, loading: false, error: '', open: {}, tab: 'wacc_growth', focus: null, sel: null, extra: {}, saved: null, status: '', replays: {}, compares: {}, armed: null, comps: null, sotp: null, peers: '', sotpM: {} });
     const n = document.createElement('section');
     n.className = 'section dcf'; n.id = 'dcf'; n.setAttribute('aria-labelledby', 'dcf-h');
-    n.innerHTML = '<div class="section-head"><div><h2 class="t-h2" id="dcf-h">Fair-value model, discounted cash flow</h2></div></div><div class="dcf-body"></div>';
+    // two values on one tab (BUG-064): this model and the range from the company's own P/E history, said apart
+    n.innerHTML = '<div class="section-head"><div><h2 class="t-h2" id="dcf-h">Fair-value model, discounted cash flow</h2><p class="section-sub">A separate model from the fair value range above, which comes from the company\'s own P/E history, so the two values differ.</p></div></div><div class="dcf-body"></div>';
     V.node = n; wire(n); paint(); load(false);
     registerValuation(VAL_API);
   }

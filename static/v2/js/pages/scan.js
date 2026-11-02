@@ -27,6 +27,11 @@ let S = {}, live = true, mainEl = null, poll = null;
 // answer instead of asking again: a request in words can use a Milo question, and a screen is the
 // whole ranked universe (the brief: no expensive scan re-run by an incidental change).
 const ASKED = new Map(), SCREENED = new Map();
+// Set by Milo's "Find stocks" card when it is pressed (ui/milo.js), read once here: the press is what allows the spend.
+const SCAN_GO = 'optic.scan.go.v1';
+function pressedInMilo(q) {
+  try { const go = sessionStorage.getItem(SCAN_GO); sessionStorage.removeItem(SCAN_GO); return go === q; } catch (e) { return false; }
+}
 const specKey = (sp) => JSON.stringify({ f: sp.filters, s: sp.states, o: sp.sort, d: sp.direction });
 /** The address says which scan, screen or request is on screen, so Back from a result returns to it. */
 function remember(q) {
@@ -232,10 +237,11 @@ export async function render(main, route) {
   provideContext(() => ({ view: 'scan', scan: S.result && S.result.rows ? { id: S.scanId, name: S.result.name, rows: S.result.rows.slice(0, 15) } : null }));
   paint(); wire(main);
   if (S.mode === 'shortlist') loadShortlist();
-  // #/scan?q=… (from Milo's "Find stocks" card, which said it may use a question) runs that request, once:
-  // back on this page from a result, the answer already given is shown again
+  // #/scan?q=… from Milo's "Find stocks" card, which said it may use a question, runs that request, once; back on
+  // this page from a result, the answer already given is shown again. Any other link with ?q= (a shared one) puts the
+  // words in the box and waits for the press, so opening a link never spends a reader's Milo message (Phase 02).
   const q = String(prm.q || '').trim().slice(0, 300);
-  if (q && ASKED.has(q)) { S.askText = q; S.ask = ASKED.get(q); paint(); } else if (q) runAsk(q);
+  if (q && ASKED.has(q)) { S.askText = q; S.ask = ASKED.get(q); paint(); } else if (q && pressedInMilo(q)) runAsk(q); else if (q) { S.askText = q; paint(); }
   try { [S.scans, S.groups] = await Promise.all([api.get('/api/scanners', { ttl: 120000 }), api.get('/api/scanners/groups', { ttl: 600000 }).catch(() => null)]); if (!S.groups && S.scans) S.groups = { groups: [{ id: 'all', name: 'Screens', count: S.scans.scans.length, scans: S.scans.scans }] }; }
   catch (e) { S.scansErr = e; S.scans = null; }
   paint();
@@ -256,6 +262,9 @@ function saveSpec() {
   if (b) { const n = S.spec.filters.filter((x) => x.min != null || x.max != null).length + S.spec.states.length; b.textContent = n ? `${n} condition${n === 1 ? '' : 's'} on` : 'No conditions on'; }
 }
 function wire(main) {
+  // once per page view: Try again draws into the same view, and wiring it again doubled every press (BUG-037)
+  if (main.__v2Wired) return;
+  main.__v2Wired = true;
   main.addEventListener('submit', (e) => {
     if (e.target.closest('[data-v2-ask]')) { e.preventDefault(); runAsk(e.target.text.value); return; }
     if (e.target.closest('[data-v2-screen]')) { e.preventDefault(); runScreen(); }

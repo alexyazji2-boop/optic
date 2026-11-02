@@ -29,7 +29,7 @@
    * no way to tell a considered "Financially Literate" from never having seen
    * the control, so the prompt would either never appear or appear forever. */
   var ASKED_KEY = 'optic.knowledge.asked.v1';
-  var DEFAULT_MODE = 'literate';
+  var DEFAULT_MODE = 'intermediate';
 
   /* The one thing duplicated from the server, and why.
    *
@@ -43,13 +43,19 @@
    * tests/test_knowledge_modes.py asserts this table agrees with the server's,
    * because two records of one fact drift and the symptom would be panels at a
    * density the selector does not claim. */
+  /* Five levels since the post-demo Phase 05 (2026-10-29): New to Markets, Beginner,
+   * Intermediate, Advanced, Expert (app/knowledge.py). The two that replace Simple share
+   * its rung, so Classic's layouts render as they did. */
   var LEVELS = {
-    simple: 0,
-    literate: 1,
+    new: 0,
+    beginner: 0,
+    intermediate: 1,
     advanced: 2,
-    professional: 3,
-    adaptive: 1        // the answer adapts; the layout does not guess
+    expert: 3
   };
+  /* The ids before Phase 05, still in readers' browsers: read once and rewritten as the
+   * new id, so both apps agree (app/knowledge.py LEGACY says the same). */
+  var LEGACY = { simple: 'new', literate: 'intermediate', professional: 'expert', adaptive: 'intermediate' };
 
   var catalogue = null;          // filled from the server, once
   var listeners = [];
@@ -58,6 +64,10 @@
     try {
       var saved = localStorage.getItem(STORE_KEY);
       if (saved && Object.prototype.hasOwnProperty.call(LEVELS, saved)) return saved;
+      if (saved && Object.prototype.hasOwnProperty.call(LEGACY, saved)) {
+        localStorage.setItem(STORE_KEY, LEGACY[saved]);
+        return LEGACY[saved];
+      }
     } catch (e) { /* private mode */ }
     return DEFAULT_MODE;
   }
@@ -88,6 +98,82 @@
       // half-applied would leave the page at two densities at once.
       try { fn(id); } catch (e) { /* keep going */ }
     });
+    if (!fromAccount) pushLevel(id);
+  }
+
+  /* A signed-in reader's level is the account's (post-demo Phase 05), by the
+   * same rule as v2's core/store.js, so the two apps never keep two values.
+   * When a session is first read, an account that has a level replaces this
+   * browser's, and an account that never chose takes this browser's if the
+   * reader chose one here. Each change made while signed in is saved to the
+   * account. A save that fails leaves the level in this browser and is
+   * remembered with the account and the version of its preferences this
+   * browser last saw: at the next load the browser's level goes up only if
+   * nothing has changed the account since. auth.js loads after this file, so
+   * OpticAuth is looked up when it is needed. */
+  var syncedFor = null;          // the session whose account level has been read
+  var fromAccount = false;       // set() is writing the account's level: not sent back
+  var PENDING_KEY = 'optic.knowledge.pending.v1';
+  var acctAt = null;             // the version of the account's preferences last seen
+
+  function pending() {
+    try { return JSON.parse(localStorage.getItem(PENDING_KEY) || 'null'); } catch (e) { return null; }
+  }
+  function setPending(value) {
+    try {
+      if (value) localStorage.setItem(PENDING_KEY, JSON.stringify(value));
+      else localStorage.removeItem(PENDING_KEY);
+    } catch (e) { /* private mode */ }
+  }
+
+  function pushLevel(id) {
+    var auth = global.OpticAuth, st = auth && auth.state ? auth.state() : null;
+    if (!st || st.status !== 'user' || !auth.api) return;
+    var user = st.user && st.user.id;
+    auth.api('/api/auth/preferences', { method: 'PATCH', body: { knowledge_level: id } })
+      .then(function (r) {
+        acctAt = (r && r.preferences && r.preferences.updated_at) || acctAt;
+        setPending(null);
+      })
+      .catch(function () {
+        var was = pending();
+        setPending({ user: user, base: was && was.user === user ? was.base : acctAt, level: id });
+      });
+  }
+
+  function chose() {
+    try { return localStorage.getItem(ASKED_KEY) === '1'; } catch (e) { return false; }
+  }
+
+  function pullLevel(st) {
+    if (!st || st.status !== 'user') { if (st && st.status === 'guest') syncedFor = null; return; }
+    var session = st.sessionId || (st.user && st.user.id) || 'user';
+    if (session === syncedFor) return;
+    syncedFor = session;
+    var prefs = st.preferences || {}, saved = prefs.knowledge_level, was = pending();
+    acctAt = prefs.updated_at || null;
+    if (was && was.user === (st.user && st.user.id) && (was.base || null) === acctAt) {
+      // nothing changed the account since: the unsaved level is the newer one (the level itself, since another
+      // account may have used this browser in between)
+      var unsaved = Object.prototype.hasOwnProperty.call(LEVELS, was.level) ? was.level : read();
+      if (unsaved !== read()) { fromAccount = true; try { set(unsaved); } finally { fromAccount = false; } }
+      pushLevel(unsaved);
+    } else if (saved && Object.prototype.hasOwnProperty.call(LEVELS, saved)) {
+      setPending(null);
+      fromAccount = true;
+      try { set(saved); } finally { fromAccount = false; }
+    } else if (chose()) {
+      pushLevel(read());
+    }
+  }
+
+  function watchAccount() {
+    if (!global.OpticAuth || !global.OpticAuth.on) return false;
+    global.OpticAuth.on(pullLevel);
+    return true;
+  }
+  if (!watchAccount() && global.document && global.document.addEventListener) {
+    global.document.addEventListener('DOMContentLoaded', watchAccount);
   }
 
   /* The "show advanced analysis" switch: the same ladder, read as one switch.

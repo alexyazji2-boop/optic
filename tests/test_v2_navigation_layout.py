@@ -102,7 +102,7 @@ def test_options_tools_sit_in_three_groups_near_the_top():
     render = _fn(op, "export async function render")
     assert render.index("groupBar()") < render.index('id="op-research"') < render.index('id="op-builder"')
     # every panel the old tab row held is still on the page
-    for name in ("What options are pricing", "Dealer gamma", "Flow", "Delta and gamma", "Ideas", "Strike and entry",
+    for name in ("What options are pricing", "Dealer gamma", "Flow", "Delta and gamma", "Ideas", "Example contract and levels",
                  "Swing verdict", "Levels and momentum", "How value moves", "Swing setups", "Chart patterns and seasonality"):   # B6b split the last in two
         assert f"['{name}'," in op, name
 

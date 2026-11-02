@@ -30,7 +30,7 @@ from urllib.parse import urlparse
 from . import db
 from .auth import mailer
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)   # not `log`: the reports reader below is `log()` (BUG-018)
 
 # Never a literal. The repository is public and this is a personal address.
 FEEDBACK_TO = (os.environ.get("FEEDBACK_EMAIL_TO") or "").strip()
@@ -127,6 +127,8 @@ def _body(row: Dict[str, Any]) -> str:
         lines.append("Reply to: {}".format(row["reply_to"]))
     if row.get("user_agent"):
         lines.append("Browser: {}".format(row["user_agent"]))
+    if row.get("build"):
+        lines.append("Server build: {}".format(row["build"]))
     lines.append("Received: {}".format(row["created_at"]))
     lines.append("Report id: {}".format(row["id"]))
     return "\n".join(lines)
@@ -167,7 +169,8 @@ def mark_emailed(report_id: str) -> None:
 
 
 def submit(message: str, page: str = "", reply_to: str = "",
-           user_agent: str = "", reporter: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+           user_agent: str = "", reporter: Optional[Dict[str, Any]] = None,
+           build: str = "") -> Dict[str, Any]:
     """Store a report, then try to email it.
 
     Blocking on the mail send, like the auth routes: the caller runs it off the
@@ -175,6 +178,10 @@ def submit(message: str, page: str = "", reply_to: str = "",
     nothing is lost and the backlog can go out later.
     """
     row = store(message, page, reply_to, user_agent, reporter)
+    if row is not None and build:
+        # the server's own build: /api/health no longer tells a visitor's browser the commit (BUG-052), so the report's
+        # "Build:" line would read "unknown" for every reader who is not the operator
+        row = {**row, "build": build}
     if row is None:
         return {"stored": False, "emailed": False,
                 "reason": "The report was empty, so there was nothing to send."}

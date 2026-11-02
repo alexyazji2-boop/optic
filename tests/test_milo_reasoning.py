@@ -48,18 +48,20 @@ def ask(question, **kw):
 
 # ------------------------------------------------------------ level and voice
 
-def test_the_level_is_read_from_the_question_not_the_page():
-    _, meta = ask("is it a buy", context=page(), mode="adaptive")
-    assert meta["level"] == "literate", "gamma/skew in the page data must not make it Advanced"
-    _, meta = ask("what does P/E mean?", context=page(), mode="adaptive")
-    assert meta["level"] == "simple"
+def test_the_level_is_the_readers_own_whatever_the_page_or_the_question_says():
+    # Phase 05 (D-027): Adaptive is not one of the five levels, so neither the page data ("gamma", "skew") nor the
+    # question's words move the level; a stored "adaptive" reads as Intermediate, where its layout already sat
     _, meta = ask("is the forward multiple supported by the skew?", context=page(), mode="adaptive")
-    assert meta["level"] == "advanced"
+    assert meta["level"] == "intermediate"
+    _, meta = ask("what does P/E mean?", context=page(), mode="intermediate")
+    assert meta["level"] == "intermediate"
 
 
 def test_a_chosen_level_is_never_second_guessed():
-    _, meta = ask("what is a P/E", context=page(), mode="professional")
-    assert meta["level"] == "professional"
+    _, meta = ask("what is a P/E", context=page(), mode="expert")
+    assert meta["level"] == "expert"
+    _, meta = ask("what is a P/E", context=page(), mode="professional")   # the id before Phase 05
+    assert meta["level"] == "expert"
 
 
 # ------------------------------------------------------------------ horizon
@@ -191,7 +193,8 @@ def test_context_text_is_data_not_instructions():
 def test_the_level_ladder_still_owns_the_wording():
     """The base prompt points at the level block rather than fixing a register."""
     assert "a level block says how much to explain" in SYSTEM
-    assert knowledge.prompt_for("simple") in [knowledge.MODES["simple"]["prompt"]]
+    assert knowledge.prompt_for("new").startswith(knowledge.MODES["new"]["prompt"])
+    assert knowledge.prompt_for("simple") == knowledge.prompt_for("new"), "the id before Phase 05 maps"
 
 
 def test_the_eval_lessons_are_in_the_prompt():

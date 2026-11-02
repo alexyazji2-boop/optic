@@ -385,6 +385,10 @@ def _phase(when: datetime) -> str:
         return "regular"
     if minutes < _after_end(when):
         return "after"
+    # A half day's after-hours ends at 5pm and the overnight session starts at 8pm: nothing trades between. These
+    # three hours read "Overnight" until Phase 09 (2026-11-27 at 5:30pm).
+    if minutes < OVERNIGHT_START:
+        return "closed"
     return "overnight"
 
 
@@ -406,7 +410,7 @@ def _next_change(when: datetime) -> Dict[str, Any]:
         if nxt != current:
             return {
                 "phase": nxt,
-                "label": LABELS[nxt],
+                "label": _label(probe, nxt),
                 "starts_at": probe.isoformat(),
                 "minutes_away": int((probe - when).total_seconds() // 60),
             }
@@ -421,6 +425,61 @@ LABELS = {
     "closed": "Weekend. Closed",
     "holiday": "Market holiday. Closed",
 }
+
+
+def _closed_for(when: datetime) -> str:
+    """Why the market is shut at a "closed" moment: the weekend, the evening before a holiday, or the hours after a
+    half day. Every closed moment read "Weekend. Closed" and "shut for the weekend" until Phase 09, the Wednesday
+    evening before Thanksgiving among them."""
+    if _weekend(when):
+        return "weekend"
+    if _closed_evening(when):
+        return "eve"
+    return "half_day"
+
+
+def _label(when: datetime, phase: str) -> str:
+    holiday = holiday_name(when)
+    if holiday:
+        return f"{holiday}. Closed"
+    if phase != "closed":
+        return LABELS[phase]
+    why = _closed_for(when)
+    if why == "eve":
+        tomorrow = holiday_name(when + timedelta(days=1)) or "a market holiday"
+        return f"Closed for {tomorrow}"
+    if why == "half_day":
+        return "Closed after the half day"
+    return LABELS["closed"]
+
+
+def _description(when: datetime, phase: str) -> str:
+    if phase != "closed" or holiday_name(when):
+        return DESCRIPTIONS[phase]
+    why = _closed_for(when)
+    if why == "eve":
+        return ("The market is shut for tomorrow's holiday: there is no overnight session tonight, and nothing "
+                "trades until the next trading day's sessions.")
+    if why == "half_day":
+        return ("Today was a half day: the regular session ended at 1:00pm ET and after-hours trading at 5:00pm. "
+                "Nothing trades until the overnight session, if one follows tonight.")
+    return DESCRIPTIONS["closed"]
+
+
+def _day_segments(when: datetime) -> List[Dict[str, Any]]:
+    """The strip for this day: on a half day the regular session ends at 1pm and after-hours at 5pm, and nothing
+    trades from then until 8pm."""
+    reg_end, after_end = _regular_end(when), _after_end(when)
+    segs = [
+        {"phase": "overnight", "label": "Overnight", "start": 0, "end": OVERNIGHT_END},
+        {"phase": "pre", "label": "Pre-market", "start": PRE_START, "end": REGULAR_START},
+        {"phase": "regular", "label": "Regular", "start": REGULAR_START, "end": reg_end},
+        {"phase": "after", "label": "After hours", "start": reg_end, "end": after_end},
+    ]
+    if after_end < OVERNIGHT_START:
+        segs.append({"phase": "closed", "label": "Closed", "start": after_end, "end": OVERNIGHT_START})
+    segs.append({"phase": "overnight", "label": "Overnight", "start": OVERNIGHT_START, "end": 24 * 60})
+    return segs
 
 
 def overnight_started_at(now: Optional[datetime] = None) -> Optional[datetime]:
@@ -452,7 +511,7 @@ def state(now: Optional[datetime] = None) -> Dict[str, Any]:
     phase = _phase(when)
 
     segments: List[Dict[str, Any]] = []
-    for seg in SEGMENTS:
+    for seg in _day_segments(when):
         # Absolute timestamps as well as ET clock minutes. Market hours are defined
         # in New York time and always will be, but a reader in London or Mumbai
         # needs to know when that is for *them* — and converting a bare "9:30am"
@@ -460,6 +519,8 @@ def state(now: Optional[datetime] = None) -> Dict[str, Any]:
         # An ISO instant with its offset converts correctly anywhere.
         starts = _at(when, min(seg["start"], 24 * 60 - 1))
         ends = _at(when, min(seg["end"], 24 * 60 - 1))
+        # (a half day's own hours, and the closed hours after them; the strip drew a normal day under the half
+        # day's note until Phase 09)
         segments.append({
             **seg,
             "active": seg["phase"] == phase,
@@ -477,8 +538,8 @@ def state(now: Optional[datetime] = None) -> Dict[str, Any]:
         "phase": phase,
         # The holiday's own name, so the strip reads "Labor Day" rather than
         # asking the reader to work out which one it is.
-        "label": (f"{holiday}. Closed" if holiday else LABELS[phase]),
-        "description": DESCRIPTIONS[phase],
+        "label": _label(when, phase),
+        "description": _description(when, phase),
         "is_regular": phase == "regular",
         "is_open": phase in ("regular", "after", "pre", "overnight"),
         "holiday": holiday,

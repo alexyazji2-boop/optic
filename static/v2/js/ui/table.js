@@ -23,7 +23,8 @@ export function sortRows(rows, cols, sort) {
 
 export function table(rows, cols, opts = {}) {
   const sort = opts.sort || {};
-  const sorted = sortRows(rows, cols, sort);
+  // `limit`: draw only the first rows of the sorted whole, so a sort still covers every row (the caller offers the rest)
+  const all = sortRows(rows, cols, sort), sorted = opts.limit > 0 && all.length > opts.limit ? all.slice(0, opts.limit) : all;
   return html`<div class="tscroll"><table class="t st" id="${opts.id || ''}">${opts.caption ? html`<caption class="sr">${opts.caption}</caption>` : ''}
     <thead><tr>${cols.map((c) => {
       const on = sort.key === c.key;

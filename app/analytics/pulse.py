@@ -22,7 +22,7 @@ is a question about magnitude and direction together. 50 is neutral.
 
 from __future__ import annotations
 
-from datetime import date, datetime, timezone
+from datetime import date
 from typing import Any, Dict, List, Optional
 from .. import session as session_mod
 

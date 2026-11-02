@@ -77,7 +77,8 @@ async function fetchRows(symbols, { force = false } = {}) {
   const chunks = [];
   for (let i = 0; i < symbols.length; i += 40) chunks.push(symbols.slice(i, i + 40));
   const res = await Promise.all(chunks.map((c) => api.get(`/api/watchlist?symbols=${c.map(encodeURIComponent).join(',')}`, { ttl: 60000, timeout: 30000, force })));
-  S.checked = new Date().toISOString();
+  // the server's time of reading, the oldest of the chunks; the browser's own clock only when an older server sent none (BUG-073)
+  S.checked = res.map((r) => r && r.generated_at).filter(Boolean).sort()[0] || new Date().toISOString();
   S.method = (res[0] || {}).method || '';
   const got = new Map(res.flatMap((r) => r.rows || []).map((r) => [r.symbol, r]));
   return symbols.map((s) => got.get(s) || { symbol: s, available: false, reason: 'No data returned for this symbol.' });
@@ -220,7 +221,7 @@ function paint(main) {
     ${store.state.listsError ? failed('Your watchlists', store.state.listsError, { retry: 'lists' }) : ''}
     ${!lists.length ? empty('You are not following anything yet', 'Add a ticker below to start your watchlist.') : listsBar()}
     <form class="add-form" data-v2-add>
-      <label class="field">${icon('plus')}<span class="sr">Add a ticker${a ? ` to ${a.name}` : ''}</span><input name="sym" data-v2-wl-add data-v2-ta="submit" placeholder="Add a ticker, such as MSFT" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="12" enterkeyhint="done" required></label>
+      <label class="field">${icon('plus')}<span class="sr">Add a ticker${a ? ` to ${a.name}` : ''}</span><input name="sym" data-v2-wl-add data-v2-ta="submit" placeholder="Add a ticker, such as MSFT" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="40" enterkeyhint="done" required></label>
       <button type="submit" class="btn btn-primary">Add</button></form>
     ${savedNote()}
     ${S.rows ? pulse(S.rows) : ''}${controls()}<div id="wl-rows">${rowsBlock()}</div>`);

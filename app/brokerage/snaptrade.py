@@ -377,7 +377,8 @@ class SnapTradeProvider(Provider):
             raise WebhookRejected("body is not JSON") from None
         expected = base64.b64encode(hmac.new(self.consumer_key.encode(), canonical(parsed).encode(),
                                              hashlib.sha256).digest()).decode()
-        if not given or not hmac.compare_digest(given, expected):
+        # bytes: a non-ASCII header raised TypeError, a 500 instead of a refusal (SEC-11, Phase 10)
+        if not given or not hmac.compare_digest(given.encode("utf-8"), expected.encode("utf-8")):
             raise WebhookRejected("signature does not match")
         stamp = parsed.get("eventTimestamp")
         try:

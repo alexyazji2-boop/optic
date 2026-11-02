@@ -12,8 +12,10 @@ import { html } from '../core/dom.js';
 import { num, signed, money, clean, capFirst, shortDate, fullDate, ago, score100 } from '../core/format.js';
 import { daysUntil } from '../core/marketTime.js';
 import { how } from '../ui/states.js';
+import { icon } from '../ui/icons.js';
 import { term } from '../ui/term.js';
 import { hrefFor } from '../nav.js';
+import { setupGrade, convictionPhrase, valuationWord } from '../core/research-words.js';
 
 const g = (o, ...ks) => ks.reduce((x, k) => (x && typeof x === 'object' ? x[k] : undefined), o);
 const fin = (v) => typeof v === 'number' && Number.isFinite(v);
@@ -117,7 +119,7 @@ export function priceRead(t, { index = false } = {}) {
   const q = g(t, 'quote') || {};
   if (fin(q.fifty_two_low) && fin(q.fifty_two_high)) evidence.push(['52-week range', `${money(q.fifty_two_low)} to ${money(q.fifty_two_high)}`]);
   const why = fin(m3) && !text.includes('three months') ? `Over the last three months it is ${Math.abs(m3) < 2 ? 'little changed' : `${m3 >= 0 ? 'up' : 'down'} ${num(Math.abs(m3), 0)}%`}.` : '';
-  return { text, why, evidence, yr, m3, off, through: dates[dates.length - 1] };
+  return { text, why, evidence, yr, m3, off, through: dates[dates.length - 1], span };
 }
 
 /** The price against its own history (Classic's ovValuationRead), from the long-term payload's P/E history. */
@@ -259,8 +261,6 @@ export function keyStatRows(q, shortInt, phase) {
     revenue_growth: ['Revenue growth, last quarter', has(q.revenue_growth) ? signed(q.revenue_growth * 100, 1) : null],
   };
 }
-// The four figures most readers look a stock up for, plus its range and yield (Classic's OV_ESSENTIALS)
-export const OV_ESSENTIALS = ['market_cap', 'pe_trailing', 'revenue_growth', 'profit_margin', 'dividend_yield', 'high_52', 'low_52'];
 const statList = (rows, ids) => html`<dl class="ovx-stats">${ids.filter((id) => rows[id] && rows[id][1] !== null).map((id) => html`<div><dt>${term(`stat:${id}`, rows[id][0])}</dt><dd>${rows[id][1]}</dd></div>`)}</dl>`;
 
 /* ---------------- the past year's chart: its line, its marks and its source ---------------- */
@@ -306,7 +306,9 @@ export function marksFold(marks) {
 }
 
 /* ---------------- four questions, answered separately (Classic's static/research.js) ---------------- */
-const QUESTIONS = [['business', 'Is it a strong business?'], ['price', 'Is the price attractive?'], ['trade', 'Is there a trade?'], ['earnings', 'What about earnings?']];
+// The price and setup questions describe what the rules found rather than asking whether to buy (advice policy, 2026-10-29):
+// "Is the price attractive?" and "Is there a trade?" framed research output as a purchase decision.
+const QUESTIONS = [['business', 'Is it a strong business?'], ['price', 'How is it valued?'], ['trade', 'Is there a short-term setup?'], ['earnings', 'What about earnings?']];
 const PRICE_WORDS = ['very rich', 'rich', 'full', 'reasonable', 'cheap'];
 const list = (items) => { const rows = (items || []).filter(Boolean); return rows.length ? html`<ul class="plain">${rows.map((x) => html`<li>${clean(x)}</li>`)}</ul>` : ''; };
 const pct = (v, d = 1) => (fin(v) ? `${num(v, d)}%` : 'n/a');
@@ -357,41 +359,41 @@ function businessTile(lt, c) {
   }
   const q = lt.quality || {}, conv = lt.conviction || {};
   const value = q.status === 'scored' ? `Quality ${q.grade}` : 'Insufficient Data';
-  const sub = q.status === 'scored' ? `Quality and price together: ${conv.label}. ${conv.why || ''}` : (q.reason || '');
+  const sub = q.status === 'scored' ? `Quality and price together: ${convictionPhrase(conv.label)}. ${conv.why || ''}` : (q.reason || '');
   const more = html`${qtable(componentRows(q.components))}
     ${(lt.loss_paths || []).length ? html`${qh('Two ways this could lose money over three years')}${list(lt.loss_paths.map((l) => `${l.risk}: ${l.text}`))}` : ''}
-    ${g(lt, 'accumulation', 'offered') ? html`${qh('Levels to reassess at')}${list(lt.accumulation.zones.map((z) => `${usd(z.price)}: ${z.basis} (${pct(z.distance_pct)})`))}${fine(clean(lt.accumulation.condition))}` : ''}
+    ${g(lt, 'accumulation', 'offered') ? html`${qh('Price levels the long-term model marks')}${list(lt.accumulation.zones.map((z) => `${usd(z.price)}: ${z.basis} (${pct(z.distance_pct)})`))}${fine(clean(lt.accumulation.condition))}${fine('Levels from price history that the model reads against, not prices to buy at.')}` : ''}
     ${fine(clean(`${lt.policy_note || ''} ${lt.separation_note || ''}`))}`;
   return tile('business', 'Is it a strong business?', value, sub, more, c);
 }
 function priceTile(lt, c) {
   const v = (lt || {}).valuation || {};
-  if (!lt || !lt.available || !v.status) return tile('price', 'Is the price attractive?', 'Insufficient Data', 'Valuation needs the company\'s filings.', '', c);
+  if (!lt || !lt.available || !v.status) return tile('price', 'How is it valued?', 'Insufficient Data', 'Valuation needs the company\'s filings.', '', c);
   const lead = (v.components || []).find((x) => x.status === 'scored');
   const sub = v.status === 'scored' ? (lead ? lead.headline : v.summary) : (v.reason || '');
   const chart = lt.chart || {};
   const more = html`${qtable(componentRows(v.components, 'price'))}
     ${chart.text ? html`${qh('The chart, as context')}<p>${clean(chart.text)}</p>` : ''}${chart.volume ? fine(clean(chart.volume.text)) : ''}
     ${fine('Graded on its own, separately from the business: 4 of 4 is cheapest. A strong business can be an expensive stock.')}`;
-  return tile('price', 'Is the price attractive?', v.status === 'scored' ? v.label : 'Insufficient Data', sub, more, c);
+  return tile('price', 'How is it valued?', v.status === 'scored' ? valuationWord(v.label) : 'Insufficient Data', sub, more, c);
 }
 function tradeTile(sw, c) {
-  if (!sw) return tile('trade', 'Is there a trade?', 'Insufficient Data', 'No swing assessment.', '', c);
+  // The setup model's output, said as the model's levels rather than a trade to take (advice policy, 2026-10-29):
+  // no "entry", "targets" or share count for the reader, no "Avoid", and a line saying what the levels are.
+  if (!sw) return tile('trade', 'Is there a short-term setup?', 'Insufficient Data', 'No setup assessment.', '', c);
   const plan = sw.plan, objections = (sw.objections || []).slice().sort((a, b) => b.severity - a.severity);
-  const parts = [objections.length ? html`${qh('Reasons to skip it, most damaging first')}${list(objections.map((o) => o.text))}` : html`<p>No specific objection was found in the data.</p>`];
+  const parts = [objections.length ? html`${qh('What argues against the setup, strongest first')}${list(objections.map((o) => o.text))}` : html`<p>No specific objection was found in the data.</p>`];
   if (plan) {
     const inv = plan.invalidation || {}, sens = plan.sensitivity || {}, row = (k, v) => html`<tr><th scope="row">${k}</th><td colspan="2">${v}</td></tr>`;
-    parts.push(qtable([row('Setup', `${plan.kind} (${plan.side})`), row('Entry zone', `${usd((plan.entry_zone || [])[0])} to ${usd((plan.entry_zone || [])[1])}`), row('Confirmation', clean(plan.confirmation)),
-      row('Invalidation', `${usd(inv.price)}: ${clean(inv.structure || '')}. ${clean(inv.note || '')}`), row('Targets', `${(plan.targets || []).map(usd).join(', ')} (${clean(plan.target_basis || '')})`),
-      row('Reward to risk', `${fin(plan.reward_to_risk) ? num(plan.reward_to_risk, 2) : 'n/a'} = ${clean(plan.rr_formula || '')}; ${fin(sens.low) ? `${num(sens.low, 2)} to ${num(sens.high, 2)} across fills and costs` : ''}`),
-      row('Holding', clean(g(plan, 'holding', 'basis') || '')), row('Earnings', clean(g(plan, 'earnings', 'text') || ''))]));
+    parts.push(fine('These are levels Optic\'s setup model computes from price history, for research. They are not an order, a forecast or a recommendation.'));
+    parts.push(qtable([row('Pattern', `${plan.kind} (${plan.side})`), row('Trigger zone', `${usd((plan.entry_zone || [])[0])} to ${usd((plan.entry_zone || [])[1])}`), row('Confirmation the model looks for', clean(plan.confirmation)),
+      row('Breaks the pattern at', `${usd(inv.price)}: ${clean(inv.structure || '')}. ${clean(inv.note || '')}`), row('Projected levels', `${(plan.targets || []).map(usd).join(', ')} (${clean(plan.target_basis || '')})`),
+      row('The model\'s reward to risk', `${fin(plan.reward_to_risk) ? num(plan.reward_to_risk, 2) : 'n/a'} = ${clean(plan.rr_formula || '')}; ${fin(sens.low) ? `${num(sens.low, 2)} to ${num(sens.high, 2)} across fills and costs` : ''}`),
+      row('Typical time to resolve', clean(g(plan, 'holding', 'basis') || '')), row('Earnings', clean(g(plan, 'earnings', 'text') || ''))]));
     parts.push(fine(clean(plan.reassess || '')));
-    const s = plan.sizing_example;
-    if (s && s.available) parts.push(fine(clean(`${s.label} ${s.shares} shares risk about $${Math.round(s.planned_loss)} at the stop. ${s.gap_note || ''}`)));
-  } else if (sw.reassess_when) parts.push(html`${qh('What would make it worth another look')}<p>${clean(sw.reassess_when)}</p>`);
+  } else if (sw.reassess_when) parts.push(html`${qh('When the model would grade a setup again')}<p>${clean(sw.reassess_when)}</p>`);
   parts.push(fine(clean(sw.framework_note || '')));
-  const value = ['S', 'A', 'B'].includes(sw.grade) ? `Grade ${sw.grade}` : sw.grade;
-  return tile('trade', 'Is there a trade?', value, sw.why, html`${parts}`, c);
+  return tile('trade', 'Is there a short-term setup?', setupGrade(sw.grade), sw.why, html`${parts}`, c);
 }
 function earningsTile(er, c) {
   if (!er) return tile('earnings', 'What about earnings?', 'Insufficient Data', 'No earnings data.', '', c);
@@ -441,19 +443,22 @@ export function fourQuestions(c) {
     const gaps = g(out, 'data', 'gaps') || [];
     // The combined verdict is said once, under "Taken together" further down, with its reasons beside it.
     body = html`${qgrid([businessTile(out.long_term, c), priceTile(out.long_term, c), tradeTile(out.swing, c), earningsTile(out.earnings, c)])}
-      <p class="asof">The Optic Score below summarises trend and signals. These four are graded separately, each by its own stated rules (method ${out.method_version || ''}, policy ${g(out, 'policy', 'version') || ''}), and none has been shown to predict returns. "Insufficient Data" means evidence is missing, not that the answer is bad.${g(out, 'freshness', 'text') ? ` ${clean(out.freshness.text)}` : ''}${gaps.length ? ` Not loaded: ${clean(gaps.join('; '))}.` : ''}</p>`;
+      <p class="asof">These four are graded separately, each by its own stated rules, and none has been shown to predict returns.${g(out, 'freshness', 'text') ? ` ${clean(out.freshness.text)}` : ''}${gaps.length ? ` Not loaded: ${clean(gaps.join('; '))}.` : ''}</p>
+      ${how(html`<p>The Optic Score below summarises trend and signals; these four questions are graded apart from it. "Insufficient Data" means evidence is missing, not that the answer is bad.</p><p class="t-muted">Method ${out.method_version || 'not stated'}, policy ${g(out, 'policy', 'version') || 'not stated'}.</p>`)}`;
   }
   return html`<section class="section qsec" aria-labelledby="qs-h"><h2 class="t-h2" id="qs-h">Four questions, answered separately</h2>${body}</section>`;
 }
 
 /* ---------------- key figures; the bull case and the bear case; what to look at next ---------------- */
-export function keyFigures(c) {
+/** Every key statistic the feed has, in one section of the advanced analysis (it was seven under Key figures and all
+ *  eighteen again under Advanced research, post-demo Phase 06). */
+export function keyStats(c) {
   const q = g(c.t, 'quote');
   if (!q || !fin(q.price)) return '';
-  const rows = keyStatRows(q, g(c.t, 'company', 'short_interest'), c.phase);
-  if (!OV_ESSENTIALS.some((id) => rows[id][1] !== null)) return '';
-  return html`<section class="section" aria-labelledby="kf-h"><h2 class="t-h2" id="kf-h">Key figures</h2>${statList(rows, OV_ESSENTIALS)}
-    <p class="asof">Select a label for what it means. All eighteen figures are under Advanced research below.</p></section>`;
+  const rows = keyStatRows(q, g(c.t, 'company', 'short_interest'), c.phase), ids = Object.keys(rows).filter((id) => rows[id][1] !== null);
+  if (!ids.length) return '';
+  return html`<section class="section" aria-labelledby="kf-h"><h2 class="t-h2" id="kf-h">Key statistics</h2>${statList(rows, ids)}
+    <p class="asof">Select a label for what it means.</p></section>`;
 }
 
 export function casesSection(c) {
@@ -463,9 +468,9 @@ export function casesSection(c) {
   const cols = html`<div class="cs-cols">
     <div><h3 class="case-h up">Bull case</h3>${f.pos.length ? html`<ul class="cs-list is-pos">${f.pos.map((x) => item(x, false))}</ul>` : html`<p class="t-muted">No bull-case point stands out in the data Optic holds.</p>`}</div>
     <div><h3 class="case-h down">Bear case</h3>${f.neg.length ? html`<ul class="cs-list is-neg">${f.neg.map((x) => item(x, true))}</ul>` : html`<p class="t-muted">No bear-case point stands out in the data Optic holds. That is not the same as no risk: every stock can fall.</p>`}</div></div>`;
-  // folded below the Advanced level, with the count in the summary; open at Advanced and above (Classic)
+  // open: it is part of the advanced analysis, which is where a reader comes to read it (post-demo Phase 06)
   return html`<section class="section" aria-labelledby="cs-h"><h2 class="t-h2" id="cs-h">Bull case and bear case</h2>
-    <details class="more-inline cs-fold" data-adv ${c.advanced ? 'open' : ''}><summary>Show the case for and against (${f.pos.length} for, ${f.neg.length} against)</summary><div class="how-body">${cols}</div></details>
+    <p class="section-sub">${f.pos.length} for, ${f.neg.length} against.</p>${cols}
     ${drv.length ? html`<details class="more-inline"><summary>What has been moving it recently</summary><div class="how-body">
       <ul class="cs-drv">${drv.map((x) => html`<li><span class="t-label">${x.kind}</span><span>${x.url ? html`<a class="textlink" href="${x.url}" target="_blank" rel="noopener noreferrer nofollow">${clean(x.text)}</a>` : clean(x.text)}</span>${x.note ? html`<span class="t-muted">${x.note}</span>` : ''}</li>`)}</ul>
       <p class="asof">None of these proves why the price moved. Prices also move on things no data feed records.</p></div></details>` : ''}
@@ -482,9 +487,9 @@ export function nextSection(c) {
           <p class="asof">Scheduled dates only. A date is not a forecast of what happens on it.</p>`
           : html`<p class="t-muted">No scheduled company events or economic releases in the data for the coming days.</p>`}</div>
       <div><h3 class="t-label nx-h">Research steps</h3>
-        <ul class="nx-steps">${steps.map((s) => html`<li>${s.compare ? html`<a class="nx-step" href="#/compare?t=${encodeURIComponent(sym)}"><span>${s.text}</span><span class="nx-to">Compare ${'→'}</span></a>`
-          : html`<a class="nx-step" href="${hrefFor(s.view, sym)}"><span>${s.text}</span><span class="nx-to">${TAB[s.view] || ''} ${'→'}</span></a>`}</li>`)}
-          <li><button type="button" class="nx-step" data-v2-milo="Using the figures Optic has for ${sym}, what are the main things a long-term investor should understand about it, and what would change that picture?" data-v2-milo-ctx="${sym} Dossier, Overview: what to look at next" data-v2-milo-sym="${sym}"><span>Ask Milo a question about ${sym}</span><span class="nx-to">Ask Milo ${'→'}</span></button></li></ul>
+        <ul class="nx-steps">${steps.map((s) => html`<li>${s.compare ? html`<a class="nx-step" href="#/compare?t=${encodeURIComponent(sym)}"><span>${s.text}</span><span class="nx-to">Compare ${icon('arrow')}</span></a>`
+          : html`<a class="nx-step" href="${hrefFor(s.view, sym)}"><span>${s.text}</span><span class="nx-to">${TAB[s.view] || ''} ${icon('arrow')}</span></a>`}</li>`)}
+          <li><button type="button" class="nx-step" data-v2-milo="Using the figures Optic has for ${sym}, what are the main things a long-term investor should understand about it, and what would change that picture?" data-v2-milo-ctx="${sym} Dossier, Overview: what to look at next" data-v2-milo-sym="${sym}"><span>Ask Milo a question about ${sym}</span><span class="nx-to">Ask Milo ${icon('arrow')}</span></button></li></ul>
         <p class="asof">Ask Milo writes a question for you to edit. Nothing is sent until you press Send.</p></div>
     </div></section>`;
 }
@@ -624,7 +629,7 @@ export function scoreSection(c) {
         : scoreCard({ id: 'long', span: 'Long term: several years', empty: l && l.unavailable ? `The long-term score is not available: ${l.unavailable.replace(/\.$/, '')}.` : 'Working out the long-term score…', method: '' })}
     </div>
     ${notes.map((x) => html`<p class="osc-both">${x}</p>`)}
-    <p class="asof">50 is each model's neutral midpoint, where its inputs balance; it is not a measured break-even. Neither score is a probability, an expected return or a forecast, and neither has been shown to predict returns. Not a recommendation to buy or sell.</p></section>`;
+    <p class="asof">50 is each model's neutral midpoint, where its inputs balance; it is not a measured break-even. Neither score is a probability, an expected return or a forecast, and neither has been shown to predict returns. Compare ranks names on scores of its own, built only from inputs every compared name has, so its numbers for this company differ from these. Not a recommendation to buy or sell.</p></section>`;
 }
 
 /* ---------------- Optic's read: the short-term signals, assembled from the payload (Classic's renderOpticPulse) ---------------- */
@@ -703,7 +708,8 @@ export function opticRead(c) {
   const t = c.t, p = t && t.pulse; if (!p) return '';
   const stance = String(p.stance || 'neutral'), skill = p.skill || {}, dg = t.digest || {}, story = dg.story || null, src = dg.sources || {};
   const fresh = ago(dg.as_of, c.now), tiers = g(t, 'news', 'tiers') || [], tier = story && story.tier ? tiers.find((x) => x.id === story.tier) : null;
-  return html`<div class="ovx-block pl" aria-labelledby="pl-h"><div class="pl-top"><h3 class="t-label" id="pl-h">Optic's read</h3>${fresh ? html`<span class="asof">Updated ${fresh}</span>` : ''}</div>
+  return html`<section class="section pl" aria-labelledby="pl-h"><div class="section-head"><div><h2 class="t-h2" id="pl-h">Optic's read</h2>
+      <p class="section-sub">Optic's short-term signal score${fresh ? `, updated ${fresh}` : ''}.</p></div></div>
     <p class="pl-lede is-${stance}">${clean(dg.lede || p.stance_label || stance.toUpperCase())}</p>
     ${catalystLine(p.catalyst)}${pendingLine(p.pending_catalyst)}${readMore(p)}
     ${story && story.title ? html`<p class="pl-story">${tier ? html`<span class="chip-tag pl-tier" title="${story.tier_why || ''}">${tier.label}</span>` : ''}<a class="textlink" href="${story.url || '#'}" target="_blank" rel="noopener noreferrer">${clean(story.title)}</a><span class="t-muted">${[story.publisher, story.age_words, story.catalyst].filter(Boolean).join(', ')}</span></p>` : ''}
@@ -714,12 +720,13 @@ export function opticRead(c) {
     <p class="asof">Each input scores from -100 to +100: a bar fills right of the line when the input leans bullish and left when it leans bearish.</p>
     <p class="pl-skill">${clean(skill.text || '')}</p>
     ${p.factors_priced < p.factors_total ? html`<p class="asof">${p.factors_priced} of ${p.factors_total} inputs had data. A missing input redistributes its weight rather than counting as zero.</p>` : ''}
-    ${dg.method ? how(html`<p>${clean(dg.method)}</p>`) : ''}</div>`;
+    ${dg.method ? how(html`<p>${clean(dg.method)}</p>`) : ''}</section>`;
 }
 
-/* ---------------- Advanced research: one press away, open at the Advanced level (Classic) ---------------- */
-function restBlock(c) {
-  const t = c.t, sym = c.sym, q = t.quote || {}, news = t.news || {}, p = t.pulse || {}, st = c.stars;
+/* ---------------- the rest of the ticker and the method: the last sections of the advanced analysis ---------------- */
+export function restSection(c) {
+  const t = c.t; if (!t) return '';
+  const sym = c.sym, q = t.quote || {}, news = t.news || {}, p = t.pulse || {}, st = c.stars;
   const lo = q.fifty_two_low, hi = q.fifty_two_high, band = fin(lo) && fin(hi) && hi > lo && fin(q.price) ? Math.round(((q.price - lo) / (hi - lo)) * 100) : null;
   const days = news.days_to_earnings;
   const cards = [
@@ -730,37 +737,21 @@ function restBlock(c) {
     ['news', 'News', news.article_count ? String(news.article_count) : null, news.overall_tone ? `headlines, ${news.overall_tone}` : 'headlines'],
     st && st.available ? ['long', 'Investing', `${st.stars} of 5 stars`, `Optic star rating, ${String(st.word || '').toLowerCase()}`] : ['long', 'Investing', fin(q.trailing_pe) ? num(q.trailing_pe, 1) : null, 'trailing P/E, valuation and holding case'],
   ];
-  return html`<div class="ovx-block" aria-labelledby="rest-h"><h3 class="t-label" id="rest-h">The rest of this ticker</h3>
-    <p class="asof">One reading from each section, so the row says what is there rather than only where to click.</p>
-    <ul class="ovx-cards">${cards.map(([view, label, value, note]) => html`<li><a class="ovx-card" href="${hrefFor(view, sym)}"><span class="t-label">${label}</span><b class="${value === null ? 't-muted' : ''}">${value === null ? 'n/a' : value}</b><span class="t-muted">${note}</span></a></li>`)}</ul></div>`;
+  return html`<section class="section ovx-sec" aria-labelledby="rest-h"><div class="section-head"><div><h2 class="t-h2" id="rest-h">The rest of this ticker</h2>
+    <p class="section-sub">One reading from each section, so the row says what is there rather than only where to click.</p></div></div>
+    <ul class="ovx-cards">${cards.map(([view, label, value, note]) => html`<li><a class="ovx-card" href="${hrefFor(view, sym)}"><span class="t-label">${label}</span><b class="${value === null ? 't-muted' : ''}">${value === null ? 'n/a' : value}</b><span class="t-muted">${note}</span></a></li>`)}</ul></section>`;
 }
-function headlines(c) {
-  const news = c.t.news || {}, heads = (news.articles || []).slice(0, 3);
-  if (!heads.length) return '';
-  return html`<div class="ovx-block" aria-labelledby="hl-h"><h3 class="t-label" id="hl-h">Latest headlines</h3>
-    <ul class="plain">${heads.map((a) => html`<li><a class="textlink" href="${a.url}" target="_blank" rel="noopener">${clean(a.title)}</a> <span class="t-muted">${a.publisher || ''}${a.age_words ? `, published ${a.age_words}` : ''}</span></li>`)}</ul>
-    <p>${tabLink(c.sym, 'news', `All ${news.article_count || heads.length} headlines`)}</p></div>`;
-}
-function methodNote(t) {
+export function methodSection(c) {
+  const t = c.t; if (!t) return '';
   const built = ago(t.generated_at), src = t.data_source === 'tradier' ? 'Tradier, with Yahoo Finance where it has no data' : 'Yahoo Finance';
-  return html`<div class="ovx-block"><h3 class="t-label">How this page is built</h3><ul class="plain">
+  return html`<section class="section ovx-sec" aria-labelledby="mt-h"><h2 class="t-h2" id="mt-h">How this page is built</h2><ul class="plain">
     <li>Every sentence above comes from the figures on this page by fixed rules. No AI model writes them, so the same data gives the same words.</li>
     <li>Business figures come from the company's filed statements via Yahoo Finance. The latest fiscal year can be months old, and the latest quarter is shown beside it when the two disagree.</li>
     <li>Price figures are daily closes from ${src}${built ? `, gathered ${built}` : ''}. Outside market hours the price is the last close.</li>
     <li>The wording uses fixed cut-offs, chosen for plain language rather than taken from research: business changes under 1% either way are "roughly flat", price changes under 2% "little changed"; a year and the last three months are called out as pointing different ways when one is up at least 5% and the other down at least 5%; an earnings report within 45 days is listed as a risk; a price 20% or more below its highest close is listed as a risk; a price-to-earnings ratio 20% or more above or below the company's own average over at least three fiscal years is called asking more or less than usual.</li>
     <li>Optic's short-term signal score, its star rating and its options readings are models. Each carries its own method and limits on its page.</li>
-    <li>Nothing here is a recommendation to buy or sell.</li></ul></div>`;
+    <li>Nothing here is a recommendation to buy or sell.</li></ul></section>`;
 }
-export function advancedSection(c) {
-  const t = c.t; if (!t) return '';
-  const rows = keyStatRows(t.quote, g(t, 'company', 'short_interest'), c.phase), ids = Object.keys(rows).filter((id) => rows[id][1] !== null);
-  return html`<section class="section ovx-adv" aria-label="Advanced research"><details class="adv-fold" data-adv ${c.advanced ? 'open' : ''}>
-    <summary><span class="t-h2">Advanced research</span><span class="section-sub">Optic's short-term signal score, all key statistics, every section at a glance, headlines and method</span></summary>
-    ${opticRead(c)}
-    ${ids.length ? html`<div class="ovx-block" aria-labelledby="ks-h"><h3 class="t-label" id="ks-h">Key stats</h3>${statList(rows, ids)}</div>` : ''}
-    ${restBlock(c)}${headlines(c)}${methodNote(t)}</details></section>`;
-}
-
 /** The context every section reads, built once per paint. */
 export function context({ sym, t, fw, fwError, lt, stars, fund, advanced, phase, now = Date.now() }) {
   const price = t ? priceRead(t, { index: /^\^/.test(sym) }) : null;

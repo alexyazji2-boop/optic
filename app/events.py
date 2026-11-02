@@ -34,6 +34,7 @@ from typing import Any, Dict, List, Optional
 
 from zoneinfo import ZoneInfo
 
+from . import public_errors
 from . import feeds
 
 log = logging.getLogger(__name__)
@@ -545,7 +546,7 @@ def _expiry_events(now: datetime) -> Dict[str, Any]:
         from .analytics import expiries as expiries_mod
         rows = expiries_mod.upcoming(now, months=3)
     except Exception as exc:                     # noqa: BLE001
-        return {"events": [], "error": str(exc)[:120], "stale": False}
+        return {"events": [], "error": public_errors.public(exc), "stale": False}
 
     out = []
     for row in rows:

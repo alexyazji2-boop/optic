@@ -72,7 +72,9 @@ function saveBudget(v) {
 /* ---------------- readings ---------------- */
 function readings(sym) {
   const t = D.t || {}, vs = t.vol_surface || {}, g = t.gex || {}, e = D.earn || {};
-  if (!D.t) return html`<section class="readings" aria-label="What options are pricing">${skeleton('lines', 2, 'Loading what options are pricing')}</section>`;
+  // a failed load is said once, with Try again, by the page's "Options data" line: this skeleton stayed for good under
+  // it (BUG-193, Phase 11), as paintMore's already did not
+  if (!D.t) return D.tErr ? '' : html`<section class="readings" aria-label="What options are pricing">${skeleton('lines', 2, 'Loading what options are pricing')}</section>`;
   const im = (e.implied && e.implied.available) ? e.implied : null;
   const r30 = P.row30(vs);
   const spot = (D.quote || t.quote || {}).price;
@@ -316,7 +318,7 @@ function research() {
       <tbody>${rs.map((r, n) => html`<tr class="${Math.abs(r.moneyness_pct) < 1.5 ? 'atm' : ''}">
         <td><b>${num(r.strike, r.strike % 1 ? 1 : 0)}</b> <small class="t-muted">${signed(r.moneyness_pct, 1)}</small><button type="button" class="icon-btn op-rowbtn" data-v2-op-row="${n}" aria-expanded="false" aria-controls="op-rd-${n}" aria-label="The ${num(r.strike, 0)} ${r.type}'s details">${icon('chev')}</button></td><td class="op-wide">${num(r.delta, 2)}</td>
         <td>${num(r.bid)} / ${num(r.ask)} <small class="t-muted">${unquotedRow(r) ? 'no two-sided quote' : `mid ${num(r.mid)}`}</small></td>
-        <td><span class="liq liq-${(r.liquidity || {}).grade}" title="${((r.liquidity || {}).reasons || []).join(' ')}">${(r.liquidity || {}).label || ''}</span> <small class="t-muted">${num(r.spread_pct, 1)}%</small></td>
+        <td><span class="liq liq-${(r.liquidity || {}).grade}" title="${((r.liquidity || {}).reasons || []).join(' ')}">${(r.liquidity || {}).label || ''}</span> <small class="t-muted">spread ${num(r.spread_pct, 1)}%</small></td>
         <td class="op-wide">${num(r.iv_pct, 1)}%${r.iv_source === 'filled' ? html` <small class="t-muted">assumed</small>` : r.iv_source === 'feed' ? html` <small class="t-muted">feed</small>` : ''}</td>
         <td class="op-wide">${num(r.breakeven_ask)} <small class="t-muted">${signed(r.breakeven_move_pct, 1)}</small></td><td class="op-wide">${money(r.cost_ask_contract, 0)}</td>
         ${R.more ? html`<td>${money(r.theta_per_contract, 2)}</td><td>${money(r.vega_per_contract, 2)}</td><td>${isNum(r.p_itm_model) ? `${num(r.p_itm_model * 100, 0)}%` : 'n/a'}</td><td>${num(r.open_interest, 0)} / ${num(r.volume, 0)}</td><td>${r.exercise === 'european' ? 'European' : isNum(r.early_exercise_premium_contract) ? (r.early_exercise_premium_contract < 0.5 ? 'Under $1' : money(r.early_exercise_premium_contract, 0)) : 'n/a'}</td>` : ''}
@@ -387,9 +389,9 @@ const OPT_GROUPS = [
     ['Flow', (t, s) => P.flow(t, s), (t) => P.flowCharts(t)],
     ['Delta and gamma', (t, s) => P.greeksPanel(t, s)],
   ] },
-  { id: 'strategy', label: 'Setups and strategy', sub: 'The swing read, the entry it points to and the ideas sized to a budget are model output from these figures, not recommendations.', panels: [
+  { id: 'strategy', label: 'Setups and strategy', sub: 'The swing read, the model\'s levels and the example structures fitted to your limit are model output from these figures, not recommendations.', panels: [
     ['Swing verdict', (t, s) => P.verdict(t, s)],
-    ['Strike and entry', (t, s) => P.entry(t, s)],
+    ['Example contract and levels', (t, s) => P.entry(t, s)],
     ['Ideas', (t, s) => P.ideas(t, s, D.budget), (t) => P.ideaCharts(t, (t.quote || {}).price)],
     ['Price', (t, s) => priceBody(t, s), null, () => mountPrice()],
     ['Levels and momentum', (t, s) => P.levels(t, s), (t) => P.levelCharts(t)],

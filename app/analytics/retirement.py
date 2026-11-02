@@ -23,6 +23,7 @@ Roth-specific reasoning that genuinely changes the answer versus a taxable accou
 
 from __future__ import annotations
 
+from .. import public_errors
 from .. import legal as legal_mod
 
 from typing import Any, Dict, List, Optional
@@ -276,7 +277,8 @@ def _allocation_rows(alloc: Dict[str, Any], stats: Dict[str, Dict[str, Any]],
             "name": fund["name"],
             "note": fund["note"],
             "weight_pct": weight,
-            "annual_dollars": _f(annual * weight / 100.0, 0),
+            # No dollars of the reader's own contribution per fund: that is the contribution plan the advice
+            # policy withholds (2026-10-29), said as a column instead of a table.
             "expense_ratio_pct": mt.get("expense_ratio_pct"),
             "yield_pct": mt.get("yield_pct"),
             "cagr_10y_pct": st.get("cagr_10y_pct"),
@@ -737,6 +739,21 @@ def _overlap(holdings: Dict[str, float], provider) -> Dict[str, Any]:
 # ------------------------------------------------------- individual stocks
 
 
+REBALANCE_WITHHELD = (
+    "Optic does not say where to put your contribution or what to sell: that is a personal allocation "
+    "decision, and this page is an example to compare against, not a plan for you. The comparison above "
+    "shows how your holdings differ from the example's weights."
+)
+
+
+def _without_sizing(sleeve: Dict[str, Any]) -> Dict[str, Any]:
+    """The sleeve as readers see it: each candidate's long-term reading, with no suggested weight."""
+    out = dict(sleeve or {})
+    if isinstance(out.get("rows"), list):
+        out["rows"] = [{k: v for k, v in r.items() if k != "suggested_pct"} for r in out["rows"]]
+    return out
+
+
 def _stock_sleeve(provider, symbols: List[str], risk: str,
                   years: int) -> Dict[str, Any]:
     """Score individual stocks for a retirement sleeve, and cap how much they get.
@@ -765,8 +782,8 @@ def _stock_sleeve(provider, symbols: List[str], risk: str,
         return {
             "available": False,
             "cap_pct": _f(cap, 1),
-            "note": f"No candidates entered. At this risk setting and horizon the sleeve could take "
-                    f"up to {cap:.0f}% of the portfolio. Leaving it empty is a perfectly good choice.",
+            "note": f"No candidates entered. At this risk setting and horizon the example allocation leaves "
+                    f"room for up to {cap:.0f}% in individual stocks: the example's parameter, not a size for you.",
         }
 
     rows = []
@@ -774,7 +791,7 @@ def _stock_sleeve(provider, symbols: List[str], risk: str,
         try:
             read = longterm.analyse_holding(provider, sym)
         except Exception as exc:
-            rows.append({"symbol": sym, "error": str(exc)})
+            rows.append({"symbol": sym, "error": public_errors.public(exc)})
             continue
         if read.get("error"):
             rows.append({"symbol": sym, "error": read["error"]})
@@ -971,9 +988,10 @@ def analyse(provider, years: int = 30, risk: str = "balanced",
         targets["stocks"] = _f(sleeve_pct, 1)
 
     drift = _drift(holdings, targets, stock_candidates) if holdings else {"available": False}
-    rebalance = (_rebalance_with_new_money(holdings, targets, annual, stock_candidates)
-                 if holdings else {"available": False,
-                                   "note": "Enter your current holdings to get a rebalancing plan."})
+    # Where to put the reader's own contribution, by fund and amount, is a personal allocation and is not
+    # given (advice policy, 2026-10-29). _rebalance_with_new_money is kept, and tested, so the owner can bring
+    # it back after counsel has reviewed it (docs/post-demo-ultra/COMPLIANCE_REVIEW.md).
+    rebalance = {"available": False, "withheld": True, "note": REBALANCE_WITHHELD}
     overlap = _overlap(holdings, provider) if holdings else {"available": False}
 
     return {
@@ -990,7 +1008,9 @@ def analyse(provider, years: int = 30, risk: str = "balanced",
         "drift": drift,
         "rebalance": rebalance,
         "overlap": overlap,
-        "stock_sleeve": sleeve,
+        # The candidates' long-term readings are research; a suggested weight for each of the reader's own
+        # picks is individual sizing, so it is computed for the example's total and not returned per name.
+        "stock_sleeve": _without_sizing(sleeve),
         "roth_notes": _roth_notes(alloc, risk, years),
         "limit_note": (
             "The contribution figure is yours to set. IRS Roth limits change annually and depend "

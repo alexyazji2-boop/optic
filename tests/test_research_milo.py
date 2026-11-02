@@ -28,14 +28,14 @@ def test_the_mode_block_rides_only_with_a_framework_assessment():
         "routing": _routing("swing"), "swing": {"grade": "B"}}})
     blocks = "\n".join(_texts(kw))
     assert "## The research framework" in blocks and "Swing mode." in blocks
-    assert "Before any grade, give the strongest specific reasons to skip" in blocks
+    assert "Before any grade, give the strongest specific reasons against the setup" in blocks
     assert meta["framework_mode"] == "swing"
     kw, meta = ai.build_chat_request(hist, context={"ticker": "NVDA"})
     assert "## The research framework" not in "\n".join(_texts(kw)) and meta["framework_mode"] is None
 
 
 @pytest.mark.parametrize("mode,phrase", [
-    ("long_term", "Quality comes before any talk of buying"),
+    ("long_term", "Quality comes before price"),
     ("pre_earnings", "My best-supported pre-earnings view is"),
     ("post_earnings", "never rewrite the earlier reasoning"),
     ("combined", "where they agree or disagree"),

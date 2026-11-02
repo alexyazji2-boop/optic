@@ -415,7 +415,7 @@ def _fit_spread(idea: Optional[Dict[str, Any]], chain: pd.DataFrame, expiry: str
             if fitted is None:
                 continue
             fitted["rationale"] = (
-                "Narrowed to fit your ${:,.0f} limit: buy the {:g} {kind} and sell the "
+                "Narrowed to fit the ${:,.0f} limit you set: a spread long the {:g} {kind} and short the "
                 "{:g}. It costs ${:,.0f} for one and can make at most ${:,.0f}. {}".format(
                     budget, float(long_leg["strike"]), float(short_leg["strike"]),
                     debit * 100.0, (float(fitted["max_profit"] or 0)) * 100.0,
@@ -469,10 +469,10 @@ def _attach_risk_plan(
             "stop_basis": "1.5 x the average daily range, which is {:.1f}% of the current "
                           "price".format(stop_distance),
             "first_target": _f(resistance if not bearish else support, 2),
-            "invalidation": "A daily close beyond the stop, or dealer gamma flipping sign through "
-                            "the flip point. Either one breaks the reason for the trade.",
-            "sizing_note": "Size each idea so the worst case costs a fixed fraction of the "
-                           "account. The maximum loss shown above is the whole position.",
+            "invalidation": "A daily close beyond the model's level, or dealer gamma flipping sign through "
+                            "the flip point. Either one breaks the setup's premise.",
+            # A fact about the structure, not a sizing instruction (advice policy, 2026-10-29).
+            "sizing_note": "The maximum loss shown above is the whole position's worst case at expiry.",
         }
 
 
@@ -598,10 +598,11 @@ def build_strategy_ideas(
                         # step in, the opposite of the model: it is the heaviest
                         # negative gamma, where hedging adds to a fall.
                         "rationale": "Positive gamma regime: under the model's assumption dealer hedging "
-                        "leans against moves near the money, the condition premium selling wants. Selling a "
-                        "~20-delta put collects premium and only obliges you to buy at a price you already "
-                        "like. The put wall near {:.0f} is the heaviest negative gamma below the price, where "
-                        "a fall can speed up rather than stall.".format(put_wall),
+                        "leans against moves near the money, the condition premium selling wants. A "
+                        "~20-delta short put collects premium in exchange for the obligation to buy 100 shares "
+                        "at the strike if assigned; below the strike the loss grows with every dollar the stock "
+                        "falls, less the premium. The put wall near {:.0f} is the heaviest negative gamma below "
+                        "the price, where a fall can speed up rather than stall.".format(put_wall),
                         "expiry": expiry,
                         "dte": int(put_leg["dte"]),
                         "legs": [_leg(put_leg, "SELL")],
@@ -648,8 +649,8 @@ def build_strategy_ideas(
                 "assumed side, their hedging would damp realised volatility, the condition premium "
                 "selling wants. The side is assumed, not observed."
                 if regime == "positive"
-                else "No directional edge; implied vol isn't cheap, so selling the range collects a "
-                "premium that realized vol is unlikely to eat into."
+                else "No directional edge, and implied vol isn't cheap, so selling the range collects more "
+                "premium than when it is. A move larger than the options price still loses money."
             )
             if all(leg is not None for leg in (short_call, long_call, short_put, long_put)):
                 credit = (

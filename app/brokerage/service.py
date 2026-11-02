@@ -694,6 +694,7 @@ def disconnect(user: Dict[str, Any], connection_id: str) -> Dict[str, Any]:
                           "provider not configured at disconnect")
         queued = True
     _delete_connection(uid, connection_id)
+    _forget_assembled(uid)
     remaining = store.connections(uid)
     if not remaining:
         delete_all(user)
@@ -702,11 +703,19 @@ def disconnect(user: Dict[str, Any], connection_id: str) -> Dict[str, Any]:
     return {"ok": True, "provider_removal_queued": queued, "remaining": len(remaining)}
 
 
+def _forget_assembled(uid: str) -> None:
+    """Drop the workspace's assembled holdings for this reader at once. A new key already kept them from being served
+    after a disconnect, but they stayed in memory for up to ten minutes after "delete my data" (Phase 09 cache audit)."""
+    from . import workspace
+    workspace.forget(uid)
+
+
 def delete_all(user_or_id: Any) -> Dict[str, Any]:
     """Every connection, every stored holding, the snapshots, and the data key.
     Also used by account deletion, so it takes a bare id as well."""
     uid = user_or_id["id"] if isinstance(user_or_id, dict) else user_or_id
     row = store.purge_local(uid)
+    _forget_assembled(uid)
     queued = False
     if row and not row.get("provider_removed_at"):
         try:

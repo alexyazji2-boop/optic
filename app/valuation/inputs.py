@@ -26,9 +26,8 @@ below, is reported as not covered rather than approximated.
 from __future__ import annotations
 
 import math
-import time
 from datetime import date, datetime, timezone
-from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from .. import feeds
 from ..analytics import sec_facts

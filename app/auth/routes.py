@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from typing import Any, Dict, List, Optional
 from urllib.parse import parse_qs, urlencode
 
@@ -48,6 +49,11 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 # above is decoration. Computed once at import: it is not a secret and never
 # matches anything, since nobody knows the random input.
 _DUMMY_HASH = pw.hash_password(tokens.new_token())
+
+
+# One @, a dotted domain, no spaces or control characters: the old test (an @, a dot after it, six characters) let a
+# line break through, which failed at the mail header after the account row existed (SEC-12, Phase 10)
+_EMAIL = re.compile(r"^[^@\s\x00-\x1f\x7f]+@[^@\s\x00-\x1f\x7f.]+(\.[^@\s\x00-\x1f\x7f.]+)+$")
 
 
 def _clean(value: Any, limit: int = 200) -> str:
@@ -176,7 +182,7 @@ async def register(request: Request, response: Response,
 
     ratelimit.guard(request, "register", email or None)
 
-    if "@" not in email or "." not in email.split("@")[-1] or len(email) < 6:
+    if not _EMAIL.match(email) or len(email) > 254:
         raise _bad("Enter a valid email address.")
     if not first_name:
         raise _bad("Enter your first name.")
@@ -812,7 +818,26 @@ async def oauth_start(provider: str, request: Request,
         return _home("config", provider)
     store.store_state(state, provider, nonce, next or None, link_user_id,
                       config.OAUTH_STATE_TTL, verifier, remember=bool(remember))
-    return RedirectResponse(url, status_code=303)
+    response = RedirectResponse(url, status_code=303)
+    if _binds_state(provider):
+        # The state, tied to the browser that started the flow (SEC-08 / BUG-043, Phase 10 security review): without
+        # it, a stranger could start a sign-in, stop before the last redirect and have someone else open that link,
+        # signing them in to the stranger's account. Google's return leg is a top-level GET, which carries a Lax
+        # cookie. Apple's is a cross-site form POST, which carries only a SameSite=None cookie, and a browser takes
+        # one of those only when it is Secure: so Apple is bound on a host served over HTTPS, as auth libraries do it.
+        kw = {**config.cookie_kwargs(config.OAUTH_STATE_TTL), "path": "/api/auth/"}
+        if provider == "apple":
+            kw.update(samesite="none", secure=True)
+        response.set_cookie(OAUTH_COOKIE, tokens.token_hash(state), **kw)
+    return response
+
+
+def _binds_state(provider: str) -> bool:
+    """Whether this provider's callback is checked against the browser's state cookie."""
+    return provider == "google" or (provider == "apple" and config.cookie_secure())
+
+
+OAUTH_COOKIE = "optic_oauth"
 
 
 async def _finish_oauth(provider: str, request: Request,
@@ -822,6 +847,9 @@ async def _finish_oauth(provider: str, request: Request,
     if not code or not state:
         return _home("denied", provider)
 
+    if _binds_state(provider) and not tokens.same(request.cookies.get(OAUTH_COOKIE, ""), tokens.token_hash(state)):
+        # a flow this browser did not start (SEC-08); the state is left for its own browser to finish
+        return _home("state", provider)
     found = store.take_state(state, provider)
     if not found:
         # Unknown, expired or already used. All three mean this callback is not

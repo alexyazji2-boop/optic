@@ -18,14 +18,17 @@ Two things this module is careful about:
 
 from __future__ import annotations
 
+import heapq
 import json
 import os
 import re
 import threading
+import time
+from collections import OrderedDict
 import urllib.error
 import urllib.request
-from datetime import date
 from typing import Any, Dict, List, Optional
+from . import public_errors
 from . import session as session_mod
 
 # NASDAQ's own symbol directory. Public, keyless, no terms beyond attribution;
@@ -163,7 +166,7 @@ def nasdaq_symbols(force: bool = False) -> Dict[str, Any]:
                 "fetched_on": None,
                 "count": len(FALLBACK_SYMBOLS),
                 "source": "built-in large-cap fallback. The NASDAQ directory could not be "
-                          "reached ({}), so this is NOT the whole exchange".format(exc),
+                          "reached ({}), so this is NOT the whole exchange".format(public_errors.public(exc)),
                 "degraded": True,
             }
 
@@ -255,8 +258,8 @@ def search_index(force: bool = False) -> Dict[str, Any]:
             rows += _parse_search_rows(_fetch(OTHER_LISTED_URL), 0, 1, 4, 6)
         except Exception as exc:
             if cached and cached.get("rows"):
-                return {**cached, "stale": True, "error": str(exc)}
-            return {"rows": [], "fetched_on": None, "error": str(exc)}
+                return {**cached, "stale": True, "error": public_errors.public(exc)}
+            return {"rows": [], "fetched_on": None, "error": public_errors.public(exc)}
 
         # De-duplicate: a handful of symbols appear in both files.
         seen: Dict[str, Dict[str, Any]] = {}
@@ -297,13 +300,26 @@ def _prominence() -> Dict[str, float]:
     available offline — the symbol directory has no size or volume field — and it
     is what puts Apple above a same-length shell company for "aa".
     """
+    # Read again only when the file changes: it was parsed from disk on every keystroke's search (BUG-053, Phase 10)
+    path = os.path.join(CACHE_DIR, "screen_ranking.json")
     try:
-        with open(os.path.join(CACHE_DIR, "screen_ranking.json")) as handle:
+        stamp = os.path.getmtime(path)
+    except OSError:
+        return {}
+    if _VOLUME.get("stamp") == stamp and _VOLUME.get("path") == path:
+        return _VOLUME["volume"]
+    try:
+        with open(path) as handle:
             payload = json.load(handle)
         ranked = (payload.get("ranking") or {}).get("ranked") or []
-        return {r["symbol"]: float(r.get("dollar_volume") or 0.0) for r in ranked}
+        volume = {r["symbol"]: float(r.get("dollar_volume") or 0.0) for r in ranked}
     except (OSError, ValueError, KeyError, TypeError):
         return {}
+    _VOLUME.update(stamp=stamp, path=path, volume=volume)
+    return volume
+
+
+_VOLUME: Dict[str, Any] = {}
 
 
 # Indices, rates, currencies, commodities, futures and crypto are not in the exchange
@@ -385,21 +401,50 @@ def _company_aliases() -> Dict[str, str]:
     return _NAME_ALIASES
 
 
+# After a failed refresh the directory is not asked again for this long (S19, Phase 10): each search retried the
+# download, holding the directory lock for its whole timeout, so a slow Nasdaq Trader stalled every search box.
+REFRESH_RETRY_SECONDS = 15 * 60.0
+
+
 def _rows_today() -> Dict[str, Any]:
     """The directory, read from disk once a day rather than on every keystroke."""
     today = session_mod.market_today().isoformat()
     memo = _MEMO.get("index")
     if memo and memo.get("fetched_on") == today and memo.get("rows"):
         return memo
+    failed = _MEMO.get("failed")
+    if failed and time.time() - failed["at"] < REFRESH_RETRY_SECONDS:
+        return failed["idx"]
     idx = search_index()
     if idx.get("rows") and not idx.get("error"):
         _MEMO["index"] = idx
+        _MEMO.pop("failed", None)
+    else:
+        _MEMO["failed"] = {"at": time.time(), "idx": idx}
     return idx
 
 
 def _dashed(symbol: str) -> str:
     m = _CLASS.match(symbol)
     return "{}-{}".format(m.group(1), m.group(2)) if m else symbol
+
+
+_KNOWN: Dict[str, Any] = {"rows": None, "set": frozenset()}
+
+
+def known_symbol(symbol: str) -> Optional[bool]:
+    """Whether the exchange directory lists this symbol, dotted or dashed; None when the directory cannot be read.
+    The logo proxy fetches and stores only for listed symbols (SEC-06, Phase 10)."""
+    rows = (_rows_today().get("rows") or [])
+    if not rows:
+        return None
+    with _PREP_LOCK:
+        if _KNOWN["rows"] is not rows:
+            names = set()
+            for r in rows:
+                names.add(r["symbol"]); names.add(_dashed(r["symbol"]))
+            _KNOWN.update(rows=rows, set=frozenset(names))
+        return symbol in _KNOWN["set"]
 
 
 def search_with_status(query: str, limit: int = 10) -> Dict[str, Any]:
@@ -411,6 +456,26 @@ def search_with_status(query: str, limit: int = 10) -> Dict[str, Any]:
     if idx.get("error"):
         out["reason"] = "The symbol directory could not be refreshed."
     return out
+
+
+# Each row's upper-cased name, its words, its dashed form and whether it is a shell or a leveraged product, worked
+# out once per directory rather than for all 12,000 rows on every keystroke; and the answers themselves, kept for
+# the directory's day. One search cost 14 to 88 ms of the only worker's time, so a loop of them could hold every
+# other request (BUG-053, Phase 10). Same ranking as before: tests/test_phase10_hardening.py compares the two.
+_PREP: Dict[str, Any] = {"rows": None, "prep": []}
+_ANSWERS: "OrderedDict[tuple, List[Dict[str, Any]]]" = OrderedDict()
+_ANSWERS_MAX = 4096
+_PREP_LOCK = threading.Lock()
+
+
+def _prepared(rows: List[Dict[str, Any]]) -> List[tuple]:
+    with _PREP_LOCK:
+        if _PREP["rows"] is not rows:
+            _PREP["prep"] = [(r["symbol"], r["name"], r["name"].upper(), r["name"].upper().replace(",", " ").split(),
+                              _dashed(r["symbol"]), bool(_LOW_PRIORITY.search(r["name"])), r["etf"]) for r in rows]
+            _PREP["rows"] = rows      # held, so its id cannot be reused by another list
+            _ANSWERS.clear()
+        return _PREP["prep"]
 
 
 def search(query: str, limit: int = 10, _idx: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
@@ -432,7 +497,14 @@ def search(query: str, limit: int = 10, _idx: Optional[Dict[str, Any]] = None) -
     dotted = "{}.{}".format(m.group(1), m.group(2)) if m else None
     idx = _idx if _idx is not None else _rows_today()
     rows = idx.get("rows") or []
+    prep = _prepared(rows)
     volume = _prominence()
+    key = (q, limit, _VOLUME.get("stamp") if volume and volume is _VOLUME.get("volume") else None)
+    with _PREP_LOCK:
+        hit = _ANSWERS.get(key)
+        if hit is not None:
+            _ANSWERS.move_to_end(key)
+            return [dict(r) for r in hit]
     alias_sym = _company_aliases().get(q)
 
     scored: List[tuple] = []
@@ -449,18 +521,16 @@ def search(query: str, limit: int = 10, _idx: Optional[Dict[str, Any]] = None) -
             continue
         scored.append((rank, 0.0, len(sym), sym, {"symbol": sym, "name": inst["name"], "etf": False,
                                                      "kind": inst["kind"], "match": how, "dollar_volume": None}))
-    for row in rows:
-        symbol, name = row["symbol"], row["name"]
-        upper_name = name.upper()
+    for symbol, name, upper_name, words, shown, low, etf in prep:
         if symbol == q or symbol == dotted:
             rank, how = 0, "symbol"
-        elif alias_sym and _dashed(symbol) == alias_sym:
+        elif alias_sym and shown == alias_sym:
             rank, how = 0.5, "alias"
         elif symbol.startswith(q):
             rank, how = 1, "prefix"
         elif upper_name.startswith(q):
             rank, how = 2, "name"
-        elif any(word.startswith(q) for word in upper_name.replace(",", " ").split()):
+        elif any(word.startswith(q) for word in words):
             rank, how = 3, "word"
         elif q in symbol:
             rank, how = 4, "contains"
@@ -477,27 +547,31 @@ def search(query: str, limit: int = 10, _idx: Optional[Dict[str, Any]] = None) -
         # when the symbol belongs to a derivative of the thing being searched for.
         # An exact symbol or a known name is never demoted: "SPY" and "SQQQ" mean those.
         if rank >= 1:
-            if _LOW_PRIORITY.search(name):
+            if low:
                 rank += 2
-            elif row["etf"]:
+            elif etf:
                 # Also a cross-tier demotion. "tes" surfaced two Tesla-linked funds
                 # ahead of Tesla purely because TESL and TEST are symbol prefixes; an
                 # operating company is nearly always the intent.
                 rank += 1
-        shown = _dashed(symbol)
-        scored.append((
-            rank,
-            -volume.get(symbol, 0.0),
-            len(symbol),
-            symbol,
-            {"symbol": shown, "name": name, "etf": row["etf"], "kind": "etf" if row["etf"] else "stock",
-             "match": how, "dollar_volume": volume.get(symbol) or None},
-        ))
+        # the answer's dict is built for the winners only, not for every match
+        scored.append((rank, -volume.get(symbol, 0.0), len(symbol), symbol, (shown, name, etf, how)))
     # No early stop: the directory is alphabetical, so a cap on matches dropped exact
     # one-letter symbols late in the alphabet (T opened Cooper Companies, 2026-10-20).
 
-    scored.sort(key=lambda t: t[:4])
-    return [t[4] for t in scored[:limit]]
+    # nsmallest is documented as sorted(...)[:n], ties included, without sorting thousands of matches for "a"
+    best = heapq.nsmallest(limit, scored, key=lambda t: t[:4])
+    out = [t[4] if isinstance(t[4], dict) else
+           {"symbol": t[4][0], "name": t[4][1], "etf": t[4][2], "kind": "etf" if t[4][2] else "stock",
+            "match": t[4][3], "dollar_volume": volume.get(t[3]) or None} for t in best]
+    with _PREP_LOCK:
+        # kept only while the directory it was ranked on is still the one in use: an answer finished on yesterday's
+        # rows after today's cleared the memo would have been served all day (BUG-188, Phase 11)
+        if _PREP["rows"] is rows:
+            _ANSWERS[key] = [dict(r) for r in out]
+            while len(_ANSWERS) > _ANSWERS_MAX:
+                _ANSWERS.popitem(last=False)
+    return out
 
 
 UNIVERSES = {

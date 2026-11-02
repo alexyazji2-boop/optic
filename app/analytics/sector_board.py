@@ -167,11 +167,10 @@ def _summary(trend: str, bull_above: float, bear_below: float) -> str:
     read is still loading, or when the assistant is switched off entirely.
     """
     if trend == "uptrend":
-        return ("Above prior session high. Bulls want price to hold above "
-                "{:,.2f}.".format(bull_above))
+        # The level itself, not what "bulls want" (advice policy, 2026-10-29)
+        return ("Above prior session high of {:,.2f}.".format(bull_above))
     if trend == "downtrend":
-        return ("Below prior session low. Bears want price to stay under "
-                "{:,.2f}.".format(bear_below))
+        return ("Below prior session low of {:,.2f}.".format(bear_below))
     return "Inside prior session range ({:,.2f} – {:,.2f}).".format(bear_below, bull_above)
 
 

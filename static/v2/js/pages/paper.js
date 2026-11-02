@@ -14,6 +14,7 @@ import { mountCharts } from '../ui/chart.js';
 import { provideContext } from '../ui/milo.js';
 import { sectionHead } from './tabs.js';
 import { etStamp } from '../core/marketTime.js';
+import { poll } from '../core/poll.js';
 import * as J from '../core/journal.js';
 import * as RP from './paper-replay.js';
 import { hrefFor } from '../nav.js';
@@ -60,7 +61,7 @@ export function health(open, marks, today = etToday()) {
 
 /* ---------------- state ---------------- */
 let book = { open: [], closed: [] }, ticket = blankTicket(), chain = null, chainFor = '', chainState = 'idle', chainErr = '';
-let markedAt = null, marks = {}, marking = false, markFailed = false, armed = false, note = '', reads = {}, live = true, mainEl = null, health0 = null, fromDraft = '';
+let markedAt = null, marks = {}, marking = false, markFailed = false, armed = false, note = '', reads = {}, live = true, mainEl = null, health0 = null, fromDraft = '', leftOut = '', remark = null;
 function blankTicket() { return { ticker: '', instrument: 'shares', direction: 'long', qty: '', entry: '', stop: '', target: '', thesis: '', expiry: '', strike: '', optionType: 'call',
   // the journal's plan (core/journal.js): frozen on the trade when it opens
   setup: 'other', evidence: [{ text: '', family: 'trend' }, { text: '', family: 'momentum' }], against: '', catalyst: '', catalyst_date: '', hold_through: false, trigger: '', invalidation: '', hold_days: '', entry_note: '', source: '' }; }
@@ -149,7 +150,7 @@ function ticketForm() {
   const prompt = !t.ticker ? 'Type a symbol above' : chainState === 'failed' ? `Could not read ${s}'s chain` : chainState === 'empty' ? `${s} has no listed options` : `Reading ${s}'s chain…`;
   return html`<section class="section ${book.open.length ? '' : 'first'}" aria-labelledby="pt-h"><h2 class="t-h2" id="pt-h">Open a trade</h2>
     <form class="pt-form" data-v2-pt-form novalidate>
-      <div class="pt-row"><div class="pt-f pt-sym"><label class="t-label" for="pt-ticker">Symbol</label><span class="field"><input id="pt-ticker" name="ticker" value="${t.ticker}" placeholder="NVDA" maxlength="12" spellcheck="false" autocomplete="off" autocapitalize="characters"></span></div>
+      <div class="pt-row"><div class="pt-f pt-sym"><label class="t-label" for="pt-ticker">Symbol</label><span class="field"><input id="pt-ticker" name="ticker" value="${t.ticker}" placeholder="NVDA" data-v2-ta maxlength="40" spellcheck="false" autocomplete="off" autocapitalize="characters"></span></div>
         <div class="pt-f"><span class="t-label" id="pt-dir">Direction</span><div class="seg" role="group" aria-labelledby="pt-dir"><button type="button" data-v2-pt-dir="long" aria-pressed="${t.direction === 'long'}">Long</button><button type="button" data-v2-pt-dir="short" aria-pressed="${t.direction === 'short'}">Short</button></div></div>
         <div class="pt-f"><span class="t-label" id="pt-inst">Instrument</span><div class="seg" role="group" aria-labelledby="pt-inst"><button type="button" data-v2-pt-inst="shares" aria-pressed="${!isOpt}">Shares</button><button type="button" data-v2-pt-inst="option" aria-pressed="${isOpt}">Option</button></div></div></div>
       ${isOpt ? html`<div class="pt-row"><div class="pt-f"><span class="t-label" id="pt-ot">Call or put</span><div class="seg" role="group" aria-labelledby="pt-ot"><button type="button" data-v2-pt-ot="call" aria-pressed="${t.optionType === 'call'}">Call</button><button type="button" data-v2-pt-ot="put" aria-pressed="${t.optionType === 'put'}">Put</button></div></div>
@@ -163,7 +164,7 @@ function ticketForm() {
         <label class="pt-f"><span class="t-label">Target <span class="t-muted">(optional)</span></span><span class="field"><input name="target" type="number" min="0" step="any" inputmode="decimal" value="${t.target}"></span></label></div>
       <label class="pt-f"><span class="t-label">Why, and what would prove you wrong</span><span class="field"><input name="thesis" maxlength="600" value="${t.thesis}" placeholder="Held the 200-day and volume came in"></span></label>
       ${planFold()}
-      ${s ? (read ? html`<p class="pt-read">Optic reads ${s} as <b class="${read.stance === 'bullish' ? 'up' : read.stance === 'bearish' ? 'down' : ''}">${read.stance}</b>${read.conviction ? `, ${read.conviction} conviction` : ''}. ${ag === null ? 'Neither with nor against you.' : ag ? 'That agrees with this trade.' : 'That is against this trade.'} <span class="t-muted">Recorded on the trade, and scored separately below.</span></p>`
+      ${s ? (read ? html`<p class="pt-read">Optic reads ${s} as <b class="${read.stance === 'bullish' ? 'up' : read.stance === 'bearish' ? 'down' : ''}">${read.stance}</b>${read.conviction ? `, ${read.conviction} conviction` : ''}. ${ag === null ? 'No direction to compare with this practice trade.' : ag ? 'The same direction as this practice trade.' : 'The opposite direction to this practice trade.'} <span class="t-muted">A model reading of past data, not a forecast; recorded on the trade and scored separately below.</span></p>`
         : html`<p class="pt-read">Optic has no read on ${s} loaded. <button type="button" class="textlink" data-v2-pt-read="${s}">Load it</button> and this trade will record what the terminal thought at the moment you opened it.</p>`) : ''}
       <div aria-live="polite" data-v2-pt-preview>${preview()}</div>
       <div class="cluster"><button type="submit" class="btn btn-primary">Open the trade</button><button type="button" class="btn" data-v2-pt-clear>Clear</button></div>
@@ -196,7 +197,7 @@ function openTable() {
           <td class="pt-src">${m.mark_source ? m.mark_source : html`<span class="t-muted">${m.reason || (marking ? 'pricing…' : 'not marked')}</span>`}</td><td class="${cls}">${isNum(pnl) ? money2(pnl) : 'n/a'}</td><td class="${cls}">${rText(r)}</td>
           <td>${p.read ? html`<span class="${ag === null ? 't-muted' : ag ? 'up' : 'down'}" title="${p.read.summary || ''}">${p.read.stance}${ag === null ? '' : ag ? ', with' : ', against'}</span>` : html`<span class="t-muted">n/a</span>`}</td>
           <td><button type="button" class="btn btn-sm" data-v2-pt-close="${p.id}" ${isNum(m.mark_price) ? '' : 'disabled'} title="Close at the current mark" aria-label="Close ${posLabel(p)} at the current mark">Close</button></td></tr>`; })}</tbody></table></div>
-      <p class="asof">${markedAt ? `Marks taken ${etStamp(markedAt)}; a mark is a quote, delayed about 15 minutes in session and the last close outside it. ` : ''}Closing takes the current mark: the last trade for shares, the chain's mid for an option, or a model's estimate when the contract has no quote. A real fill would be at the bid or the ask.</p>`
+      <p class="asof">${leftOut ? `Not everything was priced: ${leftOut} ` : ''}${markedAt ? `Marks taken ${etStamp(markedAt)}; a mark is a quote, delayed up to 15 minutes in session and the last close outside it. ` : ''}Closing takes the current mark: the last trade for shares, the chain's mid for an option, or a model's estimate when the contract has no quote. A real fill would be at the bid or the ask.</p>`
       : html`<p class="quiet">No open positions. The ticket above opens one.</p>`}${o.length ? html`<div class="pt-revs">${o.map(planEditRow)}</div>` : ''}</section>`;
 }
 
@@ -283,7 +284,15 @@ function paint() {
 async function mark() {
   if (marking || !book.open.length) return;
   marking = true; markFailed = false; paint();
-  try { const out = await api.post('/api/paper/mark', { positions: book.open }, { timeout: 60000 }); marks = {}; markedAt = out.marked_at || new Date().toISOString(); (out.marks || []).forEach((m) => { marks[m.id] = m; }); }
+  try {
+    const out = await api.post('/api/paper/mark', { positions: book.open }, { timeout: 60000 }); marks = {}; markedAt = out.marked_at || new Date().toISOString(); (out.marks || []).forEach((m) => { marks[m.id] = m; });
+    // what the server left out, said: it priced at most max_positions and skipped any it could not read, and the page
+    // drew the rest as if that were the whole book (BUG-073, Phase 10)
+    const why = [];
+    if (out.capped) why.push(`only the first ${out.max_positions} positions are priced`);
+    if (out.dropped && !out.capped) why.push(`${plural(out.dropped, 'position')} could not be read and ${out.dropped === 1 ? 'is' : 'are'} left out`);
+    leftOut = why.length ? `${why.join('; ')}.` : '';
+  }
   catch (e) { markFailed = true; note = `Could not price the book just now (${api.explain(e, 'The pricing')}).`; }
   marking = false; paint();
 }
@@ -339,6 +348,13 @@ export async function render(main, route) {
   provideContext(() => ({ view: 'paper', reader_holdings: book.open.slice(0, 30).map((p) => ({ ticker: p.ticker, instrument: p.instrument, direction: p.direction, qty: p.qty, entry_price: p.entry_price, stop: p.stop, pnl: (marks[p.id] || {}).pnl })), journal: J.forMilo(book.closed) }));
   if (fromDraft && ticket.instrument === 'option' && ticket.ticker) loadChain(ticket.ticker);
   api.get('/api/health', { ttl: 60000 }).then((h) => { health0 = h; paint(); }, () => {});
+  // marked again while the page is open, every two minutes in the trading day and ten outside it, paused while hidden:
+  // they were taken on load and after a trade only (BUG-073)
+  if (remark) remark.stop();
+  // not while the reader is typing on the page: a re-mark redraws it, which took text not yet saved and moved the focus
+  // into the ticket's field of the same name (BUG-182, Phase 11); the next round marks it
+  const editing = () => { const a = document.activeElement; return !!a && !!mainEl && mainEl.contains(a) && (/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName) || a.isContentEditable); };
+  remark = poll(async (current) => { if (live && current() && book.open.length && !marking && !editing()) await mark(); }, { every: 120000, closed: 600000 });
   main.addEventListener('input', (e) => {
     const ev = e.target.dataset.v2PtEvText;
     if (ev !== undefined) { ticket.evidence[Number(ev)].text = e.target.value; return; }
@@ -349,6 +365,8 @@ export async function render(main, route) {
     if (e.target.name === 'ticker') return;
     const pv = mainEl.querySelector('[data-v2-pt-preview]'); if (pv) draw(pv, preview());
   });
+  // a suggestion picked under the symbol box (ui/typeahead.js) is a change of symbol, like typing one and leaving
+  main.addEventListener('v2:ta-pick', (e) => { if (e.target && e.target.name === 'ticker') e.target.dispatchEvent(new Event('change', { bubbles: true })); });
   main.addEventListener('change', (e) => {
     const t = e.target;
     if (t.dataset.v2PtRev) {
@@ -395,6 +413,6 @@ export async function render(main, route) {
   });
   paint(); mark();
 }
-export function dispose() { live = false; RP.dispose(); }
+export function dispose() { live = false; RP.dispose(); if (remark) { remark.stop(); remark = null; } }
 export const retry = RP.retry;
 export function onAuth() { if (live) { loadBook(); marks = {}; paint(); mark(); } }

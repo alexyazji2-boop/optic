@@ -28,7 +28,7 @@ def test_a_marked_book_says_when(monkeypatch):
 
 def test_the_page_says_how_old_its_marks_are_and_what_realised_covers():
     assert "markedAt = out.marked_at" in PAPER and "` at ${etStamp(markedAt)}`" in PAPER
-    assert "Marks taken ${etStamp(markedAt)}; a mark is a quote, delayed about 15 minutes in session" in PAPER
+    assert "Marks taken ${etStamp(markedAt)}; a mark is a quote, delayed up to 15 minutes in session" in PAPER
     assert "all ${done.length} closed" in PAPER and "the table shows the newest 50" in PAPER
 
 

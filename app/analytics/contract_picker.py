@@ -40,15 +40,16 @@ DELTA_LO, DELTA_HI = 0.25, 0.80
 # decay and sensitivity to the stock speed up most.
 EXPIRY_BUFFER_DAYS = 7
 MAX_PICKS = 3
-# Grades a pick may have. "Wide" (over 25% of the mid) and no usable quote are out.
+# Grades a pick may have. "Thin" (the poor grade, such as a spread over 25% of the mid) and no usable quote are out.
 TRADABLE = ("good", "fair")
 # Scenario sizes, stated with the result
 VOL_CRUSH_EVENT = 0.30     # implied volatility falls by 30% of itself after a report held through
 VOL_CRUSH = 0.20           # otherwise a 20% fall in implied volatility
 
-FIT_NOTE = ("The fit score is how well the contract matches your plan (expiry against your holding "
-            "period, cost against your limit, sensitivity to the stock) and how tradable its quote looks. "
-            "It is not a chance of profit.")
+# Said as a screen on the reader's own filters, never as a pick (advice policy, 2026-10-29).
+FIT_NOTE = ("The match score is how closely the contract meets the filters you set (expiry against your "
+            "window, cost against your limit, sensitivity to the stock) and how tradable its quote looks. "
+            "It is not a chance of profit and not a recommendation.")
 MODEL_NOTE = ("Values before expiry are Black-Scholes (or its American approximation for stock options) at "
               "the contract's own implied volatility, the risk-free rate and the dividend yield, valued at the "
               "mid. They are what the model says the contract would be worth, not prices anyone has offered.")
@@ -151,7 +152,7 @@ def _why(row, plan, kind: str) -> Dict[str, str]:
     hold = plan["hold_days"]
     d = abs(row.get("delta") or 0)
     after = row["dte"] - hold
-    fit = ("Costs ${:,.0f} at the ask, inside your ${:,.0f} limit; expires {} days after your planned exit; "
+    fit = ("Costs ${:,.0f} at the ask, inside the ${:,.0f} limit you set; expires {} days after the end of your window; "
            "moves about ${:,.0f} for each $1 in the stock today (delta {:.2f}).".format(
                row["ask"] * 100, plan["max_premium"], after, d * 100, d))
     if d >= 0.6:
@@ -162,7 +163,7 @@ def _why(row, plan, kind: str) -> Dict[str, str]:
     else:
         trade = "Near the money: a balance of cost and sensitivity, and the most time value to lose if the stock stalls."
     if kind == "longer":
-        trade += " The longer expiry costs more but decays more slowly over your holding period."
+        trade += " The longer expiry costs more but decays more slowly over your window."
     return {"fit": fit, "tradeoff": trade}
 
 
@@ -226,17 +227,18 @@ def pick(frames: Dict[str, pd.DataFrame], spot: float, rate: float, div: float, 
         parts = {"expiry_too_soon": "expire too soon for your holding period plus a week",
                  "adjusted": "are adjusted contracts whose deliverable the feed does not give",
                  "no_quote": "have no two-sided quote", "wide_spread": "have a spread wider than 25% of the mid",
-                 "over_budget": "cost more than your limit at the ask",
+                 "over_budget": "cost more than the limit you set at the ask",
                  "delta": "sit outside a 0.25 to 0.80 delta",
-                 "event": "would be held through the report on {} that your plan exits before".format(earnings)}
-        why_none = "None of the {} {}s considered fits: {}.".format(
+                 "event": "would be held through the report on {}, which your window ends before".format(earnings)}
+        why_none = "None of the {} {}s considered matches: {}.".format(
             considered, side, "; ".join("{} {}".format(n, parts[k]) for k, n in reasons.items() if n) or "none were listed")
     # The one reason a reader can act on straight away, said first: the plan and the calendar disagree
     conflict = None
     if event_in_hold and not plan.get("through_event"):
         before = (ed - today).days - 1
-        conflict = ("The {} earnings report falls inside your {}-day hold. Either say you mean to hold through "
-                    "it, or plan a hold of {} or fewer.".format(
+        conflict = ("The {} earnings report falls inside the {}-day window you set. Tick the box for holding "
+                    "through the next report to include contracts held across it, or choose a window of {} or "
+                    "fewer.".format(
                         ed.isoformat(), hold, "{} days".format(before) if before >= 1 else "less than a day"))
     return {
         "available": True, "side": side, "plan": plan, "spot": _f(spot),
@@ -244,13 +246,13 @@ def pick(frames: Dict[str, pd.DataFrame], spot: float, rate: float, div: float, 
         # No date from the feed is not "no report": say it was not checked (seen 2026-10-22, when Yahoo
         # answered the chain but not the calendar and AAPL's Nov 2 report went unflagged)
         "earnings_note": None if earnings else ("The feed gave no next earnings date just now, so whether a report "
-                                                "falls inside your hold or before an expiry was not checked."),
+                                                "falls inside your window or before an expiry was not checked."),
         "considered": considered, "eligible": len(out), "excluded": reasons,
         "picks": picks, "why_none": why_none, "conflict": conflict,
-        "rules": ("Calls for a rising view, puts for a falling one; an expiry at least {} days after your planned "
-                  "exit; a two-sided quote with a spread within 25% of the mid; a cost at the ask within your "
-                  "limit; a delta between {:.2f} and {:.2f}; standard 100-share contracts only; and, if your plan "
-                  "exits before the next report, no holding period that contains it.".format(
+        "rules": ("Calls when screening for a rise, puts for a fall; an expiry at least {} days after the end of your "
+                  "window; a two-sided quote with a spread within 25% of the mid; a cost at the ask within the limit "
+                  "you set; a delta between {:.2f} and {:.2f}; standard 100-share contracts only; and, if your window "
+                  "ends before the next report, no contract held across it.".format(
                       EXPIRY_BUFFER_DAYS, DELTA_LO, DELTA_HI)),
         "fit_note": FIT_NOTE, "model_note": MODEL_NOTE, "fill_note": NOT_A_FILL, "oi_note": OI_CAVEAT,
     }

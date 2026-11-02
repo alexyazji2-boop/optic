@@ -30,6 +30,7 @@ import threading
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 from zoneinfo import ZoneInfo
+from .. import public_errors
 
 ET = ZoneInfo("America/New_York")
 DB_PATH = os.path.join(os.environ.get("TRACKER_DATA_DIR", "data"), "research_forecasts.db")
@@ -121,7 +122,7 @@ def save(ticker: str, pre: Dict[str, Any], method_version: str, policy_version: 
                 return {"saved": False, "reason": "duplicate"}
             return {"saved": True, "id": cur.lastrowid, "created_at": row[4]}
     except sqlite3.Error as exc:
-        return {"saved": False, "reason": "storage: {}".format(exc)}
+        return {"saved": False, "reason": "storage: {}".format(public_errors.public(exc))}
 
 
 def _row(r: sqlite3.Row) -> Dict[str, Any]:

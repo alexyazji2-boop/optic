@@ -33,6 +33,9 @@ export const SOURCES = {
   desk_edition: ['Optic Desk', 'brief'], desk_section: ['Optic Desk', 'brief'], research: ['Sources Milo read', 'sources'],
   retrieved: ['Data Milo retrieved', 'sources'], chart_levels: ['Levels', 'chart'], track_record: ['Track record', 'swing'],
   brokerage_portfolio: ['Your brokerage', 'brokerage'],
+  // a figure for a symbol the server loaded because the question named it: the chip opens the list of what was loaded
+  // (post-demo Phase 08; there was no key for it, so Milo tagged it `quote`, the page's own symbol)
+  auto_loaded: ['Loaded for your question', 'sources'],
 };
 const SYMBOL_VIEWS = { overview: '', chart: 'chart', swing: 'options', long: 'investing', earnings: 'earnings', news: 'news' };
 const PLAIN_VIEWS = { market: '#/macro', brief: '#/read', indices: '#/indices', compare: '#/compare', tracker: '#/portfolio', paper: '#/paper', watchlist: '#/watchlist', brokerage: '#/brokerage' };
@@ -41,6 +44,13 @@ const PLAIN_VIEWS = { market: '#/macro', brief: '#/read', indices: '#/indices', 
 export function sourceHref(view, symbol) {
   if (view in SYMBOL_VIEWS) return symbol ? `#/${encodeURIComponent(symbol)}${SYMBOL_VIEWS[view] ? `/${SYMBOL_VIEWS[view]}` : ''}` : null;
   return PLAIN_VIEWS[view] || null;
+}
+
+/** " (host)" after a link whose text does not already name its host; the text is escaped already. */
+export function linkHost(label, url) {
+  const m = /^https?:\/\/([^/?#:]+)/i.exec(url); if (!m) return '';
+  const host = m[1].toLowerCase().replace(/^www\./, '');
+  return String(label).toLowerCase().includes(host) ? '' : ` <span class="milo-host">(${host})</span>`;
 }
 
 /** The classic mdLite: escape first, then a small, safe subset of markdown. Links must be http(s). */
@@ -54,7 +64,8 @@ export function mdLite(text) {
   out = out.replace(/^\s*[-*] (.*)$/gm, '<span class="milo-li">$1</span>');
   // numbered steps keep their numbers (2026-10-20: the redesign renders lists, tables and code as written)
   out = out.replace(/^\s*(\d{1,2})[.)] (.*)$/gm, '<span class="milo-li milo-oli"><span class="milo-n">$1.</span> $2</span>');
-  out = out.replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+  // the destination's host beside each link the model wrote, so a link a page or headline talked it into shows where it goes (SEC-05)
+  out = out.replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, (m, label, url) => `<a href="${url}" target="_blank" rel="noopener">${label}</a>${linkHost(label, url)}`);
   // tables: lines that start and end with "|", the second a separator row ("|---|:---:|"); figures right-aligned
   out = out.replace(/(^|\n)((?:[ \t]*\|[^\n]*\|[ \t]*(?:\n|$)){2,})/g, (m, lead, block) => {
     const rows = block.trim().split('\n').map((l) => l.trim().replace(/^\||\|$/g, '').split('|').map((c) => c.trim()));
@@ -162,18 +173,53 @@ function actionCard(a) {
     <div class="cluster"><button type="button" class="btn btn-sm${persists ? ' btn-primary' : ''}" data-v2-milo-act-go>${persists ? 'Confirm' : 'Go'}</button>${persists ? '<button type="button" class="btn btn-sm" data-v2-milo-act-skip>Not now</button>' : ''}</div>
     <p class="milo-act-result" role="status" aria-live="polite"></p></div>`;
 }
-function actionsIn(htmlText) { let n = 0; return htmlText.replace(ACTION_RE, (m, kind, rest) => { n += 1; return n > 2 ? '' : actionCard(parseAction(kind, actionArgs(rest))); }); }
+function actionsIn(htmlText, seen = {}) { return htmlText.replace(ACTION_RE, (m, kind, rest) => { seen.actions = (seen.actions || 0) + 1; return seen.actions > 2 ? '' : actionCard(parseAction(kind, actionArgs(rest))); }); }
 function chartsIn(htmlText) {
   return htmlText.replace(CHART_RE, (m, sym, span) => `<figure class="milo-chart" data-v2-milo-chart="${sym}" data-span="${span}"><div class="milo-chart-plot"></div><figcaption class="asof">${sym}, daily closes over the last ${CHART_WORDS[span]}</figcaption></figure>`);
 }
 // at most two figures an answer, each a placeholder the panel fills from Optic's data
-function figuresIn(htmlText) { let n = 0; return htmlText.replace(FIG_RE, (m, kind, sym) => { n += 1; return n > 2 ? '' : `<figure class="milo-fig" data-v2-milo-fig="${kind}" data-sym="${sym}" aria-busy="true"><p class="asof">Drawing ${esc(sym)}'s figures from Optic's data</p></figure>`; }); }
-/** A full answer: body markdown with tags drawn, plus its follow-up questions. */
-export function renderAnswer(text, symbol) {
+function figuresIn(htmlText, seen = {}) { return htmlText.replace(FIG_RE, (m, kind, sym) => { seen.figures = (seen.figures || 0) + 1; return seen.figures > 2 ? '' : `<figure class="milo-fig" data-v2-milo-fig="${kind}" data-sym="${sym}" aria-busy="true"><p class="asof">Drawing ${esc(sym)}'s figures from Optic's data</p></figure>`; }); }
+/** A full answer: body markdown with tags drawn, plus its follow-up questions. `seen` carries the count of action
+ *  cards and figures across the pieces of one answer drawn in turn (the answer still arriving), so the limit of two of
+ *  each is the answer's, as when it is drawn whole. */
+export function renderAnswer(text, symbol, seen = {}) {
   const { body, ups } = splitFollowUps(text);
   // a tag alone in its paragraph becomes the block itself, not a block inside a <p>
   const md = mdLite(body).replace(/<p>\s*(\[\[(?:chart|action|figure) [^\]]*\]\])\s*<\/p>/g, '$1');
-  return { html: sourcesIn(actionsIn(figuresIn(chartsIn(md))), symbol), ups };
+  return { html: sourcesIn(actionsIn(figuresIn(chartsIn(md), seen), seen), symbol), ups };
 }
 /** Text still arriving: drop any tag, complete or half-written, so nothing raw flashes. */
 export function streamingTail(text) { return String(text || '').replace(/\s?\[\[[^\]\n]*\]\]/g, '').replace(/\s?\[\[?[^\]\n]*$/, ''); }
+
+/** The paragraph still arriving, drawn as it will be drawn once finished (post-demo Phase 07; it was plain text, and
+ *  its stars and hashes turned into bold and headings with a jump when it finished). Bold or a code block still open
+ *  is closed for now, so it reads as itself while it comes, and a marker that has only begun (a star, a backtick, a
+ *  heading's hashes) waits for the next characters. */
+export function streamingHTML(text, symbol) {
+  let t = streamingTail(text).replace(/[*`]+$/, '').replace(/(^|\n)#{1,3}$/, '$1');
+  if ((t.match(/```/g) || []).length % 2) t += '\n```';
+  if ((t.replace(/```[\s\S]*?```/g, '').match(/\*\*/g) || []).length % 2) t += '**';
+  return renderAnswer(t, symbol).html;
+}
+
+// a list item: mdLite's own pattern for one takes the blank line above it into the paragraph before
+const LIST_START = /^[ \t]*(?:[-*]|\d{1,2}[.)]) /;
+/** Where the finished part of an answer still arriving ends: after the last blank line at which drawing the answer in
+ *  two pieces gives what drawing it whole gives (post-demo Phase 07), so the finished part is drawn once and never
+ *  again. Not inside a code block or a bold run, not before a list item (mdLite joins a list to the paragraph above
+ *  it), not before a line too short yet to tell, and never into the closing "→" follow-ups, which wait for the end.
+ *  0 when there is no such place yet. */
+export const FOLLOW_AT = /(?:^|\n)(?:→|->) /;
+export function settledEnd(text, followAt = text.search(FOLLOW_AT)) {
+  const upto = followAt >= 0 ? followAt : text.length;
+  for (let i = upto; ;) {
+    const cut = text.lastIndexOf('\n\n', i - 1);
+    if (cut <= 0) return 0;
+    let e = cut; while (text[e] === '\n') e += 1;
+    const before = text.slice(0, cut), next = text.slice(e, upto);
+    const decided = next.length >= 4 || next.includes('\n');
+    if (decided && !LIST_START.test(next) && (before.match(/```/g) || []).length % 2 === 0
+        && (before.replace(/```[\s\S]*?```/g, '').match(/\*\*/g) || []).length % 2 === 0) return e;
+    i = cut;
+  }
+}

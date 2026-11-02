@@ -45,11 +45,14 @@ DB_PATH = os.path.join("data", "alerts.db")
 # not decoration — it is what a delivery layer would filter on, and writing it
 # down now means the rules do not all arrive as equally important later.
 KINDS: Dict[str, Dict[str, str]] = {
+    # "New trade idea" read as a recommendation to every visitor of a public inbox. These are
+    # simulated positions in Optic's own paper book (advice policy, 2026-10-29).
     "idea": {
-        "label": "New trade idea",
+        "label": "Paper book opened a position",
         "urgency": "normal",
-        "why": "A scan opened a position: the composite cleared the book's bar, "
-               "it sized, and it has a stop and a target.",
+        "why": "A scan opened a simulated position in Optic's paper book: the composite cleared the "
+               "book's bar, the book's own rules sized it, and it has a stop and a target. No money "
+               "is involved, and it is not a recommendation to anyone.",
     },
     "closed": {
         "label": "Position closed",
@@ -191,11 +194,9 @@ def from_scan(result: Dict[str, Any]) -> int:
         side = pos.get("direction", "")
         made += raise_alert(
             "idea",
-            "%s. New %s %s" % (tkr, side, instrument),
+            "%s. Paper book opened %s %s" % (tkr, side, instrument),
             ticker=tkr,
-            body=("Composite %s. Entry %s, stop %s, target %s. Book: %s."
-                  % (pos.get("composite"), pos.get("entry_price"),
-                     pos.get("stop"), pos.get("target"), pos.get("book"))),
+            body=_opened_body(pos),
             payload=pos,
             # One per position id, so re-running a scan cannot duplicate it.
             dedupe_key="idea:%s:%s:%s:%s" % (tkr, instrument, pos.get("book"),
@@ -217,6 +218,22 @@ def from_scan(result: Dict[str, Any]) -> int:
         ) and 1 or 0
 
     return made
+
+
+def _opened_body(pos: Dict[str, Any]) -> str:
+    """What the paper book did, said as a simulation, from the parts that exist (a missing
+    field read "Composite None" before)."""
+    book = str(pos.get("book") or "").strip()
+    out = "A simulated position in Optic's {}paper book, not a recommendation.".format(
+        book.capitalize() + " " if book else "")
+    if pos.get("composite") is not None:
+        out += " Composite %s." % pos["composite"]
+    if pos.get("entry_price") is not None:
+        out += " Opened at %s." % pos["entry_price"]
+    exits = [w % pos[k] for w, k in (("stop %s", "stop"), ("target %s", "target")) if pos.get(k) is not None]
+    if exits:
+        out += " The book's " + " and ".join(exits) + "."
+    return out
 
 
 def _instrument_words(pos: Dict[str, Any]) -> str:

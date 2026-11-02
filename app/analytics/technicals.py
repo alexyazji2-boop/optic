@@ -32,8 +32,12 @@ def rsi(close: pd.Series, length: int = 14) -> pd.Series:
     avg_loss = loss.ewm(alpha=1.0 / length, adjust=False, min_periods=length).mean()
     rs = avg_gain / avg_loss.replace(0.0, np.nan)
     out = 100.0 - (100.0 / (1.0 + rs))
-    # All-gain windows divide by zero -> pin to 100.
-    return out.where(avg_loss > 0, 100.0).where(avg_gain > 0, out.fillna(50.0))
+    # All-gain windows divide by zero -> pin to 100; a window with no move at all reads 50. The first `length` bars
+    # have no average yet and stay empty: they used to read 50, a made-up neutral reading drawn on the chart and
+    # averaged into the signal line (Phase 09).
+    warm = avg_gain.notna() & avg_loss.notna()
+    out = out.where(avg_loss > 0, 100.0).where(avg_gain > 0, out.fillna(50.0))
+    return out.where(warm)
 
 
 def macd(

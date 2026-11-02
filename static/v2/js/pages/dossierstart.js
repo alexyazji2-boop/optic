@@ -6,10 +6,10 @@
 // every symbol box does (ui/typeahead.js); choosing one opens it.
 import { html, raw, render as draw } from '../core/dom.js';
 import * as store from '../core/store.js';
-import * as api from '../core/api.js';
 import { icon } from '../ui/icons.js';
 import { provideContext } from '../ui/milo.js';
 import * as palette from '../ui/palette.js';
+import { resolve, ticket } from '../core/resolve.js';
 import { logoHTML } from '../ui/symbols.js';
 
 const KNOWN = [['AAPL', 'Apple'], ['NVDA', 'NVIDIA'], ['MSFT', 'Microsoft'], ['SPY', 'S&P 500 fund']];
@@ -43,12 +43,11 @@ export async function render(main) {
     e.preventDefault();
     const q = String(f.q.value || '').trim();
     if (!q) { f.q.focus(); return; }
-    // a listed symbol opens its Dossier; anything else (a company's name) goes to the search with it, to choose from
-    const tickerish = /^[A-Za-z0-9.^=-]{1,12}$/.test(q);
-    let hit = null, failed = false;
-    try { const r = await api.get(`/api/search?q=${encodeURIComponent(q)}&limit=5`, { ttl: 300000, timeout: 8000 }); hit = ((r && r.results) || []).find((x) => String(x.symbol).toUpperCase() === q.toUpperCase()) || null; } catch (err) { failed = true; }
-    if (hit || (failed && tickerish)) location.hash = `#/${encodeURIComponent(q.toUpperCase())}`;
-    else palette.open(f.q, { seed: q });
+    // the one resolver for typed text (core/resolve.js): a listing opens its page, an index its instrument page;
+    // anything else goes to the search with the text, to choose from. Nothing moves the reader once they have left.
+    const t = ticket(), r = await resolve(q);
+    if (!t.stillHere()) return;
+    if (r.hit) t.go(r.hit.href); else palette.open(f.q, { seed: q });
   });
   const input = main.querySelector('[data-v2-ds-form] input'); if (input && !matchMedia('(pointer: coarse)').matches) input.focus({ preventScroll: true });
 }

@@ -56,7 +56,9 @@ def no_model_calls(monkeypatch):
     the moment it was topped up, `pytest` would have started billing. What is
     under test is the gate, not the model behind it.
     """
-    def fake_stream(*args, **kwargs):
+    # an async generator, as ai.stream_chat is: the chat route reads it with `async for` since it says its first step
+    # before the context is gathered (post-demo Phase 07)
+    async def fake_stream(*args, **kwargs):
         yield "data: stub\n\n"
 
     monkeypatch.setattr(main.ai, "stream_chat", fake_stream)

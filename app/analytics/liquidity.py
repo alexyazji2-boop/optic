@@ -32,7 +32,9 @@ DEFAULTS = {
 }
 
 GRADES = ("good", "fair", "poor", "not_tradable")
-LABELS = {"good": "Tight", "fair": "Fair", "poor": "Wide", "not_tradable": "No usable quote"}
+# Words for the whole grade, spread and activity together (Phase 04, BUG-010): "Tight 3.2%" beside "Fair 0.3%" read as a
+# claim about the spread, when a thin open interest had lowered the second. The spread itself is shown beside the word.
+LABELS = {"good": "Liquid", "fair": "Fair", "poor": "Thin", "not_tradable": "No usable quote"}
 
 
 def grade_row(row: Dict[str, Any], th: Optional[Dict[str, float]] = None) -> Dict[str, Any]:

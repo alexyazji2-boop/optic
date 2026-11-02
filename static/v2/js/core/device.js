@@ -41,6 +41,7 @@ export const PERSONAL_KEYS = [
   'optic.v2.picker.v1',
   'optic.v2.replay.v1',
   'optic.v2.paper.draft.v1',
+  'optic.knowledge.pending.v1',
   'optic.writeToken',
   'optic.auth.passkeyOffered',
 ];
@@ -122,6 +123,9 @@ export function guestThingsHere() {
   });
   return found;
 }
+
+/** Whether a guest's things are still waiting for the reader's answer. */
+export const askIsPending = () => !!askPending;
 
 /** The guest's things become the account's: they stay where they are. */
 export function bringGuestThings() {

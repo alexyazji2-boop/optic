@@ -1,182 +1,220 @@
-"""Knowledge modes: how much financial fluency Optic should assume.
+"""Knowledge levels: how much financial fluency Optic assumes when it explains.
 
-**One control, three axes.** The same setting moves the language Pulse writes
-in, how many panels a view renders, and whether a term is explained where it
-appears. Those were three separate things before this module and none of them
-used the same vocabulary:
+**Five levels, one preference (post-demo overhaul, Phase 05, 2026-10-29).** The
+owner's directive names them: New to Markets, Beginner, Intermediate, Advanced
+and Expert, five positions on one slider. The reader's choice is one value:
+`optic.knowledge.v1` in the browser, and `user_preferences.knowledge_level` for a
+signed-in reader (app/auth/store.py). Both apps and every page read that value.
 
-* `uiMode` was Pro / Simple and switched *panels* only.
-* `PERSONAS` held six lenses, one of which ("Straight to it") was not a lens at
-  all but a register control, so picking it fought whatever `uiMode` said.
-* The glossary explained terms on hover regardless of whether the reader needed
-  it, which is the right default for nobody in particular.
+**The level changes the words, never the facts.** It decides vocabulary, how
+much is explained, and how dense an answer is. It must not change a figure, a
+calculation, a source, a caveat, a disclosure, whether missing data is said, or
+whether the advice policy applies (app/ai_policy.py). Every style instruction
+below ends with the same INVARIANT, appended in one place (`prompt_for`), so no
+level can be written without it. A level that changed the arithmetic would be a
+way of getting a friendlier answer by claiming to be a beginner.
 
-A lens and a level are different questions. "Whose judgement do I want" is a
-lens; "how much do I already know" is a level, and the level is the one that
-should decide how everything is worded. So the registers moved here and the
-lenses stayed where they were.
+**One copy of the styles.** This module is the only place the five styles are
+written. Milo, deep research and the written portfolio briefing take their
+level block from `prompt_for`; no service keeps its own five prompts
+(directive 05, section 5).
 
-**The data never changes, only its presentation.** A mode may hide a panel and
-may simplify a sentence. It must not round a number, drop a caveat, or withhold
-a figure that was measured: every panel remains reachable, and the levels are
-about what is shown *first*. A mode that changed the arithmetic would be a way
-of getting a friendlier answer by claiming to be a beginner.
+**What changed in Phase 05.** The ladder had five modes, Simple, Financially
+Literate, Advanced, Professional and Adaptive, and the labels were chosen to
+describe the explanation rather than the reader. The owner's directive asks for
+the five names above, so they replace those labels (DECISIONS D-026). Adaptive,
+which judged depth from each question, is not one of the five positions; a
+stored "adaptive" reads as Intermediate, where its layout already sat, and the
+reader's chosen level is now always the one used (D-027). Old ids keep working
+through LEGACY, because they are stored in readers' browsers and sent by any
+page loaded before this change.
 
-**Levels, not tiers of customer.** The labels say what the reader gets, never
-what the product thinks of them: "Simple" describes the explanation, where
-"Beginner" would describe the person. Nothing in the interface calls anybody a
-novice, and nothing is locked.
-
-**Adaptive is about the answer, not the layout.** It lets Pulse judge the depth
-of a reply from the question asked, which is a thing a question can support. It
-does not guess at panel density, because a reader who has not asked anything yet
-has given nothing to infer from, so it renders at Financially Literate and says
-so rather than picking silently.
+**Density is not here.** What a page shows is the separate Simple or Advanced
+setting (static/v2/js/core/prefs.js `density`, D-019). The `level` integers below
+are Classic's panel ladder only, kept so Classic's layouts do not move.
 """
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
-# The density ladder. A panel carries the lowest level at which it appears, so
-# the comparison is one integer and a new mode does not mean re-tagging panels.
+# Classic's panel ladder (static/components/knowledge.js reads these through the
+# catalogue and keeps a copy for its first paint). A panel carries the lowest
+# rung it appears at. New to Markets and Beginner share the first rung, so the
+# two levels that replace "Simple" render Classic exactly as Simple did.
 LEVEL_SIMPLE = 0
 LEVEL_LITERATE = 1
 LEVEL_ADVANCED = 2
 LEVEL_PROFESSIONAL = 3
 
-# What "explain a term where it appears" does per mode.
-#   inline     the definition is shown, not hidden behind a hover
-#   on_demand  the term is marked and explains itself when asked
+# What "explain a term where it appears" does per level, for rule-written text:
+#   inline     the definition is shown with the term, not behind a press
+#   on_demand  the term is marked and explains itself when pressed
 #   off        no marks; the reader knows the vocabulary
 EXPLAIN_INLINE = "inline"
 EXPLAIN_ON_DEMAND = "on_demand"
 EXPLAIN_OFF = "off"
 
-DEFAULT_MODE = "literate"
+DEFAULT_MODE = "intermediate"
+
+# Ids before Phase 05, as stored in browsers and sent by pages loaded before it.
+LEGACY = {
+    "simple": "new",
+    "literate": "intermediate",
+    "professional": "expert",
+    "adaptive": "intermediate",
+}
+
+# Appended to every level's instruction, so no level is ever written without it.
+INVARIANT = (
+    "Whatever this level asks of the wording, it changes only the words, how much "
+    "is explained and how densely; nothing else. Every figure, calculation and "
+    "date is the same at every level and comes from the CONTEXT as given. Every "
+    "source is named the same way. Every caveat, every risk, every note that data "
+    "is delayed, estimated or inferred, and every statement that something is "
+    "missing or unknown stays in, in words this reader can follow. The advice "
+    "policy in these instructions applies unchanged. A simpler level never makes the facts "
+    "softer, and a denser one never drops a caveat."
+)
+
+# The one fact every level's preview explains, so the slider shows the same
+# thing said five ways. An illustration, labelled as one where it is shown.
+PREVIEW_FACT = "A company whose shares trade at 30 times its earnings over the past year."
 
 MODES: Dict[str, Dict[str, Any]] = {
-    "simple": {
-        "label": "Simple",
+    "new": {
+        "label": "New to Markets",
+        "position": 1,
         "glyph": "\U0001F331",
-        "tagline": "Explain it simply.",
-        "blurb": "New to investing. Plain words, and every term explained where "
-                 "it appears.",
+        "tagline": "Explain it in everyday words.",
+        "blurb": "Everyday English. Every financial term is explained where it appears.",
         "level": LEVEL_SIMPLE,
         "explain": EXPLAIN_INLINE,
+        "preview": ("People are paying $30 for every $1 of profit the company made last year. "
+                    "That figure, called the price-to-earnings ratio, is high next to many "
+                    "companies, which usually means buyers expect the profits to grow."),
         "prompt": (
-            "Write for somebody new to investing. Short sentences and everyday "
-            "words. Where a term is unavoidable, define it in the same breath "
-            "you use it: \"the price-to-earnings ratio (what you pay for each "
-            "dollar the company earns)\". Use a comparison to something outside "
-            "markets where one genuinely fits, and skip it where it does not. "
-            "After each point, answer the question they have not asked: why "
-            "does this matter to somebody holding this stock. "
-            "Every factual constraint above still applies without exception. "
-            "Cite the same CONTEXT figures, keep every caveat about delayed "
-            "data and inferred flow, and never state a number you do not have. "
-            "Simple means the words are plain, not that the facts are softer: "
-            "if the honest answer is that the signals disagree and there is no "
-            "edge here, say exactly that in plain words rather than reaching "
-            "for something more comfortable."
+            "Write for somebody new to markets. Use basic everyday English and short "
+            "sentences. Define every financial term in the same breath you use it: "
+            "\"the price-to-earnings ratio (what you pay for each dollar the company "
+            "earns)\". Use a comparison to something outside markets where one "
+            "genuinely fits, and skip it where it does not. After each point, answer "
+            "the question they have not asked: why does this matter to somebody "
+            "holding this stock. Cite the same CONTEXT figures, keep every caveat "
+            "about delayed data and inferred flow, and never state a number you do "
+            "not have. Plain words, not softer facts: if the honest answer is that "
+            "the signals disagree and there is no edge here, say exactly that in "
+            "plain words rather than reaching for something more comfortable."
         ),
     },
-    "literate": {
-        "label": "Financially Literate",
+    "beginner": {
+        "label": "Beginner",
+        "position": 2,
+        "glyph": "\U0001F33F",
+        "tagline": "Explain it simply.",
+        "blurb": "Simple explanations that introduce the essential terms as they come up.",
+        "level": LEVEL_SIMPLE,
+        "explain": EXPLAIN_ON_DEMAND,
+        "preview": ("The shares trade at 30 times last year's earnings, a price-to-earnings "
+                    "ratio (P/E) of 30. A high P/E means buyers expect earnings to grow."),
+        "prompt": (
+            "Write for a beginner: somebody who knows what a stock and a percentage "
+            "move are, and not much more. Use simple explanations and introduce the "
+            "essential terms rather than avoiding them: use the standard name "
+            "(earnings per share, the price-to-earnings ratio, volatility) and explain "
+            "it in a few words the first time it appears. Use only the terms the "
+            "answer needs, one idea to a sentence, and say why each point matters."
+        ),
+    },
+    "intermediate": {
+        "label": "Intermediate",
+        "position": 3,
         "glyph": "\U0001F4CA",
         "tagline": "Give me the important context.",
-        "blurb": "Assumes the basics: stocks, earnings, percentages, why rates "
-                 "matter. Explains the rest.",
+        "blurb": "Ordinary financial terms, with context for the specialist ones.",
         "level": LEVEL_LITERATE,
         "explain": EXPLAIN_ON_DEMAND,
+        "preview": ("At 30 times trailing earnings the stock is priced for growth: the "
+                    "multiple holds only if earnings keep rising."),
         "prompt": (
-            "Assume the reader follows markets and knows the basics: what a "
-            "stock is, how earnings work, what a percentage move means, roughly "
-            "why interest rates matter. Do not explain those. Use ordinary "
-            "financial vocabulary and gloss the specialist end of it in a "
-            "clause as you go, which is what the base instructions already ask "
-            "for. Assume no professional training: implied volatility, dealer "
-            "gamma and factor exposure each need a few words the first time "
-            "they appear in an answer."
+            "Assume the reader follows markets and knows the basics: what a stock "
+            "is, how earnings work, what a percentage move means, roughly why "
+            "interest rates matter. Do not explain those. Use balanced financial "
+            "vocabulary and gloss the specialist end of it in a clause as you go, "
+            "which is what the base instructions already ask for. Assume no "
+            "professional training: implied volatility, dealer gamma and factor "
+            "exposure each need a few words the first time they appear in an answer."
         ),
     },
     "advanced": {
         "label": "Advanced",
+        "position": 4,
         "glyph": "\U0001F4C8",
         "tagline": "Give me the full analysis.",
-        "blurb": "Comfortable with valuation, technicals and macro. Skip the "
-                 "definitions.",
+        "blurb": "Professional language and deeper reasoning. Standard terms are not defined.",
         "level": LEVEL_ADVANCED,
         "explain": EXPLAIN_ON_DEMAND,
+        "preview": ("30x trailing EPS is a premium multiple. It needs sustained earnings "
+                    "growth, and a miss would compress it."),
         "prompt": (
-            "Assume the reader is fluent: valuation multiples, technical "
-            "indicators, the rate and dollar relationships, how positioning "
-            "feeds back into price. Do not define standard terms, and do not "
-            "prefix an explanation with what it is about to explain. Spend the "
-            "words you save on the reasoning instead: which readings disagree "
-            "with each other, what the base rate is, and what would have to "
-            "happen for the read to be wrong."
+            "Assume the reader is fluent: valuation multiples, technical indicators, "
+            "the rate and dollar relationships, how positioning feeds back into "
+            "price. Use professional technical language. Do not define standard "
+            "terms, and do not prefix an explanation with what it is about to "
+            "explain. Spend the words you save on deeper analytical reasoning "
+            "instead: which readings disagree with each other, what the base rate "
+            "is, and what would have to happen for the read to be wrong."
         ),
     },
-    "professional": {
-        "label": "Professional",
+    "expert": {
+        "label": "Expert",
+        "position": 5,
         "glyph": "\U0001F52C",
         "tagline": "Give me the terminal view.",
-        "blurb": "Maximum density. Raw readings, market structure, no "
-                 "explanation.",
+        "blurb": "Concise research language and advanced metrics. No definitions.",
         "level": LEVEL_PROFESSIONAL,
         "explain": EXPLAIN_OFF,
+        "preview": "30x TTM P/E: a premium multiple, sensitive to EPS revisions.",
         "prompt": (
-            "Terminal register. Lead with the readings and let them carry the "
-            "argument: levels, greeks, positioning, the distribution a number "
-            "sits in. No definitions and no scene-setting. Where a figure is a "
-            "proxy or an assumption, label it in a word rather than a sentence, "
-            "and keep it labelled: density is not a reason to drop the "
-            "distinction between what was measured and what was inferred, which "
-            "is the one thing this register could quietly lose."
-        ),
-    },
-    "adaptive": {
-        "label": "Adaptive",
-        "glyph": "\U0001F9E0",
-        "tagline": "Judge it from what I ask.",
-        "blurb": "Optic reads the depth from your question. Panels render at "
-                 "Financially Literate.",
-        "level": LEVEL_LITERATE,
-        "explain": EXPLAIN_ON_DEMAND,
-        "prompt": (
-            "Judge the depth from the question itself. \"What is a P/E\" and "
-            "\"is the 31x forward multiple supported by the revenue trajectory\" "
-            "come from readers who need different answers, and the wording of "
-            "the question is real evidence about which one is asking. Match the "
-            "vocabulary the reader used rather than the vocabulary you would "
-            "pick, and where the question carries no signal either way, answer "
-            "as you would for somebody who follows markets and has no "
-            "professional training. Never explain a term the reader has just "
-            "used correctly."
+            "Terminal register: concise, precise financial research language, with "
+            "advanced metrics where they are relevant. Lead with the readings and "
+            "let them carry the argument: levels, greeks, positioning, the "
+            "distribution a number sits in. No definitions and no scene-setting. "
+            "Where a figure is a proxy or an assumption, label it in a word rather "
+            "than a sentence, and keep it labelled: density is not a reason to drop "
+            "the distinction between what was measured and what was inferred, "
+            "which is the one thing this register could quietly lose."
         ),
     },
 }
 
-# The order the selector shows. Not dict order: the ladder is the point, and
-# Adaptive sits at the end because it is a choice not to choose a rung.
-ORDER = ["simple", "literate", "advanced", "professional", "adaptive"]
+# Slider order, New to Markets to Expert.
+ORDER = ["new", "beginner", "intermediate", "advanced", "expert"]
 
 
 def normalise(mode: Optional[str]) -> str:
-    """A known mode id, or the default.
+    """A known level id, or the default.
 
     Never raises and never trusts the input. The value arrives from
-    localStorage, which the reader can edit, and from a query string, which
-    anybody can. An unknown mode has to render *something*, and the something is
-    the recommended default rather than an error page.
-    """
+    localStorage, which the reader can edit, from a query string, which anybody
+    can, and from pages loaded before Phase 05, which send the old ids."""
     key = str(mode or "").strip().lower()
+    key = LEGACY.get(key, key)
     return key if key in MODES else DEFAULT_MODE
+
+
+def known(mode: Optional[str]) -> bool:
+    """Whether a value names a level (an old id counts), for storing it."""
+    key = str(mode or "").strip().lower()
+    return LEGACY.get(key, key) in MODES
 
 
 def level(mode: Optional[str]) -> int:
     return MODES[normalise(mode)]["level"]
+
+
+def label(mode: Optional[str]) -> str:
+    return MODES[normalise(mode)]["label"]
 
 
 def explain_policy(mode: Optional[str]) -> str:
@@ -184,78 +222,49 @@ def explain_policy(mode: Optional[str]) -> str:
 
 
 def prompt_for(mode: Optional[str]) -> str:
-    """The register fragment for Pulse's system prompt."""
-    return MODES[normalise(mode)]["prompt"]
+    """The level's instruction block for a model's system prompt: its style, then the invariant."""
+    return MODES[normalise(mode)]["prompt"] + "\n\n" + INVARIANT
 
 
 def catalogue() -> Dict[str, Any]:
-    """What the selector renders, and what each mode changes.
+    """What the slider renders, and what a level changes and cannot change.
 
-    `changes` is published rather than described in the UI's own copy so the
-    promise and the behaviour come from one place. A selector that claimed to
-    change density while the density table disagreed would be the kind of split
-    nothing reports.
-    """
+    Published rather than written into each page, so the promise and the
+    behaviour come from one place."""
     return {
         "modes": [
             {
                 "id": key,
                 "label": MODES[key]["label"],
+                "position": MODES[key]["position"],
                 "glyph": MODES[key]["glyph"],
                 "tagline": MODES[key]["tagline"],
                 "blurb": MODES[key]["blurb"],
                 "level": MODES[key]["level"],
                 "explain": MODES[key]["explain"],
+                "preview": MODES[key]["preview"],
             }
             for key in ORDER
         ],
         "default": DEFAULT_MODE,
+        "legacy": dict(LEGACY),
+        "preview_fact": PREVIEW_FACT,
         "changes": [
-            "The words Optic writes in, and how much it explains as it goes.",
-            "How many panels a view opens with. Every panel stays reachable.",
-            "Whether a term is defined where it appears or when you ask.",
+            "The words Optic and Milo use, and how much they explain as they go.",
+            "Whether a term is defined where it appears, marked to explain itself, or left plain.",
         ],
         "never_changes": [
-            "The figures. A mode never rounds a number, drops a caveat, or "
-            "withholds something that was measured.",
+            "The figures, the calculations and the sources. A level never rounds a number, "
+            "drops a caveat or a disclosure, hides that something is missing, or changes "
+            "what the advice policy declines.",
         ],
     }
 
 
-def resolve_for_answer(mode: Optional[str], question: str) -> str:
-    """Which register to write an answer in.
+def resolve_for_answer(mode: Optional[str], question: str = "") -> str:
+    """Which level to write an answer at: the reader's own, always.
 
-    Adaptive is the only mode that reads the question, and it is deliberately a
-    coarse read: a question containing "what is" or "explain" from somebody who
-    has not used a specialist term is asking to be taught, and a question that
-    uses the vocabulary correctly is not.
-
-    Kept crude on purpose. A confident classifier that is wrong a quarter of the
-    time is worse than a blunt rule a reader can predict, and Pulse gets the
-    question itself as well, so the model sees whatever this misses.
-
-    `question` must be the reader's own words. It was handed the turn after the
-    CONTEXT JSON had been prepended, so "gamma" in the page data made "is it a
-    buy" an Advanced question (measured 2026-10-12: 7 of 21 eval questions).
-    """
-    key = normalise(mode)
-    if key != "adaptive":
-        return key
-    text = (question or "").strip().lower()
-    if not text:
-        return DEFAULT_MODE
-    teaching = ("what is", "what are", "what does", "explain", "how does",
-                "why does", "in simple terms", "eli5", "beginner", "i'm new",
-                "im new", "new to investing", "new to this", "plain english",
-                "dumb it down", "mean?")
-    if any(text.startswith(p) or (" " + p) in text for p in teaching):
-        # Asking to be taught is not the same as being a beginner, so this
-        # lands on Simple for the wording of one answer and changes nothing
-        # about the reader's chosen mode.
-        return "simple"
-    fluent = ("gamma", "vanna", "charm", "skew", "basis", "term structure",
-              "factor", "duration", "carry", "iv rank", "delta-hedg",
-              "forward multiple", "free cash flow yield")
-    if any(term in text for term in fluent):
-        return "advanced"
-    return DEFAULT_MODE
+    Adaptive used to read the question and pick a level per answer. It is not
+    one of the five positions (D-027), so the reader's chosen level is the one
+    used, and `question` is no longer read. The name is kept for its callers."""
+    return normalise(mode)

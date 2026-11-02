@@ -21,6 +21,9 @@ import { button as miloButton, provideContext } from '../ui/milo.js';
 import { core, header, tabs, isFund, livePrice } from './dossier-frame.js';
 import { etStamp, sessionWord } from '../core/marketTime.js';
 import { historyRatio } from './dossier.js';
+
+// The brief's stance in words that describe the evidence rather than call the stock (advice policy, 2026-10-29).
+const STANCE_WORDS = { 'leaning bullish': 'The evidence leans positive', 'leaning bearish': 'The evidence leans negative', 'two-sided': 'The evidence is two-sided' };
 let lp = null;   // the header's price refresh (dossier-frame livePrice), stopped in dispose()
 
 let D = {}, live = true, mainEl = null;
@@ -121,7 +124,7 @@ function brief(sym) {
           : b.error ? failed('The brief', b.error, { retry: 'brief' })
             : !b.available && b.written === false && b.can_write ? html`<p class="t-muted">${clean(b.reason || '')}</p><button type="button" class="btn" data-v2-brief>Write the pre-earnings brief</button>`
               : !b.available ? html`<p class="${b.refused ? 'stale' : 't-muted'}" role="status">${clean(b.reason || 'No brief right now.')}</p>`
-          : html`<p class="t-label">${capFirst(b.stance || '')}</p><p class="t-h3">${clean(b.headline || '')}</p>${(b.paragraphs || []).map((p) => html`<p>${raw(bolded(p))}</p>`)}${generated(b.written_by ? b : Object.assign({ written_by: 'model' }, b), { at: b.generated_at })}<p class="asof">${clean(b.method || '')} ${clean(b.disclaimer || '')}</p>`}
+          : html`<p class="t-label">${STANCE_WORDS[b.stance] || capFirst(b.stance || '')}</p><p class="t-h3">${clean(b.headline || '')}</p>${(b.paragraphs || []).map((p) => html`<p>${raw(bolded(p))}</p>`)}${generated(b.written_by ? b : Object.assign({ written_by: 'model' }, b), { at: b.generated_at })}<p class="asof">${clean(b.method || '')} ${clean(b.disclaimer || '')}</p>`}
   </section>`;
 }
 

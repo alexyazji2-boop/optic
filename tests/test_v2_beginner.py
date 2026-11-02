@@ -68,7 +68,7 @@ def test_overview_opens_on_what_the_company_does():
     paint = OV[OV.index("function paint(main, sym) {"):]
     assert paint.index("${about(sym)}") < paint.index('section class="section dchart"')
     ab = OV[OV.index("function about(sym) {"):OV.index("/* ---------------- the rest, one step away")]
-    for want in ("What ${name} does", "<dt>${fund ? 'Kind of fund' : 'Industry'}</dt>", "Where its revenue comes from", "US dollars; quotes delayed about 15 minutes", "replace(/^The Company\\b/, name)"):
+    for want in ("What ${name} does", "<dt>${fund ? 'Kind of fund' : 'Industry'}</dt>", "Where its revenue comes from", "US dollars; quotes delayed up to 15 minutes", "replace(/^The Company\\b/, name)"):
         assert want in ab, want
     assert "String(d.data_caveat).split(" in OV, "the chart's footer is the delay, not Greeks and Black-Scholes"
     # A company's four answers are Classic's four questions since 2026-10-25 (owner's screenshots; the owner chose to
@@ -78,7 +78,7 @@ def test_overview_opens_on_what_the_company_does():
     assert "return answerGrid(fundAnswers(sym, trendItem(sym)));" in ans
     assert "${fund ? (D.fwError && D.fvError && D.earnError ? failed('The four answers', D.fwError, { retry: 'dossier' }) : answers(sym)) : OR.fourQuestions(c)}" in OV
     ovr = (JS / "pages/overview-research.js").read_text()
-    assert "This describes the stock, not the business." in ovr and "tile('trade', 'Is there a trade?', value, sw.why" in ovr
+    assert "This describes the stock, not the business." in ovr and "tile('trade', 'Is there a short-term setup?', setupGrade(sw.grade), sw.why" in ovr
 
 
 def test_the_long_term_views_are_told_apart_and_summed_up(tmp_path):
@@ -92,9 +92,9 @@ def test_the_long_term_views_are_told_apart_and_summed_up(tmp_path):
         trend: O.trendFinding(pts, 200),
       }}));
     """)
-    assert got["apple"] == "The business grades A and the long-term price trend is strong (82 of 100), but the price is above its fair value range (valuation stretched). Weighing them, Optic's combined long-term case is neutral."
+    assert got["apple"] == "The business grades A and the long-term price trend is strong (82 of 100), but the price is above its fair value range (valuation stretched). Weighing them, Optic's combined long-term reading: neutral on the long-term rules."
     assert " but " not in got["allGood"] and got["allGood"].startswith("The business grades A")
-    assert got["none"] == "Optic's combined long-term case is neutral."
+    assert got["none"] == "Optic's combined long-term reading: neutral on the long-term rules."
     assert abs(got["trend"]["ch"] - ((249.5 - 123.5) / 123.5 * 100)) < 1e-6 and got["trend"]["span"] == "a year", "a year back: 252 sessions"
     # the summing up leads "Taken together"; the trend score itself is the Optic Score's long-term reading (2026-10-25)
     comb = OV[OV.index("function combined() {"):OV.index("/* ---------------- what changed lately")]
@@ -122,7 +122,9 @@ def test_milo_tells_a_guest_what_needs_an_account():
 
 
 def test_the_level_is_labelled_as_milos():
-    assert "How Milo explains things" in SET and "The pages are the same at every level" in SET
+    assert "How Optic explains things" in SET and "it does not change what a page shows." in SET   # one level for Milo and the pages (Phase 05)
+    # what a page shows is its own setting since Phase 04 (D-019), and says it leaves Milo alone
+    assert "How much each page shows" in SET and "It does not change how Milo explains things." in SET
     assert "every page leads with plain-language summaries and the specialist panels start folded" not in SET, "it never did that"
 
 

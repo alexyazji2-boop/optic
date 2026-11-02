@@ -60,13 +60,16 @@ async function request(method, path, { body, timeout = 20000, signal } = {}) {
   try { window.dispatchEvent(new CustomEvent('optic:reached')); } catch (e) { /* no window in tests */ }
   // v2 closed to this reader (owner-only preview or emergency shutdown): core/build.js offers the classic app
   if (res.headers.get('X-Optic-V2') === 'closed') { try { window.dispatchEvent(new CustomEvent('optic:v2-closed')); } catch (e) { /* no window in tests */ } }
-  let data = null;
+  let data = null, unreadable = false;
   const text = await res.text();
-  try { data = text ? JSON.parse(text) : null; } catch (e) { data = null; }
+  try { data = text ? JSON.parse(text) : null; } catch (e) { data = null; unreadable = true; }
   if (!res.ok) {
     const msg = (data && (data.detail || data.error || data.message)) || res.statusText || 'Request failed';
     throw new ApiError(classify(res.status), res.status, typeof msg === 'string' ? msg : 'Request failed', data);
   }
+  // A 200 whose body is not JSON is a failure, not an empty answer: it resolved null, and a page reading `d.quote`
+  // threw and left its skeletons running (Phase 10 resilience check R8)
+  if (unreadable) throw new ApiError('server', res.status, 'The server sent an answer Optic could not read.');
   return data;
 }
 
@@ -86,21 +89,24 @@ export async function knownSymbol(sym) {
     return q && q.available === true ? true : q && q.unreachable ? null : false;
   } catch (e) { return null; }
 }
-export async function get(path, { ttl = 60000, force = false, onUpdate, timeout } = {}) {
+// `keep(data)` returning false keeps an answer out of the cache (search: a directory outage is not an answer to keep).
+export async function get(path, { ttl = 60000, force = false, onUpdate, timeout, keep } = {}) {
   const hit = cache.get(path);
   const now = Date.now();
   if (hit && hit.data !== undefined && !force) {
     if (now - hit.at < ttl) return hit.data;
     // stale: return it now, refresh in the background
     if (!hit.promise) {
-      hit.promise = request('GET', path, { timeout }).then((d) => { cache.set(path, { at: Date.now(), data: d }); if (onUpdate) onUpdate(d); return d; })
-        .catch(() => { hit.promise = null; });
+      // a refresh refused for want of a session drops the copy: a signed-out reader's answers are not served on
+      // (they were, indefinitely, after a 401; Phase 09 cache audit)
+      hit.promise = request('GET', path, { timeout }).then((d) => { if (keep && !keep(d)) { hit.promise = null; return hit.data; } cache.set(path, { at: Date.now(), data: d }); if (onUpdate) onUpdate(d); return d; })
+        .catch((e) => { hit.promise = null; if (e && (e.status === 401 || e.status === 403)) cache.delete(path); });
     }
     return hit.data;
   }
   if (hit && hit.promise && !force) return hit.promise;
   // An answer that says it is still being built is never cached: the next ask goes to the server.
-  const p = request('GET', path, { timeout }).then((d) => { if (d && d.building) cache.delete(path); else cache.set(path, { at: Date.now(), data: d }); return d; })
+  const p = request('GET', path, { timeout }).then((d) => { if ((d && d.building) || (keep && !keep(d))) cache.delete(path); else cache.set(path, { at: Date.now(), data: d }); return d; })
     .catch((e) => { cache.delete(path); throw e; });
   cache.set(path, { at: 0, data: undefined, promise: p });
   return p;
@@ -126,10 +132,11 @@ export async function settle(map) {
 export function explain(err, what = 'This') {
   if (!err) return '';
   switch (err.kind) {
-    case 'offline': return `${what} needs a connection. Optic will try again when you are back online.`;
+    // said so the verb fits any subject: "The headlines needs a connection" (BUG-199, Phase 11), as notfound's below
+    case 'offline': return `Optic needs a connection for ${what.toLowerCase()}. It will try again when you are back online.`;
     case 'timeout': return `${what} took too long to load. The data provider may be slow right now.`;
     case 'auth': return `Sign in to see ${what.toLowerCase()}.`;
-    case 'forbidden': return `${what} is not available on this account.`;
+    case 'forbidden': return `${what}: not available on this account.`;
     // the server's own sentence when it sent one ("No listed options for 'AAPL'."); "The contracts was not
     // found" read as broken grammar and as a missing page when Yahoo briefly listed no expiries (2026-10-22)
     case 'notfound': return err.message && err.message !== 'Request failed' && !/^not found$/i.test(err.message)

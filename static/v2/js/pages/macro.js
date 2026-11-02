@@ -9,7 +9,7 @@ import { $, html, raw, render as draw } from '../core/dom.js';
 import * as api from '../core/api.js';
 import { num, signed, compact, clean, capFirst, shortDate, isNum, esc, dir } from '../core/format.js';
 import { lineChart, spark, mountCharts } from '../ui/chart.js';
-import { skeleton, empty, failed, how } from '../ui/states.js';
+import { skeleton, empty, failed, how, asOfLine } from '../ui/states.js';
 import { groupedTabs } from '../ui/grouptabs.js';
 import { button as miloButton, provideContext } from '../ui/milo.js';
 import { sectionHead } from './tabs.js';
@@ -17,6 +17,15 @@ import { sectorBoard, sectorReadBlock, loadSectorRead } from './market-shared.js
 import { poll } from '../core/poll.js';
 
 let D = {}, live = true, mainEl = null, tabState = { g: 0, s: {} }, refresh = null;
+// The newest choice wins (BUG-040): a series, map, sector read or currency chosen before the current one, answering
+// later, is dropped instead of drawing over it. Resolves to {data} or {err}, or null when superseded.
+const LATEST = {};
+async function newest(key, make) {
+  const mine = (LATEST[key] = (LATEST[key] || 0) + 1), box = D;
+  let out;
+  try { out = { data: await make() }; } catch (err) { out = { err }; }
+  return live && D === box && mine === LATEST[key] ? out : null;
+}
 const kv = (rows, n = 3) => html`<dl class="kv" style="--kv:${n}">${rows.filter(Boolean).map(([k, v]) => html`<div><dt>${k}</dt><dd>${v}</dd></div>`)}</dl>`;
 const ask = (label, q) => miloButton(label, { ask: q, context: 'Markets, Macro' });
 const pct = (v, dp = 1) => (isNum(v) ? `${num(v, dp)}%` : 'n/a');
@@ -34,8 +43,8 @@ function regimeBlock(m) {
   const x = m.macro || {}, inst = x.instruments || {};
   const facs = (x.factors || []).slice().sort((a, b) => Math.abs(b.contribution) - Math.abs(a.contribution));
   const peak = Math.max(...facs.map((f) => Math.abs(f.contribution)), 1);
-  return html`<section class="section" aria-labelledby="mr-h"><div class="section-head"><div><p class="t-label">Macro regime</p><h2 class="t-display-m" id="mr-h">${capFirst(x.regime || '')}</h2></div>${ask('Ask Milo about the regime', 'What is driving the macro regime right now, and what would change it?')}</div>
-    ${kv([['Risk score', html`<b>${signed(x.risk_score, 1, '')}</b>`], ['3-month to 10-year curve', html`<span class="${x.curve_3m10y < 0 ? 'down' : ''}">${signed(x.curve_3m10y, 2, ' pts')}</span>`], ['VIX', num((inst['^VIX'] || {}).last, 2)]], 3)}
+  return html`<section class="section" aria-labelledby="mr-h"><div class="section-head"><div><p class="t-label">Optic's market score</p><h2 class="t-display-m" id="mr-h">${capFirst(x.regime || '')}</h2></div>${ask('Ask Milo about the market score', 'What is driving Optic\'s market score right now, and what would change it?')}</div>
+    ${kv([['Market score, −100 to +100', html`<b>${signed(x.risk_score, 1, '')}</b>`], ['3-month to 10-year curve', html`<span class="${x.curve_3m10y < 0 ? 'down' : ''}">${signed(x.curve_3m10y, 2, ' pts')}</span>`], ['VIX', num((inst['^VIX'] || {}).last, 2)]], 3)}
     <p>${clean(x.stance || '')}</p><ul class="plain">${(x.notes || []).map((n) => html`<li>${clean(n)}</li>`)}</ul>
     <details class="more-inline"><summary>How the score is built, ${facs.length} terms</summary><ul class="factor-bars">${facs.map((f) => html`<li><span class="fb-l">${f.factor} <small class="t-muted">${clean(f.rule || '')}</small></span><span class="fb-track"><span class="fb-bar ${f.contribution >= 0 ? 'pos' : 'neg'}" style="width:${(Math.abs(f.contribution) / peak) * 50}%"></span></span><span class="fb-v">${signed(f.contribution, 1, '')}</span></li>`)}</ul>
     <p class="asof">${facs.length} terms add to ${signed(x.risk_score, 1, '')}.${x.score_unattributed ? ` ${signed(x.score_unattributed, 1, '')} is not attributed to a term.` : ''}</p></details>
@@ -44,15 +53,18 @@ function regimeBlock(m) {
 function expected(em) {
   if (!em || !isNum(em.implied_pct)) return '';
   return html`<h3>Expected S&amp;P move, from the VIX</h3><p>${clean(em.reading || '')}</p>
-    ${kv([['Options price, as one day', html`±${num(em.implied_pct, 2)}% <small class="t-muted">±${num(em.implied_points, 0)} points, VIX ÷ 16</small>`], ['Its typical day lately', html`±${num(em.realized_pct, 2)}% <small class="t-muted">14-day ATR ${num(em.atr_pct, 2)}% (${num(em.atr14, 0)} points) ÷ 1.6</small>`], ['Priced against typical', isNum(em.ratio) ? html`${num(em.ratio, 2)}× <small class="t-muted">±${num(em.implied_pct, 2)} ÷ ±${num(em.realized_pct, 2)}</small>` : 'n/a']], 3)}
+    ${kv([['Move priced by options, one day', html`±${num(em.implied_pct, 2)}% <small class="t-muted">±${num(em.implied_points, 0)} points, VIX ÷ 16</small>`], ['Typical day lately', html`±${num(em.realized_pct, 2)}% <small class="t-muted">14-day ATR ${num(em.atr_pct, 2)}% (${num(em.atr14, 0)} points) ÷ 1.6</small>`], ['Priced against typical', isNum(em.ratio) ? html`${num(em.ratio, 2)}× <small class="t-muted">±${num(em.implied_pct, 2)} ÷ ±${num(em.realized_pct, 2)}</small>` : 'n/a']], 3)}
     ${how(html`<p>${clean(em.implied_basis || '')} ${clean(em.realized_basis || '')} The ratio divides the first by the second.</p>`)}`;
 }
 
 /* ---------------- tabs ---------------- */
 function breadth() {
+  // its figures come with the macro picture: when that did not load, say so rather than draw two "n/a" (BUG-039)
+  if (D.err || (D.m && D.m.available === false)) return html`<p class="t-muted">Breadth comes with the macro picture above, which did not load. It shows here when that does.</p>`;
+  if (!D.m) return html`<p class="t-muted" role="status">Breadth comes with the macro picture, which is still loading.</p>`;
   const s = (D.m || {}).sectors || {}, b = s.breadth || {}, evc = b.equal_vs_cap || {}, sp = s.suggested_pair;
   return html`${kv([['Sectors above the 200-day', pct(b.pct_sectors_above_200sma, 0)], ['Sectors above the 50-day', pct(b.pct_sectors_above_50sma, 0)]], 2)}<p>${clean(b.note || '')}</p>
-    ${s.rotation_note ? html`<p><b>Rotation.</b> ${clean(s.rotation_note)}</p>` : ''}${sp ? html`<p><b>Strongest against weakest right now:</b> long ${sp.long}, short ${sp.short}. ${clean(sp.note || '')}</p>` : ''}
+    ${s.rotation_note ? html`<p><b>Rotation.</b> ${clean(s.rotation_note)}</p>` : ''}${sp ? html`<p><b>Strongest and weakest sector right now:</b> ${sp.long} and ${sp.short}. ${clean(sp.note || '')}</p>` : ''}
     ${evc.note ? html`<h3>Equal weight against cap weight (RSP / SPY)</h3>${kv([['3 months', signed(evc.chg_3m_pct)], ['1 year', signed(evc.chg_1y_pct)]], 2)}<p>${clean(evc.note)}</p><div class="chart-slot" data-chart="rsp"></div>` : ''}`;
 }
 function curve() {
@@ -207,7 +219,7 @@ function themes() {
   return html`<h3>Themes and sub-industries</h3>${tbl(s.themes || [])}
     <h3>Breakout candidates</h3>${(s.breakout_candidates || []).length ? tbl(s.breakout_candidates) : html`<p class="quiet">No sector is set up for a breakout right now.</p>`}
     <h3>Niche industries</h3>${tbl(s.niche || [])}
-    <h3>Ratio pair trades</h3><div class="tscroll"><table class="t"><thead><tr><th>Pair</th><th>Ratio</th><th>z-score, 60 days</th><th>5 days</th><th>20 days</th><th>Setup</th></tr></thead><tbody>${(s.pairs || []).map((p) => html`<tr><td><b>${p.pair}</b><br><small class="t-muted">${clean(p.thesis || '')}</small></td><td>${num(p.ratio, 3)}</td><td class="${Math.abs(p.zscore_60d) >= 2 ? 'z-stretched' : ''}">${signed(p.zscore_60d, 1, '')}</td><td>${signed(p.chg_5d)}</td><td>${signed(p.chg_20d)}</td><td style="text-align:left">${clean(p.setup || '')}</td></tr>`)}</tbody></table></div>
+    <h3>Ratio pairs</h3><div class="tscroll"><table class="t"><thead><tr><th>Pair</th><th>Ratio</th><th>z-score, 60 days</th><th>5 days</th><th>20 days</th><th>Reading</th></tr></thead><tbody>${(s.pairs || []).map((p) => html`<tr><td><b>${p.pair}</b><br><small class="t-muted">${clean(p.thesis || '')}</small></td><td>${num(p.ratio, 3)}</td><td class="${Math.abs(p.zscore_60d) >= 2 ? 'z-stretched' : ''}">${signed(p.zscore_60d, 1, '')}</td><td>${signed(p.chg_5d)}</td><td>${signed(p.chg_20d)}</td><td style="text-align:left">${clean(p.setup || '')}</td></tr>`)}</tbody></table></div>
     <p class="asof">A z-score beyond ±2 is stretched against the last 60 sessions; it is not a call.</p>`;
 }
 
@@ -238,7 +250,7 @@ function paint() {
   const y = window.scrollY;
   draw(mainEl, html`<header class="page-head">${sectionHead('market', 'market')}</header>
     ${D.err ? failed('The macro picture', D.err, { retry: 'market' }) : !D.m ? html`${skeleton('lines', 5, 'Loading about 40 instruments')}<p class="asof" role="status">Loading about 40 instruments. This can take up to 30 seconds.</p>`
-    : html`<section class="section" aria-label="The market today"><h2 class="t-h2">The market today, in brief</h2>${plain(D.m)}</section>${regimeBlock(D.m)}`}
+    : html`<section class="section" aria-label="The market today"><h2 class="t-h2">The market today, in brief</h2>${plain(D.m)}${asOfLine(D.m.generated_at, { note: 'From delayed quotes and daily closes.' })}</section>${regimeBlock(D.m)}`}
     <section class="section" aria-labelledby="mc-more-h"><h2 class="t-h2" id="mc-more-h">In depth</h2><div id="mc-more"></div></section>`);
   paintMore();
   if (Math.abs(window.scrollY - y) > 2) window.scrollTo(0, y);
@@ -279,13 +291,13 @@ function wire(main) {
     // click the charts here, load a subchart like i used to on the classic version"); its name and its sparkline are
     // links to the same page, so the keyboard reaches it by the name
     if ((b = t('tr[data-v2-inst]')) && !t('a, button, input, select, summary')) { location.hash = `#/instrument/${encodeURIComponent(b.dataset.v2Inst)}`; return; }
-    if ((b = t('[data-v2-econ]'))) { D.econCode = b.dataset.v2Econ; D.econ = null; paintMore(); try { D.econ = await api.get(`/api/econ/${encodeURIComponent(D.econCode)}?years=12`, { ttl: 3600000 }); } catch (err) { D.econ = { error: err.message }; } paintMore(); return; }
-    if ((b = t('[data-v2-map]'))) { D.map = undefined; paintMore(); try { D.map = await api.get(`/api/stockmap?template=${encodeURIComponent(b.dataset.v2Map)}`, { ttl: 600000 }); } catch (err) { D.map = null; } paintMore(); return; }
-    if ((b = t('[data-v2-map-sector]'))) { const tpl = (D.map.template || {}).id; D.map = undefined; paintMore(); try { D.map = await api.get(`/api/stockmap?template=${encodeURIComponent(tpl)}&sector=${encodeURIComponent(b.dataset.v2MapSector)}`, { ttl: 600000 }); } catch (err) { D.map = null; } paintMore(); return; }
-    if (t('[data-v2-map-back]')) { const tpl = (D.map.template || {}).id; D.map = undefined; paintMore(); try { D.map = await api.get(`/api/stockmap?template=${encodeURIComponent(tpl)}`, { ttl: 600000 }); } catch (err) { D.map = null; } paintMore(); return; }
-    if ((b = t('[data-v2-sread]'))) { D.sread = { loading: b.dataset.v2Sread }; paintMore(); D.sread = await loadSectorRead(b.dataset.v2Sread); paintMore(); return; }
+    if ((b = t('[data-v2-econ]'))) { D.econCode = b.dataset.v2Econ; D.econ = null; paintMore(); const code = D.econCode, r = await newest('econ', () => api.get(`/api/econ/${encodeURIComponent(code)}?years=12`, { ttl: 3600000 })); if (!r) return; D.econ = r.err ? { error: r.err.message } : r.data; paintMore(); return; }
+    if ((b = t('[data-v2-map]'))) { D.map = undefined; paintMore(); const r = await newest('map', () => api.get(`/api/stockmap?template=${encodeURIComponent(b.dataset.v2Map)}`, { ttl: 600000 })); if (!r) return; D.map = r.err ? null : r.data; paintMore(); return; }
+    if ((b = t('[data-v2-map-sector]'))) { const tpl = (D.map.template || {}).id; D.map = undefined; paintMore(); const r = await newest('map', () => api.get(`/api/stockmap?template=${encodeURIComponent(tpl)}&sector=${encodeURIComponent(b.dataset.v2MapSector)}`, { ttl: 600000 })); if (!r) return; D.map = r.err ? null : r.data; paintMore(); return; }
+    if (t('[data-v2-map-back]')) { const tpl = (D.map.template || {}).id; D.map = undefined; paintMore(); const r = await newest('map', () => api.get(`/api/stockmap?template=${encodeURIComponent(tpl)}`, { ttl: 600000 })); if (!r) return; D.map = r.err ? null : r.data; paintMore(); return; }
+    if ((b = t('[data-v2-sread]'))) { D.sread = { loading: b.dataset.v2Sread }; paintMore(); const r = await newest('sread', () => loadSectorRead(b.dataset.v2Sread)); if (!r) return; D.sread = r.err ? null : r.data; paintMore(); return; }
     if (t('[data-v2-sread-close]')) { D.sread = null; paintMore(); }
   });
   main.addEventListener('keydown', (e) => { const g = e.target.closest('[data-v2-map-sector]'); if (g && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); g.dispatchEvent(new MouseEvent('click', { bubbles: true })); } });
-  main.addEventListener('submit', async (e) => { const f = e.target.closest('[data-v2-fx]'); if (!f) return; e.preventDefault(); D.fx = undefined; paintMore(); try { D.fx = await api.get(`/api/forex?q=${encodeURIComponent(f.q.value.trim())}`, { ttl: 600000 }); } catch (err) { D.fx = null; } paintMore(); });
+  main.addEventListener('submit', async (e) => { const f = e.target.closest('[data-v2-fx]'); if (!f) return; e.preventDefault(); D.fx = undefined; paintMore(); const q = f.q.value.trim(), r = await newest('fx', () => api.get(`/api/forex?q=${encodeURIComponent(q)}`, { ttl: 600000 })); if (!r) return; D.fx = r.err ? null : r.data; paintMore(); });
 }

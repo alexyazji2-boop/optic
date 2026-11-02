@@ -276,7 +276,6 @@ def _wilson(k: int, n: int) -> Tuple[Optional[float], Optional[float]]:
 
 def _book(rets: List[float]) -> Dict[str, Any]:
     wins = [r for r in rets if r > 0]
-    losses = [r for r in rets if r <= 0]
     total = float(np.prod([1 + r for r in rets]) - 1) * 100 if rets else 0.0
     return {"trades": len(rets), "total_return_pct": round(total, 2),
             "win_rate_pct": round(len(wins) / len(rets) * 100, 1) if rets else None,
