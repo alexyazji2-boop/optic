@@ -61,8 +61,8 @@
   --c-scrim: rgba(20, 18, 15, .30);
 
   /* type: Inter reads, Space Grotesk labels and tickers */
-  --f-sans: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
-  --f-label: "Space Grotesk", "Inter", system-ui, sans-serif;
+  --f-sans: "Inter Variable", "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-label: "Space Grotesk Variable", "Space Grotesk", "Inter Variable", "Inter", system-ui, sans-serif;
   --t-display: clamp(40px, 6vw, 84px);
   --t-display-m: clamp(28px, 3.4vw, 46px);
   /* the type scale (design standard, 2026-10-19, docs/frontend-v2/DESIGN-STANDARD.md): seven text sizes and

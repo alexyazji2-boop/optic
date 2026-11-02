@@ -33,6 +33,20 @@ def test_the_type_scale():
     assert set(re.findall(r"font-weight:\s*(\d+)", RULES)) <= {"400", "500", "600"}
 
 
+def test_the_two_faces_are_the_ones_the_page_loads():
+    # index.html loads fontsource's variable packages, which declare the families "Inter Variable" and
+    # "Space Grotesk Variable". The tokens named "Inter" and "Space Grotesk", which matched nothing, so every
+    # reader without the fonts installed got the system face: measured on live 2026-11-02, text sat at exactly
+    # system-ui's width while both downloaded faces went unused. Classic's stacks already name them this way.
+    html = (V2 / "index.html").read_text()
+    assert "https://cdn.jsdelivr.net/npm/@fontsource-variable/inter/opsz.css" in html
+    assert "https://cdn.jsdelivr.net/npm/@fontsource-variable/space-grotesk/index.css" in html
+    assert '--f-sans: "Inter Variable", "Inter", system-ui' in TOK
+    assert '--f-label: "Space Grotesk Variable", "Space Grotesk", "Inter Variable"' in TOK
+    named = set(re.findall(r'font-family:\s*"([^"]+)"', RULES))
+    assert not named, f"faces come from the tokens, not literal families: {sorted(named)}"
+
+
 def test_radii_by_what_the_shape_holds():
     assert "--r-xs: 4px; --r-sm: 6px; --r-md: 8px; --r-lg: 12px; --r-xl: 16px;" in TOK
     assert "--r-ctl: var(--r-md); --r-ctl-in: var(--r-sm);" in TOK
