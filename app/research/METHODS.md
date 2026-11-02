@@ -102,7 +102,11 @@ at 2.25, Full at 1.5, Stretched below. Fewer than two is Insufficient Data.
 - **Intrinsic value**: the base-case value from the model that fits (DCF, or
   residual income for a bank) against the price; graded only when that model is
   the primary fit at normal confidence, otherwise shown and not graded.
-- **Against its own history**: the P/E's percentile in its five-year range.
+- **Against its own history**: the P/E's percentile among the P/E of each fiscal
+  year in the feed (average price over diluted EPS, usually four or five years).
+  Coarser than the weekly five-year range from the filings behind the Overview's
+  price answer (`analytics/fair_value.py`), which can be too wide to rate when
+  this still scores; the Overview says so rather than picking one.
 - **Cash yield, matched measures**: free cash flow to equity over market value
   (equity over equity), against the 10-year yield; free cash flow to the firm
   over enterprise value reported beside it.

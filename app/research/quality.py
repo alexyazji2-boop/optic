@@ -62,8 +62,10 @@ VALUATION_RUBRICS: Dict[str, str] = {
     "intrinsic": ("Base-case value per share from the model that fits this business (the DCF, or residual "
                   "income for a bank) against the price: 4 at 30% upside or more, 3 at +10%, 2 within 10%, "
                   "1 down to -30%, else 0. Scored only when the model is the primary fit at normal confidence."),
-    "own_history": ("Today's P/E against the company's own five-year range: 4 in the bottom fifth, 3 "
-                    "below the 40th percentile, 2 below the 60th, 1 below the 80th, else 0."),
+    "own_history": ("Today's P/E against the P/E of each fiscal year in the feed (that year's average price over "
+                    "its diluted EPS, usually four or five years): 4 in the bottom fifth, 3 below the 40th "
+                    "percentile, 2 below the 60th, 1 below the 80th, else 0. A coarser test than the weekly range "
+                    "from the filings behind the Overview's price answer, so the two can differ."),
     "cash_yield": ("Free cash flow to equity over market value (an equity measure over an equity value), "
                    "against the 10-year Treasury yield: 4 at 2 points above or more, 3 at or above it, 2 "
                    "down to 1.5 below, 1 down to 3 below, else 0. Free cash flow to the firm over "
@@ -751,8 +753,15 @@ def valuation_grade(val: Dict[str, Any], data: Dict[str, Any], lt: Dict[str, Any
     if vh.get("available", True) and pct is not None:
         p = pct / 100.0 if pct > 1.0 else pct
         score = 4 if p <= 0.2 else 3 if p <= 0.4 else 2 if p <= 0.6 else 1 if p <= 0.8 else 0
-        out.append(_component("own_history", "Against its own history", "scored", score,
-                              "The P/E sits at the {:.0f}th percentile of its five-year range.".format(p * 100),
+        # Said as the handful of fiscal years it is. "The 0th percentile of its five-year range" sat on
+        # NVIDIA's Overview beside a weekly five-year range from the filings that was too wide to rate, and
+        # read as the same measure contradicting itself (interface audit, 2026-10-24).
+        n = vh.get("usable_years")
+        span = "its last {} fiscal years' P/E".format(n) if n else "its P/E in recent fiscal years"
+        headline = ("The P/E is below each of {}.".format(span) if p <= 0 else
+                    "The P/E is above each of {}.".format(span) if p >= 1 else
+                    "The P/E sits at the {:.0f}th percentile of {}.".format(p * 100, span))
+        out.append(_component("own_history", "Against its own history", "scored", score, headline,
                               [vh.get("read") or "", "Median P/E {}; premium to median {}.".format(
                                   vh.get("median_pe"), "{:+.0f}%".format(vh["premium_to_median_pct"])
                                   if vh.get("premium_to_median_pct") is not None else "n/a")],

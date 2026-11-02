@@ -39,6 +39,14 @@ RESAMPLE = "W-FRI"
 # Those points are dropped and counted, never plotted as a number.
 MIN_TTM_EPS = 0.01
 
+# The oldest a trailing year's last quarter may be and still price a week. A
+# quarter plus the longest regular 10-K deadline (90 days) and its 15-day
+# extension is about 196 days; past that a quarter is missing, not late. The as-of
+# lookup used to carry the last good trailing year forward indefinitely, and one
+# missing fourth quarter priced two years of NVIDIA, Walmart and Broadcom weeks on
+# earnings up to 1,224 days old (2026-10-24). Such weeks are omitted and counted.
+MAX_EPS_AGE_DAYS = 230
+
 # Bands drawn on the pane.
 PERCENTILES = (10, 25, 50, 75, 90)
 
@@ -184,16 +192,25 @@ def build(provider, ticker: str, years: int = 10) -> Dict[str, Any]:
     # after it was filed. Keying on the period end double-adjusts those; keying on
     # nothing at all under-adjusts the old periods no later filing ever restated,
     # which is what gave Apple a P/E of 1 in 2008.
-    eps_q = facts.get("eps_quarters") or []
-    adjusted_quarters = []
-    for row in eps_q:
-        try:
-            filed = dt.date.fromisoformat(row["available_from"])
-        except (KeyError, TypeError, ValueError):
-            continue
-        factor = _cumulative_after(factors, filed)
-        adjusted_quarters.append({**row, "value": float(row["value"]) / factor,
-                                  "split_factor": factor})
+    #
+    # "Filing" is the filing the VALUE came from, which is the latest restatement
+    # when there is one, not the first filing (that one only says when the quarter
+    # became public). Keying on the first filing divided NVIDIA's July 2023 quarter,
+    # restated after the 2024 split in an August 2024 10-Q, by ten a second time.
+    # And the fourth quarters are derived after restating, not before
+    # (sec_facts.eps_quarters_restated says why).
+    if facts.get("eps_points"):
+        adjusted_quarters = sec_facts.eps_quarters_restated(
+            facts, lambda filed: _cumulative_after(factors, filed))
+    else:
+        adjusted_quarters = []
+        for row in facts.get("eps_quarters") or []:
+            try:
+                filed = dt.date.fromisoformat(row.get("restated_on") or row["available_from"])
+            except (KeyError, TypeError, ValueError):
+                continue
+            adjusted_quarters.append({**row, "value": float(row["value"]) /
+                                      _cumulative_after(factors, filed)})
     eps_ttm = sec_facts._trailing(adjusted_quarters)      # noqa: SLF001
     if len(eps_ttm) < 4:
         return {"available": False,
@@ -203,13 +220,16 @@ def build(provider, ticker: str, years: int = 10) -> Dict[str, Any]:
     pairs = _as_of_lookup(eps_ttm)
 
     points: List[Dict[str, Any]] = []
-    negative = 0
+    negative = stale = 0
     for stamp, price in weekly.items():
         when = stamp.date() if hasattr(stamp, "date") else stamp
         hit = _value_as_of(pairs, when)
         if hit is None:
             continue                       # before the first filing we can see
         _filed, ttm_eps, period = hit
+        if (when - dt.date.fromisoformat(period)).days > MAX_EPS_AGE_DAYS:
+            stale += 1
+            continue
         if ttm_eps < MIN_TTM_EPS:
             # Loss-making trailing year. A P/E here is not a small number, it is
             # not a number — so it is counted and omitted rather than drawn.
@@ -271,6 +291,7 @@ def build(provider, ticker: str, years: int = 10) -> Dict[str, Any]:
         "anchor": anchor,
         "weeks": len(points),
         "loss_weeks": negative,
+        "stale_weeks": stale,
         "revenue_growth": [
             {"period_end": g["period_end"],
              "label": _quarter_label(g["period_end"]),
@@ -301,10 +322,15 @@ def build(provider, ticker: str, years: int = 10) -> Dict[str, Any]:
             "because a comparative column in a later filing has already been "
             "restated once. Weeks where the trailing year was loss-making are "
             "omitted rather than plotted, because a P/E on negative earnings is "
-            "not a small number, it is not a number{loss}. Percentile bands are "
+            "not a small number, it is not a number{loss}. Weeks whose latest "
+            "filed quarter ended more than {age} days before are omitted as well: "
+            "a quarter is missing from the filings, and an older year's earnings "
+            "would otherwise price them{stale}. Percentile bands are "
             "over this name's own history in the window, so \u201ccheap\u201d "
             "means cheap against itself and says nothing about its sector."
-        ).format(loss=(" ({} such weeks here)".format(negative) if negative else "")),
+        ).format(loss=(" ({} such weeks here)".format(negative) if negative else ""),
+                 age=MAX_EPS_AGE_DAYS,
+                 stale=(" ({} such weeks here)".format(stale) if stale else "")),
     }
 
 

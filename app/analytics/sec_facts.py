@@ -215,6 +215,41 @@ def _fill_fourth_quarters(quarters: Dict[str, Dict[str, Any]],
     return added
 
 
+def eps_quarters_restated(facts: Dict[str, Any], factor_after) -> List[Dict[str, Any]]:
+    """Quarterly EPS on one share basis, with each fourth quarter derived AFTER restating.
+
+    A filing states every figure in it, comparatives included, on the share count
+    in force when it was filed, and the value kept for a period is the latest
+    filing's. So two values for neighbouring periods can sit on different share
+    counts, and a fourth quarter derived as "annual minus three quarters" across a
+    split subtracts one basis from another. NVIDIA's fiscal 2023 annual EPS came
+    from a 10-K filed after the June 2024 ten-for-one split (0.17) while its
+    quarters came from filings before it (0.64, 0.26, 0.27): the remainder was
+    negative, the quarter was skipped, and with fiscal 2021 and 2024 lost the same
+    way the trailing P/E ran on 2022 earnings from February 2023 to January 2025.
+    That put the five-year 75th percentile at 286x and the fair-value range at
+    "too wide to call" (2026-10-24).
+
+    `factor_after(date)` is the product of the splits effective after that date;
+    every value is divided by it at the date of the filing it came from.
+    """
+    pts = facts.get("eps_points") or {}
+
+    def restate(rows: Dict[str, Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
+        out = {}
+        for end, row in rows.items():
+            try:
+                factor = factor_after(dt.date.fromisoformat(row["filed"]))
+            except (KeyError, TypeError, ValueError):
+                continue
+            out[end] = {**row, "value": float(row["value"]) / factor}
+        return out
+
+    quarters = restate(pts.get("quarters") or {})
+    _fill_fourth_quarters(quarters, restate(pts.get("years") or {}))
+    return _series(quarters)
+
+
 def _series(merged: Dict[str, Dict[str, Any]]) -> List[Dict[str, Any]]:
     rows = []
     for end in sorted(merged):
@@ -291,7 +326,7 @@ CACHE_DIR = os.path.join("data", "sec_facts")
 # Bumped whenever the extraction gains or renames a field. Without it, entries
 # written before a new key existed are served to code that expects it — adding
 # `short_history` raised a KeyError on every previously-cached ticker.
-CACHE_SCHEMA = 4
+CACHE_SCHEMA = 5
 # Filings land four times a year. A week of cache is still current and turns a
 # multi-megabyte fetch into a file read.
 CACHE_TTL_SECONDS = 7 * 86400
@@ -378,6 +413,10 @@ def history(ticker: str, force: bool = False) -> Dict[str, Any]:
 
     eps_q = _merge_periods(gaap, EPS_TAGS, "USD/shares", Q_MIN_DAYS, Q_MAX_DAYS)
     eps_y = _merge_periods(gaap, EPS_TAGS, "USD/shares", Y_MIN_DAYS, Y_MAX_DAYS)
+    # Kept before derivation, so a reader with the split history can restate each
+    # value onto one share basis first (eps_quarters_restated). A few dozen rows.
+    eps_points = {"quarters": {k: dict(v) for k, v in eps_q.items()},
+                  "years": {k: dict(v) for k, v in eps_y.items()}}
     derived_eps = _fill_fourth_quarters(eps_q, eps_y)
 
     revenue = _series(rev_q)
@@ -413,6 +452,7 @@ def history(ticker: str, force: bool = False) -> Dict[str, Any]:
         "revenue_ttm": _trailing(revenue),
         "eps_quarters": eps,
         "eps_ttm": _trailing(eps),
+        "eps_points": eps_points,
         "counts": {
             "revenue_quarters": len(revenue),
             "eps_quarters": len(eps),
