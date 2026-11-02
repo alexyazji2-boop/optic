@@ -445,9 +445,18 @@ def test_v2_shows_the_dated_line_under_the_book_cards():
     assert "${rulesChangedLine(d.rules_change)}" in books
     line = V2[V2.index("export function rulesChangedLine"):]
     line = line[:line.index("\n}") + 2]
-    assert "Rules changed on ${rc.date}." in line
+    assert "Rules changed on ${clean(rc.date)}." in line, "written Nov 2, 2026, as the caveats are"
     assert "if (!rc || !rc.date) return ''" in line, "no line before a change is recorded"
     assert "class=\"pill\"" not in line and "—" not in line
+
+
+def test_v2_says_when_a_book_is_over_its_ceiling():
+    """The books ran on the old rules until this build, so balanced and aggressive open above the 1x
+    ceiling. The tile says the book stops adding, rather than "capped at the account" beside 2.26x."""
+    note = V2[V2.index("function heldNote("):]
+    note = note[:note.index("\n}") + 2]
+    assert "cap.gross_exposure_x > x" in note and "so the book stops adding until it is back under" in note
+    assert "heldNote(cap)" in V2[V2.index("function ledger("):V2.index("function openPositions(")]
 
 
 def test_v2_describes_each_book_from_its_own_settings():

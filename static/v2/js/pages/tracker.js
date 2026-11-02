@@ -104,7 +104,8 @@ export function bookRules(b) {
 /** The dated rules change, or nothing before one is recorded. */
 export function rulesChangedLine(rc) {
   if (!rc || !rc.date) return '';
-  return html`<p class="rules-changed"><b>Rules changed on ${rc.date}.</b> ${clean(rc.summary || '')} Positions opened before then keep the rules they were opened with, and the record was not restarted, so the figures here include trades under both.</p>`;
+  // the date as Optic writes one (Nov 2, 2026), as clean() does for the server's caveats below it
+  return html`<p class="rules-changed"><b>Rules changed on ${clean(rc.date)}.</b> ${clean(rc.summary || '')} Positions opened before then keep the rules they were opened with, and the record was not restarted, so the figures here include trades under both.</p>`;
 }
 function books(d) {
   const bs = d.books || [];
@@ -131,6 +132,15 @@ function markedLine(d) {
   return at ? html`<p class="asof">Open positions last marked ${stamp(at)}; the figures above are as of then.</p>` : '';
 }
 
+// Over its ceiling a book is not made to sell: it stops adding until it is back under (limit_policy "block_new").
+// Said on the tile, because "1.80 times equity, capped at the account" otherwise reads like a rule being broken.
+function heldNote(cap) {
+  const x = cap.max_gross_exposure_x, held = `${$0(cap.gross_exposure)} by what it moves`;
+  if (!isNum(x)) return `${held}, no cap`;
+  if (isNum(cap.gross_exposure_x) && cap.gross_exposure_x > x) return `${held}, over its cap of ${x === 1 ? "the account's value" : `${num(x, 0)} times the account`}, so the book stops adding until it is back under`;
+  return `${held}, capped at ${x === 1 ? 'the account' : `${num(x, 0)} times`}`;
+}
+
 function ledger(d) {
   const s = d.summary || {}, cfg = d.config || {}, cap = d.capacity || {}, prog = d.progress || {}, run = scanning || !!prog.running;
   const bk = (d.books || []).find((b) => b.id === (d.book || book)) || {}, name = bk.label || '';
@@ -153,7 +163,7 @@ function ledger(d) {
     ${markedLine(d)}
     <details class="more-inline" ${advancedOn() ? 'open' : ''}><summary>How the book limits its risk</summary>
       <dl class="kv" style="--kv:3">${tile('Position slots', `${cap.open_positions || 0} / ${bk.max_positions || cfg.max_open_positions || 'n/a'}`, `${cap.position_slots_left || 0} left`)}${tile('Risk deployed', $0(cap.open_risk), `${num(cap.open_risk_pct, 1)}% of a ${num(isNum(bk.max_portfolio_risk) ? bk.max_portfolio_risk * 100 : cfg.max_portfolio_risk_pct, 0)}% budget`)}
-        ${tile('Risk budget left', $0(cap.risk_budget_left), 'before the book stops adding')}${tile('Held in positions', isNum(cap.gross_exposure_x) ? `${num(cap.gross_exposure_x, 2)} times equity` : 'n/a', isNum(cap.max_gross_exposure_x) ? `${$0(cap.gross_exposure)} by what it moves, capped at ${cap.max_gross_exposure_x === 1 ? 'the account' : `${num(cap.max_gross_exposure_x, 0)} times`}` : `${$0(cap.gross_exposure)} by what it moves, no cap`)}
+        ${tile('Risk budget left', $0(cap.risk_budget_left), 'before the book stops adding')}${tile('Held in positions', isNum(cap.gross_exposure_x) ? `${num(cap.gross_exposure_x, 2)} times equity` : 'n/a', heldNote(cap))}
         ${tile('Sizing base', $0(s.equity), 'closed trades only, so an open run-up cannot raise the next bet')}${tile('New per scan', num(bk.max_new_per_scan || cfg.max_new_per_scan, 0), 'so the book fills over days')}</dl>
       <p class="asof">The caps exist because one scan can find many qualifying setups at once. Without them it could put a third of the account at risk in an afternoon, on names that are often the same bet under different tickers: TQQQ, QQQ and NVIDIA move together.</p></details></section>`;
 }
