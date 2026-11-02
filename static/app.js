@@ -42786,7 +42786,7 @@ function sessionClockLine(sess, now) {
   const upcoming = !next.label ? ''
     : minutes < 1 ? ` · ${next.label} starting now`
       : ` · ${next.label} in ${humanCountdown(minutes)}`;
-  return `${dayIn(iso, zone)} ${timeIn(iso, zone)} ${zoneAbbrev(zone)}${et}${upcoming}`;
+  return `${dayIn(iso, zone)} ${timeIn(iso, zone)} ${zoneAbbrev(zone, iso)}${et}${upcoming}`;
 }
 
 /** Where `now` sits on the ET day, in percent, as the server's day_pct has it. */
