@@ -821,3 +821,38 @@ device shelves exist for; that trade is the owner's. Model-chosen tool inputs wr
 **D-111 Legal and consent text is flagged, not rewritten.** Two disclaimers that repeat the line above them
 (Earnings, Retirement) and the brokerage consent's "count towards your Optic portfolio" are listed for counsel and
 the owner (WRITING_CORRECTIONS M).
+
+## Phase 13 (directive 15, 2026-11-02)
+
+**D-112 One request for every model.** The comparison sends Optic's own request (`ai.build_chat_request`), tools and
+checks to every candidate, and an adapter changes only what a provider requires. Each adaptation is written down
+with its reason (`docs/ai/MILO_MODEL_COMPARISON.md` section 3):
+- OpenAI runs on the Responses API, statelessly, because its current models need it for tool calls;
+- Gemini's parts go back unchanged, because its thought signatures live inside them;
+- open-weight hosts get their reasoning field back;
+- Haiku 5.5 gets no fallback parameter;
+- every model gets production's output cap.
+
+Prompting written for Claude is tested as it is. A change made for one model is recorded, and the baseline is rerun
+with it.
+
+**D-113 Costs are modelled, and the model is checked against the cost audit.** No model answered, so cost per
+question comes from the code's measured sizes, the audit's answer shapes and verified list prices.
+- **The check:** given the audit's prefix, the model reproduces the audit's $0.14, $0.18 and $0.10 and its monthly
+  lines, held by a test.
+- **Planning date:** prices are those in force on 2027-01-01, the earliest a change of model could reach readers;
+  both Gemini models' announced rises fall before it.
+- **Token ratio:** the audit's 4 characters a token is kept, and its uncertainty is shown at 3 and at 1.7.
+
+**D-114 No routing.** The router is analysis code under `tests/`, not in the app. A perfect router saves 10% on the
+directive's example architecture, and the measured router's extra saving comes from misroutes, high-risk ones among
+them. Caching the CONTEXT turn saves 27%. The recommendation is one model, C1, and the small models tested as whole
+replacements (`docs/ai/MILO_ROUTING_RECOMMENDATION.md`).
+
+**D-115 No ranking without results.** No candidate was evaluated (BL-01, BL-14), so no model is called best,
+cheapest-qualifying or best value. Sonnet 5.5 is not said to meet the standard: the one earlier sample of its
+answers (14, on 2026-10-16's code) has a factual error in 5.
+
+**D-116 Nothing spent.** Paid evaluation runs, accounts and keys are the owner's to approve. The budget per model is
+proposed in the cost analysis (section 8), and the runner refuses without a key or a `--max-dollars` cap.
+

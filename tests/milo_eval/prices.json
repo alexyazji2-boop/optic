@@ -1,0 +1,35 @@
+{
+  "note": "List prices in USD per million tokens, standard tier, global routing, for compare.py and cost_model.py. Only prices read from the provider's own page are listed; a model missing here is costed as unknown. input = uncached input, cached_input = a cache hit, cache_write = a cache write at the default lifetime, output = output tokens, reasoning included (every provider here bills reasoning as output). cache: how a prompt is cached (explicit = only where the request puts a breakpoint; implicit-latest = the provider also writes through the latest message on its own; implicit = repeated prefixes are read with no write charge; none). tiers: the whole request's prices once the prompt passes `above` tokens. changes: prices from a date the provider has announced.",
+  "read": "2026-11-02",
+  "sources": {
+    "anthropic": "platform.claude.com/docs/en/about-claude/pricing and /docs/en/about-claude/models/overview, read 2026-11-02 (Phase 13 research); the same figures as the 2026-10-30 cost audit and app/ai_store.py PRICES. Cache writes at the 5-minute lifetime (1.25x input).",
+    "openai": "developers.openai.com/api/docs/models/{gpt-6-astra,gpt-6.1-sol,gpt-6.1-terra,gpt-6-luna} and /api/docs/guides/prompt-caching, read 2026-11-02. Cache writes at the default 30-minute lifetime (1.25x input); prompts over 272K input tokens pay 2x input and cache rates and 1.5x output for the whole request.",
+    "google": "aistudio.google.com/docs/pricing and /docs/caching, read 2026-11-02 (ai.google.dev/gemini-api/docs now redirects there). Implicit caching, minimum 4,096 tokens on Argon and 3.8 Flash; no write charge is listed for implicit caching.",
+    "together": "together.ai/pricing and docs.together.ai/docs/serverless/models, read 2026-11-02 (input / cached input / output).",
+    "fireworks": "docs.fireworks.ai/serverless/pricing, read 2026-11-02 (Standard tier: input / cached input / output)."
+  },
+  "models": {
+    "claude-fable-5-1": {"provider": "anthropic", "input": 10.0, "cache_write": 12.5, "cached_input": 0.25, "output": 50.0, "cache": "explicit", "cache_life_minutes": 5},
+    "claude-opus-5-5": {"provider": "anthropic", "input": 4.0, "cache_write": 5.0, "cached_input": 0.2, "output": 20.0, "cache": "explicit", "cache_life_minutes": 5},
+    "claude-sonnet-5-5": {"provider": "anthropic", "input": 2.0, "cache_write": 2.5, "cached_input": 0.1, "output": 10.0, "cache": "explicit", "cache_life_minutes": 5},
+    "claude-haiku-5-5": {"provider": "anthropic", "input": 0.1, "cache_write": 0.125, "cached_input": 0.01, "output": 0.5, "cache": "explicit", "cache_life_minutes": 5,
+                         "tiers": [{"above": 100000, "input": 0.5, "cache_write": 0.625, "cached_input": 0.05, "output": 2.5}]},
+    "gpt-6-astra": {"provider": "openai", "input": 10.0, "cache_write": 12.5, "cached_input": 1.0, "output": 50.0, "cache": "implicit-latest", "cache_life_minutes": 30,
+                    "tiers": [{"above": 272000, "input": 20.0, "cache_write": 25.0, "cached_input": 2.0, "output": 75.0}]},
+    "gpt-6.1-sol": {"provider": "openai", "input": 2.0, "cache_write": 2.5, "cached_input": 0.1, "output": 10.0, "cache": "implicit-latest", "cache_life_minutes": 30,
+                    "tiers": [{"above": 272000, "input": 4.0, "cache_write": 5.0, "cached_input": 0.2, "output": 15.0}]},
+    "gpt-6.1-terra": {"provider": "openai", "input": 1.0, "cache_write": 1.25, "cached_input": 0.05, "output": 5.0, "cache": "implicit-latest", "cache_life_minutes": 30,
+                      "tiers": [{"above": 272000, "input": 2.0, "cache_write": 2.5, "cached_input": 0.1, "output": 7.5}]},
+    "gpt-6-luna": {"provider": "openai", "input": 0.1, "cache_write": 0.125, "cached_input": 0.01, "output": 0.5, "cache": "implicit-latest", "cache_life_minutes": 30,
+                   "tiers": [{"above": 272000, "input": 0.2, "cache_write": 0.25, "cached_input": 0.02, "output": 0.75}]},
+    "gemini-4-argon": {"provider": "google", "input": 2.0, "cached_input": 0.1, "output": 10.0, "cache": "implicit",
+                       "changes": [{"from": "2026-12-01", "input": 4.0, "cached_input": 0.2, "output": 20.0}]},
+    "gemini-3.8-flash": {"provider": "google", "input": 0.75, "cached_input": 0.075, "output": 3.75, "cache": "implicit",
+                         "changes": [{"from": "2027-01-01", "input": 1.5, "cached_input": 0.15, "output": 7.5}]},
+    "gemini-3.5-flash-lite": {"provider": "google", "input": 0.3, "cached_input": 0.03, "output": 2.5, "cache": "implicit"},
+    "moonshotai/Kimi-K3": {"provider": "together", "input": 3.0, "cached_input": 0.3, "output": 15.0, "cache": "implicit"},
+    "zai-org/GLM-5.3": {"provider": "together", "input": 1.4, "cached_input": 0.26, "output": 4.4, "cache": "implicit"},
+    "deepseek-ai/DeepSeek-V4.1-Flash-1017": {"provider": "together", "input": 0.3, "cached_input": 0.006, "output": 1.2, "cache": "implicit"},
+    "accounts/fireworks/models/gpt-oss-120b": {"provider": "fireworks", "input": 0.15, "cached_input": 0.015, "output": 0.6, "cache": "implicit"}
+  }
+}

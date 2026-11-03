@@ -10,7 +10,17 @@ Read this and [REQUIREMENTS_MATRIX.md](REQUIREMENTS_MATRIX.md) before changing a
   `optic-phase12` (:8270, stand-in model :8271, data `~/Optic/phase12-data`, guests allowed and the hourly cap lifted
   for the latency run, local only). Working folder: `~/Optic/work/phase12-2026-11-02/` (page captures, the advice
   sets, latency runs, tools).
-- **Next:** Phase 13 (directive 15), which the owner asked to start only after Phase 12 is complete.
+- **Phase 13 (directive 15, 2026-11-02): complete on the same branch**, after Phase 12's commits. It produced:
+  - the standards per workload, the error-severity policy, and the harness for any provider (Anthropic, the OpenAI
+    Responses API, OpenAI-compatible hosts, Gemini), tested offline;
+  - verified prices for 15 candidates, and a cost model that reproduces the cost audit;
+  - the router analysis.
+
+  **No model answered:** BL-01 is still 401 and no other provider has a key (BL-14). The recommendation is one model
+  (Sonnet 5.5), C1, then the baseline and the small models as whole replacements. Report:
+  `docs/ai/MILO_PHASE_13_FINAL_REPORT.md`.
+- **Next:** the owner's. A working key and a run budget (BL-01, BL-14), and a go-ahead for C1 if wanted. Nothing is
+  pushed.
 
 - **Current phase:** none. Phases 01 to 11 are complete (reports below). FINAL_REPORT.md holds the decision: **NOT READY: BLOCKING ISSUES REMAIN** (BUG-132, the advice output check, P0; BUG-022 and BUG-023, unlicensed market data, P0, the owner's and counsel's).
 - **Branch / worktree:** `post-demo-ultra` in `~/Optic/wt-ultra`, from `9fa0f36` (tag `post-demo-ultra-baseline`). Upstream unset. **Deployed on 2026-11-01** on the owner's word in chat ("push all new changes and make them live"): merged onto live main `8e2cbf4` as `23b435a` on branch `release-2026-11-01` and pushed to `main`, before the checks in FINAL_REPORT section 17, which remain open.
@@ -769,3 +779,15 @@ Read this and [REQUIREMENTS_MATRIX.md](REQUIREMENTS_MATRIX.md) before changing a
 - On the owner's yes. origin/main was still `a10eaba`, so the commit whose suite had passed (7,158 passed, 1 skipped) went as it was: `a10eaba..8e2cbf4`, a fast-forward from `~/Optic/wt-hotfix-report-date`, at 19:40:28 UTC. The live site served `8e2cbf4` 90 seconds later (booted 19:41:43 UTC; one health check went unanswered during the swap).
 - On the live site, before and after (`~/Optic/work/hotfix-report-date-2026-10-30/ship/`): before, the field was missing for NVDA, MSFT, AAPL, KO and META, and KO's and META's surfaces marked every expiry as holding a past report; after, NVDA 2026-11-17, MSFT 2027-01-27 and AAPL 2026-11-02 (the date Apple announced), and KO and META have no next report and no surface event (TEST_RESULTS, after Phase 11).
 - This branch merges with the new live main without conflict (`git merge-tree`, exit 0). It is still not pushed (D-100, D-101).
+
+### 2026-11-02 Phase 13 (evening)
+- Milo's model and request traced (three questions).
+- The workloads' standards, the four severities and the release-gate sizes written down.
+- `compare.py` and `providers.py` run Optic's own request on any provider. While reading the providers' documentation,
+  six defects in the harness's own fairness were found and fixed.
+- The research pass verified models, prices and data terms. The cost model was checked against the cost audit, with
+  a sensitivity table and the self-hosting arithmetic.
+- The router was measured and the routing scenarios priced.
+- An evaluation budget was proposed.
+- Nothing spent, nothing pushed.
+

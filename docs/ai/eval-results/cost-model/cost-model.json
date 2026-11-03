@@ -1,0 +1,5209 @@
+{
+ "assumptions": {
+  "chars_per_token": {
+   "json": 3.5,
+   "prose": 4.0
+  },
+  "common": {
+   "blocks": 500,
+   "carried": 800,
+   "out_tool": 800,
+   "question": 50
+  },
+  "mix": {
+   "S1": 0.05,
+   "S2": 0.01,
+   "W1": 0.12,
+   "W10": 0.02,
+   "W2": 0.2,
+   "W3": 0.1,
+   "W4": 0.1,
+   "W5": 0.12,
+   "W6": 0.06,
+   "W7": 0.06,
+   "W8": 0.12,
+   "W9": 0.04
+  },
+  "repeated": 0.02,
+  "shape_of": {
+   "S1": "typical",
+   "S2": "typical",
+   "W1": "light",
+   "W10": "typical",
+   "W2": "typical",
+   "W3": "typical",
+   "W4": "typical",
+   "W5": "typical",
+   "W6": "portfolio",
+   "W7": "research",
+   "W8": "thread",
+   "W9": "light"
+  },
+  "shapes": {
+   "light": {
+    "context": 2300,
+    "history": 0,
+    "out_answer": 1000,
+    "results": [],
+    "rounds": [
+     1.0
+    ],
+    "tools": 16,
+    "why": "a definition or a help question: no tool, a small page context (the audit's light question)"
+   },
+   "portfolio": {
+    "context": 19700,
+    "history": 1000,
+    "out_answer": 2000,
+    "results": [
+     3400,
+     1700
+    ],
+    "rounds": [
+     1.0,
+     1.0,
+     0.5
+    ],
+    "tools": 17,
+    "why": "typical, plus the linked-portfolio block and the portfolio tool"
+   },
+   "research": {
+    "context": 15700,
+    "history": 1000,
+    "out_answer": 2500,
+    "results": [
+     3400,
+     3400,
+     1700
+    ],
+    "rounds": [
+     1.0,
+     1.0,
+     1.0,
+     0.5
+    ],
+    "tools": 16,
+    "why": "typical, with a third tool round and a longer answer"
+   },
+   "thread": {
+    "context": 15700,
+    "history": 4000,
+    "out_answer": 2000,
+    "results": [
+     3400,
+     1700
+    ],
+    "rounds": [
+     1.0,
+     1.0,
+     0.5
+    ],
+    "tools": 16,
+    "why": "typical, with three earlier turns in the history"
+   },
+   "typical": {
+    "context": 15700,
+    "history": 1000,
+    "out_answer": 2000,
+    "results": [
+     3400,
+     1700
+    ],
+    "rounds": [
+     1.0,
+     1.0,
+     0.5
+    ],
+    "tools": 16,
+    "why": "a Dossier question with one or two tool rounds (the audit's typical)"
+   }
+  },
+  "volume": {
+   "active_hours": 14,
+   "ask_share": 0.1,
+   "cache_life_minutes": 5,
+   "ceiling": 300,
+   "chat_share": 0.85,
+   "days": 30.4,
+   "per_asker": 2,
+   "prefix_variants": 1.5
+  }
+ },
+ "evaluation_budget": {
+  "cases": 181,
+  "gate_cases": 92,
+  "models": {
+   "accounts/fireworks/models/gpt-oss-120b": {
+    "benchmark_fixture_sizes": 3.51,
+    "benchmark_production_sizes": 3.18,
+    "gate_set_production_sizes": 1.8
+   },
+   "claude-fable-5-1": {
+    "benchmark_fixture_sizes": 240.33,
+    "benchmark_production_sizes": 338.64,
+    "gate_set_production_sizes": 192.04
+   },
+   "claude-haiku-5-5": {
+    "benchmark_fixture_sizes": 2.4,
+    "benchmark_production_sizes": 3.55,
+    "gate_set_production_sizes": 2.01
+   },
+   "claude-opus-5-5": {
+    "benchmark_fixture_sizes": 96.13,
+    "benchmark_production_sizes": 137.59,
+    "gate_set_production_sizes": 77.98
+   },
+   "claude-sonnet-5-5": {
+    "benchmark_fixture_sizes": 48.07,
+    "benchmark_production_sizes": 68.79,
+    "gate_set_production_sizes": 38.99
+   },
+   "deepseek-ai/DeepSeek-V4.1-Flash-1017": {
+    "benchmark_fixture_sizes": 7.01,
+    "benchmark_production_sizes": 5.52,
+    "gate_set_production_sizes": 3.12
+   },
+   "gemini-3.5-flash-lite": {
+    "benchmark_fixture_sizes": 7.86,
+    "benchmark_production_sizes": 8.45,
+    "gate_set_production_sizes": 4.74
+   },
+   "gemini-3.8-flash": {
+    "benchmark_fixture_sizes": 18.02,
+    "benchmark_production_sizes": 17.12,
+    "gate_set_production_sizes": 9.64
+   },
+   "gemini-4-argon": {
+    "benchmark_fixture_sizes": 48.07,
+    "benchmark_production_sizes": 42.12,
+    "gate_set_production_sizes": 23.74
+   },
+   "gpt-6-astra": {
+    "benchmark_fixture_sizes": 240.33,
+    "benchmark_production_sizes": 256.55,
+    "gate_set_production_sizes": 144.72
+   },
+   "gpt-6-luna": {
+    "benchmark_fixture_sizes": 2.4,
+    "benchmark_production_sizes": 2.57,
+    "gate_set_production_sizes": 1.45
+   },
+   "gpt-6.1-sol": {
+    "benchmark_fixture_sizes": 48.07,
+    "benchmark_production_sizes": 47.77,
+    "gate_set_production_sizes": 26.97
+   },
+   "gpt-6.1-terra": {
+    "benchmark_fixture_sizes": 24.03,
+    "benchmark_production_sizes": 23.89,
+    "gate_set_production_sizes": 13.49
+   },
+   "moonshotai/Kimi-K3": {
+    "benchmark_fixture_sizes": 72.1,
+    "benchmark_production_sizes": 68.49,
+    "gate_set_production_sizes": 38.56
+   },
+   "zai-org/GLM-5.3": {
+    "benchmark_fixture_sizes": 31.95,
+    "benchmark_production_sizes": 32.05,
+    "gate_set_production_sizes": 18.06
+   }
+  },
+  "trials": 3
+ },
+ "models": {
+  "accounts/fireworks/models/gpt-oss-120b": {
+   "monthly": {
+    "100": {
+     "at_ceiling": {
+      "asked_a_day": 20.0,
+      "chat_questions": 517,
+      "dollars": 4.16,
+      "per_question": 0.008,
+      "served_a_day": 20.0,
+      "warm_share": 0.076
+     },
+     "demand_served": {
+      "asked_a_day": 20.0,
+      "chat_questions": 517,
+      "dollars": 4.16,
+      "per_question": 0.008,
+      "served_a_day": 20.0,
+      "warm_share": 0.076
+     }
+    },
+    "1000": {
+     "at_ceiling": {
+      "asked_a_day": 200.0,
+      "chat_questions": 5168,
+      "dollars": 35.92,
+      "per_question": 0.007,
+      "served_a_day": 200.0,
+      "warm_share": 0.548
+     },
+     "demand_served": {
+      "asked_a_day": 200.0,
+      "chat_questions": 5168,
+      "dollars": 35.92,
+      "per_question": 0.007,
+      "served_a_day": 200.0,
+      "warm_share": 0.548
+     }
+    },
+    "10000": {
+     "at_ceiling": {
+      "asked_a_day": 2000.0,
+      "chat_questions": 7752,
+      "dollars": 51.22,
+      "per_question": 0.0066,
+      "served_a_day": 300,
+      "warm_share": 0.696
+     },
+     "demand_served": {
+      "asked_a_day": 2000.0,
+      "chat_questions": 51680,
+      "dollars": 305.04,
+      "per_question": 0.0059,
+      "served_a_day": 2000.0,
+      "warm_share": 1.0
+     }
+    }
+   },
+   "per_workload": {
+    "S1": {
+     "cold": {
+      "cache_write": 0,
+      "cached_input": 53228,
+      "calls": 2.5,
+      "dollars": 0.0086486625,
+      "input": 39535,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 70062,
+      "calls": 2.5,
+      "dollars": 0.0063759375,
+      "input": 22700,
+      "output": 3200
+     }
+    },
+    "S2": {
+     "cold": {
+      "cache_write": 0,
+      "cached_input": 53228,
+      "calls": 2.5,
+      "dollars": 0.0086486625,
+      "input": 39535,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 70062,
+      "calls": 2.5,
+      "dollars": 0.0063759375,
+      "input": 22700,
+      "output": 3200
+     }
+    },
+    "W1": {
+     "cold": {
+      "cache_write": 0,
+      "cached_input": 0,
+      "calls": 1.0,
+      "dollars": 0.00355275,
+      "input": 19685,
+      "output": 1000
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 16835,
+      "calls": 1.0,
+      "dollars": 0.0012800250000000002,
+      "input": 2850,
+      "output": 1000
+     }
+    },
+    "W10": {
+     "cold": {
+      "cache_write": 0,
+      "cached_input": 53228,
+      "calls": 2.5,
+      "dollars": 0.0086486625,
+      "input": 39535,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 70062,
+      "calls": 2.5,
+      "dollars": 0.0063759375,
+      "input": 22700,
+      "output": 3200
+     }
+    },
+    "W2": {
+     "cold": {
+      "cache_write": 0,
+      "cached_input": 53228,
+      "calls": 2.5,
+      "dollars": 0.0086486625,
+      "input": 39535,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 70062,
+      "calls": 2.5,
+      "dollars": 0.0063759375,
+      "input": 22700,
+      "output": 3200
+     }
+    },
+    "W3": {
+     "cold": {
+      "cache_write": 0,
+      "cached_input": 53228,
+      "calls": 2.5,
+      "dollars": 0.0086486625,
+      "input": 39535,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 70062,
+      "calls": 2.5,
+      "dollars": 0.0063759375,
+      "input": 22700,
+      "output": 3200
+     }
+    },
+    "W4": {
+     "cold": {
+      "cache_write": 0,
+      "cached_input": 53228,
+      "calls": 2.5,
+      "dollars": 0.0086486625,
+      "input": 39535,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 70062,
+      "calls": 2.5,
+      "dollars": 0.0063759375,
+      "input": 22700,
+      "output": 3200
+     }
+    },
+    "W5": {
+     "cold": {
+      "cache_write": 0,
+      "cached_input": 53228,
+      "calls": 2.5,
+      "dollars": 0.0086486625,
+      "input": 39535,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 70062,
+      "calls": 2.5,
+      "dollars": 0.0063759375,
+      "input": 22700,
+      "output": 3200
+     }
+    },
+    "W6": {
+     "cold": {
+      "cache_write": 0,
+      "cached_input": 59824,
+      "calls": 2.5,
+      "dollars": 0.0094073175,
+      "input": 43933,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 77058,
+      "calls": 2.5,
+      "dollars": 0.007080862499999999,
+      "input": 26700,
+      "output": 3200
+     }
+    },
+    "W7": {
+     "cold": {
+      "cache_write": 0,
+      "cached_input": 93612,
+      "calls": 3.5,
+      "dollars": 0.0106644375,
+      "input": 43735,
+      "output": 4500
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 110448,
+      "calls": 3.5,
+      "dollars": 0.0083917125,
+      "input": 26900,
+      "output": 4500
+     }
+    },
+    "W8": {
+     "cold": {
+      "cache_write": 0,
+      "cached_input": 57728,
+      "calls": 2.5,
+      "dollars": 0.0091661625,
+      "input": 42535,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 74562,
+      "calls": 2.5,
+      "dollars": 0.006893437500000001,
+      "input": 25700,
+      "output": 3200
+     }
+    },
+    "W9": {
+     "cold": {
+      "cache_write": 0,
+      "cached_input": 0,
+      "calls": 1.0,
+      "dollars": 0.00355275,
+      "input": 19685,
+      "output": 1000
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 16835,
+      "calls": 1.0,
+      "dollars": 0.0012800250000000002,
+      "input": 2850,
+      "output": 1000
+     }
+    }
+   },
+   "price": {
+    "cache": "implicit",
+    "cached_input": 0.015,
+    "input": 0.15,
+    "output": 0.6,
+    "provider": "fireworks"
+   },
+   "price_date": "2027-01-01",
+   "priced": true
+  },
+  "claude-fable-5-1": {
+   "monthly": {
+    "100": {
+     "at_ceiling": {
+      "asked_a_day": 20.0,
+      "chat_questions": 517,
+      "dollars": 426.31,
+      "per_question": 0.8249,
+      "served_a_day": 20.0,
+      "warm_share": 0.076
+     },
+     "at_ceiling_c1": {
+      "asked_a_day": 20.0,
+      "chat_questions": 517,
+      "dollars": 320.5,
+      "per_question": 0.6202,
+      "served_a_day": 20.0,
+      "warm_share": 0.076
+     },
+     "demand_served": {
+      "asked_a_day": 20.0,
+      "chat_questions": 517,
+      "dollars": 426.31,
+      "per_question": 0.8249,
+      "served_a_day": 20.0,
+      "warm_share": 0.076
+     },
+     "demand_served_c1": {
+      "asked_a_day": 20.0,
+      "chat_questions": 517,
+      "dollars": 320.5,
+      "per_question": 0.6202,
+      "served_a_day": 20.0,
+      "warm_share": 0.076
+     }
+    },
+    "1000": {
+     "at_ceiling": {
+      "asked_a_day": 200.0,
+      "chat_questions": 5168,
+      "dollars": 3749.76,
+      "per_question": 0.7256,
+      "served_a_day": 200.0,
+      "warm_share": 0.548
+     },
+     "at_ceiling_c1": {
+      "asked_a_day": 200.0,
+      "chat_questions": 5168,
+      "dollars": 2691.66,
+      "per_question": 0.5208,
+      "served_a_day": 200.0,
+      "warm_share": 0.548
+     },
+     "demand_served": {
+      "asked_a_day": 200.0,
+      "chat_questions": 5168,
+      "dollars": 3749.76,
+      "per_question": 0.7256,
+      "served_a_day": 200.0,
+      "warm_share": 0.548
+     },
+     "demand_served_c1": {
+      "asked_a_day": 200.0,
+      "chat_questions": 5168,
+      "dollars": 2691.66,
+      "per_question": 0.5208,
+      "served_a_day": 200.0,
+      "warm_share": 0.548
+     }
+    },
+    "10000": {
+     "at_ceiling": {
+      "asked_a_day": 2000.0,
+      "chat_questions": 7752,
+      "dollars": 5382.78,
+      "per_question": 0.6944,
+      "served_a_day": 300,
+      "warm_share": 0.696
+     },
+     "at_ceiling_c1": {
+      "asked_a_day": 2000.0,
+      "chat_questions": 7752,
+      "dollars": 3795.62,
+      "per_question": 0.4896,
+      "served_a_day": 300,
+      "warm_share": 0.696
+     },
+     "demand_served": {
+      "asked_a_day": 2000.0,
+      "chat_questions": 51680,
+      "dollars": 32578.75,
+      "per_question": 0.6304,
+      "served_a_day": 2000.0,
+      "warm_share": 1.0
+     },
+     "demand_served_c1": {
+      "asked_a_day": 2000.0,
+      "chat_questions": 51680,
+      "dollars": 21997.7,
+      "per_question": 0.4257,
+      "served_a_day": 2000.0,
+      "warm_share": 1.0
+     }
+    }
+   },
+   "per_workload": {
+    "S1": {
+     "cold": {
+      "cache_write": 16835,
+      "cached_input": 25252,
+      "calls": 2.5,
+      "dollars": 0.883500625,
+      "input": 50675,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 42088,
+      "calls": 2.5,
+      "dollars": 0.6772718750000001,
+      "input": 50675,
+      "output": 3200
+     },
+     "warm_c1": {
+      "cache_write": 22700,
+      "cached_input": 70062,
+      "calls": 2.5,
+      "dollars": 0.46126562499999996,
+      "input": 0,
+      "output": 3200
+     }
+    },
+    "S2": {
+     "cold": {
+      "cache_write": 16835,
+      "cached_input": 25252,
+      "calls": 2.5,
+      "dollars": 0.883500625,
+      "input": 50675,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 42088,
+      "calls": 2.5,
+      "dollars": 0.6772718750000001,
+      "input": 50675,
+      "output": 3200
+     },
+     "warm_c1": {
+      "cache_write": 22700,
+      "cached_input": 70062,
+      "calls": 2.5,
+      "dollars": 0.46126562499999996,
+      "input": 0,
+      "output": 3200
+     }
+    },
+    "W1": {
+     "cold": {
+      "cache_write": 16835,
+      "cached_input": 0,
+      "calls": 1.0,
+      "dollars": 0.2889375,
+      "input": 2850,
+      "output": 1000
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 16835,
+      "calls": 1.0,
+      "dollars": 0.08270875,
+      "input": 2850,
+      "output": 1000
+     },
+     "warm_c1": {
+      "cache_write": 2850,
+      "cached_input": 16835,
+      "calls": 1.0,
+      "dollars": 0.08983375,
+      "input": 0,
+      "output": 1000
+     }
+    },
+    "W10": {
+     "cold": {
+      "cache_write": 16835,
+      "cached_input": 25252,
+      "calls": 2.5,
+      "dollars": 0.883500625,
+      "input": 50675,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 42088,
+      "calls": 2.5,
+      "dollars": 0.6772718750000001,
+      "input": 50675,
+      "output": 3200
+     },
+     "warm_c1": {
+      "cache_write": 22700,
+      "cached_input": 70062,
+      "calls": 2.5,
+      "dollars": 0.46126562499999996,
+      "input": 0,
+      "output": 3200
+     }
+    },
+    "W2": {
+     "cold": {
+      "cache_write": 16835,
+      "cached_input": 25252,
+      "calls": 2.5,
+      "dollars": 0.883500625,
+      "input": 50675,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 42088,
+      "calls": 2.5,
+      "dollars": 0.6772718750000001,
+      "input": 50675,
+      "output": 3200
+     },
+     "warm_c1": {
+      "cache_write": 22700,
+      "cached_input": 70062,
+      "calls": 2.5,
+      "dollars": 0.46126562499999996,
+      "input": 0,
+      "output": 3200
+     }
+    },
+    "W3": {
+     "cold": {
+      "cache_write": 16835,
+      "cached_input": 25252,
+      "calls": 2.5,
+      "dollars": 0.883500625,
+      "input": 50675,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 42088,
+      "calls": 2.5,
+      "dollars": 0.6772718750000001,
+      "input": 50675,
+      "output": 3200
+     },
+     "warm_c1": {
+      "cache_write": 22700,
+      "cached_input": 70062,
+      "calls": 2.5,
+      "dollars": 0.46126562499999996,
+      "input": 0,
+      "output": 3200
+     }
+    },
+    "W4": {
+     "cold": {
+      "cache_write": 16835,
+      "cached_input": 25252,
+      "calls": 2.5,
+      "dollars": 0.883500625,
+      "input": 50675,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 42088,
+      "calls": 2.5,
+      "dollars": 0.6772718750000001,
+      "input": 50675,
+      "output": 3200
+     },
+     "warm_c1": {
+      "cache_write": 22700,
+      "cached_input": 70062,
+      "calls": 2.5,
+      "dollars": 0.46126562499999996,
+      "input": 0,
+      "output": 3200
+     }
+    },
+    "W5": {
+     "cold": {
+      "cache_write": 16835,
+      "cached_input": 25252,
+      "calls": 2.5,
+      "dollars": 0.883500625,
+      "input": 50675,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 42088,
+      "calls": 2.5,
+      "dollars": 0.6772718750000001,
+      "input": 50675,
+      "output": 3200
+     },
+     "warm_c1": {
+      "cache_write": 22700,
+      "cached_input": 70062,
+      "calls": 2.5,
+      "dollars": 0.46126562499999996,
+      "input": 0,
+      "output": 3200
+     }
+    },
+    "W6": {
+     "cold": {
+      "cache_write": 17233,
+      "cached_input": 25850,
+      "calls": 2.5,
+      "dollars": 0.988624875,
+      "input": 60675,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 43082,
+      "calls": 2.5,
+      "dollars": 0.777520625,
+      "input": 60675,
+      "output": 3200
+     },
+     "warm_c1": {
+      "cache_write": 26700,
+      "cached_input": 77058,
+      "calls": 2.5,
+      "dollars": 0.513014375,
+      "input": 0,
+      "output": 3200
+     }
+    },
+    "W7": {
+     "cold": {
+      "cache_write": 16835,
+      "cached_input": 42088,
+      "calls": 3.5,
+      "dollars": 1.230209375,
+      "input": 78425,
+      "output": 4500
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 58922,
+      "calls": 3.5,
+      "dollars": 1.023980625,
+      "input": 78425,
+      "output": 4500
+     },
+     "warm_c1": {
+      "cache_write": 26900,
+      "cached_input": 110448,
+      "calls": 3.5,
+      "dollars": 0.588861875,
+      "input": 0,
+      "output": 4500
+     }
+    },
+    "W8": {
+     "cold": {
+      "cache_write": 16835,
+      "cached_input": 25252,
+      "calls": 2.5,
+      "dollars": 0.958500625,
+      "input": 58175,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 42088,
+      "calls": 2.5,
+      "dollars": 0.752271875,
+      "input": 58175,
+      "output": 3200
+     },
+     "warm_c1": {
+      "cache_write": 25700,
+      "cached_input": 74562,
+      "calls": 2.5,
+      "dollars": 0.49989062500000003,
+      "input": 0,
+      "output": 3200
+     }
+    },
+    "W9": {
+     "cold": {
+      "cache_write": 16835,
+      "cached_input": 0,
+      "calls": 1.0,
+      "dollars": 0.2889375,
+      "input": 2850,
+      "output": 1000
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 16835,
+      "calls": 1.0,
+      "dollars": 0.08270875,
+      "input": 2850,
+      "output": 1000
+     },
+     "warm_c1": {
+      "cache_write": 2850,
+      "cached_input": 16835,
+      "calls": 1.0,
+      "dollars": 0.08983375,
+      "input": 0,
+      "output": 1000
+     }
+    }
+   },
+   "price": {
+    "cache": "explicit",
+    "cache_life_minutes": 5,
+    "cache_write": 12.5,
+    "cached_input": 0.25,
+    "input": 10.0,
+    "output": 50.0,
+    "provider": "anthropic"
+   },
+   "price_date": "2027-01-01",
+   "priced": true
+  },
+  "claude-haiku-5-5": {
+   "monthly": {
+    "100": {
+     "at_ceiling": {
+      "asked_a_day": 20.0,
+      "chat_questions": 517,
+      "dollars": 4.36,
+      "per_question": 0.0084,
+      "served_a_day": 20.0,
+      "warm_share": 0.076
+     },
+     "at_ceiling_c1": {
+      "asked_a_day": 20.0,
+      "chat_questions": 517,
+      "dollars": 3.4,
+      "per_question": 0.0066,
+      "served_a_day": 20.0,
+      "warm_share": 0.076
+     },
+     "demand_served": {
+      "asked_a_day": 20.0,
+      "chat_questions": 517,
+      "dollars": 4.36,
+      "per_question": 0.0084,
+      "served_a_day": 20.0,
+      "warm_share": 0.076
+     },
+     "demand_served_c1": {
+      "asked_a_day": 20.0,
+      "chat_questions": 517,
+      "dollars": 3.4,
+      "per_question": 0.0066,
+      "served_a_day": 20.0,
+      "warm_share": 0.076
+     }
+    },
+    "1000": {
+     "at_ceiling": {
+      "asked_a_day": 200.0,
+      "chat_questions": 5168,
+      "dollars": 38.74,
+      "per_question": 0.0075,
+      "served_a_day": 200.0,
+      "warm_share": 0.548
+     },
+     "at_ceiling_c1": {
+      "asked_a_day": 200.0,
+      "chat_questions": 5168,
+      "dollars": 29.18,
+      "per_question": 0.0056,
+      "served_a_day": 200.0,
+      "warm_share": 0.548
+     },
+     "demand_served": {
+      "asked_a_day": 200.0,
+      "chat_questions": 5168,
+      "dollars": 38.74,
+      "per_question": 0.0075,
+      "served_a_day": 200.0,
+      "warm_share": 0.548
+     },
+     "demand_served_c1": {
+      "asked_a_day": 200.0,
+      "chat_questions": 5168,
+      "dollars": 29.18,
+      "per_question": 0.0056,
+      "served_a_day": 200.0,
+      "warm_share": 0.548
+     }
+    },
+    "10000": {
+     "at_ceiling": {
+      "asked_a_day": 2000.0,
+      "chat_questions": 7752,
+      "dollars": 55.84,
+      "per_question": 0.0072,
+      "served_a_day": 300,
+      "warm_share": 0.696
+     },
+     "at_ceiling_c1": {
+      "asked_a_day": 2000.0,
+      "chat_questions": 7752,
+      "dollars": 41.5,
+      "per_question": 0.0054,
+      "served_a_day": 300,
+      "warm_share": 0.696
+     },
+     "demand_served": {
+      "asked_a_day": 2000.0,
+      "chat_questions": 51680,
+      "dollars": 341.25,
+      "per_question": 0.0066,
+      "served_a_day": 2000.0,
+      "warm_share": 1.0
+     },
+     "demand_served_c1": {
+      "asked_a_day": 2000.0,
+      "chat_questions": 51680,
+      "dollars": 245.64,
+      "per_question": 0.0048,
+      "served_a_day": 2000.0,
+      "warm_share": 1.0
+     }
+    }
+   },
+   "per_workload": {
+    "S1": {
+     "cold": {
+      "cache_write": 16835,
+      "cached_input": 25252,
+      "calls": 2.5,
+      "dollars": 0.009024399999999998,
+      "input": 50675,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 42088,
+      "calls": 2.5,
+      "dollars": 0.007088374999999999,
+      "input": 50675,
+      "output": 3200
+     },
+     "warm_c1": {
+      "cache_write": 22700,
+      "cached_input": 70062,
+      "calls": 2.5,
+      "dollars": 0.0051381249999999995,
+      "input": 0,
+      "output": 3200
+     }
+    },
+    "S2": {
+     "cold": {
+      "cache_write": 16835,
+      "cached_input": 25252,
+      "calls": 2.5,
+      "dollars": 0.009024399999999998,
+      "input": 50675,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 42088,
+      "calls": 2.5,
+      "dollars": 0.007088374999999999,
+      "input": 50675,
+      "output": 3200
+     },
+     "warm_c1": {
+      "cache_write": 22700,
+      "cached_input": 70062,
+      "calls": 2.5,
+      "dollars": 0.0051381249999999995,
+      "input": 0,
+      "output": 3200
+     }
+    },
+    "W1": {
+     "cold": {
+      "cache_write": 16835,
+      "cached_input": 0,
+      "calls": 1.0,
+      "dollars": 0.002889375,
+      "input": 2850,
+      "output": 1000
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 16835,
+      "calls": 1.0,
+      "dollars": 0.00095335,
+      "input": 2850,
+      "output": 1000
+     },
+     "warm_c1": {
+      "cache_write": 2850,
+      "cached_input": 16835,
+      "calls": 1.0,
+      "dollars": 0.0010245999999999999,
+      "input": 0,
+      "output": 1000
+     }
+    },
+    "W10": {
+     "cold": {
+      "cache_write": 16835,
+      "cached_input": 25252,
+      "calls": 2.5,
+      "dollars": 0.009024399999999998,
+      "input": 50675,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 42088,
+      "calls": 2.5,
+      "dollars": 0.007088374999999999,
+      "input": 50675,
+      "output": 3200
+     },
+     "warm_c1": {
+      "cache_write": 22700,
+      "cached_input": 70062,
+      "calls": 2.5,
+      "dollars": 0.0051381249999999995,
+      "input": 0,
+      "output": 3200
+     }
+    },
+    "W2": {
+     "cold": {
+      "cache_write": 16835,
+      "cached_input": 25252,
+      "calls": 2.5,
+      "dollars": 0.009024399999999998,
+      "input": 50675,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 42088,
+      "calls": 2.5,
+      "dollars": 0.007088374999999999,
+      "input": 50675,
+      "output": 3200
+     },
+     "warm_c1": {
+      "cache_write": 22700,
+      "cached_input": 70062,
+      "calls": 2.5,
+      "dollars": 0.0051381249999999995,
+      "input": 0,
+      "output": 3200
+     }
+    },
+    "W3": {
+     "cold": {
+      "cache_write": 16835,
+      "cached_input": 25252,
+      "calls": 2.5,
+      "dollars": 0.009024399999999998,
+      "input": 50675,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 42088,
+      "calls": 2.5,
+      "dollars": 0.007088374999999999,
+      "input": 50675,
+      "output": 3200
+     },
+     "warm_c1": {
+      "cache_write": 22700,
+      "cached_input": 70062,
+      "calls": 2.5,
+      "dollars": 0.0051381249999999995,
+      "input": 0,
+      "output": 3200
+     }
+    },
+    "W4": {
+     "cold": {
+      "cache_write": 16835,
+      "cached_input": 25252,
+      "calls": 2.5,
+      "dollars": 0.009024399999999998,
+      "input": 50675,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 42088,
+      "calls": 2.5,
+      "dollars": 0.007088374999999999,
+      "input": 50675,
+      "output": 3200
+     },
+     "warm_c1": {
+      "cache_write": 22700,
+      "cached_input": 70062,
+      "calls": 2.5,
+      "dollars": 0.0051381249999999995,
+      "input": 0,
+      "output": 3200
+     }
+    },
+    "W5": {
+     "cold": {
+      "cache_write": 16835,
+      "cached_input": 25252,
+      "calls": 2.5,
+      "dollars": 0.009024399999999998,
+      "input": 50675,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 42088,
+      "calls": 2.5,
+      "dollars": 0.007088374999999999,
+      "input": 50675,
+      "output": 3200
+     },
+     "warm_c1": {
+      "cache_write": 22700,
+      "cached_input": 70062,
+      "calls": 2.5,
+      "dollars": 0.0051381249999999995,
+      "input": 0,
+      "output": 3200
+     }
+    },
+    "W6": {
+     "cold": {
+      "cache_write": 17233,
+      "cached_input": 25850,
+      "calls": 2.5,
+      "dollars": 0.010080120000000001,
+      "input": 60675,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 43082,
+      "calls": 2.5,
+      "dollars": 0.008098325,
+      "input": 60675,
+      "output": 3200
+     },
+     "warm_c1": {
+      "cache_write": 26700,
+      "cached_input": 77058,
+      "calls": 2.5,
+      "dollars": 0.005708075,
+      "input": 0,
+      "output": 3200
+     }
+    },
+    "W7": {
+     "cold": {
+      "cache_write": 16835,
+      "cached_input": 42088,
+      "calls": 3.5,
+      "dollars": 0.012617749999999999,
+      "input": 78425,
+      "output": 4500
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 58922,
+      "calls": 3.5,
+      "dollars": 0.010681725,
+      "input": 78425,
+      "output": 4500
+     },
+     "warm_c1": {
+      "cache_write": 26900,
+      "cached_input": 110448,
+      "calls": 3.5,
+      "dollars": 0.006716975,
+      "input": 0,
+      "output": 4500
+     }
+    },
+    "W8": {
+     "cold": {
+      "cache_write": 16835,
+      "cached_input": 25252,
+      "calls": 2.5,
+      "dollars": 0.009774399999999999,
+      "input": 58175,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 42088,
+      "calls": 2.5,
+      "dollars": 0.007838375,
+      "input": 58175,
+      "output": 3200
+     },
+     "warm_c1": {
+      "cache_write": 25700,
+      "cached_input": 74562,
+      "calls": 2.5,
+      "dollars": 0.0055581250000000006,
+      "input": 0,
+      "output": 3200
+     }
+    },
+    "W9": {
+     "cold": {
+      "cache_write": 16835,
+      "cached_input": 0,
+      "calls": 1.0,
+      "dollars": 0.002889375,
+      "input": 2850,
+      "output": 1000
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 16835,
+      "calls": 1.0,
+      "dollars": 0.00095335,
+      "input": 2850,
+      "output": 1000
+     },
+     "warm_c1": {
+      "cache_write": 2850,
+      "cached_input": 16835,
+      "calls": 1.0,
+      "dollars": 0.0010245999999999999,
+      "input": 0,
+      "output": 1000
+     }
+    }
+   },
+   "price": {
+    "cache": "explicit",
+    "cache_life_minutes": 5,
+    "cache_write": 0.125,
+    "cached_input": 0.01,
+    "input": 0.1,
+    "output": 0.5,
+    "provider": "anthropic",
+    "tiers": [
+     {
+      "above": 100000,
+      "cache_write": 0.625,
+      "cached_input": 0.05,
+      "input": 0.5,
+      "output": 2.5
+     }
+    ]
+   },
+   "price_date": "2027-01-01",
+   "priced": true
+  },
+  "claude-opus-5-5": {
+   "monthly": {
+    "100": {
+     "at_ceiling": {
+      "asked_a_day": 20.0,
+      "chat_questions": 517,
+      "dollars": 171.76,
+      "per_question": 0.3324,
+      "served_a_day": 20.0,
+      "warm_share": 0.076
+     },
+     "at_ceiling_c1": {
+      "asked_a_day": 20.0,
+      "chat_questions": 517,
+      "dollars": 130.8,
+      "per_question": 0.2531,
+      "served_a_day": 20.0,
+      "warm_share": 0.076
+     },
+     "demand_served": {
+      "asked_a_day": 20.0,
+      "chat_questions": 517,
+      "dollars": 171.76,
+      "per_question": 0.3324,
+      "served_a_day": 20.0,
+      "warm_share": 0.076
+     },
+     "demand_served_c1": {
+      "asked_a_day": 20.0,
+      "chat_questions": 517,
+      "dollars": 130.8,
+      "per_question": 0.2531,
+      "served_a_day": 20.0,
+      "warm_share": 0.076
+     }
+    },
+    "1000": {
+     "at_ceiling": {
+      "asked_a_day": 200.0,
+      "chat_questions": 5168,
+      "dollars": 1516.51,
+      "per_question": 0.2934,
+      "served_a_day": 200.0,
+      "warm_share": 0.548
+     },
+     "at_ceiling_c1": {
+      "asked_a_day": 200.0,
+      "chat_questions": 5168,
+      "dollars": 1106.87,
+      "per_question": 0.2142,
+      "served_a_day": 200.0,
+      "warm_share": 0.548
+     },
+     "demand_served": {
+      "asked_a_day": 200.0,
+      "chat_questions": 5168,
+      "dollars": 1516.51,
+      "per_question": 0.2934,
+      "served_a_day": 200.0,
+      "warm_share": 0.548
+     },
+     "demand_served_c1": {
+      "asked_a_day": 200.0,
+      "chat_questions": 5168,
+      "dollars": 1106.87,
+      "per_question": 0.2142,
+      "served_a_day": 200.0,
+      "warm_share": 0.548
+     }
+    },
+    "10000": {
+     "at_ceiling": {
+      "asked_a_day": 2000.0,
+      "chat_questions": 7752,
+      "dollars": 2179.99,
+      "per_question": 0.2812,
+      "served_a_day": 300,
+      "warm_share": 0.696
+     },
+     "at_ceiling_c1": {
+      "asked_a_day": 2000.0,
+      "chat_questions": 7752,
+      "dollars": 1565.53,
+      "per_question": 0.202,
+      "served_a_day": 300,
+      "warm_share": 0.696
+     },
+     "demand_served": {
+      "asked_a_day": 2000.0,
+      "chat_questions": 51680,
+      "dollars": 13237.67,
+      "per_question": 0.2561,
+      "served_a_day": 2000.0,
+      "warm_share": 1.0
+     },
+     "demand_served_c1": {
+      "asked_a_day": 2000.0,
+      "chat_questions": 51680,
+      "dollars": 9141.31,
+      "per_question": 0.1769,
+      "served_a_day": 2000.0,
+      "warm_share": 1.0
+     }
+    }
+   },
+   "per_workload": {
+    "S1": {
+     "cold": {
+      "cache_write": 16835,
+      "cached_input": 25252,
+      "calls": 2.5,
+      "dollars": 0.3559255,
+      "input": 50675,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 42088,
+      "calls": 2.5,
+      "dollars": 0.2751175,
+      "input": 50675,
+      "output": 3200
+     },
+     "warm_c1": {
+      "cache_write": 22700,
+      "cached_input": 70062,
+      "calls": 2.5,
+      "dollars": 0.1915125,
+      "input": 0,
+      "output": 3200
+     }
+    },
+    "S2": {
+     "cold": {
+      "cache_write": 16835,
+      "cached_input": 25252,
+      "calls": 2.5,
+      "dollars": 0.3559255,
+      "input": 50675,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 42088,
+      "calls": 2.5,
+      "dollars": 0.2751175,
+      "input": 50675,
+      "output": 3200
+     },
+     "warm_c1": {
+      "cache_write": 22700,
+      "cached_input": 70062,
+      "calls": 2.5,
+      "dollars": 0.1915125,
+      "input": 0,
+      "output": 3200
+     }
+    },
+    "W1": {
+     "cold": {
+      "cache_write": 16835,
+      "cached_input": 0,
+      "calls": 1.0,
+      "dollars": 0.115575,
+      "input": 2850,
+      "output": 1000
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 16835,
+      "calls": 1.0,
+      "dollars": 0.034767,
+      "input": 2850,
+      "output": 1000
+     },
+     "warm_c1": {
+      "cache_write": 2850,
+      "cached_input": 16835,
+      "calls": 1.0,
+      "dollars": 0.037617,
+      "input": 0,
+      "output": 1000
+     }
+    },
+    "W10": {
+     "cold": {
+      "cache_write": 16835,
+      "cached_input": 25252,
+      "calls": 2.5,
+      "dollars": 0.3559255,
+      "input": 50675,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 42088,
+      "calls": 2.5,
+      "dollars": 0.2751175,
+      "input": 50675,
+      "output": 3200
+     },
+     "warm_c1": {
+      "cache_write": 22700,
+      "cached_input": 70062,
+      "calls": 2.5,
+      "dollars": 0.1915125,
+      "input": 0,
+      "output": 3200
+     }
+    },
+    "W2": {
+     "cold": {
+      "cache_write": 16835,
+      "cached_input": 25252,
+      "calls": 2.5,
+      "dollars": 0.3559255,
+      "input": 50675,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 42088,
+      "calls": 2.5,
+      "dollars": 0.2751175,
+      "input": 50675,
+      "output": 3200
+     },
+     "warm_c1": {
+      "cache_write": 22700,
+      "cached_input": 70062,
+      "calls": 2.5,
+      "dollars": 0.1915125,
+      "input": 0,
+      "output": 3200
+     }
+    },
+    "W3": {
+     "cold": {
+      "cache_write": 16835,
+      "cached_input": 25252,
+      "calls": 2.5,
+      "dollars": 0.3559255,
+      "input": 50675,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 42088,
+      "calls": 2.5,
+      "dollars": 0.2751175,
+      "input": 50675,
+      "output": 3200
+     },
+     "warm_c1": {
+      "cache_write": 22700,
+      "cached_input": 70062,
+      "calls": 2.5,
+      "dollars": 0.1915125,
+      "input": 0,
+      "output": 3200
+     }
+    },
+    "W4": {
+     "cold": {
+      "cache_write": 16835,
+      "cached_input": 25252,
+      "calls": 2.5,
+      "dollars": 0.3559255,
+      "input": 50675,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 42088,
+      "calls": 2.5,
+      "dollars": 0.2751175,
+      "input": 50675,
+      "output": 3200
+     },
+     "warm_c1": {
+      "cache_write": 22700,
+      "cached_input": 70062,
+      "calls": 2.5,
+      "dollars": 0.1915125,
+      "input": 0,
+      "output": 3200
+     }
+    },
+    "W5": {
+     "cold": {
+      "cache_write": 16835,
+      "cached_input": 25252,
+      "calls": 2.5,
+      "dollars": 0.3559255,
+      "input": 50675,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 42088,
+      "calls": 2.5,
+      "dollars": 0.2751175,
+      "input": 50675,
+      "output": 3200
+     },
+     "warm_c1": {
+      "cache_write": 22700,
+      "cached_input": 70062,
+      "calls": 2.5,
+      "dollars": 0.1915125,
+      "input": 0,
+      "output": 3200
+     }
+    },
+    "W6": {
+     "cold": {
+      "cache_write": 17233,
+      "cached_input": 25850,
+      "calls": 2.5,
+      "dollars": 0.3980349,
+      "input": 60675,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 43082,
+      "calls": 2.5,
+      "dollars": 0.3153165,
+      "input": 60675,
+      "output": 3200
+     },
+     "warm_c1": {
+      "cache_write": 26700,
+      "cached_input": 77058,
+      "calls": 2.5,
+      "dollars": 0.21291150000000003,
+      "input": 0,
+      "output": 3200
+     }
+    },
+    "W7": {
+     "cold": {
+      "cache_write": 16835,
+      "cached_input": 42088,
+      "calls": 3.5,
+      "dollars": 0.49629249999999997,
+      "input": 78425,
+      "output": 4500
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 58922,
+      "calls": 3.5,
+      "dollars": 0.4154845,
+      "input": 78425,
+      "output": 4500
+     },
+     "warm_c1": {
+      "cache_write": 26900,
+      "cached_input": 110448,
+      "calls": 3.5,
+      "dollars": 0.24658950000000002,
+      "input": 0,
+      "output": 4500
+     }
+    },
+    "W8": {
+     "cold": {
+      "cache_write": 16835,
+      "cached_input": 25252,
+      "calls": 2.5,
+      "dollars": 0.38592550000000003,
+      "input": 58175,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 42088,
+      "calls": 2.5,
+      "dollars": 0.30511750000000004,
+      "input": 58175,
+      "output": 3200
+     },
+     "warm_c1": {
+      "cache_write": 25700,
+      "cached_input": 74562,
+      "calls": 2.5,
+      "dollars": 0.2074125,
+      "input": 0,
+      "output": 3200
+     }
+    },
+    "W9": {
+     "cold": {
+      "cache_write": 16835,
+      "cached_input": 0,
+      "calls": 1.0,
+      "dollars": 0.115575,
+      "input": 2850,
+      "output": 1000
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 16835,
+      "calls": 1.0,
+      "dollars": 0.034767,
+      "input": 2850,
+      "output": 1000
+     },
+     "warm_c1": {
+      "cache_write": 2850,
+      "cached_input": 16835,
+      "calls": 1.0,
+      "dollars": 0.037617,
+      "input": 0,
+      "output": 1000
+     }
+    }
+   },
+   "price": {
+    "cache": "explicit",
+    "cache_life_minutes": 5,
+    "cache_write": 5.0,
+    "cached_input": 0.2,
+    "input": 4.0,
+    "output": 20.0,
+    "provider": "anthropic"
+   },
+   "price_date": "2027-01-01",
+   "priced": true
+  },
+  "claude-sonnet-5-5": {
+   "monthly": {
+    "100": {
+     "at_ceiling": {
+      "asked_a_day": 20.0,
+      "chat_questions": 517,
+      "dollars": 85.88,
+      "per_question": 0.1662,
+      "served_a_day": 20.0,
+      "warm_share": 0.076
+     },
+     "at_ceiling_c1": {
+      "asked_a_day": 20.0,
+      "chat_questions": 517,
+      "dollars": 65.4,
+      "per_question": 0.1265,
+      "served_a_day": 20.0,
+      "warm_share": 0.076
+     },
+     "demand_served": {
+      "asked_a_day": 20.0,
+      "chat_questions": 517,
+      "dollars": 85.88,
+      "per_question": 0.1662,
+      "served_a_day": 20.0,
+      "warm_share": 0.076
+     },
+     "demand_served_c1": {
+      "asked_a_day": 20.0,
+      "chat_questions": 517,
+      "dollars": 65.4,
+      "per_question": 0.1265,
+      "served_a_day": 20.0,
+      "warm_share": 0.076
+     }
+    },
+    "1000": {
+     "at_ceiling": {
+      "asked_a_day": 200.0,
+      "chat_questions": 5168,
+      "dollars": 758.25,
+      "per_question": 0.1467,
+      "served_a_day": 200.0,
+      "warm_share": 0.548
+     },
+     "at_ceiling_c1": {
+      "asked_a_day": 200.0,
+      "chat_questions": 5168,
+      "dollars": 553.44,
+      "per_question": 0.1071,
+      "served_a_day": 200.0,
+      "warm_share": 0.548
+     },
+     "demand_served": {
+      "asked_a_day": 200.0,
+      "chat_questions": 5168,
+      "dollars": 758.25,
+      "per_question": 0.1467,
+      "served_a_day": 200.0,
+      "warm_share": 0.548
+     },
+     "demand_served_c1": {
+      "asked_a_day": 200.0,
+      "chat_questions": 5168,
+      "dollars": 553.44,
+      "per_question": 0.1071,
+      "served_a_day": 200.0,
+      "warm_share": 0.548
+     }
+    },
+    "10000": {
+     "at_ceiling": {
+      "asked_a_day": 2000.0,
+      "chat_questions": 7752,
+      "dollars": 1089.99,
+      "per_question": 0.1406,
+      "served_a_day": 300,
+      "warm_share": 0.696
+     },
+     "at_ceiling_c1": {
+      "asked_a_day": 2000.0,
+      "chat_questions": 7752,
+      "dollars": 782.77,
+      "per_question": 0.101,
+      "served_a_day": 300,
+      "warm_share": 0.696
+     },
+     "demand_served": {
+      "asked_a_day": 2000.0,
+      "chat_questions": 51680,
+      "dollars": 6618.83,
+      "per_question": 0.1281,
+      "served_a_day": 2000.0,
+      "warm_share": 1.0
+     },
+     "demand_served_c1": {
+      "asked_a_day": 2000.0,
+      "chat_questions": 51680,
+      "dollars": 4570.66,
+      "per_question": 0.0884,
+      "served_a_day": 2000.0,
+      "warm_share": 1.0
+     }
+    }
+   },
+   "per_workload": {
+    "S1": {
+     "cold": {
+      "cache_write": 16835,
+      "cached_input": 25252,
+      "calls": 2.5,
+      "dollars": 0.17796275,
+      "input": 50675,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 42088,
+      "calls": 2.5,
+      "dollars": 0.13755875,
+      "input": 50675,
+      "output": 3200
+     },
+     "warm_c1": {
+      "cache_write": 22700,
+      "cached_input": 70062,
+      "calls": 2.5,
+      "dollars": 0.09575625,
+      "input": 0,
+      "output": 3200
+     }
+    },
+    "S2": {
+     "cold": {
+      "cache_write": 16835,
+      "cached_input": 25252,
+      "calls": 2.5,
+      "dollars": 0.17796275,
+      "input": 50675,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 42088,
+      "calls": 2.5,
+      "dollars": 0.13755875,
+      "input": 50675,
+      "output": 3200
+     },
+     "warm_c1": {
+      "cache_write": 22700,
+      "cached_input": 70062,
+      "calls": 2.5,
+      "dollars": 0.09575625,
+      "input": 0,
+      "output": 3200
+     }
+    },
+    "W1": {
+     "cold": {
+      "cache_write": 16835,
+      "cached_input": 0,
+      "calls": 1.0,
+      "dollars": 0.0577875,
+      "input": 2850,
+      "output": 1000
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 16835,
+      "calls": 1.0,
+      "dollars": 0.0173835,
+      "input": 2850,
+      "output": 1000
+     },
+     "warm_c1": {
+      "cache_write": 2850,
+      "cached_input": 16835,
+      "calls": 1.0,
+      "dollars": 0.0188085,
+      "input": 0,
+      "output": 1000
+     }
+    },
+    "W10": {
+     "cold": {
+      "cache_write": 16835,
+      "cached_input": 25252,
+      "calls": 2.5,
+      "dollars": 0.17796275,
+      "input": 50675,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 42088,
+      "calls": 2.5,
+      "dollars": 0.13755875,
+      "input": 50675,
+      "output": 3200
+     },
+     "warm_c1": {
+      "cache_write": 22700,
+      "cached_input": 70062,
+      "calls": 2.5,
+      "dollars": 0.09575625,
+      "input": 0,
+      "output": 3200
+     }
+    },
+    "W2": {
+     "cold": {
+      "cache_write": 16835,
+      "cached_input": 25252,
+      "calls": 2.5,
+      "dollars": 0.17796275,
+      "input": 50675,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 42088,
+      "calls": 2.5,
+      "dollars": 0.13755875,
+      "input": 50675,
+      "output": 3200
+     },
+     "warm_c1": {
+      "cache_write": 22700,
+      "cached_input": 70062,
+      "calls": 2.5,
+      "dollars": 0.09575625,
+      "input": 0,
+      "output": 3200
+     }
+    },
+    "W3": {
+     "cold": {
+      "cache_write": 16835,
+      "cached_input": 25252,
+      "calls": 2.5,
+      "dollars": 0.17796275,
+      "input": 50675,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 42088,
+      "calls": 2.5,
+      "dollars": 0.13755875,
+      "input": 50675,
+      "output": 3200
+     },
+     "warm_c1": {
+      "cache_write": 22700,
+      "cached_input": 70062,
+      "calls": 2.5,
+      "dollars": 0.09575625,
+      "input": 0,
+      "output": 3200
+     }
+    },
+    "W4": {
+     "cold": {
+      "cache_write": 16835,
+      "cached_input": 25252,
+      "calls": 2.5,
+      "dollars": 0.17796275,
+      "input": 50675,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 42088,
+      "calls": 2.5,
+      "dollars": 0.13755875,
+      "input": 50675,
+      "output": 3200
+     },
+     "warm_c1": {
+      "cache_write": 22700,
+      "cached_input": 70062,
+      "calls": 2.5,
+      "dollars": 0.09575625,
+      "input": 0,
+      "output": 3200
+     }
+    },
+    "W5": {
+     "cold": {
+      "cache_write": 16835,
+      "cached_input": 25252,
+      "calls": 2.5,
+      "dollars": 0.17796275,
+      "input": 50675,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 42088,
+      "calls": 2.5,
+      "dollars": 0.13755875,
+      "input": 50675,
+      "output": 3200
+     },
+     "warm_c1": {
+      "cache_write": 22700,
+      "cached_input": 70062,
+      "calls": 2.5,
+      "dollars": 0.09575625,
+      "input": 0,
+      "output": 3200
+     }
+    },
+    "W6": {
+     "cold": {
+      "cache_write": 17233,
+      "cached_input": 25850,
+      "calls": 2.5,
+      "dollars": 0.19901745,
+      "input": 60675,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 43082,
+      "calls": 2.5,
+      "dollars": 0.15765825,
+      "input": 60675,
+      "output": 3200
+     },
+     "warm_c1": {
+      "cache_write": 26700,
+      "cached_input": 77058,
+      "calls": 2.5,
+      "dollars": 0.10645575000000002,
+      "input": 0,
+      "output": 3200
+     }
+    },
+    "W7": {
+     "cold": {
+      "cache_write": 16835,
+      "cached_input": 42088,
+      "calls": 3.5,
+      "dollars": 0.24814624999999998,
+      "input": 78425,
+      "output": 4500
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 58922,
+      "calls": 3.5,
+      "dollars": 0.20774225,
+      "input": 78425,
+      "output": 4500
+     },
+     "warm_c1": {
+      "cache_write": 26900,
+      "cached_input": 110448,
+      "calls": 3.5,
+      "dollars": 0.12329475000000001,
+      "input": 0,
+      "output": 4500
+     }
+    },
+    "W8": {
+     "cold": {
+      "cache_write": 16835,
+      "cached_input": 25252,
+      "calls": 2.5,
+      "dollars": 0.19296275000000002,
+      "input": 58175,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 42088,
+      "calls": 2.5,
+      "dollars": 0.15255875000000002,
+      "input": 58175,
+      "output": 3200
+     },
+     "warm_c1": {
+      "cache_write": 25700,
+      "cached_input": 74562,
+      "calls": 2.5,
+      "dollars": 0.10370625,
+      "input": 0,
+      "output": 3200
+     }
+    },
+    "W9": {
+     "cold": {
+      "cache_write": 16835,
+      "cached_input": 0,
+      "calls": 1.0,
+      "dollars": 0.0577875,
+      "input": 2850,
+      "output": 1000
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 16835,
+      "calls": 1.0,
+      "dollars": 0.0173835,
+      "input": 2850,
+      "output": 1000
+     },
+     "warm_c1": {
+      "cache_write": 2850,
+      "cached_input": 16835,
+      "calls": 1.0,
+      "dollars": 0.0188085,
+      "input": 0,
+      "output": 1000
+     }
+    }
+   },
+   "price": {
+    "cache": "explicit",
+    "cache_life_minutes": 5,
+    "cache_write": 2.5,
+    "cached_input": 0.1,
+    "input": 2.0,
+    "output": 10.0,
+    "provider": "anthropic"
+   },
+   "price_date": "2027-01-01",
+   "priced": true
+  },
+  "deepseek-ai/DeepSeek-V4.1-Flash-1017": {
+   "monthly": {
+    "100": {
+     "at_ceiling": {
+      "asked_a_day": 20.0,
+      "chat_questions": 517,
+      "dollars": 7.69,
+      "per_question": 0.0149,
+      "served_a_day": 20.0,
+      "warm_share": 0.076
+     },
+     "demand_served": {
+      "asked_a_day": 20.0,
+      "chat_questions": 517,
+      "dollars": 7.69,
+      "per_question": 0.0149,
+      "served_a_day": 20.0,
+      "warm_share": 0.076
+     }
+    },
+    "1000": {
+     "at_ceiling": {
+      "asked_a_day": 200.0,
+      "chat_questions": 5168,
+      "dollars": 64.6,
+      "per_question": 0.0125,
+      "served_a_day": 200.0,
+      "warm_share": 0.548
+     },
+     "demand_served": {
+      "asked_a_day": 200.0,
+      "chat_questions": 5168,
+      "dollars": 64.6,
+      "per_question": 0.0125,
+      "served_a_day": 200.0,
+      "warm_share": 0.548
+     }
+    },
+    "10000": {
+     "at_ceiling": {
+      "asked_a_day": 2000.0,
+      "chat_questions": 7752,
+      "dollars": 91.09,
+      "per_question": 0.0118,
+      "served_a_day": 300,
+      "warm_share": 0.696
+     },
+     "demand_served": {
+      "asked_a_day": 2000.0,
+      "chat_questions": 51680,
+      "dollars": 527.94,
+      "per_question": 0.0102,
+      "served_a_day": 2000.0,
+      "warm_share": 1.0
+     }
+    }
+   },
+   "per_workload": {
+    "S1": {
+     "cold": {
+      "cache_write": 0,
+      "cached_input": 53228,
+      "calls": 2.5,
+      "dollars": 0.016019864999999998,
+      "input": 39535,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 70062,
+      "calls": 2.5,
+      "dollars": 0.011070375,
+      "input": 22700,
+      "output": 3200
+     }
+    },
+    "S2": {
+     "cold": {
+      "cache_write": 0,
+      "cached_input": 53228,
+      "calls": 2.5,
+      "dollars": 0.016019864999999998,
+      "input": 39535,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 70062,
+      "calls": 2.5,
+      "dollars": 0.011070375,
+      "input": 22700,
+      "output": 3200
+     }
+    },
+    "W1": {
+     "cold": {
+      "cache_write": 0,
+      "cached_input": 0,
+      "calls": 1.0,
+      "dollars": 0.0071055,
+      "input": 19685,
+      "output": 1000
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 16835,
+      "calls": 1.0,
+      "dollars": 0.0021560100000000003,
+      "input": 2850,
+      "output": 1000
+     }
+    },
+    "W10": {
+     "cold": {
+      "cache_write": 0,
+      "cached_input": 53228,
+      "calls": 2.5,
+      "dollars": 0.016019864999999998,
+      "input": 39535,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 70062,
+      "calls": 2.5,
+      "dollars": 0.011070375,
+      "input": 22700,
+      "output": 3200
+     }
+    },
+    "W2": {
+     "cold": {
+      "cache_write": 0,
+      "cached_input": 53228,
+      "calls": 2.5,
+      "dollars": 0.016019864999999998,
+      "input": 39535,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 70062,
+      "calls": 2.5,
+      "dollars": 0.011070375,
+      "input": 22700,
+      "output": 3200
+     }
+    },
+    "W3": {
+     "cold": {
+      "cache_write": 0,
+      "cached_input": 53228,
+      "calls": 2.5,
+      "dollars": 0.016019864999999998,
+      "input": 39535,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 70062,
+      "calls": 2.5,
+      "dollars": 0.011070375,
+      "input": 22700,
+      "output": 3200
+     }
+    },
+    "W4": {
+     "cold": {
+      "cache_write": 0,
+      "cached_input": 53228,
+      "calls": 2.5,
+      "dollars": 0.016019864999999998,
+      "input": 39535,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 70062,
+      "calls": 2.5,
+      "dollars": 0.011070375,
+      "input": 22700,
+      "output": 3200
+     }
+    },
+    "W5": {
+     "cold": {
+      "cache_write": 0,
+      "cached_input": 53228,
+      "calls": 2.5,
+      "dollars": 0.016019864999999998,
+      "input": 39535,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 70062,
+      "calls": 2.5,
+      "dollars": 0.011070375,
+      "input": 22700,
+      "output": 3200
+     }
+    },
+    "W6": {
+     "cold": {
+      "cache_write": 0,
+      "cached_input": 59824,
+      "calls": 2.5,
+      "dollars": 0.017378846999999996,
+      "input": 43933,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 77058,
+      "calls": 2.5,
+      "dollars": 0.012312345,
+      "input": 26700,
+      "output": 3200
+     }
+    },
+    "W7": {
+     "cold": {
+      "cache_write": 0,
+      "cached_input": 93612,
+      "calls": 3.5,
+      "dollars": 0.019082175,
+      "input": 43735,
+      "output": 4500
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 110448,
+      "calls": 3.5,
+      "dollars": 0.014132685000000002,
+      "input": 26900,
+      "output": 4500
+     }
+    },
+    "W8": {
+     "cold": {
+      "cache_write": 0,
+      "cached_input": 57728,
+      "calls": 2.5,
+      "dollars": 0.016946865000000002,
+      "input": 42535,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 74562,
+      "calls": 2.5,
+      "dollars": 0.011997375000000001,
+      "input": 25700,
+      "output": 3200
+     }
+    },
+    "W9": {
+     "cold": {
+      "cache_write": 0,
+      "cached_input": 0,
+      "calls": 1.0,
+      "dollars": 0.0071055,
+      "input": 19685,
+      "output": 1000
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 16835,
+      "calls": 1.0,
+      "dollars": 0.0021560100000000003,
+      "input": 2850,
+      "output": 1000
+     }
+    }
+   },
+   "price": {
+    "cache": "implicit",
+    "cached_input": 0.006,
+    "input": 0.3,
+    "output": 1.2,
+    "provider": "together"
+   },
+   "price_date": "2027-01-01",
+   "priced": true
+  },
+  "gemini-3.5-flash-lite": {
+   "monthly": {
+    "100": {
+     "at_ceiling": {
+      "asked_a_day": 20.0,
+      "chat_questions": 517,
+      "dollars": 10.32,
+      "per_question": 0.02,
+      "served_a_day": 20.0,
+      "warm_share": 0.076
+     },
+     "demand_served": {
+      "asked_a_day": 20.0,
+      "chat_questions": 517,
+      "dollars": 10.32,
+      "per_question": 0.02,
+      "served_a_day": 20.0,
+      "warm_share": 0.076
+     }
+    },
+    "1000": {
+     "at_ceiling": {
+      "asked_a_day": 200.0,
+      "chat_questions": 5168,
+      "dollars": 91.9,
+      "per_question": 0.0178,
+      "served_a_day": 200.0,
+      "warm_share": 0.548
+     },
+     "demand_served": {
+      "asked_a_day": 200.0,
+      "chat_questions": 5168,
+      "dollars": 91.9,
+      "per_question": 0.0178,
+      "served_a_day": 200.0,
+      "warm_share": 0.548
+     }
+    },
+    "10000": {
+     "at_ceiling": {
+      "asked_a_day": 2000.0,
+      "chat_questions": 7752,
+      "dollars": 132.52,
+      "per_question": 0.0171,
+      "served_a_day": 300,
+      "warm_share": 0.696
+     },
+     "demand_served": {
+      "asked_a_day": 2000.0,
+      "chat_questions": 51680,
+      "dollars": 810.59,
+      "per_question": 0.0157,
+      "served_a_day": 2000.0,
+      "warm_share": 1.0
+     }
+    }
+   },
+   "per_workload": {
+    "S1": {
+     "cold": {
+      "cache_write": 0,
+      "cached_input": 53228,
+      "calls": 2.5,
+      "dollars": 0.021457325,
+      "input": 39535,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 70062,
+      "calls": 2.5,
+      "dollars": 0.016911875,
+      "input": 22700,
+      "output": 3200
+     }
+    },
+    "S2": {
+     "cold": {
+      "cache_write": 0,
+      "cached_input": 53228,
+      "calls": 2.5,
+      "dollars": 0.021457325,
+      "input": 39535,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 70062,
+      "calls": 2.5,
+      "dollars": 0.016911875,
+      "input": 22700,
+      "output": 3200
+     }
+    },
+    "W1": {
+     "cold": {
+      "cache_write": 0,
+      "cached_input": 0,
+      "calls": 1.0,
+      "dollars": 0.0084055,
+      "input": 19685,
+      "output": 1000
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 16835,
+      "calls": 1.0,
+      "dollars": 0.0038600500000000003,
+      "input": 2850,
+      "output": 1000
+     }
+    },
+    "W10": {
+     "cold": {
+      "cache_write": 0,
+      "cached_input": 53228,
+      "calls": 2.5,
+      "dollars": 0.021457325,
+      "input": 39535,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 70062,
+      "calls": 2.5,
+      "dollars": 0.016911875,
+      "input": 22700,
+      "output": 3200
+     }
+    },
+    "W2": {
+     "cold": {
+      "cache_write": 0,
+      "cached_input": 53228,
+      "calls": 2.5,
+      "dollars": 0.021457325,
+      "input": 39535,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 70062,
+      "calls": 2.5,
+      "dollars": 0.016911875,
+      "input": 22700,
+      "output": 3200
+     }
+    },
+    "W3": {
+     "cold": {
+      "cache_write": 0,
+      "cached_input": 53228,
+      "calls": 2.5,
+      "dollars": 0.021457325,
+      "input": 39535,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 70062,
+      "calls": 2.5,
+      "dollars": 0.016911875,
+      "input": 22700,
+      "output": 3200
+     }
+    },
+    "W4": {
+     "cold": {
+      "cache_write": 0,
+      "cached_input": 53228,
+      "calls": 2.5,
+      "dollars": 0.021457325,
+      "input": 39535,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 70062,
+      "calls": 2.5,
+      "dollars": 0.016911875,
+      "input": 22700,
+      "output": 3200
+     }
+    },
+    "W5": {
+     "cold": {
+      "cache_write": 0,
+      "cached_input": 53228,
+      "calls": 2.5,
+      "dollars": 0.021457325,
+      "input": 39535,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 70062,
+      "calls": 2.5,
+      "dollars": 0.016911875,
+      "input": 22700,
+      "output": 3200
+     }
+    },
+    "W6": {
+     "cold": {
+      "cache_write": 0,
+      "cached_input": 59824,
+      "calls": 2.5,
+      "dollars": 0.022974635,
+      "input": 43933,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 77058,
+      "calls": 2.5,
+      "dollars": 0.018321724999999997,
+      "input": 26700,
+      "output": 3200
+     }
+    },
+    "W7": {
+     "cold": {
+      "cache_write": 0,
+      "cached_input": 93612,
+      "calls": 3.5,
+      "dollars": 0.027178874999999998,
+      "input": 43735,
+      "output": 4500
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 110448,
+      "calls": 3.5,
+      "dollars": 0.022633425,
+      "input": 26900,
+      "output": 4500
+     }
+    },
+    "W8": {
+     "cold": {
+      "cache_write": 0,
+      "cached_input": 57728,
+      "calls": 2.5,
+      "dollars": 0.022492325,
+      "input": 42535,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 74562,
+      "calls": 2.5,
+      "dollars": 0.017946875,
+      "input": 25700,
+      "output": 3200
+     }
+    },
+    "W9": {
+     "cold": {
+      "cache_write": 0,
+      "cached_input": 0,
+      "calls": 1.0,
+      "dollars": 0.0084055,
+      "input": 19685,
+      "output": 1000
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 16835,
+      "calls": 1.0,
+      "dollars": 0.0038600500000000003,
+      "input": 2850,
+      "output": 1000
+     }
+    }
+   },
+   "price": {
+    "cache": "implicit",
+    "cached_input": 0.03,
+    "input": 0.3,
+    "output": 2.5,
+    "provider": "google"
+   },
+   "price_date": "2027-01-01",
+   "priced": true
+  },
+  "gemini-3.8-flash": {
+   "monthly": {
+    "100": {
+     "at_ceiling": {
+      "asked_a_day": 20.0,
+      "chat_questions": 517,
+      "dollars": 43.9,
+      "per_question": 0.0849,
+      "served_a_day": 20.0,
+      "warm_share": 0.076
+     },
+     "demand_served": {
+      "asked_a_day": 20.0,
+      "chat_questions": 517,
+      "dollars": 43.9,
+      "per_question": 0.0849,
+      "served_a_day": 20.0,
+      "warm_share": 0.076
+     }
+    },
+    "1000": {
+     "at_ceiling": {
+      "asked_a_day": 200.0,
+      "chat_questions": 5168,
+      "dollars": 382.38,
+      "per_question": 0.074,
+      "served_a_day": 200.0,
+      "warm_share": 0.548
+     },
+     "demand_served": {
+      "asked_a_day": 200.0,
+      "chat_questions": 5168,
+      "dollars": 382.38,
+      "per_question": 0.074,
+      "served_a_day": 200.0,
+      "warm_share": 0.548
+     }
+    },
+    "10000": {
+     "at_ceiling": {
+      "asked_a_day": 2000.0,
+      "chat_questions": 7752,
+      "dollars": 546.92,
+      "per_question": 0.0706,
+      "served_a_day": 300,
+      "warm_share": 0.696
+     },
+     "demand_served": {
+      "asked_a_day": 2000.0,
+      "chat_questions": 51680,
+      "dollars": 3281.76,
+      "per_question": 0.0635,
+      "served_a_day": 2000.0,
+      "warm_share": 1.0
+     }
+    }
+   },
+   "per_workload": {
+    "S1": {
+     "cold": {
+      "cache_write": 0,
+      "cached_input": 53228,
+      "calls": 2.5,
+      "dollars": 0.09128662500000001,
+      "input": 39535,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 70062,
+      "calls": 2.5,
+      "dollars": 0.068559375,
+      "input": 22700,
+      "output": 3200
+     }
+    },
+    "S2": {
+     "cold": {
+      "cache_write": 0,
+      "cached_input": 53228,
+      "calls": 2.5,
+      "dollars": 0.09128662500000001,
+      "input": 39535,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 70062,
+      "calls": 2.5,
+      "dollars": 0.068559375,
+      "input": 22700,
+      "output": 3200
+     }
+    },
+    "W1": {
+     "cold": {
+      "cache_write": 0,
+      "cached_input": 0,
+      "calls": 1.0,
+      "dollars": 0.0370275,
+      "input": 19685,
+      "output": 1000
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 16835,
+      "calls": 1.0,
+      "dollars": 0.01430025,
+      "input": 2850,
+      "output": 1000
+     }
+    },
+    "W10": {
+     "cold": {
+      "cache_write": 0,
+      "cached_input": 53228,
+      "calls": 2.5,
+      "dollars": 0.09128662500000001,
+      "input": 39535,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 70062,
+      "calls": 2.5,
+      "dollars": 0.068559375,
+      "input": 22700,
+      "output": 3200
+     }
+    },
+    "W2": {
+     "cold": {
+      "cache_write": 0,
+      "cached_input": 53228,
+      "calls": 2.5,
+      "dollars": 0.09128662500000001,
+      "input": 39535,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 70062,
+      "calls": 2.5,
+      "dollars": 0.068559375,
+      "input": 22700,
+      "output": 3200
+     }
+    },
+    "W3": {
+     "cold": {
+      "cache_write": 0,
+      "cached_input": 53228,
+      "calls": 2.5,
+      "dollars": 0.09128662500000001,
+      "input": 39535,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 70062,
+      "calls": 2.5,
+      "dollars": 0.068559375,
+      "input": 22700,
+      "output": 3200
+     }
+    },
+    "W4": {
+     "cold": {
+      "cache_write": 0,
+      "cached_input": 53228,
+      "calls": 2.5,
+      "dollars": 0.09128662500000001,
+      "input": 39535,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 70062,
+      "calls": 2.5,
+      "dollars": 0.068559375,
+      "input": 22700,
+      "output": 3200
+     }
+    },
+    "W5": {
+     "cold": {
+      "cache_write": 0,
+      "cached_input": 53228,
+      "calls": 2.5,
+      "dollars": 0.09128662500000001,
+      "input": 39535,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 70062,
+      "calls": 2.5,
+      "dollars": 0.068559375,
+      "input": 22700,
+      "output": 3200
+     }
+    },
+    "W6": {
+     "cold": {
+      "cache_write": 0,
+      "cached_input": 59824,
+      "calls": 2.5,
+      "dollars": 0.09887317500000001,
+      "input": 43933,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 77058,
+      "calls": 2.5,
+      "dollars": 0.07560862499999998,
+      "input": 26700,
+      "output": 3200
+     }
+    },
+    "W7": {
+     "cold": {
+      "cache_write": 0,
+      "cached_input": 93612,
+      "calls": 3.5,
+      "dollars": 0.113394375,
+      "input": 43735,
+      "output": 4500
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 110448,
+      "calls": 3.5,
+      "dollars": 0.090667125,
+      "input": 26900,
+      "output": 4500
+     }
+    },
+    "W8": {
+     "cold": {
+      "cache_write": 0,
+      "cached_input": 57728,
+      "calls": 2.5,
+      "dollars": 0.096461625,
+      "input": 42535,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 74562,
+      "calls": 2.5,
+      "dollars": 0.07373437499999999,
+      "input": 25700,
+      "output": 3200
+     }
+    },
+    "W9": {
+     "cold": {
+      "cache_write": 0,
+      "cached_input": 0,
+      "calls": 1.0,
+      "dollars": 0.0370275,
+      "input": 19685,
+      "output": 1000
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 16835,
+      "calls": 1.0,
+      "dollars": 0.01430025,
+      "input": 2850,
+      "output": 1000
+     }
+    }
+   },
+   "price": {
+    "cache": "implicit",
+    "cached_input": 0.15,
+    "input": 1.5,
+    "output": 7.5,
+    "provider": "google"
+   },
+   "price_date": "2027-01-01",
+   "priced": true,
+   "today": {
+    "monthly": {
+     "100": {
+      "asked_a_day": 20.0,
+      "chat_questions": 517,
+      "dollars": 21.95,
+      "per_question": 0.0425,
+      "served_a_day": 20.0,
+      "warm_share": 0.076
+     },
+     "1000": {
+      "asked_a_day": 200.0,
+      "chat_questions": 5168,
+      "dollars": 191.19,
+      "per_question": 0.037,
+      "served_a_day": 200.0,
+      "warm_share": 0.548
+     },
+     "10000": {
+      "asked_a_day": 2000.0,
+      "chat_questions": 7752,
+      "dollars": 273.46,
+      "per_question": 0.0353,
+      "served_a_day": 300,
+      "warm_share": 0.696
+     }
+    },
+    "price": {
+     "cache": "implicit",
+     "cached_input": 0.075,
+     "input": 0.75,
+     "output": 3.75,
+     "provider": "google"
+    }
+   }
+  },
+  "gemini-4-argon": {
+   "monthly": {
+    "100": {
+     "at_ceiling": {
+      "asked_a_day": 20.0,
+      "chat_questions": 517,
+      "dollars": 111.85,
+      "per_question": 0.2164,
+      "served_a_day": 20.0,
+      "warm_share": 0.076
+     },
+     "demand_served": {
+      "asked_a_day": 20.0,
+      "chat_questions": 517,
+      "dollars": 111.85,
+      "per_question": 0.2164,
+      "served_a_day": 20.0,
+      "warm_share": 0.076
+     }
+    },
+    "1000": {
+     "at_ceiling": {
+      "asked_a_day": 200.0,
+      "chat_questions": 5168,
+      "dollars": 959.28,
+      "per_question": 0.1856,
+      "served_a_day": 200.0,
+      "warm_share": 0.548
+     },
+     "demand_served": {
+      "asked_a_day": 200.0,
+      "chat_questions": 5168,
+      "dollars": 959.28,
+      "per_question": 0.1856,
+      "served_a_day": 200.0,
+      "warm_share": 0.548
+     }
+    },
+    "10000": {
+     "at_ceiling": {
+      "asked_a_day": 2000.0,
+      "chat_questions": 7752,
+      "dollars": 1363.89,
+      "per_question": 0.1759,
+      "served_a_day": 300,
+      "warm_share": 0.696
+     },
+     "demand_served": {
+      "asked_a_day": 2000.0,
+      "chat_questions": 51680,
+      "dollars": 8066.9,
+      "per_question": 0.1561,
+      "served_a_day": 2000.0,
+      "warm_share": 1.0
+     }
+    }
+   },
+   "per_workload": {
+    "S1": {
+     "cold": {
+      "cache_write": 0,
+      "cached_input": 53228,
+      "calls": 2.5,
+      "dollars": 0.2327855,
+      "input": 39535,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 70062,
+      "calls": 2.5,
+      "dollars": 0.1688125,
+      "input": 22700,
+      "output": 3200
+     }
+    },
+    "S2": {
+     "cold": {
+      "cache_write": 0,
+      "cached_input": 53228,
+      "calls": 2.5,
+      "dollars": 0.2327855,
+      "input": 39535,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 70062,
+      "calls": 2.5,
+      "dollars": 0.1688125,
+      "input": 22700,
+      "output": 3200
+     }
+    },
+    "W1": {
+     "cold": {
+      "cache_write": 0,
+      "cached_input": 0,
+      "calls": 1.0,
+      "dollars": 0.09874,
+      "input": 19685,
+      "output": 1000
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 16835,
+      "calls": 1.0,
+      "dollars": 0.034767,
+      "input": 2850,
+      "output": 1000
+     }
+    },
+    "W10": {
+     "cold": {
+      "cache_write": 0,
+      "cached_input": 53228,
+      "calls": 2.5,
+      "dollars": 0.2327855,
+      "input": 39535,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 70062,
+      "calls": 2.5,
+      "dollars": 0.1688125,
+      "input": 22700,
+      "output": 3200
+     }
+    },
+    "W2": {
+     "cold": {
+      "cache_write": 0,
+      "cached_input": 53228,
+      "calls": 2.5,
+      "dollars": 0.2327855,
+      "input": 39535,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 70062,
+      "calls": 2.5,
+      "dollars": 0.1688125,
+      "input": 22700,
+      "output": 3200
+     }
+    },
+    "W3": {
+     "cold": {
+      "cache_write": 0,
+      "cached_input": 53228,
+      "calls": 2.5,
+      "dollars": 0.2327855,
+      "input": 39535,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 70062,
+      "calls": 2.5,
+      "dollars": 0.1688125,
+      "input": 22700,
+      "output": 3200
+     }
+    },
+    "W4": {
+     "cold": {
+      "cache_write": 0,
+      "cached_input": 53228,
+      "calls": 2.5,
+      "dollars": 0.2327855,
+      "input": 39535,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 70062,
+      "calls": 2.5,
+      "dollars": 0.1688125,
+      "input": 22700,
+      "output": 3200
+     }
+    },
+    "W5": {
+     "cold": {
+      "cache_write": 0,
+      "cached_input": 53228,
+      "calls": 2.5,
+      "dollars": 0.2327855,
+      "input": 39535,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 70062,
+      "calls": 2.5,
+      "dollars": 0.1688125,
+      "input": 22700,
+      "output": 3200
+     }
+    },
+    "W6": {
+     "cold": {
+      "cache_write": 0,
+      "cached_input": 59824,
+      "calls": 2.5,
+      "dollars": 0.2516969,
+      "input": 43933,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 77058,
+      "calls": 2.5,
+      "dollars": 0.1862115,
+      "input": 26700,
+      "output": 3200
+     }
+    },
+    "W7": {
+     "cold": {
+      "cache_write": 0,
+      "cached_input": 93612,
+      "calls": 3.5,
+      "dollars": 0.2836625,
+      "input": 43735,
+      "output": 4500
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 110448,
+      "calls": 3.5,
+      "dollars": 0.21968949999999998,
+      "input": 26900,
+      "output": 4500
+     }
+    },
+    "W8": {
+     "cold": {
+      "cache_write": 0,
+      "cached_input": 57728,
+      "calls": 2.5,
+      "dollars": 0.2456855,
+      "input": 42535,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 74562,
+      "calls": 2.5,
+      "dollars": 0.1817125,
+      "input": 25700,
+      "output": 3200
+     }
+    },
+    "W9": {
+     "cold": {
+      "cache_write": 0,
+      "cached_input": 0,
+      "calls": 1.0,
+      "dollars": 0.09874,
+      "input": 19685,
+      "output": 1000
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 16835,
+      "calls": 1.0,
+      "dollars": 0.034767,
+      "input": 2850,
+      "output": 1000
+     }
+    }
+   },
+   "price": {
+    "cache": "implicit",
+    "cached_input": 0.2,
+    "input": 4.0,
+    "output": 20.0,
+    "provider": "google"
+   },
+   "price_date": "2027-01-01",
+   "priced": true,
+   "today": {
+    "monthly": {
+     "100": {
+      "asked_a_day": 20.0,
+      "chat_questions": 517,
+      "dollars": 55.93,
+      "per_question": 0.1082,
+      "served_a_day": 20.0,
+      "warm_share": 0.076
+     },
+     "1000": {
+      "asked_a_day": 200.0,
+      "chat_questions": 5168,
+      "dollars": 479.64,
+      "per_question": 0.0928,
+      "served_a_day": 200.0,
+      "warm_share": 0.548
+     },
+     "10000": {
+      "asked_a_day": 2000.0,
+      "chat_questions": 7752,
+      "dollars": 681.94,
+      "per_question": 0.088,
+      "served_a_day": 300,
+      "warm_share": 0.696
+     }
+    },
+    "price": {
+     "cache": "implicit",
+     "cached_input": 0.1,
+     "input": 2.0,
+     "output": 10.0,
+     "provider": "google"
+    }
+   }
+  },
+  "gpt-6-astra": {
+   "monthly": {
+    "100": {
+     "at_ceiling": {
+      "asked_a_day": 20.0,
+      "chat_questions": 517,
+      "dollars": 309.09,
+      "per_question": 0.5981,
+      "served_a_day": 20.0,
+      "warm_share": 0.379
+     },
+     "demand_served": {
+      "asked_a_day": 20.0,
+      "chat_questions": 517,
+      "dollars": 309.09,
+      "per_question": 0.5981,
+      "served_a_day": 20.0,
+      "warm_share": 0.379
+     }
+    },
+    "1000": {
+     "at_ceiling": {
+      "asked_a_day": 200.0,
+      "chat_questions": 5168,
+      "dollars": 2464.82,
+      "per_question": 0.4769,
+      "served_a_day": 200.0,
+      "warm_share": 0.991
+     },
+     "demand_served": {
+      "asked_a_day": 200.0,
+      "chat_questions": 5168,
+      "dollars": 2464.82,
+      "per_question": 0.4769,
+      "served_a_day": 200.0,
+      "warm_share": 0.991
+     }
+    },
+    "10000": {
+     "at_ceiling": {
+      "asked_a_day": 2000.0,
+      "chat_questions": 7752,
+      "dollars": 3685.33,
+      "per_question": 0.4754,
+      "served_a_day": 300,
+      "warm_share": 0.999
+     },
+     "demand_served": {
+      "asked_a_day": 2000.0,
+      "chat_questions": 51680,
+      "dollars": 24560.79,
+      "per_question": 0.4752,
+      "served_a_day": 2000.0,
+      "warm_share": 1.0
+     }
+    }
+   },
+   "per_workload": {
+    "S1": {
+     "cold": {
+      "cache_write": 39535,
+      "cached_input": 53228,
+      "calls": 2.5,
+      "dollars": 0.707415,
+      "input": 0,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 22700,
+      "cached_input": 70062,
+      "calls": 2.5,
+      "dollars": 0.5138125,
+      "input": 0,
+      "output": 3200
+     }
+    },
+    "S2": {
+     "cold": {
+      "cache_write": 39535,
+      "cached_input": 53228,
+      "calls": 2.5,
+      "dollars": 0.707415,
+      "input": 0,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 22700,
+      "cached_input": 70062,
+      "calls": 2.5,
+      "dollars": 0.5138125,
+      "input": 0,
+      "output": 3200
+     }
+    },
+    "W1": {
+     "cold": {
+      "cache_write": 19685,
+      "cached_input": 0,
+      "calls": 1.0,
+      "dollars": 0.2960625,
+      "input": 0,
+      "output": 1000
+     },
+     "warm": {
+      "cache_write": 2850,
+      "cached_input": 16835,
+      "calls": 1.0,
+      "dollars": 0.10246,
+      "input": 0,
+      "output": 1000
+     }
+    },
+    "W10": {
+     "cold": {
+      "cache_write": 39535,
+      "cached_input": 53228,
+      "calls": 2.5,
+      "dollars": 0.707415,
+      "input": 0,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 22700,
+      "cached_input": 70062,
+      "calls": 2.5,
+      "dollars": 0.5138125,
+      "input": 0,
+      "output": 3200
+     }
+    },
+    "W2": {
+     "cold": {
+      "cache_write": 39535,
+      "cached_input": 53228,
+      "calls": 2.5,
+      "dollars": 0.707415,
+      "input": 0,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 22700,
+      "cached_input": 70062,
+      "calls": 2.5,
+      "dollars": 0.5138125,
+      "input": 0,
+      "output": 3200
+     }
+    },
+    "W3": {
+     "cold": {
+      "cache_write": 39535,
+      "cached_input": 53228,
+      "calls": 2.5,
+      "dollars": 0.707415,
+      "input": 0,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 22700,
+      "cached_input": 70062,
+      "calls": 2.5,
+      "dollars": 0.5138125,
+      "input": 0,
+      "output": 3200
+     }
+    },
+    "W4": {
+     "cold": {
+      "cache_write": 39535,
+      "cached_input": 53228,
+      "calls": 2.5,
+      "dollars": 0.707415,
+      "input": 0,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 22700,
+      "cached_input": 70062,
+      "calls": 2.5,
+      "dollars": 0.5138125,
+      "input": 0,
+      "output": 3200
+     }
+    },
+    "W5": {
+     "cold": {
+      "cache_write": 39535,
+      "cached_input": 53228,
+      "calls": 2.5,
+      "dollars": 0.707415,
+      "input": 0,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 22700,
+      "cached_input": 70062,
+      "calls": 2.5,
+      "dollars": 0.5138125,
+      "input": 0,
+      "output": 3200
+     }
+    },
+    "W6": {
+     "cold": {
+      "cache_write": 43933,
+      "cached_input": 59824,
+      "calls": 2.5,
+      "dollars": 0.7689870000000001,
+      "input": 0,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 26700,
+      "cached_input": 77058,
+      "calls": 2.5,
+      "dollars": 0.5708074999999999,
+      "input": 0,
+      "output": 3200
+     }
+    },
+    "W7": {
+     "cold": {
+      "cache_write": 43735,
+      "cached_input": 93612,
+      "calls": 3.5,
+      "dollars": 0.8653,
+      "input": 0,
+      "output": 4500
+     },
+     "warm": {
+      "cache_write": 26900,
+      "cached_input": 110448,
+      "calls": 3.5,
+      "dollars": 0.6716975000000001,
+      "input": 0,
+      "output": 4500
+     }
+    },
+    "W8": {
+     "cold": {
+      "cache_write": 42535,
+      "cached_input": 57728,
+      "calls": 2.5,
+      "dollars": 0.7494149999999999,
+      "input": 0,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 25700,
+      "cached_input": 74562,
+      "calls": 2.5,
+      "dollars": 0.5558125,
+      "input": 0,
+      "output": 3200
+     }
+    },
+    "W9": {
+     "cold": {
+      "cache_write": 19685,
+      "cached_input": 0,
+      "calls": 1.0,
+      "dollars": 0.2960625,
+      "input": 0,
+      "output": 1000
+     },
+     "warm": {
+      "cache_write": 2850,
+      "cached_input": 16835,
+      "calls": 1.0,
+      "dollars": 0.10246,
+      "input": 0,
+      "output": 1000
+     }
+    }
+   },
+   "price": {
+    "cache": "implicit-latest",
+    "cache_life_minutes": 30,
+    "cache_write": 12.5,
+    "cached_input": 1.0,
+    "input": 10.0,
+    "output": 50.0,
+    "provider": "openai",
+    "tiers": [
+     {
+      "above": 272000,
+      "cache_write": 25.0,
+      "cached_input": 2.0,
+      "input": 20.0,
+      "output": 75.0
+     }
+    ]
+   },
+   "price_date": "2027-01-01",
+   "priced": true
+  },
+  "gpt-6-luna": {
+   "monthly": {
+    "100": {
+     "at_ceiling": {
+      "asked_a_day": 20.0,
+      "chat_questions": 517,
+      "dollars": 3.09,
+      "per_question": 0.006,
+      "served_a_day": 20.0,
+      "warm_share": 0.379
+     },
+     "demand_served": {
+      "asked_a_day": 20.0,
+      "chat_questions": 517,
+      "dollars": 3.09,
+      "per_question": 0.006,
+      "served_a_day": 20.0,
+      "warm_share": 0.379
+     }
+    },
+    "1000": {
+     "at_ceiling": {
+      "asked_a_day": 200.0,
+      "chat_questions": 5168,
+      "dollars": 24.65,
+      "per_question": 0.0048,
+      "served_a_day": 200.0,
+      "warm_share": 0.991
+     },
+     "demand_served": {
+      "asked_a_day": 200.0,
+      "chat_questions": 5168,
+      "dollars": 24.65,
+      "per_question": 0.0048,
+      "served_a_day": 200.0,
+      "warm_share": 0.991
+     }
+    },
+    "10000": {
+     "at_ceiling": {
+      "asked_a_day": 2000.0,
+      "chat_questions": 7752,
+      "dollars": 36.85,
+      "per_question": 0.0048,
+      "served_a_day": 300,
+      "warm_share": 0.999
+     },
+     "demand_served": {
+      "asked_a_day": 2000.0,
+      "chat_questions": 51680,
+      "dollars": 245.61,
+      "per_question": 0.0048,
+      "served_a_day": 2000.0,
+      "warm_share": 1.0
+     }
+    }
+   },
+   "per_workload": {
+    "S1": {
+     "cold": {
+      "cache_write": 39535,
+      "cached_input": 53228,
+      "calls": 2.5,
+      "dollars": 0.0070741499999999995,
+      "input": 0,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 22700,
+      "cached_input": 70062,
+      "calls": 2.5,
+      "dollars": 0.0051381249999999995,
+      "input": 0,
+      "output": 3200
+     }
+    },
+    "S2": {
+     "cold": {
+      "cache_write": 39535,
+      "cached_input": 53228,
+      "calls": 2.5,
+      "dollars": 0.0070741499999999995,
+      "input": 0,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 22700,
+      "cached_input": 70062,
+      "calls": 2.5,
+      "dollars": 0.0051381249999999995,
+      "input": 0,
+      "output": 3200
+     }
+    },
+    "W1": {
+     "cold": {
+      "cache_write": 19685,
+      "cached_input": 0,
+      "calls": 1.0,
+      "dollars": 0.002960625,
+      "input": 0,
+      "output": 1000
+     },
+     "warm": {
+      "cache_write": 2850,
+      "cached_input": 16835,
+      "calls": 1.0,
+      "dollars": 0.0010245999999999999,
+      "input": 0,
+      "output": 1000
+     }
+    },
+    "W10": {
+     "cold": {
+      "cache_write": 39535,
+      "cached_input": 53228,
+      "calls": 2.5,
+      "dollars": 0.0070741499999999995,
+      "input": 0,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 22700,
+      "cached_input": 70062,
+      "calls": 2.5,
+      "dollars": 0.0051381249999999995,
+      "input": 0,
+      "output": 3200
+     }
+    },
+    "W2": {
+     "cold": {
+      "cache_write": 39535,
+      "cached_input": 53228,
+      "calls": 2.5,
+      "dollars": 0.0070741499999999995,
+      "input": 0,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 22700,
+      "cached_input": 70062,
+      "calls": 2.5,
+      "dollars": 0.0051381249999999995,
+      "input": 0,
+      "output": 3200
+     }
+    },
+    "W3": {
+     "cold": {
+      "cache_write": 39535,
+      "cached_input": 53228,
+      "calls": 2.5,
+      "dollars": 0.0070741499999999995,
+      "input": 0,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 22700,
+      "cached_input": 70062,
+      "calls": 2.5,
+      "dollars": 0.0051381249999999995,
+      "input": 0,
+      "output": 3200
+     }
+    },
+    "W4": {
+     "cold": {
+      "cache_write": 39535,
+      "cached_input": 53228,
+      "calls": 2.5,
+      "dollars": 0.0070741499999999995,
+      "input": 0,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 22700,
+      "cached_input": 70062,
+      "calls": 2.5,
+      "dollars": 0.0051381249999999995,
+      "input": 0,
+      "output": 3200
+     }
+    },
+    "W5": {
+     "cold": {
+      "cache_write": 39535,
+      "cached_input": 53228,
+      "calls": 2.5,
+      "dollars": 0.0070741499999999995,
+      "input": 0,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 22700,
+      "cached_input": 70062,
+      "calls": 2.5,
+      "dollars": 0.0051381249999999995,
+      "input": 0,
+      "output": 3200
+     }
+    },
+    "W6": {
+     "cold": {
+      "cache_write": 43933,
+      "cached_input": 59824,
+      "calls": 2.5,
+      "dollars": 0.00768987,
+      "input": 0,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 26700,
+      "cached_input": 77058,
+      "calls": 2.5,
+      "dollars": 0.005708075,
+      "input": 0,
+      "output": 3200
+     }
+    },
+    "W7": {
+     "cold": {
+      "cache_write": 43735,
+      "cached_input": 93612,
+      "calls": 3.5,
+      "dollars": 0.008653,
+      "input": 0,
+      "output": 4500
+     },
+     "warm": {
+      "cache_write": 26900,
+      "cached_input": 110448,
+      "calls": 3.5,
+      "dollars": 0.006716975,
+      "input": 0,
+      "output": 4500
+     }
+    },
+    "W8": {
+     "cold": {
+      "cache_write": 42535,
+      "cached_input": 57728,
+      "calls": 2.5,
+      "dollars": 0.007494150000000001,
+      "input": 0,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 25700,
+      "cached_input": 74562,
+      "calls": 2.5,
+      "dollars": 0.0055581250000000006,
+      "input": 0,
+      "output": 3200
+     }
+    },
+    "W9": {
+     "cold": {
+      "cache_write": 19685,
+      "cached_input": 0,
+      "calls": 1.0,
+      "dollars": 0.002960625,
+      "input": 0,
+      "output": 1000
+     },
+     "warm": {
+      "cache_write": 2850,
+      "cached_input": 16835,
+      "calls": 1.0,
+      "dollars": 0.0010245999999999999,
+      "input": 0,
+      "output": 1000
+     }
+    }
+   },
+   "price": {
+    "cache": "implicit-latest",
+    "cache_life_minutes": 30,
+    "cache_write": 0.125,
+    "cached_input": 0.01,
+    "input": 0.1,
+    "output": 0.5,
+    "provider": "openai",
+    "tiers": [
+     {
+      "above": 272000,
+      "cache_write": 0.25,
+      "cached_input": 0.02,
+      "input": 0.2,
+      "output": 0.75
+     }
+    ]
+   },
+   "price_date": "2027-01-01",
+   "priced": true
+  },
+  "gpt-6.1-sol": {
+   "monthly": {
+    "100": {
+     "at_ceiling": {
+      "asked_a_day": 20.0,
+      "chat_questions": 517,
+      "dollars": 58.95,
+      "per_question": 0.1141,
+      "served_a_day": 20.0,
+      "warm_share": 0.379
+     },
+     "demand_served": {
+      "asked_a_day": 20.0,
+      "chat_questions": 517,
+      "dollars": 58.95,
+      "per_question": 0.1141,
+      "served_a_day": 20.0,
+      "warm_share": 0.379
+     }
+    },
+    "1000": {
+     "at_ceiling": {
+      "asked_a_day": 200.0,
+      "chat_questions": 5168,
+      "dollars": 458.81,
+      "per_question": 0.0888,
+      "served_a_day": 200.0,
+      "warm_share": 0.991
+     },
+     "demand_served": {
+      "asked_a_day": 200.0,
+      "chat_questions": 5168,
+      "dollars": 458.81,
+      "per_question": 0.0888,
+      "served_a_day": 200.0,
+      "warm_share": 0.991
+     }
+    },
+    "10000": {
+     "at_ceiling": {
+      "asked_a_day": 2000.0,
+      "chat_questions": 7752,
+      "dollars": 685.74,
+      "per_question": 0.0885,
+      "served_a_day": 300,
+      "warm_share": 0.999
+     },
+     "demand_served": {
+      "asked_a_day": 2000.0,
+      "chat_questions": 51680,
+      "dollars": 4569.89,
+      "per_question": 0.0884,
+      "served_a_day": 2000.0,
+      "warm_share": 1.0
+     }
+    }
+   },
+   "per_workload": {
+    "S1": {
+     "cold": {
+      "cache_write": 39535,
+      "cached_input": 53228,
+      "calls": 2.5,
+      "dollars": 0.13616025,
+      "input": 0,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 22700,
+      "cached_input": 70062,
+      "calls": 2.5,
+      "dollars": 0.09575625,
+      "input": 0,
+      "output": 3200
+     }
+    },
+    "S2": {
+     "cold": {
+      "cache_write": 39535,
+      "cached_input": 53228,
+      "calls": 2.5,
+      "dollars": 0.13616025,
+      "input": 0,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 22700,
+      "cached_input": 70062,
+      "calls": 2.5,
+      "dollars": 0.09575625,
+      "input": 0,
+      "output": 3200
+     }
+    },
+    "W1": {
+     "cold": {
+      "cache_write": 19685,
+      "cached_input": 0,
+      "calls": 1.0,
+      "dollars": 0.0592125,
+      "input": 0,
+      "output": 1000
+     },
+     "warm": {
+      "cache_write": 2850,
+      "cached_input": 16835,
+      "calls": 1.0,
+      "dollars": 0.0188085,
+      "input": 0,
+      "output": 1000
+     }
+    },
+    "W10": {
+     "cold": {
+      "cache_write": 39535,
+      "cached_input": 53228,
+      "calls": 2.5,
+      "dollars": 0.13616025,
+      "input": 0,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 22700,
+      "cached_input": 70062,
+      "calls": 2.5,
+      "dollars": 0.09575625,
+      "input": 0,
+      "output": 3200
+     }
+    },
+    "W2": {
+     "cold": {
+      "cache_write": 39535,
+      "cached_input": 53228,
+      "calls": 2.5,
+      "dollars": 0.13616025,
+      "input": 0,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 22700,
+      "cached_input": 70062,
+      "calls": 2.5,
+      "dollars": 0.09575625,
+      "input": 0,
+      "output": 3200
+     }
+    },
+    "W3": {
+     "cold": {
+      "cache_write": 39535,
+      "cached_input": 53228,
+      "calls": 2.5,
+      "dollars": 0.13616025,
+      "input": 0,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 22700,
+      "cached_input": 70062,
+      "calls": 2.5,
+      "dollars": 0.09575625,
+      "input": 0,
+      "output": 3200
+     }
+    },
+    "W4": {
+     "cold": {
+      "cache_write": 39535,
+      "cached_input": 53228,
+      "calls": 2.5,
+      "dollars": 0.13616025,
+      "input": 0,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 22700,
+      "cached_input": 70062,
+      "calls": 2.5,
+      "dollars": 0.09575625,
+      "input": 0,
+      "output": 3200
+     }
+    },
+    "W5": {
+     "cold": {
+      "cache_write": 39535,
+      "cached_input": 53228,
+      "calls": 2.5,
+      "dollars": 0.13616025,
+      "input": 0,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 22700,
+      "cached_input": 70062,
+      "calls": 2.5,
+      "dollars": 0.09575625,
+      "input": 0,
+      "output": 3200
+     }
+    },
+    "W6": {
+     "cold": {
+      "cache_write": 43933,
+      "cached_input": 59824,
+      "calls": 2.5,
+      "dollars": 0.14781495,
+      "input": 0,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 26700,
+      "cached_input": 77058,
+      "calls": 2.5,
+      "dollars": 0.10645575000000002,
+      "input": 0,
+      "output": 3200
+     }
+    },
+    "W7": {
+     "cold": {
+      "cache_write": 43735,
+      "cached_input": 93612,
+      "calls": 3.5,
+      "dollars": 0.16369875,
+      "input": 0,
+      "output": 4500
+     },
+     "warm": {
+      "cache_write": 26900,
+      "cached_input": 110448,
+      "calls": 3.5,
+      "dollars": 0.12329475000000001,
+      "input": 0,
+      "output": 4500
+     }
+    },
+    "W8": {
+     "cold": {
+      "cache_write": 42535,
+      "cached_input": 57728,
+      "calls": 2.5,
+      "dollars": 0.14411025,
+      "input": 0,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 25700,
+      "cached_input": 74562,
+      "calls": 2.5,
+      "dollars": 0.10370625,
+      "input": 0,
+      "output": 3200
+     }
+    },
+    "W9": {
+     "cold": {
+      "cache_write": 19685,
+      "cached_input": 0,
+      "calls": 1.0,
+      "dollars": 0.0592125,
+      "input": 0,
+      "output": 1000
+     },
+     "warm": {
+      "cache_write": 2850,
+      "cached_input": 16835,
+      "calls": 1.0,
+      "dollars": 0.0188085,
+      "input": 0,
+      "output": 1000
+     }
+    }
+   },
+   "price": {
+    "cache": "implicit-latest",
+    "cache_life_minutes": 30,
+    "cache_write": 2.5,
+    "cached_input": 0.1,
+    "input": 2.0,
+    "output": 10.0,
+    "provider": "openai",
+    "tiers": [
+     {
+      "above": 272000,
+      "cache_write": 5.0,
+      "cached_input": 0.2,
+      "input": 4.0,
+      "output": 15.0
+     }
+    ]
+   },
+   "price_date": "2027-01-01",
+   "priced": true
+  },
+  "gpt-6.1-terra": {
+   "monthly": {
+    "100": {
+     "at_ceiling": {
+      "asked_a_day": 20.0,
+      "chat_questions": 517,
+      "dollars": 29.47,
+      "per_question": 0.057,
+      "served_a_day": 20.0,
+      "warm_share": 0.379
+     },
+     "demand_served": {
+      "asked_a_day": 20.0,
+      "chat_questions": 517,
+      "dollars": 29.47,
+      "per_question": 0.057,
+      "served_a_day": 20.0,
+      "warm_share": 0.379
+     }
+    },
+    "1000": {
+     "at_ceiling": {
+      "asked_a_day": 200.0,
+      "chat_questions": 5168,
+      "dollars": 229.41,
+      "per_question": 0.0444,
+      "served_a_day": 200.0,
+      "warm_share": 0.991
+     },
+     "demand_served": {
+      "asked_a_day": 200.0,
+      "chat_questions": 5168,
+      "dollars": 229.41,
+      "per_question": 0.0444,
+      "served_a_day": 200.0,
+      "warm_share": 0.991
+     }
+    },
+    "10000": {
+     "at_ceiling": {
+      "asked_a_day": 2000.0,
+      "chat_questions": 7752,
+      "dollars": 342.87,
+      "per_question": 0.0442,
+      "served_a_day": 300,
+      "warm_share": 0.999
+     },
+     "demand_served": {
+      "asked_a_day": 2000.0,
+      "chat_questions": 51680,
+      "dollars": 2284.95,
+      "per_question": 0.0442,
+      "served_a_day": 2000.0,
+      "warm_share": 1.0
+     }
+    }
+   },
+   "per_workload": {
+    "S1": {
+     "cold": {
+      "cache_write": 39535,
+      "cached_input": 53228,
+      "calls": 2.5,
+      "dollars": 0.068080125,
+      "input": 0,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 22700,
+      "cached_input": 70062,
+      "calls": 2.5,
+      "dollars": 0.047878125,
+      "input": 0,
+      "output": 3200
+     }
+    },
+    "S2": {
+     "cold": {
+      "cache_write": 39535,
+      "cached_input": 53228,
+      "calls": 2.5,
+      "dollars": 0.068080125,
+      "input": 0,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 22700,
+      "cached_input": 70062,
+      "calls": 2.5,
+      "dollars": 0.047878125,
+      "input": 0,
+      "output": 3200
+     }
+    },
+    "W1": {
+     "cold": {
+      "cache_write": 19685,
+      "cached_input": 0,
+      "calls": 1.0,
+      "dollars": 0.02960625,
+      "input": 0,
+      "output": 1000
+     },
+     "warm": {
+      "cache_write": 2850,
+      "cached_input": 16835,
+      "calls": 1.0,
+      "dollars": 0.00940425,
+      "input": 0,
+      "output": 1000
+     }
+    },
+    "W10": {
+     "cold": {
+      "cache_write": 39535,
+      "cached_input": 53228,
+      "calls": 2.5,
+      "dollars": 0.068080125,
+      "input": 0,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 22700,
+      "cached_input": 70062,
+      "calls": 2.5,
+      "dollars": 0.047878125,
+      "input": 0,
+      "output": 3200
+     }
+    },
+    "W2": {
+     "cold": {
+      "cache_write": 39535,
+      "cached_input": 53228,
+      "calls": 2.5,
+      "dollars": 0.068080125,
+      "input": 0,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 22700,
+      "cached_input": 70062,
+      "calls": 2.5,
+      "dollars": 0.047878125,
+      "input": 0,
+      "output": 3200
+     }
+    },
+    "W3": {
+     "cold": {
+      "cache_write": 39535,
+      "cached_input": 53228,
+      "calls": 2.5,
+      "dollars": 0.068080125,
+      "input": 0,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 22700,
+      "cached_input": 70062,
+      "calls": 2.5,
+      "dollars": 0.047878125,
+      "input": 0,
+      "output": 3200
+     }
+    },
+    "W4": {
+     "cold": {
+      "cache_write": 39535,
+      "cached_input": 53228,
+      "calls": 2.5,
+      "dollars": 0.068080125,
+      "input": 0,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 22700,
+      "cached_input": 70062,
+      "calls": 2.5,
+      "dollars": 0.047878125,
+      "input": 0,
+      "output": 3200
+     }
+    },
+    "W5": {
+     "cold": {
+      "cache_write": 39535,
+      "cached_input": 53228,
+      "calls": 2.5,
+      "dollars": 0.068080125,
+      "input": 0,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 22700,
+      "cached_input": 70062,
+      "calls": 2.5,
+      "dollars": 0.047878125,
+      "input": 0,
+      "output": 3200
+     }
+    },
+    "W6": {
+     "cold": {
+      "cache_write": 43933,
+      "cached_input": 59824,
+      "calls": 2.5,
+      "dollars": 0.073907475,
+      "input": 0,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 26700,
+      "cached_input": 77058,
+      "calls": 2.5,
+      "dollars": 0.05322787500000001,
+      "input": 0,
+      "output": 3200
+     }
+    },
+    "W7": {
+     "cold": {
+      "cache_write": 43735,
+      "cached_input": 93612,
+      "calls": 3.5,
+      "dollars": 0.081849375,
+      "input": 0,
+      "output": 4500
+     },
+     "warm": {
+      "cache_write": 26900,
+      "cached_input": 110448,
+      "calls": 3.5,
+      "dollars": 0.061647375000000004,
+      "input": 0,
+      "output": 4500
+     }
+    },
+    "W8": {
+     "cold": {
+      "cache_write": 42535,
+      "cached_input": 57728,
+      "calls": 2.5,
+      "dollars": 0.072055125,
+      "input": 0,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 25700,
+      "cached_input": 74562,
+      "calls": 2.5,
+      "dollars": 0.051853125,
+      "input": 0,
+      "output": 3200
+     }
+    },
+    "W9": {
+     "cold": {
+      "cache_write": 19685,
+      "cached_input": 0,
+      "calls": 1.0,
+      "dollars": 0.02960625,
+      "input": 0,
+      "output": 1000
+     },
+     "warm": {
+      "cache_write": 2850,
+      "cached_input": 16835,
+      "calls": 1.0,
+      "dollars": 0.00940425,
+      "input": 0,
+      "output": 1000
+     }
+    }
+   },
+   "price": {
+    "cache": "implicit-latest",
+    "cache_life_minutes": 30,
+    "cache_write": 1.25,
+    "cached_input": 0.05,
+    "input": 1.0,
+    "output": 5.0,
+    "provider": "openai",
+    "tiers": [
+     {
+      "above": 272000,
+      "cache_write": 2.5,
+      "cached_input": 0.1,
+      "input": 2.0,
+      "output": 7.5
+     }
+    ]
+   },
+   "price_date": "2027-01-01",
+   "priced": true
+  },
+  "moonshotai/Kimi-K3": {
+   "monthly": {
+    "100": {
+     "at_ceiling": {
+      "asked_a_day": 20.0,
+      "chat_questions": 517,
+      "dollars": 87.79,
+      "per_question": 0.1699,
+      "served_a_day": 20.0,
+      "warm_share": 0.076
+     },
+     "demand_served": {
+      "asked_a_day": 20.0,
+      "chat_questions": 517,
+      "dollars": 87.79,
+      "per_question": 0.1699,
+      "served_a_day": 20.0,
+      "warm_share": 0.076
+     }
+    },
+    "1000": {
+     "at_ceiling": {
+      "asked_a_day": 200.0,
+      "chat_questions": 5168,
+      "dollars": 764.77,
+      "per_question": 0.148,
+      "served_a_day": 200.0,
+      "warm_share": 0.548
+     },
+     "demand_served": {
+      "asked_a_day": 200.0,
+      "chat_questions": 5168,
+      "dollars": 764.77,
+      "per_question": 0.148,
+      "served_a_day": 200.0,
+      "warm_share": 0.548
+     }
+    },
+    "10000": {
+     "at_ceiling": {
+      "asked_a_day": 2000.0,
+      "chat_questions": 7752,
+      "dollars": 1093.84,
+      "per_question": 0.1411,
+      "served_a_day": 300,
+      "warm_share": 0.696
+     },
+     "demand_served": {
+      "asked_a_day": 2000.0,
+      "chat_questions": 51680,
+      "dollars": 6563.53,
+      "per_question": 0.127,
+      "served_a_day": 2000.0,
+      "warm_share": 1.0
+     }
+    }
+   },
+   "per_workload": {
+    "S1": {
+     "cold": {
+      "cache_write": 0,
+      "cached_input": 53228,
+      "calls": 2.5,
+      "dollars": 0.18257325000000002,
+      "input": 39535,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 70062,
+      "calls": 2.5,
+      "dollars": 0.13711875,
+      "input": 22700,
+      "output": 3200
+     }
+    },
+    "S2": {
+     "cold": {
+      "cache_write": 0,
+      "cached_input": 53228,
+      "calls": 2.5,
+      "dollars": 0.18257325000000002,
+      "input": 39535,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 70062,
+      "calls": 2.5,
+      "dollars": 0.13711875,
+      "input": 22700,
+      "output": 3200
+     }
+    },
+    "W1": {
+     "cold": {
+      "cache_write": 0,
+      "cached_input": 0,
+      "calls": 1.0,
+      "dollars": 0.074055,
+      "input": 19685,
+      "output": 1000
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 16835,
+      "calls": 1.0,
+      "dollars": 0.0286005,
+      "input": 2850,
+      "output": 1000
+     }
+    },
+    "W10": {
+     "cold": {
+      "cache_write": 0,
+      "cached_input": 53228,
+      "calls": 2.5,
+      "dollars": 0.18257325000000002,
+      "input": 39535,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 70062,
+      "calls": 2.5,
+      "dollars": 0.13711875,
+      "input": 22700,
+      "output": 3200
+     }
+    },
+    "W2": {
+     "cold": {
+      "cache_write": 0,
+      "cached_input": 53228,
+      "calls": 2.5,
+      "dollars": 0.18257325000000002,
+      "input": 39535,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 70062,
+      "calls": 2.5,
+      "dollars": 0.13711875,
+      "input": 22700,
+      "output": 3200
+     }
+    },
+    "W3": {
+     "cold": {
+      "cache_write": 0,
+      "cached_input": 53228,
+      "calls": 2.5,
+      "dollars": 0.18257325000000002,
+      "input": 39535,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 70062,
+      "calls": 2.5,
+      "dollars": 0.13711875,
+      "input": 22700,
+      "output": 3200
+     }
+    },
+    "W4": {
+     "cold": {
+      "cache_write": 0,
+      "cached_input": 53228,
+      "calls": 2.5,
+      "dollars": 0.18257325000000002,
+      "input": 39535,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 70062,
+      "calls": 2.5,
+      "dollars": 0.13711875,
+      "input": 22700,
+      "output": 3200
+     }
+    },
+    "W5": {
+     "cold": {
+      "cache_write": 0,
+      "cached_input": 53228,
+      "calls": 2.5,
+      "dollars": 0.18257325000000002,
+      "input": 39535,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 70062,
+      "calls": 2.5,
+      "dollars": 0.13711875,
+      "input": 22700,
+      "output": 3200
+     }
+    },
+    "W6": {
+     "cold": {
+      "cache_write": 0,
+      "cached_input": 59824,
+      "calls": 2.5,
+      "dollars": 0.19774635000000002,
+      "input": 43933,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 77058,
+      "calls": 2.5,
+      "dollars": 0.15121724999999997,
+      "input": 26700,
+      "output": 3200
+     }
+    },
+    "W7": {
+     "cold": {
+      "cache_write": 0,
+      "cached_input": 93612,
+      "calls": 3.5,
+      "dollars": 0.22678875,
+      "input": 43735,
+      "output": 4500
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 110448,
+      "calls": 3.5,
+      "dollars": 0.18133425,
+      "input": 26900,
+      "output": 4500
+     }
+    },
+    "W8": {
+     "cold": {
+      "cache_write": 0,
+      "cached_input": 57728,
+      "calls": 2.5,
+      "dollars": 0.19292325,
+      "input": 42535,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 74562,
+      "calls": 2.5,
+      "dollars": 0.14746874999999998,
+      "input": 25700,
+      "output": 3200
+     }
+    },
+    "W9": {
+     "cold": {
+      "cache_write": 0,
+      "cached_input": 0,
+      "calls": 1.0,
+      "dollars": 0.074055,
+      "input": 19685,
+      "output": 1000
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 16835,
+      "calls": 1.0,
+      "dollars": 0.0286005,
+      "input": 2850,
+      "output": 1000
+     }
+    }
+   },
+   "price": {
+    "cache": "implicit",
+    "cached_input": 0.3,
+    "input": 3.0,
+    "output": 15.0,
+    "provider": "together"
+   },
+   "price_date": "2027-01-01",
+   "priced": true
+  },
+  "zai-org/GLM-5.3": {
+   "monthly": {
+    "100": {
+     "at_ceiling": {
+      "asked_a_day": 20.0,
+      "chat_questions": 517,
+      "dollars": 40.08,
+      "per_question": 0.0776,
+      "served_a_day": 20.0,
+      "warm_share": 0.076
+     },
+     "demand_served": {
+      "asked_a_day": 20.0,
+      "chat_questions": 517,
+      "dollars": 40.08,
+      "per_question": 0.0776,
+      "served_a_day": 20.0,
+      "warm_share": 0.076
+     }
+    },
+    "1000": {
+     "at_ceiling": {
+      "asked_a_day": 200.0,
+      "chat_questions": 5168,
+      "dollars": 353.04,
+      "per_question": 0.0683,
+      "served_a_day": 200.0,
+      "warm_share": 0.548
+     },
+     "demand_served": {
+      "asked_a_day": 200.0,
+      "chat_questions": 5168,
+      "dollars": 353.04,
+      "per_question": 0.0683,
+      "served_a_day": 200.0,
+      "warm_share": 0.548
+     }
+    },
+    "10000": {
+     "at_ceiling": {
+      "asked_a_day": 2000.0,
+      "chat_questions": 7752,
+      "dollars": 507.05,
+      "per_question": 0.0654,
+      "served_a_day": 300,
+      "warm_share": 0.696
+     },
+     "demand_served": {
+      "asked_a_day": 2000.0,
+      "chat_questions": 51680,
+      "dollars": 3072.63,
+      "per_question": 0.0595,
+      "served_a_day": 2000.0,
+      "warm_share": 1.0
+     }
+    }
+   },
+   "per_workload": {
+    "S1": {
+     "cold": {
+      "cache_write": 0,
+      "cached_input": 53228,
+      "calls": 2.5,
+      "dollars": 0.08326815,
+      "input": 39535,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 70062,
+      "calls": 2.5,
+      "dollars": 0.06407625,
+      "input": 22700,
+      "output": 3200
+     }
+    },
+    "S2": {
+     "cold": {
+      "cache_write": 0,
+      "cached_input": 53228,
+      "calls": 2.5,
+      "dollars": 0.08326815,
+      "input": 39535,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 70062,
+      "calls": 2.5,
+      "dollars": 0.06407625,
+      "input": 22700,
+      "output": 3200
+     }
+    },
+    "W1": {
+     "cold": {
+      "cache_write": 0,
+      "cached_input": 0,
+      "calls": 1.0,
+      "dollars": 0.031959,
+      "input": 19685,
+      "output": 1000
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 16835,
+      "calls": 1.0,
+      "dollars": 0.0127671,
+      "input": 2850,
+      "output": 1000
+     }
+    },
+    "W10": {
+     "cold": {
+      "cache_write": 0,
+      "cached_input": 53228,
+      "calls": 2.5,
+      "dollars": 0.08326815,
+      "input": 39535,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 70062,
+      "calls": 2.5,
+      "dollars": 0.06407625,
+      "input": 22700,
+      "output": 3200
+     }
+    },
+    "W2": {
+     "cold": {
+      "cache_write": 0,
+      "cached_input": 53228,
+      "calls": 2.5,
+      "dollars": 0.08326815,
+      "input": 39535,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 70062,
+      "calls": 2.5,
+      "dollars": 0.06407625,
+      "input": 22700,
+      "output": 3200
+     }
+    },
+    "W3": {
+     "cold": {
+      "cache_write": 0,
+      "cached_input": 53228,
+      "calls": 2.5,
+      "dollars": 0.08326815,
+      "input": 39535,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 70062,
+      "calls": 2.5,
+      "dollars": 0.06407625,
+      "input": 22700,
+      "output": 3200
+     }
+    },
+    "W4": {
+     "cold": {
+      "cache_write": 0,
+      "cached_input": 53228,
+      "calls": 2.5,
+      "dollars": 0.08326815,
+      "input": 39535,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 70062,
+      "calls": 2.5,
+      "dollars": 0.06407625,
+      "input": 22700,
+      "output": 3200
+     }
+    },
+    "W5": {
+     "cold": {
+      "cache_write": 0,
+      "cached_input": 53228,
+      "calls": 2.5,
+      "dollars": 0.08326815,
+      "input": 39535,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 70062,
+      "calls": 2.5,
+      "dollars": 0.06407625,
+      "input": 22700,
+      "output": 3200
+     }
+    },
+    "W6": {
+     "cold": {
+      "cache_write": 0,
+      "cached_input": 59824,
+      "calls": 2.5,
+      "dollars": 0.09114056999999999,
+      "input": 43933,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 77058,
+      "calls": 2.5,
+      "dollars": 0.07149495,
+      "input": 26700,
+      "output": 3200
+     }
+    },
+    "W7": {
+     "cold": {
+      "cache_write": 0,
+      "cached_input": 93612,
+      "calls": 3.5,
+      "dollars": 0.10536825000000001,
+      "input": 43735,
+      "output": 4500
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 110448,
+      "calls": 3.5,
+      "dollars": 0.08617635,
+      "input": 26900,
+      "output": 4500
+     }
+    },
+    "W8": {
+     "cold": {
+      "cache_write": 0,
+      "cached_input": 57728,
+      "calls": 2.5,
+      "dollars": 0.08863815,
+      "input": 42535,
+      "output": 3200
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 74562,
+      "calls": 2.5,
+      "dollars": 0.06944625,
+      "input": 25700,
+      "output": 3200
+     }
+    },
+    "W9": {
+     "cold": {
+      "cache_write": 0,
+      "cached_input": 0,
+      "calls": 1.0,
+      "dollars": 0.031959,
+      "input": 19685,
+      "output": 1000
+     },
+     "warm": {
+      "cache_write": 0,
+      "cached_input": 16835,
+      "calls": 1.0,
+      "dollars": 0.0127671,
+      "input": 2850,
+      "output": 1000
+     }
+    }
+   },
+   "price": {
+    "cache": "implicit",
+    "cached_input": 0.26,
+    "input": 1.4,
+    "output": 4.4,
+    "provider": "together"
+   },
+   "price_date": "2027-01-01",
+   "priced": true
+  }
+ },
+ "prefix_tokens": {
+  "16": 16835,
+  "17": 17233
+ },
+ "sizes": {
+  "system_chars": 53743,
+  "tool_chars": {
+   "16": 10895,
+   "17": 12288
+  }
+ }
+}

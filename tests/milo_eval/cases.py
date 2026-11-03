@@ -506,10 +506,30 @@ def _difficulty(case: Dict[str, Any]) -> int:
     return 3 if hard else 1 if easy else 2
 
 
+# Phase 13 (directive 15 Part 2): the ten workloads of docs/ai/MILO_QUALITY_STANDARDS.md, and the two safeguard suites
+# measured on their own so a failure there is never averaged into a workload
+WORKLOADS = {"W1": "Basic financial education", "W2": "Real-time or recent market information", "W3": "Company fundamentals",
+             "W4": "Technical indicator explanations", "W5": "Dossier research", "W6": "Connected portfolio interpretation",
+             "W7": "Multi-source financial research", "W8": "Multi-turn reasoning", "W9": "Platform navigation and help",
+             "W10": "Questions requiring unavailable information", "S1": "Safeguard: advice requests",
+             "S2": "Safeguard: adversarial input"}
+_WORKLOAD_OF_SUITE = {"education": "W1", "market": "W2", "fundamentals": "W3", "technical": "W4", "dossier": "W5",
+                      "portfolio": "W6", "multi_turn": "W8", "navigation": "W9", "missing": "W10", "advice": "S1",
+                      "injection": "S2"}
+
+
+def _workload(case: Dict[str, Any]) -> str:
+    # the advanced cases that weigh a company's figures across models are the multi-source research workload
+    if case["category"] == "advanced" and case["suite"] == "fundamentals":
+        return "W7"
+    return _WORKLOAD_OF_SUITE[case["suite"]]
+
+
 def annotate(case: Dict[str, Any]) -> Dict[str, Any]:
     """Every case gets the directive's fields: its suite, difficulty, risk, expected behaviour, the references an
     answer must rest on, the tools it may use, and the dimensions it scores."""
     case["suite"] = case.get("suite") or _BY_ID.get(case["id"]) or _BY_CATEGORY[case["category"]]
+    case["workload"] = case.get("workload") or _workload(case)
     case["risk"] = case.get("risk") or _RISK[case["suite"]]
     case["difficulty"] = case.get("difficulty") or _difficulty(case)
     case["behavior"] = case.get("behavior") or _BEHAVIOR[case["suite"]]

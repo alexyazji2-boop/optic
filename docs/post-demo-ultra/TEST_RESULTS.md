@@ -1477,3 +1477,22 @@ Branch `phase-12-writing-milo-security` (`~/Optic/wt-phase12`, from live `d22522
 | Latency end to end (stand-in model, real providers, local) | `tools/latency.py OUT 2` | 72 answers, 0 errors, 0 timeouts; first text median 0.31 s, p95 4.67 s; total median 0.65 s, p95 4.98 s (a first run stopped at 30 answers on the hourly cap, `AI_CALLS_PER_HOUR`, working as designed) |
 | Browser, the changed pages | Browser pane on :8270 at 1440, 390 and 375x549 | Read, Home, the Overview, Macro and Options: no sideways overflow, no error state; Read's rows read "AAPL reports Monday after the close, high impact." with the shared reason once; New to Markets: no definition inside a compound noun or a parenthesis, no "earnings Per Share" |
 | Final suite on this branch | `.venv/bin/python -m pytest -q` | 8,628 passed, 1 skipped (249 s): 398 more than the baseline, all new tests passing |
+
+## Phase 13 (directive 15, 2026-11-02, evening)
+
+Same branch and working folder as Phase 12. No model was called and nothing was spent.
+
+| Check | Command | Outcome |
+|---|---|---|
+| The model key (BL-01) | a free models-list request with the `.env` key, value never printed | 401 `AuthenticationError`: no answers, no token counts |
+| Other providers' keys (BL-14) | presence of `OPENAI_API_KEY`, `GEMINI_API_KEY`, `GOOGLE_API_KEY`, `TOGETHER_API_KEY`, `FIREWORKS_API_KEY`, `GROQ_API_KEY`, `OPENROUTER_API_KEY`, `DEEPINFRA_API_KEY`, values never printed | none set |
+| Three questions traced | `harness.assemble` on BEG-01, FUN-01, POR-01 | 66,544, 67,972 and 70,580 characters; 16, 16 and 17 tools; 0.041, 0.423 and 0.019 s to the model call |
+| The harness, offline | `pytest tests/test_milo_compare.py` | 12 passed: the Responses, Chat Completions and Gemini loops; Anthropic's request unchanged; Haiku without the fallback; a tool not offered is Severity 0 and never runs; one cost convention; the output cap; refusals without a cap or key |
+| Dry runs of five adapters | `compare --dry-run --only ACC-quote-AAPL` for Sonnet 5.5, Haiku 5.5, GPT-6.1 Sol, Kimi K3 (Together) and Gemini 3.8 Flash | exit 0 each; requests of 69,845 to 71,110 characters with the same 16 tools; nothing sent |
+| The cost model | `pytest tests/test_milo_cost_model.py`; `python -m tests.milo_eval.cost_model --budget` | 11 passed; the cost audit's $0.14, $0.18, $0.10 and its four monthly lines reproduced within 1%; 15 models priced; `docs/ai/eval-results/cost-model/cost-model.json` |
+| The router | `python -m tests.milo_eval.router` | 126 of 181 routed as labelled (69.6%, 95% interval 62.6% to 75.8%), 0.127 ms a decision; `docs/ai/eval-results/routing/routing.json` |
+| Intervals | `pytest tests/test_milo_stats.py` | 3 passed |
+| Milo, policy, red team and editorial suites | 9 files, `pytest` | 1,042 passed |
+| Diff scan before the commit | keys and email addresses in the added lines | none in 8,891 lines |
+| Final suite on this branch | `.venv/bin/python -m pytest -q` | 8,654 passed, 1 skipped (423 s): the 26 new tests on top of Phase 12's 8,628, all passing |
+
