@@ -12,7 +12,7 @@ import datetime as dt
 from typing import Any, Dict, List, Optional
 
 import numpy as np
-from .. import session as session_mod
+from .. import insider_fill, session as session_mod
 
 # yfinance's statement row labels. Kept as tuples of aliases because the exact
 # label varies by filer and by statement vintage.
@@ -466,7 +466,8 @@ def analyse_earnings_history(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
 # ------------------------------------------------ insider & institutional flow
 
 
-def _six_month_trades(trades: List[Dict[str, Any]], now: Optional[dt.date] = None) -> Dict[str, Any]:
+def _six_month_trades(trades: List[Dict[str, Any]], now: Optional[dt.date] = None,
+                      coverage: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """Open-market purchases and sales over the last six months, from the classified Form 4 rows.
 
     Yahoo's own six-month tally ("Purchases", "Sales") counts every acquisition, stock awards and option
@@ -479,9 +480,14 @@ def _six_month_trades(trades: List[Dict[str, Any]], now: Optional[dt.date] = Non
     buys = [r for r in rows if r.get("action") == "purchase"]
     sells = [r for r in rows if r.get("action") == "sale"]
     total = lambda xs, k: sum(float(r.get(k) or 0) for r in xs)          # noqa: E731
-    # the provider keeps two years and up to 200 rows: when the oldest row kept is inside the window, rows
-    # before it may be missing, and the counts are a floor
-    oldest = min((str(r.get("date") or "") for r in trades), default="")
+    # Yahoo's list stops at its 150 latest rows: when it starts inside the window, rows before its start may be
+    # missing and the counts are a floor. Where SEC filings fill the rest (app/insider_fill.py) `coverage` says how
+    # far; the 200 this compared with was the provider's own cap, which Yahoo never reaches, so it never said so.
+    if coverage:
+        missing_before = None if coverage.get("complete") else coverage.get("yahoo_from")
+    else:
+        oldest = min((str(r.get("date") or "") for r in trades), default="")
+        missing_before = oldest if len(trades) >= insider_fill.YAHOO_ROWS else None
     return {
         "basis": "open_market",
         "since": cutoff,
@@ -489,7 +495,7 @@ def _six_month_trades(trades: List[Dict[str, Any]], now: Optional[dt.date] = Non
         "sale_count": len(sells), "sale_shares": total(sells, "shares"), "sale_value": total(sells, "value"),
         "other_count": len(rows) - len(buys) - len(sells),
         "net_shares": total(buys, "shares") - total(sells, "shares"),
-        "complete": not (len(trades) >= 200 and oldest > cutoff),
+        "complete": not (missing_before and missing_before > cutoff),
     }
 
 
@@ -516,7 +522,8 @@ def analyse_ownership(insiders: Dict[str, Any], institutions: Dict[str, Any],
 
     notes: List[str] = []
     insider_signal = "neutral"
-    six = _six_month_trades(trades, now)
+    coverage = (insiders or {}).get("coverage")
+    six = _six_month_trades(trades, now, coverage)
     net_shares = six["net_shares"] if trades else (net or {}).get("shares")
     other = " {} awards, grants, gifts and option exercises are not counted: they are not decisions to buy or sell.".format(
         six["other_count"]) if six["other_count"] else ""
@@ -589,10 +596,14 @@ def analyse_ownership(insiders: Dict[str, Any], institutions: Dict[str, Any],
             "note": "Yahoo Finance's count of every acquisition and disposal, awards and option exercises included.",
         },
         "insider_method": ("Open-market purchases and sales (Form 4 codes P and S) by officers, directors and 10% owners "
-                           "in the last six months, from the filings Yahoo Finance lists for the last two years. "
+                           "in the last six months, from the filings Yahoo Finance lists for the last two years and, "
+                           "where Yahoo's list stops short of two years, the SEC's own Form 4 filings for the rest. "
                            "A transaction date is when the trade happened; it became public when the Form 4 was filed, "
                            "usually within two business days. Reported history, not current trading."),
         "recent_transactions": trades,
+        # Present when Yahoo's list stops short of two years: how far it reaches, and how much of the rest has been
+        # read from the SEC's Form 4 filings (app/insider_fill.py). The chart says it under its insider marks.
+        "insider_coverage": coverage,
         "institutional_pct_held": inst_pct,
         "insider_pct_held": insiders_pct,
         "top_holders": holders,
@@ -613,7 +624,8 @@ def analyse(provider, ticker: str, quote: Dict[str, Any]) -> Dict[str, Any]:
     short_raw = provider.short_interest(ticker)
     fin_raw = provider.financials(ticker)
     earn_raw = provider.earnings_history(ticker)
-    ins_raw = provider.insiders(ticker)
+    # Yahoo's list, with the stretch it leaves out filled from kept SEC Form 4s; no request of its own
+    ins_raw = insider_fill.complete(ticker, provider.insiders(ticker))
     inst_raw = provider.institutions(ticker)
 
     return {

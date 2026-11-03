@@ -472,7 +472,15 @@ function spanLine(t) {
   const sp = insiderSpan(t);
   if (!sp.n) return '';
   return html`<label class="check chw-show"><input type="checkbox" data-chw-ins ${C.overlayOn('ins') ? 'checked' : ''}> <span>Show on the chart</span></label>
-    ${fine(sp.marked ? `The chart marks the ${[sp.buys ? `${sp.buys} purchase${sp.buys === 1 ? '' : 's'}` : '', sp.sells ? `${sp.sells} sale${sp.sells === 1 ? '' : 's'}` : ''].filter(Boolean).join(' and ')} among the ${sp.n} filings Optic has from the last two years, ${fullDate(sp.from)} to ${fullDate(sp.to)}: a green arrow under the bar for a purchase, a red one over it for a sale. Point at or tap one to see the trade.` : `None of the ${sp.n} filings Optic has from the last two years is a purchase or a sale, so the chart has nothing to mark.`)}`;
+    ${fine(`${sp.marked ? `The chart marks the ${[sp.buys ? `${sp.buys} purchase${sp.buys === 1 ? '' : 's'}` : '', sp.sells ? `${sp.sells} sale${sp.sells === 1 ? '' : 's'}` : ''].filter(Boolean).join(' and ')} among the ${sp.n} filings Optic has from the last two years, ${fullDate(sp.from)} to ${fullDate(sp.to)}: a green arrow under the bar for a purchase, a red one over it for a sale. Point at or tap one to see the trade.` : `None of the ${sp.n} filings Optic has from the last two years is a purchase or a sale, so the chart has nothing to mark.`}${coverageLine(sp.cov)}`)}`;
+}
+// Yahoo's list stops at its 150 latest rows, which for a company that files many awards is well short of two years;
+// the purchases and sales before it come from the SEC's Form 4s (app/insider_fill.py), and this says so.
+function coverageLine(cov) {
+  if (!cov || !cov.yahoo_from) return '';
+  const from = fullDate(cov.yahoo_from);
+  if (!cov.listed) return ` Yahoo's list stops at its 150 latest rows, which begin on ${from}. Optic is reading the Form 4s filed with the SEC for the months before that, and their purchases and sales will be marked on a later visit.`;
+  return ` Yahoo's list stops at its 150 latest rows, which begin on ${from}, so the purchases and sales before that are read from the Form 4s filed with the SEC.${cov.sec_unread ? ` ${num(cov.sec_unread, 0)} of those filings are still being read and will be marked on a later visit.` : ''}`;
 }
 const checkCount = (n, sym) => `${n} of ${CHECKS.length} for ${sym}. Fixed questions on purpose. A checklist you can edit becomes a list of the questions you already like the answers to.`;
 
@@ -622,7 +630,7 @@ export function insiderMarks(t) {
 function insiderSpan(t) {
   const tx = ((((t || {}).company || {}).ownership || {}).recent_transactions) || [], dates = tx.map((x) => String(x.date || '').slice(0, 10)).filter(Boolean).sort();
   const m = insiderMarks(t);
-  return { n: tx.length, from: dates[0], to: dates[dates.length - 1], marked: m.length, buys: m.filter((x) => x.side === 'buy').length, sells: m.filter((x) => x.side === 'sell').length };
+  return { n: tx.length, from: dates[0], to: dates[dates.length - 1], marked: m.length, buys: m.filter((x) => x.side === 'buy').length, sells: m.filter((x) => x.side === 'sell').length, cov: ((t || {}).company || {}).ownership ? t.company.ownership.insider_coverage : null };
 }
 
 /** The backtest's fills as markers and the stop check's lines, for the widgets that are showing. */

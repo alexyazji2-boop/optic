@@ -222,3 +222,37 @@ def test_the_arrows_their_box_and_the_switches():
     assert "data-chw-ins" in CW and "if (el.matches('[data-chw-ins]')) { C.overlay('ins', el.checked); return true; }" in CW
     css = CSS[CSS.index(".pc .ins {"):]
     assert ".pc .ins.buy { fill: var(--c-pos); } .pc .ins.sell { fill: var(--c-neg); }" in css[:400]
+
+
+def test_the_insiders_panel_says_where_yahoos_list_stops_and_what_the_sec_filings_fill(tmp_path):
+    """Yahoo's list holds its 150 latest rows; before them the purchases and sales are read from SEC Form 4s
+    (app/insider_fill.py), and the panel under the chart's arrows says how far each reaches (2026-11-03, UNH)."""
+    t = json.loads(json.dumps(FIXTURE))
+    own = t["company"]["ownership"]
+    own["recent_transactions"] = own["recent_transactions"] + [
+        {"insider": "HEMSLEY STEPHEN J", "position": "Director, CEO, UHG", "date": "2025-05-16", "shares": 86700.0,
+         "value": 25019019.0, "action": "purchase", "detail": "Purchase at price 288.57 per share, from the Form 4 filed with the SEC.",
+         "source": "sec", "accession": "0000731766-25-000150"}]
+    covs = {"read": {"yahoo_from": "2025-06-24", "listed": True, "sec_unread": 0},
+            "reading": {"yahoo_from": "2025-06-24", "listed": True, "sec_unread": 12},
+            "first": {"yahoo_from": "2025-06-24", "listed": False, "sec_unread": 0},
+            "none": None}
+    got = _run(tmp_path, f"""
+      const W = await import('{(JS / "pages/chart-widgets.js").as_posix()}');
+      const {{ toString }} = await import('{(JS / "core/dom.js").as_posix()}');
+      const t = {json.dumps(t)}, covs = {json.dumps(covs)}, out = {{}};
+      for (const [k, cov] of Object.entries(covs)) {{
+        t.company.ownership.insider_coverage = cov;
+        W.bind({{ sym: () => 'UNH', t: () => t, tErr: () => null, phase: () => 'regular', repaint() {{}}, chart() {{}}, overlayOn: () => true, overlay() {{}} }});
+        W.reset();
+        out[k] = toString(W.body('insiders')).replace(/<[^>]+>/g, ' ').replace(/&#39;/g, "'").replace(/\\s+/g, ' ').trim();
+      }}
+      out.marks = W.insiderMarks(t).filter((m) => m.side === 'buy').map((m) => [m.at, m.who, m.amount]);
+      print(JSON.stringify(out));
+    """)
+    told = "Yahoo's list stops at its 150 latest rows, which begin on Jun 24, 2025, so the purchases and sales before that are read from the Form 4s filed with the SEC."
+    assert told in got["read"] and "still being read" not in got["read"]
+    assert told + " 12 of those filings are still being read and will be marked on a later visit." in got["reading"]
+    assert "Optic is reading the Form 4s filed with the SEC for the months before that" in got["first"]
+    assert "Yahoo's list stops" not in got["none"], "a whole list says nothing about it"
+    assert ["2025-05-16", "HEMSLEY STEPHEN J", "86,700 shares, $25.0M"] in got["marks"], "an SEC row is marked like Yahoo's"

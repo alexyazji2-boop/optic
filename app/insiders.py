@@ -281,7 +281,7 @@ def _filing_folder(index_url: str) -> str:
     return index_url.rsplit("/", 1)[0]
 
 
-def parse_filing(index_url: str, accession: str) -> Dict[str, Any]:
+def parse_filing(index_url: str, accession: str, store: bool = True) -> Dict[str, Any]:
     """One Form 4, as transactions.
 
     Reads the complete submission text file rather than listing the folder and
@@ -289,9 +289,12 @@ def parse_filing(index_url: str, accession: str) -> Dict[str, Any]:
     ("wk-form4_1789056227.xml"), so the folder listing was a second request per
     filing for nothing. The submission wraps the XML in SGML, which is why the
     document is sliced out by tag rather than parsed whole.
+
+    `store=False` keeps the document out of the shared feed cache, for a caller
+    that keeps the parse itself (app/insider_fill.py reads hundreds).
     """
     url = "{}/{}.txt".format(_filing_folder(index_url), accession)
-    body = feeds.fetch_text(url, FILING_TTL, key="insider:doc:" + accession)
+    body = feeds.fetch_text(url, FILING_TTL, key="insider:doc:" + accession, store=store)
 
     start = body.find("<ownershipDocument>")
     end = body.find("</ownershipDocument>")

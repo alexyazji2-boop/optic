@@ -64,6 +64,7 @@ from app.research import forecasts as research_forecasts
 from app import live_mirror
 from app import paper
 from app import segment_store
+from app import form4_store
 from app import weekly_store
 from app.analytics import sec_facts
 from app import earnings_result
@@ -128,6 +129,9 @@ def _real_data_out_of_the_way(tmp_path_factory):
         # test that reads one back gives it a file of its own.
         patch.setattr(segment_store, "DB_PATH",
                       str(tmp_path_factory.mktemp("segments") / "segments.db"))
+        # The Form 4s read from EDGAR for the insider trades Yahoo's list leaves out (app/insider_fill.py).
+        patch.setattr(form4_store, "DB_PATH",
+                      str(tmp_path_factory.mktemp("form4") / "form4.db"))
         # Optic's own daily implied-volatility readings (the IV rank's history).
         patch.setattr(iv_history, "DB_PATH",
                       str(tmp_path_factory.mktemp("iv_history") / "iv_history.db"))
