@@ -33,9 +33,10 @@ def js(tmp_path, body):
 def test_the_header_is_milo_by_his_name_with_three_named_icons():
     opener = MILO[MILO.index("export async function openMilo("):MILO.index("// Milo's panel is as wide")]
     assert "kicker: 'Ask Milo'" not in opener, "no Ask Milo above Milo"
-    # His name alone since 2026-11-03: the owner asked for the figure out of the header.
-    assert '<div class="milo-id"><div><h2 id="milo-title" tabindex="-1">Milo</h2><p class="milo-sub">Research assistant</p></div></div>' in opener
-    assert "figure('compact')" not in opener, "no bust beside the name" 
+    # The header is the persistent companion since 2026-11-03: his figure, his name and one status, which is
+    # the only place a figure is drawn at all.
+    assert "head: html`${raw(companionHTML({" in opener
+    assert "milo-id" not in opener and "figure('compact')" not in opener 
     for label, ic in (("Conversation history", "history"), ("New conversation", "compose")):
         assert f'aria-label="{label}" title="{label}">${{icon(\'{ic}\')}}' in opener, label
     assert "head = null, actions = null" in DRAWER and '<div class="drawer-acts">${actions}${shut}</div>' in DRAWER
@@ -85,7 +86,8 @@ def test_the_welcome_is_one_heading_and_goes_once_a_conversation_starts():
     # the owner's ask (2026-10-20): a friendly hello, then the question; beside his head since 2026-10-22
     assert "${fig}<p class=\"milo-hi\">Hey, I'm Milo!</p>${fig ? menuHTML() : ''}</div>" in opening, "in his row"
     assert opening.index('<div class="milo-hello">') < opening.index('<p class="milo-hi">Hey, I\'m Milo!</p>') < opening.index('class="milo-hello-h"')
-    assert "figure('full', 'Milo guide: what to ask, examples and animation')" in opening
+    # the guide moved onto the companion with the figure; the empty screen keeps the words only
+    assert "const fig = '';" in MILO and "label: 'Milo guide: what to ask, examples and animation'" in MILO
     assert 'class="milo-starters"' in opening and "starters().map(" in opening
     log = MILO[MILO.index("function logHTML() {"):MILO.index("function paintChrome()")]
     assert "if (!S.items.length) return openingHTML();" in log and "if (S.showHistory) return historyHTML();" in log

@@ -31,7 +31,7 @@ import { CLASSIC } from '../core/classic.js';
 import { miloNotice } from '../core/legal.js';
 import { icon } from './icons.js';
 import { levelSlider } from './levelslider.js';
-import { begin as actBegin, on as actOn, activityHTML, syncActivity } from './milo-activity.js';
+import { begin as actBegin, on as actOn, companionHTML, syncCompanion } from './milo-activity.js';
 
 const HISTORY_KEY = 'optic.pulse.history.v1', PERSONA_KEY = 'optic.pulse.persona.v1', HORIZON_KEY = 'optic.milo.horizon.v1', RESEARCH_KEY = 'optic.research.v1';
 const MAX_CONVERSATIONS = 30, MAX_MESSAGES = 60, MAX_CHARS = 12000, MAX_Q = 4000;
@@ -201,7 +201,6 @@ const setPref = (k, v) => { try { localStorage.setItem(k, v); } catch (e) { /* p
 // the title, the large one only above a new conversation's question). Without the script the panel reads the
 // same, without him.
 const OS = () => window.OpticScout || null;
-const SEARCHING = new Set(['searching the web', 'searching', 'reading and weighing sources']);
 const CAN_ASK = 'Ask me anything: about the company or the page you have open, about the market as a whole, or about how Optic works something out. I read Optic\'s own figures for what is on your screen, and look up more of Optic\'s data when a question needs it.';
 // the classic panel's starters, word for word; the ones about a symbol only when one is on screen
 const EXAMPLES = [
@@ -220,39 +219,62 @@ const EXAMPLES = [
 ];
 export const examples = (sym) => EXAMPLES.filter(([need]) => !need || sym).map(([, q]) => q.replace(/\{T\}/g, sym || ''));
 // i: the answer whose bust moves, and the state it is in; via: a gesture still to play into that state
-const SC = { i: null, state: 'idle', via: null, menu: false, canAsk: false, examples: false, presses: 0, lastWave: 0, quiet: null };
-const figure = (size, label = '') => (OS() ? raw(OS().html({ size, label: label ? esc(label) : '' })) : '');
-const welcomeEl = (h) => $('.milo-hello .scout', h);
-// the figure that reacts to an answer: the small one in the header, beside the title
-// The header is his name alone: the owner asked for the figure out of it (2026-11-03). What he is doing is
-// said by the activity figure in the answer itself (ui/milo-activity.js), which is where a reader is looking,
-// so nothing is lost by it. These two stay because they are what puts a figure back there if it returns, and
-// every caller already handles finding none.
-const headEl = () => (S.panel && document.contains(S.panel) ? $('.milo-id .scout', S.panel) : null);
-const replyEl = (h, i) => (i === null || i === undefined ? null : headEl());
-/** After the log is drawn: start the welcome figure, and put the moving bust back in its state. */
-function scoutAfterPaint() {
-  const O = OS(), h = host(); if (!O || !h) return;
-  const btn = $('.milo-hello .scout-btn', h); if (btn) { btn.setAttribute('aria-expanded', String(SC.menu)); O.attach(welcomeEl(h), { slot: 'welcome' }); }
-  const el = replyEl(h, SC.i); if (!el) return;
-  const c = O.attach(el, { slot: 'reply' }), via = SC.via; SC.via = null;
-  if (c) c.set(SC.state, via || undefined);
+const SC = { menu: false, canAsk: false, examples: false, presses: 0, lastWave: 0, lastPress: 0, quiet: null,
+  // what he rests in between answers: 'idle' (Ready), or the last answer's outcome until the next question
+  rest: 'idle' };
+/* ---------------- the companion ----------------
+ * One Milo, at the top of the panel, for the whole conversation. He used to be three figures that took turns:
+ * a big one on the empty screen, a bust in the header, and a third built inside the answer while it streamed.
+ * The reader lost him at the two moments that mattered most, when a question was sent and when the answer
+ * finished, because those were exactly the moments the markup holding him was replaced.
+ *
+ * He is in the drawer's header, which is a sibling of the scrolling log, so scrolling, streaming, redrawing
+ * the log and replacing a finished answer cannot touch him. `slot: 'companion'` is his, and nothing else
+ * attaches to it. */
+const GREET_GAP_MS = 60000;
+const coEl = () => (S.panel && document.contains(S.panel) ? $('.milo-co', S.panel) : null);
+/** His controller, or null before the panel is mounted. Cheap: attach returns the one already on the element. */
+function coCtl() {
+  const O = OS(), root = coEl(); if (!O || !root) return null;
+  const el = $('.scout', root); if (!el) return null;
+  return O.attach(el, { slot: 'companion' });
 }
-function scoutTo(i, state, via) { SC.i = i; SC.state = state; SC.via = via || null; scoutAfterPaint(); }
-// typing: the welcome figure, or once a conversation has started the header's figure, unless it is busy with an answer
+/** Show `act` and move him to its pose. `via` plays one gesture on the way in. */
+function paintCompanion(act, via) {
+  const root = coEl(); if (!root) return;
+  const pose = syncCompanion(root, act, { stepWords: (raw) => stepWords(raw, S.live && S.live.symbol) });
+  const btn = $('.scout-btn', root); if (btn) btn.setAttribute('aria-expanded', String(SC.menu));
+  const c = coCtl(); if (!c || !pose) return;
+  if (via) c.set(pose, via); else c.set(pose);
+}
+/** What he should be showing right now, from the live answer if there is one. */
+const coState = () => (S.live && S.live.act ? S.live.act : { state: SC.rest, said: '' });
+function scoutAfterPaint() { paintCompanion(coState()); }
+/* Typing: a small attentive tilt toward the composer, back to rest when the box goes quiet. It is named for
+ * the composer and not for a microphone: Optic records no audio and asks for no audio permission. */
 function scoutListen(v) {
-  const O = OS(), h = host(); if (!O || !h) return;
-  let el = welcomeEl(h);
-  if (!el && !S.busy) el = headEl();
-  const c = el && O.attach(el, el.closest('.milo-hello') ? { slot: 'welcome' } : { slot: 'reply' }); if (!c) return;
+  const c = coCtl(); if (!c || S.busy) return;
   clearTimeout(SC.quiet);
   if (!String(v || '').trim()) { if (c.state === 'listening') c.set('idle'); return; }
   if (c.state === 'idle') c.set('listening');
   SC.quiet = setTimeout(() => { if (c.state === 'listening') c.set('idle'); }, 2500);
 }
+/** His own clicks: the figure, and the guide menu hanging off it. True when it handled the event. */
+function scoutClick(e, scope) {
+  const t = (q) => e.target.closest(q); let b;
+  if ((b = t('.scout-btn'))) { scoutPress(b); return true; }
+  if ((b = t('[data-v2-scout-act]'))) { scoutAct(b.dataset.v2ScoutAct); return true; }
+  if ((b = t('[data-v2-scout-motion]'))) {
+    const v = b.dataset.v2ScoutMotion; if (OS()) OS().setMotion(v);
+    (scope || document).querySelectorAll('[data-v2-scout-motion]').forEach((x) => x.setAttribute('aria-checked', String(x.dataset.v2ScoutMotion === v)));
+    setMenu(false, true); return true;
+  }
+  if (SC.menu && !t('#milo-scout-menu')) setMenu(false);
+  return false;
+}
 function setMenu(open, refocus) {
-  const h = host(); SC.menu = open;
-  const menu = h && $('#milo-scout-menu', h), btn = h && $('.milo-hello .scout-btn', h);
+  const h = S.panel; SC.menu = open;   // he and his menu are in the drawer's header, not in the body
+  const menu = h && $('#milo-scout-menu', h), btn = h && $('.scout-btn', h);
   if (menu) menu.hidden = !open;
   if (btn) { btn.setAttribute('aria-expanded', String(open)); if (!open && refocus) btn.focus(); }
   if (open && menu) { const f = $('.scout-mi', menu); if (f) f.focus({ preventScroll: true }); menu.scrollIntoView({ block: 'nearest' }); }
@@ -260,17 +282,20 @@ function setMenu(open, refocus) {
 // a press: a short wave or, every other time, a curious tilt, and the menu
 function scoutPress(btn) {
   if (SC.menu) { setMenu(false, true); return; }
-  const c = OS() && OS().attach($('.scout', btn), { slot: 'welcome' }); if (c) c.gesture(SC.presses++ % 2 ? 'curious' : 'wave');
+  // One gesture per press, never while he is working: a playful wave must not sit on top of a state the
+  // reader needs, and a cooldown keeps repeated presses from queueing up behind each other.
+  const c = coCtl();
+  if (c && !S.busy && Date.now() - SC.lastPress > 900) { SC.lastPress = Date.now(); c.gesture(SC.presses++ % 2 ? 'curious' : 'wave'); }
   setMenu(true);
 }
 // the menu's two actions show the sentence or the examples in the opening; neither sends anything
 function scoutAct(act) {
   SC.menu = false;
   if (act === 'ask') SC.canAsk = !SC.canAsk; else SC.examples = !SC.examples;
-  paintLog(false);
+  paintLog(false); paintHead();
   const h = host(); if (!h) return;
-  const btn = $('.milo-hello .scout-btn', h); if (btn) btn.focus({ preventScroll: true });
-  const c = OS() && OS().attach(welcomeEl(h), { slot: 'welcome' });
+  const root = coEl(); const btn = root && $('.scout-btn', root); if (btn) btn.focus({ preventScroll: true });
+  const c = coCtl();
   if (act === 'examples' && SC.examples) { const ex = $('.milo-examples', h); if (ex) ex.scrollIntoView({ block: 'nearest' }); if (c) c.gesture('point'); } else if (act === 'ask' && SC.canAsk && c) c.gesture('curious');
 }
 function menuHTML() {
@@ -321,7 +346,9 @@ function welcomeLine() {
   return `Ask about the ${pageLabel(route)} page, or anything in the market.`;
 }
 function openingHTML() {
-  const fig = figure('full', 'Milo guide: what to ask, examples and animation');
+  // No figure here any more: he is in the header for the whole conversation, and two large animated Milos on
+  // one screen is one too many (the owner's companion brief, 2026-11-03).
+  const fig = '';
   const sym = onSymbol();
   // the owner's ask: Milo says hello first, then the question. The bubble sits beside his head, its tail
   // pointing at him (owner, 2026-10-22: "have the text next to his head"; it had been under his feet)
@@ -722,6 +749,11 @@ function paintHead() {
   const hb = S.panel && $('.drawer-head [data-v2-milo-history]', S.panel), nb = S.panel && $('.drawer-head [data-v2-milo-new]', S.panel);
   if (hb) { hb.setAttribute('aria-expanded', String(!!S.showHistory)); hb.classList.toggle('is-on', !!S.showHistory); hb.setAttribute('aria-disabled', String(!!S.busy)); hb.title = S.busy ? 'Conversation history (stop the answer first)' : 'Conversation history'; }
   if (nb) { nb.setAttribute('aria-disabled', String(!!S.busy)); nb.title = S.busy ? 'New conversation (stop the answer first)' : 'New conversation'; }
+  // his guide's labels say what each switch will do next, so they follow the switches
+  const menu = S.panel && $('#milo-scout-menu', S.panel);
+  if (menu) { const tmp = document.createElement('div'); render(tmp, menuHTML()); const fresh = tmp.firstElementChild;
+    if (fresh && fresh.innerHTML !== menu.innerHTML) menu.innerHTML = fresh.innerHTML;
+    menu.hidden = !SC.menu; }
 }
 const WAIT_HISTORY = 'Milo is still answering. Stop the answer first, then open your history.';
 const WAIT_NEW = 'Milo is still answering. Stop the answer first, then start a new conversation.';
@@ -813,33 +845,26 @@ const draw = (el, tpl) => { if (el) render(el, tpl); };
 // the whole answer gives, so the answer reads the same while it arrives, when it ends and when it is drawn again from
 // history. The arriving paragraph is drawn as markdown too (streamingHTML). At most one paint a frame, however many
 // events arrived in it.
-// The card is for the wait before any text: it has room for the figure and it is the only thing in the bubble.
-// Once words are arriving they take the space back and he goes to the inline line beside them (the owner's
-// reference sheet, and its note: he shrinks rather than disappears). Measured on the panel, not on the bubble,
-// which is the panel less its padding and the answer's own indent (403px inside a 444px panel, measured
-// 2026-11-03) and would have put the threshold on a number with no meaning. A phone never gets the card: there
-// the panel is the whole screen and the answer has to come first.
-const CARD_MIN = 400;
-// How long "Answer ready" stays before the row goes. Long enough to read three words, short enough not to sit
-// under a finished answer: the follow-ups below it are already live while it shows.
-const DONE_MS = 1600;
-const expandedNow = (L, width) => !L.text && !isPhoneNow() && (width || 0) >= CARD_MIN;
-// What sits under the activity: the quiet notice, and the lookups so far where the card is not already listing
-// them. One string, as before; the activity above it is patched in place rather than redrawn (syncActivity).
-function liveLinesHTML(L, expanded) {
+// How long "Answer ready" shows before he settles back to resting. Long enough to register, short enough
+// that he is not still claiming to be finishing something he finished.
+const SETTLE_MS = 2500;
+let settleT = null;
+/** What stays in the answer bubble while it streams: the quiet notice, and what has been looked up so far.
+ *  What he is DOING is on the companion above the log, so none of it is drawn twice. */
+function liveLinesHTML(L) {
   const got = (L.got || []).filter((r) => r && r.ok !== false).map((r) => r.label || (r.symbols || []).join(', ')).filter(Boolean);
-  return `${L.quiet ? `<p class="milo-quiet" role="status">${esc(QUIET_TEXT)}</p>` : ''}${got.length && !expanded ? `<p class="milo-sofar">Looked up so far: ${esc([...new Set(got)].join('; '))}. Every source is listed when the answer is complete.</p>` : ''}`;
+  return `${L.quiet ? `<p class="milo-quiet" role="status">${esc(QUIET_TEXT)}</p>` : ''}${got.length ? `<p class="milo-sofar">Looked up so far: ${esc([...new Set(got)].join('; '))}. Every source is listed when the answer is complete.</p>` : ''}`;
 }
-/** The figure inside the activity, in its own slot: the header bust keeps the gestures the end of an answer plays
- *  on it, and starting this one never stops that one. */
-function scoutInActivity(root) {
-  const O = OS(), box = root && root.querySelector('.milo-doing'); if (!O || !box) return;
-  const el = box.querySelector('.scout'); if (!el) return;
-  const c = O.attach(el, { slot: 'activity' }); if (!c) return;
-  // The answer landed: the small wave he already has, played once into the resting pose. It is the gesture
-  // the owner's sheet asks for in state 5, and it is his own frames, not a new drawing of him.
-  if (box.dataset.doing === 'complete') { c.set('idle', 'ack'); return; }
-  c.set(box.dataset.scout || 'thinking');
+/** The end of an answer, on the companion. He stays: only the pose settles, a moment later. */
+function companionEnd(ok, ended) {
+  clearTimeout(settleT);
+  const state = ok ? 'complete' : ended === 'stopped' ? 'cancelled' : 'error';
+  SC.rest = state;
+  paintCompanion({ state, said: '' }, state === 'complete' ? 'ack' : undefined);
+  if (state !== 'complete') return;
+  // Guarded, so a finished answer cannot reach into the next one: by the time this runs a new question may
+  // be in flight, and its state is the one that matters.
+  settleT = setTimeout(() => { if (!S.busy && !S.live) { SC.rest = 'idle'; paintCompanion({ state: 'idle', said: '' }); } }, SETTLE_MS);
 }
 let liveFrame = null;
 function paintLive() {
@@ -862,16 +887,11 @@ function paintLive() {
     }
     const tail = $('.milo-tail', node), th = streamingHTML(text.slice(L.cut, followAt >= 0 ? Math.max(L.cut, followAt) : text.length), L.symbol);
     if (tail.v2Html !== th) { tail.innerHTML = th; tail.v2Html = th; }
-    const panel = S.panel && document.contains(S.panel) ? S.panel : h;
-    const lines = $('.milo-live-lines', node), expanded = expandedNow(L, panel.getBoundingClientRect().width);
-    let rest = $('.milo-live-rest', lines);
-    if (!rest) { lines.insertAdjacentHTML('beforeend', '<div class="milo-live-rest"></div>'); rest = $('.milo-live-rest', lines); }
-    syncActivity(lines, L.act, { expanded, stepWords: (raw) => stepWords(raw, L.symbol) });
-    // every paint, not only when it was rebuilt: the figure stays, and this is what moves him to the new pose.
-    // attach gives the figure already there, and set on the pose he is in is not news, so this costs nothing.
-    scoutInActivity(lines);
-    const lh = liveLinesHTML(L, expanded);
-    if (rest.dataset.html !== lh) { rest.innerHTML = lh; rest.dataset.html = lh; }
+    const lines = $('.milo-live-lines', node), lh = liveLinesHTML(L);
+    if (lines.dataset.html !== lh) { lines.innerHTML = lh; lines.dataset.html = lh; }
+    // He is in the header, not in this bubble: this only moves him to the pose the events have reached, and
+    // setting the pose he already holds is not news, so it costs nothing on a chunk of text.
+    paintCompanion(L.act);
     const log = $('.milo-log', h); if (log && S.follow) log.scrollTop = log.scrollHeight;
     syncLatest();
     // the form changes twice in an answer (sending, then streaming), not every frame
@@ -893,17 +913,9 @@ function paintFinished(i, live, ok) {
   if (body.length > live.cut) settled.insertAdjacentHTML('beforeend', renderAnswer(body.slice(live.cut), live.symbol, live.seen || {}).html);
   settled.replaceWith(...settled.childNodes);
   const tailNode = $('.milo-tail', old); if (tailNode) tailNode.remove();
-  // State 5 of the owner's sheet: the answer is complete, and he says so for a moment in the place he was already
-  // standing. Nothing waits on it: the answer, its sources, its follow-ups and its actions are drawn in this same
-  // frame, and the row he was in is removed a moment later, which is the one move it was going to make anyway.
-  const linesNode = $('.milo-live-lines', old);
-  if (linesNode && ok && live.act) {
-    const done = activityHTML({ ...live.act, state: 'complete', said: '' }, { expanded: false });
-    if (done) {
-      linesNode.innerHTML = done; delete linesNode.dataset.html; scoutInActivity(linesNode);
-      setTimeout(() => { if (linesNode.isConnected) linesNode.remove(); }, DONE_MS);
-    } else linesNode.remove();
-  } else if (linesNode) linesNode.remove();
+  // The streaming notices go with the stream. He does not: he is in the header and stays there, which is the
+  // whole point of the companion, so nothing here touches him.
+  const linesNode = $('.milo-live-lines', old); if (linesNode) linesNode.remove();
   delete old.dataset.v2Live;
   const tmp = document.createElement('div'); render(tmp, msgHTML(it));
   const fresh = tmp.firstElementChild, nb = fresh && $('.milo-bubble', fresh);
@@ -983,7 +995,10 @@ export async function send(text, { deep = false } = {}) {
     act: actBegin(deep) };
   if (ta) { ta.value = ''; grow(ta); } S.draft = ''; S.showHistory = false; S.showSettings = false; S.toEnd = true; S.follow = true;
   paintChrome(); paintLog(); paintForm(); paintLive();
-  scoutTo(ai, 'thinking', 'ack');
+  // He acknowledges the question with a nod and moves straight into Thinking. A finished answer's settle
+  // timer is dropped here, so the one just sent owns his state from now on.
+  clearTimeout(settleT); SC.rest = 'idle';
+  paintCompanion(S.live.act, 'nod');
   const ctl = new AbortController(); S.abort = ctl; S.sentAt = performance.now();
   let finished = false, ended = '', failed = null;
   const heard = () => { if (!S.live) return; S.live.lastAt = performance.now(); if (S.live.quiet) { S.live.quiet = false; paintLive(); } };
@@ -1020,8 +1035,8 @@ export async function send(text, { deep = false } = {}) {
           c.split('\n').forEach((line) => { if (line.startsWith('event: ')) ev = line.slice(7).trim(); else if (line.startsWith('data: ')) data += line.slice(6); });
           if (!data) continue;
           let p; try { p = JSON.parse(data); } catch (e) { continue; }
-          if (ev === 'delta') { S.live.text += p.text || ''; S.live.status = ''; S.live.act = actOn(S.live.act, 'delta'); S.conv.messages[ai].content = S.live.text; paintLive(); if (SC.i === ai && SC.state !== 'streaming') scoutTo(ai, 'streaming'); }
-          else if (ev === 'status') { const w = stepWords(String(p.state || ''), S.live.symbol); S.live.status = w; S.live.act = actOn(S.live.act, 'status', p); paintLive(); if (SC.i === ai && SC.state !== 'streaming') scoutTo(ai, SEARCHING.has(String(p.state || '')) ? 'searching' : 'thinking'); }
+          if (ev === 'delta') { S.live.text += p.text || ''; S.live.status = ''; S.live.act = actOn(S.live.act, 'delta'); S.conv.messages[ai].content = S.live.text; paintLive(); }
+          else if (ev === 'status') { const w = stepWords(String(p.state || ''), S.live.symbol); S.live.status = w; S.live.act = actOn(S.live.act, 'status', p); paintLive(); }
           else if (ev === 'attachments') { const m = meta.get(ai); if (m && Array.isArray(p.problems)) m.notSent = [...(m.notSent || []), ...p.problems.map(String)].slice(0, 6); }   // files the model refused, and the reader's own blocks left out (BUG-071)
           else if (ev === 'assumed') { const hz = (((S.personas || {}).horizons || {}).horizons || []).find((x) => x.id === p.horizon); if (hz && p.horizon_source === 'question' && p.horizon !== horizon()) meta.get(ai).assumed = `Answered for a ${hz.label.toLowerCase()} timeframe, from your question. Your setting is unchanged.`; }
           else if (ev === 'retrieved') { S.live.got = Array.isArray(p.items) ? p.items : []; S.live.act = actOn(S.live.act, 'retrieved', p.items); paintLive(); }
@@ -1049,15 +1064,10 @@ export async function send(text, { deep = false } = {}) {
     if (going.length && !S.files.length) S.files = going;   // and the files with it
     S.draft = text; const box = host() && $('#milo-q', host()); if (box && !box.value.trim()) { box.value = text; grow(box); }
     if (failed.signin) loadAllowance();
-    SC.i = null;
   } else if (!reply && ended === 'stopped') {
     S.conv.messages.splice(ai - 1, 2); S.items = S.items.filter((it) => !(it.kind === 'msg' && it.i >= ai - 1)); meta.delete(ai);
     S.items.push({ kind: 'note', text: 'Stopped before Milo answered.' });
-    SC.i = null;
   } else {
-    if (failed || ended === 'cut') Object.assign(SC, { i: ai, state: 'error', via: null });
-    else if (ended === 'stopped') Object.assign(SC, { i: ai, state: 'idle', via: 'look' });
-    else Object.assign(SC, { i: ai, state: 'idle', via: reply.trim() ? 'nod' : null });
     if (failed) S.items.push({ kind: 'note', text: failed.text });
     // part of an answer, then a failure: kept, and marked as cut off rather than saved as if it were complete (BUG-051)
     if (failed && !ended) ended = 'cut';
@@ -1067,7 +1077,9 @@ export async function send(text, { deep = false } = {}) {
   // the finished answer in place when it can be, so the rest of the conversation is not drawn again; a reader at the end
   // of the conversation stays at it
   const lg = host() && $('.milo-log', host());
-  if (paintFinished(ai, liveWas, !failed && !ended && !!reply.trim())) { if (S.follow) lg.scrollTop = lg.scrollHeight; scoutAfterPaint(); syncLatest(); } else paintLog();
+  const landed = !failed && !ended && !!reply.trim();
+  if (paintFinished(ai, liveWas, landed)) { if (S.follow) lg.scrollTop = lg.scrollHeight; syncLatest(); } else paintLog();
+  companionEnd(landed, ended);
   paintForm(); loadAllowance();
   // the state, for a screen reader: the log reads the answer itself
   announce(failed ? 'Milo could not answer. Your question is back in the box.' : ended === 'stopped' ? 'Stopped. The answer is incomplete.' : ended === 'cut' ? 'The answer was cut off.' : 'Milo has answered.');
@@ -1230,7 +1242,9 @@ export async function openMilo({ question = '', opener, send: sendNow = false, a
   drawer.open({
     title: 'Milo', opener, dock: dockFit(window.innerWidth, railW(), storedWidth() || W_DEFAULT, isPhoneNow()) > 0,
     // the redesign's compact header: Milo beside his name, and history, a new conversation and close as icons
-    head: html`<div class="milo-id"><div><h2 id="milo-title" tabindex="-1">Milo</h2><p class="milo-sub">Research assistant</p></div></div>`,
+    // The persistent companion: the drawer's header is a sibling of the scrolling log, so he survives every
+    // redraw of the conversation. The guide menu that used to hang off the welcome figure hangs off him.
+    head: html`${raw(companionHTML({ label: 'Milo guide: what to ask, examples and animation' }))}${menuHTML()}`,
     actions: html`<button type="button" class="icon-btn" data-v2-milo-history aria-expanded="false" aria-controls="milo-history" aria-label="Conversation history" title="Conversation history">${icon('history')}</button>
       <button type="button" class="icon-btn" data-v2-milo-new aria-label="New conversation" title="New conversation">${icon('compose')}</button>`,
     body: html`<div class="milo"><div class="milo-chrome">${chromeHTML()}</div>
@@ -1262,8 +1276,10 @@ export async function openMilo({ question = '', opener, send: sendNow = false, a
       // opens: a reader following the end stays at it, where before the view was left up to 56 px short
       const lg = $('.milo-log', S.mounted);
       if (lg && typeof ResizeObserver === 'function') { const ro = new ResizeObserver(() => keepEnd()); ro.observe(lg); sizeOff = () => ro.disconnect(); }
-      const w = OS() && welcomeEl(S.mounted);
-      if (w && Date.now() - SC.lastWave > 20000) { const c = OS().attach(w, { slot: 'welcome' }); if (c) { SC.lastWave = Date.now(); c.gesture('wave'); } }
+      // One friendly wave when the panel opens, then rest. The cooldown keeps a closed-and-reopened panel
+      // from waving again and again; it is an acknowledgement, not a performance.
+      paintCompanion(coState(), Date.now() - SC.lastWave > GREET_GAP_MS ? 'wave' : undefined);
+      if (Date.now() - SC.lastWave > GREET_GAP_MS) SC.lastWave = Date.now();
       const ta = $('#milo-q', S.mounted); grow(ta);
       if (ta && !matchMedia('(pointer: coarse)').matches) { requestAnimationFrame(() => { ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); }); }
       loadAllowance(); loadChoices();
@@ -1341,13 +1357,14 @@ function toggleHistory(open = !S.showHistory) {
 }
 function newConversation() {
   if (S.busy) { toast(WAIT_NEW); return; }
-  S.conv = blankConv(); S.items = []; meta.clear(); SC.i = null; S.showHistory = false; S.follow = true; S.view = null; S.report = null;   // a report form belongs to its own conversation (BUG-051)
+  S.conv = blankConv(); S.items = []; meta.clear(); SC.rest = 'idle'; clearTimeout(settleT); S.showHistory = false; S.follow = true; S.view = null; S.report = null;   // a report form belongs to its own conversation (BUG-051)
   paintChrome(); paintLog();
   const ta = host() && $('#milo-q', host()); if (ta) ta.focus();
   announce('New conversation');
 }
 function wireHead(head) {
   head.addEventListener('click', (e) => {
+    if (scoutClick(e, head)) return;
     if (e.target.closest('[data-v2-milo-history]')) toggleHistory();
     else if (e.target.closest('[data-v2-milo-new]')) newConversation();
   });
@@ -1448,14 +1465,7 @@ function wire(root) {
   root.addEventListener('click', async (e) => {
     const t = (s) => e.target.closest(s); let b;
     if (S.showSettings && !t('.milo-settings') && !t('[data-v2-milo-settings]')) { setSettings(false, false); if (t('[data-v2-milo-settings-done]')) return; }
-    if ((b = t('.scout-btn'))) { scoutPress(b); return; }
-    if ((b = t('[data-v2-scout-act]'))) { scoutAct(b.dataset.v2ScoutAct); return; }
-    if ((b = t('[data-v2-scout-motion]'))) {
-      const v = b.dataset.v2ScoutMotion; if (OS()) OS().setMotion(v);
-      root.querySelectorAll('[data-v2-scout-motion]').forEach((x) => x.setAttribute('aria-checked', String(x.dataset.v2ScoutMotion === v)));
-      setMenu(false, true); return;
-    }
-    if (SC.menu && !t('#milo-scout-menu')) setMenu(false);
+    if (scoutClick(e, root)) return;
     if (t('[data-v2-milo-settings]')) { setSettings(!S.showSettings); return; }
     if (t('[data-v2-milo-settings-done]')) { setSettings(false); return; }
     if (t('[data-v2-milo-info]')) { S.showInfo = !S.showInfo; paintChrome(); const ib = $('[data-v2-milo-info]', root); if (ib) ib.focus(); return; }
@@ -1477,7 +1487,7 @@ function wire(root) {
       if (S.busy) return;
       const c = loadHistory().find((x) => x.id === b.dataset.v2MiloOpen); if (!c) return;
       S.conv = { id: c.id, messages: (c.messages || []).map((m) => ({ role: m.role, content: m.content })), lastTicker: c.ticker || null }; S.report = null;
-      meta.clear(); SC.i = null; S.items = S.conv.messages.map((m, i) => ({ kind: 'msg', i }));
+      meta.clear(); SC.rest = 'idle'; clearTimeout(settleT); S.items = S.conv.messages.map((m, i) => ({ kind: 'msg', i }));
       S.conv.messages.forEach((m, i) => { if (m.role === 'assistant') { const saved = (c.messages || [])[i] || {}; meta.set(i, { question: (S.conv.messages[i - 1] || {}).content || '', symbol: c.ticker || null, policyLine: saved.policy || '', amended: saved.amended || '', level: saved.level || '' }); } });
       S.showHistory = false; S.toEnd = true; S.follow = true; S.view = null; paintChrome(); paintLog(); const ta = $('#milo-q', root); if (ta) ta.focus(); return;
     }

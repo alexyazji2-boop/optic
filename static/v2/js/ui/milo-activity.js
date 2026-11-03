@@ -34,14 +34,14 @@ const NOT_A_STEP = /^some files were not sent/i;
 // title: the heading the reader sees. line: what it says when the server has given no words of its own.
 // scout: the mascot state (components/scout.js POSE), prop: the drawing beside him.
 export const ACTIVITY = {
-  thinking: { title: 'Thinking', line: 'Understanding your question', scout: 'thinking', prop: 'bubble' },
-  researching: { title: 'Researching', line: 'Looking through Optic’s data', scout: 'researching', prop: null },
-  analyzing: { title: 'Analyzing', line: 'Connecting what came back', scout: 'analyzing', prop: null },
-  writing: { title: 'Writing', line: 'Putting it together', scout: 'writing', prop: null },
-  complete: { title: 'Answer ready', line: 'Here’s what I found', scout: 'idle', prop: 'done' },
-  error: { title: 'No answer', line: 'Milo could not finish this one', scout: 'error', prop: null },
-  cancelled: { title: 'Stopped', line: 'Stopped by you', scout: 'idle', prop: null },
-  idle: { title: '', line: '', scout: 'idle', prop: null },
+  idle: { title: 'Ready', line: '', scout: 'idle' },
+  thinking: { title: 'Thinking', line: 'Understanding your question', scout: 'thinking' },
+  researching: { title: 'Researching', line: 'Looking through Optic\u2019s data', scout: 'researching' },
+  analyzing: { title: 'Analyzing', line: 'Connecting what came back', scout: 'analyzing' },
+  writing: { title: 'Writing', line: 'Putting the answer together', scout: 'writing' },
+  complete: { title: 'Answer ready', line: '', scout: 'idle' },
+  error: { title: 'Couldn\u2019t finish', line: '', scout: 'error' },
+  cancelled: { title: 'Stopped', line: '', scout: 'idle' },
 };
 
 /** The record the panel keeps for one answer. `said` is the server's own words for the step it is on. */
@@ -86,87 +86,47 @@ export function words(a, stepWords) {
   return { title: spec.title, line: said || spec.line, scout: spec.scout, prop: spec.prop };
 }
 
-/* ---------------- the two drawings beside him ----------------
- * The thing Milo works with in Researching, Analyzing and Writing is rendered in the frame itself: he is at
- * the desk with the laptop, holding the tablet, writing in the notebook (static/scout, FRAMES in
- * optic-brand/scout/render_scout.py). What has no pose of its own is a thought bubble while he reads the
- * question and the sparkles when the answer lands, and those two are drawn here in Optic's line work, in the
- * brand gold, with their motion declared in CSS (components.css) so Reduce motion stops it in one place.
- * aria-hidden: the heading and the line carry the meaning. */
-const PROPS = {
-  // A thought bubble with the logo's own chart line drawing itself inside it.
-  bubble: `<svg viewBox="0 0 48 40" class="prop prop-bubble" aria-hidden="true" focusable="false">
-    <circle cx="7" cy="34" r="2.4"/><circle cx="13" cy="28" r="3.4"/>
-    <rect x="17" y="3" width="29" height="22" rx="7"/>
-    <path class="draw" d="M23 18.5l4.6-5.2 3.2 2.6 4.6-7 3.4 3.1"/></svg>`,
-  // Three sparkles, once.
-  done: `<svg viewBox="0 0 40 40" class="prop prop-done" aria-hidden="true" focusable="false">
-    <path class="s1" d="M10 8l1.6 4.4L16 14l-4.4 1.6L10 20l-1.6-4.4L4 14l4.4-1.6z"/>
-    <path class="s2" d="M29 16l1.2 3.3L33.5 20l-3.3 1.2L29 24l-1.2-3.3L24.5 20l3.3-1.2z"/>
-    <path class="s3" d="M19 28l.9 2.4 2.4.9-2.4.9-.9 2.4-.9-2.4-2.4-.9 2.4-.9z"/></svg>`,
-};
+/* ---------------- the companion ----------------
+ * One region at the top of the panel, outside the scrolling log, that holds Milo for the whole conversation:
+ * before a question, while he works, while the answer streams, and after it lands. He used to be drawn
+ * inside the log, which meant he was built when the answer began and taken away when it finished, and the
+ * reader lost him exactly when they most wanted to know what was happening.
+ *
+ * Nothing here draws him: the figure is the render (components/scout.js) and the poses carry what he is
+ * doing, so there are no icons beside him to crowd a header. The region is built once and patched in place,
+ * so his blink timer, his sprite and his gestures all survive every status change and every chunk of text.
+ */
+const scout = (size, label) => (window.OpticScout ? window.OpticScout.html({ size, label: label || '' }) : '');
 
-const scout = (size) => (window.OpticScout ? window.OpticScout.html({ size }) : '');
-
-/** The ticks under Analyzing: what actually came back, at most three, newest last. Nothing is listed that a
- *  lookup did not return, so the list is provenance, not decoration. */
-const rowsFor = (a) => (a.state === 'analyzing' ? a.fetched.slice(-3) : []);
-function checklist(a) {
-  const rows = rowsFor(a);
-  return rows.length ? `<ul class="milo-doing-got">${rows.map((r) => `<li>${esc(r)}</li>`).join('')}</ul>` : '';
+/** The companion, built once per panel. `id` names the heading the drawer focuses when it opens. */
+export function companionHTML({ size = 'full', id = 'milo-title', label = '' } = {}) {
+  return `<div class="milo-co" data-doing="idle" data-scout="idle">
+    <span class="milo-co-stage">${scout(size, label)}</span>
+    <span class="milo-co-say">
+      <h2 class="milo-co-name" id="${id}" tabindex="-1">Milo</h2>
+      <span class="milo-co-status" role="status"><b>Ready</b><i></i></span>
+    </span>
+  </div>`;
 }
 
 /**
- * Keep `host` showing `a`, without tearing the figure down when only the words change: a state change used to
- * replace the whole view, which restarted the mascot's own blink timer, reloaded his sprite and re-ran the
- * card's fade, so the card flashed empty between states (browser check, 2026-11-03). The view is rebuilt only
- * when it appears, goes, or changes size. True when it was rebuilt, so the caller can start the figure.
+ * Keep the companion showing `a`. Patches text and data attributes in place and never removes the region:
+ * the figure element has to outlive the answer, or his motion restarts every time anything changes.
+ * `stepWords` turns the server's own status string into the reader's words. Returns the pose to hold.
  */
-export function syncActivity(host, a, opts = {}) {
-  if (!host) return false;
-  const live = a && a.state !== 'idle' ? a : null;
-  let box = host.querySelector('.milo-doing');
-  if (!live) { if (box) box.remove(); return false; }
-  const expanded = !!opts.expanded;
-  if (box && box.classList.contains('is-expanded') !== expanded) { box.remove(); box = null; }
-  if (!box) { host.insertAdjacentHTML('afterbegin', activityHTML(live, opts)); return true; }
-  const w = words(live, opts.stepWords), spec = ACTIVITY[live.state] || ACTIVITY.idle;
-  if (box.dataset.doing !== live.state) box.dataset.doing = live.state;
-  if (box.dataset.scout !== w.scout) box.dataset.scout = w.scout;
-  const title = box.querySelector('b'), line = box.querySelector('.milo-doing-line');
-  if (title && title.textContent !== w.title) title.textContent = w.title;
-  if (line && line.textContent !== w.line) line.textContent = w.line;
-  const propHost = box.querySelector('.milo-doing-prop'), prop = spec.prop && PROPS[spec.prop] ? spec.prop : '';
-  if (propHost && propHost.dataset.prop !== prop) { propHost.innerHTML = prop ? PROPS[prop] : ''; propHost.dataset.prop = prop; }
-  const rows = rowsFor(live), got = box.querySelector('.milo-doing-got');
-  const wanted = rows.join('\u0000');
-  if ((got ? got.dataset.rows : '') !== wanted) {
-    if (!rows.length) { if (got) got.remove(); } else {
-      const say = box.querySelector('.milo-doing-say');
-      const ul = got || say.insertBefore(document.createElement('ul'), box.querySelector('.milo-doing-dots'));
-      ul.className = 'milo-doing-got';
-      ul.innerHTML = rows.map((r) => `<li>${esc(r)}</li>`).join('');
-      ul.dataset.rows = wanted;
-    }
-  }
-  return false;
-}
-
-/**
- * The activity, drawn. `expanded` gives the card with the whole figure; otherwise the inline line with his bust.
- * `stepWords` turns the server's own status string into the reader's words (the panel owns that vocabulary).
- */
-export function activityHTML(a, { expanded = false, stepWords = null } = {}) {
-  // complete is drawn only when the panel asks for it by name (the moment an answer lands); it is never part
-  // of the running states, so a finished answer carries no activity of its own.
-  if (!a || a.state === 'idle') return '';
-  const w = words(a, stepWords);
-  const spec = ACTIVITY[a.state] || ACTIVITY.idle;
-  const name = spec.prop && PROPS[spec.prop] ? spec.prop : '';
-  const prop = `<span class="milo-doing-prop" data-prop="${name}">${name ? PROPS[name] : ''}</span>`;
-  // role=status, not an aria-live region of its own per state: the heading and line are read as one.
-  return `<div class="milo-doing${expanded ? ' is-expanded' : ''}" data-doing="${a.state}" data-scout="${w.scout}" role="status">
-    <span class="milo-doing-fig">${scout(expanded ? 'full' : 'compact')}${prop}</span>
-    <span class="milo-doing-say"><b>${esc(w.title)}</b><span class="milo-doing-line">${esc(w.line)}</span>${checklist(a)}
-      <span class="milo-doing-dots" aria-hidden="true"><i></i><i></i><i></i></span></span></div>`;
+export function syncCompanion(root, a, opts = {}) {
+  if (!root) return null;
+  const live = a && ACTIVITY[a.state] ? a : { state: 'idle', said: '' };
+  const spec = ACTIVITY[live.state] || ACTIVITY.idle;
+  const said = live.said && opts.stepWords ? opts.stepWords(live.said) : live.said;
+  if (root.dataset.doing !== live.state) root.dataset.doing = live.state;
+  if (root.dataset.scout !== spec.scout) root.dataset.scout = spec.scout;
+  const name = root.querySelector('.milo-co-status > b');
+  const detail = root.querySelector('.milo-co-status > i');
+  // The state is the status. The server's own words for the step go under it when it sends them, and
+  // nowhere at all when it does not, so the line is never filled with something invented.
+  if (name && name.textContent !== spec.title) name.textContent = spec.title;
+  const under = said || spec.line || '';
+  if (detail && detail.textContent !== under) detail.textContent = under;
+  return spec.scout;
 }

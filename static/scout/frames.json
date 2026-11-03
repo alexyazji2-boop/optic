@@ -37,7 +37,10 @@
   "write-2",
   "arm-a",
   "arm-b",
-  "arm-c"
+  "arm-c",
+  "chin",
+  "chin-half",
+  "chin-closed"
  ],
  "wind": 12,
  "full": {

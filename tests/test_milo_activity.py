@@ -1,4 +1,4 @@
-"""Milo's activity states: what he is doing, from the server's own events (2026-11-03).
+"""Milo's companion: one figure at the top of the panel, for the whole conversation (2026-11-03).
 
 The owner asked for a Milo who visibly works through a question rather than a spinner: five states, each
 with the mascot doing the matching thing, and the sequence following the real work. The rule that makes it
@@ -102,99 +102,142 @@ def test_the_states_the_owner_asked_for_are_all_there_and_say_so(tmp_path):
         assert any(v[2] + ":" in p or v[2] + "," in p for p in poses), v
 
 
-# ----------------------------------------------------------------- the panel is wired to the real events
+# ----------------------------------------------------------------- one companion, for the whole conversation
 
 def test_every_event_that_moves_him_is_one_the_server_sends():
     for kind in ("delta", "status", "retrieved"):
         assert "actOn(S.live.act, '%s'" % kind in MILO, kind
-    # and those are the events app/ai.py actually yields
     for ev in ("delta", "status", "retrieved", "done", "error"):
         assert '_sse("%s"' % ev in AI, ev
     assert 'yield _sse("status", {"state": "writing"})' in AI, "a model round starting is what Thinking and Analyzing read"
 
 
-def test_the_card_is_for_the_wait_and_the_line_is_for_the_answer():
-    assert "const expandedNow = (L, width) => !L.text && !isPhoneNow() && (width || 0) >= CARD_MIN;" in MILO
-    assert "const CARD_MIN = 400;" in MILO
-    assert "scout(expanded ? 'full' : 'compact')" in ACT, "the whole figure in the card, the bust in the line"
+def test_he_lives_in_the_header_not_in_the_answer():
+    """The defect this stage fixes: he used to be built inside the answer bubble, so he appeared when the
+    answer began and went when it was replaced by the finished one. The drawer's header is a sibling of the
+    scrolling log, so nothing the conversation does can reach him."""
+    assert "head: html`${raw(companionHTML({" in MILO, "the header IS the companion"
+    assert "const coEl = () => (S.panel && document.contains(S.panel) ? $('.milo-co', S.panel) : null);" in MILO
+    assert "O.attach(el, { slot: 'companion' })" in MILO
+    # and nothing draws a second one: the old welcome, header-bust and in-answer figures are gone
+    for gone in ("welcomeEl", "headEl", "replyEl", "scoutInActivity", "syncActivity", "activityHTML"):
+        assert gone not in MILO, gone
+    assert ".milo-doing" not in CSS and ".milo-doing" not in ACT, "the in-log card is gone"
+    assert "const fig = '';" in MILO, "the empty screen no longer draws a second large Milo"
 
 
-def test_answer_ready_shows_only_after_an_answer_that_landed():
-    assert "paintFinished(ai, liveWas, !failed && !ended && !!reply.trim())" in MILO
-    block = MILO[MILO.index("function paintFinished(i, live, ok) {"):MILO.index("/* ---------------- figures inside answers")]
-    assert "if (linesNode && ok && live.act) {" in block
-    assert "state: 'complete'" in block and "DONE_MS" in block
-    assert "const DONE_MS = 1600;" in MILO
+def test_streaming_only_moves_him_it_never_rebuilds_him():
+    """A chunk of text must not touch his element: rebuilding it reloads his sprite and restarts his blink."""
+    live = MILO[MILO.index("function paintLive() {"):MILO.index("/* ---------------- figures inside answers")]
+    assert "paintCompanion(L.act);" in live
+    assert "syncCompanion" not in live, "paintLive goes through paintCompanion, which patches in place"
+    sync = ACT[ACT.index("export function syncCompanion("):]
+    assert "if (root.dataset.doing !== live.state)" in sync, "attributes are written only when they change"
+    assert "if (name && name.textContent !== spec.title)" in sync
+    assert "root.innerHTML" not in sync and "insertAdjacentHTML" not in sync, "the region is never rebuilt"
+    assert "return null;" in sync and "removeChild" not in sync, "and never removed"
 
 
-def test_the_answer_never_waits_for_the_character():
-    """The finished answer, its sources and its follow-ups are drawn in the same frame as before; only the row
-    he was already standing in is removed a moment later."""
-    block = MILO[MILO.index("function paintFinished(i, live, ok) {"):MILO.index("/* ---------------- figures inside answers")]
-    assert "el.replaceWith(fresh);" in block
-    assert block.index("setTimeout(") < block.index("el.replaceWith(fresh);"), "the timer only removes the row"
-    assert "setTimeout" not in MILO[MILO.index("const reply = S.live ? S.live.text : '', liveWas = S.live;"):MILO.index("if (paintFinished(ai, liveWas")]
+def test_the_answer_finishing_keeps_him():
+    fin = MILO[MILO.index("function paintFinished(i, live, ok) {"):MILO.index("/* ---------------- figures inside answers")]
+    assert "const linesNode = $('.milo-live-lines', old); if (linesNode) linesNode.remove();" in fin
+    assert "scout" not in fin.lower().replace("milo-", ""), "nothing about him is drawn or removed here"
+    end = MILO[MILO.index("function companionEnd(ok, ended) {"):]
+    end = end[:end.index("\n}")]
+    assert "const state = ok ? 'complete' : ended === 'stopped' ? 'cancelled' : 'error';" in end
+    assert "paintCompanion({ state, said: '' }, state === 'complete' ? 'ack' : undefined);" in end
+    # he settles, he does not leave
+    assert "SC.rest = 'idle'; paintCompanion({ state: 'idle', said: '' })" in end
+    assert "const SETTLE_MS = 2500;" in MILO
 
 
-def test_the_figure_is_not_torn_down_when_only_the_words_change():
-    assert "export function syncActivity(" in ACT
-    assert "host.insertAdjacentHTML('afterbegin', activityHTML(live, opts))" in ACT
-    assert "if (title && title.textContent !== w.title) title.textContent = w.title;" in ACT
-    assert "syncActivity(lines, L.act," in MILO and "scoutInActivity(lines);" in MILO
-    assert "O.attach(el, { slot: 'activity' })" in MILO, "his own slot: the header bust keeps its gestures"
+def test_a_finished_answer_cannot_reach_into_the_next_question():
+    """The settle timer runs seconds after an answer lands, by which time a new question may be in flight."""
+    end = MILO[MILO.index("function companionEnd(ok, ended) {"):]
+    end = end[:end.index("\n}")]
+    assert "settleT = setTimeout(() => { if (!S.busy && !S.live) {" in end, "the timer checks nothing newer is running"
+    assert "clearTimeout(settleT)" in end, "and a new outcome drops the old timer"
+    assert "clearTimeout(settleT); SC.rest = 'idle';" in MILO, "so does sending the next question"
 
 
-def test_the_names_do_not_collide_with_the_action_cards():
-    """`.milo-act` was already Milo's action cards (open, compare, watch): the activity took `.milo-doing`
-    after the first draft inherited their border and padding (browser check, 2026-11-03)."""
-    assert "milo-act" not in ACT.replace("milo-activity.js", ""), "the activity uses no .milo-act class"
-    assert ".milo-doing {" in CSS and ".milo-act { border:" in CSS
+def test_a_new_or_reopened_conversation_does_not_inherit_the_last_one():
+    assert MILO.count("SC.rest = 'idle'; clearTimeout(settleT);") == 2, "new conversation, and one opened from history"
+    assert "const coState = () => (S.live && S.live.act ? S.live.act : { state: SC.rest, said: '' });" in MILO
 
 
-# ----------------------------------------------------------------- what it may not claim
-
-def test_nothing_is_listed_that_a_lookup_did_not_return():
-    assert "const rowsFor = (a) => (a.state === 'analyzing' ? a.fetched.slice(-3) : []);" in ACT
-    assert ".filter((r) => r && r.ok !== false)" in ACT, "a lookup that failed is not a tick"
-
-
-def test_what_he_works_with_is_rendered_not_drawn():
-    """The desk, the tablet and the notebook are frames of the character himself (static/scout, rendered by
-    optic-brand/scout/render_scout.py), so those three states carry no drawing beside him: a drawn laptop
-    next to a rendered one was two laptops. Only the thought bubble and the sparkles, which are no pose he
-    has, are still drawn."""
-    assert "window.OpticScout ? window.OpticScout.html({ size })" in ACT
-    for name in ("bubble", "done"):
-        assert "<svg viewBox=" in ACT.split(name + ": `")[1][:80], name
-    for gone in ("prop-desk", "prop-tablet", "prop-note"):
-        assert gone not in ACT and gone not in CSS, gone
-    assert 'aria-hidden="true"' in ACT
-    poses = (V2.parent / "components/scout.js").read_text()
-    frames = json.loads((V2.parent / "scout/frames.json").read_text())["frames"]
-    for state, frame in (("researching", "desk"), ("analyzing", "tablet"), ("writing", "write")):
-        assert "%s: '%s'" % (state, frame) in poses, state
-        for suffix in ("", "-half", "-closed"):
-            assert frame + suffix in frames, frame + suffix   # a blink needs its own lids in every pose
+def test_he_acknowledges_without_delaying_the_request():
+    send = MILO[MILO.index("export async function send("):]
+    nod = send.index("paintCompanion(S.live.act, 'nod');")
+    fetch = send.index("await fetch(")
+    assert nod < fetch, "the nod is set up before the request, not awaited before it"
+    assert "await" not in send[nod:fetch].replace("await fetch(", ""), "nothing waits on the gesture"
 
 
-def test_the_three_worked_states_show_no_drawn_prop(tmp_path):
+def test_the_greeting_is_an_acknowledgement_not_a_performance():
+    assert "const GREET_GAP_MS = 60000;" in MILO
+    assert "Date.now() - SC.lastWave > GREET_GAP_MS ? 'wave' : undefined" in MILO
+
+
+def test_typing_is_attentive_and_is_never_called_listening_to_audio():
+    fn = MILO[MILO.index("function scoutListen(v) {"):]
+    fn = fn[:fn.index("\n}")]
+    assert "if (c.state === 'idle') c.set('listening');" in fn
+    assert "S.busy" in fn, "he does not drop a working pose to look at the composer"
+    assert "Optic records no audio" in MILO, "the name is about the composer, and says so"
+
+
+def test_the_status_says_one_thing_and_only_what_is_true(tmp_path):
     got = _run(tmp_path, """
       const A = await import('%s');
-      print(JSON.stringify(['researching', 'analyzing', 'writing'].map((k) => A.ACTIVITY[k].prop)));
+      const out = {};
+      for (const k of Object.keys(A.ACTIVITY)) out[k] = A.ACTIVITY[k].title;
+      print(JSON.stringify(out));
     """ % (JS / "ui/milo-activity.js").as_posix())
-    assert got == [None, None, None]
+    assert got["idle"] == "Ready" and got["complete"] == "Answer ready"
+    assert got["cancelled"] == "Stopped" and got["error"].startswith("Couldn")
+    for k in ("thinking", "researching", "analyzing", "writing"):
+        assert got[k][0].isupper()
+    # the detail line under it is the server's own words, or the state's, or nothing at all
+    sync = ACT[ACT.index("export function syncCompanion("):]
+    assert "const under = said || spec.line || '';" in sync
 
 
-def test_reduce_motion_stops_every_animation_in_one_place():
-    for prefix in ("@media (prefers-reduced-motion: reduce)", ':root[data-motion="reduce"] .milo-doing'):
-        assert prefix in CSS, prefix
-    block = CSS[CSS.index("/* One place for Reduce motion"):]
-    assert ".milo-doing, .milo-doing *, .milo-doing-prop svg * { animation: none !important;" in block
-    assert "The states still change" in block, "a state is what he is doing, not decoration"
+def test_thinking_is_a_pose_and_the_working_poses_wear_the_headphones():
+    poses = (V2.parent / "components/scout.js").read_text()
+    frames = json.loads((V2.parent / "scout/frames.json").read_text())["frames"]
+    assert "thinking: 'chin'" in poses, "hand under the jaw, not a head tilt"
+    for suffix in ("", "-half", "-closed"):
+        assert "chin" + suffix in frames
+    src = (Path(__file__).resolve().parent.parent / "optic-brand/scout/render_scout.py").read_text()
+    spec = src[src.index("FRAMES = ["):src.index("# (window in world units")]
+    for worked in ("desk", "tablet", "write"):
+        row = [l for l in spec.splitlines() if l.strip().startswith('("%s"' % worked)][0]
+        assert "phones=True" in row, worked
+    assert '("chin", dict(chin=1.0' in spec and "phones" not in spec[spec.index('("chin"'):spec.index('("chin"') + 120], \
+        "he puts the headphones on when research begins, so thinking has none"
 
 
-def test_the_words_are_optics_own(tmp_path):
-    assert "—" not in ACT, "no em dashes in the copy"
-    for word in ("Thinking", "Researching", "Analyzing", "Writing", "Answer ready"):
-        assert word in ACT
-    assert "%" not in re.sub(r"[^%]", "", "".join(re.findall(r"line: '([^']*)'", ACT))), "no invented progress"
+def test_reduce_motion_keeps_him_and_his_state():
+    assert ':root[data-motion="reduce"] .milo-co-status' in CSS
+    assert "@media (prefers-reduced-motion: reduce) { .milo-co-status" in CSS
+    # nothing hides him: reduced motion is not a reason to take the character away
+    assert ".milo-co { display: none" not in CSS
+    poses = (V2.parent / "components/scout.js").read_text()
+    assert "return motion() === 'still' && !WORK[name] ? 'idle' : name;" in poses
+
+
+def test_the_stage_reserves_its_space_so_the_conversation_never_jumps():
+    assert ".milo-co-stage { display: grid; place-items: center; width: 88px; height: 116px; }" in CSS, "the stage is the frame's own shape, so nothing overflows and gets clipped"
+    assert ".milo-co-stage .scout-full { width: 88px; }" in CSS
+    # and the compact arrangements the brief asks for
+    assert "@media (max-height: 720px), (max-width: 480px)" in CSS
+    assert "padding: 0 104px 0 4px" in CSS, "the compact row clears the panel controls"
+    assert ".milo-co-stage { width: 58px; height: 77px; }" in CSS
+    assert ".milo-co-stage { width: 48px; height: 63px; }" in CSS
+
+
+def test_he_is_reachable_from_the_keyboard_and_named():
+    assert "label: 'Milo guide: what to ask, examples and animation'" in MILO
+    assert ".milo-co-stage .scout-btn:focus-visible { outline: 2px solid var(--c-gold)" in CSS
+    assert '<span class="milo-co-status" role="status">' in ACT
+    assert 'class="milo-co-name" id="${id}" tabindex="-1"' in ACT, "the drawer still has a heading to focus"

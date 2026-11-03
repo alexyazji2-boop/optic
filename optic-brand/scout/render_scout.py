@@ -241,7 +241,7 @@ class Pose:
 
     def __init__(self, tilt=0.0, yaw=0.0, pitch=0.0, cl=0.0, cr=0.0, wide=False,
                  wave=0.0, worry=0.0, tail=True, face=None, wind=0.0, tail_only=False,
-                 prop=None, type_=0.0, pen=0.0):
+                 prop=None, type_=0.0, pen=0.0, phones=False, chin=0.0):
         # world = H (local - neck) + neck; points are mapped back with H's transpose.
         self.H = rot_y_m(math.radians(yaw)) @ rot_x_m(math.radians(pitch)) @ rot_z_m(-math.radians(tilt))
         self.wave = math.radians(wave)
@@ -265,7 +265,16 @@ class Pose:
         # exactly as it was: the 22 frames the app already ships march the same scene they always did.
         self.prop = prop
         self.pen = pen
+        # Over-ear headphones, his signature while he is working (the owner's companion brief, 2026-11-03).
+        # They go on when research begins and stay on through the working states, so they read as focus.
+        self.phones = bool(phones)
+        # Thinking: the hand comes up under his jaw. His arm is a stub about a third the distance from the
+        # shoulder to the chin, so it is drawn longer for this one pose; a snowman's arm is a stub he can
+        # lift, and a straight one at full reach only got as high as his belly.
+        self.chin = chin
         self.hand_l, self.hand_r = HAND_L, HAND_R
+        if chin:
+            self.hand_r = np.array([0.30, 1.47 + 0.015 * chin, 0.52])
         if prop == "desk":
             lift = 0.024 * math.sin(math.pi * type_)
             self.hand_l = np.array([-0.13, DESK_Y + 0.135 + lift, 1.14])
@@ -397,7 +406,8 @@ def scene(p, P, mats=False):
     ba = P.hand_r - SHOULDER
     pa = pw - SHOULDER
     h = np.clip((pa @ ba) / (ba @ ba), 0, 1)
-    arm = np.linalg.norm(pa - h[:, None] * ba, axis=1) - 0.085
+    # The arm tapers as it reaches: a stub at the shoulder, thinner where it carries the hand to his jaw.
+    arm = np.linalg.norm(pa - h[:, None] * ba, axis=1) - (0.085 - 0.022 * P.chin * h)
     arm_r = smin(hand_r, arm, 0.05)
     snow = smin(smin(body, hand_l, 0.03), arm_r, 0.03)
     snow = np.minimum(snow, feet)
@@ -444,6 +454,31 @@ def scene(p, P, mats=False):
         smile = np.full(len(p), 9.0)
     head = np.maximum(head, -smile)
 
+    # Headphones, in the head's frame `q` so they tilt and turn with him. A band over the top, a cup at each
+    # ear, and one gold ring on the outer face of each cup. Charcoal, so they read against the ivory at the
+    # size the panel draws him.
+    phones = np.full(len(p), 9.0)
+    phones_gold = np.full(len(p), 9.0)
+    if P.phones:
+        dh = q - HEAD_C
+        # The band: a slim torus over the top of the head, never across his face.
+        ring = np.hypot(np.hypot(dh[:, 0] / 1.04, dh[:, 1]) - 0.655, dh[:, 2] / 0.92) - 0.045
+        band = np.maximum(ring, -(dh[:, 1] + 0.02))
+        cups = np.minimum(
+            sd_ellipsoid(q, HEAD_C + np.array([-0.645, -0.10, 0.0]), np.array([0.100, 0.175, 0.165])),
+            sd_ellipsoid(q, HEAD_C + np.array([0.645, -0.10, 0.0]), np.array([0.100, 0.175, 0.165])))
+        phones = np.minimum(band, cups)
+        # The gold. These are his, not a generic pair of cans: a bead of gold runs along the front of the
+        # band and a gold rim circles each cup, the same weight as the rims of his glasses, so the headphones
+        # read as part of the same character rather than an accessory borrowed from somewhere else.
+        stripe = np.hypot(np.hypot(dh[:, 0] / 1.04, dh[:, 1]) - 0.655, (dh[:, 2] - 0.034) / 0.92) - 0.020
+        phones_gold = np.maximum(stripe, -(dh[:, 1] + 0.02))
+        for sx in (-1.0, 1.0):
+            c = HEAD_C + np.array([sx * 0.735, -0.10, 0.0])
+            d2 = q - c
+            rim = np.hypot(np.hypot(d2[:, 1] / 1.06, d2[:, 2]) - 0.132, d2[:, 0] * sx) - 0.023
+            phones_gold = np.minimum(phones_gold, rim)
+
     # Scarf: a ring round the neck, a knot, and a tail flying to the right.
     sq = rot_x(p - np.array([0.0, 1.43, 0.03]), math.radians(-10))
     ang = np.arctan2(sq[:, 0], sq[:, 2])
@@ -472,7 +507,7 @@ def scene(p, P, mats=False):
         scarf = smin(scarf, tail, 0.03)
 
     prop_d, prop_m = props(p, P)
-    dist = np.minimum.reduce([snow, head, gold, trace, scarf])
+    dist = np.minimum.reduce([snow, head, gold, trace, scarf, phones, phones_gold])
     if not mats:
         return np.minimum(dist, prop_d)
     # Where each surface point sits on its own part, so the clay grain moves
@@ -490,6 +525,8 @@ def scene(p, P, mats=False):
     m[gold <= dist + 1e-4] = 2
     m[trace <= dist + 1e-4] = 3
     m[(tail <= dist + 1e-4) & (m == 6)] = 7     # the tail: scarf cloth, its own layer
+    m[phones <= dist + 1e-4] = 8                # the headphones wear the prop shell's charcoal
+    m[phones_gold <= dist + 1e-4] = 2
     if prop_m is not None:
         sel = prop_d < dist
         m[sel] = prop_m[sel]
@@ -689,23 +726,28 @@ FRAMES = [
     ("concerned-closed", dict(worry=1.0, tilt=-2, cl=1.0, cr=1.0)),
     # The three worked poses, for Milo's activity states. Each has its own half-closed and closed lid so a
     # blink does not change the pose it happens in, and one or two frames of the small motion it loops on.
-    ("desk", dict(prop="desk", tilt=1.5, pitch=9)),
-    ("desk-half", dict(prop="desk", tilt=1.5, pitch=9, cl=0.5, cr=0.5)),
-    ("desk-closed", dict(prop="desk", tilt=1.5, pitch=9, cl=1.0, cr=1.0)),
-    ("desk-type", dict(prop="desk", tilt=1.5, pitch=9, type_=1.0)),
-    ("tablet", dict(prop="tablet", tilt=3, pitch=13)),
-    ("tablet-half", dict(prop="tablet", tilt=3, pitch=13, cl=0.5, cr=0.5)),
-    ("tablet-closed", dict(prop="tablet", tilt=3, pitch=13, cl=1.0, cr=1.0)),
-    ("tablet-near", dict(prop="tablet", tilt=4, pitch=19)),
-    ("write", dict(prop="write", tilt=2, pitch=15)),
-    ("write-half", dict(prop="write", tilt=2, pitch=15, cl=0.5, cr=0.5)),
-    ("write-closed", dict(prop="write", tilt=2, pitch=15, cl=1.0, cr=1.0)),
-    ("write-1", dict(prop="write", tilt=2, pitch=15, pen=0.5)),
-    ("write-2", dict(prop="write", tilt=2, pitch=15, pen=1.0)),
+    ("desk", dict(prop="desk", phones=True, tilt=1.5, pitch=9)),
+    ("desk-half", dict(prop="desk", phones=True, tilt=1.5, pitch=9, cl=0.5, cr=0.5)),
+    ("desk-closed", dict(prop="desk", phones=True, tilt=1.5, pitch=9, cl=1.0, cr=1.0)),
+    ("desk-type", dict(prop="desk", phones=True, tilt=1.5, pitch=9, type_=1.0)),
+    ("tablet", dict(prop="tablet", phones=True, tilt=3, pitch=13)),
+    ("tablet-half", dict(prop="tablet", phones=True, tilt=3, pitch=13, cl=0.5, cr=0.5)),
+    ("tablet-closed", dict(prop="tablet", phones=True, tilt=3, pitch=13, cl=1.0, cr=1.0)),
+    ("tablet-near", dict(prop="tablet", phones=True, tilt=4, pitch=19)),
+    ("write", dict(prop="write", phones=True, tilt=2, pitch=15)),
+    ("write-half", dict(prop="write", phones=True, tilt=2, pitch=15, cl=0.5, cr=0.5)),
+    ("write-closed", dict(prop="write", phones=True, tilt=2, pitch=15, cl=1.0, cr=1.0)),
+    ("write-1", dict(prop="write", phones=True, tilt=2, pitch=15, pen=0.5)),
+    ("write-2", dict(prop="write", phones=True, tilt=2, pitch=15, pen=1.0)),
     # In-between arm positions, added 2026-11-03. The wave had only arm-1, arm-2 and arm-3 (30, 65 and 100
     # degrees) and cut between them, so the hand jumped 35 degrees at a time, about 580 deg/s at the fast
     # steps: it read as a twitch rather than a wave. These halve every step.
     ("arm-a", dict(wave=15)), ("arm-b", dict(wave=47)), ("arm-c", dict(wave=82)),
+    # Thinking, hand under the jaw, added 2026-11-03 for the persistent companion. No headphones: he puts
+    # those on when research actually begins, so the change of pose is the change of work.
+    ("chin", dict(chin=1.0, tilt=7, pitch=7)),
+    ("chin-half", dict(chin=1.0, tilt=7, pitch=7, cl=0.5, cr=0.5)),
+    ("chin-closed", dict(chin=1.0, tilt=7, pitch=7, cl=1.0, cr=1.0)),
 ]
 # (window in world units, size at 3x). The 2x sprite is the 3x one resampled,
 # never an upscale: the largest use is the welcome figure at 96 CSS px wide.

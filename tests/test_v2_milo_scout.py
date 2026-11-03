@@ -19,6 +19,7 @@ ROOT = V2.parent.parent
 CLASSIC = (ROOT / "static/app.js").read_text()
 SCOUT = (ROOT / "static/components/scout.js").read_text()
 INDEX = (V2 / "index.html").read_text()
+ACT = (V2 / "js/ui/milo-activity.js").read_text()
 MILO = (V2 / "js/ui/milo.js").read_text()
 SHELL = (V2 / "js/ui/shell.js").read_text()
 CSS = (V2 / "css/components.css").read_text()
@@ -35,44 +36,38 @@ def test_the_classic_figure_is_loaded_before_the_app():
 
 
 def test_he_moves_on_milos_events_as_in_the_classic_panel():
+    """The classic panel drove a bust from Milo's events. v2 drives one companion in the header from the same
+    events, through the activity reducer (tests/test_milo_activity.py). What is checked here is that the two
+    panels still agree about when he looks around, and that v2 has exactly one figure doing it."""
     classic = set(re.search(r"const PULSE_SEARCH_STATES = new Set\(\[([^\]]+)\]\);", CLASSIC).group(1).replace("'", "").split(", "))
-    ours = set(re.search(r"const SEARCHING = new Set\(\[([^\]]+)\]\);", MILO).group(1).replace("'", "").split(", "))
-    assert ours == classic, "only a search the server reports makes him look around"
-    assert "scoutTo(ai, 'thinking', 'ack');" in MILO, "a question in: one acknowledging wave, then thinking"
-    assert "scoutTo(ai, SEARCHING.has(String(p.state || '')) ? 'searching' : 'thinking')" in MILO
-    assert "if (SC.i === ai && SC.state !== 'streaming') scoutTo(ai, 'streaming');" in MILO, "the first words: stillness"
-    end = MILO[MILO.index("const reply = S.live ? S.live.text : '', liveWas = S.live;"):MILO.index("export function stop()")]
-    assert "if (failed || ended === 'cut') Object.assign(SC, { i: ai, state: 'error', via: null });" in end, "a concerned face, as the classic panel's"
-    assert "else if (ended === 'stopped') Object.assign(SC, { i: ai, state: 'idle', via: 'look' });" in end
-    assert "via: reply.trim() ? 'nod' : null" in end, "a nod for an answer, nothing for an empty one"
-    assert "c.gesture('wave')" in MILO and "Date.now() - SC.lastWave > 20000" in MILO
-    assert "now && !open && Date.now() - scoutLastWave > 20000" in CLASSIC, "the same 20 s between waves as the classic panel"
-    assert "setTimeout(() => { if (c.state === 'listening') c.set('idle'); }, 2500);" in MILO and "quiet = setTimeout(() => { if (c.state === 'listening') c.set('idle'); }, 2500);" in CLASSIC
-    assert "O.attach(el, { slot: 'reply' })" in MILO, "one moving bust at a time, the newest"
+    ours = set(re.search(r"export const SEARCH_STEPS = new Set\(\[([^\]]+)\]\);", ACT).group(1).replace("'", "").split(", "))
+    assert classic <= ours, "every search the classic panel reports still makes him look up from the page"
+    assert "paintCompanion(S.live.act, 'nod');" in MILO, "a question in: one nod, then Thinking"
+    assert MILO.count("O.attach(el, { slot: 'companion' })") == 1, "one figure, attached in one place"
+    for gone in ("slot: 'welcome'", "slot: 'reply'", "slot: 'activity'"):
+        assert gone not in MILO, "the old %s figure is gone" % gone
+    assert "setTimeout(() => { if (c.state === 'listening') c.set('idle'); }, 2500);" in MILO \
+        and "quiet = setTimeout(() => { if (c.state === 'listening') c.set('idle'); }, 2500);" in CLASSIC
+    assert "c.set(pose, via)" in MILO, "a gesture leads into the new pose, as it did"
+    # a press plays at most one gesture, and never over a state the reader needs
+    assert "if (c && !S.busy && Date.now() - SC.lastPress > 900)" in MILO
 
 
-def test_the_welcome_figure_and_its_menu():
-    assert "figure('full', 'Milo guide: what to ask, examples and animation')" in MILO
-    # the redesign's one heading over a new conversation (owner's brief, 2026-10-20), in place of the classic greeting
-    assert "What would you like to understand?" in MILO and "Hi, I'm ${esc(ASSISTANT_NAME)}. What would you like to explore?" in CLASSIC
-    for item in ("What can I ask?", "Show example questions", "radio('full', 'Full')", "radio('subtle', 'Subtle')", "radio('still', 'Still')"):
-        assert item in MILO, item
-    assert "if (OS()) OS().setMotion(v);" in MILO, "the classic key, through the classic setter"
-    assert "if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); setMenu(false, true); }" in MILO, "Escape closes the menu, not the panel"
-    # the classic starters, word for word
-    i = CLASSIC.index("const PULSE_STARTERS = [")
-    classic = re.findall(r"text: '((?:[^'\\]|\\.)*)'", CLASSIC[i:CLASSIC.index("];", i)])
-    ours = re.findall(r"\[(?:'ticker'|null), '((?:[^'\\]|\\.)*)'\]", MILO[MILO.index("const EXAMPLES = ["):MILO.index("export const examples")])
-    assert ours == classic and len(ours) == 12
-    assert "Deep research" not in MILO[MILO.index("const CAN_ASK"):MILO.index("const EXAMPLES")], "v2's Milo has no web research switch or attachments, so its sentence does not offer them"
+def test_the_guide_menu_rides_on_the_companion():
+    """The welcome screen used to carry a large figure with his guide menu on it. The figure is now the
+    companion in the header for the whole conversation, so the menu went with it rather than being lost."""
+    assert "const fig = '';" in MILO, "no second large animated Milo on the empty screen"
+    assert "label: 'Milo guide: what to ask, examples and animation'" in MILO
+    assert "const root = coEl(); const btn = root && $('.scout-btn', root); if (btn) btn.focus({ preventScroll: true });" in MILO
+    assert 'aria-haspopup="menu"' in SCOUT, "the figure is the menu's button, as before"
+    assert "const btn = $('.scout-btn', root); if (btn) btn.setAttribute('aria-expanded', String(SC.menu));" in MILO
 
 
-def test_the_bust_beside_an_answer_and_the_head_on_the_button():
-    # The header is his name alone (the owner asked for the figure out of it, 2026-11-03). What he is doing is
-    # said by the activity figure in the answer itself, which is where the reader is looking.
-    assert '<div class="milo-id"><div><h2 id="milo-title" tabindex="-1">Milo</h2>' in MILO
-    assert "milo-id\">${figure(" not in MILO, "no bust in the header"
-    assert "const replyEl = (h, i) => (i === null || i === undefined ? null : headEl());" in MILO
+def test_the_companion_in_the_header_and_the_head_on_the_button():
+    # The header is him since 2026-11-03: his figure, his name, one status, outside the scrolling log.
+    assert "head: html`${raw(companionHTML({" in MILO
+    assert ".milo-panel .drawer-head { position: relative; justify-content: center;" in CSS, "centred, as the brief's references are"
+    assert ".milo-panel .drawer-acts { position: absolute; top: 8px; right: 8px; }" in CSS, "history, new and close stay reachable"
     assert 'aria-label="Ask Milo"><span class="scout-badge" aria-hidden="true"><span class="scout-badge-fig"></span></span>' in SHELL
     assert ":root[data-scout-motion=\"still\"] .scout-badge-fig, :root[data-motion=\"reduce\"] .scout-badge-fig { animation: none; }" in CSS and "@media (prefers-reduced-motion: reduce) { .scout-badge-fig { animation: none; } }" in CSS
     assert ".topbar-milo .scout-badge { width: 26px; height: 26px; }" in PAGES

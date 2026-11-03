@@ -66,8 +66,10 @@
     'write': 30, 'write-half': 31, 'write-closed': 32, 'write-1': 33, 'write-2': 34,
     /* In-between arm positions, so the wave is a wave: see GESTURE below. */
     'arm-a': 35, 'arm-b': 36, 'arm-c': 37,
+    /* Thinking with his hand under his jaw, for the persistent companion. */
+    'chin': 38, 'chin-half': 39, 'chin-closed': 40,
   };
-  var COUNT = 38;
+  var COUNT = 41;
 
   /* How many frames the browser ACTUALLY has, which is not always COUNT.
    *
@@ -140,16 +142,21 @@
     desk: ['desk', 'desk-half', 'desk-closed'],
     tablet: ['tablet', 'tablet-half', 'tablet-closed'],
     write: ['write', 'write-half', 'write-closed'],
+    chin: ['chin', 'chin-half', 'chin-closed'],
   };
   var POSE = {
-    idle: 'idle', listening: 'tilt', thinking: 'tilt', searching: 'tilt',
+    /* `thinking` is his hand under his jaw since 2026-11-03: the brief asks for a pose, not a head angle,
+     * and a tilt alone was not telling anyone he was thinking. `listening` is the attentive tilt he wears
+     * while someone is typing; it is named for the composer, not for a microphone, and nothing in Optic
+     * records audio. */
+    idle: 'idle', listening: 'tilt', thinking: 'chin', searching: 'tilt',
     streaming: 'idle', error: 'concerned',
     /* Milo's activity states. These are scenes, not head angles, so they sit
      * outside the upright/lean/tilt/curious ladder: LEVEL has no entry for
      * them and a change to one is a cut rather than a walk. */
     researching: 'desk', analyzing: 'tablet', writing: 'write',
   };
-  var WORK = { desk: 1, tablet: 1, write: 1 };
+  var WORK = { desk: 1, tablet: 1, write: 1, chin: 1 };
 
   /* Gestures, as [frame, ms].
    *
