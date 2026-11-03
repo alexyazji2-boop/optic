@@ -18,7 +18,8 @@ Milo's production model was not changed.
   - an evaluation plan with its budget.
 - **Recommendation:**
   - keep one model, Sonnet 5.5;
-  - cache the CONTEXT turn (C1, 27% less spend with no change to any answer);
+  - cache the CONTEXT turn (C1, 27% less spend with no change to any answer). This is now built on the branch,
+    not deployed;
   - run the Sonnet 5.5 baseline on today's code;
   - then test the small models as whole replacements.
 
@@ -216,8 +217,9 @@ None was evaluated.
 6. **One model or several?** **One.** Routing saves less than C1 alone. Its router cannot see unavailable data or
    injections, and it multiplies evaluation, failure modes and voices (routing recommendation).
 7. **What should improve whatever the model?**
-   1. **C1:** mark the CONTEXT turn as cacheable across tool rounds. 27% of Milo's spend, no change to any answer
-      (COST_AUDIT C1).
+   1. **C1:** cache the CONTEXT turn across tool rounds. 27% of Milo's spend, no change to any answer (COST_AUDIT
+      C1). **Built after this report** (the commit after `c91ec591`): the API's automatic caching beside the system
+      block's breakpoint, tested, mutation-checked, and checked end to end locally. Not deployed.
    2. **The advice safeguards** catch about a third of unseen phrasing (set F). The gap needs a person reading a
       sample of S1 answers in every evaluation. A model-based second reading of each answer (BL-07, about $0.0003
       an answer at Haiku 5.5's prices) is worth testing once a key works. Counsel decides the legal standard (BL-02).
@@ -243,7 +245,7 @@ None was evaluated.
 | Best-performing tested model | **None tested.** |
 | Lowest-cost qualifying tested model | **None tested.** |
 | Best quality-to-cost option | **None measured.** The cost side is ready: Sonnet 5.5 with C1 is the cheapest way to run today's model, at $553 a month at 1,000 MAU. |
-| Recommended architecture | **One model, Sonnet 5.5, unchanged, with C1.** Test the small models (Haiku 5.5, GPT-6 Luna, Gemini 3.5 Flash-Lite, DeepSeek V4.1 Flash) as whole replacements after the baseline. No router. |
+| Recommended architecture | **One model, Sonnet 5.5, unchanged, with C1** (built on this branch, not deployed). Test the small models (Haiku 5.5, GPT-6 Luna, Gemini 3.5 Flash-Lite, DeepSeek V4.1 Flash) as whole replacements after the baseline. No router. |
 | Expected operating-cost assumptions | 10% of monthly actives ask on a given day, 2 questions each; chat 85% of questions; the workload mix in the cost analysis; 4 characters a token (unmeasured); 2% of answers paid twice; prices on 2027-01-01. Milo chat on Sonnet 5.5 with C1: about $65, $553 and $783 a month at 100, 1,000 and 10,000 MAU under the 300-a-day ceiling, and $4,571 with demand served. |
 | Critical remaining uncertainties | (1) every quality figure, since no model answered; (2) the token ratio, up to twofold on cost; (3) the workload mix, since no traffic is labelled; (4) each model's answer length and reasoning; (5) the benchmark's fixtures are synthetic and written by the team that built Milo; (6) whether a new provider's terms suit readers' data; (7) announced price changes (both Gemini models double within two months). |
 | Required human review | A person reads a sample of S1 (advice) and S2 (injection) answers in every run. Clarity and relevance are scored by a person on at least 30 answers per workload. Every failed check is classified as the model's or Optic's before models are compared. Counsel reviews any new provider's data terms and the Privacy Policy change it needs. |

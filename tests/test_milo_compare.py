@@ -107,6 +107,7 @@ def test_the_anthropic_adapter_sends_productions_request_unchanged():
     kw = sent[0]
     assert kw["system"][0]["cache_control"] == {"type": "ephemeral"} and kw["thinking"] == {"type": "adaptive"}
     assert kw["model"] == "claude-sonnet-5-5" and kw["betas"] == [ai.FALLBACK_BETA]
+    assert kw["cache_control"] == {"type": "ephemeral"}, "the conversation cached across rounds, as production (C1)"
     assert sent[1]["messages"][-1]["content"][0]["type"] == "tool_result"
     # the figure is the fixture's quote, so the grounding check passes; what is left can only be style
     assert next(c for c in row["checks"] if c["check"] == "grounded")["passed"], row["checks"]

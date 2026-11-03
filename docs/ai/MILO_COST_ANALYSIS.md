@@ -305,6 +305,12 @@ Assumptions:
    at 10,000 with demand served. It changes no answer: the request is the same, with one more cache breakpoint.
    **It is the largest saving available without a quality question**, and every provider comparison should be read
    against Sonnet 5.5 with C1 ($553 at 1,000 MAU), not as built.
+
+   **Built on this branch after the analysis** (the commit after `c91ec591`; not deployed). It uses the API's
+   automatic caching, a top-level `cache_control` that moves forward each round, beside the system block's own
+   breakpoint. The messages stay exactly as they were. Tested: every round's request carries both markers and
+   re-sends the round before it unchanged, and the test fails without the change. Checked end to end on the local
+   server with the stand-in model. Once deployed, the ledger's `cache_read_tokens` per chat call is the measure.
 2. **A cheaper model for everything is worth 10 to 20 times more than any routing.** Moving all chat to Haiku 5.5
    would save about $719 a month at 1,000 MAU. Routing only the light questions saves $17 to $31. Section 8 and
    `MILO_ROUTING_RECOMMENDATION.md` say why that makes a single-model evaluation of the small models the first paid

@@ -1496,3 +1496,16 @@ Same branch and working folder as Phase 12. No model was called and nothing was 
 | Diff scan before the commit | keys and email addresses in the added lines | none in 8,891 lines |
 | Final suite on this branch | `.venv/bin/python -m pytest -q` | 8,654 passed, 1 skipped (423 s): the 26 new tests on top of Phase 12's 8,628, all passing |
 
+### C1: the conversation cached across tool rounds (after Phase 13, the owner's "Yes, do C1 here")
+
+| Check | Command | Outcome |
+|---|---|---|
+| The rounds' requests | `pytest tests/test_milo_tools.py -k cache` | passes: all three rounds carry the top-level marker and the system block's; one explicit marker each; model, system, tools, thinking and effort identical across rounds; each round's messages begin with the round before, unchanged |
+| The harness sends production's request | `pytest tests/test_milo_compare.py` | 13 passed, with the top-level marker in the Anthropic adapter's request |
+| Mutation | `build_chat_request` wrapped in-process to drop the field (no file changed) | both new assertions fail |
+| End to end, local | one question to `/api/chat` on :8270 with the stand-in model (launch config `optic-phase12`) | answered with a tool round; the stand-in's log shows both requests with `cache_control {"type": "ephemeral"}` at the top level and the system marker on the first block only |
+| Related suites | `pytest` on the loop, harness, flavour, reasoning, policy and brokerage files | 592 passed before the new test; 36 passed in the loop and harness files after it |
+| Tests that read the edited docs | 13 files | 983 passed |
+| Final suite | `.venv/bin/python -m pytest -q` | 8,655 passed, 1 skipped (247 s) |
+| The saving itself | the ledger's `cache_read_tokens` per chat call | **not measurable here** (no working key, BL-01): measured after deployment |
+

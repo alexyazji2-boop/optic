@@ -856,3 +856,19 @@ answers (14, on 2026-10-16's code) has a factual error in 5.
 **D-116 Nothing spent.** Paid evaluation runs, accounts and keys are the owner's to approve. The budget per model is
 proposed in the cost analysis (section 8), and the runner refuses without a key or a `--max-dollars` cap.
 
+**D-117 C1 by the API's automatic caching, not by marking turns.** The owner said "Yes, do C1 here" after the
+Phase 13 report. The chat request gains one top-level `cache_control`, beside the system block's explicit
+breakpoint, which stays. That is the combination the Claude API reference recommends for agent loops.
+- **What it does:** the API places the marker on the last block and moves it forward each round, so a round reads
+  everything the one before it sent.
+- **Why not markers on the turns:** they would have turned the CONTEXT turn's text into a block. Every reader of
+  that turn would then change: the sources list, tests, and the harness's request checks. The automatic marker
+  changes no message.
+- **Limits:**
+  - two breakpoints of the four allowed;
+  - each round adds three or four positions, inside the 20-position lookback;
+  - a last round sent with `tool_choice: none` (when a limit is reached) reads only the system block's entry,
+    because a `tool_choice` change invalidates the messages cache;
+  - a one-call answer pays the 1.25x write on its unshared tail, about $0.0015 for a definition.
+- **Shipping:** on the owner's word, like any production change.
+
