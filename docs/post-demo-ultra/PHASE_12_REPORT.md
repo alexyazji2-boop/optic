@@ -109,7 +109,8 @@ account, billing or brokerage setting was touched. The detail is in the delivera
       216, DECISIONS D-102 to 111, TEST_RESULTS, BLOCKERS).
 17. **Tests:** baseline 8,230 passed and 1 skipped. Final: **8,628 passed, 1 skipped, 0 failed** (249 s). The 398
     new tests are the editorial gate and rules, the red team, the policy's request sets and the benchmark's new cases.
-18. **Git commit:** see PROGRESS.md (the commit after this one records this one's id, as in earlier phases).
+18. **Git commit:** `35348c98` (Phase 12's work); the commit after it records that id and adds the archived
+    benchmark run, `docs/ai/eval-results/milo-bench-2026-11-02.1/` (folder named by time and commit).
 19. **Readiness for human staging review:**
     - **This branch:** ready for a human staging review. Its suite is green, the changed pages were checked in a
       browser at three sizes, and nothing is deployed.

@@ -5,7 +5,7 @@ Read this and [REQUIREMENTS_MATRIX.md](REQUIREMENTS_MATRIX.md) before changing a
 ## Current state
 
 - **Phase 12 (directive 14, 2026-11-02): complete on branch `phase-12-writing-milo-security`** (`~/Optic/wt-phase12`,
-  from live `d22522a`, not pushed). Writing standards and checker, the copy corrections, the 181-case benchmark, the
+  from live `d22522a`, not pushed; commit `35348c98`, and the commit after it records that id). Writing standards and checker, the copy corrections, the 181-case benchmark, the
   data access map and the red team, with their fixes. Report: `PHASE_12_REPORT.md`. Local server: launch config
   `optic-phase12` (:8270, stand-in model :8271, data `~/Optic/phase12-data`, guests allowed and the hourly cap lifted
   for the latency run, local only). Working folder: `~/Optic/work/phase12-2026-11-02/` (page captures, the advice
