@@ -20,6 +20,7 @@ from fastapi.testclient import TestClient
 
 import app.main as m
 from tests.test_frontend_v2_stage0 import V2, _run
+from app import figures as figures_mod
 
 ROOT = V2.parent.parent
 
@@ -202,6 +203,17 @@ def test_the_section_says_what_the_scores_are_and_what_they_are_not():
 
 # ---------------------------------------------------------------- Classic's sections, in Classic's words
 
+def _registry(net=None, *, net_debt=None, fwd=None, price=100.0, fy_end="2025-12-31"):
+    """The figure registry's block for a fixture (app/figures, Handoff 1), built by the server's own resolver from
+    statements shaped like the provider's: the Overview prints the registry's figures and nothing else."""
+    bs = {} if net_debt is None else ({"total_debt": net_debt, "cash_and_short_term": 0.0} if net_debt >= 0
+                                      else {"total_debt": 0.0, "cash_and_short_term": -net_debt})
+    fin = {"available": True, "annual_periods": [fy_end], "annual": {"revenue": [100.0], "net_income": [net]},
+           "quarterly": {}, "balance_sheet": bs}
+    quote = {"price": price, "forward_eps": (price / fwd) if fwd else None, "quote_type": "EQUITY", "currency": "USD"}
+    return figures_mod.resolve("TEST", quote, sec=(None, None, "a test fixture"), financials=fin)
+
+
 QUOTE = {"price": 86.96, "market_cap": 459.68e9, "revenue_growth": 0.254, "profit_margin": -0.198, "fifty_two_high": 142.35, "fifty_two_low": 32.89, "trailing_pe": None}
 
 
@@ -215,7 +227,7 @@ def test_the_four_questions_grade_with_classics_words(tmp_path):
     got = _run(tmp_path, f"""
       const R = await import('{(JS / "pages/overview-research.js").as_posix()}');
       const {{ toString: String }} = await import('{(JS / "core/dom.js").as_posix()}');
-      const t = {{ quote: {json.dumps(QUOTE)}, company: {{ financials: {{ available: true, growth: {{ revenue_yoy_pct: 0.4, net_income_yoy_pct: null }}, margins: {{ net_pct: -0.9 }}, annual_periods: ['2025-12-31'] }} }} }};
+      const t = {{ quote: {json.dumps(QUOTE)}, figures: {json.dumps(_registry(-0.9))}, company: {{ financials: {{ available: true, growth: {{ revenue_yoy_pct: 0.4, net_income_yoy_pct: null }}, margins: {{ net_pct: -0.9 }}, annual_periods: ['2025-12-31'] }} }} }};
       const c = R.context({{ sym: 'INTC', t, fw: {json.dumps(fw)}, lt: null, stars: null, fund: false, advanced: false, phase: 'closed', now: {NOW} }});
       const html = String(R.fourQuestions(c)), wait = String(R.fourQuestions({{ ...c, fw: undefined }})), off = String(R.fourQuestions({{ ...c, fw: {{ available: false, reason: 'No filings' }} }}));
       print(JSON.stringify({{ html, wait, off }}));
@@ -233,6 +245,7 @@ def test_the_four_questions_grade_with_classics_words(tmp_path):
 
 def test_the_case_for_and_against_and_what_to_look_at_next(tmp_path):
     t = {"quote": QUOTE, "news": {"earnings_date": "2026-10-29", "days_to_earnings": 4, "article_count": 12},
+         "figures": _registry(-0.9, net_debt=32.3e9),
          "company": {"financials": {"available": True, "growth": {"revenue_yoy_pct": 0.4}, "margins": {"net_pct": -0.9}, "balance_sheet": {"net_cash": -32.3e9}},
                      "earnings_history": {"available": True, "sample_size": 8, "beat_count": 6, "upcoming": [{"date": "2026-10-29", "timing": "after_close", "eps_estimate": 0.4}]},
                      "ownership": {"available": True, "insider_signal": "buying"}},
@@ -246,7 +259,8 @@ def test_the_case_for_and_against_and_what_to_look_at_next(tmp_path):
     """)
     pos, neg = [x["text"] for x in got["f"]["pos"]], [x["text"] for x in got["f"]["neg"]]
     assert pos == ["Beat analysts' earnings estimates in 6 of the last 8 quarters", "Company insiders bought more shares than they sold over six months"]
-    assert neg == ["Earnings report on Oct 29, in 4 days", "The company lost money over the latest period", "Owes $32.3B more than it holds in cash while losing money"]
+    assert neg == ["Earnings report on Oct 29, in 4 days", "The company lost money over the latest period",
+                   "Owes $32.3B more than it holds in cash while losing money (net debt, on Dec 31, 2025)"]
     assert next(e for e in got["ev"] if e["label"] == "Earnings report") == {"date": "2026-10-29", "label": "Earnings report", "detail": "in 4 days, analysts expect EPS of 0.40", "view": "earnings"}, "no time of day for a report not yet made"
     assert len(got["ev"]) == 2 and got["adv"] == 3, "the options expiry only at the Advanced level, as in Classic"
     assert [s["text"] for s in got["steps"]] == ["Review past results before the report on Oct 29", "Check the statements behind the weaker figures",

@@ -15,7 +15,7 @@ def _snapshot():
     """Mirrors the live `_swing_snapshot` shape for the paths `_metrics` reads."""
     return {
         "ticker": "NVDA",
-        "quote": {"price": 217.56, "change_pct": -0.99},
+        "quote": {"price": 217.56, "change_pct": -0.99, "forward_eps": 6.5333},
         "technicals": {
             "rsi": {"value": 54.2, "length": 14, "state": "neutral"},
             "moving_averages": {

@@ -21,6 +21,7 @@ import { num, signed, money, shortDate, ago, clean } from '../core/format.js';
 import { button as miloButton } from '../ui/milo.js';
 import { toast } from '../ui/toast.js';
 import { icon } from '../ui/icons.js';
+import * as FIG from '../core/figures.js';
 
 export const THESIS_KEY = 'optic.thesis.v1';
 const AUTO = 'Would change my mind if any of these stop holding: ';
@@ -63,10 +64,10 @@ export const CHECKS = [
     return null;
   } },
   { id: 'profit', label: 'It stays profitable', read(d) {
-    const m = g(d, 'company', 'financials', 'margins', 'net_pct'), q = g(d, 'quote', 'profit_margin');
-    const net = fin(m) ? m : fin(q) ? q * 100 : null;
-    if (!fin(net)) return null;
-    return { ok: net > 0, now: `net margin ${num(net, 1)}%` };
+    // the figure registry's net margin (Handoff 1): its fiscal year, or its twelve months when no year is filed
+    const fy = FIG.of(d, 'net_margin_fy'), fv = FIG.ok(fy) ? fy : FIG.of(d, 'net_margin_ttm');
+    if (!FIG.ok(fv)) return null;
+    return { ok: FIG.value(fv) > 0, now: `net margin ${fv.text}` };
   } },
   { id: 'beats', label: 'It keeps meeting or beating earnings estimates', read(d) {
     const last = (g(d, 'company', 'earnings_history', 'quarters') || [])[0];

@@ -40,6 +40,8 @@ from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Callable, Dict, List, Optional
 
+from .. import figures as figures_mod
+
 log = logging.getLogger(__name__)
 
 TIME_BUDGET_SECONDS = 8.0
@@ -109,6 +111,9 @@ class Deps:
     desk_load: Optional[Callable[[str], Optional[Dict[str, Any]]]] = None
     ex_dividend: Optional[Callable[[str], Optional[str]]] = None
     session_state: Optional[Callable[[], Dict[str, Any]]] = None
+    # the figure registry's block for a company (app/figures, Handoff 1): when it answers, the pack carries its net
+    # margin, cash flows and net debt, and leaves out the provider's own copies of them
+    figures: Optional[Callable[[str], Dict[str, Any]]] = None
     market: Optional[Callable[[], Optional[Dict[str, Any]]]] = None
 
 
@@ -147,10 +152,12 @@ class Pack:
         self.not_available: List[str] = []
 
     def add(self, label: str, value: Any = None, *, unit: str = "", period: str = "", source: str = "",
-            url: Optional[str] = None, as_of: Optional[str] = None, text: str = "", group: str = "") -> None:
+            url: Optional[str] = None, as_of: Optional[str] = None, text: str = "", group: str = "",
+            figure_id: str = "") -> None:
         self.items.append({k: v for k, v in {
             "id": "R{}".format(len(self.items) + 1), "group": group, "label": label, "value": value,
-            "unit": unit, "period": period, "source": source, "url": url, "as_of": as_of, "text": text}.items()
+            "unit": unit, "period": period, "source": source, "url": url, "as_of": as_of, "text": text,
+            "figure_id": figure_id}.items()
             if v not in (None, "", [])})
 
     def out(self) -> Dict[str, Any]:
@@ -172,7 +179,39 @@ def _statement(raw: Dict[str, Any], table: str, row: str) -> List[Optional[float
 _BANKLIKE = re.compile(r"\b(bank|banks|capital markets|insurance|credit services|asset management|mortgage)\b", re.I)
 
 
-def trailing(p: Pack, raw: Dict[str, Any], t: str) -> None:
+# The registry figures the pack carries, in its groups, each printed as the registry's own text so Milo quotes the
+# Dossier's number: the pack's own net debt was cash and equivalents less debt, the $62.7B beside the Dossier's $44.0B
+# for AAPL (authenticated audit, 2026-11-03).
+REGISTRY_ITEMS = (("net_margin_fy", "business"), ("net_margin_ttm", "business"), ("free_cash_flow_fy", "cash"),
+                  ("free_cash_flow_ttm", "cash"), ("operating_cash_flow_fy", "cash"), ("operating_cash_flow_ttm", "cash"),
+                  ("net_debt", "balance"), ("net_debt_with_leases", "balance"))
+
+
+def _registry(d: Deps, t: str) -> Optional[Dict[str, Any]]:
+    if d.figures is None:
+        return None
+    try:
+        block = d.figures(t) or {}
+    except Exception as exc:                                                   # noqa: BLE001 - the pack goes on
+        log.info("research pack: figures unavailable for %s: %s", t, exc)
+        return None
+    figs = block.get("figures") or {}
+    return figs if block.get("statement_source") and figs else None
+
+
+def registry_items(p: Pack, figs: Dict[str, Any]) -> None:
+    for fid, group in REGISTRY_ITEMS:
+        fv = figs.get(fid) or {}
+        src = fv.get("source") or {}
+        if fv.get("status") == "ok":
+            p.add(fv.get("name") or fid, fv.get("text"), period=(fv.get("period") or {}).get("label") or "",
+                  source=src.get("name") or "", url=src.get("url"), text=fv.get("note") or "", group=group,
+                  figure_id=fid)
+        elif fv.get("why"):
+            p.not_available.append("{}: {}".format(fv.get("name") or fid, fv["why"]))
+
+
+def trailing(p: Pack, raw: Dict[str, Any], t: str, registry: bool = False) -> None:
     """The last four quarters, because annual statements can be most of a year
     old: on 2026-10-13 Micron's latest fiscal year ended August 2025 while its
     quarters ran to May 2026, and Milo had to say the annual figures were stale."""
@@ -190,8 +229,9 @@ def trailing(p: Pack, raw: Dict[str, Any], t: str) -> None:
         if len(ni) >= 4 and all(v is not None for v in ni[:4]):
             p.add("Net income, trailing four quarters", _f(sum(ni[:4]) / 1e9, 2), unit="$bn", period=span,
                   source=src, url=url, group="business")
-            p.add("Net margin, trailing four quarters", _f(sum(ni[:4]) / ttm * 100, 1), unit="%", period=span,
-                  source=src, url=url, group="business")
+            if not registry:
+                p.add("Net margin, trailing four quarters", _f(sum(ni[:4]) / ttm * 100, 1), unit="%", period=span,
+                      source=src, url=url, group="business")
     if len(rev) >= 5 and rev[0] and rev[4]:
         p.add("Latest quarter's revenue growth on the same quarter a year earlier", _f((rev[0] / rev[4] - 1) * 100, 1),
               unit="%", period="quarter to {} vs quarter to {}".format(periods[0], periods[4]), source=src, url=url,
@@ -200,7 +240,10 @@ def trailing(p: Pack, raw: Dict[str, Any], t: str) -> None:
 
 def fundamentals(p: Pack, d: Deps, t: str) -> None:
     raw = d.provider.financials(t) or {}
-    trailing(p, raw, t)
+    reg = _registry(d, t)
+    if reg:
+        registry_items(p, reg)
+    trailing(p, raw, t, registry=bool(reg))
     q = d.provider.quote(t) or {}
     # A bank's operating cash flow moves with deposits, loans and trading
     # balances, so "free cash flow" and capex intensity mean nothing there:
@@ -250,7 +293,7 @@ def fundamentals(p: Pack, d: Deps, t: str) -> None:
         if len(rev) > 1 and rev[1]:
             p.add("Revenue growth", _f((rev[0] / rev[1] - 1) * 100, 1), unit="%", period="{} vs prior year".format(fy(0)),
                   source=src, url=url, group="business")
-        for name, row in (("Gross margin", gp), ("Operating margin", op), ("Net margin", ni)):
+        for name, row in (("Gross margin", gp), ("Operating margin", op)) + ((("Net margin", ni),) if not reg else ()):
             if row and row[0] is not None:
                 p.add(name, _f(row[0] / rev[0] * 100, 1), unit="%", period=fy(0), source=src, url=url, group="business")
         if capex and capex[0] is not None:
@@ -262,15 +305,16 @@ def fundamentals(p: Pack, d: Deps, t: str) -> None:
                 p.add("Capex growth", _f((abs(capex[0]) / abs(capex[1]) - 1) * 100, 1), unit="%",
                       period="{} vs prior year".format(fy(0)), source=src, url=url, group="cash")
         if fcf and fcf[0] is not None:
-            p.add("Free cash flow", _f(fcf[0] / 1e9, 2), unit="$bn", period=fy(0), source=src, url=url, group="cash",
-                  text="Operating cash flow minus capital expenditure.")
+            if not reg:
+                p.add("Free cash flow", _f(fcf[0] / 1e9, 2), unit="$bn", period=fy(0), source=src, url=url, group="cash",
+                      text="Operating cash flow minus capital expenditure.")
             p.add("Free cash flow margin", _f(fcf[0] / rev[0] * 100, 1), unit="%", period=fy(0), source=src, url=url,
                   group="cash")
             if ni and ni[0]:
                 p.add("Free cash flow as a share of net income", _f(fcf[0] / ni[0] * 100, 0), unit="%", period=fy(0),
                       source=src, url=url, group="cash",
                       text="Below 100% means less cash came in than accounting profit, often because of capex or working capital.")
-        if ocf and ocf[0] is not None:
+        if ocf and ocf[0] is not None and not reg:
             p.add("Operating cash flow", _f(ocf[0] / 1e9, 2), unit="$bn", period=fy(0), source=src, url=url, group="cash")
     if sh and len(sh) > 1 and sh[0] and sh[1]:
         p.add("Change in diluted share count", _f((sh[0] / sh[1] - 1) * 100, 2), unit="%",
@@ -287,7 +331,7 @@ def fundamentals(p: Pack, d: Deps, t: str) -> None:
         bp = (bal.get("periods") or [""])[0]
         p.add("Total debt", _f(debt[0] / 1e9, 2), unit="$bn", period="balance sheet at {}".format(bp), source=src, url=url,
               group="balance")
-        if cash and cash[0] is not None:
+        if cash and cash[0] is not None and not reg:
             p.add("Net cash (cash minus debt)", _f((cash[0] - debt[0]) / 1e9, 2), unit="$bn",
                   period="balance sheet at {}".format(bp), source=src, url=url, group="balance")
 
@@ -300,6 +344,15 @@ def valuation(p: Pack, d: Deps, t: str) -> None:
                              ("Trailing P/E", "trailing_pe", "x"), ("Forward P/E", "forward_pe", "x"),
                              ("PEG ratio", "peg_ratio", "x"), ("Price to book", "price_to_book", "x"),
                              ("Dividend yield", "dividend_yield", "%")):
+        if key == "forward_pe":
+            # the figure registry's forward P/E (app/figures): this quote's price over its forward EPS, printed as
+            # the Dossier prints it, not the feed's own ratio worked at another moment's price (Handoff 1)
+            fpe = figures_mod.forward_pe(q)
+            if fpe.get("status") == "ok":
+                p.add(fpe["name"], fpe["text"], period=(fpe.get("period") or {}).get("label") or "latest quote",
+                      source=(fpe.get("source") or {}).get("name") or src, url=url, as_of=fpe.get("as_of"),
+                      text=(fpe.get("source") or {}).get("note") or "", group="valuation", figure_id="forward_pe")
+            continue
         v = q.get(key)
         if v is None:
             continue

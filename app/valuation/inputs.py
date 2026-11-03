@@ -238,7 +238,7 @@ class Filings:
         best = max(rows, key=lambda r: (r.get("filed") or "", r.get("accn") or ""))
         first = min(rows, key=lambda r: r.get("filed") or "")
         vals = {round(float(r["val"]), 2) for r in rows if _num(r.get("val")) is not None}
-        return {
+        out = {
             "concept": concept, "value": float(best["val"]), "tag": tag, "unit": unit,
             "start": best.get("start"), "end": best.get("end"), "form": best.get("form"),
             "filed": best.get("filed"), "first_filed": first.get("filed"), "accn": best.get("accn"),
@@ -246,6 +246,18 @@ class Filings:
             "url": filing_url(self.cik, best.get("accn")),
             "restated": len(vals) > 1, "kind": "reported", "retrieved": self.retrieved,
         }
+        if out["restated"]:
+            # The value before the change and the filing that changed it, for "restated on DATE; the earlier filing
+            # reported X" (figure registry, Handoff 1): walk back from the newest filing to the last one that
+            # reported something else.
+            seq = sorted((r for r in rows if _num(r.get("val")) is not None),
+                         key=lambda r: (r.get("filed") or "", r.get("accn") or ""))
+            now_val, i = round(float(best["val"]), 2), len(seq) - 1
+            while i > 0 and round(float(seq[i - 1]["val"]), 2) == now_val:
+                i -= 1
+            if i > 0:
+                out["prior_value"], out["restated_on"] = float(seq[i - 1]["val"]), seq[i].get("filed")
+        return out
 
     def flow(self, concept: str, fy_end: str) -> Optional[Dict[str, Any]]:
         """A fiscal-year total for the year ending on `fy_end` (within a week,
@@ -377,7 +389,11 @@ def _derived(concept: str, value: Optional[float], parts: List[Optional[Dict[str
              note: Optional[str] = None) -> Dict[str, Any]:
     used = [p for p in parts if p]
     out = {"concept": concept, "value": value, "kind": "derived", "rule": rule,
-           "parts": [{k: p.get(k) for k in ("concept", "tag", "value", "end", "form", "filed", "url")}
+           # a restated part carries its earlier value with it, so a total built from it can say what it read
+           # before the change (figure registry, Handoff 1); an unrestated part keeps its old shape
+           "parts": [dict({k: p.get(k) for k in ("concept", "tag", "value", "end", "form", "filed", "url")},
+                          **({k: p[k] for k in ("restated", "prior_value", "restated_on") if p.get(k) is not None}
+                             if p.get("restated") else {}))
                      for p in used],
            "end": max((p.get("end") or "" for p in used), default=None) or None,
            "filed": max((p.get("filed") or "" for p in used), default=None) or None,
@@ -401,6 +417,17 @@ def _zero(concept: str, on: str, reason: str) -> Dict[str, Any]:
 
 def _v(f: Optional[Dict[str, Any]]) -> Optional[float]:
     return None if not f else _num(f.get("value"))
+
+
+def latest_balance_date(fl: Filings, fy0_end: str) -> str:
+    """The balance sheet the bridge reads, and the figure registry's net debt (app/figures/compute.py) with it:
+    the latest one filed, unless it is a year or more past the base fiscal year, which would mean the base year is
+    stale relative to it; FY0's own balance sheet then."""
+    bal_dates = fl.balance_dates()
+    bal_date = bal_dates[0] if bal_dates else fy0_end
+    if (_days(fy0_end, bal_date) or 0) >= 365:
+        bal_date = fy0_end
+    return bal_date
 
 
 def debt_on(fl: Filings, on: str) -> Dict[str, Any]:
@@ -938,12 +965,7 @@ def gather(provider, ticker: str, today: Optional[date] = None, force: bool = Fa
         return {"available": False, "ticker": sym, "reason": why}
     hist = history(fl, fy_ends)
     fy0 = hist[0]
-    bal_dates = fl.balance_dates()
-    bal_date = bal_dates[0] if bal_dates else fy0["fy_end"]
-    # A balance sheet more than a year past FY0 would mean the base year is
-    # stale relative to it; use FY0's own balance sheet then.
-    if (_days(fy0["fy_end"], bal_date) or 0) >= 365:
-        bal_date = fy0["fy_end"]
+    bal_date = latest_balance_date(fl, fy0["fy_end"])
     bal = balance_sheet(fl, bal_date) if bal_date != fy0["fy_end"] else fy0["balance"]
     try:
         short = provider.short_interest(sym) or {}

@@ -79,13 +79,17 @@ export function netCash(cash, debt, reported = null) {
   const net = cash - debt;
   return { net, matches: !isFig(reported) || Math.abs(net - reported) <= Math.max(1e6, Math.abs(net) * 0.001) };
 }
+/** The two lines the chart plots at the latest year end, and how debt moved; never their difference. Taken from cash
+ *  and equivalents alone, the difference read "Net debt of $62.7B" for AAPL beside the $44.0B the page printed from
+ *  cash and short-term investments (authenticated audit, 2026-11-03). Net debt is the figure registry's, one
+ *  definition, printed in the summary with its date (owner's Handoff 1). */
 export function netCashLine(cash, debt, labels, usd = moneyIn('USD')) {
-  const c = (cash || [])[0], d = (debt || [])[0], n = netCash(c, d);
-  if (!n) return '';
+  const c = (cash || [])[0], d = (debt || [])[0];
+  if (!isFig(c) || !isFig(d)) return '';
   const first = (debt || []).length - 1;
   const trend = first > 0 && isFig(debt[first]) && isFig(d) && pctChange(d, debt[first]) !== null && !flat(pctChange(d, debt[first]))
     ? ` Debt ${moved(pctChange(d, debt[first]))} from ${usd(debt[first])} at the end of ${labels[first]}.` : '';
-  return `${n.net < 0 ? 'Net debt' : 'Net cash'} of ${usd(Math.abs(n.net))} at the end of ${labels[0]}: ${usd(c)} of cash and equivalents against ${usd(d)} of debt.${trend}`;
+  return `${usd(c)} of cash and equivalents against ${usd(d)} of debt at the end of ${labels[0]}.${trend}`;
 }
 
 /** EPS and the share count beside it, each with its own change and no claim that one caused the other. */
