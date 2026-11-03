@@ -224,6 +224,10 @@ const SC = { i: null, state: 'idle', via: null, menu: false, canAsk: false, exam
 const figure = (size, label = '') => (OS() ? raw(OS().html({ size, label: label ? esc(label) : '' })) : '');
 const welcomeEl = (h) => $('.milo-hello .scout', h);
 // the figure that reacts to an answer: the small one in the header, beside the title
+// The header is his name alone: the owner asked for the figure out of it (2026-11-03). What he is doing is
+// said by the activity figure in the answer itself (ui/milo-activity.js), which is where a reader is looking,
+// so nothing is lost by it. These two stay because they are what puts a figure back there if it returns, and
+// every caller already handles finding none.
 const headEl = () => (S.panel && document.contains(S.panel) ? $('.milo-id .scout', S.panel) : null);
 const replyEl = (h, i) => (i === null || i === undefined ? null : headEl());
 /** After the log is drawn: start the welcome figure, and put the moving bust back in its state. */
@@ -1226,7 +1230,7 @@ export async function openMilo({ question = '', opener, send: sendNow = false, a
   drawer.open({
     title: 'Milo', opener, dock: dockFit(window.innerWidth, railW(), storedWidth() || W_DEFAULT, isPhoneNow()) > 0,
     // the redesign's compact header: Milo beside his name, and history, a new conversation and close as icons
-    head: html`<div class="milo-id">${figure('compact')}<div><h2 id="milo-title" tabindex="-1">Milo</h2><p class="milo-sub">Research assistant</p></div></div>`,
+    head: html`<div class="milo-id"><div><h2 id="milo-title" tabindex="-1">Milo</h2><p class="milo-sub">Research assistant</p></div></div>`,
     actions: html`<button type="button" class="icon-btn" data-v2-milo-history aria-expanded="false" aria-controls="milo-history" aria-label="Conversation history" title="Conversation history">${icon('history')}</button>
       <button type="button" class="icon-btn" data-v2-milo-new aria-label="New conversation" title="New conversation">${icon('compose')}</button>`,
     body: html`<div class="milo"><div class="milo-chrome">${chromeHTML()}</div>
