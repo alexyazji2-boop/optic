@@ -30,7 +30,8 @@ from typing import Any, Dict, List, Optional
 from . import fundamentals as fund_mod
 from . import sec_facts
 
-SEC_SOURCE = "SEC filings (XBRL us-gaap facts), the last four reported quarters"
+# shown inside parentheses on Investing, so it carries none of its own (Phase 12 browser check)
+SEC_SOURCE = "SEC filings, XBRL us-gaap facts, the last four reported quarters"
 YF_STATEMENTS = "Yahoo Finance income statements"
 YF_QUOTE = "Yahoo Finance quote"
 

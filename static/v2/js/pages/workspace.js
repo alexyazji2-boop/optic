@@ -767,9 +767,9 @@ function bar() {
 function linkRow() {
   const recent = [...new Set([...(store.recent() || []), ...((store.activeList() || {}).symbols || [])])].filter((x) => x !== S.link).slice(0, 5);
   return html`<div class="ws-linkrow">
-      <form class="ws-linkform" data-ws-linkform><label for="ws-link">Company or fund shown in linked panels</label><input id="ws-link" name="link" value="${S.link}" data-v2-ta="submit" autocomplete="off" spellcheck="false" maxlength="40" aria-describedby="ws-link-help"><button type="submit" class="btn btn-sm">Update panels</button><span id="ws-link-help" class="sr">Panels with a ticker beside their name show this one</span></form>
+      <form class="ws-linkform" data-ws-linkform><label for="ws-link">Company or fund shown in linked panels</label><input id="ws-link" name="link" value="${S.link}" data-v2-ta="submit" autocomplete="off" spellcheck="false" maxlength="40" aria-describedby="ws-link-hint"><button type="submit" class="btn btn-sm">Update panels</button></form>
       ${recent.length ? html`<div class="ws-recent" role="group" aria-label="Show a recent company in the linked panels">${recent.map((sym) => tickBtn(sym))}</div>` : ''}
-      <p class="ws-sub ws-linkhint">Panels with a ticker beside their name show this company or fund; the others show the whole market. SPY until you choose one.</p>
+      <p class="ws-sub ws-linkhint" id="ws-link-hint">Panels with a ticker beside their name show this company or fund; the others show the whole market. SPY until you choose one.</p>
     </div>`;
 }
 
@@ -834,7 +834,7 @@ function onboard() {
   return html`<section class="ws-onboard" id="ws-new" aria-labelledby="ob-h">
     <div class="ob-text"><h2 class="ws-title" id="ob-h">New to Optic? Three ways to start</h2><p class="ws-sub">Prices, options, financials and filings for US stocks and funds, each figure with its source.</p></div>
     <ul class="ob-ways">
-      <li><p><b>Research a company.</b> <span class="ob-more">Search by its name, such as Apple, or by its ${term('ticker', 'ticker')}, the short code it trades under, such as AAPL.</span></p>
+      <li><p><b>Research a company.</b> <span class="ob-more">Search by name, such as Apple, or by ${term('ticker', 'ticker')}, such as AAPL. A ticker is the short code a stock trades under.</span></p>
         <div class="ob-acts"><button type="button" class="btn btn-sm" data-v2-open-palette>Search for a company</button><a class="textlink ob-wide" href="#/AAPL">Apple · AAPL</a><a class="textlink ob-wide" href="#/NVDA">NVIDIA · NVDA</a></div></li>
       <li><p><b>Understand today's market.</b> <span class="ob-more">What moved, what is scheduled and what it means, in a few lines.</span></p>
         <div class="ob-acts"><a class="btn btn-sm" href="#/read">Read today's market</a></div></li>

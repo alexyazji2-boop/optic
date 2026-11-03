@@ -4,6 +4,14 @@ Read this and [REQUIREMENTS_MATRIX.md](REQUIREMENTS_MATRIX.md) before changing a
 
 ## Current state
 
+- **Phase 12 (directive 14, 2026-11-02): complete on branch `phase-12-writing-milo-security`** (`~/Optic/wt-phase12`,
+  from live `d22522a`, not pushed). Writing standards and checker, the copy corrections, the 181-case benchmark, the
+  data access map and the red team, with their fixes. Report: `PHASE_12_REPORT.md`. Local server: launch config
+  `optic-phase12` (:8270, stand-in model :8271, data `~/Optic/phase12-data`, guests allowed and the hourly cap lifted
+  for the latency run, local only). Working folder: `~/Optic/work/phase12-2026-11-02/` (page captures, the advice
+  sets, latency runs, tools).
+- **Next:** Phase 13 (directive 15), which the owner asked to start only after Phase 12 is complete.
+
 - **Current phase:** none. Phases 01 to 11 are complete (reports below). FINAL_REPORT.md holds the decision: **NOT READY: BLOCKING ISSUES REMAIN** (BUG-132, the advice output check, P0; BUG-022 and BUG-023, unlicensed market data, P0, the owner's and counsel's).
 - **Branch / worktree:** `post-demo-ultra` in `~/Optic/wt-ultra`, from `9fa0f36` (tag `post-demo-ultra-baseline`). Upstream unset. **Deployed on 2026-11-01** on the owner's word in chat ("push all new changes and make them live"): merged onto live main `8e2cbf4` as `23b435a` on branch `release-2026-11-01` and pushed to `main`, before the checks in FINAL_REPORT section 17, which remain open.
 - **Commits:** `fce3e71` setup; `8040f8a` and `795325a` Phase 01; `d4a2b1a` Phase 01 report; `ce60b16` Phase 02 policy module (WIP); `c6724ff` Milo portfolio privacy (cherry-pick of 2236205); `a76916b` Phase 02; `6f2e814` its commit id; `7b14b56` Phase 03; `2f6a548` its commit id; `381a018` Phase 04; `b07e181` its commit id; `e64a5ee` Phase 05; `448e633` its commit id; `0448900` Phase 06; `1652e14` its commit id; `874c109` Phase 07; `f26af09` its commit id; `ab5a2ae` Phase 08; `0268f7f` its commit id; `17024f0` Phase 09; `3698975` its commit id; `3971e7f` Phase 10; `a0e60f8` its commit id; `e0dd2ff` Phase 11; `6bc305f` its commit id; `537e101` BUG-202's fix (after Phase 11); the commit after it records that id.

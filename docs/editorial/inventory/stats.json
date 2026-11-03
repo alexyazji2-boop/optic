@@ -1,0 +1,48 @@
+{
+ "by_kind": {
+  "client": 12758,
+  "legal": 125,
+  "prompt": 18,
+  "server": 5135
+ },
+ "by_rule": {
+  "A1": 83,
+  "B1": 3,
+  "D5": 3,
+  "E2": 3,
+  "F2": 3,
+  "G1": 36,
+  "J1": 1,
+  "X1": 4,
+  "X4": 1,
+  "X5": 19,
+  "X6": 89,
+  "X7": 3,
+  "X8": 1
+ },
+ "by_zone": {
+  "classic": 5505,
+  "server": 5153,
+  "v2": 7378
+ },
+ "duplicates": 462,
+ "files": {
+  "client_files": 123,
+  "html_files": 2,
+  "server_files": 196
+ },
+ "findings": {
+  "error": 3,
+  "info": 3,
+  "warn": 243
+ },
+ "status": {
+  "flagged": 43,
+  "legal": 125,
+  "open": 147,
+  "prompt": 18,
+  "reviewed": 17703
+ },
+ "terminology": 10,
+ "texts": 18036
+}

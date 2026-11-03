@@ -315,9 +315,11 @@ def _lead(tape: Dict[str, Any], rate: Dict[str, Any],
                     "investors on edge until the decision."))
     elif bp is not None and abs(bp) >= RATE_LEAD_BP:
         out.append(
-            "Traders expect the Federal Reserve's interest rate to {} a little over "
-            "{}, before the Fed has said anything about it."
-            .format("rise" if bp > 0 else "fall",
+            # "before the Fed has said anything about it" closed this sentence: true of every futures price, so it
+            # told the reader nothing (Phase 12 editorial pass, 2026-11-02)
+            "Traders are betting that the Federal Reserve's interest rate will be a little {} on "
+            "average over {}."
+            .format("higher" if bp > 0 else "lower",
                     rate.get("contract_month_label") or "the coming month"))
 
     if spx and spx.get("chg_1d") is not None:
@@ -355,15 +357,15 @@ def _lead(tape: Dict[str, Any], rate: Dict[str, Any],
         when = (label.lower() if label in ("Today", "Tomorrow", "This week", "Next week")
                 else "on " + label if label else "ahead")
         flow = (catalyst.get("category") or "") in FLOW_CATEGORIES
-        out.append("There are no big economic reports today. The next one is {} {}, "
-                   "which {}."
+        # The non-flow branch ended "which is what this week is building up to", a claim no rule here checks: the
+        # next report is often not the week's main event (JOLTS on a payrolls week). The date says enough.
+        out.append("There are no big economic reports today. The next one is {} {}.{}"
                    .format(catalyst.get("title"), when,
-                           "shows what big traders were already betting on rather "
-                           "than anything new about the economy" if flow else
-                           "is what this week is building up to"))
+                           " It shows how big traders were already positioned, not anything new "
+                           "about the economy." if flow else ""))
     else:
-        out.append("There are no big economic reports today or in the days ahead, so "
-                   "prices are moving on their own.")
+        out.append("There are no big economic reports today or in the days ahead, so no "
+                   "scheduled release is moving prices.")
     return out
 
 
@@ -429,8 +431,10 @@ def _scenarios(rate: Dict[str, Any],
                     "the number."})
         rows.append({
             "label": "It comes in about the same",
-            "text": "The most common result. Markets then tend to carry on with "
-                    "whatever they were already doing, and early moves often reverse."})
+            # "The most common result" was a frequency nothing here measured, and "carry on" sat against "early
+            # moves often reverse" in the same sentence (Phase 12, 2026-11-02)
+            "text": "Then the report adds little that is new, and prices tend to follow "
+                    "whatever was moving them before."})
     return rows
 
 
@@ -498,8 +502,9 @@ def _overall(tape: Dict[str, Any], rate: Dict[str, Any],
         same = (ten["chg_1d"] > 0) == (dollar["chg_1d"] > 0)
         bits.append("Interest rates on government bonds are {} and the dollar is {}, {}"
                     .format(_move_word(ten["chg_1d"]), _move_word(dollar["chg_1d"]),
-                            "but one of the two has barely moved, so together they do "
-                            "not tell a clear story" if flat else
+                            # the move words already say which one is flat; naming it again ("the dollar is
+                            # flat, but one of the two has barely moved") said it twice
+                            "so together they give no clear signal" if flat else
                             # Not "it is usually about interest rates", which
                             # read back as rates being about rates.
                             "and when the two move together like this, investors "
@@ -511,12 +516,11 @@ def _overall(tape: Dict[str, Any], rate: Dict[str, Any],
     if crude.get("chg_1d") is not None and abs(crude["chg_1d"]) >= 1.5:
         bits.append("oil is {}, which matters because energy costs feed into the "
                     "prices of almost everything".format(_move_word(crude["chg_1d"])))
-    tail = ("The first reaction to news is the least reliable part of the day. The "
-            "real verdict usually shows up over the next few days."
+    tail = ("The first reaction to a report is the least reliable part of the day; the "
+            "next few days usually settle what it meant."
             if (releases or rate.get("kind") == "probability") else
-            "With no big news today, moves are mostly traders shuffling their bets, "
-            "so where prices actually end up matters more than any explanation for "
-            "them.")
+            "With no big report today, where prices close says more than any move "
+            "during the day.")
     if not bits:
         return tail
     return "{}. {}".format(". ".join(b[0].upper() + b[1:] for b in bits), tail)
@@ -539,9 +543,9 @@ def build(macro: Optional[Dict[str, Any]] = None,
     rate = rate or {"available": False, "reason": "Not requested."}
 
     limits = [
-        "No consensus estimates, meaning no economists' predictions. Each report is "
-        "compared with its own last reading, because those predictions are sold "
-        "under licence and this site does not carry them.",
+        "No consensus estimates. Economists' forecasts are sold under licence and "
+        "Optic does not carry them, so each report is compared with its own last "
+        "reading.",
         "Happening together is not the same as causing. When a headline and a "
         "price move land on the same morning, both are reported, and neither is "
         "said to have caused the other.",

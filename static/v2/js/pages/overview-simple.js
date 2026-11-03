@@ -17,7 +17,8 @@ import * as OR from './overview-research.js';
 const fin = (v) => typeof v === 'number' && Number.isFinite(v);
 const g = (o, ...ks) => ks.reduce((x, k) => (x && typeof x === 'object' ? x[k] : undefined), o);
 const pct = (v, dp = 0) => `${num(Math.abs(v), dp)}%`;
-const lowerFirst = (s) => { const t = String(s || ''); return /^[A-Z][a-z]/.test(t) ? t.charAt(0).toLowerCase() + t.slice(1) : t; };
+// a sentence's first letter, lowered to sit after "A risk to weigh:", but never a name: "optic star rating" (Phase 12)
+const lowerFirst = (s) => { const t = String(s || ''); return /^[A-Z][a-z]/.test(t) && !/^Optic\b/.test(t) ? t.charAt(0).toLowerCase() + t.slice(1) : t; };
 const up = (x) => (x >= 0 ? 'up' : 'down');
 
 /** The level's own words, falling back toward the middle: Expert to Advanced to Intermediate, New to Beginner. */
@@ -45,7 +46,10 @@ export function simpleFacts({ sym, kind, t, lt, quote, session, earnings, price,
     && !/^The company lost money/.test(x.text)) || null;
   return {
     sym, kind: k, name, price: fin(q.price) ? q.price : null, chg: fin(q.change_pct) ? q.change_pct : null,
-    regular: !!g(session, 'session', 'is_regular'), fresh: q && fin(q.price) ? sessionFreshness(q).text : '',
+    regular: !!g(session, 'session', 'is_regular'),
+    // past 4 PM in New York on the report's own day, a report due today may already be out: AAPL's Overview said "It
+    // reports today" at 7:25 PM with its results in the headlines beside it (Phase 12, 2026-11-02)
+    afterClose: /T(1[6-9]|2[0-3]):/.test(String(g(session, 'session', 'now_et') || '')), fresh: q && fin(q.price) ? sessionFreshness(q).text : '',
     yr: price && fin(price.yr) ? price.yr : null, m3: price && fin(price.m3) ? price.m3 : null, off: price && fin(price.off) ? price.off : null,
     span: (price && price.span) || 'over the past year', fullYear: !price || !price.span || price.span === 'over the past year',
     finAvailable: !!fn.available, rev: fn.available && fin(gr.revenue_yoy_pct) ? gr.revenue_yoy_pct : null,
@@ -175,7 +179,7 @@ function fundLine(F, L) {
   return say(L, {
     new: () => `${F.sym} is a fund: one share holds a small slice of many companies${F.category ? ` (a ${kind}${from})` : ''}, so its price moves with all of them together.${fin(pe) ? ` On average, the companies it holds cost about $${num(pe, 0)} for every $1 of their yearly profit.` : ''}${fin(y) ? ` It pays out about ${num(y, 1)}% of its price each year to the people who hold it.` : ''}`,
     beginner: () => `It is a fund${F.category ? `: ${F.category}${from}` : ''}. Its price follows what it holds.${fin(pe) ? ` The companies it holds trade at ${num(pe, 1)} times their earnings, weighted by the fund.` : ''}${fin(y) ? ` Its distribution yield, what it pays out a year as a share of its price, is ${num(y, 2)}%.` : ''}`,
-    intermediate: () => `A ${kind}${from}${fin(pe) ? `, its holdings at ${num(pe, 1)} times trailing earnings` : ''}${fin(y) ? `, with a ${num(y, 2)}% distribution yield` : ''}.`,
+    intermediate: () => `A ${kind}${from}.${fin(pe) ? ` Its holdings trade at ${num(pe, 1)} times trailing earnings${fin(y) ? `, and it has a ${num(y, 2)}% distribution yield` : ''}.` : fin(y) ? ` It has a ${num(y, 2)}% distribution yield.` : ''}`,
     advanced: () => `Fund (${F.category || 'category not stated'}${F.family ? `, ${F.family}` : ''}): holdings P/E ${fin(pe) ? num(pe, 1) : 'n/a'} trailing, distribution yield ${fin(y) ? `${num(y, 2)}%` : 'n/a'}.`,
     expert: () => `Fund, ${F.category || 'n/a'}; holdings ${fin(pe) ? `${num(pe, 1)}x` : 'n/a'} trailing; yield ${fin(y) ? `${num(y, 2)}%` : 'n/a'}.`,
   });
@@ -199,14 +203,15 @@ export function matters(F, L) {
 function reportLine(F, L) {
   const r = F.report;
   if (!r) return say(L, { new: 'No date for its next results is in the data yet.', intermediate: 'No report date in the data.', expert: 'No report date in the data.' });
+  const due = r.days === 0 && F.afterClose;
   const when = r.days === 0 ? 'today' : `on ${shortDate(r.date)}, in ${r.days} day${r.days === 1 ? '' : 's'}`;
   const im = F.implied, imA = im ? `; options price a ±${num(im.pct, 1)}% move through the ${shortDate(im.expiry)} expiry` : '', imE = im ? `; implied ±${num(im.pct, 1)}% to ${shortDate(im.expiry)}` : '';
   return say(L, {
-    new: `It reports its results ${when}. Share prices often jump or drop after results, in either direction.`,
-    beginner: `It reports results ${when}. Results and guidance (what the company says to expect next) can move the price sharply either way.`,
-    intermediate: `${r.days === 0 ? 'It reports today' : `Next report: ${shortDate(r.date)}, in ${r.days} day${r.days === 1 ? '' : 's'}`}. Results and guidance can move the price sharply either way.`,
-    advanced: `${r.days === 0 ? 'Reports today' : `Reports ${shortDate(r.date)} (${r.days} day${r.days === 1 ? '' : 's'})`}${imA}.`,
-    expert: `Earnings ${r.days === 0 ? 'today' : `${shortDate(r.date)}, ${r.days}d out`}${imE}.`,
+    new: `${due ? 'Its results were due out today' : `It reports its results ${when}`}. Share prices often jump or drop after results, in either direction.`,
+    beginner: `${due ? 'Its results were due today' : `It reports results ${when}`}. Results and guidance (what the company says to expect next) can move the price sharply either way.`,
+    intermediate: `${due ? 'Its report was due today' : r.days === 0 ? 'It reports today' : `Next report: ${shortDate(r.date)}, in ${r.days} day${r.days === 1 ? '' : 's'}`}. Results and guidance can move the price sharply either way.`,
+    advanced: `${due ? 'Report due today' : r.days === 0 ? 'Reports today' : `Reports ${shortDate(r.date)} (${r.days} day${r.days === 1 ? '' : 's'})`}${imA}.`,
+    expert: `Earnings ${due ? 'due today' : r.days === 0 ? 'today' : `${shortDate(r.date)}, ${r.days}d out`}${imE}.`,
   });
 }
 // The reason beside a risk is said at every level: for some it is the caveat itself ("an assumption, not reported
@@ -219,10 +224,13 @@ function riskLine(F, L) {
 function swingLine(F, L) {
   if (!fin(F.vol)) return '';
   const dd = fin(F.ddNow) && F.ddNow <= -1 ? F.ddNow : null;
+  // the first answer already gave a distance below the high, over its own period: a second, different figure under
+  // the same words ("3.0%" and then "3.5% below its highest close") read as a contradiction (Phase 12 editorial pass)
+  const ddSaid = dd !== null && !fin(F.off) ? dd : null;
   return say(L, {
-    new: `Its price swings by about ${num(F.vol, 0)}% a year, by a standard measure called volatility: the higher it is, the bigger the ups and downs.${dd !== null ? ` It is ${pct(dd)} below the highest price it has closed at.` : ''}`,
-    beginner: `Its annualised volatility, a measure of how much the price swings, is about ${num(F.vol, 0)}%.${dd !== null ? ` It sits ${pct(dd)} below its highest close.` : ''}`,
-    intermediate: `Annualised volatility is about ${num(F.vol, 0)}%${dd !== null ? `, and it is ${pct(dd, 1)} below its highest close` : ''}.`,
+    new: `Its price swings by about ${num(F.vol, 0)}% a year, by a standard measure called volatility: the higher it is, the bigger the ups and downs.${ddSaid !== null ? ` It is ${pct(ddSaid)} below the highest price it has closed at.` : ''}`,
+    beginner: `Its annualised volatility, a measure of how much the price swings, is about ${num(F.vol, 0)}%.${ddSaid !== null ? ` It sits ${pct(ddSaid)} below its highest close.` : ''}`,
+    intermediate: `Annualised volatility is about ${num(F.vol, 0)}%${ddSaid !== null ? `, and it is ${pct(ddSaid, 1)} below its highest close` : ''}.`,
     advanced: `Annualised volatility ${num(F.vol, 1)}% over its daily closes (up to 12 years)${dd !== null ? `; ${signed(dd, 1)} from its highest close` : ''}.`,
     expert: `Vol ${num(F.vol, 1)}% ann.${dd !== null ? `; drawdown ${signed(dd, 1)}` : ''}.`,
   });

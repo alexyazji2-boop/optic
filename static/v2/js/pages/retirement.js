@@ -105,7 +105,7 @@ function sections(d) {
         ${sl.rows.filter((r) => r.reject_reason || r.error).map((r) => html`<p class="t-muted"><b>${r.symbol}</b>: ${clean(r.reject_reason || r.error)}</p>`)}
         ${sl.rows.flatMap((r) => (r.warnings || []).map((w) => html`<p class="stale"><b>${r.symbol}</b>: ${clean(w)}</p>`))}` : ''}
       ${sl.caveat ? html`<p class="stale">${clean(sl.caveat)}</p>` : ''}</section>
-    <section class="section" aria-labelledby="rw-h"><h2 class="t-h2" id="rw-h">What the Roth wrapper changes</h2><p class="section-sub">Reasoning specific to a Roth, as opposed to generic allocation advice.</p>
+    <section class="section" aria-labelledby="rw-h"><h2 class="t-h2" id="rw-h">What the Roth wrapper changes</h2><p class="section-sub">Reasoning specific to a Roth account.</p>
       <dl class="reads-dl">${(d.roth_notes || []).map((n) => html`<div><dt>${n.title}</dt><dd>${clean(n.body)}</dd></div>`)}</dl></section>
     <section class="section" aria-labelledby="ru-h"><h2 class="t-h2" id="ru-h">Fund universe</h2><p class="section-sub">Every candidate measured over its own available history, so the rows cover different spans: see History. Returns include reinvested distributions where marked. Highlighted rows are in the model above.</p>
       ${simpleFold('roth-universe', `All ${(d.funds || []).length} funds, measured`, html`<div class="tscroll"><table class="t"><thead><tr><th scope="col">Fund</th><th scope="col">In model</th><th scope="col">Expense</th><th scope="col">Return a year, full history</th><th scope="col">5y CAGR</th><th scope="col">Volatility</th><th scope="col">Return / vol</th><th scope="col">Worst drawdown</th><th scope="col">History</th></tr></thead>

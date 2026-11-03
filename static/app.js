@@ -43708,6 +43708,9 @@ const PULSE_MAX_MESSAGES = 60;      // per conversation, oldest trimmed first
 const PULSE_MAX_CHARS = 12000;      // per message, so one huge paste cannot fill the quota
 
 function pulseLoadHistory() {
+  // A device switch that did not take leaves the last account's keys live: their conversations are not this
+  // reader's to see (Phase 12 red team, MRT-03; v2 checks the holder the same way, core/device.js holds()).
+  if (sessionStuck) return [];
   try {
     const raw = localStorage.getItem(PULSE_STORE_KEY);
     if (!raw) return [];
@@ -43720,6 +43723,7 @@ function pulseLoadHistory() {
 }
 
 function pulseSaveHistory(list) {
+  if (sessionStuck) return false;     // nor theirs to write into (MRT-03)
   try {
     localStorage.setItem(PULSE_STORE_KEY, JSON.stringify(list));
     return true;
@@ -45088,8 +45092,13 @@ function mdLite(text) {
   /* The destination's host beside each link the model wrote, so a link a web page or a headline talked it
    * into shows where it goes before the click (SEC-05, Phase 10 security review). */
   out = out.replace(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g, (m, label, url) => {
-    const hm = /^https?:\/\/([^/?#:\s]+)/i.exec(url);
-    const host = hm ? hm[1].toLowerCase().replace(/^www\./, '') : '';
+    // An address that hides its host is not a link: "https://www.sec.gov:x@evil.example/" opens evil.example and
+    // was labelled "(sec.gov)" (Phase 12 red team, MRT-02; v2's linkTarget is the same rule).
+    const am = /^https?:\/\/([^/?#]*)/i.exec(url);
+    const auth = am ? am[1] : '';
+    const bare = auth.replace(/:\d{1,5}$/, '').toLowerCase();
+    if (!auth || /[@\\\s]/.test(auth) || !/^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$/.test(bare) || bare.indexOf('.') < 0) return label;
+    const host = bare.replace(/^www\./, '');
     const note = host && !label.toLowerCase().includes(host)
       ? ` <span style="color:var(--ink-muted);font-size:var(--t-small)">(${host})</span>` : '';
     return `<a href="${url}" target="_blank" rel="noopener" style="color:var(--s1)">${label}</a>${note}`;

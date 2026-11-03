@@ -229,7 +229,7 @@ function paint() {
   if (!live) return;
   const c = result;
   draw(mainEl, html`<header class="page-head"><h1 class="t-display-m">Compare</h1>
-      <p class="section-sub">Two to four stocks or ETFs ranked across momentum, technical structure, volatility and longer-term value. The three horizons are scored separately, so a name can lead one and trail another. That disagreement is the useful part.</p></header>
+      <p class="section-sub">Two to four stocks or ETFs ranked on three horizons. Each is scored separately, so a name can lead one and trail another.</p></header>
     <section class="section first" aria-label="Choose tickers">${controls()}
       ${c && c.available && (c.horizons || []).length ? html`<div class="cmp-hzs">${c.horizons.map((h) => html`<div><p class="t-label">${h.name}</p><p><b>Horizon: ${h.horizon}</b></p><p class="t-muted">${clean(h.basis || '')}</p></div>`)}</div>
         <p class="t-muted cmp-own">These are Compare's own scores, built only from inputs every compared name has. A Dossier's short- and long-term readings weigh more (options activity, news tone, the business's filings), so their numbers differ from these.</p>` : ''}</section>

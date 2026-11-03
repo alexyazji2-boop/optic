@@ -296,8 +296,8 @@ def relative_performance(provider, ticker: str, benchmark: str = "SPY",
         "ratio": [_f(v, 3) for v in indexed.tolist()],
         "excess": {"5d": excess(5), "20d": excess(20), "60d": excess(60),
                    "120d": excess(120), "252d": excess(252)},
-        "note": ("The line is this symbol divided by {}, indexed to 100 at the "
-                 "start. Rising means outperformance regardless of whether either "
+        # the caption above the chart already says what the line is (Phase 12 editorial pass)
+        "note": ("Rising means outperformance regardless of whether either "
                  "went up. A stock up 20% in a year the index rose 25% "
                  "underperformed, and a price chart will not say so."
                  .format(benchmark)),

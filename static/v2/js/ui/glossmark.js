@@ -24,11 +24,14 @@ export const TERM_RE = new RegExp(`\\b(${KEYS.map((k) => k.replace(/[.*+?^${}()|
 const SKIP = ['a', 'button', 'input', 'textarea', 'select', 'option', 'label', 'summary', 'code', 'pre', 'kbd', 'samp', 'svg', 'canvas', 'script', 'style', 'nav', 'h1',
   '[contenteditable]', '[role="tab"]', '[role="button"]', '[role="option"]', '[role="dialog"]', '[aria-hidden="true"]', '[data-no-gloss]',
   '.term', '.term-pop', '.term-tip', '.lvl', '.chart-wrap', '.chart-slot', '.chart-tip', '.milo-panel', '.milo-log', '.tick', '.seg', '.chips', '.tabs', '.tabset',
-  '.menu', '.ta-list', '.dhead', '.dstick', '.legal-area', '.sr', '.mstrip', '.cs-strip', '.op-groups', '.sec-list', '.toast'].join(', ');
+  '.menu', '.ta-list', '.dhead', '.dstick', '.legal-area', '.sr', '.mstrip', '.cs-strip', '.op-groups', '.sec-list', '.toast',
+  // a definition shown inline is not marked again: "gamma (how fast ... (its delta (how much ...)) changes" (Phase 12)
+  '.term-inline'].join(', ');
 // a fold or a tab panel is a section of its own, so a mention hidden in a closed "How this works" never takes the mark
 // from the one in view
 const SCOPE = 'details, [role="tabpanel"], .view, section.section, [data-ws-panel], .drawer, .page-view';
-const NO_INLINE = 'table, dl, .kv';
+// a tile's label ("Implied move through Nov 4") keeps its mark without a definition inside it (Phase 12)
+const NO_INLINE = 'table, dl, .kv, .rd .k';
 
 const LEVEL_KEY = 'optic.knowledge.v1';
 /** Whether this reader's level marks terms: every level but Expert (Classic's explain "off"; an old "professional" too). */
@@ -41,9 +44,29 @@ export function gloss(key) {
   const d = String(GLOSSARY[key] || ''); if (!d) return '';
   let first = d.split('. ')[0].replace(/\.$/, '').trim();
   if (!first || first.length > 140) return '';
+  // a parenthesis inside the definition becomes commas, so the reader's sentence never holds two levels of them
+  first = first.replace(/\s*\(([^()]*)\)/g, ', $1,').replace(/,\s*,/g, ',').replace(/,\s*$/, '');
   const w = first.split(/\s/)[0];
-  if (/^[A-Z][a-z]*$/.test(w) && !PROPER.has(w)) first = first[0].toLowerCase() + first.slice(1);   // "A" too: "(a 20-day average ...)"
+  // an acronym's expansion keeps its capitals ("Earnings Per Share", not "earnings Per Share")
+  const expansion = /^(?:[A-Z][a-z]+\s?){2,6}$/.test(first);
+  if (!expansion && /^[A-Z][a-z]*$/.test(w) && !PROPER.has(w)) first = first[0].toLowerCase() + first.slice(1);   // "A" too: "(a 20-day average ...)"
   return first;
+}
+
+// A definition sits after a whole noun phrase, never inside one: at New to Markets the Desk read "No consensus (the
+// average of what analysts forecast) estimates" (Phase 12, 2026-11-02). It goes in when the term ends its phrase:
+// punctuation, the end of the text, a number, or a small joining word next ("P/E of 30", "consensus is"). Before
+// another word of the same phrase ("consensus estimates", "gamma exposure") the mark alone explains it.
+const JOINS = new Set(('is are was were be been being has have had do does did of in on at for to and or but nor that which who whose '
+  + 'with from by as than then the a an its it this these those so if when while because about into over under after before between '
+  + 'against during without within through per vs versus can could will would should may might must not no').split(' '));
+/** Whether the text right after a term lets its definition follow it without splitting a phrase. */
+export function endsPhrase(rest) {
+  const r = String(rest || '');
+  if (!r.trim()) return true;
+  if (/^[-'\u2019]/.test(r)) return false;                 // "consensus-based", "Apple's"
+  const m = /^\s+([A-Za-z][A-Za-z'\u2019-]*)/.exec(r);
+  return m ? JOINS.has(m[1].toLowerCase()) : true;
 }
 
 const keyOf = (word) => String(word).toLowerCase();
@@ -97,7 +120,9 @@ export function mark(root) {
       const btn = termButton(k, hit[1]); after.replaceWith(btn); n += 1;
       // a definition joins prose only: a table cell or a figure's label keeps the mark, and its row its shape
       // (directive 05 section 4: the level is not forced into data tables)
-      const def = inline && !btn.closest(NO_INLINE) ? gloss(k) : '';
+      // nor inside a parenthesis the page already opened: "(free cash flow (cash from operations ...) to the firm)"
+      const head = text.slice(0, hit.index), insideParens = (head.match(/\(/g) || []).length > (head.match(/\)/g) || []).length;
+      const def = inline && !insideParens && !btn.closest(NO_INLINE) && endsPhrase(rest.nodeValue) ? gloss(k) : '';
       if (def) { const sp = document.createElement('span'); sp.className = 'term-inline'; sp.dataset.v2TermInline = ''; sp.textContent = ` (${def})`; btn.after(sp); }
       node = rest;
     }

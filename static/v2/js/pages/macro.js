@@ -34,8 +34,8 @@ const instLink = (sym, label) => html`<a href="#/instrument/${encodeURIComponent
 function plain(m) {
   const s = m.sectors || {}, b = s.breadth || {}, evc = b.equal_vs_cap || {}, rg = (m.macro || {}).regime || '';
   return html`<ul class="desk-lead">
-    <li>The market leans ${/off/.test(rg) ? 'cautious (risk-off)' : /on/.test(rg) ? 'confident (risk-on)' : 'neither way'}: ${clean((m.macro || {}).stance || '')}</li>
-    <li>${isNum(b.pct_sectors_above_200sma) ? `${num(b.pct_sectors_above_200sma, 0)}% of the 11 sector funds are above their 200-day average` : ''}${isNum(evc.chg_3m_pct) ? `${isNum(b.pct_sectors_above_200sma) ? '; ' : ''}the equal-weight S&P 500 is ${evc.chg_3m_pct >= 0 ? 'keeping up with' : 'falling behind'} the cap-weighted index (${signed(evc.chg_3m_pct)} over 3 months).` : '.'}</li>
+    <li>${(m.macro || {}).stance ? clean(m.macro.stance) : `The market leans ${/off/.test(rg) ? 'cautious (risk-off)' : /on/.test(rg) ? 'confident (risk-on)' : 'neither way'} on Optic's market score.`}</li>
+    <li>${isNum(b.pct_sectors_above_200sma) ? `${num(b.pct_sectors_above_200sma, 0)}% of the 11 sector funds are above their 200-day average` : ''}${isNum(evc.chg_3m_pct) ? `${isNum(b.pct_sectors_above_200sma) ? '; ' : ''}the equal-weight S&P 500 is ${evc.chg_3m_pct > 2 ? 'ahead of' : evc.chg_3m_pct < -2 ? 'behind' : 'in line with'} the cap-weighted index (${signed(evc.chg_3m_pct)} over 3 months).` : '.'}</li>
     ${s.rotation_note ? html`<li>${clean(s.rotation_note)}</li>` : ''}</ul>`;
 }
 
@@ -64,7 +64,7 @@ function breadth() {
   if (!D.m) return html`<p class="t-muted" role="status">Breadth comes with the macro picture, which is still loading.</p>`;
   const s = (D.m || {}).sectors || {}, b = s.breadth || {}, evc = b.equal_vs_cap || {}, sp = s.suggested_pair;
   return html`${kv([['Sectors above the 200-day', pct(b.pct_sectors_above_200sma, 0)], ['Sectors above the 50-day', pct(b.pct_sectors_above_50sma, 0)]], 2)}<p>${clean(b.note || '')}</p>
-    ${s.rotation_note ? html`<p><b>Rotation.</b> ${clean(s.rotation_note)}</p>` : ''}${sp ? html`<p><b>Strongest and weakest sector right now:</b> ${sp.long} and ${sp.short}. ${clean(sp.note || '')}</p>` : ''}
+    ${s.rotation_note ? html`<p><b>Rotation.</b> ${clean(s.rotation_note)}</p>` : ''}${sp ? html`<p><b>Strongest and weakest sector right now:</b> ${sp.long} and ${sp.short}.</p>` : ''}
     ${evc.note ? html`<h3>Equal weight against cap weight (RSP / SPY)</h3>${kv([['3 months', signed(evc.chg_3m_pct)], ['1 year', signed(evc.chg_1y_pct)]], 2)}<p>${clean(evc.note)}</p><div class="chart-slot" data-chart="rsp"></div>` : ''}`;
 }
 function curve() {

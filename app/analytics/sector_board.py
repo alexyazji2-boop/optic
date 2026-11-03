@@ -136,12 +136,11 @@ def _rotation(spread_fast: Optional[float],
 
     if fast >= band and slow >= band:
         state, label = "in", "Rotating in"
-        note = ("Ahead of the index over both the past week and the past month. "
-                "Money has been moving here, not just visiting.")
+        # relative return is not a measure of money flow, so the note says the return (Phase 12)
+        note = "Ahead of the index over both the past week and the past month."
     elif fast <= -band and slow <= -band:
         state, label = "out", "Rotating out"
-        note = ("Behind the index over both windows, which is money leaving rather "
-                "than a single bad session.")
+        note = "Behind the index over both the past week and the past month."
     elif fast >= band > slow and slow <= -band:
         state, label = "turning", "Turning up"
         note = ("Ahead this week after trailing over the month. That is either the "

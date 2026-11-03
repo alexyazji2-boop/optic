@@ -123,7 +123,8 @@ def _next_report(history: List[Dict[str, Any]], calendar: Dict[str, Any],
         spread = (out["eps_high"] - out["eps_low"]) / abs(out["eps_consensus"]) * 100.0
         out["eps_dispersion_pct"] = _f(spread, 1)
         out["dispersion_note"] = (
-            "Analysts disagree widely on this quarter. A bigger surprise either way is likely."
+            # "is likely" was a frequency nobody measured (Phase 12 editorial pass)
+            "Analysts disagree widely on this quarter, so the result could land far from the average either way."
             if spread > 25 else
             "Analysts are tightly clustered, so a large surprise would be genuinely unexpected."
         )
@@ -261,8 +262,8 @@ def _surprise_history(history: List[Dict[str, Any]], hist: pd.DataFrame, limit: 
         # the quarters the rate is taken over (those with an estimate to beat), which the page says
         "rate_quarters": counts["rate_quarters"],
         "beat_rate_pct": _f(counts["beat_rate_pct"], 0) if counts["beat_rate_pct"] is not None else None,
-        "eps_basis": ("Estimates and reported EPS on the basis analysts use, usually adjusted; it can differ "
-                      "from the statements' diluted EPS on Financials."),
+        "eps_basis": ("Estimates and reported EPS are on the basis analysts use, usually adjusted, so they can "
+                      "differ from the statements' diluted EPS on Financials."),
         "avg_surprise_pct": _f(float(np.mean(surprises)), 1) if surprises else None,
         "avg_abs_move_pct": _f(float(np.mean([abs(m) for m in moves])), 2) if moves else None,
         "largest_move_pct": _f(max(moves, key=abs), 2) if moves else None,
@@ -328,9 +329,8 @@ def _extended_move(quote: Dict[str, Any]) -> Dict[str, Any]:
             "move_pct": _f(pct, 2),
             "as_of": quote.get(time_key),
             "caveat": (
-                "Extended-hours volume is a fraction of the regular session, so this level is "
-                "struck by far fewer participants and can retrace once the open provides real "
-                "liquidity. It is the market's first read, not its settled one."
+                "Far fewer shares trade outside the regular session, so this price can reverse "
+                "once the regular session opens."
             ),
         }
     return {"available": False}
@@ -933,7 +933,8 @@ def _verdict(next_report: Dict[str, Any], surprise: Dict[str, Any], revisions: D
     if days is None:
         headline = "No scheduled report found."
     elif days <= 7:
-        headline = f"Reports in {days} day{'s' if days != 1 else ''}. Inside the event window."
+        headline = ("Reports today. Inside the event window." if days == 0 else
+                    f"Reports in {days} day{'s' if days != 1 else ''}. Inside the event window.")
         reasons.append(
             "Options into the print carry event premium that collapses the morning after, "
             "so a directional long here needs the move to happen almost immediately."

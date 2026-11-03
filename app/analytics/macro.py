@@ -176,7 +176,7 @@ def _expected_move(snaps: Dict[str, Dict[str, Any]], frames: Dict[str, Any]) -> 
         reading = "The index has not moved enough lately to compare."
     elif ratio > 1.25:
         reading = ("Options are pricing about {:.1f} times the movement the index has been "
-                   "delivering. Protection is dear against what the tape is doing.".format(ratio))
+                   "delivering, so protection is dear against recent moves.".format(ratio))
     elif ratio < 0.8:
         reading = ("Options are pricing less movement than the index has been delivering. "
                    "Protection is cheap against what the tape is doing.")
@@ -408,19 +408,21 @@ def analyse(provider) -> Dict[str, Any]:
     if vix_level is not None:
         if vix_level < 14:
             adj, band = 18, "below 14"
-            notes.append("VIX {:.1f}. Complacent tape, trend-following works, hedges are cheap".format(vix_level))
+            # Phase 12: these notes said what to do ("size down and widen stops", "premium selling favored over
+            # directional longs") and claimed what works; they now say what the level means for option prices
+            notes.append("VIX {:.1f}. Low: options are pricing small daily moves".format(vix_level))
         elif vix_level < 18:
             adj, band = 10, "14 to 18"
-            notes.append("VIX {:.1f}. Normal vol regime".format(vix_level))
+            notes.append("VIX {:.1f}. In its normal range".format(vix_level))
         elif vix_level < 25:
             adj, band = -8, "18 to 25"
-            notes.append("VIX {:.1f}. Elevated; size down and widen stops".format(vix_level))
+            notes.append("VIX {:.1f}. Elevated: options are pricing wider daily swings".format(vix_level))
         elif vix_level < 32:
             adj, band = -20, "25 to 32"
-            notes.append("VIX {:.1f}. Stressed; premium selling favored over directional longs".format(vix_level))
+            notes.append("VIX {:.1f}. Stressed: options are pricing large daily swings".format(vix_level))
         else:
             adj, band = -30, "above 32"
-            notes.append("VIX {:.1f}. Panic regime; mean-reversion bounces are violent both ways".format(vix_level))
+            notes.append("VIX {:.1f}. Panic level: daily swings are very large in both directions".format(vix_level))
         score += adj
         # The single largest term in the score, and it was missing from the
         # decomposition entirely.

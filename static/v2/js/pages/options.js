@@ -11,7 +11,7 @@ import { $, $$, html, render as draw } from '../core/dom.js';
 import * as api from '../core/api.js';
 import * as store from '../core/store.js';
 import { holds } from '../core/device.js';
-import { num, signed, money, signedMoney, clean, shortDate, isNum, capFirst } from '../core/format.js';
+import { num, signed, money, signedMoney, clean, shortDate, isNum, capFirst, plural } from '../core/format.js';
 import { etStamp } from '../core/marketTime.js';
 import { mountCharts } from '../ui/chart.js';
 import { xyChart } from '../ui/xychart.js';
@@ -82,9 +82,9 @@ function readings(sym) {
   const main = im ? { pct: im.implied_move_pct, expiry: im.expiry, dte: im.dte, event: !!(e.next_report && e.next_report.date && e.next_report.date <= im.expiry) }
     : r30 ? { pct: r30.straddle_move_pct, expiry: r30.expiry, dte: r30.dte, event: r30.contains_event } : null;
   const cells = [];
-  if (main && isNum(main.pct)) cells.push(html`<div class="rd main"><span class="k">Implied move through ${shortDate(main.expiry)}</span><span class="v">±${num(main.pct)}%</span><span class="d">${isNum(spot) ? `${num(spot * (1 - main.pct / 100), 0)} to ${num(spot * (1 + main.pct / 100), 0)}. ` : ''}All ${P.dayCount(main.dte)}${main.event && e.next_report ? `, the ${shortDate(e.next_report.date)} report included` : ''}.</span></div>`);
+  if (main && isNum(main.pct)) cells.push(html`<div class="rd main"><span class="k">Implied move through ${shortDate(main.expiry)}</span><span class="v">±${num(main.pct)}%</span><span class="d">${isNum(spot) ? `${num(spot * (1 - main.pct / 100), 0)} to ${num(spot * (1 + main.pct / 100), 0)}. ` : ''}Over ${P.dayCount(main.dte)}${main.event && e.next_report ? `, including the ${shortDate(e.next_report.date)} report` : ''}.</span></div>`);
   if (pr.available && isNum(pr.event_day_avg_pct)) cells.push(html`<div class="rd"><span class="k">Average report-day move</span><span class="v">±${num(pr.event_day_avg_pct)}%</span><span class="d">Last ${(e.surprise || {}).quarters || 8} quarters. History, not a price.</span></div>`);
-  if (pr.available && isNum(pr.ratio)) cells.push(html`<div class="rd"><span class="k">Priced against history</span><span class="v">${num(pr.ratio, 2)}×</span><span class="d">the typical ±${num(pr.baseline_move_pct)}% for ${pr.baseline_sessions} sessions</span></div>`);
+  if (pr.available && isNum(pr.ratio)) cells.push(html`<div class="rd"><span class="k">Priced against history</span><span class="v">${num(pr.ratio, 2)}×</span><span class="d">the typical ±${num(pr.baseline_move_pct)}% over ${plural(pr.baseline_sessions, 'session')}</span></div>`);
   const iv = vs.iv30 || {};
   if (iv.available) cells.push(html`<div class="rd"><span class="k">Implied volatility, 30 days</span><span class="v">${num(iv.iv_pct, 1)}%</span><span class="d">${(t.iv_rank || {}).available ? `Rank ${num(t.iv_rank.rank, 0)}` : 'No rank yet: history still building'}</span></div>`);
   // one expiry across the readings where the surface has it
@@ -103,7 +103,7 @@ function builder(sym) {
   const exps = ((R.data || {}).listed_expiries) || [];
   const a = B.analysis;
   return html`<section class="section builder" aria-labelledby="pb-h">
-    <div class="section-head"><div><h2 class="t-h2" id="pb-h">Position builder</h2><p class="section-sub">${R.expiry ? `Priced on the ${shortDate(R.expiry)} expiry chosen above.` : 'Priced on the expiry chosen above, once the contracts load.'} Pick a template or press Add in the table. Figures are per position.</p></div></div>
+    <div class="section-head"><div><h2 class="t-h2" id="pb-h">Position builder</h2><p class="section-sub">${R.expiry ? `Priced on the ${shortDate(R.expiry)} expiry chosen above.` : 'Priced on the expiry chosen above, once the contracts load.'} Figures are per position.</p></div></div>
     ${noQuotes() ? html`<p class="stale">${noQuotes()} The templates need two-sided quotes, so they are off until there are some.</p>` : ''}
     <div class="tpl" role="group" aria-label="Templates">${TEMPLATES.map(([id, label]) => html`<button type="button" class="chip" data-v2-tpl="${id}" aria-pressed="${B.template === id}" ${R.expiry && !noQuotes() ? '' : 'disabled'}>${label}</button>`)}</div>
     ${B.legs.length ? html`<ul class="legs-list" aria-label="Legs">${B.legs.map((l, i) => { const q = legQuote(l); return html`<li><div class="leg-main"><span class="leg-l">${legLabel(l)}</span>${q ? html`<small class="t-muted leg-q">${q}</small>` : ''}</div>

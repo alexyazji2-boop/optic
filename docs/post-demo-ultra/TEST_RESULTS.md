@@ -1453,3 +1453,27 @@ closed (a Saturday).
 - **MSFT:** its report of 2026-10-28 stays in its resolved catalyst events on both, as it should.
 - **What else could change:** nothing. The changed code runs only inside `_swing_snapshot`. Earnings this week, the
   weekly digest and the Desk edition read the provider, which the hotfix does not touch.
+
+## Phase 12 (directive 14, 2026-11-02)
+
+Branch `phase-12-writing-milo-security` (`~/Optic/wt-phase12`, from live `d22522a`). Working folder
+`~/Optic/work/phase12-2026-11-02/`.
+
+| Check | Command | Outcome |
+|---|---|---|
+| Baseline suite on `d22522a` | `.venv/bin/python -m pytest -q` | 8,230 passed, 1 skipped (243 s) |
+| The model key (BL-01) | a free `GET /v1/models` with the `.env` key, value never printed | 401 `authentication_error`: no model answers in this phase |
+| Phase 08's eval suite, before the fixes | `python -m tests.milo_eval.run` | 137 of 137 cases, 949 of 949 checks (7 s) |
+| The 181-case benchmark on live `main`'s server code (scratch copy) | same, with `ai_policy.py`, `main.py`, `ai.py`, `research/service.py` from `origin/main` | 173 of 181 cases, 1,223 of 1,231 checks; failures ADV-R09 to R12, MUL-11, INJ-09 (policy), POR-10, INJ-11 (authorization) |
+| The benchmark after the fixes | `python -m tests.milo_eval.run` | 181 of 181 cases, 1,231 of 1,231 checks; no critical failure |
+| Red team | `pytest tests/test_milo_redteam.py` | 38 passed |
+| Red team, mutation | each fixed file restored from `origin/main` in a scratch copy | `main.py`: 7 tests fail (MRT-01, 04, 05 x3, 08, 09); `research/service.py`: MRT-01's service test fails; `milo-text.js`: MRT-02 v2 fails; `app.js`: MRT-02 Classic and MRT-03 fail. MRT-01's chat test first passed vacuously (a suite-wide stub of the hook); marked `framework_live` and re-run: it fails on the vulnerable code |
+| Editorial gate and rules | `pytest tests/test_editorial_standards.py` | passes: no error finding in v2 or server copy outside `allow.txt` (3 lines, REJECTED_SOURCES); the directive's 11 bad examples caught, 9 good ones clean |
+| Inventory | `python -m tests.editorial.review inventory` | 18,036 texts from 321 files; 3 errors (allowed), 243 warnings, 3 info; 10 terminology variants; 462 texts written out in more than one file |
+| Page captures | `tools/pagetext.py` (headless, guest, local server) | 27 routes at New, Intermediate and Expert (81 captures); the changed pages recaptured after the fixes |
+| Advice checks, set E (unseen when scored) | `tools/measure_advice.py` | live main: request reader 23 of 60, output check 17 of 50; Phase 12 round 1: 32 of 60, 21 of 50; false positives 0 of 60 and 1 of 50 |
+| Advice checks, set F (unseen, final) | same | live main: 11 of 60, 12 of 50; Phase 12 final: 18 of 60, 16 of 50; false positives 1 of 60 and 2 of 50, the same items on both |
+| Advice checks, development sets A to D and the research corpus | inline | 190 of 190 advice sentences, 0 of 190 research removed; corpus 0 of 1,506 removed, before and after |
+| Latency end to end (stand-in model, real providers, local) | `tools/latency.py OUT 2` | 72 answers, 0 errors, 0 timeouts; first text median 0.31 s, p95 4.67 s; total median 0.65 s, p95 4.98 s (a first run stopped at 30 answers on the hourly cap, `AI_CALLS_PER_HOUR`, working as designed) |
+| Browser, the changed pages | Browser pane on :8270 at 1440, 390 and 375x549 | Read, Home, the Overview, Macro and Options: no sideways overflow, no error state; Read's rows read "AAPL reports Monday after the close, high impact." with the shared reason once; New to Markets: no definition inside a compound noun or a parenthesis, no "earnings Per Share" |
+| Final suite on this branch | `.venv/bin/python -m pytest -q` | 8,628 passed, 1 skipped (249 s): 398 more than the baseline, all new tests passing |

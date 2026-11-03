@@ -58,7 +58,7 @@ export function pricing(t, sym) {
       <tbody>${(vs.expiries || []).map((e) => html`<tr><td>${shortDate(e.expiry)}</td><td>${e.dte}</td><td>${pct(e.atm_iv_pct)}</td><td>±${num(e.straddle_move_pct, 2)}%</td><td>±${num(e.one_sd_move_pct, 2)}%</td><td>${signed(e.rr25_pts, 1, '')}</td><td>${e.two_sided} of ${e.contracts}</td><td>${e.contains_event ? 'Yes' : 'No'}</td></tr>`)}</tbody></table></div>
       ${(vs.notes || []).map((n) => note(n))}</details>
     ${note(`${vs.clock || ''} ${(t.rate || {}).label ? 'Rate ' + t.rate.label + '.' : ''}${(t.carry || {}).assumed_none ? ' No dividend yield came back from the feed, so these implied volatilities assume no dividend.' : ''}`)}
-    ${how(r && isNum(r.straddle_move_pct) ? html`<p>A straddle's price and one standard deviation are what options cost, not limits on the price: a move that size or larger happens about a third of the time.</p>` : '',
+    ${how(r && isNum(r.straddle_move_pct) ? html`<p>A straddle's price and one standard deviation are what options cost, not limits on the price.</p>` : '',
       term.available ? html`<p>The term structure compares the front expiry's implied volatility with a later one's.</p>` : '',
       r && isNum(r.rr25_pts) ? html`<p>The risk reversal is the 25-delta put's implied volatility less the 25-delta call's: positive means downside puts cost more than upside calls.</p>` : '',
       evMove ? html`<p>The report day's move is read from the ${shortDate(ev.after)} expiry's IV against the ${shortDate(ev.before)} expiry's. ${clean(ev.method || '')}</p>` : '',

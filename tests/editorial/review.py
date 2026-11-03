@@ -1,0 +1,246 @@
+"""Optic's editorial reviewer (Phase 12, 2026-11-02).
+
+    .venv/bin/python -m tests.editorial.review inventory [--out docs/editorial/inventory]
+    .venv/bin/python -m tests.editorial.review diff [--base origin/main]
+    .venv/bin/python -m tests.editorial.review diff --ai --max-dollars 0.50     (optional, needs a working key)
+
+`inventory` reads every source (`extract.py`), runs the rules (`rules.py`) and writes `text_inventory.csv` (one row
+per text: route, component file and line, kind, the words, the findings, the status) and `TEXT_INVENTORY.md` (the
+counts and every error and warning, by route).
+
+`diff` is the reviewer for new copy: it compares each changed file with the base and checks only the texts that are
+new or changed, so a branch is reviewed on what it adds. It exits 1 on an `error` finding. With `--ai` it also asks
+a model to read the new texts against `docs/editorial/OPTIC_WRITING_STANDARDS.md`; that is the optional half. It
+prints what it would send and the estimated cost first, refuses without `--max-dollars`, and never runs from pytest.
+"""
+from __future__ import annotations
+
+import argparse
+import csv
+import json
+import os
+import subprocess
+import sys
+from collections import Counter, defaultdict
+from pathlib import Path
+from typing import Dict, List, Optional, Tuple
+
+from tests.editorial import extract as X
+from tests.editorial import rules as R
+
+ROOT = X.ROOT
+ALLOW = Path(__file__).with_name("allow.txt")
+STANDARDS = ROOT / "docs" / "editorial" / "OPTIC_WRITING_STANDARDS.md"
+
+
+def allowed() -> List[Tuple[str, str, str]]:
+    """`allow.txt`: one `file | rule | words` per line, then `# why`. A finding is allowed when its file and rule
+    match and its text contains the words."""
+    out = []
+    if ALLOW.exists():
+        for line in ALLOW.read_text(encoding="utf-8").splitlines():
+            line = line.split("#", 1)[0].strip()
+            if line.count("|") >= 2:
+                f, r, w = (p.strip() for p in line.split("|", 2))
+                out.append((f, r, w))
+    return out
+
+
+def is_allowed(t: X.Text, f: Dict[str, str], allow: List[Tuple[str, str, str]]) -> bool:
+    return any(t.file == af and f["rule"] == ar and aw in t.text for af, ar, aw in allow)
+
+
+def zone(t: X.Text) -> str:
+    if t.file.startswith("static/v2"):
+        return "v2"
+    if t.file.startswith("static/"):
+        return "classic"
+    return "server"
+
+
+def review(texts: List[X.Text]) -> List[X.Text]:
+    for t in texts:
+        t.findings = R.check(t.text, t.kind)
+    return texts
+
+
+def status_of(t: X.Text, allow) -> str:
+    if t.kind == "legal":
+        return "legal: flagged for counsel, not rewritten" if t.findings else "legal: reviewed, no finding"
+    if t.kind == "prompt":
+        return "prompt: traced (see MILO_ARCHITECTURE_AUDIT.md)"
+    if not t.findings:
+        return "reviewed: no finding"
+    if all(is_allowed(t, f, allow) for f in t.findings):
+        return "reviewed: allowed (allow.txt)"
+    sev = {f["severity"] for f in t.findings if not is_allowed(t, f, allow)}
+    if zone(t) == "classic":
+        return "flagged: Classic is left as it is unless the owner asks"
+    return "open: " + ("error" if "error" in sev else "warn" if "warn" in sev else "info")
+
+
+# ------------------------------------------------------------------------------------------------ inventory
+def write_inventory(out_dir: Path) -> Dict[str, object]:
+    texts, counts = X.inventory()
+    review(texts)
+    allow = allowed()
+    out_dir.mkdir(parents=True, exist_ok=True)
+    with open(out_dir / "text_inventory.csv", "w", newline="", encoding="utf-8") as fh:
+        w = csv.writer(fh)
+        w.writerow(["route", "file", "line", "kind", "attr", "symbol", "text", "problems", "suggestion", "status"])
+        for t in texts:
+            w.writerow([t.where, t.file, t.line, t.kind, t.attr or "", t.symbol or "", t.text[:600],
+                        "; ".join("{} {}: {}".format(f["rule"], f["severity"], f["match"]) for f in t.findings),
+                        "; ".join(sorted({f["suggestion"] for f in t.findings})), status_of(t, allow)])
+    terms = R.terminology(texts)
+    dups = R.duplicates(texts)
+    by_route = defaultdict(Counter)
+    for t in texts:
+        by_route[t.where]["texts"] += 1
+        for f in t.findings:
+            by_route[t.where][f["severity"]] += 1
+    stats = {"files": counts, "texts": len(texts), "by_kind": X.by_kind(texts),
+             "by_zone": dict(Counter(zone(t) for t in texts)),
+             "findings": dict(R.summary(f for t in texts for f in t.findings)["severity"]),
+             "by_rule": dict(R.summary(f for t in texts for f in t.findings)["rule"]),
+             "terminology": len(terms), "duplicates": len(dups),
+             "status": dict(Counter(status_of(t, allow).split(":")[0] for t in texts))}
+    (out_dir / "stats.json").write_text(json.dumps(stats, indent=1, sort_keys=True))
+    md = ["# Text inventory", "",
+          "Generated by `.venv/bin/python -m tests.editorial.review inventory`. Do not edit by hand: rerun it. The full",
+          "row-per-text table is `text_inventory.csv` (route, file and line, kind, words, problems, suggestion, status).", "",
+          "| Measure | Count |", "|---|---:|",
+          "| Files read (client scripts, HTML shells, server modules) | {client_files}, {html_files}, {server_files} |".format(**counts),
+          "| Texts inventoried | {} |".format(len(texts))]
+    for k, v in sorted(X.by_kind(texts).items()):
+        md.append("| ... of kind `{}` | {} |".format(k, v))
+    for k, v in sorted(stats["by_zone"].items()):
+        md.append("| ... in {} | {} |".format(k, v))
+    for k, v in sorted(stats["findings"].items()):
+        md.append("| Findings: {} | {} |".format(k, v))
+    md.append("| Terminology variants | {} |".format(len(terms)))
+    md.append("| Texts written out in more than one file (8 words or more) | {} |".format(len(dups)))
+    md += ["", "## By route", "", "| Route or component | Texts | error | warn | info |", "|---|---:|---:|---:|---:|"]
+    for route, c in sorted(by_route.items(), key=lambda kv: (-kv[1]["error"], -kv[1]["warn"], kv[0])):
+        md.append("| {} | {} | {} | {} | {} |".format(route, c["texts"], c["error"], c["warn"], c["info"]))
+    md += ["", "## Open findings in v2 and server copy", ""]
+    for t in texts:
+        if zone(t) == "classic" or t.kind in ("prompt",):
+            continue
+        for f in t.findings:
+            if f["severity"] in ("error", "warn") and not is_allowed(t, f, allow):
+                md.append("- `{}:{}` {} ({}): \"{}\". {}".format(t.file, t.line, f["rule"], f["severity"],
+                                                             f["match"].replace("|", "/")[:120], f["suggestion"]))
+    md += ["", "## Terminology", ""]
+    for f in terms:
+        md.append("- `{}:{}` \"{}\": {}".format(f["file"], f["line"], f["match"], f["suggestion"]))
+    md += ["", "## Written out in more than one file", ""]
+    for d in dups[:80]:
+        md.append("- \"{}\" in {}".format(d["text"][:110].replace("|", "/"), ", ".join("`{}`".format(x) for x in d["files"])))
+    (out_dir / "TEXT_INVENTORY.md").write_text("\n".join(md) + "\n", encoding="utf-8")
+    return stats
+
+
+# ------------------------------------------------------------------------------------------------ diff
+def _git(*args: str) -> str:
+    return subprocess.run(["git", "-C", str(ROOT), *args], capture_output=True, text=True, check=False).stdout
+
+
+def _texts_of(rel: str, content: Optional[str]) -> List[X.Text]:
+    """The texts of one version of a file, read through the same extractors as the inventory."""
+    if content is None:
+        return []
+    if rel.endswith(".js"):
+        got = list(X.js_texts_from(rel, content))
+    elif rel.endswith(".py"):
+        got = list(X.py_texts_from(rel, content))
+    else:
+        return []
+    for t in got:
+        t.where = X.route_of(rel, t.symbol)
+    return got
+
+
+def new_texts(base: str) -> List[X.Text]:
+    changed = [l for l in (_git("diff", "--name-only", base, "--") + _git("ls-files", "--others", "--exclude-standard")).splitlines()
+               if (l.startswith("static/") and l.endswith(".js")) or (l.startswith("app/") and l.endswith(".py"))]
+    out: List[X.Text] = []
+    for rel in sorted(set(changed)):
+        now = (ROOT / rel).read_text(encoding="utf-8") if (ROOT / rel).exists() else None
+        before = subprocess.run(["git", "-C", str(ROOT), "show", "{}:{}".format(base, rel)], capture_output=True,
+                                text=True).stdout or None
+        old = {t.text for t in _texts_of(rel, before)}
+        out += [t for t in _texts_of(rel, now) if t.text not in old]
+    return out
+
+
+AI_PROMPT = """You are the copy editor for Optic, a stock research terminal. Read each numbered interface text against
+the standards below and return JSON only: a list of {"n": number, "verdict": "keep" | "revise", "problem": short
+reason naming the standard, "revised": the corrected text or ""}. Never change a figure, a source, a time, a legal
+notice or a navigation name. Revise only when a standard is broken.
+
+STANDARDS:
+"""
+
+
+def ai_review(texts: List[X.Text], max_dollars: Optional[float], dry_run: bool) -> int:
+    """The optional model read. One request for up to 120 texts. Prices from Anthropic's list (Haiku 5.5 is not
+    listed in this repository, so the model is the chat model and its $2 / $10 per million tokens, MILO_COST_ANALYSIS)."""
+    standards = STANDARDS.read_text(encoding="utf-8") if STANDARDS.exists() else ""
+    items = [t for t in texts if t.kind in ("client", "server")][:120]
+    body = "\n".join("{}. [{}] {}".format(i + 1, t.where, t.text) for i, t in enumerate(items))
+    prompt = AI_PROMPT + standards[:24000] + "\n\nTEXTS:\n" + body
+    est_in, est_out = len(prompt) / 3.6, 60 * len(items)
+    cost = est_in * 2.0 / 1e6 + est_out * 10.0 / 1e6
+    print("AI review: {} texts, about {:,.0f} input and {:,.0f} output tokens, about ${:.3f}".format(len(items), est_in, est_out, cost))
+    if dry_run or not items:
+        return 0
+    if max_dollars is None or cost > max_dollars:
+        print("Refused: pass --max-dollars at or above the estimate to spend it.")
+        return 2
+    try:
+        import anthropic
+        from app import ai
+    except ImportError as exc:
+        print("No SDK: {}".format(exc))
+        return 2
+    client = anthropic.Anthropic()
+    msg = client.messages.create(model=ai.PULSE_MODEL, max_tokens=8000, messages=[{"role": "user", "content": prompt}])
+    text = "".join(getattr(b, "text", "") for b in msg.content)
+    print(text)
+    return 0
+
+
+def main(argv: Optional[List[str]] = None) -> int:
+    ap = argparse.ArgumentParser()
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    inv = sub.add_parser("inventory")
+    inv.add_argument("--out", default=str(ROOT / "docs" / "editorial" / "inventory"))
+    df = sub.add_parser("diff")
+    df.add_argument("--base", default="origin/main")
+    df.add_argument("--ai", action="store_true")
+    df.add_argument("--dry-run", action="store_true")
+    df.add_argument("--max-dollars", type=float)
+    a = ap.parse_args(argv)
+    if a.cmd == "inventory":
+        stats = write_inventory(Path(a.out))
+        print(json.dumps({k: stats[k] for k in ("texts", "by_kind", "findings", "terminology", "duplicates")}))
+        return 0
+    texts = review(new_texts(a.base))
+    allow = allowed()
+    errors = 0
+    for t in texts:
+        for f in t.findings:
+            if is_allowed(t, f, allow):
+                continue
+            errors += f["severity"] == "error"
+            print("{}:{} {} {} \"{}\": {}".format(t.file, t.line, f["rule"], f["severity"], f["match"][:100], f["suggestion"]))
+    print("{} new or changed texts, {} error(s)".format(len(texts), errors))
+    rc = 1 if errors else 0
+    if a.ai:
+        rc = max(rc, ai_review(texts, a.max_dollars, a.dry_run))
+    return rc
+
+
+if __name__ == "__main__":
+    sys.exit(main())

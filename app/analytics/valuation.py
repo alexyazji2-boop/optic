@@ -214,11 +214,11 @@ def revenue_and_multiple(financials: Dict[str, Any],
         "years_with_pe": len(with_pe),
         "method": (
             "Revenue is the company's own reported annual figure. The multiple is "
-            "the trailing P/E for that fiscal year. Its diluted EPS against the "
-            "average closing price across the year, not the year-end close, so one "
-            "volatile December cannot define the whole year. Only {} fiscal years "
-            "are available: free fundamentals stop there, and four points can show "
-            "a direction but cannot establish a range the way a ten-year series "
-            "would.".format(len(rows))
+            "the trailing P/E for that fiscal year: the year's average closing price "
+            "over its diluted EPS, rather than the year-end close, so one volatile "
+            "December cannot define the whole year. Only {n} fiscal years are "
+            "available: free fundamentals stop there, and {n} points can show a "
+            "direction but cannot establish a range the way a ten-year series "
+            "would.".format(n=len(rows))
         ),
     }

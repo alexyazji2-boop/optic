@@ -1,0 +1,6 @@
+# Findings the editorial gate accepts, each with its reason. One per line: file | rule | words the text contains  # why
+# A new line here needs a reason a reviewer would accept; "it was already there" is not one.
+
+app/feeds.py | X7 | the blog closed  # REJECTED_SOURCES: the feed probe's notes for maintainers, never served (grep: no reader of it)
+app/feeds.py | X7 | none of them carry a date  # REJECTED_SOURCES, as above
+app/feeds.py | X7 | the closest miss  # REJECTED_SOURCES, as above

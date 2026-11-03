@@ -70,7 +70,8 @@ export function cashFlowLine(ocf, capex, fcf, labels, usd = moneyIn('USD')) {
   const ch = pctChange(f, (fcf || [])[1]);
   const how = bridges(o, c, f) ? `: ${usd(o)} from operations less ${usd(Math.abs(c))} of capital spending` : isFig(o) && isFig(c) ? `. Operating cash flow less capital spending gives ${usd(o + c)}, which is not the statement's figure, so no bridge is drawn` : '';
   const vs = ch === null ? '' : flat(ch) ? `, unchanged from ${labels[1]}` : `, ${ch > 0 ? 'up' : 'down'} ${num(Math.abs(ch), 1)}% from ${usd(fcf[1])} in ${labels[1]}`;
-  return `Free cash flow was ${usd(f)} in ${labels[0]}${how}${vs}.`;
+  // the change first, so "down 9.2%" reads as free cash flow's and not as capital spending's (Phase 12 editorial pass)
+  return how && vs ? `Free cash flow was ${usd(f)} in ${labels[0]}${vs}${how.replace(/^: /, '. That is ')}.` : `Free cash flow was ${usd(f)} in ${labels[0]}${how}${vs}.`;
 }
 
 /** Cash less debt, and whether it matches the net figure reported beside them. */
@@ -85,7 +86,9 @@ export function netCashLine(cash, debt, labels, usd = moneyIn('USD')) {
   const first = (debt || []).length - 1;
   const trend = first > 0 && isFig(debt[first]) && isFig(d) && pctChange(d, debt[first]) !== null && !flat(pctChange(d, debt[first]))
     ? ` Debt ${moved(pctChange(d, debt[first]))} from ${usd(debt[first])} at the end of ${labels[first]}.` : '';
-  return `${n.net < 0 ? 'Net debt' : 'Net cash'} of ${usd(Math.abs(n.net))} at the end of ${labels[0]}: ${usd(c)} of cash and equivalents against ${usd(d)} of debt.${trend}`;
+  // "counting cash and equivalents only": the Financials tile's net debt counts short-term investments too, so the
+  // two figures differ and the sentence says which this is (Phase 12 editorial pass)
+  return `Counting cash and equivalents only, ${n.net < 0 ? 'net debt' : 'net cash'} was ${usd(Math.abs(n.net))} at the end of ${labels[0]}: ${usd(c)} of cash and equivalents against ${usd(d)} of debt.${trend}`;
 }
 
 /** EPS and the share count beside it, each with its own change and no claim that one caused the other. */

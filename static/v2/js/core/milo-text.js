@@ -46,10 +46,19 @@ export function sourceHref(view, symbol) {
   return PLAIN_VIEWS[view] || null;
 }
 
+/** The host a link goes to, or null when its address hides it: `https://www.sec.gov:x@evil.example/` opens
+ *  evil.example, and the old host note read "(sec.gov)" (Phase 12 red team, MRT-02). Userinfo, a backslash or a
+ *  space in the address, or a host that is not plain letters, digits, dots and hyphens, is refused. */
+export function linkTarget(url) {
+  const m = /^https?:\/\/([^/?#]*)/i.exec(String(url || '')); if (!m) return null;
+  const auth = m[1];
+  if (!auth || /[@\\\s]/.test(auth)) return null;
+  const host = auth.replace(/:\d{1,5}$/, '').toLowerCase();
+  return /^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$/.test(host) && host.includes('.') ? host.replace(/^www\./, '') : null;
+}
 /** " (host)" after a link whose text does not already name its host; the text is escaped already. */
 export function linkHost(label, url) {
-  const m = /^https?:\/\/([^/?#:]+)/i.exec(url); if (!m) return '';
-  const host = m[1].toLowerCase().replace(/^www\./, '');
+  const host = linkTarget(url); if (!host) return '';
   return String(label).toLowerCase().includes(host) ? '' : ` <span class="milo-host">(${host})</span>`;
 }
 
@@ -65,7 +74,8 @@ export function mdLite(text) {
   // numbered steps keep their numbers (2026-10-20: the redesign renders lists, tables and code as written)
   out = out.replace(/^\s*(\d{1,2})[.)] (.*)$/gm, '<span class="milo-li milo-oli"><span class="milo-n">$1.</span> $2</span>');
   // the destination's host beside each link the model wrote, so a link a page or headline talked it into shows where it goes (SEC-05)
-  out = out.replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, (m, label, url) => `<a href="${url}" target="_blank" rel="noopener">${label}</a>${linkHost(label, url)}`);
+  // a link whose address hides where it goes stays as its words (MRT-02)
+  out = out.replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, (m, label, url) => (linkTarget(url) ? `<a href="${url}" target="_blank" rel="noopener">${label}</a>${linkHost(label, url)}` : label));
   // tables: lines that start and end with "|", the second a separator row ("|---|:---:|"); figures right-aligned
   out = out.replace(/(^|\n)((?:[ \t]*\|[^\n]*\|[ \t]*(?:\n|$)){2,})/g, (m, lead, block) => {
     const rows = block.trim().split('\n').map((l) => l.trim().replace(/^\||\|$/g, '').split('|').map((c) => c.trim()));

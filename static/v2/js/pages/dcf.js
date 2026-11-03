@@ -67,8 +67,11 @@ function when(iso) {
 }
 function day(iso) {
   if (!iso) return '';
-  const d = new Date(`${String(iso).slice(0, 10)}T12:00:00Z`);
-  return Number.isNaN(d.getTime()) ? String(iso) : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
+  // a timestamp is dated in New York, as the fold beside it is: 7:18 PM EST on Nov 2 read "Nov 3" from its UTC date
+  // (Phase 12 editorial pass); a bare date stays the date it names
+  const s = String(iso), timed = /T\d{2}:\d{2}/.test(s);
+  const d = new Date(timed ? s : `${s.slice(0, 10)}T12:00:00Z`);
+  return Number.isNaN(d.getTime()) ? s : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: timed ? 'America/New_York' : 'UTC' });
 }
 /** When the price is from: the quote's own trade time when the feed gives one, else only when it was fetched. */
 export const priceWhen = (m) => (m && m.market_time ? `last trade ${when(m.market_time)}` : m && m.as_of ? `quote fetched ${when(m.as_of)}` : 'time not given');
@@ -406,8 +409,7 @@ const formulas = () => html`<ul class="plain dcf-formulas">
   <li><b>WACC</b> = E/V × (risk-free + β × ERP) + D/V × cost of debt × (1 − t).</li>
   <li><b>Gap to value</b> = value ÷ price − 1. <b>Price below value</b> (a margin of safety) = 1 − price ÷ value. Both follow from the assumptions above; neither is a forecast.</li>
   <li><b>Residual income</b>: value = book + Σ (ROE − cost of equity) × opening book, discounted; justified P/B = (ROE − g) ÷ (cost of equity − g).</li>
-  <li><b>Dividend discount</b>: two stages, dividends discounted at the cost of equity, a growing perpetuity after five years.</li>
-  <li>Full notes: app/valuation/METHODS.md in the source.</li></ul>`;
+  <li><b>Dividend discount</b>: two stages, dividends discounted at the cost of equity, a growing perpetuity after five years.</li></ul>`;
 /** Classic's questions, as quiet buttons that draft into Milo; nothing is sent. */
 function asks(d) {
   const n = d.ticker, ok = (d.dcf || {}).available, ri = d.residual_income;

@@ -167,7 +167,9 @@ export function factors(t, { lt = null, stars = null, price = null, fund = false
   if (eh.available && eh.sample_size >= 4 && eh.beat_count > eh.sample_size / 2) pos.push({ text: `Beat analysts' earnings estimates in ${eh.beat_count} of the last ${eh.sample_size} quarters`, view: 'earnings' });
   if (fin(bs.net_cash) && bs.net_cash > 0) pos.push({ text: `Holds more cash than debt (${usdCompact(bs.net_cash)} net cash)`, view: 'financials' });
   if (ow.available && ow.insider_signal === 'buying') pos.push({ text: 'Company insiders bought more shares than they sold over six months', view: 'financials' });
-  if (st && st.stars >= 4) pos.push({ text: `Optic star rating ${st.stars} of 5: ${String(st.word || '').toLowerCase()}`, view: 'long' });
+  // "Optic's star rating is 4 of 5 (...)", a sentence: "Optic star rating 4 of 5: ..." read as a label, and after Simple's
+  // "A risk to weigh:" it gave two colons in one line (Phase 12 editorial pass, 2026-11-02)
+  if (st && st.stars >= 4) pos.push({ text: `Optic's star rating is ${st.stars} of 5 (${String(st.word || '').toLowerCase()})`, view: 'long' });
   if (price && price.yr >= 5) pos.push({ text: `Share price up ${num(price.yr, 0)}% over the period shown`, view: 'chart' });
   if (sc.available && /outperform|leading|ahead/i.test(String(sc.rs_vs_sector_label || ''))) pos.push({ text: `Ahead of its sector over the last ${num(sc.window_sessions || 21, 0)} sessions` });
 
@@ -181,7 +183,9 @@ export function factors(t, { lt = null, stars = null, price = null, fund = false
   if (fn.available && fin(gr.revenue_yoy_pct) && gr.revenue_yoy_pct <= -1) neg.push({ text: `Revenue fell ${num(Math.abs(gr.revenue_yoy_pct), 1)}% in the latest fiscal year`, why: 'Falling sales make it harder to grow profit.', view: 'financials' });
   if (fn.available && fin(gr.net_income_yoy_pct) && gr.net_income_yoy_pct <= -1) neg.push({ text: `Net income fell ${num(Math.abs(gr.net_income_yoy_pct), 1)}% in the latest fiscal year`, why: 'One-off gains and charges move profit more than sales, so check the statements before reading much into it.', view: 'financials' });
   if (fin(bs.net_cash) && bs.net_cash < 0 && fin(net) && net < 0) neg.push({ text: `Owes ${usdCompact(-bs.net_cash)} more than it holds in cash while losing money`, why: 'Debt has to be paid or refinanced whether or not the business recovers.', view: 'financials' });
-  if (st && st.stars <= 2) neg.push({ text: `Optic star rating ${st.stars} of 5: ${String(st.word || '').toLowerCase()}`, why: "Optic's fair-value model places the price above the range it treats as usual for this company. A model estimate, not a verdict.", view: 'long' });
+  // the reason says what the rating compares; it used to repeat the rating's own words ("above its usual valuation
+  // range ... places the price above the range it treats as usual")
+  if (st && st.stars <= 2) neg.push({ text: `Optic's star rating is ${st.stars} of 5 (${String(st.word || '').toLowerCase()})`, why: "The rating compares the price with the range Optic's fair-value model treats as usual for this company. A model estimate, not a verdict.", view: 'long' });
   if (si.available && si.squeeze_potential && !/^low/i.test(String(si.squeeze_potential)) && fin(si.percent_of_float)) neg.push({ text: `${num(si.percent_of_float * 100, 1)}% of the tradable shares are sold short`, why: 'Many investors are betting the price will fall, and short sellers buying back can also cause sudden rises.', view: 'financials' });
   if (sc.available && /lag/i.test(String(sc.rs_vs_sector_label || ''))) neg.push({ text: `Has lagged its sector over the last ${num(sc.window_sessions || 21, 0)} sessions`, why: sc.conflict || 'Peers in the same industry have done better over the same weeks.' });
   if (g(t, 'gex', 'regime', 'state') === 'negative') neg.push({ text: 'Options positioning may amplify price swings', why: "Under Optic's model of how options dealers hedge, their trading could add to moves in either direction. An assumption, not reported positions.", view: 'swing' });

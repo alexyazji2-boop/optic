@@ -112,7 +112,9 @@ def test_the_chat_hook_adds_the_assessment(monkeypatch):
     hist = [{"role": "user", "content": "Is there a swing setup here?"}]
     ctx = {"ticker": "NVDA", "focus": {"ticker": "NVDA"}, "vol_surface": {"event": {"available": True, "move_pct": 4}}}
     out = asyncio.run(m._with_framework(hist, ctx))
-    assert calls == {"ticker": "NVDA", "mode": "swing", "vol_event": {"available": True, "move_pct": 4}}
+    # the page's vol_surface.event is the browser's word, so it no longer reaches the read every reader shares, or the
+    # saved forecast (Phase 12 red team, MRT-01); the read is built as /api/framework/{t} builds it
+    assert calls == {"ticker": "NVDA", "mode": "swing", "vol_event": None}
     fw = out["framework"]
     assert fw["routing"]["mode"] == "swing" and fw["swing"]["grade"] == "B"
     assert json.dumps(fw)                                   # serialisable for CONTEXT

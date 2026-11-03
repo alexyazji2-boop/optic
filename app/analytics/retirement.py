@@ -741,9 +741,10 @@ def _overlap(holdings: Dict[str, float], provider) -> Dict[str, Any]:
 
 REBALANCE_WITHHELD = (
     "Optic does not say where to put your contribution or what to sell: that is a personal allocation "
-    "decision, and this page is an example to compare against, not a plan for you. The comparison above "
-    "shows how your holdings differ from the example's weights."
+    "decision, and this page is an example to compare against, not a plan for you."
 )
+# said only when the reader entered holdings: with none, there is no comparison above (Phase 12 editorial pass)
+HOLDINGS_COMPARED = " The comparison above shows how your holdings differ from the example's weights."
 
 
 def _without_sizing(sleeve: Dict[str, Any]) -> Dict[str, Any]:
@@ -890,7 +891,7 @@ def _roth_notes(alloc: Dict[str, Any], risk: str, years: int) -> List[Dict[str, 
                     "falls. That removes one argument for holding highly volatile single names here.",
         },
         {
-            "title": "Keep it to a handful of funds",
+            "title": "A few broad funds already diversify",
             "body": "The annual contribution limit is small. Splitting it across eight funds adds "
                     "rebalancing work without adding much real diversification. Two or three broad "
                     "funds already hold thousands of companies.",
@@ -991,7 +992,7 @@ def analyse(provider, years: int = 30, risk: str = "balanced",
     # Where to put the reader's own contribution, by fund and amount, is a personal allocation and is not
     # given (advice policy, 2026-10-29). _rebalance_with_new_money is kept, and tested, so the owner can bring
     # it back after counsel has reviewed it (docs/post-demo-ultra/COMPLIANCE_REVIEW.md).
-    rebalance = {"available": False, "withheld": True, "note": REBALANCE_WITHHELD}
+    rebalance = {"available": False, "withheld": True, "note": REBALANCE_WITHHELD + (HOLDINGS_COMPARED if holdings else "")}
     overlap = _overlap(holdings, provider) if holdings else {"available": False}
 
     return {

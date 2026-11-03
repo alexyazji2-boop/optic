@@ -40,7 +40,8 @@ export async function load(sym) {
 }
 
 export function work(start, c, shared) {
-  const missing = FIELDS.filter(([k]) => !isNum(c[k])).map(([, l]) => l.toLowerCase());
+  // the label's first letter lowered for the sentence, never an acronym's ("exit P/E", not "exit p/e")
+  const missing = FIELDS.filter(([k]) => !isNum(c[k])).map(([, l]) => l.replace(/^([A-Z])(?=[a-z])/, (x) => x.toLowerCase()));
   if (!shared.years) missing.push('years ahead');
   if (!(start.revenue > 0)) missing.push('a revenue figure');
   if (missing.length) return { ok: false, missing };
@@ -102,7 +103,7 @@ export const startOf = (inputs, body) => {
 };
 export function caseOut(start, c, shared) {
   const r = work(start, c || {}, shared);
-  return !r.ok ? html`<p class="t-muted">Needs ${r.missing.join(', ')}.</p>` : r.loss ? html`<p>A loss in year ${shared.years}: no earnings multiple to apply.</p>`
+  return !r.ok ? html`<p class="t-muted">Fill in ${r.missing.join(', ').replace(/, ([^,]*)$/, ' and $1')} to see this case.</p>` : r.loss ? html`<p>A loss in year ${shared.years}: no earnings multiple to apply.</p>`
     : html`<dl class="kv" style="--kv:2"><div><dt>EPS in year ${shared.years}</dt><dd>${num(r.eps)}</dd></div><div><dt>Price then</dt><dd>${money(r.price)}</dd></div><div><dt>Value today</dt><dd>${money(r.today)}</dd></div><div><dt>Against today's price</dt><dd class="${dir(r.vs)}">${signed(r.vs, 0)}</dd></div></dl><p class="asof">Price-only rate ${signed(r.cagr, 1)} a year; dividends are not in it.</p>`;
 }
 

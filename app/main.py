@@ -6910,11 +6910,11 @@ async def scanner_groups() -> Dict[str, Any]:
         scans=[{"id": d["id"], "name": d["name"], "looks_for": d["looks_for"]}
                for d in relperf_mod.SCAN_DEFS],
     )],
+                # "700-name scale" sat beside a Scan page counting 2,983 symbols (Phase 12 editorial pass)
                 "note": ("Grouped by the question each scan asks. Premarket movers, "
-                         "short-squeeze watch and quality screens are deliberately "
-                         "absent: they need premarket quotes, short interest and "
-                         "fundamentals across the whole universe, none of which this "
-                         "terminal has at 700-name scale.")}
+                         "short-squeeze watch and quality screens are not offered: "
+                         "Optic has no premarket quotes, short interest or fundamentals "
+                         "for every name it screens.")}
     return await _run(build)
 
 
@@ -7487,12 +7487,15 @@ async def _with_framework(history: List[Dict[str, Any]], context: Optional[Dict[
     svc_mode = mode
     if mode in ("pre_earnings", "post_earnings") and routing.get("source") == "timing" and not (nxt or prev):
         svc_mode = "earnings"        # the service reads the calendar itself
-    vs = ctx.get("vol_surface") if isinstance(ctx.get("vol_surface"), dict) else {}
-    vol_event = vs.get("event") if str(ctx.get("ticker") or "").upper() == ticker else None
+    # No `vol_event` from the page (Phase 12 red team, MRT-01): the browser's `vol_surface.event` went into the read
+    # that is cached for every reader for ten minutes and into the forecast record that is never edited, so one
+    # reader's forged "priced move" became Optic's figure for everyone and decided how that forecast was scored. The
+    # read is built as `/api/framework/{t}` builds it; the page's own vol surface still reaches Milo in CONTEXT, as
+    # the page's figure.
     try:
         out = await asyncio.wait_for(
             _run(research_service.build, PROVIDER, YF_PROVIDER, ticker, svc_mode, rate=_rate(),
-                 vol_event=vol_event, budget=FRAMEWORK_CHAT_SECONDS - 2.0),
+                 budget=FRAMEWORK_CHAT_SECONDS - 2.0),
             timeout=FRAMEWORK_CHAT_SECONDS)
     except Exception as exc:                                    # noqa: BLE001 - includes the timeout
         logging.getLogger("uvicorn.error").warning("milo framework skipped: %s", exc)
@@ -8349,9 +8352,11 @@ def _milo_toolbox(request: Request, context: Optional[Dict[str, Any]] = None,
         # pages (post-demo Phase 08, from the milo-upgrade branch's 795a766)
         **milo_data.runners(PROVIDER, YF_PROVIDER),
     }
+    # a turn that is not a dict is skipped, as `_personal_blocks_for` skips it (BUG-189): here it raised after the
+    # question was charged and the stream ended with neither an error nor an answer (Phase 12 red team, MRT-08)
     if focus.get("scope") in ("none", "market") or not (
             focus.get("view") == "brokerage" or any(_asks_about_own_portfolio(t) for t in (history or [])
-                                                    if t.get("role") != "assistant")):
+                                                    if isinstance(t, dict) and t.get("role") != "assistant")):
         runners.pop("get_my_portfolio")
     return milo_tools.Toolbox(runners=runners)
 
@@ -8385,11 +8390,17 @@ def _asks_about_own_portfolio(turn: Optional[Dict[str, Any]]) -> bool:
 # accounts, so a browser-sent copy (stale or forged) is dropped before anything
 # reads the context.
 _LINKED_KEYS = ("brokerage_portfolio", "brokerage_linked")
+# The other keys only the server writes (Phase 12 red team, MRT-05). Milo is told each is Optic's own retrieval
+# ("Loaded for your question", "Sources Milo read", the screener's list, the daily brief), and the panel lists them
+# as such, so a browser copy let a page present forged figures as Optic's. No v2 or Classic page sends one
+# (checked 2026-11-02); `framework` and `track_record` are page data and stay.
+_SERVER_KEYS = _LINKED_KEYS + ("auto_loaded", "auto_load_skipped", "question_named", "research", "chart_levels",
+                               "screen_candidates", "market", "portfolio_summary")
 
 
 def _without_linked_keys(context: Any) -> Any:
-    if isinstance(context, dict) and any(k in context for k in _LINKED_KEYS):
-        return {k: v for k, v in context.items() if k not in _LINKED_KEYS}
+    if isinstance(context, dict) and any(k in context for k in _SERVER_KEYS):
+        return {k: v for k, v in context.items() if k not in _SERVER_KEYS}
     return context
 
 
@@ -8486,10 +8497,15 @@ async def chat(request: Request,
             logging.getLogger("uvicorn.error").warning("chat context failed: %s: %s", type(exc).__name__, exc)
             yield ai._sse("error", {"message": "Milo could not gather the figures for this question. Send it again in a moment."})
             return
+        box = _milo_toolbox(request, ctx, history)
+        # The account ids the Brokerage page scoped the question to are a filter the server has applied, by the
+        # reader's own accounts, to the block and the tool; the model needs neither the ids nor the list (Phase 12,
+        # MRT-09: sensitive-field minimisation). They were sent to the model provider with every Brokerage question.
+        if isinstance(ctx, dict) and "brokerage_scope" in ctx:
+            ctx = {k: v for k, v in ctx.items() if k != "brokerage_scope"}
         async for chunk in ai.stream_chat(history, context=ctx, use_web=use_web,
                                           attachments=attachments, persona=persona, mode=mode,
-                                          horizon=horizon, toolbox=_milo_toolbox(request, ctx, history),
-                                          started=started):
+                                          horizon=horizon, toolbox=box, started=started):
             yield chunk
 
     return StreamingResponse(
@@ -8598,8 +8614,11 @@ async def research(request: Request,
     _count_question(request, "research")
     ticker = (payload.get("ticker") or "").upper()
     question = payload.get("question")
-    # Research is about a company or the market, never the reader's accounts.
-    context = _without_linked_keys(payload.get("context"))
+    # Research is about a company or the market, never the reader's accounts. The reader's own blocks (a paper book,
+    # a journal, a retirement plan) go only with a question about them, as in chat (BUG-071); deep research sent them
+    # with every question, to the model and its web searches (Phase 12 red team, MRT-04).
+    context, _ = _personal_blocks_for([{"role": "user", "content": str(question or "")}],
+                                      _without_linked_keys(payload.get("context")))
     if not ticker and not question:
         raise HTTPException(status_code=400, detail="Provide a ticker or a question.")
     # the reader's knowledge level, as chat takes it (Phase 05)

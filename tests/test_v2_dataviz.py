@@ -64,7 +64,7 @@ def test_a_cash_flow_bridge_only_when_the_figures_reconcile(tmp_path):
         noBridge: F.cashFlowLine([111482e6], [-12715e6], [90000e6, 80000e6], ['FY25', 'FY24']) }));
     """)
     assert got["ok"] is True and got["off"] is False and got["gap"] is False
-    assert got["line"] == "Free cash flow was $98.8B in FY25: $111.5B from operations less $12.7B of capital spending, down 9.2% from $108.8B in FY24."
+    assert got["line"] == "Free cash flow was $98.8B in FY25, down 9.2% from $108.8B in FY24. That is $111.5B from operations less $12.7B of capital spending."
     assert "which is not the statement's figure, so no bridge is drawn" in got["noBridge"]
 
 
@@ -73,7 +73,7 @@ def test_net_cash_reconciles_with_its_parts(tmp_path):
       print(JSON.stringify({ n: F.netCash(35934e6, 98657e6, -62723e6), bad: F.netCash(10e9, 5e9, 9e9), line: F.netCashLine([35934e6, 23646e6], [98657e6, 132480e6], ['FY25', 'FY22']) }));
     """)
     assert abs(got["n"]["net"] + 62723e6) < 1 and got["n"]["matches"] is True and got["bad"]["matches"] is False
-    assert got["line"] == "Net debt of $62.7B at the end of FY25: $35.9B of cash and equivalents against $98.7B of debt. Debt fell from $132.5B at the end of FY22."
+    assert got["line"] == "Counting cash and equivalents only, net debt was $62.7B at the end of FY25: $35.9B of cash and equivalents against $98.7B of debt. Debt fell from $132.5B at the end of FY22."
 
 
 def test_a_total_line_among_its_parts_is_left_out_not_counted_twice(tmp_path):

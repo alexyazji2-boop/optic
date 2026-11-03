@@ -108,11 +108,12 @@ def method(th: Optional[Dict[str, float]] = None) -> Dict[str, Any]:
     th = {**DEFAULTS, **(th or {})}
     return {
         "thresholds": th,
-        "text": ("Tight: a two-sided quote with a spread of at most {tight_spread_pct:.0f}% of the mid "
+        # the grades by the names the table shows (LABELS): it read "Tight" and "Wide" beside "Liquid" and "Thin"
+        "text": ("Liquid: a two-sided quote with a spread of at most {tight_spread_pct:.0f}% of the mid "
                  "(or ${tight_spread_abs:.2f}), open interest of {good_oi:,.0f} or more and trades this "
-                 "session. Fair: up to {fair_spread_pct:.0f}%, or thinner open interest. Wide: up to "
-                 "{wide_spread_pct:.0f}%. No usable quote: one side missing, locked, crossed, or wider "
-                 "than {wide_spread_pct:.0f}%.").format(**th),
+                 "session. Fair: up to {fair_spread_pct:.0f}%, or thinner open interest. Thin: up to "
+                 "{wide_spread_pct:.0f}%. Too wide to trade: wider than {wide_spread_pct:.0f}%. No usable "
+                 "quote: one side missing, locked or crossed.").format(**th),
         "cannot_see": ["quote size (how many contracts are bid or offered)",
                        "the quote's own timestamp",
                        "the complex order book, where a spread order can fill inside its legs"],
