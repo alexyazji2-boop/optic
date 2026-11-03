@@ -121,7 +121,9 @@ def test_the_live_answer_appends_what_is_finished_and_draws_only_the_arriving_pa
     live = MILO[MILO.index("function paintLive() {"):MILO.index("/* ---------------- figures inside answers")]
     assert "settled.insertAdjacentHTML('beforeend', renderAnswer(text.slice(L.cut, end), L.symbol, L.seen).html);" in live
     assert "if (tail.v2Html !== th) { tail.innerHTML = th; tail.v2Html = th; }" in live, "the arriving paragraph only when it changed"
-    assert "if (lines.dataset.html !== lh)" in live and "if (L.formState !== fs)" in live, "the activity lines and the form only when they change"
+    # the activity above them is patched in place instead (ui/milo-activity.js, 2026-11-03); its own checks are in
+    # tests/test_milo_activity.py. What is left under it still goes in whole, and only when it changed.
+    assert "if (rest.dataset.html !== lh)" in live and "if (L.formState !== fs)" in live, "the rest of the lines and the form only when they change"
     assert "settled.replaceWith(...settled.childNodes);" in live, "the finished paragraphs stay, with any chart in them"
     assert "renderAnswer(body.slice(live.cut), live.symbol, live.seen || {})" in live, "the two-a-piece limit counts the whole answer"
     assert ".milo-bubble .milo-settled p:last-child { margin-bottom: 10px; }" in CSS, "no gap closing and opening as a paragraph finishes"
@@ -134,7 +136,7 @@ def test_the_view_follows_only_a_reader_following_the_end():
     assert "else if (d < 60) S.follow = true;" in note, "back at the end follows again"
     assert "if (log && S.follow) log.scrollTop = log.scrollHeight;" in MILO, "the live answer follows only then"
     assert "if (S.toEnd || (stick && S.follow)) log.scrollTop = log.scrollHeight;" in MILO
-    assert "if (paintFinished(ai, liveWas)) { if (S.follow) lg.scrollTop = lg.scrollHeight;" in MILO
+    assert "if (paintFinished(ai, liveWas, " in MILO and ")) { if (S.follow) lg.scrollTop = lg.scrollHeight;" in MILO
     assert "if (l && l.scrollTop > 0) S.follow = false;" in MILO, "a wheel turned up stops it before the view moves"
     assert MILO.count("keepEnd();") >= 3, "a chart or a figure drawn later keeps a following reader at the end"
     assert "new ResizeObserver(() => keepEnd())" in MILO and "if (sizeOff) { sizeOff(); sizeOff = null; }" in MILO, "and so does the log getting shorter"

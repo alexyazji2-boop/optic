@@ -633,6 +633,90 @@ ul.plain { margin: 0; padding-left: 18px; } ul.plain li { margin-bottom: 7px; }
 .tabs { position: relative; }
 /* the question just sent: one short entrance (ui/milo.js marks it for a single paint) */
 .milo-sofar { margin: 6px 0 0; font-size: var(--t-sm); color: var(--c-ink-3); }
+
+/* ---------------- Milo's activity: what he is doing, him doing it (js/ui/milo-activity.js) ----------------
+   Two sizes of one thing. The card while the reader waits with nothing to read; the line, with his bust, once
+   words are arriving, so he shrinks rather than disappears. The figure is the rendered mascot (static/scout);
+   the props beside him are Optic's own line drawing, in the brand gold, never a second drawing of him.
+   Every motion below is a named animation, so Reduce motion stops the lot in the one block at the end. */
+.milo-doing { display: flex; align-items: center; gap: 10px; margin: 8px 0 0; }
+.milo-doing-fig { position: relative; display: block; flex: none; }
+.milo-doing .scout-compact { width: 34px; }
+.milo-doing-say { display: flex; flex-direction: column; min-width: 0; }
+.milo-doing-say > b { font: 600 var(--t-md)/1.25 var(--f-sans); color: var(--c-ink); }
+.milo-doing-line { font-size: var(--t-sm); line-height: 1.35; color: var(--c-ink-3); }
+.milo-doing-got { margin: 4px 0 0; padding: 0; list-style: none; display: grid; gap: 2px; }
+.milo-doing-got li { position: relative; padding-left: 15px; font-size: var(--t-sm); color: var(--c-ink-3); }
+.milo-doing-got li::before { content: ""; position: absolute; left: 0; top: .45em; width: 9px; height: 5px;
+  border-left: 1.6px solid var(--c-gold); border-bottom: 1.6px solid var(--c-gold); transform: rotate(-45deg);
+  animation: milo-doing-tick 240ms ease-out both; }
+.milo-doing-got li:nth-child(2)::before { animation-delay: 90ms; }
+.milo-doing-got li:nth-child(3)::before { animation-delay: 180ms; }
+@keyframes milo-doing-tick { from { opacity: 0; transform: rotate(-45deg) scale(.4); } to { opacity: 1; transform: rotate(-45deg) scale(1); } }
+.milo-doing-dots { display: inline-flex; gap: 4px; margin-top: 5px; }
+.milo-doing-dots i { width: 4px; height: 4px; border-radius: 50%; background: var(--c-gold); opacity: .22;
+  animation: milo-doing-dot 1.3s ease-in-out infinite; }
+.milo-doing-dots i:nth-child(2) { animation-delay: .17s; }
+.milo-doing-dots i:nth-child(3) { animation-delay: .34s; }
+@keyframes milo-doing-dot { 0%, 72%, 100% { opacity: .22; } 34% { opacity: 1; } }
+/* The answer landed: the dots have nothing left to wait for. */
+.milo-doing[data-doing="complete"] .milo-doing-dots { display: none; }
+
+/* The card. Its own surface inside the bubble, so the figure has somewhere to stand. */
+.milo-doing.is-expanded { gap: 14px; padding: 14px 16px; border: 1px solid var(--c-line); border-radius: var(--r-lg);
+  background: var(--c-plane-2); animation: milo-doing-in 260ms var(--ease-out, cubic-bezier(.2, .8, .3, 1)) both; }
+.milo-doing.is-expanded .scout-full { width: 78px; }
+.milo-doing.is-expanded .milo-doing-say > b { font-size: var(--t-lg); }
+@keyframes milo-doing-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+/* The props. One SVG each, drawn at the figure's shoulder in the card and left out of the line, where the
+   words have the room. */
+.milo-doing-prop { display: none; }
+.milo-doing.is-expanded .milo-doing-fig { width: 132px; }
+/* Each prop sits where the thing itself would be: the thought bubble over his head, the desk and the notebook
+   at his hands, the tablet in front of him. At 52px a laptop with its books read as one gold smudge (browser
+   check at 1440, 2026-11-03), so they are wider and each is drawn with fewer parts. */
+.milo-doing.is-expanded .milo-doing-prop { display: block; position: absolute; right: -2px; top: -6px; width: 56px; pointer-events: none; }
+.milo-doing.is-expanded .milo-doing-prop:has(.prop-desk), .milo-doing.is-expanded .milo-doing-prop:has(.prop-note) { top: auto; bottom: -2px; right: -6px; width: 72px; }
+.milo-doing.is-expanded .milo-doing-prop:has(.prop-tablet) { top: 14px; width: 62px; }
+.milo-doing-prop svg { display: block; width: 100%; height: auto; overflow: visible;
+  fill: none; stroke: var(--c-gold); stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.milo-doing-prop .screen { fill: var(--c-gold-wash); }
+.prop-bubble circle { fill: var(--c-gold); stroke: none; }
+.milo-doing-prop .draw { stroke-dasharray: 44; stroke-dashoffset: 44; animation: milo-doing-draw 2.2s ease-in-out infinite; }
+@keyframes milo-doing-draw { 0% { stroke-dashoffset: 44; } 55%, 100% { stroke-dashoffset: 0; } }
+.prop-bubble { animation: milo-doing-float 3.4s ease-in-out infinite; }
+@keyframes milo-doing-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-2px); } }
+.prop-desk .screen { animation: milo-doing-glow 2.6s ease-in-out infinite; }
+@keyframes milo-doing-glow { 0%, 100% { opacity: .55; } 50% { opacity: 1; } }
+.prop-desk .card { opacity: 0; animation: milo-doing-card 3s ease-in-out infinite; }
+.prop-desk .card-2 { animation-delay: 1.2s; }
+@keyframes milo-doing-card { 0%, 100% { opacity: 0; transform: translateY(2px); } 25%, 70% { opacity: .9; transform: none; } }
+.prop-tablet .ticks > * { opacity: 0; animation: milo-doing-show 3.2s ease-out infinite; }
+.prop-tablet .ticks > :nth-child(2), .prop-tablet .ticks > :nth-child(5) { animation-delay: .5s; }
+.prop-tablet .ticks > :nth-child(3), .prop-tablet .ticks > :nth-child(6) { animation-delay: 1s; }
+@keyframes milo-doing-show { 0%, 8% { opacity: 0; } 22%, 86% { opacity: 1; } 100% { opacity: 0; } }
+.prop-note .lines path { stroke-dasharray: 10; stroke-dashoffset: 10; animation: milo-doing-line 2.6s ease-in-out infinite; }
+.prop-note .l2 { animation-delay: .35s; } .prop-note .l3 { animation-delay: .7s; }
+@keyframes milo-doing-line { 0%, 6% { stroke-dashoffset: 10; } 40%, 92% { stroke-dashoffset: 0; } 100% { stroke-dashoffset: 10; } }
+.prop-note .pencil { animation: milo-doing-pencil 1.1s ease-in-out infinite; }
+@keyframes milo-doing-pencil { 0%, 100% { transform: translate(0, 0); } 50% { transform: translate(-1.5px, 1px); } }
+.prop-done path { fill: var(--c-gold); stroke: none; opacity: 0; animation: milo-doing-spark 900ms ease-out forwards; }
+.prop-done .s2 { animation-delay: 130ms; } .prop-done .s3 { animation-delay: 260ms; }
+@keyframes milo-doing-spark { 0% { opacity: 0; transform: scale(.4); } 45% { opacity: 1; transform: scale(1.1); } 100% { opacity: .9; transform: scale(1); } }
+
+/* One place for Reduce motion: the props hold their finished shape and nothing repeats. The states still change,
+   because they are what Milo is doing, not decoration. */
+@media (prefers-reduced-motion: reduce) {
+  .milo-doing, .milo-doing *, .milo-doing-prop svg * { animation: none !important; transform: none !important; }
+  .milo-doing-prop .draw, .prop-note .lines path { stroke-dashoffset: 0; }
+  .milo-doing-prop .card, .prop-tablet .ticks > *, .prop-done path { opacity: 1; }
+  .milo-doing-dots i { opacity: .5; }
+}
+:root[data-motion="reduce"] .milo-doing, :root[data-motion="reduce"] .milo-doing *, :root[data-motion="reduce"] .milo-doing-prop svg * { animation: none !important; transform: none !important; }
+:root[data-motion="reduce"] .milo-doing-prop .draw, :root[data-motion="reduce"] .prop-note .lines path { stroke-dashoffset: 0; }
+:root[data-motion="reduce"] .milo-doing-prop .card, :root[data-motion="reduce"] .prop-tablet .ticks > *, :root[data-motion="reduce"] .prop-done path { opacity: 1; }
+:root[data-motion="reduce"] .milo-doing-dots i { opacity: .5; }
 .milo-you.is-new { animation: milo-sent var(--m-content) var(--ease-out); }
 @keyframes milo-sent { from { opacity: 0; transform: translateY(4px); } }
 .tab-ink { position: absolute; bottom: -1px; height: 2px; background: var(--c-gold); transform-origin: left center; pointer-events: none; }

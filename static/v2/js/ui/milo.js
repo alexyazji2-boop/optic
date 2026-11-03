@@ -31,6 +31,7 @@ import { CLASSIC } from '../core/classic.js';
 import { miloNotice } from '../core/legal.js';
 import { icon } from './icons.js';
 import { levelSlider } from './levelslider.js';
+import { begin as actBegin, on as actOn, activityHTML, syncActivity } from './milo-activity.js';
 
 const HISTORY_KEY = 'optic.pulse.history.v1', PERSONA_KEY = 'optic.pulse.persona.v1', HORIZON_KEY = 'optic.milo.horizon.v1', RESEARCH_KEY = 'optic.research.v1';
 const MAX_CONVERSATIONS = 30, MAX_MESSAGES = 60, MAX_CHARS = 12000, MAX_Q = 4000;
@@ -808,9 +809,33 @@ const draw = (el, tpl) => { if (el) render(el, tpl); };
 // the whole answer gives, so the answer reads the same while it arrives, when it ends and when it is drawn again from
 // history. The arriving paragraph is drawn as markdown too (streamingHTML). At most one paint a frame, however many
 // events arrived in it.
-function liveLinesHTML(L) {
+// The card is for the wait before any text: it has room for the figure and it is the only thing in the bubble.
+// Once words are arriving they take the space back and he goes to the inline line beside them (the owner's
+// reference sheet, and its note: he shrinks rather than disappears). Measured on the panel, not on the bubble,
+// which is the panel less its padding and the answer's own indent (403px inside a 444px panel, measured
+// 2026-11-03) and would have put the threshold on a number with no meaning. A phone never gets the card: there
+// the panel is the whole screen and the answer has to come first.
+const CARD_MIN = 400;
+// How long "Answer ready" stays before the row goes. Long enough to read three words, short enough not to sit
+// under a finished answer: the follow-ups below it are already live while it shows.
+const DONE_MS = 1600;
+const expandedNow = (L, width) => !L.text && !isPhoneNow() && (width || 0) >= CARD_MIN;
+// What sits under the activity: the quiet notice, and the lookups so far where the card is not already listing
+// them. One string, as before; the activity above it is patched in place rather than redrawn (syncActivity).
+function liveLinesHTML(L, expanded) {
   const got = (L.got || []).filter((r) => r && r.ok !== false).map((r) => r.label || (r.symbols || []).join(', ')).filter(Boolean);
-  return `${L.status ? `<p class="milo-status" role="status">${esc(L.status)}…</p>` : ''}${L.quiet ? `<p class="milo-quiet" role="status">${esc(QUIET_TEXT)}</p>` : ''}${got.length ? `<p class="milo-sofar">Looked up so far: ${esc([...new Set(got)].join('; '))}. Every source is listed when the answer is complete.</p>` : ''}`;
+  return `${L.quiet ? `<p class="milo-quiet" role="status">${esc(QUIET_TEXT)}</p>` : ''}${got.length && !expanded ? `<p class="milo-sofar">Looked up so far: ${esc([...new Set(got)].join('; '))}. Every source is listed when the answer is complete.</p>` : ''}`;
+}
+/** The figure inside the activity, in its own slot: the header bust keeps the gestures the end of an answer plays
+ *  on it, and starting this one never stops that one. */
+function scoutInActivity(root) {
+  const O = OS(), box = root && root.querySelector('.milo-doing'); if (!O || !box) return;
+  const el = box.querySelector('.scout'); if (!el) return;
+  const c = O.attach(el, { slot: 'activity' }); if (!c) return;
+  // The answer landed: the small wave he already has, played once into the resting pose. It is the gesture
+  // the owner's sheet asks for in state 5, and it is his own frames, not a new drawing of him.
+  if (box.dataset.doing === 'complete') { c.set('idle', 'ack'); return; }
+  c.set(box.dataset.scout || 'thinking');
 }
 let liveFrame = null;
 function paintLive() {
@@ -833,8 +858,16 @@ function paintLive() {
     }
     const tail = $('.milo-tail', node), th = streamingHTML(text.slice(L.cut, followAt >= 0 ? Math.max(L.cut, followAt) : text.length), L.symbol);
     if (tail.v2Html !== th) { tail.innerHTML = th; tail.v2Html = th; }
-    const lines = $('.milo-live-lines', node), lh = liveLinesHTML(L);
-    if (lines.dataset.html !== lh) { lines.innerHTML = lh; lines.dataset.html = lh; }
+    const panel = S.panel && document.contains(S.panel) ? S.panel : h;
+    const lines = $('.milo-live-lines', node), expanded = expandedNow(L, panel.getBoundingClientRect().width);
+    let rest = $('.milo-live-rest', lines);
+    if (!rest) { lines.insertAdjacentHTML('beforeend', '<div class="milo-live-rest"></div>'); rest = $('.milo-live-rest', lines); }
+    syncActivity(lines, L.act, { expanded, stepWords: (raw) => stepWords(raw, L.symbol) });
+    // every paint, not only when it was rebuilt: the figure stays, and this is what moves him to the new pose.
+    // attach gives the figure already there, and set on the pose he is in is not news, so this costs nothing.
+    scoutInActivity(lines);
+    const lh = liveLinesHTML(L, expanded);
+    if (rest.dataset.html !== lh) { rest.innerHTML = lh; rest.dataset.html = lh; }
     const log = $('.milo-log', h); if (log && S.follow) log.scrollTop = log.scrollHeight;
     syncLatest();
     // the form changes twice in an answer (sending, then streaming), not every frame
@@ -845,7 +878,7 @@ function paintLive() {
  *  any chart in them), the last one is added, and only what sits around the text (follow-ups, sources, actions, the
  *  incomplete note) is drawn new. The rest of the conversation is not touched. False when it cannot be done in place
  *  (the text was amended, or the bubble is not the live one), and the caller draws the log instead. */
-function paintFinished(i, live) {
+function paintFinished(i, live, ok) {
   const h = host(); if (!h || !live || live.amended) return false;
   const el = $(`[data-v2-milo-i="${i}"]`, h), it = S.items.find((x) => x.kind === 'msg' && x.i === i);
   const old = el && $('.milo-bubble', el);
@@ -855,7 +888,18 @@ function paintFinished(i, live) {
   const settled = $('.milo-settled', old);
   if (body.length > live.cut) settled.insertAdjacentHTML('beforeend', renderAnswer(body.slice(live.cut), live.symbol, live.seen || {}).html);
   settled.replaceWith(...settled.childNodes);
-  ['.milo-tail', '.milo-live-lines'].forEach((q) => { const n = $(q, old); if (n) n.remove(); });
+  const tailNode = $('.milo-tail', old); if (tailNode) tailNode.remove();
+  // State 5 of the owner's sheet: the answer is complete, and he says so for a moment in the place he was already
+  // standing. Nothing waits on it: the answer, its sources, its follow-ups and its actions are drawn in this same
+  // frame, and the row he was in is removed a moment later, which is the one move it was going to make anyway.
+  const linesNode = $('.milo-live-lines', old);
+  if (linesNode && ok && live.act) {
+    const done = activityHTML({ ...live.act, state: 'complete', said: '' }, { expanded: false });
+    if (done) {
+      linesNode.innerHTML = done; delete linesNode.dataset.html; scoutInActivity(linesNode);
+      setTimeout(() => { if (linesNode.isConnected) linesNode.remove(); }, DONE_MS);
+    } else linesNode.remove();
+  } else if (linesNode) linesNode.remove();
   delete old.dataset.v2Live;
   const tmp = document.createElement('div'); render(tmp, msgHTML(it));
   const fresh = tmp.firstElementChild, nb = fresh && $('.milo-bubble', fresh);
@@ -930,7 +974,9 @@ export async function send(text, { deep = false } = {}) {
   const ai = S.conv.messages.length; // index the answer will take
   S.conv.messages.push({ role: 'assistant', content: '' }); S.items.push({ kind: 'msg', i: ai });
   meta.set(ai, { question: text, symbol: focusTicker || route.symbol || null, context, deep, web: !deep && !!S.web, level: prefs.knowledge() });
-  S.busy = true; S.live = { i: ai, text: '', status: MILO_STATES.submitted, symbol: focusTicker || route.symbol || null, lastAt: performance.now(), quiet: false };
+  S.busy = true; S.live = { i: ai, text: '', status: MILO_STATES.submitted, symbol: focusTicker || route.symbol || null, lastAt: performance.now(), quiet: false,
+    // what he is doing, from the server's own events (ui/milo-activity.js); the line above is still the words
+    act: actBegin(deep) };
   if (ta) { ta.value = ''; grow(ta); } S.draft = ''; S.showHistory = false; S.showSettings = false; S.toEnd = true; S.follow = true;
   paintChrome(); paintLog(); paintForm(); paintLive();
   scoutTo(ai, 'thinking', 'ack');
@@ -970,11 +1016,11 @@ export async function send(text, { deep = false } = {}) {
           c.split('\n').forEach((line) => { if (line.startsWith('event: ')) ev = line.slice(7).trim(); else if (line.startsWith('data: ')) data += line.slice(6); });
           if (!data) continue;
           let p; try { p = JSON.parse(data); } catch (e) { continue; }
-          if (ev === 'delta') { S.live.text += p.text || ''; S.live.status = ''; S.conv.messages[ai].content = S.live.text; paintLive(); if (SC.i === ai && SC.state !== 'streaming') scoutTo(ai, 'streaming'); }
-          else if (ev === 'status') { const w = stepWords(String(p.state || ''), S.live.symbol); S.live.status = w; paintLive(); if (SC.i === ai && SC.state !== 'streaming') scoutTo(ai, SEARCHING.has(String(p.state || '')) ? 'searching' : 'thinking'); }
+          if (ev === 'delta') { S.live.text += p.text || ''; S.live.status = ''; S.live.act = actOn(S.live.act, 'delta'); S.conv.messages[ai].content = S.live.text; paintLive(); if (SC.i === ai && SC.state !== 'streaming') scoutTo(ai, 'streaming'); }
+          else if (ev === 'status') { const w = stepWords(String(p.state || ''), S.live.symbol); S.live.status = w; S.live.act = actOn(S.live.act, 'status', p); paintLive(); if (SC.i === ai && SC.state !== 'streaming') scoutTo(ai, SEARCHING.has(String(p.state || '')) ? 'searching' : 'thinking'); }
           else if (ev === 'attachments') { const m = meta.get(ai); if (m && Array.isArray(p.problems)) m.notSent = [...(m.notSent || []), ...p.problems.map(String)].slice(0, 6); }   // files the model refused, and the reader's own blocks left out (BUG-071)
           else if (ev === 'assumed') { const hz = (((S.personas || {}).horizons || {}).horizons || []).find((x) => x.id === p.horizon); if (hz && p.horizon_source === 'question' && p.horizon !== horizon()) meta.get(ai).assumed = `Answered for a ${hz.label.toLowerCase()} timeframe, from your question. Your setting is unchanged.`; }
-          else if (ev === 'retrieved') { S.live.got = Array.isArray(p.items) ? p.items : []; paintLive(); }
+          else if (ev === 'retrieved') { S.live.got = Array.isArray(p.items) ? p.items : []; S.live.act = actOn(S.live.act, 'retrieved', p.items); paintLive(); }
           // the advice policy (app/ai_policy.py): the server's own line for a question that asked for a personal decision,
           // and, after the stream, the answer with any sentence that read as personal advice taken out, said in a note
           else if (ev === 'notice') { if (p.kind === 'policy' && p.text) { meta.get(ai).policyLine = String(p.text); paintLive(); } }
@@ -1017,7 +1063,7 @@ export async function send(text, { deep = false } = {}) {
   // the finished answer in place when it can be, so the rest of the conversation is not drawn again; a reader at the end
   // of the conversation stays at it
   const lg = host() && $('.milo-log', host());
-  if (paintFinished(ai, liveWas)) { if (S.follow) lg.scrollTop = lg.scrollHeight; scoutAfterPaint(); syncLatest(); } else paintLog();
+  if (paintFinished(ai, liveWas, !failed && !ended && !!reply.trim())) { if (S.follow) lg.scrollTop = lg.scrollHeight; scoutAfterPaint(); syncLatest(); } else paintLog();
   paintForm(); loadAllowance();
   // the state, for a screen reader: the log reads the answer itself
   announce(failed ? 'Milo could not answer. Your question is back in the box.' : ended === 'stopped' ? 'Stopped. The answer is incomplete.' : ended === 'cut' ? 'The answer was cut off.' : 'Milo has answered.');
