@@ -21,7 +21,20 @@
   "nod-2",
   "concerned",
   "concerned-half",
-  "concerned-closed"
+  "concerned-closed",
+  "desk",
+  "desk-half",
+  "desk-closed",
+  "desk-type",
+  "tablet",
+  "tablet-half",
+  "tablet-closed",
+  "tablet-near",
+  "write",
+  "write-half",
+  "write-closed",
+  "write-1",
+  "write-2"
  ],
  "wind": 12,
  "full": {

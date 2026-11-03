@@ -57,8 +57,15 @@
     'look-l1': 13, 'look-l2': 14, 'look-r1': 15, 'look-r2': 16,
     'nod-1': 17, 'nod-2': 18,
     'concerned': 19, 'concerned-half': 20, 'concerned-closed': 21,
+    /* The three worked poses, added 2026-11-03 for Milo's activity states: at
+     * the desk with the laptop, holding the tablet, writing in the notebook.
+     * Appended, never inserted: the indices are a contract with
+     * static/scout/frames.json and the renderer's FRAMES. */
+    'desk': 22, 'desk-half': 23, 'desk-closed': 24, 'desk-type': 25,
+    'tablet': 26, 'tablet-half': 27, 'tablet-closed': 28, 'tablet-near': 29,
+    'write': 30, 'write-half': 31, 'write-closed': 32, 'write-1': 33, 'write-2': 34,
   };
-  var COUNT = 22;
+  var COUNT = 35;
 
   /* How far over the head is, so a change of pose walks through the frames
    * in between instead of jumping: upright, leaning, tilted, curious. */
@@ -74,11 +81,19 @@
     tilt: ['tilt', 'tilt-half', 'tilt-closed'],
     curious: ['curious', 'curious-half', 'curious-closed'],
     concerned: ['concerned', 'concerned-half', 'concerned-closed'],
+    desk: ['desk', 'desk-half', 'desk-closed'],
+    tablet: ['tablet', 'tablet-half', 'tablet-closed'],
+    write: ['write', 'write-half', 'write-closed'],
   };
   var POSE = {
     idle: 'idle', listening: 'tilt', thinking: 'tilt', searching: 'tilt',
     streaming: 'idle', error: 'concerned',
+    /* Milo's activity states. These are scenes, not head angles, so they sit
+     * outside the upright/lean/tilt/curious ladder: LEVEL has no entry for
+     * them and a change to one is a cut rather than a walk. */
+    researching: 'desk', analyzing: 'tablet', writing: 'write',
   };
+  var WORK = { desk: 1, tablet: 1, write: 1 };
 
   /* Gestures, as [frame, ms]. Short on purpose. */
   var GESTURE = {
@@ -92,6 +107,11 @@
       ['curious-half', 40], ['curious', 280]],
     point: [['arm-1', 80], ['arm-2', 950], ['arm-1', 80]],
     bob: [['lean', 260]],
+    /* The small motion each worked pose loops on: hands moving over the keys,
+     * a look down at the tablet, the pencil travelling across the page. */
+    type: [['desk-type', 170], ['desk', 150], ['desk-type', 170], ['desk', 150], ['desk-type', 160]],
+    read: [['tablet-near', 820], ['tablet', 180]],
+    pen: [['write-1', 190], ['write-2', 240], ['write-1', 180], ['write', 150]],
   };
   /* The ladder level each gesture starts from: upright for the arm and the
    * nod, leaning for a look around, tilted for the curious look. */
@@ -164,7 +184,11 @@
     this.el.style.setProperty('--scout-x', (FRAME[name] / (COUNT - 1) * 100).toFixed(4) + '%');
   };
   Ctl.prototype.pose = function () {
-    return motion() === 'still' ? 'idle' : POSE[this.state] || 'idle';
+    var name = POSE[this.state] || 'idle';
+    // Still motion holds him in the resting pose. What he is working with is
+    // the state itself and not decoration, so the desk, the tablet and the
+    // notebook stay; only the movement goes.
+    return motion() === 'still' && !WORK[name] ? 'idle' : name;
   };
   Ctl.prototype.level = function () { return LEVEL[FACE[this.pose()][0]] || 0; };
   Ctl.prototype.rest = function () { this.show(FACE[this.pose()][0]); };
@@ -269,7 +293,7 @@
     clearTimeout(this.idleT);
     this.idleT = null;
     if (!this.running()) return;
-    var busy = this.state === 'thinking' || this.state === 'searching';
+    var busy = this.state === 'thinking' || this.state === 'searching' || !!WORK[this.pose()];
     var ms = busy ? rand(2000, 4000) : rand(2500, 5000);
     this.idleT = setTimeout(function () {
       self.idleT = null;
@@ -288,6 +312,8 @@
         self.gesture('look');
       } else if (full && self.state === 'thinking' && r < 0.25) {
         self.gesture('bob');
+      } else if (full && WORK[self.pose()] && r < 0.6) {
+        self.gesture(self.pose() === 'desk' ? 'type' : self.pose() === 'tablet' ? 'read' : 'pen');
       } else {
         self.blink(full && r > 0.85);
       }

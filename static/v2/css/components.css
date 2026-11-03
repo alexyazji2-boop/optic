@@ -474,7 +474,7 @@ ul.plain { margin: 0; padding-left: 18px; } ul.plain li { margin-bottom: 7px; }
    its aspect ratio, so nothing moves when the sprite arrives. 2x and 3x sprites, chosen by the browser. */
 .scout { --scout-x: 0%; display: block; flex: none; position: relative; aspect-ratio: 288 / 380; }
 .scout::before, .scout::after { content: ""; position: absolute; inset: 0; background-repeat: no-repeat; background-position: 0 0; }
-.scout::after { background-size: 2200% 100%; background-position-x: var(--scout-x);
+.scout::after { background-size: 3500% 100%; background-position-x: var(--scout-x);
   background-image: url("/scout/scout-full@2x.webp");
   background-image: -webkit-image-set(url("/scout/scout-full@2x.webp") 2x, url("/scout/scout-full@3x.webp") 3x);
   background-image: image-set(url("/scout/scout-full@2x.webp") 2x, url("/scout/scout-full@3x.webp") 3x); }
@@ -496,15 +496,15 @@ ul.plain { margin: 0; padding-left: 18px; } ul.plain li { margin-bottom: 7px; }
 /* his head on the Ask Milo button, as on the classic one: the bust sprite clipped to a disc, blinking through the
    sprite's own lid frames twice in 11 s; still under reduced motion or with his motion set to Still */
 .scout-badge { position: relative; display: block; flex: none; width: 22px; height: 22px; border-radius: 50%; overflow: hidden; }
-.scout-badge-fig { position: absolute; left: -1.8%; top: 7.8%; width: 126.4%; height: 136.9%; background-repeat: no-repeat; background-size: 2200% 100%; background-position: 0% 0;
+.scout-badge-fig { position: absolute; left: -1.8%; top: 7.8%; width: 126.4%; height: 136.9%; background-repeat: no-repeat; background-size: 3500% 100%; background-position: 0% 0;
   background-image: url("/scout/scout-compact@2x.webp");
   background-image: -webkit-image-set(url("/scout/scout-compact@2x.webp") 2x, url("/scout/scout-compact@3x.webp") 3x);
   background-image: image-set(url("/scout/scout-compact@2x.webp") 2x, url("/scout/scout-compact@3x.webp") 3x);
   animation: scout-badge-blink 11s step-end infinite; }
 @keyframes scout-badge-blink {
-  0% { background-position-x: 0%; } 36% { background-position-x: 4.7619%; } 36.32% { background-position-x: 9.5238%; } 36.77% { background-position-x: 4.7619%; } 37.13% { background-position-x: 0%; }
-  93% { background-position-x: 4.7619%; } 93.32% { background-position-x: 9.5238%; } 93.77% { background-position-x: 4.7619%; } 94.13% { background-position-x: 0%; }
-  95.22% { background-position-x: 4.7619%; } 95.54% { background-position-x: 9.5238%; } 95.99% { background-position-x: 4.7619%; } 96.35% { background-position-x: 0%; } 100% { background-position-x: 0%; } }
+  0% { background-position-x: 0%; } 36% { background-position-x: 2.9412%; } 36.32% { background-position-x: 5.8824%; } 36.77% { background-position-x: 2.9412%; } 37.13% { background-position-x: 0%; }
+  93% { background-position-x: 2.9412%; } 93.32% { background-position-x: 5.8824%; } 93.77% { background-position-x: 2.9412%; } 94.13% { background-position-x: 0%; }
+  95.22% { background-position-x: 2.9412%; } 95.54% { background-position-x: 5.8824%; } 95.99% { background-position-x: 2.9412%; } 96.35% { background-position-x: 0%; } 100% { background-position-x: 0%; } }
 :root[data-scout-motion="still"] .scout-badge-fig, :root[data-motion="reduce"] .scout-badge-fig { animation: none; }
 @media (prefers-reduced-motion: reduce) { .scout-badge-fig { animation: none; } }
 /* the welcome: the whole figure above the question, a button that opens his guide menu (no fill, no hover pill;
@@ -665,57 +665,40 @@ ul.plain { margin: 0; padding-left: 18px; } ul.plain li { margin-bottom: 7px; }
 /* The card. Its own surface inside the bubble, so the figure has somewhere to stand. */
 .milo-doing.is-expanded { gap: 14px; padding: 14px 16px; border: 1px solid var(--c-line); border-radius: var(--r-lg);
   background: var(--c-plane-2); animation: milo-doing-in 260ms var(--ease-out, cubic-bezier(.2, .8, .3, 1)) both; }
-.milo-doing.is-expanded .scout-full { width: 78px; }
+.milo-doing.is-expanded .scout-full { width: 104px; }
 .milo-doing.is-expanded .milo-doing-say > b { font-size: var(--t-lg); }
 @keyframes milo-doing-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
 
-/* The props. One SVG each, drawn at the figure's shoulder in the card and left out of the line, where the
-   words have the room. */
+/* The two drawn props. Researching, Analyzing and Writing have no drawing beside them: the thing Milo is
+   working with is rendered in the frame itself (static/scout, the desk, the tablet and the notebook), and a
+   drawn laptop next to a rendered one was two laptops. What is left is the thought bubble over his head while
+   he is reading the question, and the sparkles when the answer lands, neither of which is a pose he has. */
 .milo-doing-prop { display: none; }
-.milo-doing.is-expanded .milo-doing-fig { width: 132px; }
-/* Each prop sits where the thing itself would be: the thought bubble over his head, the desk and the notebook
-   at his hands, the tablet in front of him. At 52px a laptop with its books read as one gold smudge (browser
-   check at 1440, 2026-11-03), so they are wider and each is drawn with fewer parts. */
-.milo-doing.is-expanded .milo-doing-prop { display: block; position: absolute; right: -2px; top: -6px; width: 56px; pointer-events: none; }
-.milo-doing.is-expanded .milo-doing-prop:has(.prop-desk), .milo-doing.is-expanded .milo-doing-prop:has(.prop-note) { top: auto; bottom: -2px; right: -6px; width: 72px; }
-.milo-doing.is-expanded .milo-doing-prop:has(.prop-tablet) { top: 14px; width: 62px; }
+.milo-doing.is-expanded .milo-doing-fig { width: 128px; }
+.milo-doing.is-expanded .milo-doing-prop { display: block; position: absolute; right: -4px; top: -8px; width: 52px; pointer-events: none; }
 .milo-doing-prop svg { display: block; width: 100%; height: auto; overflow: visible;
   fill: none; stroke: var(--c-gold); stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
-.milo-doing-prop .screen { fill: var(--c-gold-wash); }
 .prop-bubble circle { fill: var(--c-gold); stroke: none; }
 .milo-doing-prop .draw { stroke-dasharray: 44; stroke-dashoffset: 44; animation: milo-doing-draw 2.2s ease-in-out infinite; }
 @keyframes milo-doing-draw { 0% { stroke-dashoffset: 44; } 55%, 100% { stroke-dashoffset: 0; } }
 .prop-bubble { animation: milo-doing-float 3.4s ease-in-out infinite; }
 @keyframes milo-doing-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-2px); } }
-.prop-desk .screen { animation: milo-doing-glow 2.6s ease-in-out infinite; }
-@keyframes milo-doing-glow { 0%, 100% { opacity: .55; } 50% { opacity: 1; } }
-.prop-desk .card { opacity: 0; animation: milo-doing-card 3s ease-in-out infinite; }
-.prop-desk .card-2 { animation-delay: 1.2s; }
-@keyframes milo-doing-card { 0%, 100% { opacity: 0; transform: translateY(2px); } 25%, 70% { opacity: .9; transform: none; } }
-.prop-tablet .ticks > * { opacity: 0; animation: milo-doing-show 3.2s ease-out infinite; }
-.prop-tablet .ticks > :nth-child(2), .prop-tablet .ticks > :nth-child(5) { animation-delay: .5s; }
-.prop-tablet .ticks > :nth-child(3), .prop-tablet .ticks > :nth-child(6) { animation-delay: 1s; }
-@keyframes milo-doing-show { 0%, 8% { opacity: 0; } 22%, 86% { opacity: 1; } 100% { opacity: 0; } }
-.prop-note .lines path { stroke-dasharray: 10; stroke-dashoffset: 10; animation: milo-doing-line 2.6s ease-in-out infinite; }
-.prop-note .l2 { animation-delay: .35s; } .prop-note .l3 { animation-delay: .7s; }
-@keyframes milo-doing-line { 0%, 6% { stroke-dashoffset: 10; } 40%, 92% { stroke-dashoffset: 0; } 100% { stroke-dashoffset: 10; } }
-.prop-note .pencil { animation: milo-doing-pencil 1.1s ease-in-out infinite; }
-@keyframes milo-doing-pencil { 0%, 100% { transform: translate(0, 0); } 50% { transform: translate(-1.5px, 1px); } }
 .prop-done path { fill: var(--c-gold); stroke: none; opacity: 0; animation: milo-doing-spark 900ms ease-out forwards; }
 .prop-done .s2 { animation-delay: 130ms; } .prop-done .s3 { animation-delay: 260ms; }
 @keyframes milo-doing-spark { 0% { opacity: 0; transform: scale(.4); } 45% { opacity: 1; transform: scale(1.1); } 100% { opacity: .9; transform: scale(1); } }
 
 /* One place for Reduce motion: the props hold their finished shape and nothing repeats. The states still change,
-   because they are what Milo is doing, not decoration. */
+   because they are what Milo is doing, not decoration. The figure holds its pose too (components/scout.js
+   keeps the worked poses at Still motion), so Researching still shows him at the desk, just not moving. */
 @media (prefers-reduced-motion: reduce) {
   .milo-doing, .milo-doing *, .milo-doing-prop svg * { animation: none !important; transform: none !important; }
-  .milo-doing-prop .draw, .prop-note .lines path { stroke-dashoffset: 0; }
-  .milo-doing-prop .card, .prop-tablet .ticks > *, .prop-done path { opacity: 1; }
+  .milo-doing-prop .draw { stroke-dashoffset: 0; }
+  .prop-done path { opacity: 1; }
   .milo-doing-dots i { opacity: .5; }
 }
 :root[data-motion="reduce"] .milo-doing, :root[data-motion="reduce"] .milo-doing *, :root[data-motion="reduce"] .milo-doing-prop svg * { animation: none !important; transform: none !important; }
-:root[data-motion="reduce"] .milo-doing-prop .draw, :root[data-motion="reduce"] .prop-note .lines path { stroke-dashoffset: 0; }
-:root[data-motion="reduce"] .milo-doing-prop .card, :root[data-motion="reduce"] .prop-tablet .ticks > *, :root[data-motion="reduce"] .prop-done path { opacity: 1; }
+:root[data-motion="reduce"] .milo-doing-prop .draw { stroke-dashoffset: 0; }
+:root[data-motion="reduce"] .prop-done path { opacity: 1; }
 :root[data-motion="reduce"] .milo-doing-dots i { opacity: .5; }
 .milo-you.is-new { animation: milo-sent var(--m-content) var(--ease-out); }
 @keyframes milo-sent { from { opacity: 0; transform: translateY(4px); } }

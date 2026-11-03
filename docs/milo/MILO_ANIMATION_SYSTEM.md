@@ -73,38 +73,52 @@ than disappearing, which is what the reference sheet asks for.
 
 ## 4. Motion
 
-Everything is CSS. No animation library was added, no Lottie, no Rive, no new dependency of any kind. Every
-animation is declared in one block of `components.css`, which is what lets Reduce motion stop all of them in
-one place.
+Two kinds, kept apart.
+
+**The character moves in his own frames.** Researching, Analyzing and Writing are rendered poses on the
+sprite sheet (`static/scout`), driven by `static/components/scout.js`: he is at the table with the laptop,
+holding the tablet, writing in the notebook. His blinks, his pose changes and the small loops he plays while
+working (`type`, `read`, `pen`) are that driver's, stepping through frames of the sheet. Nothing about him is
+animated in CSS, and nothing about him is drawn in CSS.
+
+**Everything around him is CSS.** No animation library was added, no Lottie, no Rive, no new dependency of
+any kind. Every CSS animation is declared in one block of `components.css`, which is what lets Reduce motion
+stop all of them in one place.
 
 | What | Property | Duration | Easing | Repeats |
 | --- | --- | --- | --- | --- |
 | Card appearing | `opacity`, `translateY(4px)` | 260 ms | `--ease-out` | once |
 | Three dots | `opacity` .22 to 1 | 1.3 s, 170 ms apart | ease-in-out | yes |
 | A tick appearing | `opacity`, `scale` | 240 ms, 90 ms apart | ease-out | once per tick |
-| Chart line drawing | `stroke-dashoffset` | 2.2 s | ease-in-out | yes |
-| Thought bubble | `translateY(2px)` | 3.4 s | ease-in-out | yes |
-| Laptop screen | `opacity` .55 to 1 | 2.6 s | ease-in-out | yes |
-| Source cards | `opacity`, `translateY(2px)` | 3 s | ease-in-out | yes |
-| Checklist ticks on the tablet | `opacity` | 3.2 s | ease-out | yes |
-| Notebook lines | `stroke-dashoffset` | 2.6 s | ease-in-out | yes |
-| Pencil | `translate(1.5px, 1px)` | 1.1 s | ease-in-out | yes |
+| Thought bubble floating | `translateY(2px)` | 3.4 s | ease-in-out | yes |
+| Its chart line drawing | `stroke-dashoffset` | 2.2 s | ease-in-out | yes |
 | Sparkles | `opacity`, `scale` | 900 ms | ease-out | once |
 
-No bouncing, no spinning, no shaking, no flashing. The largest travel in the set is 4 px. Milo's own motion
-(blinks, pose changes, the small wave at the end) is the existing driver's, unchanged by this work, and still
-governed by the reader's Full / Subtle / Still setting in Response settings.
+And in the character's own frames (`GESTURE` in scout.js):
+
+| Loop | Frames | Beat |
+| --- | --- | --- |
+| Typing | `desk-type`, `desk`, alternating | 150-170 ms a frame, five frames |
+| Looking at the tablet | `tablet-near`, `tablet` | 820 ms down, 180 ms back |
+| Writing | `write-1`, `write-2`, `write-1`, `write` | 150-240 ms a frame |
+| Blinking, in every pose | that pose's `-half` and `-closed` lids | 35-50 ms a frame |
+
+He plays one of those, or a blink, every 2 to 4 seconds while working, at Full motion only. No bouncing, no
+spinning, no shaking, no flashing; the largest CSS travel in the set is 4 px.
 
 ## 5. Reduce motion
 
 Two triggers, one block (`components.css`, "One place for Reduce motion"): the system preference
 `prefers-reduced-motion: reduce`, and Optic's own `:root[data-motion="reduce"]`.
 
-With either set: every animation and transform in the activity is off, the props hold their finished shape
-(`stroke-dashoffset: 0`, cards and ticks at full opacity), and the dots sit at .5 opacity instead of pulsing.
-**The states still change.** A state is what Milo is doing, not decoration, so the heading, the line and the
-ticks are all still shown and still update. Measured 2026-11-03 with `data-motion="reduce"`: zero elements in
-the card report an `animation-name`, the prop is drawn and complete, the heading and line read correctly.
+With either set: every CSS animation and transform in the activity is off, the thought bubble holds its
+finished shape, and the dots sit at .5 opacity instead of pulsing. The character stops moving too, because
+`scout.js` already reads both and drops to its Still motion.
+
+**The states still change, and so does the pose.** A state is what Milo is doing, not decoration, so the
+heading, the line and the ticks are all still shown and still update, and `Ctl.prototype.pose` keeps a worked
+pose at Still motion: Researching still shows him at the desk, Writing still shows him at the notebook. They
+simply hold. Only the standing states fall back to the plain resting frame, which is what they always did.
 
 ## 6. Accessibility
 

@@ -59,6 +59,43 @@ def sd_ellipsoid(p, c, r):
     return k0 * (k0 - 1.0) / np.maximum(k1, 1e-9)
 
 
+def sd_box(p, c, h, r=0.0):
+    """Distance to a box of half-extents `h` about `c`, corners rounded by `r`."""
+    q = np.abs(p - c) - (h - r)
+    return np.linalg.norm(np.maximum(q, 0), axis=1) + np.minimum(q.max(1), 0) - r
+
+
+def sd_capsule(p, a, b, r):
+    ab = b - a
+    t = np.clip(((p - a) @ ab) / (ab @ ab), 0, 1)
+    return np.linalg.norm(p - a - t[:, None] * ab, axis=1) - r
+
+
+def sd_cyl(p, c, r, hh):
+    """A cylinder standing on the y axis."""
+    d = np.stack([np.hypot(p[:, 0] - c[0], p[:, 2] - c[2]) - r, np.abs(p[:, 1] - c[1]) - hh], 1)
+    return np.minimum(d.max(1), 0) + np.linalg.norm(np.maximum(d, 0), axis=1)
+
+
+def rot_x_at(p, pivot, ang):
+    """Rotate points about the x axis through `pivot`. Passing +ang tests a shape
+    whose world pose leans back (its top away from the camera) by ang."""
+    c, s = math.cos(ang), math.sin(ang)
+    y, z = p[:, 1] - pivot[1], p[:, 2] - pivot[2]
+    return np.stack([p[:, 0], pivot[1] + y * c - z * s, pivot[2] + y * s + z * c], 1)
+
+
+def poly2(u, v, pts):
+    """Distance in a plane to a polyline."""
+    best = None
+    for (x0, y0), (x1, y1) in zip(pts, pts[1:]):
+        dx, dy = x1 - x0, y1 - y0
+        t = np.clip(((u - x0) * dx + (v - y0) * dy) / (dx * dx + dy * dy), 0, 1)
+        d = np.hypot(u - x0 - t * dx, v - y0 - t * dy)
+        best = d if best is None else np.minimum(best, d)
+    return best
+
+
 def smin(a, b, k):
     h = np.clip(0.5 + 0.5 * (b - a) / k, 0, 1)
     return b * (1 - h) + a * h - k * h * (1 - h)
@@ -94,6 +131,7 @@ NECK = np.array([0.0, 1.42, 0.0])
 # and asked for the two eyes back.
 FACE_STYLE = os.environ.get("SCOUT_FACE", "optic")
 SHOULDER = np.array([0.52, 0.98, 0.20])
+SHOULDER_L = np.array([-0.52, 0.98, 0.20])
 HAND_R = np.array([0.70, 0.74, 0.27])
 HAND_L = np.array([-0.60, 0.88, 0.38])
 HAND_SIZE = np.array([0.175, 0.22, 0.17])
@@ -202,7 +240,8 @@ class Pose:
            flatter, smaller mouth (never a frown)"""
 
     def __init__(self, tilt=0.0, yaw=0.0, pitch=0.0, cl=0.0, cr=0.0, wide=False,
-                 wave=0.0, worry=0.0, tail=True, face=None, wind=0.0, tail_only=False):
+                 wave=0.0, worry=0.0, tail=True, face=None, wind=0.0, tail_only=False,
+                 prop=None, type_=0.0, pen=0.0):
         # world = H (local - neck) + neck; points are mapped back with H's transpose.
         self.H = rot_y_m(math.radians(yaw)) @ rot_x_m(math.radians(pitch)) @ rot_z_m(-math.radians(tilt))
         self.wave = math.radians(wave)
@@ -222,9 +261,115 @@ class Pose:
         else:
             self.eyes = [Eye(-20, 6, -10, 0.46, cl, slant=k),
                          Eye(28, 9, -15, 0.40 * (1.16 if wide else 1.0), cr, slant=-k)]
+        # The thing he is working with, and where that puts his hands. None keeps the standing figure
+        # exactly as it was: the 22 frames the app already ships march the same scene they always did.
+        self.prop = prop
+        self.pen = pen
+        self.hand_l, self.hand_r = HAND_L, HAND_R
+        if prop == "desk":
+            lift = 0.024 * math.sin(math.pi * type_)
+            self.hand_l = np.array([-0.13, DESK_Y + 0.135 + lift, 1.14])
+            self.hand_r = np.array([0.46, DESK_Y + 0.135 + (0.024 - lift), 1.14])
+        elif prop == "tablet":
+            self.hand_l = np.array([-0.29, 0.97, 1.10])
+            self.hand_r = np.array([0.55, 0.97, 1.10])
+        elif prop == "write":
+            self.hand_l = np.array([-0.36, DESK_Y + 0.115, 1.16])
+            self.hand_r = np.array([0.30 + 0.11 * pen, DESK_Y + 0.21, 1.16 - 0.04 * pen])
         self.mouth = surface_frame(math.radians(8), math.radians(-23), math.radians(-4))
         self.smile_w = 0.10 - 0.025 * worry
         self.smile_d = 0.042 - 0.030 * worry
+
+
+# --------------------------------------------------------------- what he works with
+#
+# Three worked scenes for Milo's activity states (docs/milo/MILO_CHARACTER_DESIGN.md): a desk with a dark
+# laptop and two books, a tablet held in both hands, and the same desk with an open notebook, a pencil and a
+# cup. He stands behind the desk rather than sitting at it: the desk crosses him at scarf height and hides
+# everything below, which is the composition the reference sheet has and which keeps the body, the arms and
+# the whole light rig identical to every other frame.
+#
+# Materials: 8 shell (laptop, tablet, cup), 9 desk, 10 paper, 11 book cloth. Gold reuses 2 and 3.
+# The camera is almost level with him (it has to be: every frame shares one rig), so anything lying flat is
+# foreshortened to a few pixels and disappears. Everything here therefore stands up, and the desk is a narrow
+# table with its ends and legs in frame rather than a slab running off both edges, which in a sprite with a
+# transparent background would read as a black bar rather than as furniture.
+DESK_Y = 0.95                                    # the top surface
+DESK_C, DESK_H = np.array([0.10, DESK_Y - 0.046, 0.66]), np.array([1.05, 0.046, 0.46])
+LEG_X, LEG_Z = (-0.90, 1.10), 0.96
+HINGE = np.array([0.0, DESK_Y + 0.044, 0.62])    # the laptop's, at the back of its base
+LID_C, LID_H, LID_LEAN = np.array([0.14, DESK_Y + 0.240, 0.62]), np.array([0.34, 0.210, 0.014]), math.radians(13)
+TAB_C, TAB_H, TAB_LEAN = np.array([0.13, 1.00, 0.94]), np.array([0.35, 0.235, 0.019]), math.radians(36)
+NOTE_P, NOTE_H, NOTE_LEAN = np.array([0.02, DESK_Y + 0.016, 0.98]), np.array([0.44, 0.26, 0.014]), math.radians(48)
+# The chart on the tablet, and the Optic trace inside the laptop's aperture: the logo's own line, set by hand
+# in each plane rather than scaled from TRACE32, because both are far smaller than an eye.
+TAB_TRACE = [(-0.23, -0.09), (-0.10, 0.05), (0.01, -0.04), (0.12, 0.11), (0.23, 0.02)]
+LID_TRACE = [(-0.036, -0.011), (-0.011, 0.016), (0.008, -0.004), (0.036, 0.023)]
+
+
+def props(p, P):
+    """Distance to the prop, and its material. Nothing is built for a pose that has no prop."""
+    far = np.full(len(p), 9.0)
+    if not P.prop:
+        return far, None
+    kind = P.prop
+    d = far.copy()
+    m = np.zeros(len(p), np.int8)
+
+    def add(dist, mat):
+        nonlocal d, m
+        m = np.where(dist < d, mat, m).astype(np.int8)
+        d = np.minimum(d, dist)
+
+    if kind in ("desk", "write"):
+        add(sd_box(p, DESK_C, DESK_H, 0.012), 9)
+        for lx in LEG_X:
+            add(sd_box(p, np.array([lx, (DESK_Y - 0.076 - 0.16) / 2, LEG_Z]),
+                       np.array([0.042, (DESK_Y - 0.076 + 0.16) / 2, 0.042]), 0.012), 12)
+
+    if kind == "desk":
+        add(sd_box(p, np.array([0.14, DESK_Y + 0.020, 0.90]), np.array([0.34, 0.020, 0.28]), 0.010), 8)
+        q = rot_x_at(p, HINGE, LID_LEAN)
+        add(sd_box(q, LID_C, LID_H, 0.013), 8)
+        # The aperture on the lid's back: the ring, and the logo's line inside it.
+        mu, mv, mz = q[:, 0] - LID_C[0], q[:, 1] - LID_C[1], q[:, 2] - (LID_C[2] + LID_H[2])
+        add(np.hypot(np.hypot(mu, mv) - 0.062, mz) - 0.0105, 2)
+        add(np.hypot(poly2(mu, mv, LID_TRACE), mz) - 0.0072, 3)
+        # Two books stacked at his left, each with a gold band so they read at card size.
+        for c, h in ((np.array([-0.60, DESK_Y + 0.062, 0.84]), np.array([0.26, 0.062, 0.19])),
+                     (np.array([-0.56, DESK_Y + 0.178, 0.87]), np.array([0.23, 0.054, 0.17]))):
+            add(sd_box(p, c, h, 0.009), 11)
+            add(sd_box(p, c + np.array([0.0, 0.0, h[2]]), np.array([h[0] * 0.96, h[1] * 0.28, 0.005])), 2)
+
+    if kind == "tablet":
+        q = rot_x_at(p, TAB_C, TAB_LEAN)
+        add(sd_box(q, TAB_C, TAB_H, 0.028), 8)
+        tu, tv = q[:, 0] - TAB_C[0], q[:, 1] - TAB_C[1]
+        add(np.hypot(poly2(tu, tv, TAB_TRACE), q[:, 2] - (TAB_C[2] + TAB_H[2])) - 0.013, 3)
+
+    if kind == "write":
+        q = rot_x_at(p, NOTE_P, NOTE_LEAN)
+        nc = NOTE_P + np.array([0.0, 0.20, 0.0])
+        add(sd_box(q, nc, NOTE_H + np.array([0.034, 0.034, 0.004]), 0.014), 8)
+        pages = nc + np.array([0.0, 0.0, 0.014])
+        add(sd_box(q, pages, NOTE_H, 0.010), 10)
+        nc, face = pages, np.abs(q[:, 2] - (pages[2] + NOTE_H[2])) - 0.005
+        # The spine down the middle, and the lines he has written so far on the right page.
+        add(np.maximum(np.maximum(np.abs(q[:, 0] - nc[0]) - 0.008,
+                                  np.abs(q[:, 1] - nc[1]) - 0.23), face), 9)
+        for k, w in ((0.0, 0.13), (-0.075, 0.115), (-0.15, 0.06 + 0.055 * P.pen)):
+            add(np.maximum(np.maximum(np.abs(q[:, 0] - (nc[0] + 0.045 + w)) - w,
+                                      np.abs(q[:, 1] - (nc[1] + 0.085 + k)) - 0.0075), face), 9)
+        # The pencil runs right through his hand and well past it at both ends: his hands are mitts, and a
+        # pencil the length of a real one vanishes inside one (first render, 2026-11-03).
+        grip = np.array([0.30 + 0.11 * P.pen, DESK_Y + 0.21, 1.16 - 0.04 * P.pen])
+        pa = grip + np.array([-0.21, -0.28, 0.02])
+        add(sd_capsule(p, pa, pa + np.array([0.52, 0.72, -0.13]), 0.030), 2)
+        cup = np.array([0.88, DESK_Y + 0.105, 0.78])
+        add(sd_cyl(p, cup, 0.115, 0.105), 8)
+        add(np.hypot(np.hypot(p[:, 0] - cup[0], p[:, 2] - cup[2]) - 0.115, p[:, 1] - (cup[1] + 0.105)) - 0.012, 2)
+
+    return d, m
 
 
 def scene(p, P, mats=False):
@@ -237,15 +382,19 @@ def scene(p, P, mats=False):
                       sd_ellipsoid(p, np.array([0.31, 0.13, 0.20]), np.array([0.25, 0.13, 0.27])))
     # Hands sized and placed to stand off the body, not melt into it: asked
     # for "a little more visible" after the first renders.
-    hl = rot_z(p, HAND_L, math.radians(-25))
-    hand_l = sd_ellipsoid(hl, HAND_L, HAND_SIZE)
+    hl = rot_z(p, P.hand_l, math.radians(-25))
+    hand_l = sd_ellipsoid(hl, P.hand_l, HAND_SIZE)
+    # The left hand rests against the body in the standing frames and needs no arm. Reaching for a keyboard,
+    # a tablet or a page it would float, so a prop gives it the same capsule the right one has always had.
+    if P.prop:
+        hand_l = smin(hand_l, sd_capsule(p, SHOULDER_L, P.hand_l, 0.085), 0.05)
     # The right arm swings from the shoulder: a short capsule from inside the
     # body to the hand, so a raised hand stays joined to him instead of
     # floating free, and nothing on the body stretches.
     pw = rot_z(p, SHOULDER, -P.wave)
-    hr = rot_z(pw, HAND_R, math.radians(28))
-    hand_r = sd_ellipsoid(hr, HAND_R, HAND_SIZE)
-    ba = HAND_R - SHOULDER
+    hr = rot_z(pw, P.hand_r, math.radians(28))
+    hand_r = sd_ellipsoid(hr, P.hand_r, HAND_SIZE)
+    ba = P.hand_r - SHOULDER
     pa = pw - SHOULDER
     h = np.clip((pa @ ba) / (ba @ ba), 0, 1)
     arm = np.linalg.norm(pa - h[:, None] * ba, axis=1) - 0.085
@@ -322,9 +471,10 @@ def scene(p, P, mats=False):
         tail = np.maximum(rib, ends) * 0.6
         scarf = smin(scarf, tail, 0.03)
 
+    prop_d, prop_m = props(p, P)
     dist = np.minimum.reduce([snow, head, gold, trace, scarf])
     if not mats:
-        return dist
+        return np.minimum(dist, prop_d)
     # Where each surface point sits on its own part, so the clay grain moves
     # with the head and the arm instead of sliding across them between frames.
     local = p.copy()
@@ -340,6 +490,11 @@ def scene(p, P, mats=False):
     m[gold <= dist + 1e-4] = 2
     m[trace <= dist + 1e-4] = 3
     m[(tail <= dist + 1e-4) & (m == 6)] = 7     # the tail: scarf cloth, its own layer
+    if prop_m is not None:
+        sel = prop_d < dist
+        m[sel] = prop_m[sel]
+        local[sel] = p[sel]
+        dist = np.minimum(dist, prop_d)
     return dist, m, local
 
 
@@ -438,7 +593,19 @@ def shade(p, P):
     scarfc = S * (wrap * keycol * 0.95 + fill + amb) + G * (0.30 * sh * ndh ** 28)[:, None] \
         + G * env * 0.06 * ao[:, None] + rim * 0.5
 
-    for mid, c in ((0, snowc), (1, snowc), (2, metal), (3, tracec), (4, floor), (5, smilec), (6, scarfc), (7, scarfc)):
+    # What he works with: matte shells, a matte desk, paper and cloth, under the same rig, so they sit in his
+    # world rather than being pasted onto it.
+    def matte(alb, spec=0.0, power=40):
+        c = alb * (wrap * keycol + fill + amb)
+        return c + (spec * sh * ndh ** power)[:, None] if spec else c
+    shell = matte(np.array([0.021, 0.024, 0.028]), 0.22, 60) + rim * 0.35
+    deskc = matte(np.array([0.042, 0.034, 0.029]), 0.05, 30)
+    paperc = matte(np.array([0.80, 0.76, 0.68]) * (0.98 + 0.03 * grain)[:, None])
+    bookc = matte(np.array([0.110, 0.082, 0.056]) * (0.96 + 0.08 * grain)[:, None], 0.04, 24)
+    legc = matte(np.array([0.026, 0.021, 0.018]), 0.04, 30)
+
+    for mid, c in ((0, snowc), (1, snowc), (2, metal), (3, tracec), (4, floor), (5, smilec), (6, scarfc),
+                   (7, scarfc), (8, shell), (9, deskc), (10, paperc), (11, bookc), (12, legc)):
         sel = m == mid
         col[sel] = c[sel]
     return tonemap(col)
@@ -520,6 +687,21 @@ FRAMES = [
     ("nod-1", dict(pitch=6)), ("nod-2", dict(pitch=12)),
     ("concerned", dict(worry=1.0, tilt=-2)), ("concerned-half", dict(worry=1.0, tilt=-2, cl=0.6, cr=0.6)),
     ("concerned-closed", dict(worry=1.0, tilt=-2, cl=1.0, cr=1.0)),
+    # The three worked poses, for Milo's activity states. Each has its own half-closed and closed lid so a
+    # blink does not change the pose it happens in, and one or two frames of the small motion it loops on.
+    ("desk", dict(prop="desk", tilt=1.5, pitch=9)),
+    ("desk-half", dict(prop="desk", tilt=1.5, pitch=9, cl=0.5, cr=0.5)),
+    ("desk-closed", dict(prop="desk", tilt=1.5, pitch=9, cl=1.0, cr=1.0)),
+    ("desk-type", dict(prop="desk", tilt=1.5, pitch=9, type_=1.0)),
+    ("tablet", dict(prop="tablet", tilt=3, pitch=13)),
+    ("tablet-half", dict(prop="tablet", tilt=3, pitch=13, cl=0.5, cr=0.5)),
+    ("tablet-closed", dict(prop="tablet", tilt=3, pitch=13, cl=1.0, cr=1.0)),
+    ("tablet-near", dict(prop="tablet", tilt=4, pitch=19)),
+    ("write", dict(prop="write", tilt=2, pitch=15)),
+    ("write-half", dict(prop="write", tilt=2, pitch=15, cl=0.5, cr=0.5)),
+    ("write-closed", dict(prop="write", tilt=2, pitch=15, cl=1.0, cr=1.0)),
+    ("write-1", dict(prop="write", tilt=2, pitch=15, pen=0.5)),
+    ("write-2", dict(prop="write", tilt=2, pitch=15, pen=1.0)),
 ]
 # (window in world units, size at 3x). The 2x sprite is the 3x one resampled,
 # never an upscale: the largest use is the welcome figure at 96 CSS px wide.

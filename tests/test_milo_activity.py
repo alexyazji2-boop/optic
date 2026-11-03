@@ -12,6 +12,7 @@ motion) is written up in docs/milo/MILO_VISUAL_QA.md with what was measured.
 """
 from __future__ import annotations
 
+import json
 import re
 from pathlib import Path
 
@@ -98,7 +99,7 @@ def test_the_states_the_owner_asked_for_are_all_there_and_say_so(tmp_path):
     # the mascot's own states (components/scout.js POSE), never a name he does not have
     poses = set(re.search(r"var POSE = \{(.+?)\};", (V2.parent / "components/scout.js").read_text(), re.S).group(1).split())
     for k, v in got.items():
-        assert any(v[2] + ":" in p or v[2] + "," in p for p in poses) or v[2] in ("idle", "thinking", "searching", "streaming", "error"), v
+        assert any(v[2] + ":" in p or v[2] + "," in p for p in poses), v
 
 
 # ----------------------------------------------------------------- the panel is wired to the real events
@@ -157,12 +158,31 @@ def test_nothing_is_listed_that_a_lookup_did_not_return():
     assert ".filter((r) => r && r.ok !== false)" in ACT, "a lookup that failed is not a tick"
 
 
-def test_the_props_are_drawings_beside_him_not_a_second_character():
-    """The character is the render in static/scout; the props are Optic's line work in the brand gold."""
+def test_what_he_works_with_is_rendered_not_drawn():
+    """The desk, the tablet and the notebook are frames of the character himself (static/scout, rendered by
+    optic-brand/scout/render_scout.py), so those three states carry no drawing beside him: a drawn laptop
+    next to a rendered one was two laptops. Only the thought bubble and the sparkles, which are no pose he
+    has, are still drawn."""
     assert "window.OpticScout ? window.OpticScout.html({ size })" in ACT
-    for name in ("bubble", "desk", "tablet", "note", "done"):
+    for name in ("bubble", "done"):
         assert "<svg viewBox=" in ACT.split(name + ": `")[1][:80], name
+    for gone in ("prop-desk", "prop-tablet", "prop-note"):
+        assert gone not in ACT and gone not in CSS, gone
     assert 'aria-hidden="true"' in ACT
+    poses = (V2.parent / "components/scout.js").read_text()
+    frames = json.loads((V2.parent / "scout/frames.json").read_text())["frames"]
+    for state, frame in (("researching", "desk"), ("analyzing", "tablet"), ("writing", "write")):
+        assert "%s: '%s'" % (state, frame) in poses, state
+        for suffix in ("", "-half", "-closed"):
+            assert frame + suffix in frames, frame + suffix   # a blink needs its own lids in every pose
+
+
+def test_the_three_worked_states_show_no_drawn_prop(tmp_path):
+    got = _run(tmp_path, """
+      const A = await import('%s');
+      print(JSON.stringify(['researching', 'analyzing', 'writing'].map((k) => A.ACTIVITY[k].prop)));
+    """ % (JS / "ui/milo-activity.js").as_posix())
+    assert got == [None, None, None]
 
 
 def test_reduce_motion_stops_every_animation_in_one_place():

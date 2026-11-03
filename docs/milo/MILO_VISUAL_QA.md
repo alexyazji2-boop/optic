@@ -77,12 +77,33 @@ lookups that returned); Writing compact row with the answer above it and "Looked
 ready row with the answer's actions already drawn beside it; the phone view at 375 x 812. They are attached to
 the session rather than committed, since `docs/` holds no binaries.
 
+## The rendered poses (2026-11-03, second pass)
+
+The three worked poses were placeholders in the first pass: the standing Milo plus a gold line drawing. They
+are now rendered frames of the character himself. Re-checked after the render:
+
+| Check | Result |
+| --- | --- |
+| The sheet | 35 frames, `scout-full@3x.webp` 10080 x 380 and `scout-compact@3x.webp` 5040 x 156, both exactly `frame x 35` |
+| The standing frames | unchanged: `props()` builds nothing for a pose with no prop, so those 22 march the scene they always did |
+| Researching | card at a 560 px panel: frame `desk`, no drawn prop, Milo at the table with the laptop, its gold aperture and the two books |
+| Analyzing | frame `tablet`, the gold chart on the glass, the two ticks naming the lookups that returned |
+| Writing | collapses to the inline row as text arrives, frame `write` |
+| Answer ready | frame `idle` with the `ack` wave, prop `done` (the sparkles) |
+| Card height | 167 px, identical across all four working states: no layout shift |
+| Phone, 375 x 812 | inline row 44 px with the `desk` bust, no horizontal overflow |
+| At the inline size | all three worked busts were rendered down to 34 px and inspected: the laptop, the tablet's gold chart and the notebook with its pencil each stay legible and distinct |
+| Still motion | `OpticScout.setMotion('still')` holds frame `desk` and the heading Researching: the pose stays, only the movement goes |
+| Reduce motion | with `data-motion="reduce"`, zero elements in the card report an `animation-name` |
+| CSS frame count | `background-size: 3500% 100%` live in the panel, `frames.json` 35: the two agree, which is what the clipped figure in the first reload was about |
+| Console | no errors |
+
 ## Remaining defects and gaps
 
-1. **Three poses are placeholders.** Researching, Analyzing and Writing use the standing Milo plus a gold line
-   drawing of the desk, the tablet and the notebook. The brief asks for him seated at a desk, holding a
-   tablet, and writing. Exact asset specifications are in `MILO_CHARACTER_DESIGN.md` section 3. This is the
-   one visible departure from the reference sheet.
+1. **The figure is cut off until the page is reloaded.** Changing the frame count changes
+   `background-size` in CSS and the sheet at the same time; a tab still running the old stylesheet against
+   the new sheet slices him wrong. It fixes itself on reload and matters only to someone holding the app
+   open across this deploy, but it is the reason a staging check should start with a hard reload.
 2. **No answer-level verification.** Scenarios 3, 4, 7 and 8 need a working model key. Nothing in this stage
    changes what Milo says, but that is an assertion from the diff, not a measurement.
 3. **`prefers-reduced-motion` not emulated**, only Optic's own `data-motion="reduce"`. Same CSS block, same

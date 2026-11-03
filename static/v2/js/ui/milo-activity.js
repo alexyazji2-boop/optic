@@ -35,9 +35,9 @@ const NOT_A_STEP = /^some files were not sent/i;
 // scout: the mascot state (components/scout.js POSE), prop: the drawing beside him.
 export const ACTIVITY = {
   thinking: { title: 'Thinking', line: 'Understanding your question', scout: 'thinking', prop: 'bubble' },
-  researching: { title: 'Researching', line: 'Looking through Optic’s data', scout: 'searching', prop: 'desk' },
-  analyzing: { title: 'Analyzing', line: 'Connecting what came back', scout: 'thinking', prop: 'tablet' },
-  writing: { title: 'Writing', line: 'Putting it together', scout: 'streaming', prop: 'note' },
+  researching: { title: 'Researching', line: 'Looking through Optic’s data', scout: 'researching', prop: null },
+  analyzing: { title: 'Analyzing', line: 'Connecting what came back', scout: 'analyzing', prop: null },
+  writing: { title: 'Writing', line: 'Putting it together', scout: 'writing', prop: null },
   complete: { title: 'Answer ready', line: 'Here’s what I found', scout: 'idle', prop: 'done' },
   error: { title: 'No answer', line: 'Milo could not finish this one', scout: 'error', prop: null },
   cancelled: { title: 'Stopped', line: 'Stopped by you', scout: 'idle', prop: null },
@@ -86,38 +86,19 @@ export function words(a, stepWords) {
   return { title: spec.title, line: said || spec.line, scout: spec.scout, prop: spec.prop };
 }
 
-/* ---------------- the drawings beside him ----------------
- * Optic's own line iconography in the brand gold, not a second rendering of the character: the mascot is the
- * 3D render (static/scout), and these are the props around him. Each is one small SVG with its own motion,
- * and every animation is declared in CSS (components.css, .milo-doing-prop), so Reduce motion stops all of them
- * in one place. aria-hidden: the heading and the line carry the meaning. */
+/* ---------------- the two drawings beside him ----------------
+ * The thing Milo works with in Researching, Analyzing and Writing is rendered in the frame itself: he is at
+ * the desk with the laptop, holding the tablet, writing in the notebook (static/scout, FRAMES in
+ * optic-brand/scout/render_scout.py). What has no pose of its own is a thought bubble while he reads the
+ * question and the sparkles when the answer lands, and those two are drawn here in Optic's line work, in the
+ * brand gold, with their motion declared in CSS (components.css) so Reduce motion stops it in one place.
+ * aria-hidden: the heading and the line carry the meaning. */
 const PROPS = {
   // A thought bubble with the logo's own chart line drawing itself inside it.
   bubble: `<svg viewBox="0 0 48 40" class="prop prop-bubble" aria-hidden="true" focusable="false">
     <circle cx="7" cy="34" r="2.4"/><circle cx="13" cy="28" r="3.4"/>
     <rect x="17" y="3" width="29" height="22" rx="7"/>
     <path class="draw" d="M23 18.5l4.6-5.2 3.2 2.6 4.6-7 3.4 3.1"/></svg>`,
-  // The desk: a laptop with the Optic aperture on its lid, two books, and two cards that come and go as
-  // sources are read. The screen's glow is the only fill.
-  desk: `<svg viewBox="0 0 64 44" class="prop prop-desk" aria-hidden="true" focusable="false">
-    <path class="screen" d="M16 8h26a2 2 0 0 1 2 2v17H14V10a2 2 0 0 1 2-2z"/>
-    <circle class="mark" cx="29" cy="18" r="5"/><path class="mark-line" d="M26.2 19.4l2-2.4 1.5 1.2 2-3"/>
-    <path d="M9 27h40l4 6H5z"/>
-    <rect x="47" y="19" width="14" height="4.5" rx="1.5"/><rect x="44" y="23.5" width="17" height="4.5" rx="1.5"/>
-    <rect class="card card-1" x="2" y="5" width="10" height="13" rx="2"/>
-    <rect class="card card-2" x="50" y="4" width="10" height="13" rx="2"/></svg>`,
-  // The tablet: a chart line drawing itself, and a checklist whose ticks are the lookups that actually returned.
-  tablet: `<svg viewBox="0 0 48 40" class="prop prop-tablet" aria-hidden="true" focusable="false">
-    <rect class="screen" x="3" y="4" width="28" height="32" rx="3"/>
-    <path class="draw" d="M8 27l5-7 4 3.4 5-9 4 5"/>
-    <g class="ticks"><circle cx="38" cy="11" r="4"/><circle cx="38" cy="22" r="4"/><circle cx="38" cy="33" r="4"/>
-      <path d="M36.2 11l1.3 1.4 2.4-2.8"/><path d="M36.2 22l1.3 1.4 2.4-2.8"/><path d="M36.2 33l1.3 1.4 2.4-2.8"/></g></svg>`,
-  // The notebook: three lines written one after another, a pencil, and a cup.
-  note: `<svg viewBox="0 0 60 44" class="prop prop-note" aria-hidden="true" focusable="false">
-    <path d="M4 34V10a2 2 0 0 1 2-2h28a2 2 0 0 1 2 2v24"/><path d="M20 9v25"/>
-    <g class="lines"><path class="l1" d="M8 16h8"/><path class="l2" d="M8 23h8"/><path class="l3" d="M24 16h8"/></g>
-    <path class="pencil" d="M28 29l9-9 3.5 3.5-9 9-4.8 1.3z"/>
-    <path class="cup" d="M45 19h10v8a5 5 0 0 1-5 5 5 5 0 0 1-5-5z"/><path class="cup" d="M55 21h3.5a2.5 2.5 0 0 1 0 5H55"/></svg>`,
   // Three sparkles, once.
   done: `<svg viewBox="0 0 40 40" class="prop prop-done" aria-hidden="true" focusable="false">
     <path class="s1" d="M10 8l1.6 4.4L16 14l-4.4 1.6L10 20l-1.6-4.4L4 14l4.4-1.6z"/>

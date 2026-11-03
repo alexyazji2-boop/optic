@@ -11,7 +11,7 @@ never be: every picture of him comes from the same rendered sprite sheets.
 | Piece | Path | What it is |
 | --- | --- | --- |
 | Driver | `static/components/scout.js` | `window.OpticScout`: poses, gestures, blinks, motion setting, sprite positioning |
-| Sheets | `static/scout/scout-{full,compact}@{2,3}x.webp` | 22 frames across one row, plus `-tail` sheets |
+| Sheets | `static/scout/scout-{full,compact}@{2,3}x.webp` | 35 frames across one row, plus `-tail` sheets |
 | Frame map | `static/scout/frames.json` | frame order and the per-frame pixel size of each sheet |
 | Renderer | `optic-brand/scout/render_scout.py` | the numpy SDF raymarcher the sheets are rendered from |
 | Loaded by | `static/v2/index.html:38` | a plain script tag, before the app |
@@ -22,83 +22,84 @@ chart symbol, gold scarf, small smile, soft 3D shading, minimal face. Optic blac
 Per-frame size: full `288x380` at 3x (`192x253` at 2x), compact `144x156` at 3x (`96x104` at 2x). 22 frames,
 one row, positioned with `--scout-x`.
 
-### The 22 frames
+### The 35 frames
 
-`idle`, `idle-half`, `idle-closed`, `lean`, `tilt`, `tilt-half`, `tilt-closed`, `curious`, `curious-half`,
-`curious-closed`, `arm-1`, `arm-2`, `arm-3`, `look-l1`, `look-l2`, `look-r1`, `look-r2`, `nod-1`, `nod-2`,
-`concerned`, `concerned-half`, `concerned-closed`.
+Standing, as they always were: `idle`, `idle-half`, `idle-closed`, `lean`, `tilt`, `tilt-half`,
+`tilt-closed`, `curious`, `curious-half`, `curious-closed`, `arm-1`, `arm-2`, `arm-3`, `look-l1`, `look-l2`,
+`look-r1`, `look-r2`, `nod-1`, `nod-2`, `concerned`, `concerned-half`, `concerned-closed`.
 
-Each resting pose carries its own half-closed and closed lid, so a blink never changes the pose it happens in.
-A pose change walks the ladder `idle -> lean -> tilt -> curious` rather than jumping.
+Added 2026-11-03 for the activity states, appended and never inserted: `desk`, `desk-half`, `desk-closed`,
+`desk-type`, `tablet`, `tablet-half`, `tablet-closed`, `tablet-near`, `write`, `write-half`, `write-closed`,
+`write-1`, `write-2`.
 
-### Poses and gestures the driver already has
+Each resting pose carries its own half-closed and closed lid, so a blink never changes the pose it happens
+in, and the three new ones are no exception. A pose change walks the ladder `idle -> lean -> tilt -> curious`
+rather than jumping; the worked poses sit outside that ladder (they are scenes, not head angles), so moving
+to one is a cut.
+
+### Poses and gestures the driver has
 
 Poses (`POSE` in scout.js): `idle`->idle, `listening`->tilt, `thinking`->tilt, `searching`->tilt,
-`streaming`->idle, `error`->concerned.
-Gestures (`GESTURE`): `wave`, `ack`, `nod`, `look`, `curious`, `point`, `bob`.
+`streaming`->idle, `error`->concerned, `researching`->desk, `analyzing`->tablet, `writing`->write.
+Gestures (`GESTURE`): `wave`, `ack`, `nod`, `look`, `curious`, `point`, `bob`, and for the worked poses
+`type`, `read`, `pen`.
 
-## 2. What each activity state uses today
+## 2. What each activity state uses
 
-The five states are built from the existing frames plus one gold line drawing beside him. The drawing is the
-prop, never a second character.
-
-| State | Pose (frames) | Prop beside him | Heading / line |
+| State | Pose | What is in the frame | Heading / line |
 | --- | --- | --- | --- |
-| Thinking | `thinking` -> `tilt` | thought bubble with the chart line drawing itself | Thinking / "Understanding your question" |
-| Researching | `searching` -> `tilt`, `look` gesture available | laptop with the Optic aperture on the lid, two books, two cards coming and going | Researching / the tool's own words, else "Looking through Optic's data" |
-| Analyzing | `thinking` -> `tilt` | tablet with a chart drawing itself and a three-row checklist | Analyzing / "Connecting what came back" |
-| Writing | `streaming` -> `idle` | open notebook, three lines written in turn, pencil, cup | Writing / "Putting it together" |
-| Answer ready | `idle` plus the `ack` gesture, played once | three sparkles, once | Answer ready / "Here's what I found" |
-| Error | `error` -> `concerned` | none | No answer / "Milo could not finish this one" |
-| Cancelled | `idle` | none | Stopped / "Stopped by you" |
+| Thinking | `thinking` -> tilt | a drawn thought bubble with the logo's chart line | Thinking / "Understanding your question" |
+| Researching | `researching` -> desk | at the table: a dark laptop with the gold aperture on its lid, two books with gold bands, hands on the keys (`desk-type` loops the typing) | Researching / the tool's own words, else "Looking through Optic's data" |
+| Analyzing | `analyzing` -> tablet | a dark tablet held in both hands with the gold chart on the glass (`tablet-near` tips his head toward it) | Analyzing / "Connecting what came back" |
+| Writing | `writing` -> write | at the table: an open notebook with a dark cover, written lines, a gold pencil in his hand and a cup (`write-1`, `write-2` move the pencil, and the third line grows) | Writing / "Putting it together" |
+| Answer ready | `idle` plus the `ack` gesture, played once | three drawn sparkles | Answer ready / "Here's what I found" |
+| Error | `error` -> concerned | nothing | No answer / "Milo could not finish this one" |
+| Cancelled | `idle` | nothing | Stopped / "Stopped by you" |
 
-The props live in `PROPS` in `static/v2/js/ui/milo-activity.js`: one inline SVG each, stroked in `--c-gold`,
-`aria-hidden`, with the screen fills in `--c-gold-wash`. They are Optic's own line iconography, the same family
-as the app's icons. No emoji and no stock art is used anywhere in this feature.
+Two drawings remain, in `PROPS` in `static/v2/js/ui/milo-activity.js`: the thought bubble and the sparkles,
+neither of which is a pose he has. The desk, the tablet and the notebook used to be drawn there too and are
+not any more: a drawn laptop beside a rendered one was two laptops.
 
-## 3. The gap, stated plainly
+## 3. How the three worked poses were built
 
-The brief asks for five rendered poses: Milo with a hand on his chin, Milo **sitting at a desk** at a laptop,
-Milo **holding a tablet**, Milo **seated with a notebook and pencil**, and Milo waving.
+The renderer is a signed-distance scene ray-marched in numpy, so a new pose is new geometry, not a new
+drawing. `props(p, P)` in `render_scout.py` builds one of three scenes when a pose asks for one, and nothing
+at all when it does not, so the 22 standing frames march exactly the scene they always did.
 
-Three of those do not exist. Nothing in `static/scout/` shows him seated, holding anything, or with furniture.
-What shipped uses the pose he does have for each state and puts the desk, the tablet and the notebook beside
-him as gold line drawings. That is a deliberate substitution, taken because the brief says to "define exact
-asset specifications and use approved temporary placeholders rather than attempting to recreate a complex 3D
-character from CSS alone". It is a placeholder, and it is the one thing in this stage that does not match the
-reference sheet.
+Two things shaped the result:
 
-### Exact specification for the three missing poses
+**The camera is almost level with him**, at `[0.10, 1.75, 14.0]`, and every frame has to share it. Anything
+lying flat on a desk is foreshortened to a few pixels and simply disappears: the first attempt put an open
+notebook on the desk and rendered a desk with nothing on it. Everything therefore stands up. The laptop is
+read from the back of its lid, the books are a stack that rises above the table, the tablet is tipped toward
+the viewer, and the notebook is propped against the table rather than lying open on it.
 
-If the owner wants the rendered versions, these are the specifications. The renderer exists and works:
-`optic-brand/scout/render_scout.py`, timed on this machine at about 45 s per full frame and 21 s per compact
-frame, so a sheet of new frames is minutes of CPU, not a new pipeline.
+**The sprite has a transparent background.** A desk running off both edges of the frame reads as a black bar
+rather than as furniture, so the desk is a narrow table, 2.1 units wide, with both ends and both legs in
+frame.
 
-Shared rules for every new frame:
-- Same character solid, same materials, same gold (`#b0861b` family), same key light and soft shadow as the
-  existing sheet. Render from the same scene file so the shading matches frame to frame.
-- Transparent background, premultiplied alpha, WebP, at 2x and 3x.
-- Same frame box as the sheet it joins. A seated or propped pose is wider than the standing one, so these
-  frames need a **wider camera window**: widen the frame box for the whole sheet rather than cropping him,
-  then update `frames.json` (`full`/`compact` sizes) and re-export every frame at the new box so one row stays
-  one row.
-- Append new frames to the end of the `frames` array. Never reorder: `FRAME` in scout.js is index-based and a
-  reorder silently shifts every pose.
+Materials added to the shader: 8 shell (laptop, tablet, cup), 9 desk, 10 paper, 11 book cloth, 12 legs. They
+are lit by the same key, fill, sky, shadow and occlusion as he is, so they sit in his world rather than being
+pasted onto it.
 
-| New pose | Frames needed | Geometry | Used by |
-| --- | --- | --- | --- |
-| `desk` | `desk`, `desk-half`, `desk-closed`, `desk-type-1`, `desk-type-2` | Milo seated three-quarter at a dark desk, dark laptop lid toward the viewer carrying a small gold aperture mark, two stacked books at his left. Hands at the keyboard; `desk-type-1/2` move the hands about 4 px for a typing loop. Lid glow is baked into the render, not animated in CSS. | Researching |
-| `tablet` | `tablet`, `tablet-half`, `tablet-closed`, `tablet-near` | Milo standing, head angled down toward a dark tablet held in both hands, gold chart on the glass. `tablet-near` tips the head a further 6 degrees toward it for the look-down beat. | Analyzing |
-| `write` | `write`, `write-half`, `write-closed`, `write-1`, `write-2` | Milo seated at the same desk, open notebook, pencil in his right hand, small gold-rimmed cup at the right edge. `write-1/2` travel the pencil hand across about 10 px for the writing loop. | Writing |
+Three things had to be true and are checked in the renders:
 
-Driver changes those frames would need, all in `static/components/scout.js`: add each name to `FRAME` with its
-index, raise `COUNT`, add `FACE` entries so blinks work in the new resting poses, add `LEVEL` entries (seated
-poses sit outside the upright/lean/tilt/curious ladder and should not be walked through it, so give them a
-direct cut), and add `POSE` names `researching`, `analyzing`, `writing` pointing at them. The activity module
-then only needs its `scout:` values changed in `ACTIVITY`; nothing else in the panel moves.
+1. **The scarf stays visible.** It is one of the features that make him him, so the laptop lid and the
+   notebook both stop below it. The first pass had the lid crossing the scarf.
+2. **The hands read as holding something.** His hands are mitts: the first pencil was a realistic length and
+   vanished inside one, so the pencil now runs well past his hand at both ends.
+3. **The props read at card size.** The figure is 104 CSS px wide in the card, which is 36% of the 3x frame.
+   The gold aperture, the gold book bands, the chart on the glass and the pencil are what carry each scene at
+   that size; everything smaller was removed.
 
-Until that is done the props stay. They are the substitute, they are labelled as such here, and the states
-read correctly without them because the heading and the line carry the meaning.
+### If a fourth pose is ever wanted
+
+Follow the same path. Add frames to the **end** of `FRAMES` in `render_scout.py`, give the resting pose its
+own `-half` and `-closed` lids, add the names to `FRAME` in `scout.js` with their indices, raise `COUNT`, add
+a `FACE` entry, add a `POSE` name, and leave `LEVEL` alone so the change is a cut. Then re-render, and update
+the two places in CSS that carry the frame count: `background-size: 3500% 100%` (in `static/styles.css` and
+`static/v2/css/components.css`) and the per-frame step in `@keyframes scout-badge-blink`, which is
+`100 / (frames - 1)` per frame. `tests/test_pulse_scout.py` checks all of that against `frames.json`.
 
 ## 4. Consistency rules
 
@@ -108,6 +109,12 @@ read correctly without them because the heading and the line carry the meaning.
 4. One figure per context. The panel header bust, the empty state and the activity figure each take their own
    slot (`O.attach(el, { slot })`) so one never stops another's gesture.
 5. The full sheet is already fetched by the panel's empty state (`milo.js:320`), so the activity card adds no
-   image bytes to the panel.
-6. Reduce motion stops the props and the dots; the character's own motion is governed by his existing motion
-   setting (Full / Subtle / Still) in Response settings, which this feature did not change.
+   request to the panel. The sheet itself grew with the thirteen new frames, which is the one real cost:
+   `scout-full@3x.webp` and `scout-compact@3x.webp` are both larger than before.
+6. Reduce motion stops the drawn props and the dots, and holds the figure still, but **not** in the plain
+   standing pose: `Ctl.prototype.pose` keeps a worked pose at Still motion, because what he is working with
+   is the state itself and not decoration. Researching still shows him at the desk, just not typing. His
+   motion setting (Full / Subtle / Still) in Response settings governs the movement, as it always did.
+7. The frame count lives in four places and they must agree: `FRAMES` in the renderer, `frames` in
+   `frames.json`, `FRAME` and `COUNT` in `scout.js`, and the two `background-size` / blink-keyframe figures
+   in `static/styles.css` and `static/v2/css/components.css`.

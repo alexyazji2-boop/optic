@@ -1,5 +1,45 @@
 # Milo animation changelog
 
+## 2026-11-03 (second pass) — the three worked poses, rendered
+
+The placeholders are gone. Researching, Analyzing and Writing are now frames of the character himself.
+
+Thirteen frames were added to the sprite sheet: `desk`, `desk-half`, `desk-closed`, `desk-type`, `tablet`,
+`tablet-half`, `tablet-closed`, `tablet-near`, `write`, `write-half`, `write-closed`, `write-1`, `write-2`.
+The sheet went from 22 frames to 35.
+
+| File | What |
+| --- | --- |
+| `optic-brand/scout/render_scout.py` | `props(p, P)` builds one of three scenes; `sd_box`, `sd_capsule`, `sd_cyl`, `rot_x_at`, `poly2`; a left arm capsule when a prop moves that hand; materials 8-12 and their shading; the thirteen new `FRAMES` |
+| `static/scout/*.webp`, `frames.json` | re-rendered, 35 frames each |
+| `static/components/scout.js` | the new names in `FRAME`, `COUNT` 35, `FACE` entries so blinks work in every pose, `POSE` gains `researching`/`analyzing`/`writing`, the `type`/`read`/`pen` loops, and `pose()` keeps a worked pose at Still motion |
+| `static/v2/js/ui/milo-activity.js` | the three states point at the new poses and carry no drawn prop; the desk, tablet and notebook SVGs removed |
+| `static/v2/css/components.css` | `background-size: 3500%`, the blink keyframe step, the card figure 78 -> 104 px, the removed props' rules gone |
+| `static/styles.css` | the same two sprite figures, for the classic app |
+| `tests/test_milo_activity.py` | the props test became a check that what he works with is rendered and not drawn, plus the pose/frame contract |
+
+What shaped the geometry, since none of it is obvious from the numbers:
+
+- **The camera is almost level with him**, and every frame shares it. Anything lying flat is foreshortened to
+  a few pixels: the first attempt put an open notebook on the desk and rendered a desk with nothing on it.
+  Everything stands up instead.
+- **The sprite has a transparent background**, so a desk running off both edges reads as a black bar. The
+  desk is a narrow table with its ends and legs in frame.
+- **His hands are mitts.** A pencil of realistic length vanished inside one; it now runs well past his hand
+  at both ends.
+- **The scarf stays visible.** The laptop lid and the notebook both stop below it.
+
+Render: `--no-tail --no-hero`, 70 frames, about 11 minutes on this machine. The tail strips and the hero PNG
+were not touched.
+
+The 22 standing frames are geometrically identical (`props()` builds nothing without a prop), but the strip
+had to be re-encoded to hold 35 frames, so their pixels are not bit-identical: compared against the committed
+sheet, the mean channel difference across those 22 frames is 0.23 of 255, with isolated maxima around 35 on
+the gold rims. That is WebP re-compression at the new width, not a change to the figure.
+
+One consequence worth knowing: the frame count lives in the renderer, `frames.json`, `scout.js` and twice in
+CSS. A tab holding the old stylesheet against the new sheet draws him clipped until it reloads.
+
 ## 2026-11-03 — five activity states, from the server's own events
 
 Branch `milo-animation`, cut from `origin/main` `1a1cf58b`. Commit `ba314e64`, plus this file.
@@ -51,8 +91,7 @@ Browser: 25 scenarios, recorded one by one in `MILO_VISUAL_QA.md`.
 
 ### Known gaps
 
-1. Three of the five poses are placeholders: the standing Milo plus a prop, not Milo seated at a desk, holding
-   a tablet, or writing. Exact specifications for rendering those are in `MILO_CHARACTER_DESIGN.md` section 3.
+1. (Closed by the second pass above: the three poses are rendered.)
 2. The app's Anthropic key is refused, so no real model answer was produced; scenarios 3, 4, 7 and 8 in the QA
    document are blocked or partial for that reason.
 3. `prefers-reduced-motion` was not emulated in the browser; Optic's own `data-motion="reduce"` was, and both
