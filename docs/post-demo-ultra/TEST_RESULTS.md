@@ -1508,4 +1508,5 @@ Same branch and working folder as Phase 12. No model was called and nothing was 
 | Tests that read the edited docs | 13 files | 983 passed |
 | Final suite | `.venv/bin/python -m pytest -q` | 8,655 passed, 1 skipped (247 s) |
 | The saving itself | the ledger's `cache_read_tokens` per chat call | **not measurable here** (no working key, BL-01): measured after deployment |
+| Shipped alone | a worktree at origin/main `d22522a4` with only `app/ai.py` and its test; full suite there | 8,231 passed, 1 skipped, 0 failed; pushed `d22522a4..1a1cf58b`; live booted `1a1cf58b2b01` at 04:29:29 UTC on 2026-11-03; `/`, `/classic`, `/api/build`, `/healthz` 200; same boot 45 s later |
 

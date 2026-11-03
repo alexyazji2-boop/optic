@@ -870,5 +870,6 @@ breakpoint, which stays. That is the combination the Claude API reference recomm
   - a last round sent with `tool_choice: none` (when a limit is reached) reads only the system block's entry,
     because a `tool_choice` change invalidates the messages cache;
   - a one-call answer pays the 1.25x write on its unshared tail, about $0.0015 for a definition.
-- **Shipping:** on the owner's word, like any production change.
+- **Shipping:** on the owner's word, like any production change. The owner said "Ship C1 alone", and it shipped
+  from a worktree at live main as `1a1cf58b` on 2026-11-03 (only `app/ai.py` and its test; suite 8,231 passed).
 

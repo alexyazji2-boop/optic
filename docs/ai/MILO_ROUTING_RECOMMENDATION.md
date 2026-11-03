@@ -118,9 +118,9 @@ one is benign.
    - its saving is 4% to 10% with a perfect router, less than C1 alone;
    - the router cannot see the two risks that matter most (unavailable data and injection);
    - it would multiply the evaluation and the failure modes.
-2. **Ship C1.** It is the one saving with no quality question attached. It is built on this branch (the commit
-   after `c91ec591`), with its own tests, and ships on the owner's word. After it ships, read the ledger's cache hits
-   before and after (COST_AUDIT C1).
+2. **C1 has shipped.** It is the one saving with no quality question attached. It went to live main as `1a1cf58b`
+   on 2026-11-03, on the owner's word, with its own tests. The ledger's cache hits will show what it saves
+   (COST_AUDIT C1).
 3. **Evaluate the small models as replacements, not routes.** Run Haiku 5.5, GPT-6 Luna, Gemini 3.5 Flash-Lite and
    DeepSeek V4.1 Flash, each on the whole benchmark, after the Sonnet 5.5 baseline. A small model that passes every
    gate saves far more than any router. One that fails only W1 and W9 is no use to a router either, since those

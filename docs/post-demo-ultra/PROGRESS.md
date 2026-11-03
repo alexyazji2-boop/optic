@@ -20,8 +20,11 @@ Read this and [REQUIREMENTS_MATRIX.md](REQUIREMENTS_MATRIX.md) before changing a
   (Sonnet 5.5), C1, then the baseline and the small models as whole replacements. Report:
   `docs/ai/MILO_PHASE_13_FINAL_REPORT.md`.
 - **C1 built on the same branch** on the owner's "Yes, do C1 here" (D-117): the API's automatic caching beside the
-  system breakpoint, tested and checked end to end with the stand-in. Not deployed.
-- **Next:** the owner's. A working key and a run budget (BL-01, BL-14), and the word to ship. Nothing is pushed.
+  system breakpoint, tested and checked end to end with the stand-in. **Shipped alone** on "Ship C1 alone": live
+  main `1a1cf58b` from `~/Optic/wt-ship-c1`, live at 04:29 UTC on 2026-11-03. Record:
+  `~/Optic/work/phase12-2026-11-02/ship-c1/SHIP.md`.
+- **Next:** the owner's. A working key and a run budget (BL-01, BL-14). Phases 12 and 13 themselves are not
+  pushed.
 
 - **Current phase:** none. Phases 01 to 11 are complete (reports below). FINAL_REPORT.md holds the decision: **NOT READY: BLOCKING ISSUES REMAIN** (BUG-132, the advice output check, P0; BUG-022 and BUG-023, unlicensed market data, P0, the owner's and counsel's).
 - **Branch / worktree:** `post-demo-ultra` in `~/Optic/wt-ultra`, from `9fa0f36` (tag `post-demo-ultra-baseline`). Upstream unset. **Deployed on 2026-11-01** on the owner's word in chat ("push all new changes and make them live"): merged onto live main `8e2cbf4` as `23b435a` on branch `release-2026-11-01` and pushed to `main`, before the checks in FINAL_REPORT section 17, which remain open.
