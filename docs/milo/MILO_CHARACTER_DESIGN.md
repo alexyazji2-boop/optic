@@ -121,6 +121,9 @@ the two places in CSS that carry the frame count: `background-size: 3800% 100%` 
    standing pose: `Ctl.prototype.pose` keeps a worked pose at Still motion, because what he is working with
    is the state itself and not decoration. Researching still shows him at the desk, just not typing. His
    motion setting (Full / Subtle / Still) in Response settings governs the movement, as it always did.
-7. The frame count lives in four places and they must agree: `FRAMES` in the renderer, `frames` in
-   `frames.json`, `FRAME` and `COUNT` in `scout.js`, and the two `background-size` / blink-keyframe figures
-   in `static/styles.css` and `static/v2/css/components.css`.
+7. The frame count lives in four places and they should agree: `FRAMES` in the renderer, `frames` in
+   `frames.json`, `FRAME` and `COUNT` in `scout.js`, and the fallback figures in `static/styles.css` and
+   `static/v2/css/components.css`. Since 2026-11-03 a disagreement no longer breaks him: `scout.js` measures
+   the sheet the browser actually loaded and publishes `--scout-frames` and `--scout-step` on `<html>`, which
+   both stylesheets read, and it never asks for a frame past the end of that sheet. Keep the figures in step
+   anyway, so a page whose script has not run still looks right.

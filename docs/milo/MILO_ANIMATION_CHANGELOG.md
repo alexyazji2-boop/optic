@@ -1,5 +1,39 @@
 # Milo animation changelog
 
+## 2026-11-03 (fourth pass) — a deploy can no longer break Milo
+
+Chasing a stray reading during the live check turned up why he looked cut in half earlier: the frame count
+lives in four files that deploy separately, and three of them are cached for four hours with no version in
+their URLs.
+
+| | cache-control |
+| --- | --- |
+| `/components/scout.js` | `max-age=14400` |
+| `/v2/css/components.css` | `max-age=14400` |
+| `/scout/scout-full@3x.webp` | `max-age=14400` |
+| `/scout/frames.json` | `no-cache` |
+
+Nothing carries a version, so for four hours after the count changes a browser can hold any mix of old and
+new, and any disagreement slices him wrong: a fresh stylesheet against a cached script puts every frame at
+1.76x its offset, a stale stylesheet against a fresh script at 0.57x. The count had moved twice that day,
+22 to 35 to 38.
+
+`scout.js` now measures the picture the browser actually loaded rather than trusting the count compiled into
+it. The sheet is one row of equal frames, so the number of them is its width over its height times one
+frame's aspect, and that aspect comes off the element's own box. It publishes the answer as `--scout-frames`
+and `--scout-step` on `<html>`; both stylesheets read those, keeping their own figures only as the fallback
+for a page whose script has not run. `show()` slices by the measured count and refuses any frame past the end
+of the sheet, so a script newer than the picture draws a resting Milo instead of nothing.
+
+Nothing is fetched. The frame's aspect comes from `getComputedStyle(el).aspectRatio`, and the sprite it
+measures is the one the element is already loading, so `test_presentation_only` still holds: Scout talks to
+no server.
+
+**What this does and does not fix.** From here on, any mix of the three files agrees, because whichever
+script is running measures whichever sheet arrived and tells the stylesheet what it found. It does not repair
+the window created by this deploy itself: a browser still holding the pre-fix script or stylesheet keeps
+them until its four hours run out. Purging the CDN for those three paths would end it sooner.
+
 ## 2026-11-03 (third pass) — the wave is a wave
 
 The owner said Milo twitched instead of waving. He was right, and it was not the new work: the arm had three

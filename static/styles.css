@@ -19676,8 +19676,15 @@ footer.legal > .legal-full {
   background-repeat: no-repeat;
   background-position: 0 0;
 }
+:root {
+  /* How many frames the pose sheet holds, and the step between two of them. components/scout.js overrides
+     both on <html> from the sheet the browser really loaded; these are what a page whose script has not run
+     uses, and they must match FRAMES in optic-brand/scout/render_scout.py. */
+  --scout-frames: 3800%;
+  --scout-step: 2.7027%;
+}
 .scout::after {
-  background-size: 3800% 100%;
+  background-size: var(--scout-frames, 3800%) 100%;
   background-position-x: var(--scout-x);
   background-image: url("scout/scout-full@2x.webp");
   background-image: -webkit-image-set(url("scout/scout-full@2x.webp") 2x, url("scout/scout-full@3x.webp") 3x);
@@ -19735,7 +19742,7 @@ footer.legal > .legal-full {
   width: 126.4%;
   height: 136.9%;
   background-repeat: no-repeat;
-  background-size: 3800% 100%;
+  background-size: var(--scout-frames, 3800%) 100%;
   background-position: 0% 0;
   background-image: url("scout/scout-compact@2x.webp");
   background-image: -webkit-image-set(url("scout/scout-compact@2x.webp") 2x, url("scout/scout-compact@3x.webp") 3x);
@@ -19745,17 +19752,17 @@ footer.legal > .legal-full {
 /* 1% of 11 s is 110 ms: half 35 ms, closed 50 ms, half 40 ms. */
 @keyframes scout-badge-blink {
   0%      { background-position-x: 0%; }
-  36%     { background-position-x: 2.7027%; }
-  36.32%  { background-position-x: 5.4054%; }
-  36.77%  { background-position-x: 2.7027%; }
+  36%     { background-position-x: var(--scout-step, 2.7027%); }
+  36.32%  { background-position-x: calc(var(--scout-step, 2.7027%) * 2); }
+  36.77%  { background-position-x: var(--scout-step, 2.7027%); }
   37.13%  { background-position-x: 0%; }
-  93%     { background-position-x: 2.7027%; }
-  93.32%  { background-position-x: 5.4054%; }
-  93.77%  { background-position-x: 2.7027%; }
+  93%     { background-position-x: var(--scout-step, 2.7027%); }
+  93.32%  { background-position-x: calc(var(--scout-step, 2.7027%) * 2); }
+  93.77%  { background-position-x: var(--scout-step, 2.7027%); }
   94.13%  { background-position-x: 0%; }
-  95.22%  { background-position-x: 2.7027%; }
-  95.54%  { background-position-x: 5.4054%; }
-  95.99%  { background-position-x: 2.7027%; }
+  95.22%  { background-position-x: var(--scout-step, 2.7027%); }
+  95.54%  { background-position-x: calc(var(--scout-step, 2.7027%) * 2); }
+  95.99%  { background-position-x: var(--scout-step, 2.7027%); }
   96.35%  { background-position-x: 0%; }
   100%    { background-position-x: 0%; }
 }

@@ -87,7 +87,9 @@ def test_the_box_holds_its_space_and_picks_a_density():
     full_w, full_h = MANIFEST["full"]["3x"]
     assert "aspect-ratio: %d / %d" % (full_w, full_h) in base
     pose = _block("}\n.scout::after {")
-    assert "background-size: %d00%% 100%%" % len(FRAMES) in pose
+    # The count comes from the sheet the browser really loaded (scout.js measures it); the figure in the
+    # stylesheet is only the fallback for a page whose script has not run.
+    assert "background-size: var(--scout-frames, %d00%%) 100%%" % len(FRAMES) in pose
     assert "background-position-x: var(--scout-x);" in pose
     assert "--scout-x: 0%;" in base
     assert 'image-set(url("scout/scout-full@2x.webp") 2x, url("scout/scout-full@3x.webp") 3x)' in pose
@@ -269,13 +271,14 @@ def test_the_pulse_button_wears_scout_blinking():
     # and the brief asked for Milo's head "without a surrounding black ring".
     assert "border-radius: 50%" in badge and "background: transparent" in badge
     fig = _block("\n.scout-badge-fig {")
-    assert "scout-compact@3x.webp" in fig and "background-size: %d00%% 100%%" % len(FRAMES) in fig
+    assert "scout-compact@3x.webp" in fig and "background-size: var(--scout-frames, %d00%%) 100%%" % len(FRAMES) in fig
     assert "animation: scout-badge-blink 11s step-end infinite;" in fig
     step = 100 / (len(FRAMES) - 1)
     assert FRAMES.index("idle-half") == 1 and FRAMES.index("idle-closed") == 2
     blink = CSS[CSS.index("@keyframes scout-badge-blink"):]
     blink = blink[:blink.index("\n}")]
-    assert "%.4f%%" % step in blink and "%.4f%%" % (2 * step) in blink
+    assert "var(--scout-step, %.4f%%)" % step in blink
+    assert "calc(var(--scout-step, %.4f%%) * 2)" % step in blink
     assert ':root[data-scout-motion="still"] .scout-badge-fig { animation: none; }' in CSS
     reduced = CSS[CSS.index(':root[data-scout-motion="still"] .scout-badge-fig'):]
     assert "@media (prefers-reduced-motion: reduce)" in reduced[:300]
@@ -318,3 +321,32 @@ def test_the_wave_is_a_wave_and_not_a_twitch():
             at = angle[frame]
         # and it comes back down rather than snapping home from the top
         assert angle[steps[-1][0]] <= 20, "%s ends with the arm still up" % gesture
+
+
+def test_the_sheet_is_measured_rather_than_assumed():
+    """The frame count lives in four files that deploy separately (the renderer, frames.json, FRAME in
+    scout.js, and background-size in the two stylesheets). Each is served max-age=14400 with no version in
+    its URL, so for four hours after the count changes a browser can hold any mix. A fresh stylesheet against
+    a cached script put every frame at 1.76x its offset on 2026-11-03 and cut Milo in half on screen.
+
+    So nothing is allowed to slice by the compiled-in COUNT. scout.js measures the picture it actually got,
+    publishes the answer to CSS, and never asks for a frame past the end of that picture."""
+    assert "var LIVE = COUNT;" in SCOUT
+    assert "FRAME[name] / (COUNT - 1)" not in SCOUT, "the compiled count must not slice the sheet"
+    show = SCOUT[SCOUT.index("Ctl.prototype.show = function"):]
+    show = show[:show.index("\n  };")]
+    assert "if (i === undefined || i >= LIVE) { name = 'idle'; i = 0; }" in show, "no frame past the sheet"
+    assert "(i / Math.max(1, LIVE - 1) * 100)" in show
+    # the measurement itself: one row of equal frames, so width over height times the frame's aspect
+    assert "im.naturalWidth / im.naturalHeight * (BOX.h / BOX.w)" in SCOUT
+    assert "if (n >= 2) LIVE = n;" in SCOUT, "a sheet that measures as nothing keeps the compiled count"
+    assert "root.style.setProperty('--scout-frames', (LIVE * 100) + '%');" in SCOUT
+    assert "root.style.setProperty('--scout-step', (100 / Math.max(1, LIVE - 1)).toFixed(4) + '%');" in SCOUT
+    # the frame's aspect comes off the element, so this stays presentation only: nothing is fetched, and the
+    # sprite it loads is the one the element is already loading
+    assert "global.getComputedStyle(el).aspectRatio" in SCOUT
+    assert "measure(el);" in SCOUT and SCOUT.index("measure(el);") < SCOUT.index("c.rest();\n    if (io)")
+    # and every place that slices a sheet reads those two, in both apps
+    for css, where in ((CSS, "v2"), ((ROOT / "static/styles.css").read_text(), "classic")):
+        assert css.count("background-size: var(--scout-frames,") == 2, where
+        assert "var(--scout-step," in css, where

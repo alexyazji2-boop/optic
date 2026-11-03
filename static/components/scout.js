@@ -69,6 +69,60 @@
   };
   var COUNT = 38;
 
+  /* How many frames the browser ACTUALLY has, which is not always COUNT.
+   *
+   * The count lives in four files that deploy separately: the renderer, frames.json, FRAME above, and
+   * background-size in the stylesheets. Each is served with max-age=14400 and no version in its URL, so for
+   * four hours after the count changes a browser can hold any mix of old and new. Every disagreement slices
+   * him wrong: on 2026-11-03 a fresh stylesheet against a cached script put every frame at 1.76x its offset,
+   * and the owner saw a Milo cut in half.
+   *
+   * So the sheet is measured instead of assumed. It is one row of equal frames, so the number of them is its
+   * width over its height times the frame's own aspect; frames.json carries that aspect and is the one file
+   * served no-cache. The measurement drives the frame offset and background-size for every figure and for
+   * the button's badge, and a frame past the end of the sheet is never asked for. Both sheets always hold
+   * the same frames, so measuring one answers for both. */
+  var LIVE = COUNT;                     // what we actually slice by
+  var BOX = { w: 288, h: 380 };         // one full frame, until an element on the page says otherwise
+  var sized = false;
+
+  function publishSize() {
+    try {
+      var root = global.document.documentElement;
+      root.style.setProperty('--scout-frames', (LIVE * 100) + '%');
+      root.style.setProperty('--scout-step', (100 / Math.max(1, LIVE - 1)).toFixed(4) + '%');
+    } catch (e) { /* no DOM */ }
+    for (var i = 0; i < live.length; i++) {
+      if (live[i] && live[i].el && live[i].el.isConnected) live[i].show(live[i].frameName);
+    }
+  }
+
+  /* Measured from `el`, the first figure to appear: its box carries one frame's aspect (the stylesheet gives
+   * it an aspect-ratio), and the sheet is one row of frames with that aspect, so the number of them is the
+   * picture's width over its height times that ratio. Nothing is fetched: the sprite is already being loaded
+   * for the element, so this reads the same file out of the cache. */
+  function measure(el) {
+    if (sized || !global.document || !global.Image) return;
+    sized = true;
+    try {
+      var r = (global.getComputedStyle(el).aspectRatio || '').split('/');
+      var w = parseFloat(r[0]), h = parseFloat(r[1]);
+      if (!(w > 0 && h > 0)) { var b = el.getBoundingClientRect(); w = b.width; h = b.height; }
+      if (w > 0 && h > 0) BOX = { w: w, h: h };
+    } catch (e) { /* the compiled frame box stands */ }
+    publishSize();                      // the compiled count, until the picture answers
+    var im = new global.Image();
+    im.onload = function () {
+      if (!im.naturalWidth || !im.naturalHeight) return;
+      var n = Math.round(im.naturalWidth / im.naturalHeight * (BOX.h / BOX.w));
+      // A sheet that measures as nothing, or as a single frame, means the picture is wrong rather than the
+      // count: keep what was compiled in.
+      if (n >= 2) LIVE = n;
+      publishSize();
+    };
+    im.src = '/scout/scout-full@' + ((global.devicePixelRatio || 1) >= 2.5 ? '3x' : '2x') + '.webp';
+  }
+
   /* How far over the head is, so a change of pose walks through the frames
    * in between instead of jumping: upright, leaning, tilted, curious. */
   var LEVEL = { 'lean': 1, 'look-l1': 1, 'look-l2': 1, 'look-r1': 1, 'look-r2': 1,
@@ -191,9 +245,13 @@
     return this.visible && !document.hidden && motion() !== 'still' && this.alive();
   };
   Ctl.prototype.show = function (name) {
+    var i = FRAME[name];
+    // Never ask for a frame the sheet in this browser does not have: a script newer than the picture would
+    // otherwise point past its end and show nothing.
+    if (i === undefined || i >= LIVE) { name = 'idle'; i = 0; }
     this.frameName = name;
     this.el.setAttribute('data-frame', name);
-    this.el.style.setProperty('--scout-x', (FRAME[name] / (COUNT - 1) * 100).toFixed(4) + '%');
+    this.el.style.setProperty('--scout-x', (i / Math.max(1, LIVE - 1) * 100).toFixed(4) + '%');
   };
   Ctl.prototype.pose = function () {
     var name = POSE[this.state] || 'idle';
@@ -382,6 +440,7 @@
     var c = new Ctl(el, opts.slot);
     el.scoutCtl = c;
     live.push(c);
+    measure(el);        // the first figure to appear tells us how many frames the sheet really has
     c.rest();
     if (io) io.observe(el); else c.wake();
     return c;
