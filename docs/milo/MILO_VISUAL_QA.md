@@ -97,6 +97,7 @@ are now rendered frames of the character himself. Re-checked after the render:
 | Reduce motion | with `data-motion="reduce"`, zero elements in the card report an `animation-name` |
 | CSS frame count | `background-size: 3500% 100%` live in the panel, `frames.json` 35: the two agree, which is what the clipped figure in the first reload was about |
 | Console | no errors |
+| Rebase | rebased onto `origin/main` `5bcf5972` before shipping; no file overlapped that commit, so nothing was resolved by hand |
 
 ## Remaining defects and gaps
 

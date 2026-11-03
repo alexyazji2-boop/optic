@@ -2,7 +2,7 @@
 
 ## 2026-11-03 (second pass) — the three worked poses, rendered
 
-Commit `073315a1`. Not pushed, not deployed.
+Commit `8f1e06bb`.
 
 The placeholders are gone. Researching, Analyzing and Writing are now frames of the character himself.
 
@@ -44,8 +44,8 @@ CSS. A tab holding the old stylesheet against the new sheet draws him clipped un
 
 ## 2026-11-03 — five activity states, from the server's own events
 
-Branch `milo-animation`, cut from `origin/main` `1a1cf58b`. Commit `ba314e64`, plus this file.
-Not pushed. Not deployed.
+Branch `milo-animation`, cut from `origin/main` `1a1cf58b` and rebased onto `5bcf5972` before shipping.
+Commit `8073a937`, plus this file.
 
 ### What changed for a reader
 
