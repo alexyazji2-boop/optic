@@ -2,6 +2,8 @@
 
 ## 2026-11-03 (second pass) — the three worked poses, rendered
 
+Commit `073315a1`. Not pushed, not deployed.
+
 The placeholders are gone. Researching, Analyzing and Writing are now frames of the character himself.
 
 Thirteen frames were added to the sprite sheet: `desk`, `desk-half`, `desk-closed`, `desk-type`, `tablet`,
