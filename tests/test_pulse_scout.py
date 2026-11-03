@@ -292,3 +292,29 @@ def test_he_blinks_and_waves_more_often():
     assert "var WAVE_GAP_MS = 20000;" in SCOUT
     assert "full && self.state === 'idle' && self.slot === 'welcome'" in sched
     assert "self.gesture('wave');" in sched
+
+
+def test_the_wave_is_a_wave_and_not_a_twitch():
+    """The owner called it a twitch (2026-11-03), and it was: the arm had three positions, 30, 65 and 100
+    degrees, and the wave cut between them, crossing 35 degrees in 60 ms. At the welcome size the hand jumped
+    about 18 px across and 36 px up with nothing in between. The in-between frames arm-a, arm-b and arm-c
+    halve every step. This pins the property, not the exact numbers: no single step may move the arm more
+    than 20 degrees, and none may do it faster than 400 deg/s."""
+    angle = {"arm-a": 15, "arm-1": 30, "arm-b": 47, "arm-2": 65, "arm-c": 82, "arm-3": 100}
+    for name in angle:
+        assert name in FRAMES, name
+    table = SCOUT[SCOUT.index("var GESTURE = {"):SCOUT.index("var GESTURE_FROM")]
+    for gesture in ("wave", "ack", "point"):
+        body = table[table.index(gesture + ": ["):]
+        body = body[:body.index("]],") + 2]
+        steps = re.findall(r"\['([a-z0-9-]+)', (\d+)\]", body)
+        assert steps, gesture
+        at = 0
+        for frame, ms in steps:
+            assert frame in angle, (gesture, frame)   # every gesture frame is one of the arm's positions
+            move, ms = abs(angle[frame] - at), int(ms)
+            assert move <= 20, "%s: %s moves the arm %d degrees in one cut" % (gesture, frame, move)
+            assert move / ms * 1000 <= 400, "%s: %s travels %.0f deg/s" % (gesture, frame, move / ms * 1000)
+            at = angle[frame]
+        # and it comes back down rather than snapping home from the top
+        assert angle[steps[-1][0]] <= 20, "%s ends with the arm still up" % gesture

@@ -702,6 +702,10 @@ FRAMES = [
     ("write-closed", dict(prop="write", tilt=2, pitch=15, cl=1.0, cr=1.0)),
     ("write-1", dict(prop="write", tilt=2, pitch=15, pen=0.5)),
     ("write-2", dict(prop="write", tilt=2, pitch=15, pen=1.0)),
+    # In-between arm positions, added 2026-11-03. The wave had only arm-1, arm-2 and arm-3 (30, 65 and 100
+    # degrees) and cut between them, so the hand jumped 35 degrees at a time, about 580 deg/s at the fast
+    # steps: it read as a twitch rather than a wave. These halve every step.
+    ("arm-a", dict(wave=15)), ("arm-b", dict(wave=47)), ("arm-c", dict(wave=82)),
 ]
 # (window in world units, size at 3x). The 2x sprite is the 3x one resampled,
 # never an upscale: the largest use is the welcome figure at 96 CSS px wide.

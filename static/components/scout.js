@@ -64,8 +64,10 @@
     'desk': 22, 'desk-half': 23, 'desk-closed': 24, 'desk-type': 25,
     'tablet': 26, 'tablet-half': 27, 'tablet-closed': 28, 'tablet-near': 29,
     'write': 30, 'write-half': 31, 'write-closed': 32, 'write-1': 33, 'write-2': 34,
+    /* In-between arm positions, so the wave is a wave: see GESTURE below. */
+    'arm-a': 35, 'arm-b': 36, 'arm-c': 37,
   };
-  var COUNT = 35;
+  var COUNT = 38;
 
   /* How far over the head is, so a change of pose walks through the frames
    * in between instead of jumping: upright, leaning, tilted, curious. */
@@ -95,17 +97,27 @@
   };
   var WORK = { desk: 1, tablet: 1, write: 1 };
 
-  /* Gestures, as [frame, ms]. Short on purpose. */
+  /* Gestures, as [frame, ms].
+   *
+   * The arm has seven positions, not three: arm-a, arm-1, arm-b, arm-2, arm-c, arm-3 climb 15, 30, 47, 65,
+   * 82 and 100 degrees from the shoulder. Until 2026-11-03 the wave used only arm-1, arm-2 and arm-3 and cut
+   * between them, so the hand crossed 35 degrees in 60 ms, about 580 deg/s, and at the welcome size it
+   * jumped roughly 18 px across and 36 px up with nothing in between. It read as a twitch, which is what the
+   * owner called it. Every step is now about 17 degrees over 50 ms, near 300 deg/s, which is where a wave
+   * actually sits. */
   var GESTURE = {
-    wave: [['arm-1', 60], ['arm-2', 60], ['arm-3', 130], ['arm-2', 80], ['arm-3', 130],
-      ['arm-2', 75], ['arm-1', 60]],
-    ack: [['arm-1', 55], ['arm-2', 105], ['arm-1', 55]],
+    wave: [['arm-a', 50], ['arm-1', 50], ['arm-b', 52], ['arm-2', 52], ['arm-c', 55], ['arm-3', 120],
+      ['arm-c', 60], ['arm-2', 70], ['arm-c', 60], ['arm-3', 110],
+      ['arm-c', 55], ['arm-2', 52], ['arm-b', 50], ['arm-1', 50], ['arm-a', 45]],
+    ack: [['arm-a', 50], ['arm-1', 52], ['arm-b', 55], ['arm-2', 110], ['arm-b', 55], ['arm-1', 52],
+      ['arm-a', 48]],
     nod: [['nod-1', 90], ['nod-2', 170], ['nod-1', 90]],
     look: [['look-l1', 120], ['look-l2', 520], ['look-l1', 110], ['lean', 90],
       ['look-r1', 120], ['look-r2', 520], ['look-r1', 110], ['lean', 90]],
     curious: [['curious', 1300], ['curious-half', 40], ['curious-closed', 50],
       ['curious-half', 40], ['curious', 280]],
-    point: [['arm-1', 80], ['arm-2', 950], ['arm-1', 80]],
+    point: [['arm-a', 50], ['arm-1', 52], ['arm-b', 55], ['arm-2', 900], ['arm-b', 55], ['arm-1', 52],
+      ['arm-a', 48]],
     bob: [['lean', 260]],
     /* The small motion each worked pose loops on: hands moving over the keys,
      * a look down at the tablet, the pencil travelling across the page. */

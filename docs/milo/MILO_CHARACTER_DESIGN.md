@@ -11,7 +11,7 @@ never be: every picture of him comes from the same rendered sprite sheets.
 | Piece | Path | What it is |
 | --- | --- | --- |
 | Driver | `static/components/scout.js` | `window.OpticScout`: poses, gestures, blinks, motion setting, sprite positioning |
-| Sheets | `static/scout/scout-{full,compact}@{2,3}x.webp` | 35 frames across one row, plus `-tail` sheets |
+| Sheets | `static/scout/scout-{full,compact}@{2,3}x.webp` | 38 frames across one row, plus `-tail` sheets |
 | Frame map | `static/scout/frames.json` | frame order and the per-frame pixel size of each sheet |
 | Renderer | `optic-brand/scout/render_scout.py` | the numpy SDF raymarcher the sheets are rendered from |
 | Loaded by | `static/v2/index.html:38` | a plain script tag, before the app |
@@ -22,7 +22,7 @@ chart symbol, gold scarf, small smile, soft 3D shading, minimal face. Optic blac
 Per-frame size: full `288x380` at 3x (`192x253` at 2x), compact `144x156` at 3x (`96x104` at 2x). 22 frames,
 one row, positioned with `--scout-x`.
 
-### The 35 frames
+### The 38 frames
 
 Standing, as they always were: `idle`, `idle-half`, `idle-closed`, `lean`, `tilt`, `tilt-half`,
 `tilt-closed`, `curious`, `curious-half`, `curious-closed`, `arm-1`, `arm-2`, `arm-3`, `look-l1`, `look-l2`,
@@ -31,6 +31,12 @@ Standing, as they always were: `idle`, `idle-half`, `idle-closed`, `lean`, `tilt
 Added 2026-11-03 for the activity states, appended and never inserted: `desk`, `desk-half`, `desk-closed`,
 `desk-type`, `tablet`, `tablet-half`, `tablet-closed`, `tablet-near`, `write`, `write-half`, `write-closed`,
 `write-1`, `write-2`.
+
+Added the same day, after the owner said the wave read as a twitch: `arm-a`, `arm-b`, `arm-c`, the in-between
+arm positions at 15, 47 and 82 degrees. With only `arm-1`, `arm-2` and `arm-3` the wave crossed 35 degrees in
+60 ms (about 580 deg/s) with nothing between, and the hand jumped roughly 18 px across and 36 px up at the
+welcome size. Every step is now about 17 degrees over 50 ms, near 300 deg/s. The `wave`, `ack` and `point`
+gestures in `scout.js` all use them.
 
 Each resting pose carries its own half-closed and closed lid, so a blink never changes the pose it happens
 in, and the three new ones are no exception. A pose change walks the ladder `idle -> lean -> tilt -> curious`
@@ -97,7 +103,7 @@ Three things had to be true and are checked in the renders:
 Follow the same path. Add frames to the **end** of `FRAMES` in `render_scout.py`, give the resting pose its
 own `-half` and `-closed` lids, add the names to `FRAME` in `scout.js` with their indices, raise `COUNT`, add
 a `FACE` entry, add a `POSE` name, and leave `LEVEL` alone so the change is a cut. Then re-render, and update
-the two places in CSS that carry the frame count: `background-size: 3500% 100%` (in `static/styles.css` and
+the two places in CSS that carry the frame count: `background-size: 3800% 100%` (in `static/styles.css` and
 `static/v2/css/components.css`) and the per-frame step in `@keyframes scout-badge-blink`, which is
 `100 / (frames - 1)` per frame. `tests/test_pulse_scout.py` checks all of that against `frames.json`.
 

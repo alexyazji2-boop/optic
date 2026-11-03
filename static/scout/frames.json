@@ -34,7 +34,10 @@
   "write-half",
   "write-closed",
   "write-1",
-  "write-2"
+  "write-2",
+  "arm-a",
+  "arm-b",
+  "arm-c"
  ],
  "wind": 12,
  "full": {

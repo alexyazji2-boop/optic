@@ -1,5 +1,32 @@
 # Milo animation changelog
 
+## 2026-11-03 (third pass) — the wave is a wave
+
+The owner said Milo twitched instead of waving. He was right, and it was not the new work: the arm had three
+positions (`arm-1`, `arm-2`, `arm-3`, at 30, 65 and 100 degrees) and the wave cut straight between them,
+crossing 35 degrees in 60 ms, about 580 deg/s. At the welcome size the hand jumped roughly 18 px across and
+36 px up with nothing in between. `cbc877bc` (2026-10-11, "a quicker wave and blink") had shortened it, and
+with only three frames quicker just means snappier.
+
+Ruled out first, by measurement rather than by eye: the sprite positioning (every frame percentage was
+correct), the scarf (its 12 phases move the tail 0.23 CSS px per step on average, max 0.43, which is
+sub-pixel), and element churn (one figure element, stable across nine seconds).
+
+Three in-between frames were rendered, `arm-a`, `arm-b` and `arm-c` at 15, 47 and 82 degrees, taking the
+sheet to 38. `wave`, `ack` and `point` now climb through all six positions and come back down the same way:
+
+| | Before | After |
+| --- | --- | --- |
+| wave | 7 cuts, 595 ms, up to 583 deg/s | 15 steps, 931 ms, at most 360 deg/s |
+| ack | 3 cuts, 215 ms | 7 steps, 422 ms |
+| point | 3 cuts, 1110 ms | 7 steps, 1212 ms |
+
+`tests/test_pulse_scout.py::test_the_wave_is_a_wave_and_not_a_twitch` pins the property rather than the
+numbers: no step may move the arm more than 20 degrees or faster than 400 deg/s, and no gesture may end with
+the arm still up. Quickening it back into a twitch now fails the suite.
+
+Full suite 8262 passed, 1 skipped.
+
 ## 2026-11-03 (second pass) — the three worked poses, rendered
 
 Commit `8f1e06bb`.
@@ -8,7 +35,7 @@ The placeholders are gone. Researching, Analyzing and Writing are now frames of 
 
 Thirteen frames were added to the sprite sheet: `desk`, `desk-half`, `desk-closed`, `desk-type`, `tablet`,
 `tablet-half`, `tablet-closed`, `tablet-near`, `write`, `write-half`, `write-closed`, `write-1`, `write-2`.
-The sheet went from 22 frames to 35.
+The sheet went from 22 frames to 35, and to 38 with the wave frames below.
 
 | File | What |
 | --- | --- |
@@ -16,7 +43,7 @@ The sheet went from 22 frames to 35.
 | `static/scout/*.webp`, `frames.json` | re-rendered, 35 frames each |
 | `static/components/scout.js` | the new names in `FRAME`, `COUNT` 35, `FACE` entries so blinks work in every pose, `POSE` gains `researching`/`analyzing`/`writing`, the `type`/`read`/`pen` loops, and `pose()` keeps a worked pose at Still motion |
 | `static/v2/js/ui/milo-activity.js` | the three states point at the new poses and carry no drawn prop; the desk, tablet and notebook SVGs removed |
-| `static/v2/css/components.css` | `background-size: 3500%`, the blink keyframe step, the card figure 78 -> 104 px, the removed props' rules gone |
+| `static/v2/css/components.css` | `background-size: 3800%`, the blink keyframe step, the card figure 78 -> 104 px, the removed props' rules gone |
 | `static/styles.css` | the same two sprite figures, for the classic app |
 | `tests/test_milo_activity.py` | the props test became a check that what he works with is rendered and not drawn, plus the pose/frame contract |
 

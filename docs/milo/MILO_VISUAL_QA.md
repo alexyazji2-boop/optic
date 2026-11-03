@@ -84,7 +84,7 @@ are now rendered frames of the character himself. Re-checked after the render:
 
 | Check | Result |
 | --- | --- |
-| The sheet | 35 frames, `scout-full@3x.webp` 10080 x 380 and `scout-compact@3x.webp` 5040 x 156, both exactly `frame x 35` |
+| The sheet | 38 frames, `scout-full@3x.webp` 10944 x 380 and `scout-compact@3x.webp` 5472 x 156, both exactly `frame x 38` |
 | The standing frames | unchanged: `props()` builds nothing for a pose with no prop, so those 22 march the scene they always did |
 | Researching | card at a 560 px panel: frame `desk`, no drawn prop, Milo at the table with the laptop, its gold aperture and the two books |
 | Analyzing | frame `tablet`, the gold chart on the glass, the two ticks naming the lookups that returned |
@@ -95,7 +95,7 @@ are now rendered frames of the character himself. Re-checked after the render:
 | At the inline size | all three worked busts were rendered down to 34 px and inspected: the laptop, the tablet's gold chart and the notebook with its pencil each stay legible and distinct |
 | Still motion | `OpticScout.setMotion('still')` holds frame `desk` and the heading Researching: the pose stays, only the movement goes |
 | Reduce motion | with `data-motion="reduce"`, zero elements in the card report an `animation-name` |
-| CSS frame count | `background-size: 3500% 100%` live in the panel, `frames.json` 35: the two agree, which is what the clipped figure in the first reload was about |
+| CSS frame count | `background-size: 3800% 100%` live in the panel, `frames.json` 38: the two agree, which is what the clipped figure in the first reload was about |
 | Console | no errors |
 | Rebase | rebased onto `origin/main` `5bcf5972` before shipping; no file overlapped that commit, so nothing was resolved by hand |
 
