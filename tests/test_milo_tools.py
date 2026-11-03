@@ -317,6 +317,33 @@ def test_a_model_that_keeps_asking_is_stopped_and_still_answers(monkeypatch):
     assert json.loads(last_results[0]["content"])["status"] == "limit"
 
 
+def test_every_round_reads_the_conversation_so_far_from_the_cache(monkeypatch):
+    """Cost audit C1: beside the system block's breakpoint, the API's automatic one caches the conversation as
+    it grows. That only pays if each round sends the round before it unchanged and keeps everything the cache is
+    keyed on, so both are held here."""
+    monkeypatch.setattr(ai_store, "record", lambda *a, **k: None)
+    sent = []
+    ev, block = _text("AMD sits in negative gamma under the model.")
+    script = [lambda: _Stream([], _final("tool_use", [_use("t1", "get_options", {"ticker": "AMD"})])),
+              lambda: _Stream([], _final("tool_use", [_use("t2", "get_quote", {"ticker": "AMD"})])),
+              lambda: _Stream([ev], _final("end_turn", [block]))]
+    monkeypatch.setattr(ai, "_client", lambda: _client(script, sent))
+    box = milo_tools.Toolbox(runners={"get_options": lambda ticker, expiries=None: milo_tools.compact_options(snapshot()),
+                                      "get_quote": lambda ticker: {"source": "q"}})
+    _drain(ai.stream_chat(AMD_Q, context={"focus": {"scope": "none"}}, toolbox=box))
+    assert len(sent) == 3
+    for kw in sent:
+        assert kw["cache_control"] == {"type": "ephemeral"}, "the conversation's moving breakpoint"
+        assert kw["system"][0]["cache_control"] == {"type": "ephemeral"}, "the system block keeps its own"
+        explicit = sum("cache_control" in b for b in kw["system"]) + sum(
+            "cache_control" in b for m in kw["messages"] if isinstance(m["content"], list)
+            for b in m["content"] if isinstance(b, dict))
+        assert explicit == 1, "one explicit marker and the automatic one, well inside the API's four"
+    for before, after in zip(sent, sent[1:]):
+        assert all(after[k] == before[k] for k in ("model", "system", "tools", "thinking", "output_config"))
+        assert after["messages"][:len(before["messages"])] == before["messages"], "the round before, unchanged"
+
+
 def test_a_refused_turn_never_runs_its_tools(monkeypatch):
     monkeypatch.setattr(ai_store, "record", lambda *a, **k: None)
     ran = []

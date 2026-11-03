@@ -3493,6 +3493,16 @@ def build_chat_request(
         "output_config": {"effort": "medium"},
         "betas": [FALLBACK_BETA],
         "fallbacks": "default",
+        # The conversation is cached as well as the system block (cost audit C1, 2026-11-02). Until now the
+        # system block's breakpoint was the only one, so every tool round sent the CONTEXT turn and the rounds
+        # before it again at the full input price. This top-level marker is the API's automatic caching: it
+        # sits on the last block and moves forward each round, so a round reads everything the one before it
+        # sent. The text is unchanged and so are the answers. The cost audit estimates 22% to 24% off Milo's
+        # spend, about $217 a month at 1,000 monthly readers (docs/post-demo-ultra/COST_AUDIT.md, section 12).
+        # An answer with one call pays the write premium on its unshared tail, about $0.0015 for a definition,
+        # and a last round sent with tool_choice none reads only the system block's entry, since changing
+        # tool_choice invalidates the messages cache.
+        "cache_control": {"type": "ephemeral"},
     }
     if tools:
         kwargs["tools"] = tools
