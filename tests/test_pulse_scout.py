@@ -350,3 +350,65 @@ def test_the_sheet_is_measured_rather_than_assumed():
     for css, where in ((CSS, "v2"), ((ROOT / "static/styles.css").read_text(), "classic")):
         assert css.count("background-size: var(--scout-frames,") == 2, where
         assert "var(--scout-step," in css, where
+
+
+# ------------------------------------------------- the motion of a state matches the state (2026-11-03)
+
+def _gesture(name):
+    """The frame names one gesture plays, in order."""
+    block = SCOUT[SCOUT.index("var GESTURE = {"):SCOUT.index("var GESTURE_FROM")]
+    body = re.search(r"\n    %s: \[(.*?)\],\n" % re.escape(name), block, re.S).group(1)
+    return re.findall(r"\['([a-z0-9-]+)'", body)
+
+
+def test_every_pose_that_holds_a_scene_has_motion_of_its_own():
+    """Until 2026-11-03 the loop was picked by a chain of equality tests that ended in `pen`, so `chin`
+    - the one scene that is neither a desk nor a tablet - answered the fallback and Milo played the
+    notebook-writing frames while the panel said Thinking. The owner saw him switch to writing during
+    thinking; that was this. Each pose now names its own loop, and a new one cannot inherit another's."""
+    loop = dict(re.findall(r"(\w+): '(\w+)'", SCOUT[SCOUT.index("var LOOP = {"):].split("}")[0]))
+    work = re.findall(r"(\w+):", SCOUT[SCOUT.index("var WORK = {"):].split("}")[0])
+    assert sorted(loop) == sorted(work), "a scene with no loop of its own falls back to another's frames"
+    for pose, gesture in loop.items():
+        played = _gesture(gesture)
+        assert played, gesture
+        for frame in played:
+            assert frame == pose or frame.startswith(pose + "-"), \
+                "%s plays %s, which is not a %s frame" % (gesture, frame, pose)
+
+
+def test_thinking_ponders_slowly_rather_than_standing_still():
+    """The one state with nothing in his hands. It still has to move, or a model that takes half a minute
+    leaves a still picture under a heading that says Thinking."""
+    steps = re.search(r"\n    ponder: \[(.*?)\],\n", SCOUT, re.S).group(1)
+    ms = [int(x) for x in re.findall(r", (\d+)\]", steps)]
+    assert len(ms) >= 4 and sum(ms) >= 2500, "a think loop that is over in a blink reads as a twitch"
+    assert min(ms) >= 400, "thinking is slow: no step of it is a flick"
+    assert "chin-2" in steps and "chin-3" in steps, "the head has to actually move, not just the lids"
+    # and it has to come round often enough to read as thinking rather than as a photograph
+    sched = _proto("schedule")
+    assert "LOOP[this.pose()] ? rand(1200, 2400)" in sched
+
+
+def test_a_change_of_scene_is_a_transition_and_not_a_cut():
+    """The scenes sit outside the head ladder, so there are no in-between frames to walk through and a
+    straight swap reads as a cut: the laptop is simply gone and a tablet is in its place. He dips out and
+    back, and the frame changes while there is nothing on screen to see change."""
+    dip = _proto("dip")
+    assert "is-swap" in dip
+    assert "motion() === 'still'" in dip, "Still motion keeps the cut rather than inventing a fade"
+    settle = _proto("settle")
+    assert "WORK[pose]" in settle and "dip" in settle
+    # two scene changes inside the dip collapse into one, or the fast run of states at the start of an
+    # answer (Researching -> Analyzing -> Writing) would fade him in and out three times in a second
+    assert "this.swapThen = then; return;" in dip
+    assert "this.swapThen = null;" in _proto("cancel"), "a cancelled dip must not leave him faded out"
+    for sheet in (CSS, (ROOT / "static/v2/css/components.css").read_text(encoding="utf-8")):
+        assert ".scout.is-swap::after { opacity: .18;" in sheet
+        assert ".scout::after { transition: opacity" in sheet
+
+
+def test_the_gesture_that_leads_into_a_scene_lands_behind_the_dip():
+    """The nod into Thinking and the ack into Ready end in a pose, and that landing is a scene change
+    like any other: it goes through settle, not straight to rest."""
+    assert "var done = function () { self.settle(" in SCOUT

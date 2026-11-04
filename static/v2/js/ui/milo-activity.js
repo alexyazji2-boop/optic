@@ -7,8 +7,11 @@
 //
 //   thinking     the question has gone and the model has it: `status thinking`, or a round starting with
 //                nothing fetched yet (`status writing`, which the server sends as each model round begins)
-//   researching  the server says it is fetching: a tool's own words ("Checking NVDA's options data"), a web
-//                search, or the server gathering the page's figures; `retrieved` names what came back
+//   researching  the server says it is fetching, or has just turned toward it: the model naming a tool it
+//                wants run ("looking up what it needs"), a tool's own words ("Checking NVDA's options
+//                data"), a web search, or the server gathering the page's figures. `retrieved` names what
+//                came back. The server only announces the turn when the limits would actually let that
+//                call run (app/ai.py `will_fetch`), so this is never a lookup that never happened
 //   analyzing    a model round started AFTER at least one lookup returned and before any text: the model is
 //                working on what it got. Without a lookup this state never appears
 //   writing      the first `delta`. Text is arriving and the answer itself has the reader's attention

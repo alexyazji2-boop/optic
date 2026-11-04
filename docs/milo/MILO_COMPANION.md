@@ -64,6 +64,23 @@ The statuses are one line each: Ready, Thinking, Researching, Analyzing, Writing
 Couldn't finish. Under it sits the server's own words for the step when it sends them ("Checking NVDA's
 filings") and nothing at all when it does not.
 
+### Keeping up with the round (2026-11-03)
+
+The owner's report was that it "is just stuck on thinking and then sometimes switches to writing". Two
+separate causes, one on each side:
+
+- **The server went quiet in the middle of a round.** It sent `writing` as the round began (which is
+  Thinking until text arrives) and then nothing at all until a tool actually ran. A round that reasoned for
+  twenty seconds and then asked for three lookups spent all of it on Thinking. The stream already carried
+  the moment the model stopped reasoning and started naming a tool - `content_block_start` for a `tool_use`
+  block - and that was being dropped. It is now forwarded as `looking up what it needs`, guarded by
+  `will_fetch` so a call the round's limits would refuse is never announced as research.
+- **Thinking played the writing animation.** The loop for a pose was picked by a chain of equality tests
+  ending in `pen`, so `chin` - the one scene that is neither a desk nor a tablet - fell through to the
+  notebook frames. He was *literally* switching to writing while the heading said Thinking. Each pose now
+  names its own loop (`LOOP` in `components/scout.js`) and a test fails if a scene has none, or if a loop
+  plays a frame from outside its own pose.
+
 ## 4. The assets
 
 Two things were rendered for this stage, both as geometry in `optic-brand/scout/render_scout.py`:
@@ -75,8 +92,12 @@ Two things were rendered for this stage, both as geometry in `optic-brand/scout/
 - **`chin`, `chin-half`, `chin-closed`**, the hand under the jaw. `POSE.thinking` was a head tilt, which told
   nobody he was thinking. His arm is a stub about a third of the distance from his shoulder to his chin, so
   for this pose it is drawn longer and tapered; a straight arm at full reach only got as high as his belly.
+- **`chin-2`, `chin-3`**, the two small head moves the thinking pose ponders on: a settle, and a glance off to
+  the side. The chin hand is now held in the **head's** frame rather than the world's, so it goes where the
+  chin goes and the mitt never drifts off the jaw when the head moves. The canonical `chin` frame comes out
+  bit-for-bit identical, because there the two transforms cancel.
 
-The sheet is 41 frames. `scout.js` measures the one the browser actually loaded (shipped in `c623c264`), so
+The sheet is 43 frames. `scout.js` measures the one the browser actually loaded (shipped in `c623c264`), so
 the count moving again cannot slice him wrong.
 
 ## 5. Behaviour
@@ -86,8 +107,10 @@ the count moving again cannot slice him wrong.
 | The panel opens | one wave, then rest. A 60 s cooldown, so closing and reopening does not wave again |
 | The reader types | an attentive tilt toward the composer, back to rest after 2.5 s of quiet. Never while he is working |
 | The question is sent | a nod, then Thinking. The nod is set up before the request and nothing waits on it |
+| He waits on the model | the pondering loop: a settle, a glance away, a blink. Never the writing frames |
 | Research begins | headphones on, at the desk |
 | Text arrives | the notebook |
+| The scene changes | he dips out and back over 90 ms, so a laptop becoming a tablet is a transition, not a cut |
 | The answer lands | Answer ready and one small wave, then he settles to Ready after 2.5 s and stays |
 | Stopped, or failed | Stopped / Couldn't finish, work motion stops, he stays |
 | He is clicked | one wave or curious tilt, at most one per 900 ms, and never while he is working |

@@ -465,7 +465,7 @@ ul.plain { margin: 0; padding-left: 18px; } ul.plain li { margin-bottom: 7px; }
 .milo-ended { margin: 0; font-size: var(--t-md); color: var(--c-warn); } .milo-assumed { margin: 0; font-size: var(--t-md); color: var(--c-ink-3); }
 /* Scout, Milo's mascot (components/scout.js and the sprites in /scout/, the classic app's own, made by
    optic-brand/scout/render_scout.py). The classic rules in v2's tokens: two layers per figure, ::after the pose
-   (22 frames, picked through --scout-x, which scout.js sets) and ::before the scarf's tail in the wind (12 frames,
+   (one row of poses, picked through --scout-x, which scout.js sets from the sheet it measured) and ::before the scarf's tail in the wind (12 frames,
    looped only while scout.js marks him is-windy: on screen, in a visible tab, motion set to Full). The box keeps
    its aspect ratio, so nothing moves when the sprite arrives. 2x and 3x sprites, chosen by the browser. */
 .scout { --scout-x: 0%; display: block; flex: none; position: relative; aspect-ratio: 288 / 380; }
@@ -474,14 +474,14 @@ ul.plain { margin: 0; padding-left: 18px; } ul.plain li { margin-bottom: 7px; }
   /* How many frames the pose sheet holds, and the step between two of them. components/scout.js overrides
      both on <html> from the sheet the browser really loaded; these are what a page whose script has not run
      uses, and they must match FRAMES in optic-brand/scout/render_scout.py. */
-  --scout-frames: 4100%;
-  --scout-step: 2.5000%;
+  --scout-frames: 4300%;
+  --scout-step: 2.3810%;
 }
 /* --scout-frames and --scout-step are set on <html> by components/scout.js from the sheet the browser really
    loaded. The count lives in four files that deploy separately and are each cached four hours with no version
    in the URL, so a stale one against a fresh one slices him wrong; the figures in here are only the fallback
    for a page where the script has not run. */
-.scout::after { background-size: var(--scout-frames, 4100%) 100%; background-position-x: var(--scout-x);
+.scout::after { background-size: var(--scout-frames, 4300%) 100%; background-position-x: var(--scout-x);
   background-image: url("/scout/scout-full@2x.webp");
   background-image: -webkit-image-set(url("/scout/scout-full@2x.webp") 2x, url("/scout/scout-full@3x.webp") 3x);
   background-image: image-set(url("/scout/scout-full@2x.webp") 2x, url("/scout/scout-full@3x.webp") 3x); }
@@ -489,6 +489,10 @@ ul.plain { margin: 0; padding-left: 18px; } ul.plain li { margin-bottom: 7px; }
   background-image: url("/scout/scout-full-tail@2x.webp");
   background-image: -webkit-image-set(url("/scout/scout-full-tail@2x.webp") 2x, url("/scout/scout-full-tail@3x.webp") 3x);
   background-image: image-set(url("/scout/scout-full-tail@2x.webp") 2x, url("/scout/scout-full-tail@3x.webp") 3x); }
+/* The dip components/scout.js uses to change scene: out fast, back a little slower, so a laptop
+   becoming a tablet is a transition and not a cut. Only ever applied at Full or Subtle motion. */
+.scout::after { transition: opacity 165ms ease-out; }
+.scout.is-swap::after { opacity: .18; transition-duration: 90ms; }   /* dipped, not blanked: an 88px hole in the header reads as a fault */
 .scout.is-windy::before { animation: scout-wind 1200ms steps(12, jump-none) infinite; }
 @keyframes scout-wind { from { background-position-x: 0%; } to { background-position-x: 100%; } }
 .scout-compact { aspect-ratio: 144 / 156; }
@@ -503,15 +507,15 @@ ul.plain { margin: 0; padding-left: 18px; } ul.plain li { margin-bottom: 7px; }
 /* his head on the Ask Milo button, as on the classic one: the bust sprite clipped to a disc, blinking through the
    sprite's own lid frames twice in 11 s; still under reduced motion or with his motion set to Still */
 .scout-badge { position: relative; display: block; flex: none; width: 22px; height: 22px; border-radius: 50%; overflow: hidden; }
-.scout-badge-fig { position: absolute; left: -1.8%; top: 7.8%; width: 126.4%; height: 136.9%; background-repeat: no-repeat; background-size: var(--scout-frames, 4100%) 100%; background-position: 0% 0;
+.scout-badge-fig { position: absolute; left: -1.8%; top: 7.8%; width: 126.4%; height: 136.9%; background-repeat: no-repeat; background-size: var(--scout-frames, 4300%) 100%; background-position: 0% 0;
   background-image: url("/scout/scout-compact@2x.webp");
   background-image: -webkit-image-set(url("/scout/scout-compact@2x.webp") 2x, url("/scout/scout-compact@3x.webp") 3x);
   background-image: image-set(url("/scout/scout-compact@2x.webp") 2x, url("/scout/scout-compact@3x.webp") 3x);
   animation: scout-badge-blink 11s step-end infinite; }
 @keyframes scout-badge-blink {
-  0% { background-position-x: 0%; } 36% { background-position-x: var(--scout-step, 2.5000%); } 36.32% { background-position-x: calc(var(--scout-step, 2.5000%) * 2); } 36.77% { background-position-x: var(--scout-step, 2.5000%); } 37.13% { background-position-x: 0%; }
-  93% { background-position-x: var(--scout-step, 2.5000%); } 93.32% { background-position-x: calc(var(--scout-step, 2.5000%) * 2); } 93.77% { background-position-x: var(--scout-step, 2.5000%); } 94.13% { background-position-x: 0%; }
-  95.22% { background-position-x: var(--scout-step, 2.5000%); } 95.54% { background-position-x: calc(var(--scout-step, 2.5000%) * 2); } 95.99% { background-position-x: var(--scout-step, 2.5000%); } 96.35% { background-position-x: 0%; } 100% { background-position-x: 0%; } }
+  0% { background-position-x: 0%; } 36% { background-position-x: var(--scout-step, 2.3810%); } 36.32% { background-position-x: calc(var(--scout-step, 2.3810%) * 2); } 36.77% { background-position-x: var(--scout-step, 2.3810%); } 37.13% { background-position-x: 0%; }
+  93% { background-position-x: var(--scout-step, 2.3810%); } 93.32% { background-position-x: calc(var(--scout-step, 2.3810%) * 2); } 93.77% { background-position-x: var(--scout-step, 2.3810%); } 94.13% { background-position-x: 0%; }
+  95.22% { background-position-x: var(--scout-step, 2.3810%); } 95.54% { background-position-x: calc(var(--scout-step, 2.3810%) * 2); } 95.99% { background-position-x: var(--scout-step, 2.3810%); } 96.35% { background-position-x: 0%; } 100% { background-position-x: 0%; } }
 :root[data-scout-motion="still"] .scout-badge-fig, :root[data-motion="reduce"] .scout-badge-fig { animation: none; }
 @media (prefers-reduced-motion: reduce) { .scout-badge-fig { animation: none; } }
 /* the welcome: the whole figure above the question, a button that opens his guide menu (no fill, no hover pill;

@@ -66,10 +66,12 @@
     'write': 30, 'write-half': 31, 'write-closed': 32, 'write-1': 33, 'write-2': 34,
     /* In-between arm positions, so the wave is a wave: see GESTURE below. */
     'arm-a': 35, 'arm-b': 36, 'arm-c': 37,
-    /* Thinking with his hand under his jaw, for the persistent companion. */
-    'chin': 38, 'chin-half': 39, 'chin-closed': 40,
+    /* Thinking with his hand under his jaw, for the persistent companion. chin-2 and chin-3 are the
+     * small head moves it ponders on: the hand is held in the head's frame in the renderer, so the
+     * chin stays in the mitt while he shifts and glances off. */
+    'chin': 38, 'chin-half': 39, 'chin-closed': 40, 'chin-2': 41, 'chin-3': 42,
   };
-  var COUNT = 41;
+  var COUNT = 43;
 
   /* How many frames the browser ACTUALLY has, which is not always COUNT.
    *
@@ -179,16 +181,22 @@
       ['curious-half', 40], ['curious', 280]],
     point: [['arm-a', 50], ['arm-1', 52], ['arm-b', 55], ['arm-2', 900], ['arm-b', 55], ['arm-1', 52],
       ['arm-a', 48]],
-    bob: [['lean', 260]],
-    /* The small motion each worked pose loops on: hands moving over the keys,
-     * a look down at the tablet, the pencil travelling across the page. */
+    /* The small motion each pose loops on: hands moving over the keys, a look down at the tablet, the
+     * pencil travelling across the page, and - the slowest of them, because it is the one state with
+     * nothing in his hands - a settle and a glance away while he thinks. */
     type: [['desk-type', 170], ['desk', 150], ['desk-type', 170], ['desk', 150], ['desk-type', 160]],
     read: [['tablet-near', 820], ['tablet', 180]],
     pen: [['write-1', 190], ['write-2', 240], ['write-1', 180], ['write', 150]],
+    ponder: [['chin-2', 880], ['chin', 680], ['chin-3', 1060], ['chin', 520]],
   };
+  /* The loop that belongs to each pose. Until 2026-11-03 this was a chain of equality tests that ended
+   * in `pen`, so `chin` - the one pose that is not a desk or a tablet - answered the fallback and Milo
+   * played the notebook-writing frames while the panel said Thinking. The owner saw him "switch to
+   * writing" during thinking, which is exactly what that was. */
+  var LOOP = { desk: 'type', tablet: 'read', write: 'pen', chin: 'ponder' };
   /* The ladder level each gesture starts from: upright for the arm and the
    * nod, leaning for a look around, tilted for the curious look. */
-  var GESTURE_FROM = { wave: 0, ack: 0, nod: 0, point: 0, look: 1, curious: 3, bob: 2 };
+  var GESTURE_FROM = { wave: 0, ack: 0, nod: 0, point: 0, look: 1, curious: 3 };
 
   var STORE = 'optic.scout.motion.v1';
   var reduceQuery = global.matchMedia ? global.matchMedia('(prefers-reduced-motion: reduce)') : null;
@@ -270,9 +278,48 @@
   Ctl.prototype.level = function () { return LEVEL[FACE[this.pose()][0]] || 0; };
   Ctl.prototype.rest = function () { this.show(FACE[this.pose()][0]); };
 
+  /* A scene - the desk, the tablet, the notebook, the hand under the jaw - is a change of situation and
+   * not a notch on the head ladder, so there are no in-between frames to walk through and a straight
+   * swap reads as a cut: the laptop is simply gone and a tablet is in its place. He dips out and back
+   * instead, and the frame changes while there is nothing on screen to see change. Ladder moves keep
+   * their walk, which is already smooth, and Still motion keeps the cut rather than inventing a fade. */
+  var SWAP_MS = 90;
+  Ctl.prototype.dip = function (then) {
+    var self = this, el = this.el;
+    if (motion() === 'still' || !this.running() || !el.classList) { then(); return; }
+    // Researching -> Analyzing -> Writing can land inside a second. A second dip on top of one still in
+    // flight would read as a flicker, so the later change rides the dip already running and only the
+    // last one arrives: he fades once and comes back in the scene he ended up in.
+    if (this.swapThen && el.classList.contains('is-swap')) { this.swapThen = then; return; }
+    this.cancel();
+    this.swapThen = then;
+    el.classList.add('is-swap');
+    this.seq = setTimeout(function () {
+      self.seq = null;
+      var land = self.swapThen;
+      self.swapThen = null;
+      if (el.classList) el.classList.remove('is-swap');
+      if (land) land();
+    }, SWAP_MS);
+  };
+  /* Settle into the current state's pose, behind the dip when that means arriving in a scene he is not
+   * already standing in. `then` runs once he is there. */
+  Ctl.prototype.settle = function (then) {
+    var self = this;
+    var pose = this.pose(), at = this.frameName || '';
+    var here = (FACE[pose] || []).indexOf(at) >= 0 || at.indexOf(pose) === 0;
+    var land = function () { self.rest(); if (then) then(); };
+    if (!WORK[pose] || here) { land(); return; }
+    this.dip(land);
+  };
+
   Ctl.prototype.cancel = function () {
     clearTimeout(this.seq);
     this.seq = null;
+    // A dip cut short - he scrolled off screen, the panel closed, the figure was taken away mid-swap -
+    // would otherwise leave him faded out with nothing left to bring him back.
+    this.swapThen = null;
+    if (this.el.classList) this.el.classList.remove('is-swap');
   };
 
   /* Play frames one after another, then `then`. Off screen, or with motion
@@ -315,9 +362,10 @@
     clearTimeout(this.idleT);
     if (via) { this.gesture(via); return; }
     this.run(this.path(this.level()), function () {
-      self.rest();
-      if (state === 'searching') self.gesture('look');
-      else self.schedule();
+      self.settle(function () {
+        if (state === 'searching') self.gesture('look');
+        else self.schedule();
+      });
     });
   };
 
@@ -326,7 +374,7 @@
   Ctl.prototype.gesture = function (name, then) {
     if (!this.alive()) return;
     var self = this;
-    var done = function () { self.rest(); self.schedule(); if (then) then(); };
+    var done = function () { self.settle(function () { self.schedule(); if (then) then(); }); };
     if (motion() !== 'full') { done(); return; }
     if (!this.running()) {
       // Asked for as he comes on screen (the panel opening, a figure just
@@ -371,7 +419,10 @@
     this.idleT = null;
     if (!this.running()) return;
     var busy = this.state === 'thinking' || this.state === 'searching' || !!WORK[this.pose()];
-    var ms = busy ? rand(2000, 4000) : rand(2500, 5000);
+    // A pose with a loop of its own should look occupied. Measured in the panel on 2026-11-03, the old
+    // busy gap left him standing still for the first 2.4 s of Thinking and moving once in four seconds,
+    // which is most of a short wait spent as a photograph.
+    var ms = LOOP[this.pose()] ? rand(1200, 2400) : busy ? rand(2000, 4000) : rand(2500, 5000);
     this.idleT = setTimeout(function () {
       self.idleT = null;
       if (!self.running()) return;
@@ -387,10 +438,8 @@
         self.gesture('curious');
       } else if (full && self.state === 'searching' && r < 0.45) {
         self.gesture('look');
-      } else if (full && self.state === 'thinking' && r < 0.25) {
-        self.gesture('bob');
-      } else if (full && WORK[self.pose()] && r < 0.6) {
-        self.gesture(self.pose() === 'desk' ? 'type' : self.pose() === 'tablet' ? 'read' : 'pen');
+      } else if (full && LOOP[self.pose()] && r < 0.72) {
+        self.gesture(LOOP[self.pose()]);
       } else {
         self.blink(full && r > 0.85);
       }

@@ -241,3 +241,35 @@ def test_he_is_reachable_from_the_keyboard_and_named():
     assert ".milo-co-stage .scout-btn:focus-visible { outline: 2px solid var(--c-gold)" in CSS
     assert '<span class="milo-co-status" role="status">' in ACT
     assert 'class="milo-co-name" id="${id}" tabindex="-1"' in ACT, "the drawer still has a heading to focus"
+
+
+# ------------------------------------------- the sequence keeps up with the round (2026-11-03, owner)
+
+def test_the_turn_toward_research_is_its_own_step(tmp_path):
+    """The owner's report: "it is just stuck on thinking and then sometimes switches to writing".
+
+    One cause was on the server. A round began with `writing` (which is Thinking until text arrives) and
+    then sent nothing at all until the tool ran, so a round that reasoned for twenty seconds and then
+    asked for three lookups spent all of it on Thinking. The model naming a tool is the end of thinking,
+    and it is now sent as it happens; the tool's own words follow when it runs."""
+    got = _states(tmp_path, """[["status",{"state":"writing"}],["status",{"state":"thinking"}],
+      ["status",{"state":"looking up what it needs"}],
+      ["status",{"state":"Checking NVDA's options data"}],
+      ["retrieved",[{"label":"NVDA options analytics","ok":true}]],
+      ["status",{"state":"writing"}],["delta",null],["done",null]]""")
+    assert got == ["thinking", "thinking", "researching", "researching", "researching",
+                   "analyzing", "writing", "complete"]
+
+
+def test_the_server_sends_the_turn_toward_research_as_the_model_makes_it():
+    assert 'elif btype == "tool_use" and will_fetch:' in AI
+    assert 'yield _sse("status", {"state": "looking up what it needs"})' in AI
+
+
+def test_the_turn_is_announced_only_for_a_lookup_that_will_actually_run():
+    """Researching has to mean research. A tool call the round's limits would refuse is never run, so it
+    is never announced: `will_fetch` is settled before the round, from the same limits the loop applies."""
+    guard = AI[AI.index("will_fetch = ("):AI.index("async with client.beta.messages.stream")]
+    assert 'kwargs.get("tool_choice") != {"type": "none"}' in guard
+    assert "rounds < toolbox.max_rounds" in guard and "not toolbox.exhausted()" in guard
+    assert "toolbox is not None" in guard

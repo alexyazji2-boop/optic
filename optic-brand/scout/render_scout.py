@@ -274,7 +274,13 @@ class Pose:
         self.chin = chin
         self.hand_l, self.hand_r = HAND_L, HAND_R
         if chin:
-            self.hand_r = np.array([0.30, 1.47 + 0.015 * chin, 0.52])
+            # Under the jaw, held in the HEAD's frame rather than the world's, so that when the head moves
+            # for the pondering frames the mitt goes with it instead of staying put and letting the chin
+            # slide out of it. `base` is the canonical chin head (tilt 7, pitch 7), so the frame the owner
+            # already approved comes out bit-for-bit identical: there, self.H == base and the two cancel.
+            base = rot_x_m(math.radians(7)) @ rot_z_m(-math.radians(7))
+            local = base.T @ (np.array([0.30, 1.47 + 0.015 * chin, 0.52]) - NECK)
+            self.hand_r = self.H @ local + NECK
         if prop == "desk":
             lift = 0.024 * math.sin(math.pi * type_)
             self.hand_l = np.array([-0.13, DESK_Y + 0.135 + lift, 1.14])
@@ -748,6 +754,11 @@ FRAMES = [
     ("chin", dict(chin=1.0, tilt=7, pitch=7)),
     ("chin-half", dict(chin=1.0, tilt=7, pitch=7, cl=0.5, cr=0.5)),
     ("chin-closed", dict(chin=1.0, tilt=7, pitch=7, cl=1.0, cr=1.0)),
+    # Thinking is the one state with no work in its hands, so without these it was a still picture for as
+    # long as the model took. Two small head moves over the same hand: a settle, and a glance off to the
+    # side. The hand follows the head (see Pose.__init__), so the chin stays in the mitt.
+    ("chin-2", dict(chin=1.0, tilt=4.5, pitch=9.5)),
+    ("chin-3", dict(chin=1.0, tilt=9, pitch=5.5, yaw=-6)),
 ]
 # (window in world units, size at 3x). The 2x sprite is the 3x one resampled,
 # never an upscale: the largest use is the welcome figure at 96 CSS px wide.

@@ -3653,6 +3653,10 @@ async def stream_chat(
             # tool whose status line is still showing (post-demo Phase 07)
             clock.rounds += 1
             yield _sse("status", {"state": "writing"})
+            # Whether a tool this round asks for would actually be run, decided before the round so the
+            # turn toward research below is never announced for a call the limits will refuse.
+            will_fetch = (toolbox is not None and kwargs.get("tool_choice") != {"type": "none"}
+                          and rounds < toolbox.max_rounds and not toolbox.exhausted())
             async with client.beta.messages.stream(**kwargs) as stream:
                 async for event in stream:
                     etype = getattr(event, "type", "")
@@ -3666,6 +3670,14 @@ async def stream_chat(
                             yield _sse("status", {"state": "searching the web"})
                         elif btype == "web_search_tool_result":
                             yield _sse("status", {"state": "reading results"})
+                        elif btype == "tool_use" and will_fetch:
+                            # The model has stopped reasoning and started naming what it wants looked up.
+                            # Nothing used to be sent between the top of the round and the tool actually
+                            # running, so a round that reasoned for twenty seconds and then asked for three
+                            # lookups left the panel saying Thinking for all of it. This is the turn toward
+                            # research; the tool's own words ("Checking NVDA's options data") follow when it
+                            # runs, and `retrieved` says what came back.
+                            yield _sse("status", {"state": "looking up what it needs"})
                     elif etype == "content_block_delta":
                         delta = getattr(event, "delta", None)
                         if getattr(delta, "type", "") == "text_delta":
