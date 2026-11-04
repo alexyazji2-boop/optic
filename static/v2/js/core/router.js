@@ -36,7 +36,8 @@ export function parse(hash = location.hash) {
   // a share class written with a dot or an encoded slash (BRK.B, BF%2FB) is Yahoo's BRK-B, the rule store.canon applies to
   // lists: typed or linked as #/BRK.B (a brokerage holding, a Milo link) every feed answered "No price data found"
   const symbol = parts[0].toUpperCase().replace(/^([A-Z]{1,5})[./]([AB])$/, '$1-$2');
-  if (!/^[A-Z0-9.^=-]{1,12}$/.test(symbol)) return { view: 'notfound', params };
+  // an address that is not a page and not a symbol says what was tried (pages/notfound.js, Handoff 3)
+  if (!/^[A-Z0-9.^=-]{1,12}$/.test(symbol)) return { view: 'notfound', attempted: parts[0], params };
   const tab = (parts[1] || '').toLowerCase();
   // the printable research sheet: reached from the Dossier's menu, not a tab of its own (roadmap stage 4)
   if (tab === 'sheet') return { view: 'sheet', symbol, params };

@@ -141,6 +141,10 @@ def test_the_share_class_rule_and_a_browser_that_will_not_save(tmp_path):
       const s = await import('{(JS / "core/store.js").as_posix()}');
       const canon = ['brk.b', 'BRK-B', 'brk b', 'BF/B', 'VOD.L', 'aapl', 'RDS.A'].map(s.canon);
       localStorage.setItem('optic.session.holder.v1', 'guest');
+      // the symbol check's own answers (core/symbolcheck.js, Handoff 3): a guest's list takes only a symbol that names
+      // something, and this test, about spelling and storage, has no server to ask
+      const now = Date.now();
+      localStorage.setItem('optic.v2.symbols.known.v1', JSON.stringify({{ AAPL: {{ at: now, status: 'listed' }}, MSFT: {{ at: now, status: 'listed' }} }}));
       await s.loadLists();
       await s.follow('AAPL');
       const real = localStorage.setItem;

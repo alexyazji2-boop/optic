@@ -26,6 +26,7 @@ import { watchBuild, isClosed } from './core/build.js';
 import { watchStatus } from './core/status.js';
 import { openReport } from './pages/settings.js';
 import * as bridge from './pages/bridge.js';
+import * as symbols from './core/symbolcheck.js';
 import { watchTables } from './ui/align.js';
 import { startUnread } from './core/unread.js';
 import { startStrips } from './ui/strips.js';
@@ -59,8 +60,17 @@ const P = {
   sheet: lazy(() => import('./pages/sheet.js'), 'sheet'),
   saved: lazy(() => import('./pages/saved.js'), 'saved'),
   dossierstart: lazy(() => import('./pages/dossierstart.js'), 'dossierstart'),
+  notfound: lazy(() => import('./pages/notfound.js'), 'notfound'),
 };
-const PAGES = { home: P.workspace, overview: P.dossier, swing: P.options, long: P.investing, earnings: P.earnings, financials: P.financials, news: P.news, chart: P.chart, brief: P.read, market: P.macro, indices: P.indices, instrument: P.instrument, explore: P.explore, scan: P.scan, insiders: P.insiders, analysts: P.analysts, settings: () => settingsPage, compare: P.compare, tracker: P.tracker, paper: P.paper, roth: P.retirement, brokerage: P.brokerage, reports: P.reports, usage: P.reports, accounts: P.reports, metrics: P.reports, watchlist: P.watchlist, alerts: P.alerts, signin: () => signin, terms: P.legal, privacy: P.legal, earningsweek: P.earningsweek, dossierstart: P.dossierstart, sheet: P.sheet, saved: P.saved };
+const PAGES = { home: P.workspace, overview: P.dossier, swing: P.options, long: P.investing, earnings: P.earnings, financials: P.financials, news: P.news, chart: P.chart, brief: P.read, market: P.macro, indices: P.indices, instrument: P.instrument, explore: P.explore, scan: P.scan, insiders: P.insiders, analysts: P.analysts, settings: () => settingsPage, compare: P.compare, tracker: P.tracker, paper: P.paper, roth: P.retirement, brokerage: P.brokerage, reports: P.reports, usage: P.reports, accounts: P.reports, metrics: P.reports, watchlist: P.watchlist, alerts: P.alerts, signin: () => signin, terms: P.legal, privacy: P.legal, earningsweek: P.earningsweek, dossierstart: P.dossierstart, sheet: P.sheet, saved: P.saved, notfound: P.notfound };
+// While an uncached check is out, a quiet line in place of the last page (after a moment, so a quick answer shows none)
+function holdFor(my, text) {
+  setTimeout(() => {
+    if (my !== SHOW || !held.has(my)) return;
+    const v = $('#main'); render(v, html`<div class="page-view"><div class="state" role="status"><p>Looking up ${String(text).slice(0, 24)}</p></div></div>`);
+  }, 160);
+}
+const held = new Set();
 // The pages a reader most often opens next, fetched (not run) once the first page has settled and the
 // connection is not marked as costly: a later move to them does not wait on the network.
 function warmNext() {
@@ -144,7 +154,26 @@ async function show(route) {
   if (isClosed()) { location.href = `${CLASSIC}${location.hash}`; return; }
   if (route.view === 'signin' && store.signedIn() && (route.params || {}).mode !== 'reset') { router.go('#/'); return; }
   // the page's module: at once once fetched; on a first visit, fetched now (a later route wins a race)
-  const my = ++SHOW, load = PAGES[route.view];
+  const my = ++SHOW;
+  // The symbol is checked side by side with the page's code being fetched, and nothing about it is drawn until the
+  // answer is in. One that names nothing gets the not-found page at its own address, never another symbol's page; a
+  // check that cannot be made says so, and is never read as a not-found.
+  const asked = symbols.askedSymbol(route);
+  const checking = asked == null ? null : symbols.check(asked, { from: router.previous() || document.referrer || '' });
+  if (checking && !symbols.cached(asked)) { held.add(my); holdFor(my, asked); }
+  let load = PAGES[route.view];
+  if (checking) {
+    const res = await checking;
+    held.delete(my);
+    if (my !== SHOW) return;
+    if (route.view === 'notfound' || !symbols.admissible(res)) {
+      if (route.symbol && res.status !== 'unavailable') store.forgetRecent(route.symbol);
+      const original = route;
+      route = { view: 'notfound', params: route.params || {}, attempted: asked, check: res,
+        retry: () => { symbols.forget(asked); show(original); } };
+      load = PAGES.notfound;
+    }
+  }
   let page = bridge;
   if (load) {
     try { page = await load(); }

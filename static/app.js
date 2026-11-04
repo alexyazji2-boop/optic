@@ -154,6 +154,7 @@ const PERSONAL_KEYS = [
   'optic.v2.picker.v1',
   'optic.v2.replay.v1',
   'optic.v2.paper.draft.v1',
+  'optic.v2.symbols.known.v1',   // the symbols v2 found listed (Handoff 3): which companies this reader opened
   'optic.knowledge.pending.v1',  // a knowledge level the account has not saved yet (Phase 05)
   'optic.writeToken',            // the owner's token for writes to the record
   'optic.auth.passkeyOffered',   // so the next account is offered one as well

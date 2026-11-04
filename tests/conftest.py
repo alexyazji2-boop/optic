@@ -228,6 +228,16 @@ def _no_live_calls(monkeypatch, _ai_store_dir):
 
 
 @pytest.fixture(autouse=True)
+def _no_symbol_directory_carried_over(monkeypatch):
+    """Each test starts with no symbol directory in memory and no symbol check kept (app/symbol_check.py, Handoff 3).
+    The watchlist, Compare and Milo guards read only a directory already loaded, so with none loaded they ask no quote
+    source; a test that is about them loads its own."""
+    from app import symbol_check, universe
+    monkeypatch.setattr(universe, "_MEMO", {})
+    symbol_check.forget()
+
+
+@pytest.fixture(autouse=True)
 def _no_live_feeds(monkeypatch):
     """No test fetches through app.feeds, and one that tries fails by name.
 
