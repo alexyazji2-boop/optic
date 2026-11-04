@@ -174,3 +174,13 @@ def test_density_and_times_follow_the_standard():
     css = (V2 / "css/pages.css").read_text()
     assert ".rt { font: 600 var(--t-sm)/1 var(--f-label); color: var(--c-ink); }" in css
 
+
+
+def test_statement_and_segment_blocks_say_their_period_beside_their_title():
+    """The periods rule (Handoff 2, DESIGN-STANDARD.md "Periods"): the blocks that print statements or segments draw
+    `periodLine()`, and the written rule says what it holds. tests/test_fiscal_periods.py checks what they print."""
+    std = (ROOT / "docs" / "frontend-v2" / "DESIGN-STANDARD.md").read_text()
+    assert "### Periods (Handoff 2, 2026-11-03)" in std and "A fiscal-year name is never shown without its end date." in std
+    for page in ("pages/financials.js", "pages/earnings.js"):
+        src = (ROOT / "static" / "v2" / "js" / page).read_text()
+        assert "periodLine(" in src and "from '../ui/period.js'" in src, page

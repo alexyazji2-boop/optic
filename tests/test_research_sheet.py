@@ -35,6 +35,7 @@ def test_the_facts_carry_their_periods_and_missing_data_is_null(tmp_path):
       const full = S.sheetFacts({{ sym: 'AAPL',
         ticker: {{ quote: {{ name: 'Apple Inc.', price: 346 }}, company: {{ financials: {{ available: true, annual: {{ revenue: [416e9], net_income: [112e9], free_cash_flow: [98e9] }},
           annual_periods: ['2025-09-30'], annual_fiscal: ['FY25'], growth: {{ revenue_yoy_pct: 6.4 }}, margins: {{ operating_pct: 32 }}, balance_sheet: {{ net_cash: -62e9 }} }} }},
+          figures: {{ periods: {{ statements: {{ basis: 'GAAP', annual: [{{ type: 'annual', available: true, start: '2024-09-29', end: '2025-09-27', short: 'FY25', label: 'Fiscal year ended Sep 27, 2025', dated_by: 'filing', provider_end: '2025-09-30' }}] }} }} }},
           technicals: {{ support_resistance: [{{ price: 336, distance_pct: -2.9, role: 'support', touches: 2 }}, {{ price: 400, distance_pct: 15, role: 'resistance', touches: 1 }}] }}, cases: {{ bull: [{{ claim: 'a' }}], bear: [] }} }},
         session: {{ profile: {{ summary: 'The Company makes phones. It sells services. It has a third sentence.' }} }},
         fairValue: {{ fair_value: {{ available: true, low: 244, mid: 275, high: 307 }}, stars: {{ available: true, stars: 1, word: 'Above its usual valuation range' }} }},
@@ -43,7 +44,9 @@ def test_the_facts_carry_their_periods_and_missing_data_is_null(tmp_path):
       print(JSON.stringify({{ full, bare }}));
     """)
     f, b = got["full"], got["bare"]
-    assert f["financials"]["period"] == "2025-09-30" and f["financials"]["fiscal"] == "FY25"
+    # the year as the 10-K names and dates it (Sep 27), not the provider's month-end date (Handoff 2)
+    assert f["financials"]["period"] == "2025-09-27" and f["financials"]["fiscal"] == "FY25"
+    assert f["financials"]["label"] == "FY25, fiscal year ended Sep 27, 2025" and f["financials"]["basis"] == "GAAP"
     assert f["valuation"]["available"] and f["valuation"]["stars"] == 1
     assert f["chart"]["levels"][0]["price"] == 336, "nearest level first"
     assert b["financials"] is None and b["valuation"]["available"] is False and b["earnings"]["date"] is None and b["options"] is None

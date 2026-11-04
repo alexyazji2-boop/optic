@@ -24,6 +24,13 @@ There are four levels, and each has one look.
 ### Figures
 `font-variant-numeric: tabular-nums` applies to every place numbers are compared: value tiles, tables, the header price, panels, the chart readout, segmented controls, chips and legends. Numbers in tables are right-aligned (`table.t`, `table.st .n`).
 
+### Periods (Handoff 2, 2026-11-03)
+- **Every statement or segment block says its period beside its title**, with `periodLine()` from `ui/period.js`: a period-type badge (Annual, Quarter, TTM), an accounting-basis badge (GAAP, IFRS, Non-GAAP, Analysts' basis, or Basis not stated), the period in words with its end date ("FY25, fiscal year ended Sep 27, 2025"), and the filing it was read from. Badges are words in squared tags (`.pbadge`), never colour alone, and the line wraps under the title on a phone.
+- **A fiscal-year name is never shown without its end date.** In a table heading the date sits under the name; in a sentence it follows it, "FY25 (to Sep 27, 2025)"; on a chart tick it is the tick's second line, and the tip and the chart's description carry the whole label.
+- **Names come only from the company's filings** (`core/periods.js`, from the server's `app/figures/periods.py`). A period no filing names is labelled by its end date alone ("Year to Mar 31, 2026"), and one with no date says "Period labels unavailable". Nothing works a name out of a date: that guess called Home Depot's fiscal 2025 "FY26".
+- **What the reader must also know is said on the line**: a 53-week year, a quarter derived as the year less three quarters, a change of fiscal year end with its transition period, a figure from a later filing than the block's statements.
+- **A non-GAAP line among GAAP ones carries its own badge** (free cash flow, EBITDA, net debt). A segment table states what its parts add to against the filing's own total for the same period, or that it was not reconciled and why.
+
 ### Scores (owner, 2026-10-21)
 A score with a good and a bad side is coloured and has a thin line filled to it (`ui/score.js`), as Classic showed:
 - a 0 to 100 score where 50 is no edge (the Optic Score, the composite, the long-term trend score, Compare's horizon scores): green from 55, red to 45, grey between;

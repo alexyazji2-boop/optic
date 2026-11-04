@@ -113,8 +113,11 @@ def test_cross_tab_cells_are_summed_within_one_filing_only():
 
 
 def test_a_restatement_is_resolved_to_the_newest_filing():
+    """The newest filing is read first, so the first value a slot gets is the latest one; the filing it came from is
+    kept beside it, for the period's "from the 10-K filed ..." link (Handoff 2)."""
     block = SRC.split("def build(", 1)[1]
-    assert "cells.setdefault(slot, value)" in block
+    assert "if slot not in cells:" in block and "cells[slot] = value" in block
+    assert "read_from.setdefault((slot[1], slot[2]), entry)" in block
 
 
 def test_only_quarters_and_years_are_kept():

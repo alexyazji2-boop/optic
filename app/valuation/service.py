@@ -516,6 +516,8 @@ def _history_table(data: Dict[str, Any]) -> List[Dict[str, Any]]:
         f, b, d = y["flows"], y["balance"], y["derived"]
         rows.append({
             "fy_end": y["fy_end"],
+            # the year's own name from its 10-K ("FY25"), for the column heading (Handoff 2)
+            "fiscal": y.get("fiscal"),
             "facts": {k: _compact_fact(f.get(k)) for k in ("revenue", "operating_income", "pretax_income",
                                                           "income_tax", "net_income", "da", "capex", "cfo",
                                                           "sbc", "interest_expense", "dividends_paid",

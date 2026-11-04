@@ -14,6 +14,7 @@ import { hrefFor } from '../nav.js';
 import { icon } from '../ui/icons.js';
 import * as OR from './overview-research.js';
 import * as FIG from '../core/figures.js';
+import * as PER from '../core/periods.js';
 import { fig } from '../ui/figure.js';
 
 const fin = (v) => typeof v === 'number' && Number.isFinite(v);
@@ -57,9 +58,12 @@ export function simpleFacts({ sym, kind, t, lt, quote, session, earnings, price,
   const net = FIG.value(netFig), fwdFig = FIG.ok(FIG.of(t, 'forward_pe')) ? FIG.of(t, 'forward_pe') : null;
   // said when the margin's year is not the year the growth figures beside it are from (the filings can be a year
   // ahead of the provider's statements for a few days after a 10-K: AAPL, 2026-11-03)
-  const fyEnd = (fn.annual_periods || [])[0] || '', netEnd = ((netFig || {}).period || {}).end || '';
+  // the statements' latest year as the filings name and date it (core/periods.js, Handoff 2): Yahoo dates Apple's
+  // fiscal 2025 Sep 30, the 10-K Sep 27
+  const a0 = PER.statementPeriods(t, 'annual')[0] || null;
+  const fyEnd = a0 && a0.available ? a0.end : '', netEnd = ((netFig || {}).period || {}).end || '';
   const apart = netFig && fyEnd && netEnd && Math.abs(new Date(netEnd) - new Date(fyEnd)) > 15 * 864e5;
-  const netWhen = apart ? ` The net margin is for the ${lowerFirst(FIG.period(netFig))}.` : '';
+  const netWhen = apart ? ` The net margin is for the ${netPeriod(netFig)}.` : '';
   const ne = t ? OR.earningsNext(t, today) : null, im = g(earnings, 'implied') || {};
   const pe = val ? val.cur : fin(q.trailing_pe) && q.trailing_pe > 0 ? q.trailing_pe : null;
   // the first point against it that the other two answers do not already make: the report and the price's own fall
@@ -75,7 +79,7 @@ export function simpleFacts({ sym, kind, t, lt, quote, session, earnings, price,
     ni: fn.available && fin(gr.net_income_yoy_pct) ? gr.net_income_yoy_pct : null, net, netFig, netWhen, netApart: !!apart,
     gross: fn.available && fin(m.gross_pct) ? m.gross_pct : null, op: fn.available && fin(m.operating_pct) ? m.operating_pct : null,
     qRev: fin(q.revenue_growth) ? q.revenue_growth * 100 : null,
-    fy: (fn.annual_fiscal || [])[0] || '', fyEnd: (fn.annual_periods || [])[0] || '',
+    fy: a0 && a0.short ? a0.short : '', fyEnd, fyDesc: a0 && a0.available ? a0 : null,
     pe, peMed: val ? val.med : null, peYears: val ? val.years : null, peTone: val ? val.tone : null, prem: val ? val.prem : null,
     peLow: fin(vh.low_pe) ? vh.low_pe : null, peHigh: fin(vh.high_pe) ? vh.high_pe : null,
     fwdPe: FIG.value(fwdFig), fwdFig, losing: fin(net) && net < 0,
@@ -133,16 +137,19 @@ export function happening(F, L) {
 /* ---------------- why does it matter ---------------- */
 const verb = (x) => (x >= 1 ? 'grew' : x <= -1 ? 'fell' : 'was roughly flat');
 const rose = (x) => (x >= 1 ? 'rose' : x <= -1 ? 'fell' : 'was roughly flat');
+// a registry figure's period with the company's name for its year: "fiscal year ended Sep 26, 2026 (FY26)"
+const netPeriod = (fv) => `${lowerFirst(FIG.period(fv))}${((fv || {}).period || {}).fiscal ? ` (${fv.period.fiscal})` : ''}`;
 function businessLine(F, L) {
   if (!F.finAvailable && !fin(F.net)) {
     return say(L, { new: `Optic could not read ${F.sym}'s financial statements, so there is nothing to say yet about the business itself. That is missing information, not a bad result.`,
       intermediate: 'Its financial statements could not be read here, so the business is not described. That is missing data, not a bad result.', expert: 'No financial statements in the data.' });
   }
-  const { rev, ni, net, fy } = F, fyw = fy ? `fiscal year ${/^FY\d\d$/i.test(fy) ? `20${fy.slice(2)}` : fy}` : 'its latest fiscal year';
+  // every year named with the day it ended: "FY25 (to Sep 27, 2025)", never a bare "FY25" (Handoff 2)
+  const { rev, ni, net } = F, fyw = F.fyDesc ? PER.inWords(F.fyDesc) : 'its latest fiscal year', fyt = F.fyDesc ? PER.inText(F.fyDesc) : '';
   const amt = (x, dp = 0) => (fin(x) && Math.abs(x) >= 1 ? ` ${pct(x, dp)}` : '');
   return say(L, {
     new: () => {
-      const sales = fin(rev) ? `Its sales (revenue) ${verb(rev)}${amt(rev)} in its latest financial year${fin(ni) ? `, and its profit ${verb(ni)}${amt(ni)}` : ''}.` : '';
+      const sales = fin(rev) ? `Its sales (revenue) ${verb(rev)}${amt(rev)} in its latest financial year${F.fyEnd ? `, which ended ${fullDate(F.fyEnd)}` : ''}${fin(ni) ? `, and its profit ${verb(ni)}${amt(ni)}` : ''}.` : '';
       const keep = !fin(net) ? '' : net >= 0 ? ` It keeps about ${num(net, 0)} cents as profit from every dollar of sales, a net margin of ${NM}.` : ` It is losing money: about ${num(-net, 0)} cents on every dollar of sales, a net margin of ${NM}.`;
       const why = F.losing ? ' A company that loses money pays for it with cash, borrowing or new shares until it turns a profit.'
         : fin(rev) && rev >= 1 && (!fin(ni) || ni >= 1) ? ' Growing sales and profits are what usually support a share price over time, though the price can still fall if investors expected even more.' : '';
@@ -154,9 +161,9 @@ function businessLine(F, L) {
       return `${sales}${keep}${F.netWhen}`.trim();
     },
     intermediate: () => {
-      const sales = fin(rev) ? `Revenue ${rose(rev)}${amt(rev, 1)}${fin(ni) ? ` and net income ${rose(ni)}${amt(ni, 1)}` : ''} in ${fy || 'the latest fiscal year'}` : '';
+      const sales = fin(rev) ? `Revenue ${rose(rev)}${amt(rev, 1)}${fin(ni) ? ` and net income ${rose(ni)}${amt(ni, 1)}` : ''} in ${fyt || 'the latest fiscal year'}` : '';
       const margin = !fin(net) ? '' : F.netWhen ? '' : net >= 0 ? `${sales ? ', on a' : 'A'} ${NM} net margin` : `${sales ? ', and the' : 'The'} company is not yet profitable (net margin ${NM})`;
-      const later = fin(net) && F.netWhen ? ` Its net margin for the ${lowerFirst(FIG.period(F.netFig))} was ${NM}${net < 0 ? ', a loss' : ''}.` : '';
+      const later = fin(net) && F.netWhen ? ` Its net margin for the ${netPeriod(F.netFig)} was ${NM}${net < 0 ? ', a loss' : ''}.` : '';
       const conflict = fin(rev) && fin(F.qRev) && ((rev >= 1 && F.qRev <= -1) || (rev <= -1 && F.qRev >= 1))
         ? ` The latest quarter points the other way: revenue ${F.qRev >= 0 ? 'rose' : 'fell'} ${pct(F.qRev, 1)} against the same quarter a year earlier.` : '';
       return `${sales}${margin}.${conflict}${later}`.replace(/^\./, '').trim();
@@ -164,10 +171,10 @@ function businessLine(F, L) {
     advanced: () => {
       // a net margin from a later year than the line's is its own sentence, never listed under the line's year
       const margins = [fin(F.gross) ? `${num(F.gross, 1)}% gross` : '', fin(F.op) ? `${num(F.op, 1)}% operating` : '', fin(net) && !F.netApart ? `${NM} net` : ''].filter(Boolean).join(', ');
-      const later = fin(net) && F.netApart ? ` Net margin ${NM} in the ${lowerFirst(FIG.period(F.netFig))}.` : '';
-      return `${fy || 'Latest fiscal year'}: revenue ${fin(rev) ? signed(rev, 1) : 'n/a'}, net income ${fin(ni) ? signed(ni, 1) : 'not meaningful'}${margins ? `; margins ${margins}` : ''}.${later}${fin(F.qRev) ? ` Latest quarter revenue ${signed(F.qRev, 1)} against a year earlier.` : ''}`;
+      const later = fin(net) && F.netApart ? ` Net margin ${NM} in the ${netPeriod(F.netFig)}.` : '';
+      return `${fyt ? capFirst(fyt) : 'Latest fiscal year'}: revenue ${fin(rev) ? signed(rev, 1) : 'n/a'}, net income ${fin(ni) ? signed(ni, 1) : 'not meaningful'}${margins ? `; margins ${margins}` : ''}.${later}${fin(F.qRev) ? ` Latest quarter revenue ${signed(F.qRev, 1)} against a year earlier.` : ''}`;
     },
-    expert: () => `${fy || 'FY'} rev ${fin(rev) ? signed(rev, 1) : 'n/a'} y/y, NI ${fin(ni) ? signed(ni, 1) : 'n/m'}; ${[fin(F.gross) ? `GM ${num(F.gross, 1)}%` : '', fin(F.op) ? `OM ${num(F.op, 1)}%` : '', fin(net) && !F.netApart ? `NM ${NM}` : ''].filter(Boolean).join(', ')}${fin(net) && F.netApart ? `; NM ${NM} (${lowerFirst(FIG.period(F.netFig))})` : ''}${fin(F.qRev) ? `; last quarter rev ${signed(F.qRev, 1)} y/y` : ''}.`,
+    expert: () => `${fyt ? capFirst(fyt) : 'Latest fiscal year'} rev ${fin(rev) ? signed(rev, 1) : 'n/a'} y/y, NI ${fin(ni) ? signed(ni, 1) : 'n/m'}; ${[fin(F.gross) ? `GM ${num(F.gross, 1)}%` : '', fin(F.op) ? `OM ${num(F.op, 1)}%` : '', fin(net) && !F.netApart ? `NM ${NM}` : ''].filter(Boolean).join(', ')}${fin(net) && F.netApart ? `; NM ${NM} (${netPeriod(F.netFig)})` : ''}${fin(F.qRev) ? `; last quarter rev ${signed(F.qRev, 1)} y/y` : ''}.`,
   });
 }
 function valuationLine(F, L) {
@@ -254,7 +261,7 @@ function swingLine(F, L) {
   });
 }
 function limitsLine(F, L) {
-  const fresh = F.fresh, period = F.kind === 'company' && F.fy && F.fyEnd ? F.fyEnd : '';
+  const fresh = F.fresh, period = F.kind === 'company' && F.fyEnd ? F.fyEnd : '';
   return say(L, {
     new: `${fresh ? `About these prices: ${lowerFirst(fresh)}. ` : ''}${period ? `The business figures come from its yearly report for the year that ended ${fullDate(period)}, which can be months old. ` : ''}Optic wrote this from those figures by fixed rules. It explains them; it does not tell you what to buy or sell.`,
     beginner: `${fresh ? `${capFirst(fresh)}. ` : ''}${period ? `Business figures are from its fiscal year that ended ${fullDate(period)}. ` : ''}Optic wrote this by fixed rules from the figures on this page; it is not a recommendation to buy or sell.`,

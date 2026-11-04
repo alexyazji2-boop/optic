@@ -45,7 +45,7 @@ export function forMilo(block) {
   const out = {};
   Object.keys(figs).forEach((id) => {
     const fv = figs[id] || {}, per = fv.period || {}, src = fv.source || {};
-    out[id] = { name: fv.name, text: fv.text, status: fv.status, period: per.label || null, source: src.name || null, filing: src.url || null };
+    out[id] = { name: fv.name, text: fv.text, status: fv.status, period: per.label ? `${per.label}${per.fiscal ? ` (${per.fiscal})` : ''}` : null, source: src.name || null, filing: src.url || null };
     if (fv.why) out[id].why = fv.why;
   });
   return Object.keys(out).length ? out : null;
@@ -56,10 +56,21 @@ export function quoteForMilo(q) {
   delete out.forward_pe; delete out.profit_margin;
   return out;
 }
-export function companyForMilo(c) {
+// The statements without the provider's guessed fiscal names ("FY26" for Home Depot's fiscal 2025), with each column's
+// period as the filings name and date it instead (Handoff 2), when the page has the registry's block.
+export function companyForMilo(c, block = null) {
   const fin = c && c.financials;
   if (!fin || typeof fin !== 'object') return c;
   const margins = { ...(fin.margins || {}) }, bs = { ...(fin.balance_sheet || {}) };
   delete margins.net_pct; delete bs.net_cash;
-  return { ...c, financials: { ...fin, margins, balance_sheet: bs } };
+  const out = { ...fin, margins, balance_sheet: bs };
+  delete out.annual_fiscal; delete out.quarterly_fiscal; delete out.fiscal_year_end;
+  const st = ((block || {}).periods || {}).statements;
+  if (st) {
+    const words = (d) => (d && d.label ? `${d.short ? `${d.short}, ` : ''}${d.label}` : 'Period labels unavailable');
+    out.annual_period_labels = (st.annual || []).map(words);
+    out.quarterly_period_labels = (st.quarterly || []).map(words);
+    if (st.basis) out.accounting_basis = st.basis;
+  }
+  return { ...c, financials: out };
 }

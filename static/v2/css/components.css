@@ -1277,3 +1277,18 @@ html.eff-1100 .answers { grid-template-columns: 1fr 1fr; } html.eff-1100 .answer
   .lvl-row { flex-direction: column; align-items: stretch; gap: 0; }
   .lvl-now { order: -1; min-width: 0; padding-top: 0; }
 }
+
+/* Period line (Handoff 2, ui/period.js): a statement or segment block's period under its title. Badges are words in
+   squared tags (the period type, the accounting basis), never colour; the line wraps under the title on a phone. */
+.period-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; max-width: 100%; margin-top: 6px; color: var(--c-ink-2); font-size: var(--t-sm); }
+.pbadges { display: inline-flex; flex-wrap: wrap; gap: 6px; }
+.pbadge { display: inline-block; padding: 1px 7px; border: 1px solid var(--c-line); border-radius: var(--r-xs); color: var(--c-ink-2); font: 500 var(--t-xs)/1.5 var(--f-label); white-space: nowrap; }
+.period-what { min-width: 0; color: var(--c-ink); overflow-wrap: anywhere; }
+.period-line.is-unavailable .period-what { color: var(--c-ink-2); }
+.period-filing { min-width: 0; overflow-wrap: anywhere; }
+.period-note { margin: 4px 0 0; color: var(--c-ink-2); font-size: var(--t-sm); }
+th .pbadge, dt .pbadge, .k .pbadge { margin-left: 6px; vertical-align: 1px; }
+.fin-end .pbadge { margin: 2px 0 0; }
+/* the filing a period was read from: an inline link in the line's own type, not the standalone .textlink control */
+.period-link { color: var(--c-ink); text-decoration: underline; text-decoration-color: var(--c-line); text-decoration-thickness: 1px; text-underline-offset: 3px; }
+.period-link:hover { text-decoration-color: currentColor; }

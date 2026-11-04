@@ -496,6 +496,40 @@ def _revisions(est: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+# --------------------------------------------------------------- fiscal periods
+
+def _name_quarters(yf_provider, ticker: str, surprise: Dict[str, Any], growth: Dict[str, Any]) -> None:
+    """The quarter each report covers and each growth row's period, from the company's own filings (Handoff 2).
+
+    These were worked out from the provider's month-end year date on a 91-day grid (fundamentals.reported_quarter):
+    Apple's first quarter of fiscal 2026 ended Dec 27, 2025, not Dec 30, and Home Depot's quarter to May 3, 2026 is
+    its first of fiscal 2026, not of 2027. When the filings cannot be read, a row carries no fiscal name at all, and
+    the page says why rather than show a guess."""
+    from ..figures import compute as figures_mod
+    from ..figures import periods as periods_mod
+    fl, _cik, why = figures_mod.load_via(yf_provider, ticker)
+    cal = periods_mod.calendar(fl) if fl is not None else {"available": False, "reason": why}
+    rows = surprise.get("rows") or []
+    for r in rows:
+        per = periods_mod.for_report(cal, r.get("date"))
+        r["period"] = per
+        r["fiscal"] = (per or {}).get("short")
+    if rows:
+        surprise["periods"] = ({"available": True, "source": cal.get("source"), "year_end": cal.get("year_end"),
+                                "kind": cal.get("kind")} if cal.get("available")
+                               else {"available": False, "reason": "The quarter each report covers comes from the "
+                                                                   "company's SEC filings, which Optic could not read "
+                                                                   "for this company ({}).".format(
+                                                                       str(cal.get("reason") or "no filings").rstrip("."))})
+    # the statements behind the growth rows are filed under the company's accounting rules, when the filings say which
+    growth["basis"] = cal.get("basis")
+    for key, kind in (("quarterly", "quarter"), ("annual", "annual")):
+        for r in growth.get(key) or []:
+            per = periods_mod.describe(cal, r.get("period"), kind, provider="Yahoo Finance")
+            r["period_info"] = per
+            r["fiscal"] = per.get("short")
+
+
 # --------------------------------------------------------------- growth
 
 
@@ -1106,6 +1140,7 @@ def analyse(provider, yf_provider, ticker: str, quote: Dict[str, Any], rate: flo
     latest = _latest_result(surprise, extended)
     revisions = _revisions(est)
     growth = _growth(financials, est)
+    _name_quarters(yf_provider, ticker, surprise, growth)
     _reconcile_consensus(next_report, growth)
     implied = _implied_move(provider, ticker, spot, next_report.get("date"), rate,
                             next_report.get("timing"))

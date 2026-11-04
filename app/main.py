@@ -6990,7 +6990,9 @@ async def segments_panel(ticker: str,
     per call and cached per accession, so a cold panel reports what it has not
     read rather than holding the page. See app/analytics/segments.py.
     """
-    return await _run(segments_mod.build, ticker, force)
+    sym = (ticker or "").upper().strip()
+    # the company facts name each period and reconcile each table (Handoff 2); loaded only once the symbol has filings
+    return await _run(segments_mod.build, sym, force, sec=lambda: figures_mod.load_via(YF_PROVIDER, sym))
 
 
 @app.get("/api/insiders/latest")

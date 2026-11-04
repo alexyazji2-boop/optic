@@ -22,6 +22,8 @@ import { core, header, tabs, isFund, livePrice } from './dossier-frame.js';
 import { etStamp, sessionWord } from '../core/marketTime.js';
 import { historyRatio } from './dossier.js';
 import * as FIG from '../core/figures.js';
+import * as PER from '../core/periods.js';
+import { periodLine } from '../ui/period.js';
 
 // The brief's stance in words that describe the evidence rather than call the stock (advice policy, 2026-10-29).
 const STANCE_WORDS = { 'leaning bullish': 'The evidence leans positive', 'leaning bearish': 'The evidence leans negative', 'two-sided': 'The evidence is two-sided' };
@@ -40,6 +42,19 @@ const reactionWhen = (t) => (t === 'before_open' ? 'that session' : t === 'after
 // reports, what a report is, what analysts expect (EPS consensus in words, with the term and the figure kept), and
 // what happened after earlier reports. The beat rate is never shown without what the price did after: Apple beat in
 // 8 of 8 quarters and still fell after most of them.
+// The quarter a report covers, as the company's filings name and date it (Handoff 2); a report the filings do not place
+// is named by the day it came out, never by a guess at its quarter.
+const qName = (r) => r.fiscal || `Report ${shortDate(r.date)}`;
+const qWords = (r) => (r.period ? PER.inText(r.period) : `the report of ${fullDate(r.date)}`);
+const qTitle = (r) => (r.period ? PER.label(r.period) : `Reported ${fullDate(r.date)}; the quarter it covers is not in the filings Optic read`);
+// the line beside "Earlier reports": the quarters as filed, the EPS basis, and why there are no names when there are none
+function reportsLine(R) {
+  const s = (D.e || {}).surprise || {}, ps = s.periods || {};
+  const ds = R.map((r) => r.period).filter(Boolean);
+  const what = ds.length ? PER.range(ds) : PER.UNAVAILABLE;
+  return periodLine({ type: 'quarter', basis: "Analysts' basis", what, filing: PER.latestFiling(ds),
+    notes: [ps.available === false ? ps.reason : '', ...PER.notes(ds), "Reported EPS here is on the basis analysts' estimates use, usually the company's adjusted (non-GAAP) figure; the income statement's GAAP diluted EPS is on Financials."].filter(Boolean) });
+}
 function rows8() { return (((D.e || {}).surprise || {}).rows || []).map((r) => Object.assign({}, r, FV.surprise(r.eps_estimate, r.eps_reported, r.surprise_pct))); }
 export function afterBeats(rows) {
   const beats = rows.filter((r) => r.cls === 'beat' && isNum(r.next_day_move_pct));
@@ -80,9 +95,9 @@ function history(sym) {
   const R = rows8(); if (!R.length) return '';
   const s = (D.e || {}).surprise || {}, last = R[0], ab = afterBeats(R);
   const small = R.some((r) => r.small);
-  const lastWords = last.cls === 'missing' ? '' : last.pct === null ? ` The latest, ${last.fiscal || fullDate(last.date)}, ${last.cls === 'in line' ? 'was in line' : `${last.cls === 'beat' ? 'beat' : 'missed'} by $${num(Math.abs(last.diff))} a share`}.` : ` The latest, ${last.fiscal || fullDate(last.date)}, ${last.cls === 'in line' ? 'was in line' : `${last.cls === 'beat' ? 'beat' : 'missed'} by $${num(Math.abs(last.diff))} a share (${num(Math.abs(last.pct), 1)}%)`}.`;
+  const lastWords = last.cls === 'missing' ? '' : last.pct === null ? ` The latest, ${qWords(last)}, ${last.cls === 'in line' ? 'was in line' : `${last.cls === 'beat' ? 'beat' : 'missed'} by $${num(Math.abs(last.diff))} a share`}.` : ` The latest, ${qWords(last)}, ${last.cls === 'in line' ? 'was in line' : `${last.cls === 'beat' ? 'beat' : 'missed'} by $${num(Math.abs(last.diff))} a share (${num(Math.abs(last.pct), 1)}%)`}.`;
   const moves = R.filter((r) => isNum(r.next_day_move_pct)), up = moves.filter((r) => r.next_day_move_pct > 0).length;
-  return html`<section class="section" id="ern-history" aria-labelledby="eh-h"><h2 class="t-h2" id="eh-h">Earlier reports</h2>
+  return html`<section class="section" id="ern-history" aria-labelledby="eh-h"><h2 class="t-h2" id="eh-h">Earlier reports</h2>${reportsLine(R)}
     <div class="fv-grid">
       <figure class="fv"><figcaption><h3>Reported against expected</h3><p class="fv-take">${R.filter((r) => r.cls === 'beat').length} beats, ${R.filter((r) => r.cls === 'miss').length} misses and ${R.filter((r) => r.cls === 'in line').length} in line in the last ${R.length} quarters.${lastWords}</p>
         <p class="legend-line fv-key"><span><i class="sw s0 hollow"></i>Analysts' estimate</span><span><i class="sw s1"></i>Reported EPS</span></p><p class="fv-unit">EPS in dollars a share, by quarter, on analysts' basis. Under each quarter: beat, miss or in line.</p></figcaption>
@@ -92,7 +107,7 @@ function history(sym) {
         <div class="chart-slot" data-chart="react"></div></figure>
     </div>
     <details class="more-inline fv-data"><summary>View data</summary><div class="tscroll"><table class="t"><thead><tr><th scope="col">Quarter</th><th scope="col">Reported on</th><th scope="col">Estimate</th><th scope="col">Reported</th><th scope="col">Difference</th><th scope="col">Surprise</th><th scope="col">Result</th><th scope="col">${REACTION}</th></tr></thead>
-      <tbody>${R.map((x) => html`<tr><th scope="row">${x.fiscal || shortDate(x.date)}</th><td>${fullDate(x.date)}${x.timing && timing[x.timing] ? html`<small class="t-muted"> ${timing[x.timing]}</small>` : ''}</td><td>${num(x.eps_estimate)}</td><td>${num(x.eps_reported)}</td><td>${isNum(x.diff) ? signed(x.diff, 2, '') : 'n/a'}</td><td>${x.pct === null ? (x.small ? 'n/a, estimate under $0.10' : 'n/a') : signed(x.pct, 1)}</td><td>${FV.CLASS_WORD[x.cls]}</td><td>${isNum(x.next_day_move_pct) ? signed(x.next_day_move_pct) : 'Not reported'}</td></tr>`)}</tbody></table></div>
+      <tbody>${R.map((x) => html`<tr><th scope="row">${x.fiscal || 'Not identified'}${x.period ? html`<small class="t-muted fin-end">to ${PER.endText(x.period)}</small>` : ''}</th><td>${fullDate(x.date)}${x.timing && timing[x.timing] ? html`<small class="t-muted"> ${timing[x.timing]}</small>` : ''}</td><td>${num(x.eps_estimate)}</td><td>${num(x.eps_reported)}</td><td>${isNum(x.diff) ? signed(x.diff, 2, '') : 'n/a'}</td><td>${x.pct === null ? (x.small ? 'n/a, estimate under $0.10' : 'n/a') : signed(x.pct, 1)}</td><td>${FV.CLASS_WORD[x.cls]}</td><td>${isNum(x.next_day_move_pct) ? signed(x.next_day_move_pct) : 'Not reported'}</td></tr>`)}</tbody></table></div>
       <p class="asof">A result is in line when the difference rounds to nothing, a beat above the estimate and a miss below it. ${small ? 'Where the estimate is under ten cents a share, a percentage of almost nothing misleads, so only the dollar difference is given. ' : ''}${clean(s.eps_basis || '')}</p>
       <ul class="plain">${(s.notes || []).map((n) => html`<li>${clean(n)}</li>`)}</ul></details></section>`;
 }
@@ -142,9 +157,18 @@ function revisions(sym) {
 
 // A growth table: a column with no figure in any row is left out rather than shown as a column of n/a.
 const GROWTH_COLS = [['revenue', 'Revenue', (v) => compact(v)], ['revenue_yoy_pct', 'Growth', (v) => signed(v)], ['net_income', 'Net income', (v) => compact(v)], ['net_income_yoy_pct', 'Growth', (v) => signed(v)], ['gross_margin_pct', 'Gross margin', (v) => pct(v)], ['operating_margin_pct', 'Operating margin', (v) => pct(v)]];
+// A growth row's period: the company's name for it with the day it ended (Handoff 2), or the provider's date alone
+const growthHead = (x) => { const d = x.period_info || PER.bare(x.period, 'quarter'); return html`${PER.short(d)}${d.short ? html`<small class="t-muted fin-end">to ${PER.endText(d)}</small>` : ''}`; };
+/** The reports and growth blocks drawn from an earnings payload, for a check that needs no browser
+ * (tests/test_fiscal_periods.py); the page's own state is put back as it was. */
+export function blocksFor(e, sym = 'TEST') {
+  const was = D;
+  D = { sym, e };
+  try { return html`${history(sym)}${growth()}`; } finally { D = was; }
+}
 export function growthTable(rows) {
   const cols = GROWTH_COLS.filter(([k]) => rows.some((x) => isNum(x[k])));
-  return html`<thead><tr><th scope="col">Period</th>${cols.map(([, l]) => html`<th scope="col">${l}</th>`)}</tr></thead><tbody>${rows.map((x) => html`<tr><th scope="row">${x.fiscal || `${shortDate(x.period)} ${String(x.period).slice(0, 4)}`}<small class="t-muted fin-end">to ${shortDate(x.period)} ${String(x.period).slice(2, 4)}</small></th>${cols.map(([k, , f]) => html`<td>${f(x[k])}</td>`)}</tr>`)}</tbody>`;
+  return html`<thead><tr><th scope="col">Period</th>${cols.map(([, l]) => html`<th scope="col">${l}</th>`)}</tr></thead><tbody>${rows.map((x) => html`<tr><th scope="row">${growthHead(x)}</th>${cols.map(([k, , f]) => html`<td>${f(x[k])}</td>`)}</tr>`)}</tbody>`;
 }
 // The business the reports describe: reported quarters, then what analysts expect, drawn hollow and labelled as
 // estimates so a forecast is never read as a result
@@ -152,11 +176,13 @@ function growth() {
   const g = D.e.growth || {};
   if (!(g.quarterly || []).length && !(g.annual || []).length) return '';
   const q = g.quarterly || [], fw = (g.forward || []).filter((f) => /q$/.test(f.period || '') && isNum(f.revenue_avg));
-  const lab = q.map((r) => r.fiscal || shortDate(r.period));
+  const lab = q.map((r) => PER.inText(r.period_info || PER.bare(r.period, 'quarter')));
   const yoy = q[0] && isNum(q[0].revenue_yoy_pct) ? `Revenue ${q[0].revenue_yoy_pct >= 0 ? 'grew' : 'fell'} ${num(Math.abs(q[0].revenue_yoy_pct), 1)}% from the same quarter a year before, to ${FV.usd(q[0].revenue)} in ${lab[0]}.` : q[0] ? `Revenue was ${FV.usd(q[0].revenue)} in ${lab[0]}.` : '';
   const ni = q[0] && isNum(q[0].net_income) ? ` Net income was ${FV.usd(q[0].net_income)}${isNum(q[0].net_income_yoy_pct) ? `, ${q[0].net_income_yoy_pct >= 0 ? 'up' : 'down'} ${num(Math.abs(q[0].net_income_yoy_pct), 1)}%` : ''}.` : '';
   const ahead = fw[0] ? ` Analysts expect about ${fw[0].revenue_label || FV.usd(fw[0].revenue_avg)} of revenue for the ${fw[0].label.toLowerCase()}${isNum(fw[0].revenue_growth_pct) ? `, ${signed(fw[0].revenue_growth_pct)} on a year before` : ''}: an estimate, not a result.` : '';
+  const qd = q.map((r) => r.period_info || PER.bare(r.period, 'quarter'));
   return html`<section class="section" aria-labelledby="gr-h"><h2 class="t-h2" id="gr-h">The business behind the reports</h2>
+    ${q.length ? periodLine({ type: 'quarter', basis: g.basis || 'Basis not stated', what: PER.range(qd), filing: PER.latestFiling(qd), notes: PER.notes(qd) }) : ''}
     ${q.length ? html`<figure class="fv"><figcaption><p class="fv-take">${yoy}${ni}${ahead}</p>
       <p class="legend-line fv-key"><span><i class="sw s1"></i>Revenue</span><span><i class="sw s3"></i>Net income</span>${fw.length ? html`<span><i class="sw s1 hollow"></i>Revenue, analysts' estimate</span>` : ''}</p><p class="fv-unit">By quarter, US dollars. Reported quarters first, then estimates.</p></figcaption>
       <div class="chart-slot" data-chart="growth"></div></figure>` : ''}
@@ -181,17 +207,17 @@ function makers() {
   const e = D.e || {};
   const rv = (e.revisions || {}).rows || [], R = rows8().slice().reverse(), q = ((e.growth || {}).quarterly || []).slice().reverse();
   const fw = ((e.growth || {}).forward || []).filter((f) => /q$/.test(f.period || '') && isNum(f.revenue_avg));
-  const G = R.map((r) => ({ x: r.fiscal || shortDate(r.date), sub: FV.CLASS_WORD[r.cls], subCls: r.cls.replace(' ', '-') }));
+  const G = R.map((r) => ({ x: qName(r), sub: FV.CLASS_WORD[r.cls], subCls: r.cls.replace(' ', '-'), title: qTitle(r) }));
   const ev = eventDay();
   const out = {
     rev: (w) => signedBars(rv.map((r) => ({ x: r.label, v: r.chg_90d_pct, label: `${r.label}: ${signed(r.chg_90d_pct)} over 90 days` })), { w, h: 150, label: 'Estimate change over 90 days by period', fmt: (v) => signed(v), xfmt: (x) => x.replace('Current ', '').replace('Next ', 'next ') }),
     eps: (w) => groupedBars(G, [{ name: "Analysts' estimate", cls: 's0', hollow: true, values: R.map((r) => r.eps_estimate), missingText: 'No estimate' }, { name: 'Reported EPS', cls: 's1', values: R.map((r) => r.eps_reported) }], { w, h: 230, fmt: (v) => `$${num(v, 2)}`, axisFmt: (v) => `$${num(v, 2)}`, valueLabels: 'none', label: 'EPS estimate against reported, by quarter', note: (i) => { const r = R[i]; return r.cls === 'missing' ? 'No estimate to compare' : `${FV.CLASS_WORD[r.cls]}${isNum(r.diff) ? `, ${signed(r.diff, 2, '')} a share` : ''}${r.pct !== null && r.cls !== 'in line' ? ` (${signed(r.pct, 1)})` : ''}`; } }),
-    react: (w) => groupedBars(R.map((r) => ({ x: r.fiscal || shortDate(r.date), sub: FV.CLASS_WORD[r.cls], subCls: r.cls.replace(' ', '-') })), [{ name: 'Price move in the reaction session', cls: 's2', values: R.map((r) => r.next_day_move_pct), missingText: 'Not reported' }], { w, h: 230, fmt: (v) => signed(v), axisFmt: (v) => `${num(v, 0)}%`, label: 'Share price move in the session that traded on each report', note: (i) => `${fullDate(R[i].date)}, ${timing[R[i].timing] || ''}` }),
-    growth: (w) => groupedBars([...q.map((r) => ({ x: r.fiscal || shortDate(r.period) })), ...fw.map((f) => ({ x: f.label.replace('Current quarter', 'This quarter'), sub: 'Estimate' }))],
+    react: (w) => groupedBars(R.map((r) => ({ x: qName(r), sub: FV.CLASS_WORD[r.cls], subCls: r.cls.replace(' ', '-'), title: qTitle(r) })), [{ name: 'Price move in the reaction session', cls: 's2', values: R.map((r) => r.next_day_move_pct), missingText: 'Not reported' }], { w, h: 230, fmt: (v) => signed(v), axisFmt: (v) => `${num(v, 0)}%`, label: 'Share price move in the session that traded on each report', note: (i) => `${fullDate(R[i].date)}, ${timing[R[i].timing] || ''}` }),
+    growth: (w) => groupedBars([...q.map((r) => PER.tick(r.period_info || PER.bare(r.period, 'quarter'))), ...fw.map((f) => ({ x: f.label.replace('Current quarter', 'This quarter'), sub: 'Estimate' }))],
       [{ name: 'Revenue', cls: 's1', values: [...q.map((r) => r.revenue), ...fw.map(() => null)] }, { name: 'Net income', cls: 's3', values: [...q.map((r) => r.net_income), ...fw.map(() => null)], missingText: 'No estimate' }, { name: "Revenue, analysts' estimate", cls: 's1', hollow: true, values: [...q.map(() => null), ...fw.map((f) => f.revenue_avg)], missingText: 'Reported, see Revenue' }],
-      { w, h: 230, fmt: FV.usd, valueLabels: 'none', label: 'Quarterly revenue and net income, then analysts\' revenue estimates' }),
+      { w, h: 230, labelWidth: 84, fmt: FV.usd, valueLabels: 'none', label: 'Quarterly revenue and net income, then analysts\' revenue estimates' }),
   };
-  if (ev) out.evday = (w) => groupedBars(R.map((r) => ({ x: r.fiscal || shortDate(r.date) })), [{ name: 'Size of the report-day move', cls: 's1', values: R.map((r) => (isNum(r.next_day_move_pct) ? Math.abs(r.next_day_move_pct) : null)) }], { w, h: 200, fmt: (v) => `${num(v, 1)}%`, axisFmt: (v) => `${num(v, 0)}%`, refs: [{ v: ev.move_pct, text: `Priced today: ±${num(ev.move_pct, 1)}%` }], label: 'Size of past report-day moves against the move options price for the next report day' });
+  if (ev) out.evday = (w) => groupedBars(R.map((r) => ({ x: qName(r), title: qTitle(r) })), [{ name: 'Size of the report-day move', cls: 's1', values: R.map((r) => (isNum(r.next_day_move_pct) ? Math.abs(r.next_day_move_pct) : null)) }], { w, h: 200, fmt: (v) => `${num(v, 1)}%`, axisFmt: (v) => `${num(v, 0)}%`, refs: [{ v: ev.move_pct, text: `Priced today: ±${num(ev.move_pct, 1)}%` }], label: 'Size of past report-day moves against the move options price for the next report day' });
   return out;
 }
 

@@ -18,6 +18,7 @@
 // tied to the visit that asked for it, so nothing from an earlier ticker, or an
 // earlier visit to the same one, is ever drawn.
 import * as FV from '../core/finviz.js';
+import * as PER from '../core/periods.js';
 import { term } from '../ui/term.js';
 import { $, $$, html, render as draw, raw } from '../core/dom.js';
 import * as api from '../core/api.js';
@@ -272,19 +273,20 @@ export function firstSentences(t, n = 2, max = 320) {
   let out = ''; for (const x of parts.slice(0, n)) { if ((out + x).length > max && out) break; out += x; }
   return out.trim();
 }
-function revenueLine() {
-  const s = D.segments, f = (((D.ticker || {}).company || {}).financials) || {};
+function revenueLine() { return revenueLineFor(D.segments); }
+/** "Where its revenue comes from", from the segments payload alone (tests/test_fiscal_periods.py checks its period). */
+export function revenueLineFor(s) {
   if (!s || !s.available) return '';
-  const t = (s.tables || []).filter((x) => x.metric === 'revenue' && ((x.annual || {}).ends || []).length).sort((a, b) => (a.axis === 'product' ? -1 : 1) - (b.axis === 'product' ? -1 : 1))[0];
+  const t = PER.segmentTables(s).filter((x) => x.metric === 'revenue' && ((x.annual || {}).ends || []).length).sort((a, b) => (a.axis === 'product' ? -1 : 1) - (b.axis === 'product' ? -1 : 1))[0];
   if (!t) return '';
   const ends = t.annual.ends, rows = t.annual.rows, k = ends.map((_, i) => rows.some((r) => isNum(r.values[i]))).lastIndexOf(true); if (k < 0) return '';
-  const day = (x) => Date.parse(String(x).slice(0, 10)), ai = (f.annual_periods || []).findIndex((p) => Math.abs(day(p) - day(ends[k])) <= 15 * 864e5);
-  const total = ai >= 0 ? ((f.annual || {}).revenue || [])[ai] : null;
-  const c = FV.composition(rows.map((r) => clean(r.member)), rows.map((r) => r.values[k]), total);
+  // shares only of the total the same filings report for the same year, and the year named and dated as they do
+  // (Handoff 2): it read "of 2026 revenue" for Apple's fiscal 2026, set against the provider's fiscal 2025
+  const rep = PER.segmentTotal(t, k, true);
+  const c = FV.composition(rows.map((r) => clean(r.member)), rows.map((r) => r.values[k]), rep ? rep.value : null);
   if (!c.rows.length || !c.canShare) return '';
   const base = c.reconciles ? c.total : c.sum, top = c.rows.slice(0, 2).map((r) => `${r.label}, ${num((r.v / base) * 100, 0)}%`);
-  const label = ai >= 0 ? (f.annual_fiscal || [])[ai] : String(ends[k]).slice(0, 4);
-  return `${top.join('; ')} of ${label} revenue, ${t.axis_label.toLowerCase().replace(/^by /, 'by ')}.`;
+  return `${top.join('; ')} of revenue in ${PER.inText(PER.segmentPeriod(s, ends[k], true))}, ${t.axis_label.toLowerCase()}.`;
 }
 function about(sym) {
   const t = D.ticker || {}, q = D.quote || {}, prof = (D.session || {}).profile || {};
@@ -438,7 +440,7 @@ export async function render(main, route) {
   D = { sym, visit };
   const mine = () => live && D.visit === visit;
   // data_as_of: when the company data was read, so the server's stale-context line can fire, as Classic's does (Phase 09, B11)
-  provideContext(() => ({ view: 'overview', ticker: sym, data_as_of: (D.ticker || {}).generated_at || null, quote: FIG.quoteForMilo(D.quote), figures: FIG.forMilo((D.ticker || {}).figures), verdict: (D.ticker || {}).verdict, company: FIG.companyForMilo((D.ticker || {}).company), news: (D.ticker || {}).news, framework: D.framework, fair_value: D.fairValue, earnings: D.earnings, digest: D.digest, stage: D.stage && D.stage.available ? { stage: D.stage.stage, name: D.stage.name, transition: D.stage.transition_short } : null, thesis_check: thesisContext() }));
+  provideContext(() => ({ view: 'overview', ticker: sym, data_as_of: (D.ticker || {}).generated_at || null, quote: FIG.quoteForMilo(D.quote), figures: FIG.forMilo((D.ticker || {}).figures), verdict: (D.ticker || {}).verdict, company: FIG.companyForMilo((D.ticker || {}).company, (D.ticker || {}).figures), news: (D.ticker || {}).news, framework: D.framework, fair_value: D.fairValue, earnings: D.earnings, digest: D.digest, stage: D.stage && D.stage.available ? { stage: D.stage.stage, name: D.stage.name, transition: D.stage.transition_short } : null, thesis_check: thesisContext() }));
   document.title = `${sym} Dossier, Optic`;
   if (lp) lp.stop();
   lp = livePrice(main, route.symbol, () => D, 'overview', { stage: () => stageFor(sym), onQuote: () => { if (mine()) refreshSimple(main, sym); } });

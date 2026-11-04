@@ -15,6 +15,7 @@ import { how } from '../ui/states.js';
 import { icon } from '../ui/icons.js';
 import { term } from '../ui/term.js';
 import * as F from '../core/figures.js';
+import * as PER from '../core/periods.js';
 import { fig, figName } from '../ui/figure.js';
 import { hrefFor } from '../nav.js';
 import { setupGrade, convictionPhrase, valuationWord } from '../core/research-words.js';
@@ -68,7 +69,8 @@ function move(x, up = 'grew', down = 'fell', flat = 'was roughly flat') { return
 /** How the business is doing: the latest fiscal year, with the latest quarter beside it when they disagree. */
 export function businessRead(t) {
   const fn = g(t, 'company', 'financials') || {}, q = g(t, 'quote') || {}, gr = fn.growth || {};
-  const period = (fn.annual_periods || [])[0], fy = period ? `fiscal year to ${period}` : 'latest fiscal year';
+  // the year named and dated as the filings do (Handoff 2): it printed the provider's ISO date, "fiscal year to 2025-09-30"
+  const a0 = PER.statementPeriods(t, 'annual')[0], fy = a0 && a0.available ? PER.inWords(a0).replace(/^the /, '') : 'latest fiscal year';
   const qRev = fin(q.revenue_growth) ? q.revenue_growth * 100 : null;
   let rev = fn.available ? gr.revenue_yoy_pct : null;
   const ni = fn.available ? gr.net_income_yoy_pct : null;
@@ -98,7 +100,7 @@ export function businessRead(t) {
   if (fn.available && fin(gr.revenue_yoy_pct)) evidence.push([`Revenue growth, ${fy}`, signed(gr.revenue_yoy_pct, 1)]);
   if (fn.available && fin(ni)) evidence.push([`Net income growth, ${fy}`, signed(ni, 1)]);
   if (fn.available && !fin(ni) && fin(gr.revenue_yoy_pct)) evidence.push(['Net income growth', 'Not meaningful: the earlier year was a loss or is missing']);
-  if (nmFig) evidence.push([`${nmFig.name}, ${F.period(nmFig).replace(/^Fiscal year ended /, 'year ended ')}`, fig(nmFig, { sym: t.ticker })]);
+  if (nmFig) evidence.push([`${nmFig.name}, ${F.period(nmFig).replace(/^Fiscal year ended /, 'year ended ')}${(nmFig.period || {}).fiscal ? ` (${nmFig.period.fiscal})` : ''}`, fig(nmFig, { sym: t.ticker })]);
   if (fin(qRev)) evidence.push(['Revenue, latest quarter against a year earlier', signed(qRev, 1)]);
   return { text, why, conflict, evidence, source: fn.available ? "The company's annual statements and latest quarter, via Yahoo Finance." : 'Yahoo Finance.' };
 }
