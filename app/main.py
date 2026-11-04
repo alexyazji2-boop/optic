@@ -8477,15 +8477,25 @@ async def chat(request: Request,
         # await, and the line sat behind them, reaching the browser with the context at about 85 ms instead of 25
         # (Phase 07 measurement). The blocking itself is Phase 10's (BUG-113).
         await asyncio.sleep(0.005)
-        trimmed, left = _personal_blocks_for(history, context)
+        # A context the server cannot read (not an object) is treated as one that failed to gather, below
+        readable = context is None or isinstance(context, dict)
+        trimmed, left = _personal_blocks_for(history, ai.normalize_focus(context) if readable else None)
         if left:
             yield ai._sse("attachments", {"problems": ["{}, since the question is not about it".format(x) for x in left]})
         try:
+            if not readable:
+                raise ValueError("the page context is not an object")
             ctx = await _chat_context(request, history, trimmed, horizon, attachments)
         except Exception as exc:                                            # noqa: BLE001 - said to the reader
-            logging.getLogger("uvicorn.error").warning("chat context failed: %s: %s", type(exc).__name__, exc)
-            yield ai._sse("error", {"message": "Milo could not gather the figures for this question. Send it again in a moment."})
-            return
+            # Handoff 6: the answer goes ahead in general mode, with no ticker (never a guessed one), and the
+            # context event below tells the panel to say the page's context was unavailable. It used to end here
+            # with "Milo could not gather the figures", the question already counted.
+            logging.getLogger("uvicorn.error").warning("chat context failed, answering without it: %s: %s",
+                                                       type(exc).__name__, exc)
+            ctx = ai.unavailable_context(context)
+        # What this answer is for (ticker, timeframe, indicators, Dossier tab), as Milo is told it: the panel shows
+        # it above the answer and keeps it with the conversation
+        yield ai._sse("context", ai.context_used(ctx))
         async for chunk in ai.stream_chat(history, context=ctx, use_web=use_web,
                                           attachments=attachments, persona=persona, mode=mode,
                                           horizon=horizon, toolbox=_milo_toolbox(request, ctx, history),

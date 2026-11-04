@@ -9,7 +9,7 @@ import * as store from '../core/store.js';
 import { num, signed, clean, fullDate, ordinal, isNum } from '../core/format.js';
 import { lineChart, mountCharts } from '../ui/chart.js';
 import { hbars } from '../ui/bars.js';
-import { button as miloButton, provideContext } from '../ui/milo.js';
+import { button as miloButton, provideContext, contextChanged } from '../ui/milo.js';
 import { icon } from '../ui/icons.js';
 import { scoreLine, tone100 } from '../ui/score.js';
 import { asOfLine } from '../ui/states.js';
@@ -239,6 +239,8 @@ function paint() {
   // a phone's table header sticks under the top bar, whatever its height
   const bar = document.querySelector('.topbar'); if (bar && mainEl) mainEl.style.setProperty('--cmp-top', `${Math.round(bar.getBoundingClientRect().height)}px`);
   if (c && c.available && ((c.performance || {}).series || []).length >= 2) mountCharts(mainEl, { cmp: perfChart(c) });
+  // the names compared are what Milo's context bar offers to focus on (Handoff 6)
+  contextChanged();
 }
 
 async function run({ force } = {}) {

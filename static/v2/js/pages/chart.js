@@ -22,7 +22,7 @@ import { tradeTime } from '../core/marketTime.js';
 import { skeleton, failed } from '../ui/states.js';
 import { icon } from '../ui/icons.js';
 import { chartReadCard } from '../ui/chartread.js';
-import { button as miloButton, provideContext, openMilo } from '../ui/milo.js';
+import { button as miloButton, provideContext, openMilo, contextChanged } from '../ui/milo.js';
 import { toast } from '../ui/toast.js';
 import { createPriceChart } from '../ui/pricechart.js';
 import { core, header, tabs, isFund, livePrice } from './dossier-frame.js';
@@ -71,6 +71,37 @@ const OV_GROUP = { ma: 'Averages and bands', fib: 'Levels', msb: 'Structure and 
 // five from /api/indicators (C19, 2026-10-19), under the classic catalogue's names; WaveTrend from its own route
 const PANES = [['volume', 'Volume'], ['rsi', 'RSI 14'], ['macd', 'MACD 12, 26, 9'], ['tso', 'Trend Strength Oscillator'], ['adx', 'ADX and DI'], ['stochastic', 'Stochastic'], ['obv', 'On-balance volume'], ['mfi', 'Money flow index'], ['rs', 'Relative strength line'], ['wavetrend', 'WaveTrend']];
 
+// What each indicator on the chart is, by the name Milo and its context bar give it, with its settings (Handoff 6):
+// identifiers and settings, never values. The numbers are the ones the chart computes with: ui/pricechart.js (the
+// averages, Bollinger, RSI and MACD), ui/studies.js (TSO), app/analytics/indicators.py (Keltner, Donchian, the
+// regression channel, ADX, Stochastic, MFI, VWAP) and app/analytics/wavetrend.py. The levels, events and candle
+// colours in the Layers menu are listed by name beside them.
+const STUDY_SPEC = {
+  ma: ['MA 20, 50, 200', { average: 'simple', periods: [20, 50, 200] }], ema: ['EMA 9, 21, 50', { periods: [9, 21, 50] }],
+  cloud921: ['EMA 9 / 21 cloud', { fast: 9, slow: 21 }], cloud2150: ['EMA 21 / 50 cloud', { fast: 21, slow: 50 }],
+  bb: ['Bollinger 20, 2', { period: 20, deviations: 2 }], keltner: ['Keltner 20, 2', { period: 20, atr_multiple: 2 }],
+  donchian: ['Donchian 20', { period: 20 }], sec: ['Regression channel 100', { period: 100, standard_errors: 2 }],
+  vwap: ['Anchored VWAP', { anchor: 'the first bar in view; on intraday bars, the start of the window' }],
+  rsi: ['RSI 14', { period: 14 }], macd: ['MACD 12, 26, 9', { fast: 12, slow: 26, signal: 9 }], tso: ['TSO 14, 14, 5', { adx: 14, rsi: 14, smoothing: 5 }],
+  adx: ['ADX 14', { period: 14 }], stochastic: ['Stochastic 14, 3', { period: 14, smoothing: 3 }], obv: ['On-balance volume', {}],
+  mfi: ['MFI 14', { period: 14 }], rs: ['RS line against SPY', { benchmark: 'SPY' }], wavetrend: ['WaveTrend 9, 12, 3', { channel: 9, average: 12, signal: 3 }],
+};
+/** The indicators on the chart now, in the menus' order, each with its settings: the averages and bands, then the panes. */
+export function chartIndicators(view = V) {
+  return [...IND_KEYS.filter((k) => view.overlays[k]), ...PANES.map(([k]) => k).filter((k) => k !== 'volume' && view.panes[k])]
+    .map((id) => ({ id, label: STUDY_SPEC[id][0], settings: STUDY_SPEC[id][1] }));
+}
+// The first and last bar in view: what "the chart" covers. A daily or weekly bar's time is its date at midnight UTC
+// (Date.parse('2026-11-04')), so it is read in UTC, where New York would make it the evening before; an intraday
+// bar's is the moment it opened, read as New York's date and time.
+const NY_TIME = new Intl.DateTimeFormat('en-GB', { timeZone: 'America/New_York', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
+const barStamp = (t, intraday) => (!Number.isFinite(t) ? null : intraday ? `${ET_ISO.format(new Date(t))}T${NY_TIME.format(new Date(t))}` : new Date(t).toISOString().slice(0, 10));
+function visibleBars() {
+  if (!chart || !D.bars || !D.bars.length) return null;
+  const v = chart.view(), iv = INTERVALS.find((x) => x.key === V.interval), from = D.bars[Math.max(0, v.from)], to = D.bars[Math.min(D.bars.length - 1, v.to)];
+  return from && to ? { visible_from: barStamp(from.t, !!iv.intraday), visible_to: barStamp(to.t, !!iv.intraday), visible_bars: v.to - v.from + 1 } : null;
+}
+
 let D = {}, V = {}, live = true, mainEl = null, chart = null, unsub = null, phoneMq = null;
 
 function readView() {
@@ -83,7 +114,7 @@ function readView() {
   d.cmpAnchor = Number.isFinite(d.cmpAnchor) ? d.cmpAnchor : null;
   return d;
 }
-function saveView() { try { localStorage.setItem(VIEW_KEY, JSON.stringify({ interval: V.wantInterval || V.interval, range: V.range, style: V.style, session: V.session, read: V.read, layers: V.layers, dock: V.dock, overlays: V.overlays, panes: V.panes, msbK: V.msbK, compare: V.compare, cmpAnchor: V.cmpAnchor })); } catch (e) { /* private */ } }
+function saveView() { contextChanged(); try { localStorage.setItem(VIEW_KEY, JSON.stringify({ interval: V.wantInterval || V.interval, range: V.range, style: V.style, session: V.session, read: V.read, layers: V.layers, dock: V.dock, overlays: V.overlays, panes: V.panes, msbK: V.msbK, compare: V.compare, cmpAnchor: V.cmpAnchor })); } catch (e) { /* private */ } }
 
 function readDrawings(sym) {
   if (!holds(store.state.user)) return [];
@@ -473,6 +504,8 @@ function paintChart(over) {
   const sn = $('#ch-snote', mainEl); if (sn) sn.textContent = cmpNote().concat(ST.notes(ticked()), filingNote()).join(' ');
   paintEvidence();
   const dr = $('#ch-draw', mainEl); if (dr) { const on = !!compareOpt(); dr.classList.toggle('is-cmp', on); dr.inert = on; }
+  // new bars (another size, or daily ones where a size has no feed) are what Milo is now told about
+  contextChanged();
 }
 // The plot fills the window under the toolbar, less the reading line above it (40 until it is drawn) and the
 // navigator under it; in full screen all of what is left, less the page's padding under the navigator.
@@ -707,7 +740,7 @@ export async function render(main, route) {
   document.title = `${sym} Chart, Optic`;
   if (lp) lp.stop();
   lp = livePrice(main, route.symbol, () => D, 'chart', { bar: true, every: 15000, onQuote });
-  provideContext(() => ({ view: 'chart', ticker: sym, chart: { symbol: sym, interval: V.interval, range: V.range, studies_on: OVERLAYS.filter(([k]) => V.overlays[k]).map(([, l]) => l).concat(PANES.filter(([k]) => V.panes[k] && k !== 'volume').map(([, l]) => l)), drawings: D.drawings.length, bars: (D.bars || []).length, market_structure_breaks: V.overlays.msb && chart ? { method: `Swing high or low with ${V.msbK || 5} bars either side. The swing forms at its own bar but is only known once the ${V.msbK || 5} bars after it have closed; a close beyond the latest known, unbroken swing is a break. Earlier breaks never change as new bars arrive.`, in_view: chart.structure().slice(-6) } : undefined }, technicals: D.t ? { bias: D.t.technicals.bias, rsi: D.t.technicals.rsi, macd: D.t.technicals.macd, support_resistance: D.t.technicals.support_resistance, moving_averages: D.t.technicals.moving_averages } : null, widgets: W.context(shown()) }));
+  provideContext(() => ({ view: 'chart', ticker: sym, chart: { symbol: sym, interval: V.interval, range: V.range, ...visibleBars(), indicators: chartIndicators(), layers: OVERLAYS.filter(([k]) => V.overlays[k] && !IND_KEYS.includes(k)).map(([, l]) => l), compared: V.compare.slice(), studies_on: OVERLAYS.filter(([k]) => V.overlays[k]).map(([, l]) => l).concat(PANES.filter(([k]) => V.panes[k] && k !== 'volume').map(([, l]) => l)), drawings: D.drawings.length, bars: (D.bars || []).length, market_structure_breaks: V.overlays.msb && chart ? { method: `Swing high or low with ${V.msbK || 5} bars either side. The swing forms at its own bar but is only known once the ${V.msbK || 5} bars after it have closed; a close beyond the latest known, unbroken swing is a break. Earlier breaks never change as new bars arrive.`, in_view: chart.structure().slice(-6) } : undefined }, technicals: D.t ? { bias: D.t.technicals.bias, rsi: D.t.technicals.rsi, macd: D.t.technicals.macd, support_resistance: D.t.technicals.support_resistance, moving_averages: D.t.technicals.moving_averages } : null, widgets: W.context(shown()) }));
   paint(); wire(main);
   core(sym).then((c) => { if (D.sym !== sym || !live) return; Object.assign(D, { quote: c.quote, session: c.session, quoteError: c.quoteError }); const h = $('.dhead', mainEl); if (h) { const tmp = document.createElement('div'); draw(tmp, header(sym, D, 'chart', { bar: true })); h.replaceWith(tmp.firstElementChild); } repaintWidget('stats'); });
   loadTicker(sym);
