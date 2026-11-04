@@ -1143,6 +1143,17 @@ html.pc-touching, html.pc-touching * { -webkit-user-select: none; user-select: n
 .milo-report .asof { margin: 0; }
 .milo-report-err { margin: 0; font-size: var(--t-sm); color: var(--c-neg); }
 .milo-report-done { margin: 10px 0 0; font-size: var(--t-sm); color: var(--c-ink-2); }
+/* Explain this indicator (Handoff 7): the reading Milo was sent, as the chart computed it, above the answer; the
+   price data and the definition's source below it */
+.milo-ex { display: grid; gap: 4px; margin: 6px 0 2px; padding: 10px 12px; border: 1px solid var(--c-line); border-radius: var(--r-md); background: var(--c-sunk); }
+.milo-ex p { margin: 0; }
+.milo-ex-h { font: 600 var(--t-md)/1.3 var(--f-label); color: var(--c-ink); } .milo-ex-h span { font-weight: 500; color: var(--c-ink-2); }
+.milo-ex-v { font-size: var(--t-lg); font-weight: 600; line-height: 1.35; color: var(--c-ink); font-variant-numeric: tabular-nums; }
+.milo-ex-v span { font-size: var(--t-sm); font-weight: 400; color: var(--c-ink-3); }
+.milo-ex.is-off .milo-ex-v { font-size: var(--t-md); font-weight: 500; }
+.milo-ex-d { font-size: var(--t-sm); line-height: 1.45; color: var(--c-ink-2); }
+.milo-ex-note { font-size: var(--t-sm); line-height: 1.4; color: var(--c-ink-3); }
+.milo-ex-src { margin: 8px 0 0; font-size: var(--t-sm); line-height: 1.4; color: var(--c-ink-3); }
 /* a short screen (an iPhone SE's Safari is 549 px tall): the attached list scrolls in a strip rather than push the
    conversation off the screen */
 @media (max-height: 760px) { .milo-parts-l { max-height: 112px; overflow-y: auto; } .milo-parts .asof { display: none; } }

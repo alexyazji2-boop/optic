@@ -24,7 +24,7 @@ import { icon } from '../ui/icons.js';
 import { chartReadCard } from '../ui/chartread.js';
 import { button as miloButton, provideContext, openMilo, contextChanged } from '../ui/milo.js';
 import { toast } from '../ui/toast.js';
-import { createPriceChart } from '../ui/pricechart.js';
+import { createPriceChart, EXPLAINABLE } from '../ui/pricechart.js';
 import { core, header, tabs, isFund, livePrice } from './dossier-frame.js';
 import { kindOf } from '../core/instrument.js';
 import * as W from './chart-widgets.js';
@@ -96,6 +96,28 @@ export function chartIndicators(view = V) {
 // bar's is the moment it opened, read as New York's date and time.
 const NY_TIME = new Intl.DateTimeFormat('en-GB', { timeZone: 'America/New_York', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
 const barStamp = (t, intraday) => (!Number.isFinite(t) ? null : intraday ? `${ET_ISO.format(new Date(t))}T${NY_TIME.format(new Date(t))}` : new Date(t).toISOString().slice(0, 10));
+// Whether the latest bar is still forming, so its value can change until it closes: an intraday bar until its period
+// ends, a daily bar on a trading day while the session is open (crypto and futures trade on), a weekly bar all week.
+function forming(t, iv) {
+  if (!Number.isFinite(t)) return false;
+  if (iv.intraday) return t + Number(iv.key) * 60000 > Date.now();
+  const day = new Date(t).toISOString().slice(0, 10), today = ET_ISO.format(new Date());
+  if (V.interval === 'weekly') return day <= today && Date.parse(today) - Date.parse(day) < 7 * 86400000;
+  return day === today && (phase() === 'regular' || /-USD$|=F$/.test(D.sym));
+}
+const TF_WORD = { 1: '1-minute', 5: '5-minute', 15: '15-minute', 30: '30-minute', 60: 'hourly', 240: '4-hour', daily: 'daily', weekly: 'weekly' };
+/** Explain (Handoff 7): Milo's panel opens with the question drafted and the chart's own reading of the indicator
+ *  attached (its values at the latest bar, the bar's date, whether it is still forming), or why there is none.
+ *  Nothing is sent until the reader presses Send. */
+function explain(id) {
+  if (!EXPLAINABLE[id] || !STUDY_SPEC[id]) return;
+  const iv = INTERVALS.find((x) => x.key === V.interval), label = STUDY_SPEC[id][0];
+  const r = chart && D.bars && D.bars.length ? chart.reading(id) : null;
+  const reading = r ? { id, symbol: D.sym, interval: V.interval, values: r.values, close: r.close, at: barStamp(r.t, !!iv.intraday), forming: forming(r.t, iv), bars: r.bars }
+    : { id, symbol: D.sym, interval: V.interval, values: {}, close: null, at: null, forming: false, bars: 0, unavailable: 'no_bars' };
+  openMilo({ question: `Explain ${label} on this ${D.sym} ${TF_WORD[V.interval] || ''} chart: what it measures, what its current reading describes, and its limitations.`.replace('  ', ' '),
+    explain: reading, about: `${D.sym} Chart, ${label}`, symbol: D.sym });
+}
 function visibleBars() {
   if (!chart || !D.bars || !D.bars.length) return null;
   const v = chart.view(), iv = INTERVALS.find((x) => x.key === V.interval), from = D.bars[Math.max(0, v.from)], to = D.bars[Math.min(D.bars.length - 1, v.to)];
@@ -362,7 +384,8 @@ function cannot(k) {
   return '';
 }
 // One overlay's row in a menu: its box, its name, what it is, and for MSB the swing strength.
-const ovRow = (k) => { const l = (OVERLAYS.find((x) => x[0] === k) || [])[1], no = cannot(k); return html`<label class="check ${no ? 'is-off' : ''}"><input type="checkbox" data-v2-ch-ov="${k}" ${V.overlays[k] && !no ? 'checked' : ''} ${no ? 'disabled' : ''} ${k === 'msb' ? html`aria-describedby="ch-msb-help"` : ST.HELP[k] ? html`aria-describedby="ch-help-${k}"` : ''}> <span>${l}</span></label>${no ? html`<p class="menu-help ch-cannot">${no}</p>` : ''}${ST.HELP[k] ? html`<p class="menu-help" id="ch-help-${k}">${ST.HELP[k]}</p>` : ''}${k === 'msb' ? html`<p class="menu-help" id="ch-msb-help">Marks where a close moved beyond the latest swing high (bullish) or swing low (bearish). A swing is a bar above or below the bars on each side. Its level is drawn back to where it formed, but it only became known once those later bars had closed: the line is dotted before then, with a tick where it became known, and only a close after that counts as a break.</p>
+const explainBtn = (k, on) => (EXPLAINABLE[k] && on ? html`<button type="button" class="textlink ch-explain" data-v2-ch-explain="${k}">${icon('milo')}<span>Explain ${STUDY_SPEC[k][0]} with Milo</span></button>` : '');
+const ovRow = (k) => { const l = (OVERLAYS.find((x) => x[0] === k) || [])[1], no = cannot(k); return html`<label class="check ${no ? 'is-off' : ''}"><input type="checkbox" data-v2-ch-ov="${k}" ${V.overlays[k] && !no ? 'checked' : ''} ${no ? 'disabled' : ''} ${k === 'msb' ? html`aria-describedby="ch-msb-help"` : ST.HELP[k] ? html`aria-describedby="ch-help-${k}"` : ''}> <span>${l}</span></label>${explainBtn(k, V.overlays[k] && !no)}${no ? html`<p class="menu-help ch-cannot">${no}</p>` : ''}${ST.HELP[k] ? html`<p class="menu-help" id="ch-help-${k}">${ST.HELP[k]}</p>` : ''}${k === 'msb' ? html`<p class="menu-help" id="ch-msb-help">Marks where a close moved beyond the latest swing high (bullish) or swing low (bearish). A swing is a bar above or below the bars on each side. Its level is drawn back to where it formed, but it only became known once those later bars had closed: the line is dotted before then, with a tick where it became known, and only a close after that counts as a break.</p>
   <label class="ws-sel menu-help">Swing strength <select data-v2-ch-msbk aria-label="Market structure swing strength">${[3, 5, 10].map((n) => html`<option value="${n}" ${V.msbK === n ? 'selected' : ''}>${n} bars each side${n === 3 ? ', more breaks' : n === 10 ? ', fewer' : ''}</option>`)}</select></label>` : ''}`; };
 const countOf = (keys) => keys.filter((k) => V.overlays[k]).length;
 // what each is also called, for Find (Classic's indicator search): a reader types RSI, moving average or volume profile
@@ -426,7 +449,7 @@ function toolbar() {
   <div class="ctools ch-layers" id="ch-layers" role="group" aria-label="Layers" ${V.layers ? '' : 'hidden'}>
     ${menu('cmp', 'Compare', V.compare.length, cmpBody(), 'ch-cmp')}
     ${LAYER_MENUS.map(([id, label, ks]) => menu(id, label, countOf(ks), ks.map(ovRow)))}
-    ${menu('panes', 'Panes', PANES.filter(([k]) => k !== 'volume' && V.panes[k]).length, html`${PANES.map(([k, l]) => html`<label class="check ${cannot(k) ? 'is-off' : ''}"><input type="checkbox" data-v2-ch-pane="${k}" ${V.panes[k] && !cannot(k) ? 'checked' : ''} ${cannot(k) ? 'disabled' : ''} ${ST.HELP[k] ? html`aria-describedby="ch-help-${k}"` : ''}> <span>${l}</span></label>${cannot(k) ? html`<p class="menu-help ch-cannot">${cannot(k)}</p>` : ''}${ST.HELP[k] ? html`<p class="menu-help" id="ch-help-${k}">${ST.HELP[k]}</p>` : ''}`)}<p class="menu-help">Drawn under the price on the same bars.</p>`)}
+    ${menu('panes', 'Panes', PANES.filter(([k]) => k !== 'volume' && V.panes[k]).length, html`${PANES.map(([k, l]) => html`<label class="check ${cannot(k) ? 'is-off' : ''}"><input type="checkbox" data-v2-ch-pane="${k}" ${V.panes[k] && !cannot(k) ? 'checked' : ''} ${cannot(k) ? 'disabled' : ''} ${ST.HELP[k] ? html`aria-describedby="ch-help-${k}"` : ''}> <span>${l}</span></label>${explainBtn(k, V.panes[k] && !cannot(k))}${cannot(k) ? html`<p class="menu-help ch-cannot">${cannot(k)}</p>` : ''}${ST.HELP[k] ? html`<p class="menu-help" id="ch-help-${k}">${ST.HELP[k]}</p>` : ''}`)}<p class="menu-help">Drawn under the price on the same bars.</p>`)}
     <details class="menu ch-colours"><summary class="btn btn-sm" aria-label="Chart colours" title="Colour of the candles and the line">${icon('palette')}<span>Colours</span></summary><div class="menu-body ch-cmenu" id="ch-cmenu"></div></details>
   </div>
   ${D.confirmClear ? html`<p class="confirm ch-confirm" role="alert">Remove all ${D.drawings.length} drawings on ${D.sym}? <button type="button" class="btn btn-sm" data-v2-ch-clear="yes">Remove</button><button type="button" class="btn btn-sm" data-v2-ch-clear="no">Keep them</button></p>` : ''}
@@ -496,6 +519,8 @@ function paintChart(over) {
     onEscape: () => { V.tool = 'select'; chart.set({ tool: 'select' }); paintTools(); },
     // the legend names what the Indicators menu lists, in its order; folded or open is kept in the classic key
     names: LEGEND_NAMES, legendOpen: V.legend, navigator: true, onLegend: (open) => { V.legend = open; C.saveLegend(open); }, onRemove: removeOverlay, navH: navH(),
+    // Explain on each indicator Milo can explain (Handoff 7): its legend row, its pane, its row in the menus
+    onExplain: explain,
   });
   // the reading line above the plot is one line or two: measured now it is drawn, the plot takes what is left
   refit();
@@ -791,6 +816,7 @@ function wire(main) {
     if (t('.chw') && W.onClick(e)) return;
     if (t('[data-v2-ch-rebars]')) { loadBars(); return; }
     if ((b = t('[data-v2-ch-cmpadd]'))) { addCompare(b.dataset.v2ChCmpadd); return; }
+    if ((b = t('[data-v2-ch-explain]'))) { const d = b.closest('details'); if (d) d.open = false; explain(b.dataset.v2ChExplain); return; }
     if ((b = t('[data-v2-ch-cmprm]'))) { const sym = b.dataset.v2ChCmprm; V.compare = V.compare.filter((x) => x !== sym); delete CMP[sym]; if (!V.compare.length) V.cmpAnchor = null; D.cmpErr = ''; saveView(); paintTools(); paintChart(); const i = $('[data-v2-ch-cmpform] input', mainEl); if (i) i.focus(); return; }
     if (t('[data-v2-ch-cmpclear]')) { V.compare = []; V.cmpAnchor = null; CMP = {}; D.cmpErr = ''; saveView(); paintTools(); paintChart(); const m = $('[data-ch-menu="cmp"] > summary', mainEl); if (m) m.focus(); return; }
     if (t('[data-v2-ch-cmpanchor]')) { if (chart && D.bars) { const v = chart.keep().view || {}; V.cmpAnchor = D.bars[Math.max(0, v.from || 0)].t; saveView(); paintTools(); paintChart(); } return; }

@@ -124,6 +124,12 @@ The owner's mapping (2026-10-24): VWAP the one cool hue (the indicator exception
 - **Compare never chooses for the reader.** Its bar names the comparison and "No single focus" until the reader picks a name in the menu.
 - **Room:** beside the page (about 440 px) the bar has the first line to itself and Response settings sits beside the data line; at under 500 px the word "Change" gives way to its chevron. On a phone the bar is the ticker and the timeframe on Response settings' line, and its menu holds the rest.
 
+### Explain this indicator (Handoff 7, 2026-11-04)
+- **Explain sits on the indicator itself:** its legend row and its pane (Milo's line icon beside Remove), and under its row in the Indicators and Panes menus while it is on the chart, which is where a phone reaches it. Only indicators with an entry in `app/indicator_registry.py` get one.
+- **A press drafts, never sends.** Milo opens with the question in the box and the chart's own reading attached (`chart.reading(id)` in `ui/pricechart.js`: the values the chart draws, at the latest bar).
+- **The value is Optic's, drawn above the answer** (`.milo-ex`): the indicator and its settings, the values as the chart prints them with the bar's date, Optic's sentence on what they describe, and "still forming" when the bar is. With no value, it says why ("Live value unavailable: ...") and that the general explanation follows. Below the answer, the price data's and the definition's sources, and More detail, which drafts the deeper question.
+- **A pane prints its value at the crosshair's bar** ("RSI 14: 57.78"), as the legend does for the lines on the price, so the number Milo is sent is one the reader can see.
+
 ### Explanations
 - **Visible:** a section shows its finding and one useful line.
 - **Folded:** methods, formulas, conventions and caveats go behind one shared fold, "How this works" (`ui/states.js` `how()`), under those words everywhere.

@@ -30,6 +30,7 @@ from . import public_errors
 from . import (ai, brief as brief_mod, feeds as feeds_mod, legal,
                news as news_mod, paper, session as session_mod)
 from . import account as account_mod
+from . import indicator_registry as indicator_registry_mod
 from .valuation import service as valuation_service
 from .valuation import store as valuation_store
 from . import billing as billing_mod
@@ -6708,6 +6709,13 @@ async def instrument_chart(
     return await _run(build)
 
 
+@app.get("/api/indicator-registry")
+async def indicator_registry_route() -> Dict[str, Any]:
+    """What each indicator Milo can explain is (app/indicator_registry.py, Handoff 7): the definitions at each
+    knowledge level, the formula, the limits and the definition's source. A fixed text, cached a day."""
+    return indicator_registry_mod.public()
+
+
 @app.get("/api/indicators/{ticker}")
 async def indicator_panel(
     ticker: str,
@@ -8493,6 +8501,9 @@ async def chat(request: Request,
             logging.getLogger("uvicorn.error").warning("chat context failed, answering without it: %s: %s",
                                                        type(exc).__name__, exc)
             ctx = ai.unavailable_context(context)
+        # An Explain press (Handoff 7) explains at the reader's level: its definition is the one for that level
+        if isinstance(ctx, dict) and isinstance(ctx.get("indicator_explain"), dict):
+            ctx = dict(ctx, indicator_explain=dict(ctx["indicator_explain"], level=mode))
         # What this answer is for (ticker, timeframe, indicators, Dossier tab), as Milo is told it: the panel shows
         # it above the answer and keeps it with the conversation
         yield ai._sse("context", ai.context_used(ctx))
@@ -8539,7 +8550,15 @@ def _personal_blocks_for(history: List[Dict[str, Any]], context: Optional[Dict[s
 async def _chat_context(request: Request, history: List[Dict[str, Any]], context: Optional[Dict[str, Any]],
                         horizon: str, attachments: Any) -> Optional[Dict[str, Any]]:
     """The CONTEXT block for one Milo answer: the page's figures, with what the question needs added."""
-    context = await _augment_chat_context(history, _without_linked_keys(context))
+    context = _without_linked_keys(context)
+    # An Explain press on a chart indicator (Handoff 7) is answered from the chart's own reading and Optic's definition
+    # of it: nothing is looked up for it (no named symbols, no market read, no research pack, framework or levels)
+    if ai.explain_reading(context):
+        linked = await _with_linked_portfolio(request, history, context)
+        if isinstance(linked, dict):
+            context = dict(context or {}, **{k: linked[k] for k in _LINKED_KEYS if k in linked})
+        return context
+    context = await _augment_chat_context(history, context)
     last = next((t for t in reversed(history or []) if t.get("role") != "assistant"), None)
     if _is_definition((last or {}).get("content") or "", context):
         # A plain definition needs no research pack, framework or chart levels: they fetched a company's filings
