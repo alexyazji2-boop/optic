@@ -2017,6 +2017,32 @@ html.eff-1100 .ws-strip { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 html.eff-1100 .ob-ways { grid-template-columns: minmax(0, 1fr); }
 
 /* Saved research (pages/saved.js; Classic parity B4d) */
+/* Saved research, the library (pages/saved.js, Handoff 5): one list, single-column on a phone with 44px controls */
+.lib-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-bottom: 16px; }
+.lib-kinds { display: flex; flex-wrap: wrap; }
+.lib-n { color: var(--c-ink-3); font-variant-numeric: tabular-nums; }
+.lib-search { flex: 1 1 260px; min-width: 0; max-width: 420px; min-height: var(--tap); }
+.lib-list { list-style: none; margin: 0; padding: 0; border: 1px solid var(--c-line); border-radius: var(--r-lg); background: var(--c-raised); }
+.lib-item { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding: 14px 16px; border-top: 1px solid var(--c-line-2); }
+.lib-item:first-child { border-top: 0; }
+.lib-text { display: grid; gap: 4px; min-width: 0; }
+.lib-kind { margin: 0; }
+.lib-name { margin: 0; font-size: var(--t-lg); font-weight: 600; overflow-wrap: anywhere; }
+.lib-about { margin: 0; font-size: var(--t-md); color: var(--c-ink-2); overflow-wrap: anywhere; }
+.lib-meta { margin: 0; display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: var(--t-sm); color: var(--c-ink-3); }
+.lib-ticks { font-family: var(--f-label); color: var(--c-ink-2); }
+.lib-gone { margin: 4px 0 0; font-size: var(--t-sm); color: var(--c-warn); }
+.lib-acts { display: flex; flex-wrap: wrap; gap: 6px; flex: none; }
+.lib-more { margin-top: 12px; }
+.lib-guest { color: var(--c-ink-2); }
+.cmp-gone { margin-top: 12px; }
+@media (max-width: 860px) {
+  .lib-item { flex-direction: column; }
+  .lib-acts { width: 100%; }
+  .lib-acts .btn, .lib-kinds button { min-height: var(--tap); }
+  .lib-acts .btn { flex: 1 1 auto; }
+  .lib-search { flex-basis: 100%; max-width: none; }
+}
 .sv-list, .sv-routes { list-style: none; margin: 0; padding: 0; }
 .sv-item { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 16px; padding: 14px 0; border-bottom: 1px solid var(--c-line-2); }
 .sv-item:last-child { border-bottom: 0; }

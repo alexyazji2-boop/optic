@@ -42,6 +42,7 @@ const P = {
   stop: '<rect x="7" y="7" width="10" height="10" rx="1.5"/>',
   check: '<path d="m5 12.5 4.5 4.5L19 7.5"/>',
   flag: '<path d="M5 21V4"/><path d="M5 4h12l-2.5 4.5L17 13H5"/>',
+  bookmark: '<path d="M7 4.5h10a1 1 0 0 1 1 1V20l-6-4-6 4V5.5a1 1 0 0 1 1-1z"/>',   // Saved research (Handoff 5)
   copy: '<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5.5A1.5 1.5 0 0 0 14.5 4h-9A1.5 1.5 0 0 0 4 5.5v9A1.5 1.5 0 0 0 5.5 16H8"/>',
   retry: '<path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3"/><path d="M19.5 4.5v4.2h-4.2"/>',
   arrowDown: '<path d="M12 5v14M6 13l6 6 6-6"/>',

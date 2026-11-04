@@ -13,8 +13,11 @@ import { button as miloButton, provideContext } from '../ui/milo.js';
 import { icon } from '../ui/icons.js';
 import { scoreLine, tone100 } from '../ui/score.js';
 import { asOfLine } from '../ui/states.js';
+import { saveButton, provide } from '../ui/library.js';
+import { keyOf } from '../core/library.js';
 
 const MAX = 4, TIE = 5;
+let gone = [];   // tickers a reopened saved comparison left out
 export const GROUPS = [
   { title: 'Where it trades', rows: [
     { key: 'price', label: 'Price', kind: 'usd', means: 'Last close.' },
@@ -156,7 +159,8 @@ function controls() {
   return html`<form class="cmp-form" data-v2-cmp-form aria-label="Tickers to compare">
       <div class="cmp-inputs">${inputs.map((v, i) => html`<div class="cmp-in" data-v2-ta-host><label class="field field-sm"><span class="sr">Ticker ${i + 1}</span><input id="cmp-${i}" data-v2-cmp-input="${i}" data-v2-ta value="${v}" placeholder="Ticker ${i + 1}" title="A ticker, or a company name" maxlength="24" autocomplete="off" autocapitalize="characters" spellcheck="false"></label>
         ${inputs.length > 2 ? html`<button type="button" class="icon-btn" data-v2-cmp-drop="${i}" aria-label="Remove ticker ${i + 1}${v ? ` (${v.toUpperCase()})` : ''}">${icon('close')}</button>` : ''}</div>`)}</div>
-      <div class="cluster"><button type="submit" class="btn btn-primary" ${running ? 'disabled' : ''}>${running ? 'Comparing…' : 'Compare'}</button>${inputs.length < MAX ? html`<button type="button" class="btn" data-v2-cmp-add>Add ticker</button>` : ''}</div>
+      <div class="cluster"><button type="submit" class="btn btn-primary" ${running ? 'disabled' : ''}>${running ? 'Comparing…' : 'Compare'}</button>${inputs.length < MAX ? html`<button type="button" class="btn" data-v2-cmp-add>Add ticker</button>` : ''}${result && result.available && !stale() && !running ? saveButton('comparison', keyOf('comparison', result.tickers), { cls: '', label: 'Save comparison' }) : ''}</div>
+      ${gone.length ? html`<p class="stale cmp-gone" role="note">${gone.join(', ')} ${gone.length === 1 ? 'was' : 'were'} in this saved comparison and ${gone.length === 1 ? 'is' : 'are'} no longer available, so ${gone.length === 1 ? 'it was' : 'they were'} left out.</p>` : ''}
     </form>
     ${recent.length && !full ? html`<div class="cmp-recent" role="group" aria-labelledby="cmp-recent-h"><p class="t-label" id="cmp-recent-h">Recently viewed</p><div class="chips">${recent.map((s) => html`<button type="button" class="chip" data-v2-cmp-pick="${s}">${s}</button>`)}</div></div>` : result ? '' : html`<p class="asof">Nothing is fetched until you press Compare.</p>`}`;
 }
@@ -166,7 +170,7 @@ function take(c) {
   if (!t.available) return '';
   const hz = Object.fromEntries((c.horizons || []).map((h) => [h.id, h]));
   return html`<section class="section" aria-labelledby="ct-h"><div class="section-head"><div><h2 class="t-h2" id="ct-h">Optic's take</h2>${t.agreement ? html`<p class="section-sub">${clean(t.agreement)}</p>` : ''}</div>
-      ${miloButton('Ask Milo about this comparison', { ask: `Compare ${c.tickers.join(', ')}. ${t.headline || ''} What does each one's score rest on for this timeframe, and what is each one's biggest risk?`, context: 'Compare' })}</div>
+      <div class="cluster">${miloButton('Ask Milo about this comparison', { ask: `Compare ${c.tickers.join(', ')}. ${t.headline || ''} What does each one's score rest on for this timeframe, and what is each one's biggest risk?`, context: 'Compare' })}${stale() ? '' : saveButton('comparison', keyOf('comparison', c.tickers), { cls: 'btn-sm', label: 'Save comparison' })}</div></div>
     <p class="lead-line">${clean(t.headline || '')}</p>
     <div class="cmp-winners">${Object.entries(t.winners || {}).map(([hid, w]) => html`<div class="cmp-win ${w.decisive ? '' : 'is-close'}"><p class="t-label">${(hz[hid] || {}).name || w.name || hid}</p><p class="cmp-win-t">${w.decisive ? w.ticker : 'Level'}</p><p class="t-muted">${w.decisive ? `ahead by ${num(w.gap, 1)} points` : `${num(w.gap, 1)} points apart, under ${TIE}: not a ranking`}</p></div>`)}</div>
     ${(t.standouts || []).length ? html`<ul class="plain">${t.standouts.map((s) => html`<li><b>${s.ticker}</b> has ${clean(s.phrase)}</li>`)}</ul>` : ''}
@@ -262,6 +266,11 @@ async function run({ force } = {}) {
 export async function render(main, route) {
   live = true; mainEl = main;
   document.title = 'Compare, Optic';
+  // a saved comparison reopened without a ticker that no longer trades (Saved research, Handoff 5)
+  gone = String((route.params || {}).gone || '').split(',').map((x) => x.trim().toUpperCase()).filter((x) => /^[A-Z0-9.^=-]{1,12}$/.test(x)).slice(0, MAX);
+  // what Save keeps: the tickers compared, by reference, and their names
+  provide('comparison', () => (result && result.available && !stale() ? { kind: 'comparison', tickers: result.tickers,
+    summary: { names: Object.fromEntries((result.rows || []).filter((r) => !r.is_benchmark && r.ticker).map((r) => [r.ticker, r.name || r.ticker])), headline: ((result.take || {}).headline || '').slice(0, 300) } } : null));
   // #/compare?t=AAPL,MSFT pre-fills and runs; otherwise seed the first box from the last company opened
   const pre = String((route.params || {}).t || '').split(',').map((x) => x.trim().toUpperCase()).filter(Boolean).slice(0, MAX);
   // a result is for the tickers it was asked for: another set in the address clears it
