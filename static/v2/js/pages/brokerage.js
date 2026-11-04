@@ -17,6 +17,8 @@ import * as RP from '../core/reports.js';
 import { stamp, knowledge } from '../core/prefs.js';
 import { catalogue as levels, levelLabel } from '../ui/levelslider.js';
 import { skeleton } from '../ui/states.js';
+import * as delays from '../core/delays.js';
+import { marketSession } from '../core/status.js';
 import { lineChart, mountCharts } from '../ui/chart.js';
 import { button as miloButton, provideContext } from '../ui/milo.js';
 import { toast } from '../ui/toast.js';
@@ -149,12 +151,22 @@ function connections() {
 /* ---------------- workspace frame ---------------- */
 // the newest price may be a pre-market or after-hours print (the server picks the latest; owner, 2026-10-20)
 const EXT_QUOTES = { pre: 'Pre-market quotes', post: 'After-hours quotes' }, EXT_WORD = { pre: 'pre-market ', post: 'after-hours ' };
+// The session the prices are labelled against: the top bar's read (core/status.js), else each quote's own market state
+const quoteCtx = () => { const s = marketSession() || {}; return { phase: s.is_regular ? 'regular' : s.phase || null, lastClose: (s.last_close || {}).date || null }; };
+/** The holdings' quotes under one label, as every price label reads them (core/delays.js, Handoff 4): their delays'
+ *  range and the oldest one's time. The longest alone read as the whole page's delay: 20 minutes here while the
+ *  Dossier said 15 (audit, 2026-11-03), when the 20 was the NYSE holdings'. */
+function quotesTag(m, quotes) {
+  const qs = Object.values(quotes || {}).filter((q) => q && isNum(q.price));
+  // the Overview carries the range, not the quotes: the same label from the two ends of it
+  return delays.listTag(qs.length ? qs : delays.rangeQuotes(m), quoteCtx());
+}
 function freshness() {
   const o = W.data.overview || W.data.holdings || {}, f = o.freshness || {}, b = f.broker || {}, m = f.market || {};
   const out = [];
   if (b.oldest_broker_as_of) out.push(html`<span class="pill">Broker data as of ${day(b.oldest_broker_as_of)} ${new Date(b.oldest_broker_as_of).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}</span>`);
   else if (b.newest_sync) out.push(html`<span class="pill">Synced ${ago(b.newest_sync)}</span>`);
-  if (m.quotes_newest) out.push(html`<span class="pill">${EXT_QUOTES[m.extended] || 'Quotes'} ${ago(m.quotes_newest)}${m.delayed_minutes ? ` (delayed ${Math.round(m.delayed_minutes)} min)` : ''}</span>`);
+  if (m.quotes_newest) out.push(html`<span class="pill">${EXT_QUOTES[m.extended] || 'Quotes'}: ${m.extended ? delays.atTag(m.quotes_newest) : quotesTag(m, o.quotes)}</span>`);
   return out;
 }
 function frame(sec) {
@@ -239,7 +251,7 @@ function holdings(d) {
       <div class="tscroll"><table class="t bk-hold"><thead><tr><th scope="col">Holding</th><th scope="col">Accounts</th><th scope="col">Qty</th><th scope="col">Broker price</th><th scope="col">Quote now</th><th scope="col">Value</th><th scope="col">Weight</th><th scope="col">Cost basis</th><th scope="col">Unrealised</th></tr></thead>
         <tbody>${(d.holdings || []).length ? d.holdings.map((h) => { const q = (d.quotes || {})[String(h.symbol || '').toUpperCase()] || {};
           return html`<tr><td>${h.symbol ? html`<a href="#/${h.symbol}"><b>${h.symbol}</b></a>` : ''} <small class="t-muted">${h.description || ''}${h.sector ? `, ${h.sector}${h.industry ? `, ${h.industry}` : ''}` : ''}</small></td><td>${(h.accounts || []).join(', ')}</td><td>${qty(h.quantity)}</td><td>${money(h.price, h.currency)}</td>
-            <td>${isNum(q.price) ? html`${money(q.price, 'USD')} ${sPct(q.change_pct)}` : html`<span class="t-muted">n/a</span>`}</td><td>${money(h.market_value, h.currency)}</td><td>${pct(h.weight_pct)}</td><td>${h.cost_basis === null ? html`<span class="t-muted">Not supplied</span>` : money(h.cost_basis, h.currency)}</td>
+            <td>${isNum(q.price) ? html`${money(q.price, 'USD')} ${sPct(q.change_pct)}${delays.label(q, quoteCtx(), 'qrow')}` : html`<span class="t-muted">n/a</span>`}</td><td>${money(h.market_value, h.currency)}</td><td>${pct(h.weight_pct)}</td><td>${h.cost_basis === null ? html`<span class="t-muted">Not supplied</span>` : money(h.cost_basis, h.currency)}</td>
             <td>${h.unrealized_pl === null || h.unrealized_pl === undefined ? html`<span class="t-muted">Not supplied</span>` : html`${signedMoney(h.unrealized_pl, h.currency)} ${sPct(h.unrealized_pct, 1)}`}</td></tr>`; }) : html`<tr><td colspan="9">No holdings in these accounts.</td></tr>`}</tbody></table></div>
       ${(d.price_checks || []).length ? html`<p class="asof">The broker's price and Optic's quote differ by 2% or more for ${d.price_checks.map((c) => c.symbol).join(', ')}; the broker's is from its last sync.</p>` : ''}</section>
     ${exposure(d.exposure, d)}${scorecard(W.extra.scorecard)}${(d.options || []).length ? optionsRisk(W.extra.options) : ''}${(d.holdings || []).length || (d.options || []).length ? scenariosSection(W.extra.scenarios, { id: 'bsn-h' }) : ''}
@@ -648,3 +660,5 @@ async function saveRename(id) {
 }
 export const retry = { scenarios: () => { delete W.extra.scenarios; paint(); loadExtras(); } };
 void store; void raw; void stamp; void num;
+// the holdings table and the quotes' label, for tests/test_honest_loading.py
+export const _test = { holdings, quotesTag };

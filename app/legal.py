@@ -16,6 +16,8 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
+from . import delays
+
 # The one-line version, for footers and dense panels.
 SHORT = (
     "Not financial advice. For research and education only. You are responsible "
@@ -157,7 +159,7 @@ FOOTER_LINE = ("<strong>Not financial advice.</strong> Optic Terminal is an inde
 LABELS: Dict[str, str] = {
     "ai_written": "Written by an AI model from the data shown",
     "ai_short": "AI-written",
-    "delayed": "Quotes delayed about 15 minutes during the session",
+    "delayed": delays.quote_label(),
     "modelled": "Model output, from stated assumptions",
     "third_party": "From a third-party source, not checked by Optic",
     "simulated": "Hypothetical, never placed with real money",

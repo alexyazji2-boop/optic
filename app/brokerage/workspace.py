@@ -132,13 +132,17 @@ def _core(user: Dict[str, Any], account_ids: Optional[List[str]]) -> Dict[str, A
 def _freshness(core: Dict[str, Any], quotes: Optional[Dict[str, Dict[str, Any]]] = None) -> Dict[str, Any]:
     as_of = core.get("as_of") or {}
     qt = [q.get("as_of") for q in (quotes or {}).values() if q.get("as_of")]
+    # each quote's own stated delay: the page says their range ("Delayed 15 to 20 min"), as every price label reads
+    # them (app/delays.py); the longest alone read as the whole page's delay (audit, 2026-11-03: 20 here, 15 elsewhere)
     delays = [q.get("delayed_minutes") for q in (quotes or {}).values() if q.get("delayed_minutes") is not None]
+    unstated = sum(1 for q in (quotes or {}).values() if q.get("price") is not None and q.get("delayed_minutes") is None)
     newest = max((q for q in (quotes or {}).values() if q.get("as_of")), key=lambda q: str(q.get("as_of")), default={})
     return {
         "broker": {"oldest_broker_as_of": as_of.get("oldest_broker"), "broker_complete": as_of.get("broker_complete"),
                    "oldest_sync": as_of.get("oldest_sync"), "newest_sync": as_of.get("newest_sync")},
         "market": {"quotes_oldest": min(qt) if qt else None, "quotes_newest": max(qt) if qt else None,
                    "delayed_minutes": max(delays) if delays else None,
+                   "delay_range": [min(delays), max(delays)] if delays else None, "delay_unstated": unstated,
                    # "pre" or "post" when the newest price is a pre-market or after-hours print
                    "extended": newest.get("session") if newest.get("session") in ("pre", "post") else None},
     }
@@ -304,8 +308,9 @@ def holdings(user: Dict[str, Any], account_ids: Optional[List[str]] = None) -> D
         "concentration": core.get("concentration") or {},
         "performance": core.get("performance") or {},
         "price_checks": core.get("price_checks") or [],
-        "quotes": {s: {k: q.get(k) for k in ("price", "prev_close", "change_pct", "as_of", "market_time",
-                                             "delayed_minutes", "source")} for s, q in quotes.items()},
+        "quotes": {s: {k: q.get(k) for k in ("price", "prev_close", "change_pct", "as_of", "market_time", "trade_time",
+                                             "delayed_minutes", "exchange", "session", "market_state", "source")}
+                   for s, q in quotes.items()},
         "exposure": exp,
         "freshness": _freshness(core, quotes),
         "notes": core.get("notes") or [],

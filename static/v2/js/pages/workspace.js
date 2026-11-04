@@ -14,11 +14,11 @@ import * as store from '../core/store.js';
 import * as prefs from '../core/prefs.js';
 import { num, signed, money, compact, dir, isNum, ago, clean, shortDate, longDate, capFirst, plural } from '../core/format.js';
 import * as RP from '../core/reports.js';
-import { etDay } from '../core/marketTime.js';
 import { marketSession } from '../core/status.js';
+import * as delays from '../core/delays.js';
 import { kindOf, kindWord, learn, onLearn } from '../core/instrument.js';
 import { row30, skewWords } from './options-panels.js';
-import { skeleton, failed } from '../ui/states.js';
+import { skeleton } from '../ui/states.js';
 import { lineChart, spark, mountCharts, meter } from '../ui/chart.js';
 import { provideContext, button as miloButton } from '../ui/milo.js';
 import { marketQuestions } from '../core/market-questions.js';
@@ -62,18 +62,20 @@ const isPhone = () => { try { return matchMedia(PHONE).matches; } catch (e) { re
 const folded = (id) => isPhone() && ((S.fold[S.preset] || {})[id] ?? !(ESSENTIAL[S.preset] || []).includes(id));
 
 // How fresh each panel's figures are, from the server's own caches
-// (providers/yf.py TTLs, fred.py, the route docstrings), not a guess.
+// (providers/yf.py TTLs, fred.py, the route docstrings), not a guess. The delay clauses are worked from the one delay
+// record when the panel is drawn (core/delays.js, Handoff 4); each said "up to 15 minutes", which NYSE's 20 broke.
+const QD = () => `delayed ${delays.upTo()} by exchange`, CHAIN = () => delays.chainWords();
 const FRESH = {
-  indices: 'Quotes delayed up to 15 minutes; refreshed every minute while the market is open.',
+  indices: () => `Quotes ${QD()}; refreshed every minute while the market is open.`,
   portfolio: 'Valued at Optic\'s delayed prices, refreshed every minute in session; quantities as of the last broker sync.',
   priority: 'Rebuilt at most every 10 minutes.',
-  watch: 'Quotes delayed up to 15 minutes; refreshed every minute while the market is open.',
-  quote: 'Quote delayed up to 15 minutes; daily closes re-read at most every 5 minutes.',
+  watch: () => `Prices ${QD()}; refreshed every minute while the market is open.`,
+  quote: () => `Quote ${QD()}; daily closes re-read at most every 5 minutes.`,
   cnews: 'Headlines re-read at most every 10 minutes.',
-  contracts: 'Chain delayed about 15 minutes; re-read at most once a minute.',
+  contracts: () => `Chain ${CHAIN()}; re-read at most once a minute.`,
   regime: 'From delayed quotes and daily closes; refreshed every minute while the market is open.',
   expected: 'From the delayed VIX and index; refreshed every minute while the market is open.',
-  sectors: 'Fund prices delayed up to 15 minutes; refreshed every minute while the market is open.',
+  sectors: () => `Fund prices ${QD()}; refreshed every minute while the market is open.`,
   calendar: 'Schedule from the last built Read (built every 20 minutes); actual and prior from FRED, re-read at most every 6 hours.',
   desk: 'Written from the day\'s figures once a day, and again when the market moves away from what it says; until then a version compiled by fixed rules shows. The time under the panel is when the version shown was written or compiled.',
   earnings: 'Rebuilt at most once an hour; report dates move on the scale of days.',
@@ -81,17 +83,18 @@ const FRESH = {
   news: 'From the last built Read, built every 20 minutes.',
   alerts: 'From the scheduled scan.',
   economy: 'FRED series change on release days; Optic re-reads them at most every 6 hours.',
-  value: 'Earnings data re-read at most every 6 hours; price delayed up to 15 minutes.',
-  vol: 'Chain delayed about 15 minutes; re-read at most every 2 minutes. Outside market hours the free feed can serve it unquoted.',
+  value: () => `Earnings data re-read at most every 6 hours; price ${QD()}.`,
+  vol: () => `Chain ${CHAIN()}; re-read at most every 2 minutes. Outside market hours the free feed can serve it unquoted.`,
   gex: 'From open interest in the delayed chain, re-read at most every 2 minutes. Open interest itself updates once a day.',
   tearn: 'Report dates and consensus re-read at most every 10 minutes; the implied move from the delayed chain.',
   biz: 'From the latest annual and quarterly filings; re-read at most every 5 minutes, changing when a new filing lands.',
   fin: 'Reported statements; they change when the company files.',
   own: 'Insider filings arrive within days; 13F holdings about 45 days after each quarter.',
   changes: 'The latest completed session against the one before; it changes once a session closes.',
-  trends: 'Fund prices delayed up to 15 minutes, re-read at most once a minute; the levels are the prior completed session\'s.',
+  trends: () => `Fund prices ${QD()}, re-read at most once a minute; the levels are the prior completed session's.`,
   questions: 'Built from the market figures above as they refresh; the pool rotates each market day.',
 };
+const freshOf = (id) => (typeof FRESH[id] === 'function' ? FRESH[id]() : FRESH[id] || '');
 // The footer's one line: a short source and a status in a word or two. The full source, FRESH and
 // any calculation note are in the panel's "About this panel" explanation (owner, 2026-10-18).
 const SRC = { indices: 'Yahoo Finance', portfolio: 'Your brokerage', priority: 'Optic', watch: 'Yahoo Finance', quote: 'Yahoo Finance', cnews: 'Publisher feeds',
@@ -110,7 +113,13 @@ const marketOpen = () => !!sessionNow().is_regular;
 // Quoted panels say which prices they hold: delayed in session, otherwise the close they are from
 // (the footer's "Updated" time is when Optic fetched them, not when they traded).
 const lastClose = () => (sessionNow().last_close || {}).date;
-const statusOf = (id) => (QUOTED.has(id) ? (marketOpen() ? 'Delayed up to 15 min' : (lastClose() ? `${etDay(lastClose()).replace(/^\w+ /, '')} close` : 'Last close')) : (CADENCE[id] || ''));
+// A quoted panel's status is its own prices' label when its foot names them (`quotes`, core/delays.js listTag);
+// otherwise the session outside it, and in it the longest delay the feed states, or the chain's.
+const CHAINED = new Set(['contracts', 'vol', 'gex']);
+const homeCtx = () => { const s = sessionNow(); return { phase: s.is_regular ? 'regular' : (s.phase || null), lastClose: lastClose() || null }; };
+const statusOf = (id) => (QUOTED.has(id) ? delays.generalLabel(homeCtx(), { chain: CHAINED.has(id) }).text : (CADENCE[id] || ''));
+// The trend board's rows as the quotes they price: each states its delay and time
+const boardQuotes = (rows) => (Array.isArray(rows) ? rows : []).filter((r) => r && isNum(r.price)).map((r) => ({ delayed_minutes: r.price_delayed_minutes, trade_time: r.price_as_of }));
 // Lists and tables take a default height for their kind and fill the rest of their row; the other
 // panels size to their content.
 const LIST = new Set(['watch', 'cnews', 'contracts', 'calendar', 'earnings', 'movers', 'news', 'alerts', 'changes', 'questions']);
@@ -294,7 +303,7 @@ export const PANELS = {
     },
     body: (d) => portfolio(d.ov, d.perf),
     charts: () => ({ portfolio: (w) => { const s2 = portfolioSeries(); return s2.length > 1 ? lineChart(s2, { w, h: chartH('portfolio'), area: true, label: 'Portfolio value', dp: 0, marks: portfolioMarks() }) : ''; } }),
-    foot: () => ({ source: 'Your linked brokerage, read-only' }),
+    foot: (d) => ({ source: 'Your linked brokerage, read-only', quotes: d && d.ov && ((d.ov.freshness || {}).market || {}).quotes_newest ? delays.rangeQuotes(d.ov.freshness.market) : null }),
     milo: 'What moved my portfolio today, and is anything concentrated?',
   },
   priority: {
@@ -343,7 +352,7 @@ export const PANELS = {
     how: 'SPY, QQQ, IWM and the eleven SPDR sector funds, each against the prior completed session\'s high and low: above the high is an uptrend, below the low a downtrend, between them neutral. Each says how far it is from the level that matters and what would change its state. Choose one to open it.',
     load: () => get('/api/trends/board', { ttl: 60000 }),
     body: (d) => trendsBlock(d),
-    foot: (d) => ({ source: 'Yahoo Finance, Optic rules', at: (d || {}).generated_at }),
+    foot: (d) => ({ source: 'Yahoo Finance, Optic rules', at: (d || {}).generated_at, quotes: boardQuotes([...((d || {}).indices || []), ...((d || {}).sectors || [])]) }),
     milo: 'Which index and sector funds are breaking out of yesterday\'s range, and does it hang together?',
   },
   alerts: {
@@ -370,7 +379,8 @@ export const PANELS = {
       // 2026-10-21): green up, red down, the VIX and the 10-year included; the colour says which way, not good or bad
       return html`<div class="ws-strip">${cells.map((i) => html`<a class="ws-cell" href="#/instrument/${enc(i.symbol)}"><span class="k">${i.label}</span><span class="v">${num(i.last, i.last < 20 ? 2 : i.last > 1000 ? 0 : 2)}${i.group === 'rates' ? '%' : ''}</span><span class="d ${dir(i.chg_1d)}">${moveText(i)}</span><span class="u">${UNIT[i.label] || ''}</span>${basisLine(i)}</a>`)}</div>`;
     },
-    foot: (d) => ({ source: 'Yahoo Finance via Optic', at: d.generated_at, note: ((d.session || {}).is_regular ? '' : 'Outside the regular session, equities are at the last close; futures and crypto keep trading.'), stale: (d.degraded || []).length ? 'Some missing' : '', staleWhy: (d.degraded || []).length ? `Not available: ${d.degraded.join(', ')}.` : '' }),
+    // the tiles' own prices, each with the delay the feed states and its trade's time (app/analytics/macro.py stated_times)
+    foot: (d) => ({ source: 'Yahoo Finance via Optic', at: d.generated_at, quotes: STRIP.map(([g, l]) => inst(d, g, l)).filter((i) => i && isNum(i.last)).map((i) => ({ delayed_minutes: i.delayed_minutes, trade_time: i.trade_time, exchange: i.exchange })), note: ((d.session || {}).is_regular ? '' : 'Outside the regular session, equities are at the last close; futures and crypto keep trading.'), stale: (d.degraded || []).length ? 'Some missing' : '', staleWhy: (d.degraded || []).length ? `Not available: ${d.degraded.join(', ')}.` : '' }),
     milo: 'What do today\'s index, volatility, yield and commodity moves say together?',
   },
   regime: {
@@ -524,7 +534,7 @@ export const PANELS = {
       const levels = [...(c.supports || []).slice(0, 2), ...(c.resistances || []).slice(0, 1)].map((l) => l.price).filter(Number.isFinite);
       return lineChart(dates.map((d, i) => ({ d, c: ch.close[i] })), { w, h: chartH('quote'), label: `${c.ticker} daily closes`, overlays: levels.map((v) => ({ values: dates.map(() => v), cls: 'c0' })), summary: `${c.ticker} daily closes over ${c.span_words || ''}; dashed lines are support and resistance.` });
     } }),
-    foot: ({ q, c }) => ({ source: 'Yahoo Finance; levels by Optic', at: (c || {}).as_of }),
+    foot: ({ q, c }) => ({ source: 'Yahoo Finance; levels by Optic', at: (c || {}).as_of, quotes: q && (q.quote || q).price !== undefined ? [q.quote || q] : null }),
     milo: (link) => `Read the ${link} chart on my Home: trend, levels and what would change the picture.`,
   },
   cnews: {
@@ -734,7 +744,14 @@ let root = null, live = false, timer = null, lastScroll = 0, mq = null, mq2 = nu
 // under the current link (owner, 2026-10-19: Quote and chart showed SPY's name and price under AAPL).
 // SEQ: each panel's latest request; an earlier one that answers later is dropped (BUG-040: a range or expiry changed
 // twice drew whichever answer arrived last)
-const DATA = {}, ERR = {}, PS = {}, AT = {}, RETRIED = {}, DLINK = {}, ERRLINK = {}, SEQ = {};
+const DATA = {}, ERR = {}, PS = {}, AT = {}, DLINK = {}, ERRLINK = {}, SEQ = {};
+// Loading that always ends (Handoff 4): a panel still on its skeleton after PANEL_WAIT says it could not load, with
+// Retry, and its answer replaces that if it arrives later. A failure is asked again by itself BACKOFF apart, three
+// times at most, then only on Retry, so a source that is down costs four requests a visit, never a loop. LATE: the
+// wait's timer; INFLIGHT: the request a retry joins rather than sending another; TRIES: automatic retries used, per
+// panel and ticker; AUTO: the next one's timer; POLLS: a building board's re-reads.
+export const PANEL_WAIT = 10000, BACKOFF = [5000, 15000, 45000], BUILD_POLLS = 10;
+const LATE = {}, INFLIGHT = {}, TRIES = {}, AUTO = {}, POLLS = {};
 const ps = (id) => (PS[id] || (PS[id] = JSON.parse(JSON.stringify(PANELS[id].state || {}))));
 /** The ticker a panel shows: its own when the reader unlinked it, else the linked one (S.link). */
 const symOf = (id) => (PANELS[id] && PANELS[id].linked && ps(id).pin) || S.link;
@@ -882,22 +899,16 @@ function paintBody(id) {
   const p = PANELS[id], P = ps(id);
   if (p.optional && (DATA[id] || {}).absent) { if (!sec.hidden) { sec.hidden = true; fillRows(); } return; }
   if (sec && sec.hidden) { sec.hidden = false; fillRows(); }
-  if (ERR[id]) {
-    // a linked panel's 404 means the provider had nothing for this ticker just now, not that the panel is missing
-    if (p.linked && ERR[id].kind === 'notfound') {
-      const optionsPanel = ['contracts', 'vol', 'gex'].includes(id);
-      draw(body, html`<div class="state err" role="alert"><p class="t-h3">${p.title} did not load</p><p>The data provider has nothing for ${ERRLINK[id] || symOf(id)} just now. ${optionsPanel && !marketOpen() ? 'Outside market hours the free feed often serves option chains without quotes; they return when trading resumes.' : 'This is usually brief.'}</p></div>`);
-    }
-    else draw(body, failed(p.title, ERR[id], {}));
-    body.insertAdjacentHTML('beforeend', `<button type="button" class="btn btn-sm" data-ws-reload="${id}">Try again</button>`);
-    draw(foot, ''); return;
-  }
+  // a redraw never drops the keyboard: Retry redrawn keeps focus, and content replacing it takes focus to the body
+  const held = typeof document !== 'undefined' && document.activeElement && document.activeElement !== body && body.contains && body.contains(document.activeElement);
+  const keep = () => { if (held && !body.contains(document.activeElement)) { const r = body.querySelector('[data-ws-reload]'); (r || body).focus({ preventScroll: true }); } };
+  if (ERR[id]) { draw(body, retryState(id)); draw(foot, ''); keep(); return; }
   const d = DATA[id]; if (d === undefined) return;
   if (p.linked && DLINK[id] !== symOf(id)) { draw(body, skeleton('rows', 4, `Loading ${p.title} for ${symOf(id)}`)); draw(foot, ''); return; }
   const forLink = p.linked ? DLINK[id] : S.link;
   // a repaint keeps what the reader opened in it and where they were in it (a fold by its name, the panel's own scroll)
   const opened = [...body.querySelectorAll('details[data-v2-fold]')].filter((x) => x.open).map((x) => x.dataset.v2Fold), top = body.scrollTop;
-  draw(body, p.body(d, P, forLink));
+  draw(body, p.body(d, P, forLink)); keep();
   opened.forEach((k) => { const x = body.querySelector(`details[data-v2-fold="${k}"]`); if (x) x.open = true; });
   if (top) body.scrollTop = top;
   if (p.charts) mountCharts(body, p.charts(d, P, forLink));
@@ -906,43 +917,80 @@ function paintBody(id) {
   if (sec) { if (body.querySelector('table, ul, ol, .ws-heat, svg, canvas, .chart-slot, .pf, .kv, dl')) delete sec.dataset.sparse; else sec.dataset.sparse = ''; }
   const f = p.foot ? p.foot(d, P) : {};
   const old = f.at && CADENCE_MS[id] && Date.now() - Date.parse(f.at) > 3 * CADENCE_MS[id] ? `Built ${ago(f.at)}` : '';
-  const st = d && d.building ? 'Building' : d && d.served_stale ? 'Updating' : old ? '' : (f.status || statusOf(id));
+  const st = d && d.building ? (POLLS[id] > BUILD_POLLS ? 'Still building: Refresh to check' : 'Building') : d && d.served_stale ? 'Updating' : old ? '' : (f.status || ((f.quotes || []).length ? delays.listTag(f.quotes, homeCtx()) : '') || statusOf(id));
   draw(foot, html`<span class="ws-src">${SRC[id] || f.source || ''}</span>${f.at ? html`<span>${asof(f.at, f.verb)}</span>` : ''}${st ? html`<span class="ws-state">${st}</span>` : ''}${old ? html`<span class="ws-stale">${old}</span>` : ''}${f.stale ? html`<span class="ws-stale">${f.stale}</span>` : ''}`);
   const dl = $(`#wsd-${id}`, root);
-  if (dl) draw(dl, html`<div><dt>Source</dt><dd>${f.source || SRC[id] || ''}</dd></div>${FRESH[id] ? html`<div><dt>How fresh</dt><dd class="ws-fresh">${FRESH[id]}</dd></div>` : ''}${f.note || f.staleWhy ? html`<div><dt>Note</dt><dd>${[f.note, f.staleWhy].filter(Boolean).join(' ')}</dd></div>` : ''}${f.gap ? html`<div><dt>Not in Optic</dt><dd>${f.gap}</dd></div>` : ''}`);
+  if (dl) draw(dl, html`<div><dt>Source</dt><dd>${f.source || SRC[id] || ''}</dd></div>${freshOf(id) ? html`<div><dt>How fresh</dt><dd class="ws-fresh">${freshOf(id)}</dd></div>` : ''}${f.note || f.staleWhy ? html`<div><dt>Note</dt><dd>${[f.note, f.staleWhy].filter(Boolean).join(' ')}</dd></div>` : ''}${f.gap ? html`<div><dt>Not in Optic</dt><dd>${f.gap}</dd></div>` : ''}`);
   if (id === 'indices') { const dt = $('#ws-date', root), ses = d.session || {}; if (dt) dt.textContent = `${etDate(ses.now_et)}${ses.label ? `. ${clean(ses.label)}.` : ''}`; }
 }
 
-async function loadPanel(id, { force = false, quiet = false } = {}) {
+// What a panel that could not load says: what happened, whether Optic will ask again by itself, and Retry (a button,
+// so the keyboard reaches it; focus stays where the reader is). It takes the skeleton's place in the panel's own box.
+function retryState(id) {
+  const p = PANELS[id], e = ERR[id], n = TRIES[`${id}:${ERRLINK[id] || ''}`] || 0;
+  let why;
+  if (e && e.kind === 'late') why = `It has not answered in ${PANEL_WAIT / 1000} seconds. It appears here if it arrives.`;
+  // a linked panel's 404 means the provider had nothing for this ticker just now, not that the panel is missing
+  else if (e && p.linked && e.kind === 'notfound') why = `The data provider has nothing for ${ERRLINK[id] || symOf(id)} just now. ${['contracts', 'vol', 'gex'].includes(id) && !marketOpen() ? 'Outside market hours the free feed often serves option chains without quotes; they return when trading resumes.' : 'This is usually brief.'}`;
+  // the source's own sentence when it sent one; the heading already says it did not load
+  else if (e && (e.kind === 'server' || e.kind === 'bad') && e.message && e.message !== 'Request failed') why = `The source answered: ${e.message.replace(/\.$/, '')}.`;
+  else why = api.explain(e, p.title);
+  const next = AUTO[id] ? `Optic asks again by itself (${n} of ${BACKOFF.length}).` : e && e.kind === 'late' ? '' : n >= BACKOFF.length ? 'Optic has stopped asking by itself.' : '';
+  return html`<div class="state err ws-retry" role="alert"><p class="t-h3">Couldn't load ${p.title}.</p><p>${why}${next ? ` ${next}` : ''}</p>
+    <button type="button" class="btn btn-sm" data-ws-reload="${id}">Retry</button></div>`;
+}
+// A failed load asks again by itself after the next wait in BACKOFF, three times at most for this panel and ticker.
+function retryLater(id, link) {
+  clearTimeout(AUTO[id]); delete AUTO[id];
+  const k = `${id}:${link}`, n = TRIES[k] || 0;
+  if (n >= BACKOFF.length) return;
+  TRIES[k] = n + 1;
+  AUTO[id] = setTimeout(() => { delete AUTO[id]; if (live && ERR[id] && symOf(id) === link && !folded(id)) loadPanel(id, { auto: true }); }, BACKOFF[n]);
+}
+
+async function loadPanel(id, { force = false, quiet = false, auto = false } = {}) {
   const p = PANELS[id]; const P = ps(id);
   if (folded(id) && !force) return;
   const linkAt = symOf(id), mine = (SEQ[id] = (SEQ[id] || 0) + 1); delete ERR[id]; ERRLINK[id] = linkAt;
-  if (force) { DATA[id] = undefined; const b = $(`#wsb-${id}`, root); if (b) draw(b, skeleton('rows', 4, `Loading ${p.title}`)); }
-  try {
-    const d = await p.load(linkAt, P);
-    if (!live || mine !== SEQ[id] || (p.linked && linkAt !== symOf(id))) return;   // a later request, or the link moved on
-    const was = DATA[id], wasLink = DLINK[id];
-    DATA[id] = d; AT[id] = Date.now(); DLINK[id] = linkAt;
-    // a board the server is still building: ask again shortly, quietly, while this panel is on screen
-    if (d && d.building) setTimeout(() => { if (live && DATA[id] === d && !folded(id)) loadPanel(id, { quiet: true }); }, 12000);
-    // a quiet refresh that changed nothing repaints nothing, so a reader mid-scroll keeps their place
-    if (quiet && was !== undefined && wasLink === linkAt && JSON.stringify(was) === JSON.stringify(d)) return;
-  } catch (e) {
-    if (!live || mine !== SEQ[id] || (p.linked && linkAt !== symOf(id))) return;   // an error for a request since replaced
-    if (quiet && DATA[id] !== undefined) return;
-    // A slow or empty answer from the data provider is usually brief: one quiet retry before the reader is told. A
-    // timeout keeps the panel loading while it asks again (2026-10-21: the provider was slow, /api/home took over
-    // 30 s and every Home panel said "did not load" at once); a linked panel's not-found is shown, then retried.
-    if (e.kind === 'timeout' && !RETRIED[id]) {
-      RETRIED[id] = true;
-      const b = $(`#wsb-${id}`, root); if (b) draw(b, skeleton('rows', 4, `Still loading ${p.title}`));
-      setTimeout(() => { if (live) loadPanel(id, { force: true }); }, 3000);
-      return;
-    }
-    ERR[id] = e; DATA[id] = undefined;
-    if (p.linked && e.kind === 'notfound' && !RETRIED[id]) { RETRIED[id] = true; setTimeout(() => { if (live && ERR[id] === e) loadPanel(id, { force: true }); }, 5000); }
+  if (!auto) { clearTimeout(AUTO[id]); delete AUTO[id]; }
+  if (force) { DATA[id] = undefined; const b = $(`#wsb-${id}`, root); if (b) draw(b, skeleton(id === 'indices' ? 'lines' : 'rows', id === 'indices' ? 2 : 4, `Loading ${p.title}`)); }
+  // no answer within the wait: the skeleton gives way to the failed state, and the answer still lands if it comes
+  clearTimeout(LATE[id]);
+  if (DATA[id] === undefined) {
+    LATE[id] = setTimeout(() => {
+      if (!live || mine !== SEQ[id] || DATA[id] !== undefined || ERR[id]) return;
+      ERR[id] = { kind: 'late' }; paintBody(id);
+    }, PANEL_WAIT);
   }
-  if (!ERR[id]) delete RETRIED[id];
+  // one request in flight per panel, ticker and setting: a retry, automatic or the reader's, or the next 20 s refresh
+  // joins a slow one rather than sending another; a changed range, side or expiry is a request of its own
+  const ask = `${linkAt}|${JSON.stringify(P)}`;
+  const fly = INFLIGHT[id] && INFLIGHT[id].ask === ask ? INFLIGHT[id] : (INFLIGHT[id] = { ask, promise: Promise.resolve().then(() => p.load(linkAt, P)) });
+  try {
+    const d = await fly.promise;
+    if (INFLIGHT[id] === fly) delete INFLIGHT[id];
+    if (!live || mine !== SEQ[id] || (p.linked && linkAt !== symOf(id))) return;   // a later request, or the link moved on
+    clearTimeout(LATE[id]);
+    const was = DATA[id], wasLink = DLINK[id];
+    DATA[id] = d; AT[id] = Date.now(); DLINK[id] = linkAt; delete TRIES[`${id}:${linkAt}`]; delete ERR[id];   // a late answer replaces "Couldn't load"
+    // a board the server is still building: ask again shortly, quietly, while this panel is on screen, BUILD_POLLS
+    // times at most; after that the footer says it is still building and the panel's Refresh asks again
+    if (d && d.building) {
+      POLLS[id] = (POLLS[id] || 0) + 1;
+      if (POLLS[id] <= BUILD_POLLS) setTimeout(() => { if (live && DATA[id] === d && !folded(id)) loadPanel(id, { quiet: true }); }, 12000);
+    } else delete POLLS[id];
+    // a quiet refresh that changed nothing repaints nothing, so a reader mid-scroll keeps their place; the last poll
+    // of a building board repaints, so its footer says it stopped
+    const capped = d && d.building && POLLS[id] > BUILD_POLLS;
+    if (quiet && !capped && was !== undefined && wasLink === linkAt && JSON.stringify(was) === JSON.stringify(d)) return;
+  } catch (e) {
+    if (INFLIGHT[id] === fly) delete INFLIGHT[id];
+    if (!live || mine !== SEQ[id] || (p.linked && linkAt !== symOf(id))) return;   // an error for a request since replaced
+    clearTimeout(LATE[id]);
+    if (quiet && DATA[id] !== undefined) return;   // a refresh that failed keeps the figures shown; their label ages them
+    ERR[id] = e; DATA[id] = undefined;
+    retryLater(id, linkAt);
+  }
   paintBody(id);
   if (id === 'portfolio' && showOnboard() !== !!$('#ws-new', root)) paintAll();   // a linked portfolio makes this a returning reader's Home
 }
@@ -1094,7 +1142,13 @@ function wire() {
       const sec = $(`[data-ws-panel="${id}"]`, root); if (sec) { sec.scrollIntoView({ block: 'nearest' }); const f = $('.ws-menu > summary', sec) || $('[data-ws-fold]', sec); if (f) f.focus({ preventScroll: true }); }
       return;
     }
-    if ((b = t('[data-ws-reload]'))) { loadPanel(b.dataset.wsReload, { force: true }); return; }
+    if ((b = t('[data-ws-reload]'))) {
+      const id = b.dataset.wsReload, inPanel = !!b.closest('.ws-retry');
+      loadPanel(id, { force: true });
+      // Retry is redrawn away: the keyboard stays in the panel, on its body, rather than falling to the page's top
+      if (inPanel) { const body = $(`#wsb-${id}`, root); if (body) body.focus({ preventScroll: true }); }
+      return;
+    }
     if (t('[data-ws-edit]')) { EDIT = !EDIT; paintAll(); say(EDIT ? `Customizing ${PRESETS[S.preset].label}.` : 'Done customizing.'); const b = $('[data-ws-edit]', root); if (b) b.focus(); return; }
     if (t('[data-ws-onboard-done]')) { try { localStorage.setItem(ONBOARD_KEY, 'done'); localStorage.setItem('optic.knowledge.asked.v1', '1'); } catch (err) { /* private mode */ } paintAll(); say('Welcome dismissed. How Optic explains things is in Settings.'); return; }
     if (t('[data-ws-reset]')) {
@@ -1192,6 +1246,7 @@ export async function render(main) {
     window.addEventListener('storage', (e) => { if ((e.key === KEY || e.key === 'optic.mode.v1') && live && !EDIT) { load(); paintAll(); } });
   }
   root = main; live = true; load();
+  Object.keys(TRIES).forEach((k) => delete TRIES[k]); Object.keys(POLLS).forEach((k) => delete POLLS[k]);
   document.title = 'Home, Optic';
   wire(); paintAll();
   try { mq = matchMedia(PHONE); mq.onchange = () => { if (live) paintAll(); }; } catch (e) { mq = null; }
@@ -1202,14 +1257,16 @@ export async function render(main) {
   timer = poll(async (current) => {
     const open = (((DATA.indices || {}).session) || {}).is_regular;
     if (!live || !open || !current()) return;
-    await Promise.all(layout().filter((x) => !x.hidden && MARKET_PANELS.includes(x.id)).map((x) => loadPanel(x.id, { quiet: true })));
+    await Promise.all(layout().filter((x) => !x.hidden && MARKET_PANELS.includes(x.id) && DATA[x.id] !== undefined).map((x) => loadPanel(x.id, { quiet: true })));
   }, { every: 20000, closed: 300000 });
 }
-export function dispose() { lastScroll = window.scrollY; live = false; if (timer) { timer.stop(); timer = null; } if (mq) mq.onchange = null; if (mq2) mq2.onchange = null; }
+export function dispose() { lastScroll = window.scrollY; live = false; if (timer) { timer.stop(); timer = null; } if (mq) mq.onchange = null; if (mq2) mq2.onchange = null; Object.values(LATE).forEach(clearTimeout); Object.values(AUTO).forEach(clearTimeout); }
 export function onLists() {
   if (!live) return;
   if (!!$('#ws-new', root) !== showOnboard()) { paintAll(); return; }
   const ob = $('#ws-new', root); if (ob) { const tmp = document.createElement('div'); draw(tmp, onboard()); ob.replaceWith(tmp.firstElementChild); }
   if (layout().some((x) => x.id === 'watch' && !x.hidden)) loadPanel('watch', { force: !folded('watch') });
 }
-export const _test = { PRESETS, PANELS, ESSENTIAL, FRESH, load: () => { load(); return S; }, defaults, norm, standard, save: () => save() };
+export const _test = { PRESETS, PANELS, ESSENTIAL, FRESH, freshOf, load: () => { load(); return S; }, defaults, norm, standard, save: () => save(),
+  // the panel loader against a stand-in page (tests/test_honest_loading.py): mount a root, load and paint panels
+  mount: (r) => { root = r; live = true; load(); return S; }, loadPanel, paintBody, statusOf, state: () => ({ DATA, ERR, TRIES, AUTO }) };

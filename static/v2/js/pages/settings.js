@@ -10,6 +10,7 @@ import { html, render as draw } from '../core/dom.js';
 import * as api from '../core/api.js';
 import * as store from '../core/store.js';
 import * as prefs from '../core/prefs.js';
+import * as delays from '../core/delays.js';
 import * as passkey from '../core/passkey.js';
 import { handDeviceSessionToGuest } from '../core/device.js';
 import { clean, billingOff } from '../core/format.js';
@@ -162,7 +163,7 @@ function about() {
   const h = D.health, signed = store.signedIn();
   const feed = (p) => ({ yfinance: 'Yahoo Finance', yahoo: 'Yahoo Finance', tradier: 'Tradier' }[String(p || 'yfinance').toLowerCase()] || p);
   const rows = [
-    ['Data source', h && h.realtime_chain ? `Real-time option chains via ${feed(h.provider)}; other quotes may be delayed` : 'Yahoo Finance. Quotes delayed up to 15 minutes'],
+    ['Data source', h && h.realtime_chain ? `Option chains ${delays.chainWords(true)}. ${delays.quotesSentence()}` : `Yahoo Finance. ${delays.quotesSentence()}`],
     ['Assistant', !h ? 'Checking…' : (h.assistant || {}).enabled ? 'Milo is configured and answering' : 'Milo is switched off in this build'],
     ['Optic Portfolio', 'One shared simulated ledger, no real money'],
     ['Stored on this device', signed ? 'Theme, time zone, chart preferences, recent symbols, Milo chats, drawings, notes, Paper Desk trades and Retirement holdings' : GUEST_STORED],

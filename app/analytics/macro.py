@@ -23,7 +23,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import numpy as np
 
 from .. import fred
-from .series_stats import _f, apply_quote, live_quotes, snapshot
+from .series_stats import _f, apply_quote, live_quotes, snapshot, stated_times
 from .technicals import atr
 
 # The rule of 16. The VIX is the S&P's implied volatility for a year, and a year
@@ -334,6 +334,8 @@ def analyse(provider) -> Dict[str, Any]:
     # cannot produce the session's change on its own — see `apply_quote`. Rows
     # the quote feed does not cover keep the bar arithmetic.
     quotes = live_quotes(provider, symbols)
+    # each row's trade time and stated delay, for its price label (Handoff 4)
+    stated = stated_times(provider, symbols)
 
     snaps: Dict[str, Dict[str, Any]] = {}
     for item in INSTRUMENTS:
@@ -346,6 +348,7 @@ def analyse(provider) -> Dict[str, Any]:
         snap["symbol"] = item["symbol"]
         snap["group"] = item["group"]
         snap["note"] = item["note"]
+        snap.update(stated.get(str(item["symbol"]).upper()) or {})
         snaps[item["symbol"]] = snap
 
     # ---------------------------------------------------------- ratios

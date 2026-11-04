@@ -26,6 +26,8 @@ import re
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 
+from .. import delays
+
 THEMES = ("equities", "rates", "dollar", "oil", "credit", "volatility", "earnings", "sectors",
           "companies", "news", "calendar")
 
@@ -306,7 +308,8 @@ def build(bundle: Dict[str, Any], now: Optional[datetime] = None) -> Dict[str, A
     limits = [
         "Economic releases are compared with their own previous reading: Optic carries no consensus forecasts for them.",
         "Company results are EPS against the feed's consensus; reported revenue against its estimate and the text of guidance are not in the free data.",
-        "Prices are about 15 minutes delayed during the session; close-to-close changes use the last daily bar.",
+        "Prices are delayed {} during the session, by exchange; close-to-close changes use the last daily bar.".format(
+            delays.quotes_up_to()),
         "Options figures are Optic's estimates from delayed quotes; open interest is the previous session's.",
     ]
     if conflicts:

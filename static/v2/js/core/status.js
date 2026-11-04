@@ -5,6 +5,7 @@ import { html, render, $ } from './dom.js';
 import * as api from './api.js';
 import * as store from './store.js';
 import * as prefs from './prefs.js';
+import * as delays from './delays.js';
 
 // The market session the top bar shows, for a page that needs it without a fetch of its own (Home's
 // footers on a layout with no Indices panel). An 'optic:session' event says it changed.
@@ -27,7 +28,8 @@ async function health() {
   const el = $('#app-status'); if (!el) return;
   try {
     const h = await api.get('/api/health', { ttl: 300000, timeout: 10000 });
-    const feed = h.realtime_chain ? 'Option chains real-time; other quotes may be delayed.' : 'Quotes from Yahoo Finance, delayed up to 15 minutes.';
+    // the feed's sentence from the one delay record (core/delays.js), the same words as Settings and Milo's panel
+    const feed = h.realtime_chain ? `Option chains are ${delays.chainWords(true)}. ${delays.quotesSentence()}` : `From Yahoo Finance. ${delays.quotesSentence()}`;
     // the service and this reader's access to it, kept apart (beginner brief item 10)
     let access = null; try { access = await api.get('/api/ai-allowance', { ttl: 60000, timeout: 10000 }); } catch (e) { /* the service line still shows */ }
     const guestNeedsAccount = !!(access && access.allowance && access.allowance.requires_account && !store.signedIn());
@@ -47,6 +49,7 @@ function offline() {
 }
 export function watchStatus() {
   session(); health(); offline();
+  delays.load().then(health);   // the record's words once it answers
   setInterval(() => { if (!document.hidden) session(); }, 60000);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) session(); });
   window.addEventListener('online', offline); window.addEventListener('offline', offline);

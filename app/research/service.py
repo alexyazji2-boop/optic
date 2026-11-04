@@ -24,6 +24,7 @@ from zoneinfo import ZoneInfo
 import pandas as pd
 
 from . import METHOD_VERSION, earnings_view, forecasts, policy as policy_mod, quality, swing_setup
+from .. import delays
 from .. import session as session_mod
 
 log = logging.getLogger(__name__)
@@ -51,13 +52,23 @@ SECTOR_ETF = {
 _MT = re.compile(r"^\s*(\d{1,2}):(\d{2})\s*([AP]M)", re.I)
 
 
+def _delay_words(quote: Optional[Dict[str, Any]]) -> str:
+    """The quote's stated delay, or the feed's longest when it states none."""
+    mins = (quote or {}).get("delayed_minutes")
+    if mins is None:
+        return "the feed is delayed {} by exchange".format(delays.quotes_up_to())
+    return "the feed states {:.0f} minutes for this exchange".format(float(mins))
+
+
 def quote_freshness(quote: Dict[str, Any], last_bar: Optional[str], stale_minutes: int,
                     now: Optional[datetime] = None) -> Dict[str, Any]:
     """Whether the price is current for the session it claims.
 
     During the regular session the feed's own price time is compared with
-    the clock, allowing for the usual fifteen-minute delay. Outside it the
-    price is a close or an extended-hours print and is labelled as such."""
+    the clock, allowing for the delay the quote states (the longest the feed
+    states when it gives none) plus `stale_minutes`: the line every price
+    label draws (app/delays.py). Outside it the price is a close or an
+    extended-hours print and is labelled as such."""
     now = now or datetime.now(timezone.utc)
     st = session_mod.state(now)
     phase = st.get("phase")
@@ -81,7 +92,7 @@ def quote_freshness(quote: Dict[str, Any], last_bar: Optional[str], stale_minute
                                                    "is not in the data yet.".format(last_bar)})
         else:
             out.update({"state": "delayed", "text": "Regular session; the feed gave no price time, so its exact "
-                                                     "age is unknown (normally about 15 minutes delayed)."})
+                                                     "age is unknown ({}).".format(_delay_words(quote))})
         return out
     h, mi, ap = int(m.group(1)) % 12, int(m.group(2)), m.group(3).upper()
     h += 12 if ap == "PM" else 0
@@ -90,11 +101,11 @@ def quote_freshness(quote: Dict[str, Any], last_bar: Optional[str], stale_minute
     age = (et_now - stamp).total_seconds() / 60.0
     if age < -5:
         age += 24 * 60  # a stamp from the previous day
-    limit = stale_minutes + 15
+    limit = delays.stale_limit((quote or {}).get("delayed_minutes"), stale_minutes)
     out["age_minutes"] = round(age)
     if age > limit:
-        out.update({"state": "stale", "text": "The last price is {:.0f} minutes old in an open session (the feed is "
-                                               "normally about 15 minutes delayed).".format(age)})
+        out.update({"state": "stale", "text": "The last price is {:.0f} minutes old in an open session ({}).".format(
+            age, _delay_words(quote))})
     else:
         out.update({"state": "delayed", "text": "Regular session, price about {:.0f} minutes old (delayed "
                                                  "feed).".format(max(age, 0))})
@@ -264,7 +275,7 @@ def _missed(g: "_Gather", *names: str) -> str:
 
 SOURCES = {
     "statements": "SEC EDGAR XBRL company facts (us-gaap), each figure linked to its filing",
-    "prices": "Yahoo Finance daily bars and quote (delayed up to 15 minutes in session)",
+    "prices": "Yahoo Finance daily bars and quote (delayed {} by exchange in session)".format(delays.quotes_up_to()),
     "estimates": "Yahoo Finance analyst consensus, estimate trend and surprise history",
     "options": "The options chain's at-the-money straddle on the first expiry after the release",
     "risk_free": "10-year US Treasury yield (FRED) for the valuation; 13-week bill for options",

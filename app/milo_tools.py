@@ -38,6 +38,8 @@ from datetime import datetime, timedelta, timezone
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
+from . import delays
+
 # A leading caret is allowed: index symbols (^VIX, ^GSPC) start with one, and the description below offers
 # ^GSPC as an example while the first pattern rejected it (milo-reasoning evaluation, 2026-10-16; milo-upgrade
 # 795a766; post-demo Phase 08).
@@ -412,8 +414,8 @@ def _pick(d: Any, *keys: str) -> Dict[str, Any]:
     return {k: d.get(k) for k in keys if d.get(k) not in (None, "", [], {})}
 
 
-DELAY_NOTE = ("Delayed quote: Yahoo Finance prices can run up to 15 minutes behind during the session; outside it the "
-              "price is the last close or an extended-hours print.")
+DELAY_NOTE = ("Delayed quote: Yahoo Finance prices can run {} behind during the session, by exchange; outside it the "
+              "price is the last close or an extended-hours print.".format(delays.quotes_up_to()))
 
 
 def et(stamp: Any) -> Any:
@@ -745,8 +747,8 @@ def describe(name: str, result: Any, is_error: bool, now: Optional[datetime] = N
            "delayed": delayed, "stale": stale, "partial": partial, "unavailable": unavailable}
     if delayed and name in _FEED:
         mins = r.get("delayed_minutes")
-        out["delay"] = ("about {} minutes per the feed".format(int(float(mins))) if mins is not None
-                        else "about 15 minutes during the session (Yahoo Finance)")
+        out["delay"] = ("{} minutes, as the feed states for this exchange".format(int(float(mins))) if mins is not None
+                        else "{} during the session, by exchange ({})".format(delays.quotes_up_to(), delays.PROVIDER))
     if notes:
         out["notes"] = notes
     return out

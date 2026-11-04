@@ -32,6 +32,7 @@ import math
 from datetime import date, datetime, timezone
 from typing import Any, Callable, Dict, Iterable, List, Optional
 from .. import session as session_mod
+from .. import delays
 
 PRICE_GAP_PCT = 2.0          # broker price vs Optic's delayed quote, worth a word
 BROKER_TOTAL_GAP_PCT = 1.0   # broker's account total vs the sum of the lines we got
@@ -419,9 +420,9 @@ def build(accounts: List[Dict[str, Any]],
     earnings.sort(key=lambda e: e["days"])
     if price_checks:
         notes.append("Broker prices for {} differ from Optic's delayed quote by more than {:.0f}%. "
-                     "Broker values are as of the last sync; Optic's quotes are about 15 minutes "
-                     "delayed. Neither is a live price.".format(
-                         ", ".join(c["symbol"] for c in price_checks[:5]), PRICE_GAP_PCT))
+                     "Broker values are as of the last sync; Optic's quotes are delayed {} by exchange. "
+                     "Neither is a live price.".format(
+                         ", ".join(c["symbol"] for c in price_checks[:5]), PRICE_GAP_PCT, delays.quotes_up_to()))
 
     if options:
         assumed = any(o["multiplier_assumed"] for o in options)

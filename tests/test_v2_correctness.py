@@ -163,11 +163,13 @@ def test_an_unknown_session_is_never_called_closed():
     """Real Safari, 9:58 AM ET on a trading day (2026-10-19): the session read timed out on a cold server and
     the header said "Closed. Price is the close of the last session.\""""
     frame = _src("pages/dossier-frame.js")
-    fn = frame[frame.index("export function stateLine"):frame.index("\n}\n", frame.index("export function stateLine"))]
+    fn = frame[frame.index("export function quoteCtx"):frame.index("\n}\n", frame.index("export function quoteCtx"))]
     assert "QUOTE_PHASE[String(q.market_state" in fn, "the quote's own market state is used when the session has not answered"
-    # B2b (2026-10-21): the words come from the feed (core/marketTime.js sessionFreshness), with the same fallback
-    assert "else if (!phase) base = `${sessionFreshness(q).text}.`;" in fn
-    assert "|| 'Closed'" not in fn
+    assert "|| null);" in fn and "|| 'Closed'" not in fn, "not knowing the session, it claims none"
+    # Handoff 4 (2026-11-04): the words come from the one formatter (core/delays.js), which says "Market closed" only for
+    # a phase the session read or the quote states
+    lab = _src("core/delays.js")
+    assert "if (phase && phase !== 'regular') {" in lab and "if (!SESSION[phase]) return { state: 'closed'" in lab
 
 
 def test_the_offline_notice_gives_way_when_the_server_answers():

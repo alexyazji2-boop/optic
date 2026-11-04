@@ -115,7 +115,8 @@ def test_every_level_keeps_the_caveats_and_none_gives_advice(tmp_path):
     for L in LEVELS:
         t = text(got["out"][L])
         assert "An assumption, not reported positions." in t, (L, "a risk keeps its caveat at every level")
-        assert re.search(r"[Dd]elayed 15 minutes", t), (L, "the delay")
+        # the quote's own stated delay, in the one label's words since Handoff 4 (core/delays.js)
+        assert re.search(r"[Dd]elayed 15 min\b", t), (L, "the delay")
         assert re.search(r"not a recommendation|does not tell you what to buy or sell", t), L
         assert "either way" in t or "either direction" in t or "Nov 17" in t, (L, "the report is two-sided")
         assert "—" not in t, (L, "no em dashes")

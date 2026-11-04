@@ -54,6 +54,28 @@ def live_quotes(provider, symbols: List[str]) -> Dict[str, Dict[str, Any]]:
     return out if isinstance(out, dict) else {}
 
 
+def stated_times(provider, symbols: List[str]) -> Dict[str, Dict[str, Any]]:
+    """Each symbol's last trade time and the delay the feed states for its exchange, from the quote feed's batch read
+    (`provider.session_quotes`, one request for the strip): what a price label is computed from (app/delays.py,
+    Handoff 4). The tiles' own quote is the fast read, which carries neither, so its `as_of` is only when Optic asked.
+    `{}` when the adapter has no batch read or the feed fails: the label then says the longest delay and no time."""
+    fetch = getattr(provider, "session_quotes", None)
+    if not callable(fetch):
+        return {}
+    try:
+        got = fetch(list(symbols)) or {}
+    except Exception as exc:                                    # noqa: BLE001
+        log.warning("stated_times: quote feed unavailable: %s", exc)
+        return {}
+    out: Dict[str, Dict[str, Any]] = {}
+    for sym, q in (got.items() if isinstance(got, dict) else []):
+        if isinstance(q, dict):
+            out[str(sym).upper()] = {k: v for k, v in (("trade_time", q.get("regular_market_time")),
+                                                       ("delayed_minutes", q.get("delayed_minutes")),
+                                                       ("exchange", q.get("exchange"))) if v is not None}
+    return out
+
+
 def _trading(day: date) -> bool:
     return session_mod.regular_close(day) is not None
 

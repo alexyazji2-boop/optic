@@ -728,6 +728,11 @@ ul.plain { margin: 0; padding-left: 18px; } ul.plain li { margin-bottom: 7px; }
 .stale { position: relative; display: block; padding: 10px 14px 10px 32px; border-radius: var(--r-2); background: color-mix(in srgb, var(--c-warn) 12%, transparent); color: var(--c-ink); font-size: var(--t-base); }
 .stale::before { content: ""; position: absolute; left: 14px; top: calc(10px + 0.75em - 4px); width: 8px; height: 8px; border-radius: 50%; background: var(--c-warn); }
 .asof { font-size: var(--t-md); color: var(--c-ink-3); }
+/* A price's delay label (core/delays.js), beside the price it describes and kept on every screen size: small, legible,
+   in tabular figures. A stale price says "Stale" in words; the colour only repeats it. */
+.qlabel { font-variant-numeric: tabular-nums; }
+.qlabel.is-stale { color: var(--c-warn); font-weight: 500; }
+.qrow { display: block; font-size: var(--t-xs); color: var(--c-ink-3); white-space: normal; }
 
 /* ---------- toast ---------- */
 .toast { position: fixed; left: 50%; bottom: 28px; transform: translate(-50%, 8px); background: var(--c-scene); color: var(--c-on-scene); padding: 12px 18px; border-radius: var(--r-pill); font-size: var(--t-base); opacity: 0; pointer-events: none; transition: opacity var(--d), transform var(--d) var(--ease); z-index: 90; max-width: calc(100vw - 32px); }

@@ -8,9 +8,9 @@
 import { html, raw, render as draw } from '../core/dom.js';
 import * as api from '../core/api.js';
 import { num, signed, money, compact, clean, fullDate, shortDate, isNum, plural } from '../core/format.js';
+import * as delays from '../core/delays.js';
 import { lineChart } from '../ui/chart.js';
 import { skeleton, failed } from '../ui/states.js';
-import { etStamp } from '../core/marketTime.js';
 
 let D = {}, live = true, mainEl = null;
 const TAG = { reported: 'Reported', estimate: 'Estimate', optic: 'Optic' };
@@ -32,7 +32,9 @@ export function sheetFacts(d) {
   const levels = (te.support_resistance || []).slice().sort((x, y) => Math.abs(x.distance_pct) - Math.abs(y.distance_pct)).slice(0, 4);
   return {
     identity: { sym: d.sym, name: q.name || (d.session || {}).name || d.sym, price: q.price, change_pct: q.change_pct, currency: q.currency || 'USD',
-      exchange: q.exchange || (d.session || {}).exchange || null, session: (((d.session || {}).session) || {}).label || null, observed: q.as_of || q.market_time || null },
+      exchange: q.exchange || (d.session || {}).exchange || null, session: (((d.session || {}).session) || {}).label || null, observed: q.trade_time || q.market_time || null,
+      // the quote's own delay and trade time, labelled as every price is (core/delays.js)
+      quote: q, when: { phase: (((d.session || {}).session) || {}).is_regular ? 'regular' : ((((d.session || {}).session) || {}).phase || null), lastClose: ((((d.session || {}).session) || {}).last_close || {}).date || null } },
     business: { summary: firstSentences(clean(((d.session || {}).profile || {}).summary || '').replace(/^The Company\b/, q.name || d.sym)), industry: ((d.session || {}).profile || {}).industry, sector: ((d.session || {}).profile || {}).sector, market_cap: q.market_cap },
     financials: f.available ? { period: per[0] || null, fiscal: (f.annual_fiscal || [])[0] || null, revenue: (a.revenue || [])[0], net_income: (a.net_income || [])[0],
       fcf: (a.free_cash_flow || [])[0], revenue_yoy: g.revenue_yoy_pct, income_yoy: g.net_income_yoy_pct, op_margin: m.operating_pct, net_margin: m.net_pct,
@@ -60,7 +62,7 @@ function page1(F) {
     <header class="sh-head"><div><p class="sh-kicker">Research sheet</p><h1>${id.name} <span class="sh-sym">${id.sym}</span></h1>
         <p class="sh-meta">${[id.exchange, id.currency].filter(Boolean).join(', ')}${b.industry ? `. ${[b.industry, b.sector].filter(Boolean).join(', ')}` : ''}</p></div>
       <div class="sh-px"><b>${isNum(id.price) ? money(id.price) : 'No price'}</b>${isNum(id.change_pct) ? html` <span>${signed(id.change_pct)}</span>` : ''}
-        <p>${id.observed ? `Quote at ${etStamp(id.observed)}, delayed up to 15 minutes` : 'Quote time not reported'}${id.session ? `. ${id.session}` : ''}</p></div></header>
+        <p>${delays.label(id.quote, id.when)}${id.session ? `. ${id.session}` : ''}</p></div></header>
     <h2>The business ${tag('reported')}</h2><p>${b.summary || html`<span class="sh-na">No description reported.</span>`}${isNum(b.market_cap) ? ` Market value ${usd(b.market_cap)}.` : ''}</p>
     <h2>Key financials ${tag('reported')}</h2>
     ${fi ? html`<p class="sh-sub">${fi.fiscal || 'Latest fiscal year'}${fi.period ? `, the year to ${fullDate(fi.period)}` : ''}</p>

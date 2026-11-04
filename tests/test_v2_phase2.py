@@ -68,7 +68,9 @@ def test_a_linked_panel_names_its_ticker_and_can_keep_its_own():
 
 def test_a_kept_panel_loads_its_own_ticker_and_keeps_it():
     assert "const symOf = (id) => (PANELS[id] && PANELS[id].linked && ps(id).pin) || S.link;" in WS
-    assert "const linkAt = symOf(id), mine = (SEQ[id] = (SEQ[id] || 0) + 1);" in WS and "const d = await p.load(linkAt, P);" in WS
+    assert "const linkAt = symOf(id), mine = (SEQ[id] = (SEQ[id] || 0) + 1);" in WS
+    # Handoff 4: the request is shared by any retry for the same ticker and setting, and still asks for `linkAt`
+    assert "promise: Promise.resolve().then(() => p.load(linkAt, P))" in WS and "const d = await fly.promise;" in WS
     assert "PANELS[x.id].linked && !ps(x.id).pin).forEach" in WS, "a new link leaves kept panels alone"
     assert "...(PANELS[id] && PANELS[id].linked ? ['pin'] : [])" in WS, "the kept ticker is saved with the layout"
 
