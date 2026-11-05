@@ -146,6 +146,13 @@ The owner's mapping (2026-10-24): VWAP the one cool hue (the indicator exception
 - **Nothing is saved without a press, and nothing twice by accident.** A second save of the same thing asks whether to update the saved one or keep a copy under another name. A save that fails says so beside the button with Retry, and the button stays "Save".
 - **Where Save sits:** in the Dossier header beside Watch (in its one row on a phone), beside Compare's controls and its take, in the research sheet's actions (not printed), and in Milo's header as an icon. The library is Saved research at `#/research`, reached from the account menu and the palette.
 
+### Company events (Handoff 9, 2026-11-04)
+- **One list, every source credited.** The Overview's Company events section (`ui/timeline.js`, `/api/timeline`) merges the Dossier's own event sources, newest first. Each entry names its source and links it. Its details link the Dossier section it comes from. Entries from two sources are never merged into one line.
+- **Every date says what it is.** Each entry's date line names its kind: Published, Reported, Scheduled not yet reported, Transaction date, Disclosed, Recorded or Filed. A time is shown in the reader's zone with its name; a dated record with no time is printed as the source dates it, never moved by a zone. A delay between an event and its disclosure is a line of its own: the House's 45 days, the Form 4's two business days.
+- **A kind is a word.** Each entry's kind is its label beside a line icon (`news`, `earnings`, `insider`, `congress`, `analyst`, `filing`), never a colour alone.
+- **Never silently incomplete.** A source that did not answer is said above the list, beside what did arrive, with Try again. A source whose reach is shorter than the period says so: the headline feed's latest stories, or the House's current year. A kind with no entries says "No congressional trades reported for this company in this period", or why it does not apply.
+- **Read after the page's own figures.** The section asks for nothing until `/api/ticker` has answered, so the first load is unchanged. It shows 50 entries, then "Show 50 older".
+
 ### Headers
 Every dossier tab uses the Chart page's one-line header (`dossier-frame.js` `header()` now defaults to `bar`):
 - the company's logo (`/api/logo`, over the symbol's initial; `ui/symbols.js`), as in Classic's header (2026-10-25);

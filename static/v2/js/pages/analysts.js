@@ -62,8 +62,12 @@ async function load() {
   paint();
 }
 
-export async function render(main) {
+export async function render(main, route) {
   live = true; mainEl = main; D = {};
+  // `#/analysts?symbol=AAPL` opens on one name's year of actions: where the Overview's company events link an
+  // analyst entry (Handoff 9)
+  const want = String(((route || {}).params || {}).symbol || '').toUpperCase();
+  if (/^[A-Z0-9.^=-]{1,12}$/.test(want)) { Q.ticker = want; Q.days = 365; }
   document.title = 'Analysts, Optic';
   provideContext(() => ({ view: 'analysts', analysts: D.d ? { query: Q, rows: (D.d.rows || []).slice(0, 30) } : null }));
   main.addEventListener('click', (e) => {

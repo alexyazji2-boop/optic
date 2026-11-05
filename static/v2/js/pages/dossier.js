@@ -36,6 +36,7 @@ import * as drawer from '../ui/drawer.js';
 import { hrefFor } from '../nav.js';
 import { kindOf, learn } from '../core/instrument.js';
 import { mountThesis, disposeThesis, thesisContext } from './thesis.js';
+import { mountTimeline, startTimeline, disposeTimeline } from '../ui/timeline.js';
 import * as OR from './overview-research.js';
 import * as prefs from '../core/prefs.js';
 import { defineLive } from '../ui/term.js';
@@ -408,9 +409,11 @@ function paint(main, sym) {
     ${about(sym)}
     <section class="section dchart" aria-labelledby="py-h">${D.tickerError ? failed('The price history', D.tickerError, { retry: 'dossier' }) : chartBlock(sym)}</section>
     <div class="ov-analysis" id="ov-analysis" data-v2-analysis="${mode}" ${swapped ? 'data-swapped' : ''}>${mode === 'advanced' ? advancedView(sym, c, fund) : simpleView(sym, c)}</div>
+    <div data-tl-slot></div>
     <p class="sr" role="status" data-v2-analysis-status></p>
     <p class="asof disclaimer">${clean((D.ticker || {}).disclaimer || 'Not financial advice. For research and education only.')}</p>`);
   mountThesis(main, sym, () => D);   // the thesis check: one node for the visit, so a half-typed note survives this redraw and a swap
+  mountTimeline(main, sym);   // the company's events (Handoff 9): one node for the visit, read once /api/ticker settles
   if (D.ticker) mountChart(main, sym);
   $$('details summary', main).forEach((x) => { if (openDetails.includes(x.textContent.trim())) x.parentElement.open = true; });
   openEvs.forEach((id) => { const b = $(`[aria-controls="${id}"]`, main); const body = document.getElementById(id); if (b && body) { b.setAttribute('aria-expanded', 'true'); body.hidden = false; } });
@@ -462,10 +465,12 @@ export async function render(main, route) {
   // the first paint, a mistyped ZZZZQ whose quote timed out stayed, and a guest's Home linked its panels to it.
   fresh(`/api/quote/${enc}`, { ttl: 20000, timeout: 15000 }, (d) => { if (d && d.available !== false) { D.quote = fresher(D.quote, d.quote || d); store.pushRecent(sym); } else if (d && d.unreachable) D.quoteError = new api.ApiError('server', 503, `The quote source did not answer for ${sym}`); else { D.quoteError = new api.ApiError('notfound', 404, `No quote for ${sym}`); store.forgetRecent(sym); } }, (e) => { D.quoteError = e; });
   fresh(`/api/session/${enc}`, { ttl: 60000 }, (d) => { D.session = d; learn(sym, { session: d, quote: D.quote }); }, () => { D.session = null; });
+  // the company's events (Handoff 9) are read once these figures have arrived or failed: never alongside them
   fresh(`/api/ticker/${enc}?max_expiries=4&macro=true`, { ttl: 120000, timeout: 60000 }, (d) => {
     D.ticker = d; if (d.quote) D.quote = fresher(D.quote, d.quote);
     if (d.data_caveat) D.freshText = clean(String(d.data_caveat).split(/(?<=\.)\s/)[0]);   // the delay; Greeks and Black-Scholes belong to Options
-  }, (e) => { D.tickerError = e; });
+    startTimeline(sym);
+  }, (e) => { D.tickerError = e; if (e.kind !== 'notfound') startTimeline(sym); });
   fresh(`/api/framework/${enc}?mode=combined`, { ttl: 300000, timeout: 60000 }, (d) => { D.fwRaw = d; D.framework = d.available === false ? null : d; if (d.available === false) D.fwError = new api.ApiError('notfound', 404, d.reason || 'No framework read'); }, (e) => { D.fwError = e; D.fwNetError = e; D.fwRaw = null; D.framework = {}; });
   fresh(`/api/fair-value/${enc}`, { ttl: 600000, timeout: 30000 }, (d) => { D.fairValue = d; }, (e) => { D.fvError = e; D.fairValue = {}; });
   fresh(`/api/longterm/${enc}?indices=false`, { ttl: 600000, timeout: 45000 }, (d) => { D.longterm = d; }, () => { D.longterm = {}; });
@@ -482,7 +487,7 @@ export async function render(main, route) {
   TR.load().then(() => { if (mine() && D.stage) stageFor(sym); });   // the stage's explanation adds what history says (B6c)
 }
 
-export function dispose() { if (lp) { lp.stop(); lp = null; } if (unPrefs) { unPrefs(); unPrefs = null; } live = false; disposeThesis(); drawer.close({ silent: true }); }
+export function dispose() { if (lp) { lp.stop(); lp = null; } if (unPrefs) { unPrefs(); unPrefs = null; } live = false; disposeThesis(); disposeTimeline(); drawer.close({ silent: true }); }
 
 // once per page element: Try again renders into the same element, and a second listener made one press of "Show
 // advanced analysis" swap the view twice, back to where it was. Handlers read the visit's symbol, not a captured one.
