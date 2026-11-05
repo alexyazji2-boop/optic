@@ -185,13 +185,15 @@ def test_the_chat_route_says_its_first_step_at_once(monkeypatch):
     first = r.text.split("\n\n")[0]
     assert first.startswith("event: status") and '"gathering"' in first, first
 
+    # A context that fails to gather no longer ends the answer (Handoff 6): it goes ahead in general mode, with no
+    # ticker, and the context event says the page's context was unavailable (tests/test_milo_context_bar.py)
     async def broken(*a, **k):
         raise RuntimeError("the research pack timed out")
     monkeypatch.setattr(m, "_chat_context", broken)
     r = TestClient(m.app).post("/api/chat", json={"messages": [{"role": "user", "content": "hello"}], "context": {}})
     events = [e.split("\n")[0] for e in r.text.strip().split("\n\n")]
-    assert events == ["event: status", "event: error"], events
-    assert "could not gather the figures" in r.text and "timed out" not in r.text, "the reader is told, without the internals"
+    assert events == ["event: status", "event: context", "event: delta", "event: done"], events
+    assert '"unavailable": true' in r.text and "timed out" not in r.text, "the reader is told, without the internals"
 
 
 def test_classic_shows_its_steps_as_before():

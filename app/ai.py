@@ -1467,6 +1467,186 @@ def _ctx_time(value: Any) -> Optional[datetime]:
     return when if when.tzinfo else when.replace(tzinfo=timezone.utc)
 
 
+# What Milo is researching (Handoff 6, the Milo Context Bar): the ticker, the chart's bar size and range, the dates in
+# view, the indicators on it with their settings, and the Dossier tab, as the reader's browser describes its screen.
+# Identifiers and settings only, never the bars: a value Milo quotes comes from the data sent with the question or
+# from a tool. Every word is checked here, as the focus block always was, because it is the browser's to send.
+_CTX_TIMEFRAMES = {"1": "1-minute", "5": "5-minute", "15": "15-minute", "30": "30-minute", "60": "hourly",
+                   "240": "4-hour", "daily": "daily", "weekly": "weekly"}
+_CTX_RANGES = {"1M": "1 month", "3M": "3 months", "6M": "6 months", "1Y": "1 year", "ALL": "all of its history"}
+# The Dossier's tabs (static/v2/js/nav.js) and the chart's indicators by id, each named with the settings the chart
+# computes it with (static/v2/js/pages/chart.js STUDY_SPEC, which tests/test_milo_context_bar.py holds to this
+# table). An indicator reaches the header by its id, so no text of the browser's is read to Milo as one.
+_CTX_SECTIONS = ("Overview", "Chart", "Options", "Investing", "Earnings", "Financials", "News")
+_CTX_INDICATORS = {"ma": "MA 20, 50, 200", "ema": "EMA 9, 21, 50", "cloud921": "EMA 9 / 21 cloud",
+                   "cloud2150": "EMA 21 / 50 cloud", "bb": "Bollinger 20, 2", "keltner": "Keltner 20, 2",
+                   "donchian": "Donchian 20", "sec": "Regression channel 100", "vwap": "Anchored VWAP",
+                   "rsi": "RSI 14", "macd": "MACD 12, 26, 9", "tso": "TSO 14, 14, 5", "adx": "ADX 14",
+                   "stochastic": "Stochastic 14, 3", "obv": "On-balance volume", "mfi": "MFI 14",
+                   "rs": "RS line against SPY", "wavetrend": "WaveTrend 9, 12, 3"}
+_CTX_DATE = re.compile(r"^\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2})?$")
+_CTX_LIST_MAX = 12
+
+
+def _ctx_words(values: Any, pattern: re.Pattern = _CTX_WORDS, most: int = _CTX_LIST_MAX) -> List[str]:
+    """A list of short labels from the browser, each checked, in order, without repeats."""
+    out: List[str] = []
+    for v in values if isinstance(values, list) else []:
+        word = _ctx_word(v.get("label") if isinstance(v, dict) else v, pattern)
+        if word and word not in out:
+            out.append(word)
+        if len(out) >= most:
+            break
+    return out
+
+
+def _ctx_indicators(values: Any) -> List[str]:
+    """The chart's indicators, named from the table by their ids, in order, without repeats."""
+    out: List[str] = []
+    for v in values if isinstance(values, list) else []:
+        name = _CTX_INDICATORS.get(str((v or {}).get("id") if isinstance(v, dict) else v))
+        if name and name not in out:
+            out.append(name)
+    return out[:_CTX_LIST_MAX]
+
+
+def _ctx_join(words: List[str]) -> str:
+    return words[0] if len(words) == 1 else "{} and {}".format(", ".join(words[:-1]), words[-1])
+
+
+def research_focus(snapshot: Any) -> Dict[str, Any]:
+    """What the reader's research context holds, checked: the one reading the CONTEXT header and the panel's
+    "For AAPL · Daily" line are both built from, so what Milo is told and what the reader is shown agree."""
+    focus = snapshot.get("focus") if isinstance(snapshot, dict) and isinstance(snapshot.get("focus"), dict) else {}
+    scope = focus.get("scope") if focus.get("scope") in ("auto", "market", "none") else "auto"
+    unavailable = focus.get("unavailable") is True
+    general = scope == "none" or unavailable
+    out: Dict[str, Any] = {"scope": "none" if unavailable else scope, "general": general, "unavailable": unavailable,
+                           "ticker": None, "section": None, "timeframe": None, "range": None, "visible": None,
+                           "indicators": [], "compared": [], "compare": None, "removed": [], "described": False,
+                           "page": None}
+    if general or scope == "market":
+        return out
+    chart = focus.get("chart") if isinstance(focus.get("chart"), dict) else {}
+    cmp_ = focus.get("compare") if isinstance(focus.get("compare"), dict) else {}
+    # v2's panel describes the research (the Dossier tab, the chart's indicators, Compare's names); a browser that
+    # sends only the page and the chart's size (Classic) is told as it always was, by context_header
+    out["described"] = "section" in focus or isinstance(chart.get("indicators"), list) or bool(cmp_)
+    out["page"] = _ctx_word(focus.get("view_label"))
+    tickers = _ctx_words(cmp_.get("tickers"), _CTX_SYMBOL, 4)
+    picked = _ctx_word(cmp_.get("focus"), _CTX_SYMBOL)
+    ticker = _ctx_word(focus.get("ticker"), _CTX_SYMBOL)
+    if len(tickers) >= 2:
+        # Compare: the focus is the name the reader picked, or none. Never one of them chosen for the reader.
+        picked = picked if picked in tickers else None
+        out["compare"] = {"tickers": tickers, "focus": picked}
+        ticker = picked
+    out["ticker"] = ticker
+    if not ticker:
+        return out
+    out["section"] = focus.get("section") if focus.get("section") in _CTX_SECTIONS else None
+    interval = str(chart.get("interval") or "")
+    out["timeframe"] = _CTX_TIMEFRAMES.get(interval) or None
+    out["range"] = _CTX_RANGES.get(str(chart.get("range") or "").upper()) if interval in ("daily", "weekly") else None
+    lo, hi = str(chart.get("visible_from") or ""), str(chart.get("visible_to") or "")
+    if _CTX_DATE.match(lo) and _CTX_DATE.match(hi):
+        out["visible"] = {"from": lo, "to": hi}
+    out["indicators"] = _ctx_indicators(chart.get("indicators"))
+    out["compared"] = [s for s in _ctx_words(chart.get("compared"), _CTX_SYMBOL, 3) if s != ticker]
+    out["removed"] = [w for w in _ctx_indicators(focus.get("indicators_removed")) if w not in out["indicators"]]
+    return out
+
+
+def context_used(snapshot: Any) -> Dict[str, Any]:
+    """What this answer used, for the `context` event the panel shows above the answer and keeps with the
+    conversation, so a reopened answer still says which ticker, timeframe and indicators it was for."""
+    rf = research_focus(snapshot)
+    return {k: rf[k] for k in ("scope", "general", "unavailable", "ticker", "section", "timeframe", "range",
+                               "visible", "indicators", "compared", "compare", "removed")}
+
+
+def normalize_focus(context: Any) -> Any:
+    """The browser's focus made to agree with research_focus before anything reads it (the research pack, the
+    framework and the take-chart levels follow `focus.ticker`): no ticker in general mode, and on Compare the name
+    the reader picked or none, so the server never researches a company the panel does not show (Handoff 6)."""
+    if not isinstance(context, dict) or not isinstance(context.get("focus"), dict):
+        return context
+    focus, rf = context["focus"], research_focus(context)
+    if (rf["general"] or rf["compare"]) and focus.get("ticker") != rf["ticker"]:
+        return dict(context, focus=dict(focus, ticker=rf["ticker"]))
+    return context
+
+
+def unavailable_context(context: Any = None) -> Dict[str, Any]:
+    """The context for an answer whose page context could not be read or gathered: general mode, saying so,
+    with no ticker (Handoff 6: never a guessed one). Only when it was captured survives."""
+    focus = context.get("focus") if isinstance(context, dict) and isinstance(context.get("focus"), dict) else {}
+    when = _ctx_time(focus.get("captured_at"))
+    out: Dict[str, Any] = {"scope": "none", "unavailable": True, "ticker": None}
+    if when is not None:
+        out["captured_at"] = when.isoformat()
+    return {"focus": out}
+
+
+def _research_lines(rf: Dict[str, Any]) -> List[str]:
+    """The header's account of what the reader is researching, and the rules that come with it."""
+    if rf["unavailable"]:
+        return ["The reader's page context could not be read for this question, so none was sent. No ticker is in "
+                "focus: do not guess one from the page, from earlier answers or from memory. Answer in general "
+                "terms, or ask which company the reader means."]
+    if rf["general"]:
+        return ["No ticker is in focus: the reader removed the page context. Do not take a company from the page, "
+                "from earlier answers in this conversation or from memory unless this question names one. If the "
+                "question needs a company or a chart (\"explain this chart\"), say that none is selected and answer "
+                "in general terms, or ask which one."]
+    cmp_, ticker = rf["compare"], rf["ticker"]
+    if not rf["described"]:
+        return []
+    lines: List[str] = []
+    if cmp_:
+        names = _ctx_join(cmp_["tickers"])
+        if not ticker:
+            return ["The reader is on Compare, comparing {}. No single one of them is in focus: answer about the "
+                    "comparison, and if the question needs one company, ask which rather than choosing one.".format(names)]
+        lines.append("The reader is on Compare, comparing {}, and chose {} as the focus: answer about {}, against "
+                     "the others where it helps.".format(names, ticker, ticker))
+    elif not ticker:
+        return []
+    else:
+        where = ("the {} tab of its Dossier".format(rf["section"]) if rf["section"]
+                 else "its {} page".format(rf["page"]) if rf["page"] and rf["page"] != ticker else "its page")
+        said = "The reader is researching {} on {}".format(ticker, where)
+        if rf["timeframe"]:
+            parts = ["{} bars".format(rf["timeframe"])]
+            if rf["range"]:
+                parts.append("{} loaded".format(rf["range"]))
+            if rf["visible"]:
+                parts.append("{} to {} in view".format(rf["visible"]["from"], rf["visible"]["to"]))
+            said += ": " + ", ".join(parts)
+            said += ", with {} on the chart".format(_ctx_join(rf["indicators"])) if rf["indicators"] else ", with no indicators on the chart"
+            if rf["compared"]:
+                said += ", compared with {}".format(_ctx_join(rf["compared"]))
+        lines.append(said + ".")
+    lines.append("This question is about {t} unless it names another symbol; the reader does not need to type it. "
+                 "Start the answer by saying, in a few words, the ticker{tf} it is for (\"For {t}{ex}, ...\")."
+                 .format(t=ticker, tf=" and the timeframe" if rf["timeframe"] else "",
+                         ex=", on the {} chart".format(rf["timeframe"]) if rf["timeframe"] else ""))
+    if rf["timeframe"]:
+        lines.append("Where a figure you use is from another bar size than the chart's (daily technicals on an "
+                     "hourly chart), say which bar size it is from.")
+    if rf["indicators"]:
+        lines.append("The indicators named are the chart's settings, not values. Quote an indicator's value only "
+                     "from the data below or from a tool, with its settings and bar size; never from memory, and "
+                     "never as the chart's reading when its settings or bar size differ.")
+    if rf["removed"]:
+        lines.append("Since the reader's last question, {} {} taken off the chart. If an earlier answer in this "
+                     "conversation cited it, say in one line that it is no longer on the chart, and do not lean on "
+                     "it.".format(_ctx_join(rf["removed"]), "was" if len(rf["removed"]) == 1 else "were"))
+    lines.append("What the reader has open says what they are researching, not what they own: never infer a "
+                 "position or a holding from it, and keep the answer an explanation, not a recommendation.")
+    return lines
+
+
 def context_header(snapshot: Dict[str, Any], now: Optional[datetime] = None) -> str:
     """What the reader is looking at, when it was captured and what changed.
 
@@ -1485,16 +1665,21 @@ def context_header(snapshot: Dict[str, Any], now: Optional[datetime] = None) -> 
     if session_line:
         lines.append(session_line)
     scope = focus.get("scope")
-    if scope == "none":
+    if focus.get("unavailable") is True:
+        pass                                    # said by _research_lines: nothing was cleared, it could not be read
+    elif scope == "none":
         lines.append("The reader cleared the context for this question: nothing from their "
                      "screen was sent. Answer from the question, general knowledge and web "
                      "search, and say so if a figure would need their screen.")
     elif scope == "market":
         lines.append("The reader limited the context to the market: no single-company data "
                      "was sent, so do not quote company figures as if you had them.")
+    rf = research_focus(snapshot)
+    research = _research_lines(rf)
     ticker = _ctx_word(focus.get("ticker"), _CTX_SYMBOL)
     view = _ctx_word(focus.get("view_label"))
-    if ticker or view:
+    # A browser that sends only the page (Classic, or a v2 page with no ticker) is described as before
+    if (ticker or view) and not ((rf["described"] and (rf["ticker"] or rf["compare"])) or rf["general"]):
         where = "The reader is on {}".format(
             "{}'s {} page".format(ticker, view) if ticker and view else (ticker or "the {} page".format(view)))
         chart = focus.get("chart") if isinstance(focus.get("chart"), dict) else {}
@@ -1502,6 +1687,7 @@ def context_header(snapshot: Dict[str, Any], now: Optional[datetime] = None) -> 
         if rng or ivl:
             where += ", with the chart on {}".format(" ".join(x for x in (rng, ivl) if x))
         lines.append(where + ".")
+    lines.extend(research)
     previous = _ctx_word(focus.get("previous_ticker"), _CTX_SYMBOL)
     if previous and ticker and previous != ticker:
         lines.append("The reader switched from {p} to {t} since their last question. Earlier "
