@@ -14,6 +14,8 @@ import { daysUntil } from '../core/marketTime.js';
 import { how } from '../ui/states.js';
 import { icon } from '../ui/icons.js';
 import { term } from '../ui/term.js';
+import * as F from '../core/figures.js';
+import { fig, figName } from '../ui/figure.js';
 import { hrefFor } from '../nav.js';
 import { setupGrade, convictionPhrase, valuationWord } from '../core/research-words.js';
 
@@ -65,12 +67,15 @@ function move(x, up = 'grew', down = 'fell', flat = 'was roughly flat') { return
 
 /** How the business is doing: the latest fiscal year, with the latest quarter beside it when they disagree. */
 export function businessRead(t) {
-  const fn = g(t, 'company', 'financials') || {}, q = g(t, 'quote') || {}, gr = fn.growth || {}, m = fn.margins || {};
+  const fn = g(t, 'company', 'financials') || {}, q = g(t, 'quote') || {}, gr = fn.growth || {};
   const period = (fn.annual_periods || [])[0], fy = period ? `fiscal year to ${period}` : 'latest fiscal year';
   const qRev = fin(q.revenue_growth) ? q.revenue_growth * 100 : null;
   let rev = fn.available ? gr.revenue_yoy_pct : null;
   const ni = fn.available ? gr.net_income_yoy_pct : null;
-  const net = fn.available && fin(m.net_pct) ? m.net_pct : fin(q.profit_margin) ? q.profit_margin * 100 : null;
+  // the net margin is the figure registry's (core/figures.js, Handoff 1): its fiscal year, or its twelve months when
+  // the company files no fiscal year; never the feed's own twelve-month margin beside a statement's fiscal year
+  const nmFig = F.ok(F.of(t, 'net_margin_fy')) ? F.of(t, 'net_margin_fy') : F.ok(F.of(t, 'net_margin_ttm')) ? F.of(t, 'net_margin_ttm') : null;
+  const net = F.value(nmFig);
   let basis = 'in the latest fiscal year';
   if (!fin(rev) && fin(qRev)) { rev = qRev; basis = 'in the latest quarter, against the same quarter a year earlier'; }
   if (!fin(rev) && !fin(net)) return null;
@@ -93,7 +98,7 @@ export function businessRead(t) {
   if (fn.available && fin(gr.revenue_yoy_pct)) evidence.push([`Revenue growth, ${fy}`, signed(gr.revenue_yoy_pct, 1)]);
   if (fn.available && fin(ni)) evidence.push([`Net income growth, ${fy}`, signed(ni, 1)]);
   if (fn.available && !fin(ni) && fin(gr.revenue_yoy_pct)) evidence.push(['Net income growth', 'Not meaningful: the earlier year was a loss or is missing']);
-  if (fin(net)) evidence.push([fn.available && fin(m.net_pct) ? `Net margin, ${fy}` : 'Profit margin, 12 months', `${num(net, 1)}%`]);
+  if (nmFig) evidence.push([`${nmFig.name}, ${F.period(nmFig).replace(/^Fiscal year ended /, 'year ended ')}`, fig(nmFig, { sym: t.ticker })]);
   if (fin(qRev)) evidence.push(['Revenue, latest quarter against a year earlier', signed(qRev, 1)]);
   return { text, why, conflict, evidence, source: fn.available ? "The company's annual statements and latest quarter, via Yahoo Finance." : 'Yahoo Finance.' };
 }
@@ -156,16 +161,17 @@ export function earningsNext(t, today = new Date()) {
 /** What is working for the company and against it (Classic's ovFactors): only what the payload shows, never ranked by
  *  importance, four of each at most, each naming the tab that holds its evidence. */
 export function factors(t, { lt = null, stars = null, price = null, fund = false, today } = {}) {
-  const fn = g(t, 'company', 'financials') || {}, gr = fn.growth || {}, bs = fn.balance_sheet || {}, q = g(t, 'quote') || {};
+  const fn = g(t, 'company', 'financials') || {}, gr = fn.growth || {};
   const news = g(t, 'news') || {}, si = g(t, 'company', 'short_interest') || {}, ow = g(t, 'company', 'ownership') || {};
   const eh = g(t, 'company', 'earnings_history') || {}, sc = g(t, 'sector_confirm') || {};
   const st = stars && stars.available ? stars : null;
-  const net = fin(g(fn, 'margins', 'net_pct')) ? fn.margins.net_pct : fin(q.profit_margin) ? q.profit_margin * 100 : null;
+  const nmFig = F.ok(F.of(t, 'net_margin_fy')) ? F.of(t, 'net_margin_fy') : F.of(t, 'net_margin_ttm');
+  const net = F.value(nmFig), nd = F.of(t, 'net_debt'), ndv = F.value(nd);
   const pos = [], neg = [];
   if (fn.available && fin(gr.revenue_yoy_pct) && gr.revenue_yoy_pct >= 1) pos.push({ text: `Revenue grew ${num(gr.revenue_yoy_pct, 1)}% in the latest fiscal year`, view: 'financials' });
   if (fin(net) && net > 0) pos.push({ text: `Profitable: about ${num(net, 0)} cents of profit per dollar of sales`, view: 'financials' });
   if (eh.available && eh.sample_size >= 4 && eh.beat_count > eh.sample_size / 2) pos.push({ text: `Beat analysts' earnings estimates in ${eh.beat_count} of the last ${eh.sample_size} quarters`, view: 'earnings' });
-  if (fin(bs.net_cash) && bs.net_cash > 0) pos.push({ text: `Holds more cash than debt (${usdCompact(bs.net_cash)} net cash)`, view: 'financials' });
+  if (fin(ndv) && ndv < 0) pos.push({ text: `Holds more cash than debt (net debt ${nd.text}, ${F.period(nd).replace(/^On /, 'on ')})`, view: 'financials' });
   if (ow.available && ow.insider_signal === 'buying') pos.push({ text: 'Company insiders bought more shares than they sold over six months', view: 'financials' });
   if (st && st.stars >= 4) pos.push({ text: `Optic star rating ${st.stars} of 5: ${String(st.word || '').toLowerCase()}`, view: 'long' });
   if (price && price.yr >= 5) pos.push({ text: `Share price up ${num(price.yr, 0)}% over the period shown`, view: 'chart' });
@@ -180,7 +186,7 @@ export function factors(t, { lt = null, stars = null, price = null, fund = false
   if (fin(net) && net < 0) neg.push({ text: 'The company lost money over the latest period', why: 'Losses are paid for from cash, borrowing or new shares until the business turns a profit.', view: 'financials' });
   if (fn.available && fin(gr.revenue_yoy_pct) && gr.revenue_yoy_pct <= -1) neg.push({ text: `Revenue fell ${num(Math.abs(gr.revenue_yoy_pct), 1)}% in the latest fiscal year`, why: 'Falling sales make it harder to grow profit.', view: 'financials' });
   if (fn.available && fin(gr.net_income_yoy_pct) && gr.net_income_yoy_pct <= -1) neg.push({ text: `Net income fell ${num(Math.abs(gr.net_income_yoy_pct), 1)}% in the latest fiscal year`, why: 'One-off gains and charges move profit more than sales, so check the statements before reading much into it.', view: 'financials' });
-  if (fin(bs.net_cash) && bs.net_cash < 0 && fin(net) && net < 0) neg.push({ text: `Owes ${usdCompact(-bs.net_cash)} more than it holds in cash while losing money`, why: 'Debt has to be paid or refinanced whether or not the business recovers.', view: 'financials' });
+  if (fin(ndv) && ndv > 0 && fin(net) && net < 0) neg.push({ text: `Owes ${nd.text} more than it holds in cash while losing money (net debt, ${F.period(nd).replace(/^On /, 'on ')})`, why: 'Debt has to be paid or refinanced whether or not the business recovers.', view: 'financials' });
   if (st && st.stars <= 2) neg.push({ text: `Optic star rating ${st.stars} of 5: ${String(st.word || '').toLowerCase()}`, why: "Optic's fair-value model places the price above the range it treats as usual for this company. A model estimate, not a verdict.", view: 'long' });
   if (si.available && si.squeeze_potential && !/^low/i.test(String(si.squeeze_potential)) && fin(si.percent_of_float)) neg.push({ text: `${num(si.percent_of_float * 100, 1)}% of the tradable shares are sold short`, why: 'Many investors are betting the price will fall, and short sellers buying back can also cause sudden rises.', view: 'financials' });
   if (sc.available && /lag/i.test(String(sc.rs_vs_sector_label || ''))) neg.push({ text: `Has lagged its sector over the last ${num(sc.window_sessions || 21, 0)} sessions`, why: sc.conflict || 'Peers in the same industry have done better over the same weeks.' });
@@ -236,14 +242,17 @@ export function nextSteps(sym, t, f, fund, today) {
 }
 
 /** Every key statistic (Classic's keyStatRows), keyed by its id; a figure the feed lacks is null. */
-export function keyStatRows(q, shortInt, phase) {
+export function keyStatRows(q, shortInt, phase, figs = null) {
   q = q || {};
+  // the registry's figures (Handoff 1), printed with their own text; a row the registry does not carry stays as it was
+  const reg = (id) => { const fv = figs && figs.figures && figs.figures[id]; return fv && fv.status === 'ok' ? fv : null; };
+  const fpe = reg('forward_pe'), nmt = reg('net_margin_ttm'), sym = (figs && figs.ticker) || q.ticker || '';
   const has = fin, day = phase === 'regular' || phase === 'after' ? 'today' : 'last session';
   const si = shortInt && shortInt.available !== false ? shortInt : {}, settled = si.settlement_date ? `, as of ${shortDate(si.settlement_date)}` : '';
   return {
     market_cap: ['Market cap', has(q.market_cap) ? usdBig(q.market_cap) : null],
     pe_trailing: ['P/E (trailing)', has(q.trailing_pe) && q.trailing_pe > 0 ? num(q.trailing_pe, 1) : null],
-    pe_forward: ['P/E (forward)', has(q.forward_pe) && q.forward_pe > 0 ? num(q.forward_pe, 1) : null],
+    pe_forward: ['P/E (forward)', fpe ? fig(fpe, { sym }) : null, fpe, sym],
     eps_trailing: ['EPS (trailing)', has(q.trailing_eps) ? money(q.trailing_eps) : null],
     eps_forward: ['EPS (forward)', has(q.forward_eps) ? money(q.forward_eps) : null],
     dividend_yield: ['Dividend yield', has(q.dividend_yield) && q.dividend_yield > 0 ? `${num(q.dividend_yield * 100, 2)}%` : null],
@@ -257,11 +266,11 @@ export function keyStatRows(q, shortInt, phase) {
     beta: ['Beta', has(q.beta) ? num(q.beta, 2) : null],
     short_float: ['Short interest', has(si.percent_of_float) ? `${num(si.percent_of_float * 100, 2)}% of float${settled}` : null],
     days_to_cover: ['Days to cover', has(si.days_to_cover) ? num(si.days_to_cover, 1) : null],
-    profit_margin: ['Profit margin, 12 months', has(q.profit_margin) ? `${num(q.profit_margin * 100, 1)}%` : null],
+    profit_margin: ['Net margin, last 12 months', nmt ? fig(nmt, { sym }) : null, nmt, sym],
     revenue_growth: ['Revenue growth, last quarter', has(q.revenue_growth) ? signed(q.revenue_growth * 100, 1) : null],
   };
 }
-const statList = (rows, ids) => html`<dl class="ovx-stats">${ids.filter((id) => rows[id] && rows[id][1] !== null).map((id) => html`<div><dt>${term(`stat:${id}`, rows[id][0])}</dt><dd>${rows[id][1]}</dd></div>`)}</dl>`;
+const statList = (rows, ids) => html`<dl class="ovx-stats">${ids.filter((id) => rows[id] && rows[id][1] !== null).map((id) => html`<div><dt>${rows[id][2] ? figName(rows[id][2], rows[id][0], { sym: rows[id][3] }) : term(`stat:${id}`, rows[id][0])}</dt><dd>${rows[id][1]}</dd></div>`)}</dl>`;
 
 /* ---------------- the past year's chart: its line, its marks and its source ---------------- */
 /** "INTC is up 128% over the past year, 38% below its highest close" (Classic's overviewChartTitle). */
@@ -328,7 +337,7 @@ const fine = (t) => html`<p class="asof">${t}</p>`;
 function evidenceFold(sym, rows, source, view, viewLabel) {
   if (!rows || !rows.length) return '';
   return html`<details class="more-inline q-ev"><summary>Show the figures</summary><div class="how-body">
-    <dl class="q-evlist">${rows.map(([k, v]) => html`<div><dt>${clean(k)}</dt><dd>${clean(v)}</dd></div>`)}</dl>
+    <dl class="q-evlist">${rows.map(([k, v]) => html`<div><dt>${clean(k)}</dt><dd>${v && typeof v === 'object' ? v : clean(v)}</dd></div>`)}</dl>
     ${source || view ? html`<p class="asof">${source ? `${source} ` : ''}${view ? tabLink(sym, view, viewLabel) : ''}</p>` : ''}</div></details>`;
 }
 /** The plain answer under each question (Classic's ovPlainHTML): the business, the multiple against its own history,
@@ -455,7 +464,7 @@ export function fourQuestions(c) {
 export function keyStats(c) {
   const q = g(c.t, 'quote');
   if (!q || !fin(q.price)) return '';
-  const rows = keyStatRows(q, g(c.t, 'company', 'short_interest'), c.phase), ids = Object.keys(rows).filter((id) => rows[id][1] !== null);
+  const rows = keyStatRows(q, g(c.t, 'company', 'short_interest'), c.phase, c.t.figures), ids = Object.keys(rows).filter((id) => rows[id][1] !== null);
   if (!ids.length) return '';
   return html`<section class="section" aria-labelledby="kf-h"><h2 class="t-h2" id="kf-h">Key statistics</h2>${statList(rows, ids)}
     <p class="asof">Select a label for what it means.</p></section>`;
@@ -733,7 +742,7 @@ export function restSection(c) {
     ['chart', 'Chart', band === null ? null : `${band}%`, band === null ? '52-week range unavailable' : 'of its 52-week range'],
     ['swing', 'Options', p.stance ? capFirst(String(p.stance)) : null, p.conviction ? convictionWords(p.conviction) : 'setup, levels and the chain'],
     ['earnings', 'Earnings', news.earnings_date ? fullDate(news.earnings_date) : null, fin(days) ? `in ${days} days` : 'no date published'],
-    ...(c.fund ? [] : [['financials', 'Financials', fin(q.revenue_growth) ? `${num(q.revenue_growth * 100, 1)}%` : null, fin(q.profit_margin) ? `revenue growth, ${num(q.profit_margin * 100, 1)}% margin` : 'revenue growth']]),
+    ...(c.fund ? [] : [['financials', 'Financials', fin(q.revenue_growth) ? `${num(q.revenue_growth * 100, 1)}%` : null, F.ok(F.of(t, 'net_margin_ttm')) ? `revenue growth, ${F.of(t, 'net_margin_ttm').text} net margin over 12 months` : 'revenue growth']]),
     ['news', 'News', news.article_count ? String(news.article_count) : null, news.overall_tone ? `headlines, ${news.overall_tone}` : 'headlines'],
     st && st.available ? ['long', 'Investing', `${st.stars} of 5 stars`, `Optic star rating, ${String(st.word || '').toLowerCase()}`] : ['long', 'Investing', fin(q.trailing_pe) ? num(q.trailing_pe, 1) : null, 'trailing P/E, valuation and holding case'],
   ];

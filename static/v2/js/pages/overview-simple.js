@@ -13,12 +13,28 @@ import { sessionFreshness } from '../core/marketTime.js';
 import { hrefFor } from '../nav.js';
 import { icon } from '../ui/icons.js';
 import * as OR from './overview-research.js';
+import * as FIG from '../core/figures.js';
+import { fig } from '../ui/figure.js';
 
 const fin = (v) => typeof v === 'number' && Number.isFinite(v);
 const g = (o, ...ks) => ks.reduce((x, k) => (x && typeof x === 'object' ? x[k] : undefined), o);
 const pct = (v, dp = 0) => `${num(Math.abs(v), dp)}%`;
 const lowerFirst = (s) => { const t = String(s || ''); return /^[A-Z][a-z]/.test(t) ? t.charAt(0).toLowerCase() + t.slice(1) : t; };
 const up = (x) => (x >= 0 ? 'up' : 'down');
+// Where a sentence prints a registry figure (Handoff 1), a token marks the place, and figured() puts the figure's own
+// text there as the control that opens its definition: the sentence is built as a string (its words are trimmed and
+// joined), so the control goes in last. The text is the registry's, so the sentence and the key statistics print the
+// same 27.6%, where this read printed "28%" beside them.
+const NM = '\u0001nm\u0001', FWD = '\u0001fwd\u0001';
+/** The same sentence as plain text, each registry figure's own text in its place. */
+export function plainText(text, F) {
+  return String(text == null ? '' : text).split(NM).join(F.netFig ? F.netFig.text : '').split(FWD).join(F.fwdFig ? F.fwdFig.text : '');
+}
+export function figured(text, F) {
+  const parts = String(text == null ? '' : text).split(/(\u0001nm\u0001|\u0001fwd\u0001)/);
+  if (parts.length === 1) return text;
+  return html`${parts.map((x) => (x === NM ? fig(F.netFig, { sym: F.sym }) : x === FWD ? fig(F.fwdFig, { sym: F.sym }) : x))}`;
+}
 
 /** The level's own words, falling back toward the middle: Expert to Advanced to Intermediate, New to Beginner. */
 export function say(level, w) {
@@ -36,7 +52,14 @@ export function simpleFacts({ sym, kind, t, lt, quote, session, earnings, price,
   const k = kind === 'fund' || kind === 'index' || kind === 'crypto' ? kind : 'company';
   const name = String(q.name || prof.name || sym || '').replace(/ USD$/, '');
   const val = k === 'company' ? OR.valuationRead(lt) : null;
-  const net = fn.available && fin(m.net_pct) ? m.net_pct : fin(q.profit_margin) ? q.profit_margin * 100 : null;
+  // the registry's net margin (its fiscal year, or its twelve months when no year is filed) and forward P/E
+  const fy0 = FIG.of(t, 'net_margin_fy'), netFig = FIG.ok(fy0) ? fy0 : FIG.ok(FIG.of(t, 'net_margin_ttm')) ? FIG.of(t, 'net_margin_ttm') : null;
+  const net = FIG.value(netFig), fwdFig = FIG.ok(FIG.of(t, 'forward_pe')) ? FIG.of(t, 'forward_pe') : null;
+  // said when the margin's year is not the year the growth figures beside it are from (the filings can be a year
+  // ahead of the provider's statements for a few days after a 10-K: AAPL, 2026-11-03)
+  const fyEnd = (fn.annual_periods || [])[0] || '', netEnd = ((netFig || {}).period || {}).end || '';
+  const apart = netFig && fyEnd && netEnd && Math.abs(new Date(netEnd) - new Date(fyEnd)) > 15 * 864e5;
+  const netWhen = apart ? ` The net margin is for the ${lowerFirst(FIG.period(netFig))}.` : '';
   const ne = t ? OR.earningsNext(t, today) : null, im = g(earnings, 'implied') || {};
   const pe = val ? val.cur : fin(q.trailing_pe) && q.trailing_pe > 0 ? q.trailing_pe : null;
   // the first point against it that the other two answers do not already make: the report and the price's own fall
@@ -49,13 +72,13 @@ export function simpleFacts({ sym, kind, t, lt, quote, session, earnings, price,
     yr: price && fin(price.yr) ? price.yr : null, m3: price && fin(price.m3) ? price.m3 : null, off: price && fin(price.off) ? price.off : null,
     span: (price && price.span) || 'over the past year', fullYear: !price || !price.span || price.span === 'over the past year',
     finAvailable: !!fn.available, rev: fn.available && fin(gr.revenue_yoy_pct) ? gr.revenue_yoy_pct : null,
-    ni: fn.available && fin(gr.net_income_yoy_pct) ? gr.net_income_yoy_pct : null, net,
+    ni: fn.available && fin(gr.net_income_yoy_pct) ? gr.net_income_yoy_pct : null, net, netFig, netWhen, netApart: !!apart,
     gross: fn.available && fin(m.gross_pct) ? m.gross_pct : null, op: fn.available && fin(m.operating_pct) ? m.operating_pct : null,
     qRev: fin(q.revenue_growth) ? q.revenue_growth * 100 : null,
     fy: (fn.annual_fiscal || [])[0] || '', fyEnd: (fn.annual_periods || [])[0] || '',
     pe, peMed: val ? val.med : null, peYears: val ? val.years : null, peTone: val ? val.tone : null, prem: val ? val.prem : null,
     peLow: fin(vh.low_pe) ? vh.low_pe : null, peHigh: fin(vh.high_pe) ? vh.high_pe : null,
-    fwdPe: fin(q.forward_pe) && q.forward_pe > 0 ? q.forward_pe : null, losing: fin(net) && net < 0,
+    fwdPe: FIG.value(fwdFig), fwdFig, losing: fin(net) && net < 0,
     report: ne && fin(ne.days) && ne.days >= 0 ? ne : null,
     implied: im.available && fin(im.implied_move_pct) ? { pct: im.implied_move_pct, expiry: im.expiry } : null,
     risk, category: prof.category || '', family: prof.fund_family || '',
@@ -120,35 +143,38 @@ function businessLine(F, L) {
   return say(L, {
     new: () => {
       const sales = fin(rev) ? `Its sales (revenue) ${verb(rev)}${amt(rev)} in its latest financial year${fin(ni) ? `, and its profit ${verb(ni)}${amt(ni)}` : ''}.` : '';
-      const keep = !fin(net) ? '' : net >= 0 ? ` It keeps about ${num(net, 0)} cents as profit from every dollar of sales.` : ` It is losing money: about ${num(-net, 0)} cents on every dollar of sales.`;
+      const keep = !fin(net) ? '' : net >= 0 ? ` It keeps about ${num(net, 0)} cents as profit from every dollar of sales, a net margin of ${NM}.` : ` It is losing money: about ${num(-net, 0)} cents on every dollar of sales, a net margin of ${NM}.`;
       const why = F.losing ? ' A company that loses money pays for it with cash, borrowing or new shares until it turns a profit.'
         : fin(rev) && rev >= 1 && (!fin(ni) || ni >= 1) ? ' Growing sales and profits are what usually support a share price over time, though the price can still fall if investors expected even more.' : '';
-      return `${sales}${keep}${why}`.trim();
+      return `${sales}${keep}${why}${F.netWhen}`.trim();
     },
     beginner: () => {
       const sales = fin(rev) ? `Revenue, the money it makes from sales, ${verb(rev)}${amt(rev)} in ${fyw}${fin(ni) ? `, and net income, its profit after all costs, ${verb(ni)}${amt(ni)}` : ''}.` : '';
-      const keep = !fin(net) ? '' : net >= 0 ? ` Its net margin, the share of each sales dollar it keeps as profit, is ${num(net, 0)}%.` : ` It is losing money: its net margin is ${signed(net, 0)}, so its costs are larger than its sales.`;
-      return `${sales}${keep}`.trim();
+      const keep = !fin(net) ? '' : net >= 0 ? ` Its net margin, the share of each sales dollar it keeps as profit, is ${NM}.` : ` It is losing money: its net margin is ${NM}, so its costs are larger than its sales.`;
+      return `${sales}${keep}${F.netWhen}`.trim();
     },
     intermediate: () => {
       const sales = fin(rev) ? `Revenue ${rose(rev)}${amt(rev, 1)}${fin(ni) ? ` and net income ${rose(ni)}${amt(ni, 1)}` : ''} in ${fy || 'the latest fiscal year'}` : '';
-      const margin = !fin(net) ? '' : net >= 0 ? `${sales ? ', on a' : 'A'} ${num(net, 1)}% net margin` : `${sales ? ', and the' : 'The'} company is not yet profitable (net margin ${signed(net, 1)})`;
+      const margin = !fin(net) ? '' : F.netWhen ? '' : net >= 0 ? `${sales ? ', on a' : 'A'} ${NM} net margin` : `${sales ? ', and the' : 'The'} company is not yet profitable (net margin ${NM})`;
+      const later = fin(net) && F.netWhen ? ` Its net margin for the ${lowerFirst(FIG.period(F.netFig))} was ${NM}${net < 0 ? ', a loss' : ''}.` : '';
       const conflict = fin(rev) && fin(F.qRev) && ((rev >= 1 && F.qRev <= -1) || (rev <= -1 && F.qRev >= 1))
         ? ` The latest quarter points the other way: revenue ${F.qRev >= 0 ? 'rose' : 'fell'} ${pct(F.qRev, 1)} against the same quarter a year earlier.` : '';
-      return `${sales}${margin}.${conflict}`.replace(/^\./, '').trim();
+      return `${sales}${margin}.${conflict}${later}`.replace(/^\./, '').trim();
     },
     advanced: () => {
-      const margins = [fin(F.gross) ? `${num(F.gross, 1)}% gross` : '', fin(F.op) ? `${num(F.op, 1)}% operating` : '', fin(net) ? `${num(net, 1)}% net` : ''].filter(Boolean).join(', ');
-      return `${fy || 'Latest fiscal year'}: revenue ${fin(rev) ? signed(rev, 1) : 'n/a'}, net income ${fin(ni) ? signed(ni, 1) : 'not meaningful'}${margins ? `; margins ${margins}` : ''}.${fin(F.qRev) ? ` Latest quarter revenue ${signed(F.qRev, 1)} against a year earlier.` : ''}`;
+      // a net margin from a later year than the line's is its own sentence, never listed under the line's year
+      const margins = [fin(F.gross) ? `${num(F.gross, 1)}% gross` : '', fin(F.op) ? `${num(F.op, 1)}% operating` : '', fin(net) && !F.netApart ? `${NM} net` : ''].filter(Boolean).join(', ');
+      const later = fin(net) && F.netApart ? ` Net margin ${NM} in the ${lowerFirst(FIG.period(F.netFig))}.` : '';
+      return `${fy || 'Latest fiscal year'}: revenue ${fin(rev) ? signed(rev, 1) : 'n/a'}, net income ${fin(ni) ? signed(ni, 1) : 'not meaningful'}${margins ? `; margins ${margins}` : ''}.${later}${fin(F.qRev) ? ` Latest quarter revenue ${signed(F.qRev, 1)} against a year earlier.` : ''}`;
     },
-    expert: () => `${fy || 'FY'} rev ${fin(rev) ? signed(rev, 1) : 'n/a'} y/y, NI ${fin(ni) ? signed(ni, 1) : 'n/m'}; ${[fin(F.gross) ? `GM ${num(F.gross, 1)}%` : '', fin(F.op) ? `OM ${num(F.op, 1)}%` : '', fin(net) ? `NM ${num(net, 1)}%` : ''].filter(Boolean).join(', ')}${fin(F.qRev) ? `; last quarter rev ${signed(F.qRev, 1)} y/y` : ''}.`,
+    expert: () => `${fy || 'FY'} rev ${fin(rev) ? signed(rev, 1) : 'n/a'} y/y, NI ${fin(ni) ? signed(ni, 1) : 'n/m'}; ${[fin(F.gross) ? `GM ${num(F.gross, 1)}%` : '', fin(F.op) ? `OM ${num(F.op, 1)}%` : '', fin(net) && !F.netApart ? `NM ${NM}` : ''].filter(Boolean).join(', ')}${fin(net) && F.netApart ? `; NM ${NM} (${lowerFirst(FIG.period(F.netFig))})` : ''}${fin(F.qRev) ? `; last quarter rev ${signed(F.qRev, 1)} y/y` : ''}.`,
   });
 }
 function valuationLine(F, L) {
   const { pe, peMed: med, peYears: yrs, peTone: tone, prem, fwdPe: fwd } = F;
   if (!fin(pe)) {
     if (F.losing) return say(L, { new: 'Because it is losing money, there is no price-to-earnings figure to judge its price by.', beginner: 'It has no P/E (price-to-earnings ratio), because there are no profits to divide its price by.',
-      intermediate: 'There is no P/E to read: its earnings are negative.', advanced: `No meaningful P/E: earnings are negative${fwd ? `; forward P/E ${num(fwd, 1)} on analysts' estimates` : ''}.`, expert: 'P/E not meaningful (negative earnings).' });
+      intermediate: 'There is no P/E to read: its earnings are negative.', advanced: `No meaningful P/E: earnings are negative${fwd ? `; forward P/E ${FWD} on analysts' estimates` : ''}.`, expert: 'P/E not meaningful (negative earnings).' });
     return say(L, { new: 'There is no price-to-earnings figure for it in the data, so its price cannot be compared with its profits here.', intermediate: 'No P/E in the data.', expert: 'P/E n/a.' });
   }
   if (fin(med)) {
@@ -157,16 +183,16 @@ function valuationLine(F, L) {
       new: () => `Buyers are paying about $${num(pe, 0)} for every $1 of profit the company made over the past year. That is ${vs === 'about the same' ? 'close to' : `${vs} than`} the $${num(med, 0)} they paid in a typical year over its last ${yrs} years${tone === 'good' ? ', so expectations are lower than they were. A lower price can also mean investors expect weaker results ahead.' : tone === 'bad' ? ', so a lot of good news is already expected, and a disappointment could hurt the price more.' : '.'}`,
       beginner: () => `The shares trade at ${num(pe, 1)} times the past year's earnings, a price-to-earnings ratio (P/E) of ${num(pe, 1)}. Its typical P/E over its last ${yrs} fiscal years was ${num(med, 1)}, so the price asks ${tone === 'good' ? 'less than usual. A lower P/E can also mean investors expect weaker results' : tone === 'bad' ? 'more than usual. A higher P/E means more good news is already expected' : 'about what it usually does'}.`,
       intermediate: () => `At ${num(pe, 1)} times trailing earnings, the shares trade ${Math.abs(prem) < 20 ? `close to their ${yrs}-year median multiple of ${num(med, 1)} (${signed(prem, 0)})` : `${pct(prem)} ${prem < 0 ? 'below' : 'above'} their ${yrs}-year median multiple of ${num(med, 1)}`}.${tone === 'good' ? ' A lower multiple can mean the market expects weaker results ahead.' : tone === 'bad' ? ' A higher multiple means more good news is already in the price, so a disappointment tends to cost more.' : ''}`,
-      advanced: () => `Trailing P/E ${num(pe, 1)} against a ${yrs}-year median of ${num(med, 1)}${fin(F.peLow) && fin(F.peHigh) ? ` (range ${num(F.peLow, 1)} to ${num(F.peHigh, 1)})` : ''}: ${signed(prem, 0)} on its own history.${fwd ? ` Forward P/E ${num(fwd, 1)} on analysts' estimates.` : ''}`,
-      expert: () => `${num(pe, 1)}x trailing P/E vs ${num(med, 1)}x ${yrs}y median${fin(F.peLow) && fin(F.peHigh) ? ` (${num(F.peLow, 1)}x to ${num(F.peHigh, 1)}x)` : ''}, ${signed(prem, 0)}${fwd ? `; ${num(fwd, 1)}x forward` : ''}.`,
+      advanced: () => `Trailing P/E ${num(pe, 1)} against a ${yrs}-year median of ${num(med, 1)}${fin(F.peLow) && fin(F.peHigh) ? ` (range ${num(F.peLow, 1)} to ${num(F.peHigh, 1)})` : ''}: ${signed(prem, 0)} on its own history.${fwd ? ` Forward P/E ${FWD} on analysts' estimates.` : ''}`,
+      expert: () => `${num(pe, 1)}x trailing P/E vs ${num(med, 1)}x ${yrs}y median${fin(F.peLow) && fin(F.peHigh) ? ` (${num(F.peLow, 1)}x to ${num(F.peHigh, 1)}x)` : ''}, ${signed(prem, 0)}${fwd ? `; ${FWD}x forward` : ''}.`,
     });
   }
   return say(L, {
     new: () => `Buyers are paying about $${num(pe, 0)} for every $1 of profit the company made over the past year. Optic has no record of what they usually pay for it, so it cannot say whether that is high or low.`,
     beginner: () => `The shares trade at ${num(pe, 1)} times the past year's earnings (a price-to-earnings ratio, or P/E). Optic has no history of its P/E to compare that with.`,
     intermediate: () => `${num(pe, 1)} times trailing earnings, with no multiple history in the data to compare it with.`,
-    advanced: () => `Trailing P/E ${num(pe, 1)}${fwd ? `, forward ${num(fwd, 1)} on estimates` : ''}; no multi-year P/E history in the data.`,
-    expert: () => `${num(pe, 1)}x trailing${fwd ? `, ${num(fwd, 1)}x forward` : ''}; no history to rank it against.`,
+    advanced: () => `Trailing P/E ${num(pe, 1)}${fwd ? `, forward ${FWD} on estimates` : ''}; no multi-year P/E history in the data.`,
+    expert: () => `${num(pe, 1)}x trailing${fwd ? `, ${FWD}x forward` : ''}; no history to rank it against.`,
   });
 }
 function fundLine(F, L) {
@@ -264,7 +290,7 @@ export function simpleSection(F, level, { label = '', loading = false, error = '
   if (error) return html`<section class="section ov-simple" aria-labelledby="sa-h">${head}<p>${error}</p></section>`;
   const ask = `Using the figures Optic has for ${F.sym}, what are the main things a long-term investor should understand about it, and what would change that picture?`;
   return html`<section class="section ov-simple" aria-labelledby="sa-h" ${own ? 'data-no-gloss' : ''}>${head}
-    ${simpleAnalysis(F, level).map(([q, lines], i) => html`<div class="sa-q"><h3 class="t-h3" id="sa-q${i}">${q}</h3>${lines.map((l) => html`<p>${l}</p>`)}</div>`)}
+    ${simpleAnalysis(F, level).map(([q, lines], i) => html`<div class="sa-q"><h3 class="t-h3" id="sa-q${i}">${q}</h3>${lines.map((l) => html`<p>${figured(l, F)}</p>`)}</div>`)}
     <div class="sa-next"><h3 class="t-label">Go further</h3><ul class="sa-steps">
       ${steps(F).map(([view, text, tab]) => html`<li><a class="nx-step" href="${hrefFor(view, F.sym)}"><span>${text}</span><span class="nx-to">${tab} ${icon('arrow')}</span></a></li>`)}
       <li><button type="button" class="nx-step" data-v2-milo="${ask}" data-v2-milo-ctx="${F.sym} Dossier, Overview: simple analysis" data-v2-milo-sym="${F.sym}"><span>Ask Milo a question about ${F.sym}</span><span class="nx-to">Ask Milo ${icon('arrow')}</span></button></li></ul>

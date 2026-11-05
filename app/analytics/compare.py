@@ -24,6 +24,8 @@ from __future__ import annotations
 import logging
 from typing import Any, Dict, List, Optional, Tuple
 
+from .. import figures as figures_mod
+
 log = logging.getLogger(__name__)
 
 MIN_TICKERS, MAX_TICKERS = 2, 4
@@ -140,13 +142,20 @@ def _metrics(payload: Dict[str, Any], longterm: Dict[str, Any]) -> Dict[str, Any
     hz = holding.get("horizons") or {}
     risk = holding.get("risk") or {}
     trend = holding.get("long_trend") or {}
-    val = holding.get("valuation") or {}
     draw = holding.get("drawdown") or {}
 
     def ma_dist(key: str) -> Optional[float]:
         return _num((mas.get(key) or {}).get("distance_pct"))
 
+    # The forward P/E is the figure registry's (app/figures), from the price in this same payload: it was the
+    # long-term model's, priced at another moment, and read 30.9 here against the Dossier's 31.2 for AAPL
+    # (authenticated audit, 2026-11-03). The row carries the whole figure, so the page can print its text and
+    # open its definition.
+    figs = (payload.get("figures") or {}).get("figures") or {}
+    fpe = figs.get("forward_pe") or figures_mod.forward_pe(quote)
+
     return {
+        "figures": {"forward_pe": fpe},
         "price": _num(quote.get("price")),
         "change_pct": _num(quote.get("change_pct")),
         # technicals.rsi is an object — the number is under .value.
@@ -161,7 +170,7 @@ def _metrics(payload: Dict[str, Any], longterm: Dict[str, Any]) -> Dict[str, Any
         "composite": _num((payload.get("verdict") or {}).get("composite_score")),
         "pe_percentile": _num(vh.get("percentile")),
         "pe_read": vh.get("read"),
-        "forward_pe": _num(val.get("forward_pe")),
+        "forward_pe": _num(fpe.get("value")),
         # Current distance from the all-time high, not the worst historical one.
         "drawdown_pct": _num(draw.get("current_drawdown_pct")),
         # Annualised over five years, so it is comparable between names with

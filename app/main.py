@@ -29,6 +29,7 @@ from fastapi.staticfiles import StaticFiles
 from . import public_errors
 from . import (ai, brief as brief_mod, feeds as feeds_mod, legal,
                news as news_mod, paper, session as session_mod)
+from . import figures as figures_mod
 from . import account as account_mod
 from .valuation import service as valuation_service
 from .valuation import store as valuation_store
@@ -738,6 +739,10 @@ def _swing_snapshot(
     *,
     include_earnings: bool = True,
     include_company: bool = True,
+    # The canonical figures (app/figures): the Dossier and Compare ask for them here; Milo's tools read the same
+    # ones through figures.for_ticker. Off by default because the alert checks build this snapshot for every
+    # watched symbol on a schedule, and the company-facts document behind them is several megabytes from SEC.
+    include_figures: bool = False,
     budget: Optional[float] = None,
     parallel: bool = False,
     timings: Optional[_Timings] = None,
@@ -748,6 +753,10 @@ def _swing_snapshot(
 
     legs = _Legs(parallel, timings)
     legs.start("quote", PROVIDER.quote, ticker)
+    if include_figures:
+        # the filings, beside every other fetch; 0.2 to 0.9s cold and cached a day (sec_facts.FACTS_TTL), so it
+        # finishes inside the build's own seconds rather than after them
+        legs.start("sec_figures", figures_mod.load_via, YF_PROVIDER, ticker)
     legs.start("hist", PROVIDER.history, ticker, period="2y", interval="1d")
     legs.start("news", news_mod.analyse, YF_PROVIDER, ticker)
     legs.start("expiries", PROVIDER.expirations, ticker)
@@ -983,6 +992,18 @@ def _swing_snapshot(
         except Exception as exc:  # company data is context, never fatal
             company = {"error": "fundamentals unavailable: {}".format(public_errors.public(exc))}
 
+    # One value per financial figure, which every panel of this payload and every other surface prints
+    # (owner's Handoff 1). A failure says so figure by figure; nothing falls back to another panel's number.
+    figures_block: Optional[Dict[str, Any]] = None
+    if include_figures:
+        try:
+            figures_block = figures_mod.resolve(ticker, quote, sec=legs.get("sec_figures"),
+                                                financials=(company or {}).get("financials"))
+        except Exception as exc:                                    # noqa: BLE001 - context, never fatal
+            logging.getLogger("uvicorn.error").warning("figures for %s: %s", ticker, exc)
+            figures_block = figures_mod.unavailable(
+                ticker, "The figures could not be worked out just now ({}).".format(public_errors.public(exc)))
+
     # Shown on the Swing tab but never scored. Skipped for tracker scans: it costs
     # three more provider calls per ticker, and over a thirty-name shortlist that
     # is exactly the extra traffic that earns a rate limit — for a panel the
@@ -1053,6 +1074,8 @@ def _swing_snapshot(
             "used": sorted(chain["expiry"].unique().tolist()) if chain is not None and not chain.empty else [],
         },
     }
+    if figures_block is not None:
+        payload["figures"] = figures_block
     # Built last, from the finished payload, so an argument can cite any panel on
     # the page and cannot drift from the numbers it quotes.
     payload["cases"] = cases_mod.build(payload)
@@ -1262,7 +1285,7 @@ async def ticker_analysis(
     _KEEP_WARM["read_at"] = time.time()
     timings = _Timings()
     payload = await _run(_swing_snapshot, ticker, wanted, max_expiries, macro,
-                         include_earnings=True, budget=budget, parallel=True,
+                         include_earnings=True, include_figures=True, budget=budget, parallel=True,
                          timings=timings)
     # After the snapshot, not inside it, and onto a copy of the quote. The
     # payload is built fresh per request but its `quote` is the provider's
@@ -5793,7 +5816,7 @@ def _compare_payload(wanted: List[str]) -> Dict[str, Any]:
         # The same snapshot the Swing tab uses, minus the option chain: the
         # comparison needs technicals and structure, and pulling four chains
         # would triple the wait for numbers it never reads.
-        return _swing_snapshot(sym, None, 1, False, include_earnings=False)
+        return _swing_snapshot(sym, None, 1, False, include_earnings=False, include_figures=True)
 
     def longterm_for(sym: str) -> Dict[str, Any]:
         # analyse_holding(provider, ticker) — and the module is imported as
@@ -6935,6 +6958,28 @@ async def scanner_catalogue() -> Dict[str, Any]:
     return await _run(build)
 
 
+@app.get("/api/figures/registry")
+async def figures_registry(response: Response) -> Dict[str, Any]:
+    """What each financial figure is: definitions at every knowledge level, formulas, periods, bases.
+
+    Served as data so the Dossier, Compare and Milo's sources read one copy (owner's Handoff 1); the page asks
+    once per session. An hour of browser cache: the entries change only with a deploy, which bumps `version`."""
+    response.headers["Cache-Control"] = "public, max-age=3600"
+    return figures_mod.public()
+
+
+@app.get("/api/figures/{ticker}")
+async def figures_for(ticker: str) -> Dict[str, Any]:
+    """One company's registered figures, each with its value, period, inputs and source. The same values
+    /api/ticker carries under `figures`, for a page that does not load the whole snapshot."""
+    sym = ticker.upper().strip()
+    try:
+        return await _run(figures_mod.for_ticker, PROVIDER, sym, YF_PROVIDER)
+    except Exception as exc:                                        # noqa: BLE001 - said figure by figure
+        return figures_mod.unavailable(sym, "The figures could not be worked out just now ({}).".format(
+            public_errors.public(exc)))
+
+
 @app.get("/api/segments/{ticker}")
 async def segments_panel(ticker: str,
                          force: bool = Query(False)) -> Dict[str, Any]:
@@ -7400,7 +7445,9 @@ def _research_deps() -> "desk_research_mod.Deps":
         rate_path=_rate_path_for,
         desk_load=desk_edition_mod.load,
         ex_dividend=_ex_dividend,
-        session_state=lambda: session_mod.state())
+        session_state=lambda: session_mod.state(),
+        # the figure registry's values, which the pack carries in place of its own copies (Handoff 1)
+        figures=lambda t: figures_mod.for_ticker(PROVIDER, t, YF_PROVIDER))
 
 
 def _research_ticker(context: Optional[Dict[str, Any]]) -> Optional[str]:
@@ -8184,10 +8231,20 @@ def _tool_fundamentals(ticker: str) -> Dict[str, Any]:
     if isinstance(holding, dict) and holding.get("error") and not holding.get("price"):
         # no price history: said as not found, not as an "ok" result around an error (post-demo Phase 08)
         return {"status": "not_found", "error": "Optic's long-term model has nothing for {}: {}.".format(ticker, holding["error"])}
-    return milo_tools.compact_generic(
+    return milo_tools.with_figures(milo_tools.compact_generic(
         "Optic's long-term model (Yahoo Finance prices and statements, SEC filings)",
         {"holding": holding, "close_defence": defence_mod.for_longterm(holding)},
-        datetime.now(timezone.utc).isoformat())
+        datetime.now(timezone.utc).isoformat()), _tool_figures(ticker))
+
+
+def _tool_figures(ticker: str) -> Dict[str, Any]:
+    """The figure registry's values for a tool result (app/figures): the numbers the Dossier prints, each with its
+    period and source, which Milo quotes and the sources under its answer link to (owner's Handoff 1)."""
+    try:
+        return figures_mod.compact(figures_mod.for_ticker(PROVIDER, ticker, YF_PROVIDER))
+    except Exception as exc:                                        # noqa: BLE001 - the tool answers without them
+        logging.getLogger("uvicorn.error").info("figures for Milo, %s: %s", ticker, exc)
+        return {}
 
 
 def _tool_valuation(ticker: str) -> Dict[str, Any]:
@@ -8195,7 +8252,7 @@ def _tool_valuation(ticker: str) -> Dict[str, Any]:
     if not out.get("available", True):
         return {"status": "unavailable", "error": out.get("reason") or "The fair-value model does not run for "
                                                                     "{} (missing filings).".format(ticker)}
-    return milo_tools.compact_valuation(out)
+    return milo_tools.with_figures(milo_tools.compact_valuation(out), _tool_figures(ticker))
 
 
 def _tool_earnings(ticker: str) -> Dict[str, Any]:
@@ -8222,14 +8279,22 @@ def _tool_market() -> Dict[str, Any]:
 
 
 def _tool_compare(tickers: List[str]) -> Dict[str, Any]:
-    return milo_tools.compact_generic("Optic's Compare view", _compare_payload(tickers))
+    payload = _compare_payload(tickers)
+    # each row's registry figures leave the rows for the result's own `figures`, compacted, so the comparison's
+    # forward P/E reaches Milo once, with its period and source, and is not trimmed away with a long row
+    figs: Dict[str, Any] = {}
+    for row in payload.get("rows") or []:
+        block = {"ticker": row.get("ticker"), "figures": row.pop("figures", None) or {}}
+        figs.update(figures_mod.compact(block))
+    return milo_tools.with_figures(milo_tools.compact_generic("Optic's Compare view", payload), figs)
 
 
 def _tool_assessment(ticker: str, mode: str) -> Dict[str, Any]:
     out = research_service.build(PROVIDER, YF_PROVIDER, ticker, mode, rate=_rate())
     routing = {"mode": mode, "source": "tool", "depth": "full", "why": "Looked up by Milo for this question."}
-    return milo_tools.compact_generic("Optic's research framework (deterministic rules, no model call)",
-                                      research_milo.compact(out, routing))
+    return milo_tools.with_figures(
+        milo_tools.compact_generic("Optic's research framework (deterministic rules, no model call)",
+                                   research_milo.compact(out, routing)), _tool_figures(ticker))
 
 
 def _tool_screen(request: str) -> Dict[str, Any]:

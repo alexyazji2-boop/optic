@@ -73,7 +73,10 @@ def test_net_cash_reconciles_with_its_parts(tmp_path):
       print(JSON.stringify({ n: F.netCash(35934e6, 98657e6, -62723e6), bad: F.netCash(10e9, 5e9, 9e9), line: F.netCashLine([35934e6, 23646e6], [98657e6, 132480e6], ['FY25', 'FY22']) }));
     """)
     assert abs(got["n"]["net"] + 62723e6) < 1 and got["n"]["matches"] is True and got["bad"]["matches"] is False
-    assert got["line"] == "Net debt of $62.7B at the end of FY25: $35.9B of cash and equivalents against $98.7B of debt. Debt fell from $132.5B at the end of FY22."
+    # the caption states the two plotted lines and no difference of them: from cash and equivalents alone it read
+    # "Net debt of $62.7B" beside the page's $44.0B (owner's Handoff 1); net debt is the figure registry's
+    assert got["line"] == "$35.9B of cash and equivalents against $98.7B of debt at the end of FY25. Debt fell from $132.5B at the end of FY22."
+    assert "Net debt" not in got["line"] and "Net cash" not in got["line"]
 
 
 def test_a_total_line_among_its_parts_is_left_out_not_counted_twice(tmp_path):

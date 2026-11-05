@@ -1005,6 +1005,35 @@ table.st td a { text-decoration: none; font-weight: 600; } table.st td a:hover {
 /* the hover and focus preview (B9.1): the same words, no controls, out of the way of the pointer */
 .term-tip { position: absolute; z-index: 89; display: grid; gap: 4px; padding: 10px 12px; background: var(--c-raised); color: var(--c-ink-2); border: 1px solid var(--c-line); border-radius: var(--r-lg); box-shadow: var(--sh-pop); font-size: var(--t-sm); line-height: 1.45; pointer-events: none; }
 .term-tip p { margin: 0; }
+/* Figure registry (Handoff 1, ui/figure.js): a financial figure printed from the registry is the control that
+   defines it, underlined with dots like a term, so there is no info icon after every number. Its panel is the
+   term's popover in sections; on a phone it is a sheet from the bottom with the page still in view above it. */
+.fig { display: inline; padding: 0; margin: 0; border: 0; background: none; color: inherit; font: inherit; font-variant-numeric: tabular-nums; text-align: inherit; cursor: help; text-decoration: underline dotted var(--c-ink-3); text-decoration-thickness: 1.5px; text-underline-offset: 3px; }
+.fig:hover, .fig[aria-expanded="true"] { text-decoration-color: var(--c-ink); }
+.fig:focus-visible { outline: 2px solid var(--c-focus); outline-offset: 2px; border-radius: 2px; }
+.fig.is-missing, .fig-missing { color: var(--c-ink-3); }
+/* the registry could not be read: each figure says its definition is missing (core/figures.js sets the flag) */
+:root[data-fig-registry="failed"] .fig:not(.fig-name)::after { content: " (definition unavailable)"; color: var(--c-ink-3); font-size: var(--t-xs); text-decoration: none; }
+/* one column that may shrink below its longest word: an XBRL tag (RevenueFromContractWithCustomerExcluding...) set the
+   grid's width and clipped every line at a phone's edge */
+.fig-pop { grid-template-columns: minmax(0, 1fr); gap: 8px; max-height: min(70vh, 640px); overflow: auto; overscroll-behavior: contain; }
+.fig-pop p, .fig-pop small { overflow-wrap: anywhere; }
+.fig-pop p { margin: 0; } .fig-pop .fig-h { color: var(--c-ink); font-weight: 600; }
+.fig-sym { margin-left: 4px; color: var(--c-ink-3); font: 600 var(--t-sm)/1 var(--f-label); }
+.fig-v { color: var(--c-ink); font-size: var(--t-xl); font-weight: 600; font-variant-numeric: tabular-nums; }
+.fig-v small { margin-left: 6px; color: var(--c-ink-3); font-size: var(--t-sm); font-weight: 400; }
+.fig-badges { display: flex; flex-wrap: wrap; gap: 6px; }
+.fig-badge { display: inline-block; padding: 2px 8px; border: 1px solid var(--c-line); border-radius: var(--r-xs); color: var(--c-ink-2); font: 500 var(--t-xs)/1.5 var(--f-label); }
+.fig-def { color: var(--c-ink); } .fig-def.is-missing, .fig-why { color: var(--c-ink-2); }
+.fig-sec { display: grid; gap: 2px; padding-top: 8px; border-top: 1px solid var(--c-line-2); }
+.fig-k { color: var(--c-ink-3); font: 600 var(--t-xs)/1.4 var(--f-label); }
+.fig-sym-line { color: var(--c-ink-2); font-family: var(--f-label); }
+.fig-ins { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.fig-ins li { display: grid; gap: 1px; } .fig-ins b { color: var(--c-ink); font-weight: 600; font-variant-numeric: tabular-nums; }
+.fig-ins small, .fig-meta, .fig-note { color: var(--c-ink-3); font-size: var(--t-sm); }
+.fig-pop a { color: var(--c-ink); text-decoration: underline; }
+.fig-pop .fig-retry { margin-left: 6px; }
+.fig-pop.is-sheet { position: fixed; top: auto; right: 0; bottom: 0; left: 0; max-height: 72vh; padding: 16px 16px calc(16px + env(safe-area-inset-bottom)); border-radius: var(--r-xl) var(--r-xl) 0 0; }
 
 /* the search's own way out, for a phone with no Escape key (beginner brief item 12) */
 .palette-top { display: flex; align-items: center; gap: 8px; padding-right: 10px; border-bottom: 1px solid var(--c-line-2); } .palette-panel .palette-top input { flex: 1; min-width: 0; border-bottom: 0; }

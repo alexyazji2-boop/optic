@@ -11,6 +11,8 @@ import { num, signed, money, compact, clean, fullDate, shortDate, isNum, plural 
 import { lineChart } from '../ui/chart.js';
 import { skeleton, failed } from '../ui/states.js';
 import { etStamp } from '../core/marketTime.js';
+import * as FIG from '../core/figures.js';
+import { fig } from '../ui/figure.js';
 
 let D = {}, live = true, mainEl = null;
 const TAG = { reported: 'Reported', estimate: 'Estimate', optic: 'Optic' };
@@ -25,7 +27,7 @@ export const firstSentences = (t, n = 2) => (String(t || '').match(/(?:[^.!?]|[.
 /** The sheet's rows from the payloads, so what it says can be checked without a browser. */
 export function sheetFacts(d) {
   const t = d.ticker || {}, q = { ...(t.quote || {}), ...(d.quote || {}) }, c = t.company || {}, f = c.financials || {};
-  const a = f.annual || {}, per = f.annual_periods || [], g = f.growth || {}, m = f.margins || {}, bs = f.balance_sheet || {};
+  const a = f.annual || {}, per = f.annual_periods || [], g = f.growth || {}, m = f.margins || {};
   const fvd = d.fairValue || {}, fv = fvd.fair_value || {}, st = fvd.stars || {}, e = d.earnings || {}, nr = e.next_report || {}, pr = e.pricing || {};
   const eh = c.earnings_history || {}, gex = t.gex || {}, im = e.implied || {}, te = t.technicals || {}, ma = te.moving_averages || {};
   const lt = (d.longterm || {}).holding || {}, rk = lt.risk || {}, dd = lt.drawdown || {};
@@ -35,10 +37,12 @@ export function sheetFacts(d) {
       exchange: q.exchange || (d.session || {}).exchange || null, session: (((d.session || {}).session) || {}).label || null, observed: q.as_of || q.market_time || null },
     business: { summary: firstSentences(clean(((d.session || {}).profile || {}).summary || '').replace(/^The Company\b/, q.name || d.sym)), industry: ((d.session || {}).profile || {}).industry, sector: ((d.session || {}).profile || {}).sector, market_cap: q.market_cap },
     financials: f.available ? { period: per[0] || null, fiscal: (f.annual_fiscal || [])[0] || null, revenue: (a.revenue || [])[0], net_income: (a.net_income || [])[0],
-      fcf: (a.free_cash_flow || [])[0], revenue_yoy: g.revenue_yoy_pct, income_yoy: g.net_income_yoy_pct, op_margin: m.operating_pct, net_margin: m.net_pct,
-      net_cash: bs.net_cash, cash: bs.cash, liquid: bs.cash_and_short_term, debt: bs.total_debt } : null,
+      revenue_yoy: g.revenue_yoy_pct, income_yoy: g.net_income_yoy_pct, op_margin: m.operating_pct } : null,
+    // the figure registry's own values, each with its period and source (Handoff 1): free cash flow, the net margin and
+    // net debt are printed from here, not from the statements above, whose year can be a different one
+    figures: { fcf: FIG.of(t, 'free_cash_flow_fy'), netMargin: FIG.of(t, 'net_margin_fy'), netDebt: FIG.of(t, 'net_debt'), fwdPe: FIG.of(t, 'forward_pe') },
     valuation: { available: !!(fv.available && st.available), low: fv.low, mid: fv.mid, high: fv.high, stars: st.stars, word: st.word, basis: fv.basis, reason: st.reason || fv.reason,
-      pe: q.trailing_pe, fwd_pe: q.forward_pe },
+      pe: q.trailing_pe },
     earnings: { date: nr.date || null, days: nr.days_away, confirmed: nr.confirmed, timing: nr.timing, eps: nr.eps_consensus, eps_low: nr.eps_low, eps_high: nr.eps_high,
       revenue: nr.revenue_consensus_label, beats: eh.beat_count, sample: eh.sample_size, event_avg: pr.event_day_avg_pct },
     chart: { sma200: ma.sma200 && (ma.sma200.value ?? ma.sma200), high52: q.fifty_two_high, low52: q.fifty_two_low, levels },
@@ -55,7 +59,9 @@ function series() {
 }
 
 function page1(F) {
-  const id = F.identity, b = F.business, fi = F.financials, v = F.valuation, e = F.earnings;
+  const id = F.identity, b = F.business, fi = F.financials, v = F.valuation, e = F.earnings, R = F.figures || {};
+  // a registry row: the figure, and the period and source it carries, which need not be the statements' year
+  const reg = (fv, name) => html`<tr><th>${name}</th><td>${fv ? fig(fv, { sym: id.sym }) : html`<span class="sh-na">Not reported</span>`}</td><td>${fv ? [FIG.period(fv), (fv.source || {}).form ? `${fv.source.form}, filed ${fullDate(fv.source.filed)}` : (fv.source || {}).provider].filter(Boolean).join(', ') : ''}</td></tr>`;
   return html`<section class="sh-page">
     <header class="sh-head"><div><p class="sh-kicker">Research sheet</p><h1>${id.name} <span class="sh-sym">${id.sym}</span></h1>
         <p class="sh-meta">${[id.exchange, id.currency].filter(Boolean).join(', ')}${b.industry ? `. ${[b.industry, b.sector].filter(Boolean).join(', ')}` : ''}</p></div>
@@ -67,15 +73,14 @@ function page1(F) {
       <table class="sh-t"><tbody>
         <tr><th>Revenue</th><td>${na(fi.revenue, usd)}</td><td>${na(fi.revenue_yoy, (x) => `${signed(x)} on the year before`)}</td></tr>
         <tr><th>Net income</th><td>${na(fi.net_income, usd)}</td><td>${na(fi.income_yoy, (x) => `${signed(x)} on the year before`)}</td></tr>
-        <tr><th>Free cash flow</th><td>${na(fi.fcf, usd)}</td><td>${isNum(fi.fcf) && fi.revenue ? `${num((fi.fcf / fi.revenue) * 100, 1)}% of revenue` : ''}</td></tr>
-        <tr><th>Margins</th><td>${na(fi.op_margin, (x) => `${num(x, 1)}% operating`)}</td><td>${na(fi.net_margin, (x) => `${num(x, 1)}% net`)}</td></tr>
-        <tr><th>${isNum(fi.net_cash) && fi.net_cash < 0 ? 'Net debt' : 'Net cash'}</th><td>${na(isNum(fi.net_cash) ? Math.abs(fi.net_cash) : null, usd)}</td><td>${isNum(fi.liquid) ? `cash and short-term investments ${usd(fi.liquid)}, debt ${usd(fi.debt) || 'n/a'}` : isNum(fi.cash) ? `cash ${usd(fi.cash)}, debt ${usd(fi.debt) || 'n/a'}` : ''}</td></tr>
+        <tr><th>Operating margin</th><td>${na(fi.op_margin, (x) => `${num(x, 1)}%`)}</td><td></td></tr>
+        ${reg(R.fcf, 'Free cash flow')}${reg(R.netMargin, 'Net margin')}${reg(R.netDebt, 'Net debt')}
       </tbody></table>` : html`<p class="sh-na">No annual statements in the feed for ${id.sym}.</p>`}
     <h2>Valuation ${tag('optic')}</h2>
     ${v.available ? html`<p><b>${clean(v.word || '')}.</b> The usual range from its own five-year P/E is ${money(v.low, 0)} to ${money(v.high, 0)} (middle ${money(v.mid, 0)}); the price is ${money(id.price)}. ${v.stars} of 5 stars, where more stars means cheaper against its own past.</p>
       <p class="sh-sub">${clean(v.basis || '')} A reading against its own history, not an intrinsic value or a forecast.</p>`
       : html`<p class="sh-na">${clean(v.reason || 'No valuation range for this company.')}</p>`}
-    <p class="sh-sub">P/E ${na(v.pe, (x) => `${num(x, 1)} trailing`)} ${tag('reported')}, ${na(v.fwd_pe, (x) => `${num(x, 1)} forward`)} ${tag('estimate')}</p>
+    <p class="sh-sub">P/E ${na(v.pe, (x) => `${num(x, 1)} trailing`)} ${tag('reported')}, ${FIG.ok(R.fwdPe) ? html`${fig(R.fwdPe, { sym: id.sym })} forward` : 'forward not reported'} ${tag('estimate')}</p>
     <h2>Earnings ${tag('estimate')}</h2>
     ${e.date ? html`<p><b>Next report ${fullDate(e.date)}</b>${isNum(e.days) ? `, ${plural(e.days, 'day')} away` : ''}, ${e.confirmed ? 'date confirmed' : 'date not confirmed'}${e.timing === 'after_close' ? ', after the close' : e.timing === 'before_open' ? ', before the open' : ''}.
       ${isNum(e.eps) ? `Analysts expect EPS of ${money(e.eps)}${isNum(e.eps_low) && isNum(e.eps_high) ? ` (range ${money(e.eps_low)} to ${money(e.eps_high)})` : ''}${e.revenue ? ` on revenue of about ${e.revenue}` : ''}.` : 'No consensus in the feed.'}</p>` : html`<p class="sh-na">No report date in the feed.</p>`}

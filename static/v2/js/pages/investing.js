@@ -23,6 +23,8 @@ import { core, header, tabs, isFund, livePrice } from './dossier-frame.js';
 import * as VS from './valuation-scenarios.js';
 import { kindOf, can } from '../core/instrument.js';
 import * as TR from '../core/track.js';
+import * as FIG from '../core/figures.js';
+import { fig } from '../ui/figure.js';
 import { mountDcf, disposeDcf, dcfContext } from './dcf.js';
 import { scoreLine, tone100, toneBand } from '../ui/score.js';
 import { convictionPhrase } from '../core/research-words.js';
@@ -269,7 +271,7 @@ function accumulation() {
   const h = (D.lt || {}).holding; if (!h) return '';
   const z = h.accumulation_zones || [], va = h.valuation || {};
   return html`<section class="section" aria-labelledby="ac-h"><h2 class="t-h2" id="ac-h">Valuation and long-term price levels</h2>
-    ${kv([['Forward P/E', num(va.forward_pe, 1)], ['Trailing P/E', num(va.trailing_pe, 1)], ['Price to book', num(va.price_to_book, 1)], ['Dividend yield', isNum(va.dividend_yield) ? pct(va.dividend_yield * 100, 2) : 'n/a'], ['Analysts\' average target', num(((h.fundamentals || {}).analyst_target))]], 3)}
+    ${kv([['Forward P/E', FIG.ok((va.figures || {}).forward_pe) ? fig(va.figures.forward_pe, { sym: D.sym }) : 'n/a'], ['Trailing P/E', num(va.trailing_pe, 1)], ['Price to book', num(va.price_to_book, 1)], ['Dividend yield', isNum(va.dividend_yield) ? pct(va.dividend_yield * 100, 2) : 'n/a'], ['Analysts\' average target', num(((h.fundamentals || {}).analyst_target))]], 3)}
     <ul class="plain">${(va.notes || []).map((n) => html`<li>${clean(n)}</li>`)}</ul><p class="asof">${clean(va.caveat || '')}</p>
     ${z.length ? html`<div class="tscroll"><table class="t"><thead><tr><th>Level</th><th>Price</th><th>Distance</th><th>Role</th></tr></thead><tbody>${z.map((l) => html`<tr><td>${l.label}${l.is_golden ? ' (golden zone)' : ''}</td><td>${num(l.price)}</td><td>${signed(l.distance_pct)}</td><td>${capFirst(l.kind)}</td></tr>`)}</tbody></table></div>
       <p class="asof">Levels from the weekly chart where the price has turned before. Not targets, not prices to buy at, and not advice.</p>` : ''}
@@ -305,7 +307,7 @@ export async function render(main, route) {
   document.title = `${sym} Investing, Optic`;
   if (lp) lp.stop();
   lp = livePrice(main, route.symbol, () => D, 'long', undefined);
-  provideContext(() => ({ view: 'long', ticker: sym, quote: D.quote, track_record: TR.context(), long_term: D.lt, fair_value: D.fv, valuation: dcfContext(), scenarios: D.vsBody }));
+  provideContext(() => ({ view: 'long', ticker: sym, quote: FIG.quoteForMilo(D.quote), track_record: TR.context(), long_term: D.lt, fair_value: D.fv, valuation: dcfContext(), scenarios: D.vsBody }));
   paint(); wire(main);
   // the strip, folds and Panels (Classic parity B3); the two specialist sections open from Advanced, as Classic's did
   sections(main, 'long', { levels: { 'the multiple against its own history': 2, 'valuation and long-term price levels': 2 }, norm: (t) => { const n = ((main.querySelector('.dhead .name span') || {}).textContent || '').trim(); return n ? t.split(n).join('the company') : t; } });

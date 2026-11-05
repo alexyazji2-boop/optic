@@ -324,5 +324,10 @@ class TradierProvider(MarketDataProvider):
 
     # ------------------------------------------------ delegated (no Tradier data)
 
+    def sec_filings(self, ticker: str):
+        """The fallback's: Tradier carries no filings (app/figures reads them for the figure registry)."""
+        fn = getattr(self.fallback, "sec_filings", None)
+        return fn(ticker) if callable(fn) else (None, None, "This data source does not read SEC filings.")
+
     def news(self, ticker: str, limit: int = 12) -> List[Dict[str, Any]]:
         return self.fallback.news(ticker, limit=limit) if self.fallback else []

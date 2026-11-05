@@ -13,6 +13,7 @@ import { button as miloButton, provideContext } from '../ui/milo.js';
 import { icon } from '../ui/icons.js';
 import { scoreLine, tone100 } from '../ui/score.js';
 import { asOfLine } from '../ui/states.js';
+import { fig as figControl } from '../ui/figure.js';
 
 const MAX = 4, TIE = 5;
 export const GROUPS = [
@@ -46,6 +47,13 @@ export const GROUPS = [
     { key: 'composite', label: 'Composite', kind: 'signed', lead: 'high', means: 'The swing-tab score for this name. Included so you can see whether it agrees with the horizon ranks above.' }] },
 ];
 
+/** A row the figure registry carries (the forward P/E, Handoff 1): its own text, as the Dossier prints it, opening the
+ *  same definition. Null for any other row, or when the server sent no registry figure for this column. */
+export function regCell(m, r) {
+  const fv = ((r || {}).figures || {})[m.key];
+  if (!fv || fv.status !== 'ok' || r[m.key] === null || r[m.key] === undefined) return null;
+  return figControl(fv, { sym: r.ticker, label: `${m.label}, ${r.ticker}` });
+}
 export function cell(kind, v, why) {
   if (v === null || v === undefined || v === '') return why ? html`<span class="t-muted">n/a, ${why}</span>` : html`<span class="t-muted" aria-label="not available">n/a</span>`;
   if (kind === 'text') return clean(String(v));
@@ -219,7 +227,7 @@ function grid(c) {
         return html`<tr class="cmp-rank"><th scope="row">${h.name}<small class="t-muted cmp-means">${rankRead(rk.slice().sort((x, y) => y.score - x.score))}</small></th>${rows.map((r) => { const x = rk.find((y) => y.ticker === r.ticker), w = x ? st[x.ticker] : ''; const part = x && x.inputs && x.inputs[0] < x.inputs[1]; return html`<td>${x ? html`<span class="${w === 'best' ? 'cmp-best' : w === 'level' ? 'cmp-level' : 't-muted'}">${w === 'best' ? 'highest' : w}</span> <span class="${tone100(x.score)}">${num(x.score, 0)}</span>${scoreLine(x.score)}${part ? html`<small class="t-muted cmp-part">from ${x.inputs[0]} of ${x.inputs[1]} inputs</small>` : ''}` : 'n/a'}</td>`; })}</tr>`; })}
       ${GROUPS.map((g) => html`<tr class="cmp-group"><th scope="rowgroup" colspan="${rows.length + 1}">${g.title}</th></tr>
         ${g.rows.map((m) => { const lead = leader(m, rows, c.leaders);
-          return html`<tr><th scope="row">${m.label}${m.note ? html` <small class="t-muted">${m.note}</small>` : ''}<small class="t-muted cmp-means">${m.means}</small></th>${rows.map((r) => html`<td>${cell(m.kind, r[m.key], (r.why_na || {})[m.key])}${lead === r.ticker ? html` <span class="cmp-dot" title="${m.lead === 'high' ? 'Higher' : 'Lower'} on this measure">·<span class="sr">, leads this row</span></span>` : ''}${m.sub && r[m.sub] ? html`<br><small class="t-muted">${clean(r[m.sub])}</small>` : ''}</td>`)}</tr>`; })}`)}</tbody></table></div>
+          return html`<tr><th scope="row">${m.label}${m.note ? html` <small class="t-muted">${m.note}</small>` : ''}<small class="t-muted cmp-means">${m.means}</small></th>${rows.map((r) => html`<td>${regCell(m, r) || cell(m.kind, r[m.key], (r.why_na || {})[m.key])}${lead === r.ticker ? html` <span class="cmp-dot" title="${m.lead === 'high' ? 'Higher' : 'Lower'} on this measure">·<span class="sr">, leads this row</span></span>` : ''}${m.sub && r[m.sub] ? html`<br><small class="t-muted">${clean(r[m.sub])}</small>` : ''}</td>`)}</tr>`; })}`)}</tbody></table></div>
     ${(c.failed || []).length ? html`<p class="stale">Could not load: ${c.failed.map((f) => `${f.ticker} (${f.reason})`).join(', ')}.</p>` : ''}
     ${anyLead ? html`<p class="asof">A dot marks the higher or lower reading on the rows where one direction is better. No dot when fewer than two names have the figure, when the top two read the same, or when they are within 5% of each other.</p>` : ''}
     ${c.method ? html`<p class="asof">${clean(c.method)}</p>` : ''}</section>`;
