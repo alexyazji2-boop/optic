@@ -139,6 +139,13 @@ The owner's mapping (2026-10-24): VWAP the one cool hue (the indicator exception
 - **Nothing is saved without a press, and nothing twice by accident.** A second save of the same thing asks whether to update the saved one or keep a copy under another name. A save that fails says so beside the button with Retry, and the button stays "Save".
 - **Where Save sits:** in the Dossier header beside Watch (in its one row on a phone), beside Compare's controls and its take, in the research sheet's actions (not printed), and in Milo's header as an icon. The library is Saved research at `#/research`, reached from the account menu and the palette.
 
+### Describing a screen (Handoff 8, 2026-11-04)
+- **Read, review, then run.** A request in words is read into filters (`POST /api/screener/read`) and shown before anything runs: each filter in plain English with its period (`screener.plain`, mirrored by `plainOf` in `pages/scan.js`), its bounds editable, removable, and Run as the one primary action.
+- **A phrase nothing can screen for is named and left out** ("Couldn't map “strong moat” to a filter, so it was left out. Nothing was put in its place."), never replaced by a nearby filter. With nothing left, no list: the page offers Build a screen.
+- **A result says what it ran on, once, above the list**: the filters, the universe, the data's dates, a peer bound's value and how many stocks it was taken over, the sources, and the screen's fingerprint, then "Screening is not investment advice". A missing figure is counted and said, never estimated.
+- **An empty result names the filter that emptied it** and may propose a looser bound, which only edits the filter; Run is still the reader's.
+- **A screen saves to Saved research** (kind `screen`) with its words and filters, and reopens at `#/scan?saved=<id>`, running again at once (a screen costs nothing to run).
+
 ### Headers
 Every dossier tab uses the Chart page's one-line header (`dossier-frame.js` `header()` now defaults to `bar`):
 - the company's logo (`/api/logo`, over the symbol's initial; `ui/symbols.js`), as in Classic's header (2026-10-25);

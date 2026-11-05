@@ -72,6 +72,8 @@ from .analytics import screen as screen_mod
 from .analytics import stage as stage_mod
 from .analytics import screener as screener_mod
 from .analytics import scan_request as scan_request_mod
+from .analytics import sec_frames as sec_frames_mod
+from .analytics import screen_log as screen_log_mod
 from .analytics import segments as segments_mod
 from .providers import overnight as overnight_mod
 from . import insiders as insiders_mod
@@ -6997,24 +6999,10 @@ async def analysts_for(ticker: str, limit: int = Query(20, ge=1, le=200),
 SCAN_REQUEST_MAX = 300
 
 
-@app.post("/api/screener/ask")
-async def screener_ask(request: Request,
-                       payload: Dict[str, Any] = Body(default={})) -> Dict[str, Any]:
-    """Find the symbols a request in words describes.
-
-    Asked for as a box on the Scan tab: "add this in the discover -> scan tab
-    for users to look for stocks based on their requests". The screener does the
-    finding over the ranking the named scans share; this reads the request into
-    its filters and says what it read and what it could not.
-
-    Read here first, which costs nothing. Words left over go to Pulse, behind
-    the allowance Pulse's chat has, and what it reads is kept, so a request is
-    paid for once. Without the assistant (a guest, or none configured) the
-    reading is what could be read here, and the words it could not are named.
-    """
-    text = re.sub(r"\s+", " ", str(payload.get("text") or "")).strip()[:SCAN_REQUEST_MAX]
-    if not text:
-        raise HTTPException(status_code=400, detail="Describe what you are looking for.")
+async def _read_request(request: Request, text: str) -> Tuple[Dict[str, Any], str, List[str], List[str], Optional[str]]:
+    """A request in words read as the screener's filters: by the fixed rules, which cost nothing, and only for words
+    they leave over by Milo, behind its allowance, once (the reading is kept). (reading, read_by, unread words,
+    unsupported phrases, a note.)"""
     reading = await _run(scan_request_mod.read, text)
     read_by, unread, unsupported, note = "terminal", list(reading["leftover"]), [], None
     if unread:
@@ -7047,6 +7035,55 @@ async def screener_ask(request: Request,
                     await _run(ai_store.keep, "scan", key, reading)
                 else:
                     note = (got or {}).get("reason") or "Milo could not read it this time."
+
+    return reading, read_by, unread, unsupported, note
+
+
+@app.post("/api/screener/read")
+async def screener_read(request: Request, payload: Dict[str, Any] = Body(default={})) -> Dict[str, Any]:
+    """A request in words, read as filters the reader reviews before anything runs (Handoff 8, the Describe-It
+    screener). Each filter comes in plain English with its period; each phrase nothing can screen for is named
+    ("strong moat"), never replaced by another filter. Runs nothing: the reader edits, then presses Run."""
+    text = re.sub(r"\s+", " ", str(payload.get("text") or "")).strip()[:SCAN_REQUEST_MAX]
+    if not text:
+        raise HTTPException(status_code=400, detail="Describe what you are looking for.")
+    reading, read_by, unread, unsupported, note = await _read_request(request, text)
+    filters = screener_mod.parse_filters(reading.get("filters") or [])
+    states = screener_mod.parse_states(reading.get("states") or [])
+    sort = reading.get("sort") if reading.get("sort") in screener_mod.FIELD_BY_ID else "score"
+    # what could not be read, as phrases: the rules' own, or the phrases Milo said nothing can screen for
+    unmapped = list(unsupported) if read_by == "pulse" else list(reading.get("unmapped") or [])
+    fund = screener_mod.needs_fundamentals(filters, sort)
+    if fund:
+        await _run(sec_frames_mod.ensure)          # warm, so the run does not wait (a background read, free)
+    return {
+        "text": text, "read_by": read_by, "note": note, "unmapped": unmapped,
+        "filters": [dict(f, said=screener_mod.plain(f), label=screener_mod.FIELD_BY_ID[f["field"]]["label"],
+                         family=screener_mod.FIELD_BY_ID[f["field"]].get("family", "price")) for f in filters],
+        "states": [{"id": k, "label": screener_mod.STATE_BY_ID[k]["label"]} for k in states],
+        "sort": sort, "direction": reading.get("direction") or "desc", "needs_fundamentals": fund,
+    }
+
+
+@app.post("/api/screener/ask")
+async def screener_ask(request: Request,
+                       payload: Dict[str, Any] = Body(default={})) -> Dict[str, Any]:
+    """Find the symbols a request in words describes.
+
+    Asked for as a box on the Scan tab: "add this in the discover -> scan tab
+    for users to look for stocks based on their requests". The screener does the
+    finding over the ranking the named scans share; this reads the request into
+    its filters and says what it read and what it could not.
+
+    Read here first, which costs nothing. Words left over go to Pulse, behind
+    the allowance Pulse's chat has, and what it reads is kept, so a request is
+    paid for once. Without the assistant (a guest, or none configured) the
+    reading is what could be read here, and the words it could not are named.
+    """
+    text = re.sub(r"\s+", " ", str(payload.get("text") or "")).strip()[:SCAN_REQUEST_MAX]
+    if not text:
+        raise HTTPException(status_code=400, detail="Describe what you are looking for.")
+    reading, read_by, unread, unsupported, note = await _read_request(request, text)
 
     filters, states = reading.get("filters") or [], reading.get("states") or []
     spec = {"filters": filters, "states": states, "sort": reading.get("sort") or "score",
@@ -7110,6 +7147,21 @@ async def screener_run(payload: Dict[str, Any] = Body(default={})) -> Dict[str, 
     def build() -> Dict[str, Any]:
         ranking = _cached_ranking()
         job = _ensure_ranking(ranking)
+        fundamentals = None
+        if screener_mod.needs_fundamentals(payload.get("filters"), str(payload.get("sort") or "")):
+            # Handoff 8: revenue growth and the debt ratio come from SEC's filings, read for the whole universe in the
+            # background the first time a day; until then the screen says so rather than running without them
+            fundamentals = sec_frames_mod.ensure()
+            if fundamentals is None:
+                st = sec_frames_mod.status()
+                if st.get("error") and not st.get("running"):
+                    return {"available": False, "retry": True,
+                            "reason": "SEC's filings could not be read just now, so a screen on revenue growth or the "
+                                      "debt ratio cannot run. Nothing was screened; try again in a few minutes."}
+                return {"available": False, "building": {"what": "sec", "started": st.get("started")},
+                        "reason": "Reading revenue and balance sheets from SEC's filings for the whole universe. The "
+                                  "first screen of the day that asks for them takes about a minute; this checks "
+                                  "again every 5 seconds, and nothing partial is shown meanwhile."}
         out = screener_mod.run(
             ranking,
             filters=payload.get("filters"),
@@ -7117,7 +7169,9 @@ async def screener_run(payload: Dict[str, Any] = Body(default={})) -> Dict[str, 
             sort=str(payload.get("sort") or "score"),
             direction=str(payload.get("direction") or "desc"),
             limit=limit,
+            fundamentals=fundamentals,
         )
+        screen_log_mod.record(out, str(payload.get("text") or "")[:SCAN_REQUEST_MAX] or None)
         if job is not None:
             out["building"] = job
             if not out.get("available"):

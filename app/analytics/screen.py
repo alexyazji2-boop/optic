@@ -199,11 +199,19 @@ def _rank(provider, symbols: Sequence[str], min_price: float, min_dollar_volume:
     too_wild = 0
     already_moved = 0
     failed_batches = 0
+    # the date of the newest bar any symbol had: what a screen's prices are as of (Handoff 8)
+    latest: List[str] = []
 
     def absorb(frames: Dict[str, Any]) -> None:
         nonlocal with_data, short_history, illiquid, too_wild, already_moved
         for symbol, frame in frames.items():
             with_data += 1
+            try:
+                day = str(frame.index[-1].date())
+                if not latest or day > latest[0]:
+                    latest[:] = [day]
+            except Exception:                                   # noqa: BLE001 - an odd frame has no date to give
+                pass
             metrics = _metrics(symbol, frame)
             if metrics is None:
                 short_history += 1
@@ -271,6 +279,7 @@ def _rank(provider, symbols: Sequence[str], min_price: float, min_dollar_volume:
         "failed_batches": failed_batches,
         "passed": len(scored),
         "ranked_at": time.time(),
+        "bars_through": latest[0] if latest else None,
         "gates": {
             "min_price": min_price,
             "min_dollar_volume": min_dollar_volume,

@@ -22,5 +22,6 @@ def test_only_the_card_press_runs_a_linked_scan_question():
     gate = scan[scan.index("function pressedInMilo(q)"):]
     gate = gate[:gate.index("\n}\n")]
     assert "sessionStorage.removeItem(SCAN_GO)" in gate and "return go === q" in gate
-    assert ("else if (q && pressedInMilo(q)) runAsk(q); else if (q) { S.askText = q; paint(); }" in scan)
-    assert "else if (q) runAsk(q);" not in scan
+    # Handoff 8: the press reads the request into filters for review; nothing runs until the reader presses Run
+    assert ("else if (q && pressedInMilo(q)) readRequest(q); else if (q) { S.askText = q; paint(); }" in scan)
+    assert "else if (q) readRequest(q);" not in scan and "else if (q) runDescribed(" not in scan

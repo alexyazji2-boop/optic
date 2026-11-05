@@ -67,6 +67,8 @@ from app import segment_store
 from app import form4_store
 from app import weekly_store
 from app.analytics import sec_facts
+from app.analytics import sec_frames
+from app.analytics import screen_log
 from app import earnings_result
 
 
@@ -153,6 +155,9 @@ def _real_data_out_of_the_way(tmp_path_factory):
         patch.setattr(feeds, "CACHE_PATH",
                       str(tmp_path_factory.mktemp("feeds") / "feed_cache.json"))
         patch.setattr(sec_facts, "CACHE_DIR", str(tmp_path_factory.mktemp("sec_facts")))
+        # SEC's XBRL frames for the screener's two fundamentals, and every screen run's record (Handoff 8)
+        patch.setattr(sec_frames, "CACHE_DIR", str(tmp_path_factory.mktemp("sec_frames")))
+        patch.setattr(screen_log, "LOG_PATH", str(tmp_path_factory.mktemp("screen_log") / "screener_runs.jsonl"))
         # The revenue estimates Home records before each report.
         patch.setattr(earnings_result, "STORE_PATH",
                       str(tmp_path_factory.mktemp("earnings_consensus") / "earnings_consensus.json"))

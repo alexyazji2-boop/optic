@@ -40,7 +40,7 @@ from .auth import deps, store
 
 router = APIRouter(prefix="/api", tags=["library"])
 
-KINDS = ("company", "comparison", "conversation", "sheet")
+KINDS = ("company", "comparison", "conversation", "sheet", "screen")
 # A row saved before the library (a question to ask again) is listed as this kind
 QUESTION = "question"
 MAX_TICKERS = 4
@@ -77,7 +77,7 @@ def _tickers(raw: Any, kind: str) -> List[str]:
             out.append(sym)
     if len(out) > MAX_TICKERS:
         raise _err(400, "At most {} tickers in one saved item.".format(MAX_TICKERS))
-    least = {"company": 1, "sheet": 1, "comparison": 2, "conversation": 0}[kind]
+    least = {"company": 1, "sheet": 1, "comparison": 2, "conversation": 0, "screen": 0}[kind]
     if len(out) < least:
         raise _err(400, "A {} needs {} ticker{}.".format(
             "comparison" if kind == "comparison" else "saved " + kind, least, "s" if least > 1 else ""))
@@ -98,6 +98,54 @@ def _ref(raw: Any, kind: str) -> Dict[str, Any]:
     return {}
 
 
+# A saved screen (Handoff 8): the request in words and the filters exactly as confirmed, so it reopens and runs again.
+# Its key is the filters' canonical form hashed the way static/v2/js/core/library.js screenKey hashes it (FNV-1a over
+# the same string), so a Save button knows the screen is already saved without asking the server to hash it.
+_SCREEN_BOUND = ("min", "max")
+
+
+def _canon_number(v: Any) -> str:
+    try:
+        f = float(v)
+    except (TypeError, ValueError):
+        return ""
+    return ("%.6f" % f).rstrip("0").rstrip(".") if f == f else ""
+
+
+def screen_canonical(spec: Dict[str, Any]) -> str:
+    """One string per screen: its filters sorted by field, its states sorted, its sort and direction."""
+    parts = []
+    for f in sorted(spec.get("filters") or [], key=lambda x: str(x.get("field"))):
+        parts.append("{}|{}|{}|{}|{}|{}|{}".format(f.get("field"), _canon_number(f.get("min")), _canon_number(f.get("max")),
+                                                  1 if f.get("min_exclusive") else 0, 1 if f.get("max_exclusive") else 0,
+                                                  f.get("min_peer") or "", f.get("max_peer") or ""))
+    return "{};{};{};{}".format(",".join(parts), ",".join(sorted(spec.get("states") or [])),
+                                spec.get("sort") or "score", spec.get("direction") or "desc")
+
+
+def fnv1a(text: str) -> str:
+    h = 0x811C9DC5
+    for byte in text.encode("utf-8"):
+        h = ((h ^ byte) * 0x01000193) & 0xFFFFFFFF
+    return "{:08x}".format(h)
+
+
+def _screen(raw: Any) -> Optional[Dict[str, Any]]:
+    """A screen as saved: checked against the screener's own vocabulary, as a run checks it."""
+    from .analytics import screener
+    if not isinstance(raw, dict):
+        return None
+    filters = screener.parse_filters(raw.get("filters"))
+    states = screener.parse_states(raw.get("states"))
+    if not filters and not states:
+        return None
+    sort = raw.get("sort") if raw.get("sort") in screener.FIELD_BY_ID else "score"
+    direction = "asc" if raw.get("direction") == "asc" else "desc"
+    return {"text": re.sub(r"\s+", " ", str(raw.get("text") or "")).strip()[:300] or None, "filters": filters,
+            "states": states, "sort": sort, "direction": direction,
+            "said": [screener.plain(f) for f in filters] + [screener.STATE_BY_ID[k]["label"] for k in states]}
+
+
 def item_key(kind: str, tickers: List[str], ref: Dict[str, Any]) -> Optional[str]:
     """What makes two saves the same thing: a company's or a sheet's ticker, a comparison's set of tickers in any
     order, a conversation's own id. A conversation without one is always new (its key is then its row's id)."""
@@ -107,6 +155,8 @@ def item_key(kind: str, tickers: List[str], ref: Dict[str, Any]) -> Optional[str
         return "comparison:" + ",".join(sorted(tickers))
     if kind == "conversation" and ref.get("conversation"):
         return "conversation:" + ref["conversation"]
+    if kind == "screen" and ref.get("screen"):
+        return "screen:" + ref["screen"]
     return None
 
 
@@ -116,6 +166,8 @@ def default_name(kind: str, tickers: List[str], now: Optional[datetime] = None) 
     from zoneinfo import ZoneInfo
     day = (now or datetime.now(timezone.utc)).astimezone(ZoneInfo("America/New_York"))
     date = "{} {}, {}".format(day.strftime("%b"), day.day, day.year)
+    if kind == "screen":
+        return "Screen, {}".format(date)
     if not tickers:
         return "Milo conversation, {}".format(date)
     return "{}, {}".format(" vs ".join(tickers), date)
@@ -211,6 +263,8 @@ def _out(row: Dict[str, Any], full: bool = False) -> Dict[str, Any]:
     if full:
         if kind == "conversation":
             out["conversation"] = _load(row.get("payload"), {"messages": []})
+        elif kind == "screen":
+            out["screen"] = _load(row.get("payload"), None)
         elif kind == QUESTION:
             out["question"] = row.get("content") or ""
     return out
@@ -292,7 +346,7 @@ async def list_items(request: Request,
         where.append("item_key IS NOT NULL AND research_type = ?")
         args.append(kind)
     elif kind:
-        raise _err(400, "Kinds are company, comparison, conversation, sheet and question.")
+        raise _err(400, "Kinds are company, comparison, conversation, sheet, screen and question.")
     if key:
         where.append("item_key = ?")
         args.append(key)
@@ -346,15 +400,21 @@ async def save_item(request: Request, payload: Dict[str, Any] = Body(default={})
     deps.csrf_guard(request)
     kind = str(payload.get("kind") or "").strip().lower()
     if kind not in KINDS:
-        raise _err(400, "Kinds are company, comparison, conversation and sheet.")
+        raise _err(400, "Kinds are company, comparison, conversation, sheet and screen.")
     tickers = _tickers(payload.get("tickers"), kind)
     ref = _ref(payload.get("ref"), kind)
+    screen = _screen(payload.get("screen")) if kind == "screen" else None
+    if kind == "screen":
+        if not screen:
+            raise _err(400, "A saved screen needs at least one filter.")
+        ref = {"screen": fnv1a(screen_canonical(screen))}
     key = item_key(kind, tickers, ref)
     name = re.sub(r"\s+", " ", str(payload.get("name") or "")).strip()[:NAME_MAX] or default_name(kind, tickers)
     summary = _json(payload.get("summary") if isinstance(payload.get("summary"), dict) else None, SUMMARY_MAX, "summary")
     conv = _conversation(payload.get("conversation")) if kind == "conversation" else None
-    body = _json(conv, PAYLOAD_MAX, "conversation") if conv else None
-    content = _transcript(conv) if conv else "{}: {}".format(name, ", ".join(tickers))
+    body = _json(conv, PAYLOAD_MAX, "conversation") if conv else _json(screen, SUMMARY_MAX, "screen") if screen else None
+    content = (_transcript(conv) if conv else "{}: {}".format(name, "; ".join([screen["text"] or ""] + screen["said"])) if screen
+               else "{}: {}".format(name, ", ".join(tickers)))
     mode = str(payload.get("on_duplicate") or "ask").strip().lower()
     now = db.utcnow()
 
