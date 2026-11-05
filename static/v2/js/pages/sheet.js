@@ -13,6 +13,8 @@ import { skeleton, failed } from '../ui/states.js';
 import { etStamp } from '../core/marketTime.js';
 import * as FIG from '../core/figures.js';
 import { fig } from '../ui/figure.js';
+import { saveButton, provide } from '../ui/library.js';
+import { keyOf } from '../core/library.js';
 
 let D = {}, live = true, mainEl = null;
 const TAG = { reported: 'Reported', estimate: 'Estimate', optic: 'Optic' };
@@ -119,7 +121,7 @@ function paint() {
   if (D.err && !D.ticker) { draw(mainEl, failed(`${sym}'s research sheet`, D.err, { retry: 'sheet' })); return; }
   const ready = D.ticker && D.fairValue !== undefined && D.earnings !== undefined;
   draw(mainEl, html`<div class="sh-actions"><a class="btn btn-quiet btn-sm" href="#/${encodeURIComponent(sym)}">Back to the Dossier</a>
-      <button type="button" class="btn btn-primary btn-sm" data-sheet-print ${ready ? '' : 'disabled'}>Print or save as PDF</button>
+      <button type="button" class="btn btn-primary btn-sm" data-sheet-print ${ready ? '' : 'disabled'}>Print or save as PDF</button>${saveButton('sheet', keyOf('sheet', [sym]), { label: 'Save sheet' })}
       <span class="t-muted">${ready ? 'Two pages, Letter or A4. Private holdings are never included.' : 'Gathering the figures…'}</span></div>
     ${ready ? html`<article class="sheet" aria-label="${sym} research sheet">${page1(sheetFacts(D))}${page2(sheetFacts(D))}</article>` : skeleton('lines', 8, 'Gathering the figures for the sheet')}`);
   const slot = mainEl.querySelector('[data-sheet-chart]'), pts = series();
@@ -129,6 +131,10 @@ function paint() {
 export async function render(main, route) {
   live = true; mainEl = main; const sym = route.symbol; D = { sym };
   document.title = `${sym} research sheet, Optic`;
+  // what Save keeps (Saved research, Handoff 5): the sheet by reference, reopened on today's figures, with the name and
+  // the price it had when saved so it stays readable if the ticker later goes
+  provide('sheet', () => { const q = D.quote || ((D.ticker || {}).quote) || {}; return { kind: 'sheet', tickers: [sym],
+    summary: { names: { [sym]: q.name || sym }, price: isNum(q.price) ? { price: q.price, trade_time: q.trade_time || null, delayed_minutes: isNum(q.delayed_minutes) ? q.delayed_minutes : null } : null } }; });
   paint();
   // each answer goes into this render's own record: a late one for the sheet opened before lands nowhere (BUG-066)
   const box = D, enc = encodeURIComponent(sym), step = (p, k) => p.then((d) => { box[k] = d; }, (e) => { if (k === 'ticker') box.err = e; else box[k] = box[k] || {}; }).finally(() => { if (D === box) paint(); });

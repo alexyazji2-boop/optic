@@ -16,6 +16,8 @@
 import { html, render, $, raw, announce, reducedMotion } from '../core/dom.js';
 import { makeDrawer } from './drawer.js';
 import { saveQuestion } from '../core/research.js';
+import { saveButton, provide as provideSave, refresh as refreshSaved } from './library.js';
+import { keyOf, known as knownSaved, dayText } from '../core/library.js';
 import { toast } from './toast.js';
 import * as api from '../core/api.js';
 import * as store from '../core/store.js';
@@ -37,6 +39,10 @@ const HISTORY_KEY = 'optic.pulse.history.v1', PERSONA_KEY = 'optic.pulse.persona
 const MAX_CONVERSATIONS = 30, MAX_MESSAGES = 60, MAX_CHARS = 12000, MAX_Q = 4000;
 const DOSSIER = new Set(['overview', 'chart', 'swing', 'long', 'earnings', 'financials', 'news']);
 // a source's time as a reader says it: "2026-10-22T20:11:00+00:00" printed raw under every headline (audit 2026-10-22)
+// a moment with its day when it is not today's, in the reader's zone: a saved conversation reopened later says which day
+// each figure was read, not only the hour (Saved research, Handoff 5)
+const sameDay = (iso) => { try { const z = prefs.zone(), f = (d) => d.toLocaleDateString('en-US', { timeZone: z }); return f(new Date(iso)) === f(new Date()); } catch (e) { return true; } };
+const seenAt = (iso) => (sameDay(iso) ? prefs.clock(iso) : prefs.dayTime(iso));
 const readWhen = (v) => { const t = /^\d{4}-\d{2}-\d{2}T/.test(String(v || '')) ? new Date(v) : null; return t && !Number.isNaN(t.getTime()) ? `published ${t.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' })} ET` : (v || ''); };
 // The states an answer shows, each tied to something that happened (audit and motion session, 2026-10-22). No
 // fake progress, no percentages, no research claims without an event behind them:
@@ -487,7 +493,7 @@ export function aboutLine(info, now = route) {
   const ctx = page && !about.includes(page) ? `${where && where !== page ? where : `${page}'s page`} attached as context` : (where && (!page || where !== page) ? `asked from ${where}` : '');
   const other = about.length && now && now.symbol && !about.includes(now.symbol);
   const none = data.length ? dataless(info, data).filter((x) => x !== page) : [];   // the page's own data is attached
-  return html`<p class="milo-about ${other || unknown.length ? 'is-other' : ''}">${about.length ? `About ${join(about)}` : unknown.length ? `About ${join(unknown)}, a symbol Optic has no data for` : `From ${where}`}${none.length ? ` (no ${join(none)} data came back)` : ''}${also.length ? `; also looked up ${join(also)}` : ''}${ctx ? `; ${ctx}` : ''}${f.captured_at ? `, ${prefs.clock(f.captured_at)}` : ''}${other ? html`. <b>Not about ${now.symbol}, the page now open.</b>` : ''}</p>`;
+  return html`<p class="milo-about ${other || unknown.length ? 'is-other' : ''}">${about.length ? `About ${join(about)}` : unknown.length ? `About ${join(unknown)}, a symbol Optic has no data for` : `From ${where}`}${none.length ? ` (no ${join(none)} data came back)` : ''}${also.length ? `; also looked up ${join(also)}` : ''}${ctx ? `; ${ctx}` : ''}${f.captured_at ? `, ${seenAt(f.captured_at)}` : ''}${other ? html`. <b>Not about ${now.symbol}, the page now open.</b>` : ''}</p>`;
 }
 // The figure registry's figures a lookup returned (Handoff 1): each as Milo retrieved it, opening the same definition
 // the Dossier opens (ui/figure.js reads the value from the button, so the panel shows what this answer was given)
@@ -498,15 +504,15 @@ function figureList(figs) {
   return html`<ul class="plain milo-figs">${list.map((x) => html`<li>${x.name || ''}${x.symbol ? `, ${x.symbol}` : ''}: <button type="button" class="fig" data-v2-fig="${x.figure_id}" data-v2-fig-sym="${x.symbol || ''}" data-v2-fig-value="${own(x)}" aria-haspopup="dialog" aria-expanded="false" aria-label="${x.name || 'Figure'}: ${x.text || ''}. Show how it is defined">${x.text || ''}</button>${x.period ? html` <small class="t-muted">${x.period}</small>` : ''}</li>`)}</ul>`;
 }
 // Every source behind an answer, one fold away: what it cited, what it read, the data it looked up
-function sourceLists(info) {
+export function sourceLists(info) {
   const cites = info.citations || [], read = info.read || [], got = info.retrieved || [], loaded = info.loaded || [];
   const n = cites.length + read.length + got.length + loaded.length;
   if (!n) return html`<span class="milo-src-none"></span>`;
   return html`<details class="milo-src-all"><summary>Sources (${n})</summary><div class="milo-src-body">
     ${cites.length ? html`<div class="milo-sources"><p class="t-label">Cited</p>${cites.map((c) => (/^https?:\/\//i.test(c.url || '') ? html`<a href="${c.url}" target="_blank" rel="noopener">${c.title || c.url}</a>` : html`<span>${c.title || ''}</span>`))}</div>` : ''}
     ${read.length ? html`<div class="milo-read"><p class="t-label">Sources Milo read (${read.length})</p><ul class="plain">${read.map((r) => html`<li>${r.symbol ? html`<b>${r.symbol}</b> ` : ''}${/^https?:\/\//i.test(r.url || '') ? html`<a href="${r.url}" target="_blank" rel="noopener">${r.source}</a>` : r.source} <small class="t-muted">${[r.what, readWhen(r.period), r.kind === 'headline' ? 'the headline only, not the article' : ''].filter(Boolean).join(', ')}</small></li>`)}</ul></div>` : ''}
-    ${got.length ? html`<div class="milo-read"><p class="t-label">Data Milo retrieved (${got.length})</p><ul class="plain">${got.map((r) => html`<li>${r.label || ''} <small class="t-muted">${[r.source, r.as_of ? `observed ${prefs.clock(r.as_of)}` : '', r.retrieved_at ? `retrieved ${prefs.clock(r.retrieved_at)}` : '', r.ok === false ? 'could not be retrieved' : ''].filter(Boolean).join(', ')}</small>${figureList(r.figures)}</li>`)}</ul></div>` : ''}
-    ${loaded.length ? html`<div class="milo-read"><p class="t-label">Loaded because the question named them (${loaded.length})</p><ul class="plain">${loaded.map((r) => html`<li>${r.label || ''} <small class="t-muted">${[r.source, r.as_of ? `quote observed ${prefs.clock(r.as_of)}` : ''].filter(Boolean).join(', ')}</small></li>`)}</ul></div>` : ''}</div></details>`;
+    ${got.length ? html`<div class="milo-read"><p class="t-label">Data Milo retrieved (${got.length})</p><ul class="plain">${got.map((r) => html`<li>${r.label || ''} <small class="t-muted">${[r.source, r.as_of ? `observed ${seenAt(r.as_of)}` : '', r.retrieved_at ? `retrieved ${seenAt(r.retrieved_at)}` : '', r.ok === false ? 'could not be retrieved' : ''].filter(Boolean).join(', ')}</small>${figureList(r.figures)}</li>`)}</ul></div>` : ''}
+    ${loaded.length ? html`<div class="milo-read"><p class="t-label">Loaded because the question named them (${loaded.length})</p><ul class="plain">${loaded.map((r) => html`<li>${r.label || ''} <small class="t-muted">${[r.source, r.as_of ? `quote observed ${seenAt(r.as_of)}` : ''].filter(Boolean).join(', ')}</small></li>`)}</ul></div>` : ''}</div></details>`;
 }
 // History takes the conversation's place while it is open; the composer and its draft stay as they are
 function historyHTML() {
@@ -730,6 +736,72 @@ function paintHead() {
   const hb = S.panel && $('.drawer-head [data-v2-milo-history]', S.panel), nb = S.panel && $('.drawer-head [data-v2-milo-new]', S.panel);
   if (hb) { hb.setAttribute('aria-expanded', String(!!S.showHistory)); hb.classList.toggle('is-on', !!S.showHistory); hb.setAttribute('aria-disabled', String(!!S.busy)); hb.title = S.busy ? 'Conversation history (stop the answer first)' : 'Conversation history'; }
   if (nb) { nb.setAttribute('aria-disabled', String(!!S.busy)); nb.title = S.busy ? 'New conversation (stop the answer first)' : 'New conversation'; }
+  // Save follows the conversation on screen: its key is the conversation's own id, and it is asked about once it has
+  // an answer (a blank conversation has nothing saved)
+  const sb = S.panel && $('.drawer-head [data-v2-save="conversation"]', S.panel);
+  if (sb) {
+    const key = keyOf('conversation', [], { conversation: S.conv.id }), answered = S.conv.messages.some((m) => m.role === 'assistant' && String(m.content || '').trim());
+    if (sb.dataset.v2SaveKey !== key) { sb.dataset.v2SaveKey = key; sb.setAttribute('aria-pressed', 'false'); sb.title = 'Save conversation to Saved research'; sb.setAttribute('aria-label', sb.title); }
+    sb.setAttribute('aria-disabled', String(!answered || !!S.busy));
+    if (answered && !S.busy && knownSaved(key) === undefined && store.signedIn()) refreshSaved(key);
+  }
+}
+// What Save conversation keeps (Saved research, Handoff 5): each message, and each answer's sources with the times
+// they were read and the page it was asked from, as they are now. The cited figures are the copy's own: reopening it
+// never re-reads them.
+/** The saved form of a conversation, from its messages and each answer's facts (meta). Pure, so it can be tested. */
+export function conversationSpec(conv, facts, savedFrom = '') {
+  const msgs = (conv && conv.messages) || [];
+  if (!msgs.some((m) => m.role === 'assistant' && String(m.content || '').trim())) return { blocked: 'Ask Milo something first: a conversation is saved with its answers.' };
+  const syms = [];
+  msgs.forEach((m, i) => { const sym = (facts.get(i) || {}).symbol; if (m.role === 'assistant' && sym && !syms.includes(sym)) syms.push(sym); });
+  if (!syms.length && conv.lastTicker) syms.push(conv.lastTicker);
+  const messages = msgs.map((m, i) => {
+    const inf = facts.get(i) || {}, o = { role: m.role, content: String(m.content || '') };
+    if (inf.policyLine) o.policy = inf.policyLine; if (inf.amended) o.amended = inf.amended; if (inf.level) o.level = inf.level;
+    if (m.role === 'assistant') {
+      o.sources = { citations: inf.citations || [], read: inf.read || [], retrieved: inf.retrieved || [], loaded: inf.loaded || [] };
+      const f = (inf.context || {}).focus; if (f) o.focus = { view_label: f.view_label || '', ticker: f.ticker || inf.symbol || '', captured_at: f.captured_at || '' };
+    }
+    return o;
+  });
+  const first = (msgs.find((m) => m.role === 'user') || {}).content || '';
+  return { kind: 'conversation', tickers: syms.slice(0, 4), ref: { conversation: conv.id },
+    summary: { question: String(first).slice(0, 300), answers: msgs.filter((m) => m.role === 'assistant').length },
+    conversation: { messages, saved_from: savedFrom } };
+}
+provideSave('conversation', () => (S.busy ? { blocked: 'Milo is still answering. Save the conversation once the answer is finished.' } : conversationSpec(S.conv, meta, contextLabel('auto'))));
+/** A saved conversation as Milo's state: its messages, a log that first says when it was saved and that its figures
+ *  are as of then, and each answer's facts as saved (its sources, when each was read, the page it was asked from).
+ *  Pure, so it can be tested; openSaved puts it on screen. */
+export function restoreSaved(item, newConvId = newId) {
+  const conv = item.conversation || {}, msgs = (conv.messages || []).filter((m) => m && (m.role === 'user' || m.role === 'assistant'));
+  const ticker = (item.tickers || []).find((x) => !(item.gone || []).includes(x)) || null;
+  const out = { id: (item.ref || {}).conversation || newConvId(), messages: msgs.map((m) => ({ role: m.role, content: m.content })), lastTicker: ticker };
+  const at = item.updated_at || item.created_at, gone = item.gone || [];
+  const note = `Saved on ${dayText(at)} at ${prefs.clock(at)} ${prefs.zoneAbbrev(prefs.zone(), new Date(at))}; figures as of then. Each answer keeps the sources it had and when they were read.${gone.length ? ` ${gone.join(', ')} ${gone.length === 1 ? 'is' : 'are'} no longer available.` : ''}`;
+  const facts = new Map();
+  msgs.forEach((m, i) => {
+    if (m.role !== 'assistant') return;
+    const src = m.sources || {}, f = m.focus || {};
+    facts.set(i, { question: (msgs[i - 1] || {}).content || '', symbol: f.ticker || ticker, policyLine: m.policy || '', amended: m.amended || '', level: m.level || '',
+      citations: src.citations || [], read: src.read || [], retrieved: src.retrieved || [], loaded: src.loaded || [],
+      context: { focus: { scope: 'auto', view_label: f.view_label || '', ticker: f.ticker || ticker, captured_at: f.captured_at || '' } } });
+  });
+  return { conv: out, items: [{ kind: 'note', text: note }, ...out.messages.map((m, i) => ({ kind: 'msg', i }))], facts, ticker };
+}
+/**
+ * A saved conversation reopened (Saved research, Handoff 5), with the sources each answer had, as saved. Milo's
+ * context is its ticker, so a follow-up is about the same company; nothing is sent until the reader asks.
+ */
+export async function openSaved(item, { opener } = {}) {
+  const r = restoreSaved(item);
+  await openMilo({ opener, symbol: r.ticker || undefined, about: `Saved: ${item.name}` });
+  if (S.busy) { toast(WAIT_HISTORY); return; }
+  S.conv = r.conv; S.report = null; meta.clear(); SC.i = null;
+  r.facts.forEach((v, k) => meta.set(k, v));
+  S.items = r.items;
+  S.showHistory = false; S.toEnd = false; S.follow = true; S.view = null; paintChrome(); paintLog();
 }
 const WAIT_HISTORY = 'Milo is still answering. Stop the answer first, then open your history.';
 const WAIT_NEW = 'Milo is still answering. Stop the answer first, then start a new conversation.';
@@ -1239,7 +1311,7 @@ export async function openMilo({ question = '', opener, send: sendNow = false, a
     title: 'Milo', opener, dock: dockFit(window.innerWidth, railW(), storedWidth() || W_DEFAULT, isPhoneNow()) > 0,
     // the redesign's compact header: Milo beside his name, and history, a new conversation and close as icons
     head: html`<div class="milo-id"><div><h2 id="milo-title" tabindex="-1">Milo</h2><p class="milo-sub">Research assistant</p></div></div>`,
-    actions: html`<button type="button" class="icon-btn" data-v2-milo-history aria-expanded="false" aria-controls="milo-history" aria-label="Conversation history" title="Conversation history">${icon('history')}</button>
+    actions: html`${saveButton('conversation', keyOf('conversation', [], { conversation: S.conv.id }), { iconOnly: true, label: 'Save conversation' })}<button type="button" class="icon-btn" data-v2-milo-history aria-expanded="false" aria-controls="milo-history" aria-label="Conversation history" title="Conversation history">${icon('history')}</button>
       <button type="button" class="icon-btn" data-v2-milo-new aria-label="New conversation" title="New conversation">${icon('compose')}</button>`,
     body: html`<div class="milo"><div class="milo-chrome">${chromeHTML()}</div>
       <div class="milo-log-wrap"><div class="milo-log" role="log" aria-live="polite" aria-label="Conversation with Milo">${logHTML()}</div>

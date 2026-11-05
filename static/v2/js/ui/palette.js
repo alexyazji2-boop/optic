@@ -40,7 +40,7 @@ export const PLACES = [
   { view: 'watchlist', label: 'Watchlist', terms: 'watchlist watching follow list' },
   { view: 'alerts', label: 'Alerts', terms: 'alerts alarms notifications fired' },
   { view: 'compare', label: 'Compare', terms: 'compare versus vs side by side' },
-  { view: 'saved', label: 'Saved research', href: '#/research', terms: 'saved research questions kept investigation ask again' },
+  { view: 'saved', label: 'Saved research', href: '#/research', terms: 'saved research questions kept investigation ask again library bookmarks saved companies comparisons milo conversations research sheets' },
   { view: 'earningsweek', label: "This week's earnings", href: '#/earnings', terms: 'earnings calendar week reports reporting this week upcoming season' },
   { view: 'overview', label: 'Dossier: Overview', symbol: true, terms: 'overview dossier ticker security summary company snapshot' },
   { view: 'chart', label: 'Chart', symbol: true, terms: 'chart charting drawings indicators advanced studies backtest back-test pairs stop' },
