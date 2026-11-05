@@ -2201,3 +2201,40 @@ html.eff-1100 .dhead.bar.is-wide .dh-price { flex-basis: 100%; }
 /* The Chart tab chose 14px so Draw, the bar size and the session fit one row at 360. Every iPhone is 375 or wider,
    where 16px still fits one row (316 of 343px measured at 390); a narrower Android phone does not zoom on focus. */
 @media (pointer: coarse) and (min-width: 375px) { html .chart-page .ctools .select select { font-size: max(16px, 1em); } }
+/* Company events (Handoff 9, ui/timeline.js): one list of the company's news, earnings, insider and congressional
+   trades, analyst actions and SEC filings. The date column says what each date is; the kind is a word beside its
+   icon, never a colour alone. One column on a phone, the filters wrapping. */
+.tl-controls { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2) var(--s-4); margin: var(--s-3) 0; }
+.tl-chip .ic { width: 16px; height: 16px; }
+.tl-failed { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2) var(--s-3); }
+.tl-failed p { margin: 0; flex: 1 1 20rem; }
+.tl-reach { margin: 0 0 var(--s-3); padding: 0; list-style: none; font-size: var(--t-sm); color: var(--c-ink-3); }
+.tl-reach li + li { margin-top: var(--s-1); }
+.tl-list { margin: 0; padding: 0; list-style: none; border-top: 1px solid var(--c-line-2); }
+.tl-e { display: grid; grid-template-columns: minmax(8.5rem, 10.5rem) minmax(0, 1fr); gap: var(--s-1) var(--s-4); padding: var(--s-3) 0; border-bottom: 1px solid var(--c-line-2); }
+.tl-e:focus { outline: none; }
+.tl-e:focus-visible { outline: 2px solid var(--c-focus); outline-offset: 2px; }
+.tl-when { display: flex; flex-direction: column; gap: 2px; font-variant-numeric: tabular-nums; }
+.tl-when time { font: 600 var(--t-md)/1.3 var(--f-sans); color: var(--c-ink); }
+.tl-time, .tl-dk { font-size: var(--t-sm); line-height: 1.35; color: var(--c-ink-3); }
+.tl-main { min-width: 0; }
+.tl-kind { display: inline-flex; align-items: center; gap: 6px; margin: 0 0 2px; font: 600 var(--t-sm)/1.2 var(--f-label); color: var(--c-ink-2); }
+.tl-kind .ic { width: 16px; height: 16px; }
+.tl-title { margin: 0; font: 500 var(--t-lg)/1.4 var(--f-sans); color: var(--c-ink); overflow-wrap: anywhere; }
+.tl-sum, .tl-delay { margin: var(--s-1) 0 0; font-size: var(--t-md); line-height: 1.45; color: var(--c-ink-2); overflow-wrap: anywhere; }
+.tl-src { margin: var(--s-1) 0 0; font-size: var(--t-sm); color: var(--c-ink-3); overflow-wrap: anywhere; }
+.tl-src .textlink, .tl-detail .textlink { font-size: inherit; }
+.tl-more { margin-top: var(--s-1); }
+.tl-detail { margin-top: var(--s-2); }
+.tl-detail p { margin: 0 0 var(--s-2); font-size: var(--t-md); }
+.tl-dl { display: grid; gap: var(--s-1); margin: 0 0 var(--s-2); }
+.tl-dl > div { display: grid; grid-template-columns: minmax(0, 16rem) minmax(0, 1fr); gap: var(--s-3); }
+.tl-dl dt { font-size: var(--t-sm); color: var(--c-ink-3); }
+.tl-dl dd { margin: 0; font-size: var(--t-md); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.tl-note { color: var(--c-ink-3); }
+.tl-count { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2) var(--s-3); margin: var(--s-3) 0 0; color: var(--c-ink-2); font-variant-numeric: tabular-nums; }
+@media (max-width: 640px) {
+  .tl-e { grid-template-columns: minmax(0, 1fr); }
+  .tl-when { flex-direction: row; flex-wrap: wrap; align-items: baseline; gap: 2px var(--s-2); }
+  .tl-dl > div { grid-template-columns: minmax(0, 1fr); gap: 0; }
+}

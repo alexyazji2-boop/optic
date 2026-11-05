@@ -21,6 +21,10 @@ import { icon } from '../ui/icons.js';
 let lp = null;   // the header's price refresh (dossier-frame livePrice), stopped in dispose()
 
 let D = {}, live = true, mainEl = null;
+// A link to one section, `?section=fin-filings` (the Overview's company events link insider trades and SEC filings
+// here, Handoff 9): the page goes to it on the first paint that draws it, once.
+let wantSection = null;
+const jumpTo = (main, id) => { const sec = document.getElementById(id); if (!sec) return; openSection(main, id, { scroll: false }); sec.scrollIntoView({ behavior: reducedMotion() ? 'auto' : 'smooth', block: 'start' }); const h = sec.querySelector('h2'); if (h) { h.tabIndex = -1; h.focus({ preventScroll: true }); } };
 // Fiscal years or quarters, for the statements and the segments: a display choice kept on this device.
 const PERIOD_KEY = 'optic.v2.financials.period.v1';
 const readPeriod = () => { try { return localStorage.getItem(PERIOD_KEY) === 'quarter' ? 'quarter' : 'year'; } catch (e) { return 'year'; } };
@@ -370,9 +374,14 @@ function paint() {
   else if (D.tErr) body = failed('The financial statements', D.tErr, { retry: 'ticker' });
   else if (!D.t) body = skeleton('lines', 6, 'Loading the statements');
   else body = html`${readings()}${jumpList()}${statements(sym)}${segments()}${record('earnings')}${ownership(sym)}${record('short')}${extras()}${filings()}${congress()}`;
+  // a section heading the reader was taken to (a jump, a link's ?section=) keeps focus while later figures redraw the page
+  const was = document.activeElement, onHead = was && was.tagName === 'H2' && mainEl.contains(was) && was.closest('section[id]');
   draw(mainEl, html`<div class="dstick">${header(sym, D, 'financials')}${tabs(sym, 'financials', { fund: isFund(D) })}</div><div class="fin">${body}</div>`);
+  if (onHead && !onHead.isConnected) { const h = document.querySelector(`#${onHead.id} h2`); if (h) { h.tabIndex = -1; h.focus({ preventScroll: true }); } }
   mountCharts(mainEl, Object.assign({}, statementCharts(), segmentCharts(), extraCharts()));
   if (Math.abs(window.scrollY - y) > 2) window.scrollTo(0, y);
+  // a frame later: after the app has focused the page's heading on arrival (app.js), so focus ends on the section's
+  if (wantSection && document.getElementById(wantSection)) { const id = wantSection; wantSection = null; requestAnimationFrame(() => jumpTo(mainEl, id)); }
 }
 
 function notApplicable(sym, kind) {
@@ -397,6 +406,8 @@ export async function render(main, route) {
   live = true; mainEl = main;
   const sym = route.symbol, enc = encodeURIComponent(sym);
   D = { sym };
+  const want = String((route.params || {}).section || '');
+  wantSection = /^fin-[a-z]+$/.test(want) ? want : null;
   store.pushRecent(sym);
   document.title = `${sym} Financials, Optic`;
   if (lp) lp.stop();
@@ -407,7 +418,7 @@ export async function render(main, route) {
   if (!main.dataset.finWired) {
     main.dataset.finWired = '1';
     // a jump opens a folded (or hidden) section first (Classic parity B3.3)
-    const jump = (id) => { const sec = document.getElementById(id); if (!sec) return; openSection(main, id, { scroll: false }); sec.scrollIntoView({ behavior: reducedMotion() ? 'auto' : 'smooth', block: 'start' }); const h = sec.querySelector('h2'); if (h) { h.tabIndex = -1; h.focus({ preventScroll: true }); } };
+    const jump = (id) => jumpTo(main, id);
     main.addEventListener('click', (e) => {
       const b = e.target.closest('[data-fin-jump]'); if (b) { jump(b.dataset.finJump); return; }
       const p = e.target.closest('[data-fin-period]');
