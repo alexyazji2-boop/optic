@@ -40,6 +40,8 @@ export function parse(hash = location.hash) {
   const tab = (parts[1] || '').toLowerCase();
   // the printable research sheet: reached from the Dossier's menu, not a tab of its own (roadmap stage 4)
   if (tab === 'sheet') return { view: 'sheet', symbol, params };
+  // Investigate this company (Handoff 10): a checklist reached from the Dossier's menu and the Overview, not a tab
+  if (tab === 'investigate') return { view: 'investigate', symbol, params };
   return { view: TAB_VIEW[tab] || 'overview', symbol, params };
 }
 

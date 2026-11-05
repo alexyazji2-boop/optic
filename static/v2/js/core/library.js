@@ -6,9 +6,9 @@ import * as api from './api.js';
 import * as store from './store.js';
 import * as prefs from './prefs.js';
 
-export const KINDS = ['company', 'comparison', 'conversation', 'sheet', 'question'];
-export const WORD = { company: 'Company', comparison: 'Comparison', conversation: 'Milo conversation', sheet: 'Research sheet', question: 'Question' };
-export const PLURAL = { company: 'Companies', comparison: 'Comparisons', conversation: 'Milo conversations', sheet: 'Research sheets', question: 'Questions' };
+export const KINDS = ['company', 'comparison', 'conversation', 'sheet', 'investigation', 'question'];
+export const WORD = { company: 'Company', comparison: 'Comparison', conversation: 'Milo conversation', sheet: 'Research sheet', investigation: 'Investigation', question: 'Question' };
+export const PLURAL = { company: 'Companies', comparison: 'Comparisons', conversation: 'Milo conversations', sheet: 'Research sheets', investigation: 'Investigations', question: 'Questions' };
 
 /** A calendar date in the reader's zone: "Nov 4, 2026". */
 export function dayText(at, zone = prefs.zone()) {
@@ -34,6 +34,8 @@ export function routeOf(item) {
   const live = (item.tickers || []).filter((t) => !(item.gone || []).includes(t)), e = encodeURIComponent;
   if (item.kind === 'company') return live[0] ? `#/${e(live[0])}${(item.ref || {}).tab ? `/${item.ref.tab}` : ''}` : null;
   if (item.kind === 'sheet') return live[0] ? `#/${e(live[0])}/sheet` : null;
+  // an investigation reopens on its own page, drafts included, even for a ticker no longer listed: it is a record
+  if (item.kind === 'investigation') return (item.tickers || [])[0] ? `#/${e(item.tickers[0])}/investigate?saved=${e(item.id)}` : null;
   if (item.kind === 'comparison') {
     const gone = (item.gone || []).filter((t) => (item.tickers || []).includes(t));
     return `#/compare?t=${live.map(e).join(',')}${gone.length ? `&gone=${gone.map(e).join(',')}` : ''}`;

@@ -153,6 +153,23 @@ The owner's mapping (2026-10-24): VWAP the one cool hue (the indicator exception
 - **Never silently incomplete.** A source that did not answer is said above the list, beside what did arrive, with Try again. A source whose reach is shorter than the period says so: the headline feed's latest stories, or the House's current year. A kind with no entries says "No congressional trades reported for this company in this period", or why it does not apply.
 - **Read after the page's own figures.** The section asks for nothing until `/api/ticker` has answered, so the first load is unchanged. It shows 50 entries, then "Show 50 older".
 
+### Investigate this company (Handoff 10, 2026-11-04)
+- **Nothing runs before Start.** The page (`pages/investigate.js`, `#/SYM/investigate`) opens on the plan:
+  - the six steps, each to include or skip and to move up or down;
+  - what each step reads;
+  - the most it can cost against the reader's Milo allowance, with what is left;
+  - the longest it can take, and whether it is kept.
+  Start is the confirmation, and says the cost ("Start investigation, up to 6 messages"). It is off, with the reason, when the allowance cannot cover the steps chosen.
+- **One gold action at a time:** Start on the plan, Continue while steps remain, then Save to library.
+- **A step's state is a word beside an icon** (Waiting, Running, Done, Skipped, Failed, Stopped). Stop, Skip, Retry and Run again are the reader's; nothing retries itself.
+- **Optic's figures and Milo's words are kept apart.** Each step shows Milo's text with each figure cited by its fact (a small squared button to the row), then Optic's verified figures as a table with definition, formula, period, as-of date and a numbered source, then "Could not verify" as its own heading and list. A sentence whose figure matches no fact is moved there, never left in the text.
+- **The summary:**
+  - Its words are the reader's to edit; the facts are not.
+  - A partial investigation says so in its first line, naming what was skipped, failed or not run.
+  - It ends with the disclaimer.
+- **On a phone** the steps are a progress list: each a line with its state and controls, the current one open.
+- **Entry points:** "Investigate this company" in the Dossier's ⋯ menu on every tab, and a section of that name on the Overview after the analysis. The header's actions and the tab row are unchanged.
+
 ### Headers
 Every dossier tab uses the Chart page's one-line header (`dossier-frame.js` `header()` now defaults to `bar`):
 - the company's logo (`/api/logo`, over the symbol's initial; `ui/symbols.js`), as in Classic's header (2026-10-25);

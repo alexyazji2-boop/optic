@@ -60,10 +60,11 @@ const P = {
   reports: lazy(() => import('./pages/reports.js'), 'reports'), watchlist: lazy(() => import('./pages/watchlist.js'), 'watchlist'), alerts: lazy(() => import('./pages/alerts.js'), 'alerts'),
   legal: lazy(() => import('./pages/legalpages.js'), 'legalpages'), earningsweek: lazy(() => import('./pages/earningsweek.js'), 'earningsweek'),
   sheet: lazy(() => import('./pages/sheet.js'), 'sheet'),
+  investigate: lazy(() => import('./pages/investigate.js'), 'investigate'),
   saved: lazy(() => import('./pages/saved.js'), 'saved'),
   dossierstart: lazy(() => import('./pages/dossierstart.js'), 'dossierstart'),
 };
-const PAGES = { home: P.workspace, overview: P.dossier, swing: P.options, long: P.investing, earnings: P.earnings, financials: P.financials, news: P.news, chart: P.chart, brief: P.read, market: P.macro, indices: P.indices, instrument: P.instrument, explore: P.explore, scan: P.scan, insiders: P.insiders, analysts: P.analysts, settings: () => settingsPage, compare: P.compare, tracker: P.tracker, paper: P.paper, roth: P.retirement, brokerage: P.brokerage, reports: P.reports, usage: P.reports, accounts: P.reports, metrics: P.reports, watchlist: P.watchlist, alerts: P.alerts, signin: () => signin, terms: P.legal, privacy: P.legal, earningsweek: P.earningsweek, dossierstart: P.dossierstart, sheet: P.sheet, saved: P.saved };
+const PAGES = { home: P.workspace, overview: P.dossier, swing: P.options, long: P.investing, earnings: P.earnings, financials: P.financials, news: P.news, chart: P.chart, brief: P.read, market: P.macro, indices: P.indices, instrument: P.instrument, explore: P.explore, scan: P.scan, insiders: P.insiders, analysts: P.analysts, settings: () => settingsPage, compare: P.compare, tracker: P.tracker, paper: P.paper, roth: P.retirement, brokerage: P.brokerage, reports: P.reports, usage: P.reports, accounts: P.reports, metrics: P.reports, watchlist: P.watchlist, alerts: P.alerts, signin: () => signin, terms: P.legal, privacy: P.legal, earningsweek: P.earningsweek, dossierstart: P.dossierstart, sheet: P.sheet, investigate: P.investigate, saved: P.saved };
 // The pages a reader most often opens next, fetched (not run) once the first page has settled and the
 // connection is not marked as costly: a later move to them does not wait on the network.
 function warmNext() {

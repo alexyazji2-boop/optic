@@ -40,7 +40,9 @@ from .auth import deps, store
 
 router = APIRouter(prefix="/api", tags=["library"])
 
-KINDS = ("company", "comparison", "conversation", "sheet")
+KINDS = ("company", "comparison", "conversation", "sheet", "investigation")
+# Kept by its own page as it runs (app/investigation.py, Handoff 10), never by POST /library
+KEPT_ELSEWHERE = ("investigation",)
 # A row saved before the library (a question to ask again) is listed as this kind
 QUESTION = "question"
 MAX_TICKERS = 4
@@ -77,11 +79,11 @@ def _tickers(raw: Any, kind: str) -> List[str]:
             out.append(sym)
     if len(out) > MAX_TICKERS:
         raise _err(400, "At most {} tickers in one saved item.".format(MAX_TICKERS))
-    least = {"company": 1, "sheet": 1, "comparison": 2, "conversation": 0}[kind]
+    least = {"company": 1, "sheet": 1, "comparison": 2, "conversation": 0, "investigation": 1}[kind]
     if len(out) < least:
         raise _err(400, "A {} needs {} ticker{}.".format(
             "comparison" if kind == "comparison" else "saved " + kind, least, "s" if least > 1 else ""))
-    if kind in ("company", "sheet") and len(out) > 1:
+    if kind in ("company", "sheet", "investigation") and len(out) > 1:
         out = out[:1]
     return out
 
@@ -292,7 +294,7 @@ async def list_items(request: Request,
         where.append("item_key IS NOT NULL AND research_type = ?")
         args.append(kind)
     elif kind:
-        raise _err(400, "Kinds are company, comparison, conversation, sheet and question.")
+        raise _err(400, "Kinds are company, comparison, conversation, sheet, investigation and question.")
     if key:
         where.append("item_key = ?")
         args.append(key)
@@ -345,6 +347,8 @@ async def save_item(request: Request, payload: Dict[str, Any] = Body(default={})
     user = deps.require_user(request)
     deps.csrf_guard(request)
     kind = str(payload.get("kind") or "").strip().lower()
+    if kind in KEPT_ELSEWHERE:
+        raise _err(400, "An investigation is kept by its own page as it runs, and saved there.")
     if kind not in KINDS:
         raise _err(400, "Kinds are company, comparison, conversation and sheet.")
     tickers = _tickers(payload.get("tickers"), kind)

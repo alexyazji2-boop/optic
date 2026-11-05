@@ -43,7 +43,7 @@ import { researchOf, researchLine, researchWords, researchRows, removedSince, us
 
 const HISTORY_KEY = 'optic.pulse.history.v1', PERSONA_KEY = 'optic.pulse.persona.v1', HORIZON_KEY = 'optic.milo.horizon.v1', RESEARCH_KEY = 'optic.research.v1';
 const MAX_CONVERSATIONS = 30, MAX_MESSAGES = 60, MAX_CHARS = 12000, MAX_Q = 4000;
-const DOSSIER = new Set(['overview', 'chart', 'swing', 'long', 'earnings', 'financials', 'news']);
+const DOSSIER = new Set(['overview', 'chart', 'swing', 'long', 'earnings', 'financials', 'news', 'investigate']);
 // a source's time as a reader says it: "2026-10-22T20:11:00+00:00" printed raw under every headline (audit 2026-10-22)
 // a moment with its day when it is not today's, in the reader's zone: a saved conversation reopened later says which day
 // each figure was read, not only the hour (Saved research, Handoff 5)
@@ -110,6 +110,7 @@ export function resetContext(r) {
 const pageLabel = (r) => {
   if (r.view === 'settings') return SETTINGS.label;
   if (r.view === 'instrument') return `${r.symbol || 'Instrument'}`;
+  if (r.view === 'investigate') return 'Investigation';
   for (const g of GROUPS) { const p = g.pages.find((x) => x.view === r.view); if (p) return g.symbol ? p.label : (g.pages.length > 1 ? `${g.label}, ${p.label}` : p.label); }
   return 'this page';
 };

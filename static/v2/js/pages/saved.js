@@ -35,7 +35,13 @@ function start() {
 }
 
 /* ---------------- one item ---------------- */
-const OPEN = { company: 'Open Dossier', comparison: 'Open comparison', conversation: 'Open in Milo', sheet: 'Open sheet', question: 'Ask again' };
+const OPEN = { company: 'Open Dossier', comparison: 'Open comparison', conversation: 'Open in Milo', sheet: 'Open sheet', investigation: 'Open investigation', question: 'Ask again' };
+/** An investigation's state, from its kept summary (app/investigation.py status_of): a draft says how far it got. */
+export function investigationAbout(s = {}) {
+  const steps = `${s.done || 0} of ${s.planned || 0} step${s.planned === 1 ? '' : 's'} done`;
+  if (s.status !== 'saved') return `Draft: ${steps}${(s.failed || []).length ? `, ${s.failed.length} failed` : ''}`;
+  return s.partial ? `Partial: ${steps}${(s.skipped || []).length ? `, ${s.skipped.length} skipped` : ''}` : `Complete: ${steps}`;
+}
 const priced = (s) => (s && s.price && s.price.price !== undefined && s.price.price !== null ? ` at $${num(s.price.price)}` : '');
 function goneLine(it) {
   const gone = it.gone || [];
@@ -54,7 +60,7 @@ function item(it, i) {
   const when = `Saved ${lib.dayText(it.created_at)}${it.updated_at && lib.dayText(it.updated_at) !== lib.dayText(it.created_at) ? `, updated ${lib.dayText(it.updated_at)}` : ''}`;
   // what it is about: the question, or the companies by name (said once: without their names the tickers line below is enough)
   const named = (it.tickers || []).some((t) => names[t] && names[t] !== t);
-  const about = it.kind === 'question' ? it.question : it.kind === 'conversation' ? (s.question ? `Asked: ${s.question}` : '') : named ? (it.tickers || []).map((t) => (names[t] && names[t] !== t ? `${t} ${names[t]}` : t)).join(', ') : '';
+  const about = it.kind === 'question' ? it.question : it.kind === 'conversation' ? (s.question ? `Asked: ${s.question}` : '') : it.kind === 'investigation' ? investigationAbout(s) : named ? (it.tickers || []).map((t) => (names[t] && names[t] !== t ? `${t} ${names[t]}` : t)).join(', ') : '';
   const isArmed = armed === it.id;
   return html`<li class="lib-item" data-lib-item="${it.id}">
     <div class="lib-text"><p class="lib-kind t-label">${lib.WORD[it.kind] || 'Saved'}</p>
@@ -84,7 +90,7 @@ function body() {
   if (L.loading && !L.items.length) return skeleton('rows', 4, 'Loading saved research');
   if (!L.items.length) {
     if (L.search || L.kind) return empty('Nothing matches', L.search ? `Nothing saved matches “${L.search}”${L.kind ? ` among ${lib.PLURAL[L.kind].toLowerCase()}` : ''}.` : `No ${lib.PLURAL[L.kind].toLowerCase()} saved yet.`);
-    return empty('Nothing saved yet', 'Press Save on a company\'s Dossier, on a comparison in Compare, on a research sheet, or in Milo\'s panel to keep a conversation with its sources. Each keeps its tickers and the date, and opens where you saved it.',
+    return empty('Nothing saved yet', 'Press Save on a company\'s Dossier, on a comparison in Compare, on a research sheet, or in Milo\'s panel to keep a conversation with its sources. An investigation is kept as it runs. Each keeps its tickers and the date, and opens where you saved it.',
       html`<a class="btn btn-sm" href="#/dossier">Open a Dossier</a>`);
   }
   return html`<ul class="lib-list">${L.items.map(item)}</ul>

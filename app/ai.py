@@ -1035,6 +1035,7 @@ def _ask(client: Any, feature: str, **kwargs: Any) -> Any:
     the writer's own parser reads it. A removal is logged and noted on the
     ledger row, never hidden."""
     _LAST_CALL.id = None
+    _LAST_CALL.removed = 0
     kwargs["system"] = ai_policy.with_policy(kwargs.get("system") or [])
     try:
         msg = client.messages.create(**kwargs)
@@ -1049,6 +1050,7 @@ def _ask(client: Any, feature: str, **kwargs: Any) -> Any:
             if findings:
                 block.text = cleaned
                 removed.extend(findings)
+    _LAST_CALL.removed = len(removed)
     note = None
     if removed:
         note = "policy {}: removed {} sentence(s) ({})".format(
@@ -1058,6 +1060,11 @@ def _ask(client: Any, feature: str, **kwargs: Any) -> Any:
         feature, getattr(msg, "model", None) or kwargs.get("model"),
         getattr(msg, "usage", None), stop_reason=getattr(msg, "stop_reason", None), note=note)
     return msg
+
+
+def last_removed() -> int:
+    """How many sentences the advice policy removed from this thread's last `_ask` reply."""
+    return int(getattr(_LAST_CALL, "removed", 0) or 0)
 
 
 def _thrown_away(why: str) -> None:
@@ -1477,7 +1484,7 @@ _CTX_RANGES = {"1M": "1 month", "3M": "3 months", "6M": "6 months", "1Y": "1 yea
 # The Dossier's tabs (static/v2/js/nav.js) and the chart's indicators by id, each named with the settings the chart
 # computes it with (static/v2/js/pages/chart.js STUDY_SPEC, which tests/test_milo_context_bar.py holds to this
 # table). An indicator reaches the header by its id, so no text of the browser's is read to Milo as one.
-_CTX_SECTIONS = ("Overview", "Chart", "Options", "Investing", "Earnings", "Financials", "News")
+_CTX_SECTIONS = ("Overview", "Chart", "Options", "Investing", "Earnings", "Financials", "News", "Investigation")
 _CTX_INDICATORS = {"ma": "MA 20, 50, 200", "ema": "EMA 9, 21, 50", "cloud921": "EMA 9 / 21 cloud",
                    "cloud2150": "EMA 21 / 50 cloud", "bb": "Bollinger 20, 2", "keltner": "Keltner 20, 2",
                    "donchian": "Donchian 20", "sec": "Regression channel 100", "vwap": "Anchored VWAP",
@@ -1613,7 +1620,8 @@ def _research_lines(rf: Dict[str, Any]) -> List[str]:
     elif not ticker:
         return []
     else:
-        where = ("the {} tab of its Dossier".format(rf["section"]) if rf["section"]
+        where = ("its Investigate this company checklist" if rf["section"] == "Investigation"
+                 else "the {} tab of its Dossier".format(rf["section"]) if rf["section"]
                  else "its {} page".format(rf["page"]) if rf["page"] and rf["page"] != ticker else "its page")
         said = "The reader is researching {} on {}".format(ticker, where)
         if rf["timeframe"]:

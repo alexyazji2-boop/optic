@@ -4,7 +4,7 @@
 // `price` is a selector for the figure to copy, read from the page so what is copied is what the reader sees.
 export function tickerMenu(sym, { price = '.dhead .dh-price', sheet = true } = {}) {
   const e = encodeURIComponent(sym);
-  return html`<a class="menu-phone" href="#/alerts?symbol=${e}">Set an alert</a><a class="menu-phone" href="#/compare?t=${e}">Compare</a>${sheet ? html`<a class="menu-phone" href="#/${e}/sheet">Export research sheet</a>` : ''}
+  return html`<a href="#/${e}/investigate">Investigate this company</a><a class="menu-phone" href="#/alerts?symbol=${e}">Set an alert</a><a class="menu-phone" href="#/compare?t=${e}">Compare</a>${sheet ? html`<a class="menu-phone" href="#/${e}/sheet">Export research sheet</a>` : ''}
     <button type="button" data-v2-homelink="${sym}">Show on Home</button>
     <button type="button" data-v2-copy="${sym}">Copy ticker</button>
     ${price ? html`<button type="button" data-v2-copy-price="${sym}" data-v2-copy-from="${price}">Copy price and time</button>` : ''}`;
