@@ -14,6 +14,7 @@ import { html } from '../core/dom.js';
 import { esc, fullDate } from '../core/format.js';
 import * as prefs from '../core/prefs.js';
 import * as F from '../core/figures.js';
+import * as PER from '../core/periods.js';
 import * as api from '../core/api.js';
 import { icon } from './icons.js';
 
@@ -40,7 +41,8 @@ export function figName(fv, text = '', { sym = '' } = {}) {
 
 // ---------------------------------------------------------------- the panel
 let pop = null, from = null, seq = 0;
-const BADGE = { annual: 'Fiscal year', ttm: 'Last 12 months', balance: 'Balance sheet date', forward: 'Forward estimate' };
+// the period badges every statement and segment block uses (core/periods.js, Handoff 2); the server sends its own
+const BADGE = { annual: 'Annual', quarter: 'Quarter', ttm: 'TTM', balance: 'Balance sheet', forward: 'Forward estimate' };
 const level = () => { try { return prefs.knowledge(); } catch (e) { return 'intermediate'; } };
 const dateText = (iso) => (iso && /^\d{4}-\d{2}-\d{2}/.test(String(iso)) ? fullDate(String(iso).slice(0, 10)) : '');
 
@@ -69,7 +71,7 @@ function body(e, fv, sym) {
   const again = fv.status === 'unavailable' && sym && !fv.retrieved_by_milo ? ` <button type="button" class="btn btn-sm fig-refetch">${icon('retry').s}Retry</button>` : '';
   const status = fv.status && fv.status !== 'ok' ? `<p class="fig-why"><b>${esc(fv.text)}.</b> ${esc(fv.why || '')}${again}</p>` : '';
   const stop = (x) => (x && !/[.!?]$/.test(x) ? `${x}.` : x);
-  const periodLine = [stop(per.label), per.quarters_text, per.detail, per.fiscal_year ? `Fiscal year the estimate covers: ${per.fiscal_year.toLowerCase()}.` : '', per.note].filter(Boolean).join(' ');
+  const periodLine = [stop(per.fiscal && per.label ? `${per.label} (${per.fiscal})` : per.label), per.quarters_text, per.detail, per.fiscal_year ? `Fiscal year the estimate covers: ${per.fiscal_year.toLowerCase()}.` : '', per.note].filter(Boolean).join(' ');
   const asOf = fv.as_of && /^\d{4}-\d{2}-\d{2}T/.test(String(fv.as_of)) ? `As of ${prefs.clock(fv.as_of)}` : fv.as_of ? `As of ${dateText(fv.as_of)}` : '';
   const source = [src.name, src.form ? `${src.form}${src.filed ? ` filed ${dateText(src.filed)}` : ''}` : '', src.note].filter(Boolean).join('. ');
   const restated = fv.restated
@@ -78,7 +80,7 @@ function body(e, fv, sym) {
   const retrieved = fv.retrieved_by_milo ? '<p class="fig-note">The value as Milo retrieved it for this answer. The Dossier shows the current one.</p>' : '';
   return `<p class="fig-h">${esc(fv.name || (e && e.name) || 'Figure')}${sym ? ` <span class="fig-sym">${esc(sym)}</span>` : ''}</p>
     <p class="fig-v">${esc(fv.text || '')}${fv.note ? ` <small>${esc(fv.note)}</small>` : ''}</p>
-    <p class="fig-badges">${kind ? `<span class="fig-badge">${esc(BADGE[kind] || kind)}</span>` : ''}${e && e.basis ? `<span class="fig-badge">${esc(e.basis)}</span>` : ''}${fv.currency && fv.unit === 'money' ? `<span class="fig-badge">${esc(fv.currency)}</span>` : ''}</p>
+    <p class="fig-badges">${kind ? `<span class="fig-badge" title="${esc(PER.BADGE_MEANS[kind] || '')}">${esc(per.badge || BADGE[kind] || kind)}</span>` : ''}${e && e.basis ? `<span class="fig-badge">${esc(e.basis)}</span>` : ''}${fv.currency && fv.unit === 'money' ? `<span class="fig-badge">${esc(fv.currency)}</span>` : ''}</p>
     ${status}${retrieved}
     ${def ? `<p class="fig-def">${esc(def)}</p>` : '<p class="fig-def is-missing">Definition unavailable.</p>'}
     ${periodLine ? `<div class="fig-sec"><p class="fig-k">Period</p><p>${esc(periodLine)}</p></div>` : ''}

@@ -124,7 +124,8 @@ def test_the_page_gives_no_shares_unless_the_parts_add_up(tmp_path):
         before: [before.canShare, before.reconciles], geo: [geo.canShare, F.compositionLine(geo, 'Revenue', 'FY2026', usd)], none: none.canShare, graphics: fixed.dropped, apple: apple.dropped }));
     """)
     assert got["fixed"][:2] == [False, False]
-    assert "against $130.4B reported" in got["fixed"][2] and "no shares of the total are shown" in got["fixed"][2]
+    assert "$8.9B more than the $130.4B reported: costs the filing assigns to no segment" in got["fixed"][2]
+    assert "no shares of the total are shown" in got["fixed"][2]
     assert "%" not in got["fixed"][2]
     assert got["before"] == [False, False], "even before the server fix, 278.6B is not a whole to take shares of"
     assert got["geo"][0] is True and "% of revenue" in got["geo"][1]

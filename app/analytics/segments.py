@@ -494,6 +494,56 @@ def _drop_segment_subtotals(cells: Dict[Tuple[str, str, str], float],
     return removed
 
 
+def _periods(listed: Dict[str, Any], rows: List[Dict[str, Any]], quarters: List[str], tables: List[Dict[str, Any]],
+             read_from: Dict[Tuple[str, str], Dict[str, Any]], sec: Optional[Tuple[Any, Any, Any]]) -> Dict[str, Any]:
+    """Each period's name and filing, and each table's reported totals for its reconciliation line (Handoff 2).
+
+    The calendar is the company facts' (app/figures/periods.py), the same filings the figures are read from; without
+    them, the filing list's own periods of report, which date each period exactly but name none. A reported total
+    comes only from the company facts, for the same period: a breakdown is never set against the provider's
+    statements, which can be a year behind the filings (Apple's, the day its 10-K was filed)."""
+    from ..figures import periods as periods_mod
+    from ..valuation import inputs as vi
+    fl = sec[0] if sec else None
+    cal = periods_mod.calendar(fl) if fl is not None else None
+    if not (cal or {}).get("available"):
+        cal = periods_mod.from_filing_list(rows, listed.get("cik"))
+    year_ends = sorted({e for t in tables for e in (t.get("annual") or {}).get("ends") or []})
+    cik = listed.get("cik")
+
+    def link(entry: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+        if not entry:
+            return None
+        return {"form": entry.get("form"), "filed": entry.get("filed"), "accession": entry.get("accession"),
+                "url": vi.filing_url(cik, entry.get("accession")) if cik else None}
+
+    def named(end: str, kind: str) -> Dict[str, Any]:
+        d = periods_mod.describe(cal, end, "annual" if kind == "year" else "quarter")
+        src = read_from.get((kind, end)) or (read_from.get(("year", end)) if kind == "quarter" else None)
+        d["read_from"] = link(src)
+        return d
+
+    out_periods = {"quarter": {q: named(q, "quarter") for q in quarters},
+                   "year": {e: named(e, "year") for e in year_ends}}
+    for t in tables:
+        if fl is None:
+            t["reported"] = None
+            t["reported_why"] = ("The filings' consolidated totals could not be read, so this table is not reconciled "
+                                 "to the company's reported {}.".format(t["metric_label"].lower()))
+            continue
+        t["reported"] = {
+            "quarter": [periods_mod.reported_total(fl, cal, t["metric"], q, "quarter") for q in quarters],
+            "year": [periods_mod.reported_total(fl, cal, t["metric"], e, "year")
+                     for e in (t.get("annual") or {}).get("ends") or []],
+        }
+    return {"periods": out_periods, "calendar": periods_mod.public(cal),
+            # a 10-K or 10-Q is a domestic filer's report, which US GAAP governs; a foreign issuer files a 20-F
+            "basis": "GAAP",
+            "basis_note": ("Segment figures are the company's own segment note under US GAAP (ASC 280): each segment's "
+                           "profit is measured the way management reviews it, so the segments need not add up to the "
+                           "reported total. The reconciliation line says by how much they differ.")}
+
+
 # Where the shared feed cache kept these: parses under the first prefix, the raw
 # megabyte documents under the second.
 SHARED_PREFIX = "seg:parsed:"
@@ -521,14 +571,21 @@ def _clear_shared_cache_once() -> None:
 
 
 def build(ticker: str, force: bool = False, budget: int = PARSE_BUDGET,
-          wanted: int = FILINGS_WANTED) -> Dict[str, Any]:
-    """Quarterly breakdowns for one ticker, as tables per axis."""
+          wanted: int = FILINGS_WANTED, sec: Any = None) -> Dict[str, Any]:
+    """Quarterly breakdowns for one ticker, as tables per axis.
+
+    `sec` is the company's facts as app/figures/compute.py load_via() answers them, (filings, cik, reason), or a
+    function that loads them, called only once the symbol has filings to read: the fiscal calendar that names each
+    period and the consolidated totals each table is reconciled against come from them (Handoff 2). Without them
+    each period is named by its date and filing, and no reconciliation is claimed."""
     listed = filings(ticker, force=force)
     if not listed.get("available"):
         return {**listed, "tables": [], "blind_spot": BLIND}
 
     rows = listed["rows"][:max(1, int(wanted))]
     cells: Dict[Tuple[str, str, str], float] = {}
+    # the filing each period's figures were read from: the newest that reported it, as for the figures themselves
+    read_from: Dict[Tuple[str, str], Dict[str, Any]] = {}
     labels: Dict[str, Dict[str, str]] = {}
     read = 0
     unread = 0
@@ -598,7 +655,9 @@ def build(ticker: str, force: bool = False, budget: int = PARSE_BUDGET,
             value = direct[slot] if slot in direct else summed[slot]
             # A restated figure appears in several filings. The newest filing is
             # first in the list, so the first value seen is the latest one.
-            cells.setdefault(slot, value)
+            if slot not in cells:
+                cells[slot] = value
+                read_from.setdefault((slot[1], slot[2]), entry)
 
     made: set = set()
     cells, derived = _fill_fourth_quarters(cells, made)
@@ -606,6 +665,9 @@ def build(ticker: str, force: bool = False, budget: int = PARSE_BUDGET,
 
     quarters = sorted({k[2] for k in cells if k[1] == "quarter"})
     tables = []
+    # breakdowns filed only in the 10-K, apart from `tables`: Classic and the sum of the parts read `tables` as
+    # quarterly grids, and an annual-only one there drew an empty grid
+    annual_only_tables = []
     for axis in AXES:
         for metric in METRICS:
             series = [s for s, meta in labels.items()
@@ -620,8 +682,6 @@ def build(ticker: str, force: bool = False, budget: int = PARSE_BUDGET,
                 # which of these quarters are the year less three reported quarters, not a filed figure
                 body.append({"member": labels[s]["member"], "values": values,
                              "derived": [(s, "quarter", q) in made for q in quarters]})
-            if not body:
-                continue
             # Full fiscal years as the 10-Ks report them, beside the quarters.
             # Read by the fair-value model's sum of the parts, which needs a
             # whole year and should not depend on four quarters all having
@@ -632,21 +692,34 @@ def build(ticker: str, force: bool = False, budget: int = PARSE_BUDGET,
                 vals = [cells.get((s, "year", e)) for e in year_ends]
                 if any(v is not None for v in vals):
                     annual.append({"member": labels[s]["member"], "values": vals})
+            # A breakdown some companies file only in the 10-K (geography, most often) has no quarters. It was
+            # dropped here, so it was missing from the fiscal-year view too; it is kept, and said to be yearly only.
+            if not body and not annual:
+                continue
             gone = [x for x in subtotals if x["metric"] == metric["id"] and axis["id"] == "segment"]
-            tables.append({
+            (tables if body else annual_only_tables).append({
                 "axis": axis["id"], "axis_label": axis["label"],
                 "metric": metric["id"], "metric_label": metric["label"],
                 "rows": body,
                 "annual": {"ends": year_ends, "rows": annual},
+                "annual_only": not body,
                 "subtotals_removed": gone,
                 "notes": ([SUBTOTAL_NOTE.format(member=gone[0]["member"])] if gone else []),
             })
 
+    try:
+        facts = sec() if callable(sec) else sec
+    except Exception as exc:                                  # noqa: BLE001
+        log.info("segments: the company facts did not load (%s)", exc)
+        facts = None
+    named = _periods(listed, rows, quarters, tables + annual_only_tables, read_from, facts)
     return {
         "available": True,
         "ticker": listed["ticker"],
         "quarters": quarters,
         "tables": tables,
+        "annual_only_tables": annual_only_tables,
+        **named,
         "filings_listed": len(rows),
         "filings_read": read,
         "filings_unread": unread,

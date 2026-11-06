@@ -179,6 +179,9 @@ function wireGroups(id, n, gw, padL, W, tipHTML) {
   };
 }
 const notReported = (s) => s.missingText || 'Not reported';
+// a group's whole label for its tip and the chart's description: a period's name with its end date when the caller
+// gives one (Handoff 2), so a tick that reads "FY25" is never all a screen reader or a tip says
+const gl = (g) => (g && g.title) || (g && g.x) || '';
 // periods at either end with no figure in any series are not drawn (an empty column is not an observation); a gap
 // between reported periods stays a gap
 function trimEnds(groups, series) {
@@ -222,9 +225,9 @@ export function groupedBars(groupsIn, seriesIn, opts = {}) {
   });
   labels = placeLabels(cands, { l: pad.l, r: W - pad.r });
   const n = groups.length, last = n - 1;
-  const summary = opts.summary || `${opts.label || 'Bars'}, ${groups[0].x} to ${groups[last].x}. ${groups[last].x}: ${S.map((s) => `${s.name} ${fin(s.values[last]) ? fmt(s.values[last]) : notReported(s)}`).join(', ')}.`;
+  const summary = opts.summary || `${opts.label || 'Bars'}, ${gl(groups[0])} to ${gl(groups[last])}. ${gl(groups[last])}: ${S.map((s) => `${s.name} ${fin(s.values[last]) ? fmt(s.values[last]) : notReported(s)}`).join(', ')}.`;
   const svg = `<svg class="bars gbars" id="${id}" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="${esc(summary)}" tabindex="0">${grid}${refs}${bars}${labels}${xl}</svg><div class="chart-tip" aria-hidden="true" style="display:none"></div>`;
-  const tip = (i) => `<b>${esc(groups[i].x)}</b>${S.map((s) => `<span class="tip-row"><i class="sw ${s.cls || 's1'}${s.hollow ? ' hollow' : ''}"></i>${esc(s.name)} <b>${fin(s.values[i]) ? esc(fmt(s.values[i])) : notReported(s)}</b></span>`).join('')}${opts.note ? `<em>${esc(opts.note(i) || '')}</em>` : ''}`;
+  const tip = (i) => `<b>${esc(gl(groups[i]))}</b>${S.map((s) => `<span class="tip-row"><i class="sw ${s.cls || 's1'}${s.hollow ? ' hollow' : ''}"></i>${esc(s.name)} <b>${fin(s.values[i]) ? esc(fmt(s.values[i])) : notReported(s)}</b></span>`).join('')}${opts.note ? `<em>${esc(opts.note(i) || '')}</em>` : ''}`;
   return { html: `<div class="chart-wrap">${svg}</div>`, wire: wireGroups(id, n, gw, pad.l, W, tip) };
 }
 
@@ -251,9 +254,9 @@ export function periodLines(groupsIn, seriesIn, opts = {}) {
     paths += `<path class="pline ${s.cls || 's1'}" d="${d}"/>`;
   });
   const n = groups.length, last = n - 1;
-  const summary = opts.summary || `${opts.label || 'Lines'}, ${groups[0].x} to ${groups[last].x}. ${groups[last].x}: ${S.map((s) => `${s.name} ${fin(s.values[last]) ? fmt(s.values[last]) : 'not reported'}`).join(', ')}.`;
+  const summary = opts.summary || `${opts.label || 'Lines'}, ${gl(groups[0])} to ${gl(groups[last])}. ${gl(groups[last])}: ${S.map((s) => `${s.name} ${fin(s.values[last]) ? fmt(s.values[last]) : 'not reported'}`).join(', ')}.`;
   const svg = `<svg class="bars plines" id="${id}" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="${esc(summary)}" tabindex="0">${grid}${paths}${dots}${xl}</svg><div class="chart-tip" aria-hidden="true" style="display:none"></div>`;
-  const tip = (i) => `<b>${esc(groups[i].x)}</b>${S.map((s) => `<span class="tip-row"><i class="sw ${s.cls || 's1'}"></i>${esc(s.name)} <b>${fin(s.values[i]) ? esc(fmt(s.values[i])) : 'Not reported'}</b></span>`).join('')}`;
+  const tip = (i) => `<b>${esc(gl(groups[i]))}</b>${S.map((s) => `<span class="tip-row"><i class="sw ${s.cls || 's1'}"></i>${esc(s.name)} <b>${fin(s.values[i]) ? esc(fmt(s.values[i])) : 'Not reported'}</b></span>`).join('')}`;
   return { html: `<div class="chart-wrap">${svg}</div>`, wire: wireGroups(id, n, gw, pad.l, W, tip) };
 }
 
@@ -301,8 +304,8 @@ export function stackedBars(groupsIn, partsIn, opts = {}) {
     P.forEach((p) => { const v = p.values[i]; if (!fin(v) || v <= 0) return; bars += `<rect class="gbar ${p.cls || 's1'}" data-g="${i}" x="${x.toFixed(1)}" y="${Y(base + v).toFixed(1)}" width="${bw.toFixed(1)}" height="${Math.max(1, Y(base) - Y(base + v) - 1).toFixed(1)}"/>`; base += v; });
   });
   const last = groups.length - 1;
-  const summary = opts.summary || `${opts.label || 'Composition'}, ${groups[0].x} to ${groups[last].x}. ${groups[last].x}: ${P.map((p) => `${p.name} ${fin(p.values[last]) ? fmt(p.values[last]) : 'not reported'}`).join(', ')}; total ${fmt(totals[last])}.`;
+  const summary = opts.summary || `${opts.label || 'Composition'}, ${gl(groups[0])} to ${gl(groups[last])}. ${gl(groups[last])}: ${P.map((p) => `${p.name} ${fin(p.values[last]) ? fmt(p.values[last]) : 'not reported'}`).join(', ')}; total ${fmt(totals[last])}.`;
   const svg = `<svg class="bars sbars" id="${id}" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="${esc(summary)}" tabindex="0">${grid}${bars}${xl}</svg><div class="chart-tip" aria-hidden="true" style="display:none"></div>`;
-  const tip = (i) => `<b>${esc(groups[i].x)}</b>${totals[i] > 0 ? `<span class="tip-row">Total <b>${esc(fmt(totals[i]))}</b></span>` : ''}${P.map((p) => `<span class="tip-row"><i class="sw ${p.cls || 's1'}"></i>${esc(p.name)} <b>${fin(p.values[i]) ? esc(fmt(p.values[i])) : 'Not reported'}</b>${fin(p.values[i]) && totals[i] > 0 ? ` <small>${num((p.values[i] / totals[i]) * 100, 0)}%</small>` : ''}</span>`).join('')}<span class="tip-row">Total <b>${esc(fmt(totals[i]))}</b></span>`;
+  const tip = (i) => `<b>${esc(gl(groups[i]))}</b>${totals[i] > 0 ? `<span class="tip-row">Total <b>${esc(fmt(totals[i]))}</b></span>` : ''}${P.map((p) => `<span class="tip-row"><i class="sw ${p.cls || 's1'}"></i>${esc(p.name)} <b>${fin(p.values[i]) ? esc(fmt(p.values[i])) : 'Not reported'}</b>${fin(p.values[i]) && totals[i] > 0 ? ` <small>${num((p.values[i] / totals[i]) * 100, 0)}%</small>` : ''}</span>`).join('')}<span class="tip-row">Total <b>${esc(fmt(totals[i]))}</b></span>`;
   return { html: `<div class="chart-wrap">${svg}</div>`, wire: wireGroups(id, groups.length, gw, pad.l, W, tip) };
 }

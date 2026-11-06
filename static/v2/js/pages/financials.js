@@ -20,6 +20,8 @@ import { kindOf, can, kindWord } from '../core/instrument.js';
 import { icon } from '../ui/icons.js';
 import * as FIG from '../core/figures.js';
 import { fig } from '../ui/figure.js';
+import * as PER from '../core/periods.js';
+import { periodLine, nonGaap, typeBadge, filingLink } from '../ui/period.js';
 let lp = null;   // the header's price refresh (dossier-frame livePrice), stopped in dispose()
 
 let D = {}, live = true, mainEl = null;
@@ -28,26 +30,10 @@ const PERIOD_KEY = 'optic.v2.financials.period.v1';
 const readPeriod = () => { try { return localStorage.getItem(PERIOD_KEY) === 'quarter' ? 'quarter' : 'year'; } catch (e) { return 'year'; } };
 let period = readPeriod();
 
-/** A period end as the company's fiscal period, as app/analytics/fundamentals.py fiscal_label writes it:
- * "Q1 FY26" for Microsoft's quarter to 30 September 2025, "Q3 2026" for a calendar-year filer, "FY26" or
- * "2026" for a year. `fyEnd` is any fiscal year end the company has reported. */
-export function fiscalLabel(periodEnd, fyEnd, annual = false) {
-  const day = (s) => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(s || '')); return m ? Date.UTC(+m[1], +m[2] - 1, +m[3]) : null; };
-  const d = day(periodEnd), fe = day(fyEnd);
-  if (d === null || fe === null) return null;
-  const F = new Date(fe), DAY = 86400000;
-  const cal = (F.getUTCMonth() === 11 && F.getUTCDate() >= 24) || (F.getUTCMonth() === 0 && F.getUTCDate() <= 7);
-  const at = (y) => { const last = new Date(Date.UTC(y, F.getUTCMonth() + 1, 0)).getUTCDate(); return Date.UTC(y, F.getUTCMonth(), Math.min(F.getUTCDate(), last)); };
-  let end = at(new Date(d).getUTCFullYear());
-  if (end < d - 10 * DAY) end = at(new Date(end).getUTCFullYear() + 1);
-  const E = new Date(end);
-  const year = cal && E.getUTCMonth() === 0 ? E.getUTCFullYear() - 1 : E.getUTCFullYear();
-  const yy = String(year % 100).padStart(2, '0');
-  if (annual) return cal ? String(year) : `FY${yy}`;
-  const q = 4 - Math.round((end - d) / DAY / 91.31);
-  if (q < 1 || q > 4) return null;
-  return cal ? `Q${q} ${year}` : `Q${q} FY${yy}`;
-}
+// Every period's name and date come from the company's filings (core/periods.js, Handoff 2). The page used to work a
+// name out of the provider's month-end date (fiscalLabel, retired 2026-11-03): Apple's Segments read "FY26" under a
+// Summary that said "the fiscal year to Sep 30, 2025", a date Apple's year did not end on, and Home Depot's fiscal
+// 2025 read FY26.
 const seg = (val, opts) => html`<div class="seg fin-period" role="group" aria-label="Fiscal years or quarters">${opts.map(([v, l]) => html`<button type="button" data-fin-period="${v}" aria-pressed="${val === v}">${l}</button>`)}</div>`;
 const kv = (rows, n = 3) => html`<dl class="kv" style="--kv:${n}">${rows.filter(Boolean).map(([k, v]) => html`<div><dt>${k}</dt><dd>${v}</dd></div>`)}</dl>`;
 const ask = (sym, label, q) => miloButton(label, { ask: q, context: `${sym} Dossier, Financials`, symbol: sym });
@@ -78,27 +64,30 @@ export function insiderLine(ow) {
 }
 // A registry figure for a reading (Handoff 1): its own text as the control that defines it, and its period, which can
 // be a later year than the statements' when the filings are ahead of the provider (AAPL's 10-K, 2026-11-03).
+const andList = (xs) => (xs.length <= 1 ? xs[0] || '' : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`);
+const lowerFirst = (x) => (x ? x[0].toLowerCase() + x.slice(1) : '');
 const regFig = (id) => { const fv = FIG.of(D.t, id); return fv && fv.status === 'ok' ? fv : null; };
-const regWhen = (fv) => (fv ? FIG.period(fv) : '');
+const regWhen = (fv) => (fv ? `${FIG.period(fv)}${(fv.period || {}).fiscal ? ` (${fv.period.fiscal})` : ''}` : '');
 // the statements' own notes print the provider's net margin and net cash; the registry's are printed instead
 const NET_NOTE = /net margin|net (cash|debt) position/i;
 function readings() {
   const c = (D.t || {}).company || {}, f = c.financials || {}, m = f.margins || {}, g = f.growth || {}, eh = c.earnings_history || {}, si = c.short_interest || {}, ow = c.ownership || {};
   const items = [], nm = regFig('net_margin_fy');
+  // the statements' latest year as the filings name and date it (Handoff 2): "FY25, fiscal year ended Sep 27, 2025"
+  const A = PER.statementPeriods(D.t, 'annual'), a0 = A[0];
   if (f.available) items.push(['Margins', `Gross ${pct(m.gross_pct)}, operating ${pct(m.operating_pct)}.`]);
   if (nm) items.push(['Net margin', html`${fig(nm, { sym: D.sym })}, ${regWhen(nm).replace(/^Fiscal/, 'fiscal')}.`]);
   // a swing to a loss is said as one, with no margin clause: CRCL read "net income -483.83% ... revenue outpaced net
   // income, so the net margin narrowed" for a margin that went from positive to negative (audit 2026-10-22)
   const ni0 = ((f.annual || {}).net_income || [])[0], niGo = isNum(g.net_income_yoy_pct) && isNum(g.revenue_yoy_pct) && isNum(ni0) && ni0 > 0;
   const niWords = !isNum(g.net_income_yoy_pct) ? `net income has no growth rate (${isNum(ni0) && ni0 < 0 ? 'a loss' : 'a loss or no figure the year before'})` : isNum(ni0) && ni0 < 0 ? 'net income swung from a profit to a loss' : `net income ${signed(g.net_income_yoy_pct)}`;
-  if (f.available) items.push(['Growth', `Revenue ${isNum(g.revenue_yoy_pct) ? signed(g.revenue_yoy_pct) : 'with no growth rate'} and ${niWords} in the last fiscal year${niGo && g.net_income_yoy_pct - g.revenue_yoy_pct > 2 ? ': net income outpaced revenue, so the net margin widened' : niGo && g.revenue_yoy_pct - g.net_income_yoy_pct > 2 ? ': revenue outpaced net income, so the net margin narrowed' : ''}.`]);
+  if (f.available) items.push(['Growth', `Revenue ${isNum(g.revenue_yoy_pct) ? signed(g.revenue_yoy_pct) : 'with no growth rate'} and ${niWords} in ${a0 ? PER.inText(a0) : 'the last fiscal year'}${niGo && g.net_income_yoy_pct - g.revenue_yoy_pct > 2 ? ': net income outpaced revenue, so the net margin widened' : niGo && g.revenue_yoy_pct - g.net_income_yoy_pct > 2 ? ': revenue outpaced net income, so the net margin narrowed' : ''}.`]);
   if (eh.available && eh.sample_size) items.push(['Against estimates', `Beat in ${eh.beat_count} of ${eh.sample_size} quarters${eh.in_line_count ? `, in line in ${eh.in_line_count}` : ''}, by ${signed(eh.avg_surprise_pct, 1)} on average.`]);
   // only what was reported: a missing share of float is not 0%, and no squeeze reading is drawn without it
   if (si.available) { const parts = [isNum(si.percent_of_float) ? `${pct(si.percent_of_float * 100)} of float` : 'Share of float not reported', isNum(si.days_to_cover) ? `${num(si.days_to_cover, 1)} days to cover` : '', isNum(si.change_vs_prior_pct) ? `${signed(si.change_vs_prior_pct, 1)} since the last report` : ''].filter(Boolean); items.push(['Short interest', `${parts.join(', ')}.${isNum(si.percent_of_float) && si.squeeze_potential ? ` Squeeze potential ${si.squeeze_potential}.` : ''}`]); }
   if (ow.available) items.push(['Insiders', insiderLine(ow)]);
   if (!items.length && !f.available) return '';
-  const a = f.annual || {}, per = f.annual_periods || [];
-  const yr = (f.annual_fiscal || [])[0] || (per[0] ? String(per[0]).slice(0, 4) : '');
+  const a = f.annual || {};
   // free cash flow, the net margin and net debt are the registry's, each with its own period and source
   const fcf = regFig('free_cash_flow_fy'), nd = FIG.of(D.t, 'net_debt');
   const from = (fv) => [regWhen(fv), (fv.source || {}).form ? `from the ${fv.source.form}` : (fv.source || {}).provider ? `from ${fv.source.provider}` : ''].filter(Boolean).join(', ');
@@ -106,12 +95,19 @@ function readings() {
   const cells = f.available ? [
     ['Revenue', usd(latest('revenue')), isNum(g.revenue_yoy_pct) ? `${signed(g.revenue_yoy_pct)} on the year before` : noRate(latest('revenue'))],
     ['Net income', usd(latest('net_income')), isNum(g.net_income_yoy_pct) ? (latest('net_income') < 0 ? `swung to a loss from a profit the year before (${signed(g.net_income_yoy_pct, 0)})` : `${signed(g.net_income_yoy_pct)} on the year before`) : noRate(latest('net_income'))],
-    ['Free cash flow', fcf ? fig(fcf, { sym: D.sym }) : 'n/a', fcf ? from(fcf) : 'Not reported'],
+    [html`Free cash flow${nonGaap()}`, fcf ? fig(fcf, { sym: D.sym }) : 'n/a', fcf ? from(fcf) : 'Not reported'],
     ['Operating margin', pct(m.operating_pct), `Gross ${pct(m.gross_pct)}`],
     ['Net margin', nm ? fig(nm, { sym: D.sym }) : 'n/a', nm ? from(nm) : 'Not reported'],
-    ['Net debt', nd ? fig(nd, { sym: D.sym }) : 'n/a', nd && nd.status === 'ok' ? from(nd) : (nd && nd.why) || 'Not reported'],
+    [html`Net debt${nonGaap()}`, nd ? fig(nd, { sym: D.sym }) : 'n/a', nd && nd.status === 'ok' ? from(nd) : (nd && nd.why) || 'Not reported'],
   ] : [];
-  return html`<section class="section fin-sum" id="fin-summary" aria-labelledby="fr-h"><h2 class="t-h2" id="fr-h">Summary${yr ? `, ${/^FY/.test(yr) ? yr : `fiscal ${yr}`}` : ''}</h2>${per[0] ? html`<p class="section-sub">The fiscal year to ${fullDate(per[0])}.</p>` : ''}
+  // registry figures from a later filing than the provider's statements say so beside the title (AAPL, 2026-11-03:
+  // the 10-K for FY26 was filed that morning, the statements still ended with FY25)
+  const later = [['Free cash flow', fcf], ['net margin', nm], ['net debt', nd && nd.status === 'ok' ? nd : null]]
+    .filter(([, fv]) => fv && a0 && a0.end && (fv.period || {}).end && Date.parse(fv.period.end) - Date.parse(a0.end) > 15 * 864e5);
+  const lf = later.length ? later[0][1] : null, lp = lf ? lf.period || {} : {};
+  const laterNote = lf ? `${capFirst(andList(later.map(([n]) => n.toLowerCase())))} ${later.length > 1 ? 'are' : 'is'} from ${(lf.source || {}).form ? `the ${lf.source.form}` : 'a later filing'}${lp.fiscal ? ` for ${lp.fiscal}` : ''}, ${lowerFirst(FIG.period(lf))}: a later year than the provider's statements, which do not have it yet.` : '';
+  return html`<section class="section fin-sum" id="fin-summary" aria-labelledby="fr-h"><h2 class="t-h2" id="fr-h">Summary</h2>
+    ${f.available ? periodLine({ type: 'annual', basis: PER.basisOf(D.t) || 'Basis not stated', what: a0 ? PER.label(a0) : PER.UNAVAILABLE, filing: a0 && a0.filing, notes: [...PER.notes(a0 ? [a0] : [], PER.calendarOf(D.t)), laterNote].filter(Boolean) }) : ''}
     ${cells.length ? html`<div class="readings fin-figs" style="--rn:${cells.length}">${cells.map(([k, v, d]) => html`<div class="rd"><span class="k">${k}</span><span class="v">${v}</span><span class="d">${d}</span></div>`)}</div>` : ''}
     ${/* folded on a phone, so the period control and the charts come sooner (pitch audit, 2026-10-22); the figures above are the finding */ ''}
     ${items.length ? html`<details class="fin-say" ${wideScreen() ? 'open' : ''}><summary><h3>What the figures say</h3>${icon('chev')}</summary><dl class="reads-dl">${items.map(([k, v]) => html`<div><dt>${k}</dt><dd>${v}</dd></div>`)}</dl></details>` : ''}</section>`;
@@ -142,12 +138,13 @@ function jumpList() {
 
 // The figures for the period chosen: fiscal years from the annual statements, or quarters from the quarterly
 // income statement (Yahoo carries no quarterly cash flow, so free cash flow is a yearly figure only).
-export function periodView(f, which) {
+export function periodView(f, which, t = D.t) {
   const q = which === 'quarter' && (f.quarterly_periods || []).length;
   const per = q ? f.quarterly_periods : f.annual_periods || [];
-  const names = q ? f.quarterly_fiscal || [] : f.annual_fiscal || [];
-  return { q: !!q, per, vals: q ? f.quarterly || {} : f.annual || {},
-    label: (i) => names[i] || (q ? `${shortDate(per[i])} ${String(per[i]).slice(0, 4)}` : String(per[i]).slice(0, 4)),
+  // each column's period as the filings name and date it (core/periods.js, Handoff 2)
+  const desc = PER.statementPeriods(t, q ? 'quarterly' : 'annual');
+  return { q: !!q, per, desc, vals: q ? f.quarterly || {} : f.annual || {},
+    label: (i) => PER.short(desc[i]), said: (i) => PER.inText(desc[i]), at: (i) => PER.atText(desc[i]), tick: (i) => PER.tick(desc[i]),
     // a quarter against the same quarter a year before (four columns back); a year against the one before
     back: q ? 4 : 1, against: q ? 'on the same quarter a year before' : 'on the year before' };
 }
@@ -162,8 +159,9 @@ function statements(sym) {
   if (!f.available) return '';
   const V = periodView(f, period), a = V.vals, per = V.per, bs = f.balance_sheet || {}, m = f.margins || {};
   const nd = FIG.of(D.t, 'net_debt'), nm = regFig('net_margin_fy');
-  const Y = periodView(f, 'year'), ya = Y.vals, ylab = Y.per.map((_, i) => Y.label(i));
-  const labels = per.map((_, i) => V.label(i)), C = compare(V);
+  const Y = periodView(f, 'year'), ya = Y.vals, ysaid = Y.per.map((_, i) => Y.said(i)), yat = Y.per.map((_, i) => Y.at(i));
+  // in a sentence each period carries its date: "in FY25 (to Sep 27, 2025)" (Handoff 2)
+  const labels = per.map((_, i) => V.said(i)), C = compare(V);
   const opm = FV.marginSeries(a.operating_income, a.revenue), gpm = FV.marginSeries(a.gross_profit, a.revenue), npm = FV.marginSeries(a.net_income, a.revenue);
   const qoq = V.q && C.back === 4 && per.length > 1 ? FV.growthLine('Against the quarter before, revenue', a.revenue, labels, 1, '', usd).replace('Against the quarter before, revenue was', 'Against the quarter before, revenue was') : '';
   const bh = f.balance_history || {}, hasBal = (bh.cash || []).some(isNum) && (bh.total_debt || []).some(isNum);
@@ -171,32 +169,42 @@ function statements(sym) {
   const latestBridge = FV.bridges((ya.operating_cash_flow || [])[0], (ya.capital_expenditure || [])[0], (ya.free_cash_flow || [])[0]);
   const shares = a.diluted_shares || [];
   const unit = V.q ? 'Quarters' : 'Fiscal years';
-  const rows = [['Revenue', 'revenue'], ['Gross profit', 'gross_profit'], ['Operating income', 'operating_income'], ['EBITDA', 'ebitda'], ['Net income', 'net_income'], ['Operating cash flow', 'operating_cash_flow'], ['Capital expenditure', 'capital_expenditure'], ['Free cash flow', 'free_cash_flow'], ['Diluted EPS (GAAP)', 'diluted_eps'], ['Diluted shares', 'diluted_shares']];
+  // EBITDA and free cash flow are not GAAP lines: each says so where the rest of the table is the filed statements
+  const rows = [['Revenue', 'revenue'], ['Gross profit', 'gross_profit'], ['Operating income', 'operating_income'], ['EBITDA', 'ebitda', true], ['Net income', 'net_income'], ['Operating cash flow', 'operating_cash_flow'], ['Capital expenditure', 'capital_expenditure'], ['Free cash flow', 'free_cash_flow', true], ['Diluted EPS (GAAP)', 'diluted_eps'], ['Diluted shares', 'diluted_shares']];
   const cell = (k, v) => (k === 'diluted_eps' ? num(v) : k === 'diluted_shares' ? compact(v) : usd(v));
-  return html`<section class="section" id="fin-statements" aria-labelledby="st-h"><div class="section-head"><div><h2 class="t-h2" id="st-h">Statements</h2><p class="section-sub">${clean(f.source || "The company's statements as Yahoo Finance carries them.")} In ${ccyWords()}${ccy !== 'USD' ? ', as the company files; the share price is in US dollars' : ''}.</p></div>
+  const cal = PER.calendarOf(D.t), basis = PER.basisOf(D.t) || 'Basis not stated';
+  return html`<section class="section" id="fin-statements" aria-labelledby="st-h"><div class="section-head"><div><h2 class="t-h2" id="st-h">Statements</h2>
+      ${periodLine({ type: V.q ? 'quarter' : 'annual', basis, what: PER.range(V.desc), filing: PER.latestFiling(V.desc), notes: PER.notes(V.desc, cal) })}<p class="section-sub">${clean(f.source || "The company's statements as Yahoo Finance carries them.")} In ${ccyWords()}${ccy !== 'USD' ? ', as the company files; the share price is in US dollars' : ''}.</p></div>
       ${(f.quarterly_periods || []).length ? seg(period, [['year', 'Fiscal years'], ['quarter', 'Quarters']]) : ''}</div>
     <div class="fv-grid">
       <figure class="fv"><figcaption><h3>Revenue and profit</h3><p class="fv-take">${FV.profitLine(a.revenue, a.net_income, labels, C.back, C.against, usd)}</p>${qoq ? html`<p class="fv-take fv-sub">${qoq}</p>` : ''}
         ${key([['s1', 'Revenue'], ['s2', 'Operating income'], ['s3', 'Net income']])}<p class="fv-unit">${unit}, ${ccyWords()}</p></figcaption><div class="chart-slot" data-chart="profit"></div></figure>
       <figure class="fv"><figcaption><h3>Margins</h3><p class="fv-take">${FV.marginLine('Operating margin', opm, labels, C.back)}</p>
         ${key([['s1', 'Gross margin'], ['s2', 'Operating margin'], ['s3', 'Net margin']])}<p class="fv-unit">${unit}, percent of revenue</p></figcaption><div class="chart-slot" data-chart="margins"></div></figure>
-      ${hasCf ? html`<figure class="fv"><figcaption><h3>Cash flow</h3><p class="fv-take">${FV.cashFlowLine(ya.operating_cash_flow, ya.capital_expenditure, ya.free_cash_flow, ylab, usd)}</p>
-        ${key([['s1', 'Operating cash flow'], ['s2', 'Capital spending, shown as cash out'], ['s3', 'Free cash flow']])}<p class="fv-unit">Fiscal years, ${ccyWords()}${V.q ? '. The statements Optic reads carry no quarterly cash flow' : ''}</p></figcaption>
-        <div class="chart-slot" data-chart="cashflow"></div>${latestBridge ? html`<p class="t-label fv-bridge-h">${ylab[0]}: from operating cash flow to free cash flow</p><div class="chart-slot" data-chart="bridge"></div>` : ''}</figure>` : ''}
-      ${hasBal ? html`<figure class="fv"><figcaption><h3>Cash and debt</h3><p class="fv-take">${FV.netCashLine(bh.cash, bh.total_debt, ylab, usd)}</p>
-        ${key([['s1', 'Cash and equivalents'], ['s2', 'Total debt']])}<p class="fv-unit">At each fiscal year end, ${ccyWords()}</p></figcaption><div class="chart-slot" data-chart="balance"></div></figure>` : ''}
+      ${hasCf ? html`<figure class="fv"><figcaption><h3>Cash flow</h3><p class="fv-take">${FV.cashFlowLine(ya.operating_cash_flow, ya.capital_expenditure, ya.free_cash_flow, ysaid, usd)}</p>
+        ${key([['s1', 'Operating cash flow'], ['s2', 'Capital spending, shown as cash out'], ['s3', 'Free cash flow, non-GAAP']])}<p class="fv-unit">${V.q ? html`${typeBadge('annual')} ` : ''}Fiscal years, ${ccyWords()}${V.q ? '. The statements Optic reads carry no quarterly cash flow' : ''}</p></figcaption>
+        <div class="chart-slot" data-chart="cashflow"></div>${latestBridge ? html`<p class="t-label fv-bridge-h">${Y.said(0)}: from operating cash flow to free cash flow</p><div class="chart-slot" data-chart="bridge"></div>` : ''}</figure>` : ''}
+      ${hasBal ? html`<figure class="fv"><figcaption><h3>Cash and debt</h3><p class="fv-take">${FV.netCashLine(bh.cash, bh.total_debt, yat, usd)}</p>
+        ${key([['s1', 'Cash and equivalents'], ['s2', 'Total debt']])}<p class="fv-unit">${V.q ? html`${typeBadge('annual')} ` : ''}At each fiscal year end, ${ccyWords()}</p></figcaption><div class="chart-slot" data-chart="balance"></div></figure>` : ''}
       ${(a.diluted_eps || []).some(isNum) ? html`<figure class="fv fv-wide"><figcaption><h3>Per share</h3><p class="fv-take">${FV.perShareLine(a.diluted_eps, shares, labels, C.back, C.against)}</p>
         <p class="fv-unit">${unit}. Diluted EPS (GAAP) in ${ccyWords()} a share; the share count is the weighted diluted average each EPS divides by.</p></figcaption>
         <div class="fv-pair"><div><p class="t-label">Diluted EPS</p><div class="chart-slot" data-chart="eps"></div></div>${shares.some(isNum) ? html`<div><p class="t-label">Diluted shares</p><div class="chart-slot" data-chart="shares"></div></div>` : ''}</div></figure>` : ''}
     </div>
     <details class="more-inline fv-data"><summary>View data</summary>
-      <div class="tscroll"><table class="t fin-table"><thead><tr><th scope="col">${V.q ? 'Quarter' : 'Fiscal year'}</th>${per.map((pe, i) => html`<th scope="col">${V.label(i)}<small class="t-muted fin-end">to ${shortDate(pe)} ${String(pe).slice(2, 4)}</small></th>`)}</tr></thead>
-        <tbody>${rows.filter(([, k]) => (a[k] || []).some(isNum)).map(([l, k]) => html`<tr><th scope="row">${l}</th>${per.map((pe, i) => html`<td>${cell(k, (a[k] || [])[i])}</td>`)}</tr>`)}
+      <div class="tscroll"><table class="t fin-table"><thead><tr><th scope="col">${V.q ? 'Quarter' : 'Fiscal year'}</th>${per.map((pe, i) => html`<th scope="col">${colHead(V.desc[i])}</th>`)}</tr></thead>
+        <tbody>${rows.filter(([, k]) => (a[k] || []).some(isNum)).map(([l, k, ng]) => html`<tr><th scope="row">${l}${ng ? nonGaap() : ''}</th>${per.map((pe, i) => html`<td>${cell(k, (a[k] || [])[i])}</td>`)}</tr>`)}
           ${!V.q && hasBal ? html`<tr><th scope="row">Cash and equivalents</th>${per.map((pe, i) => html`<td>${usd((bh.cash || [])[i])}</td>`)}</tr><tr><th scope="row">Total debt</th>${per.map((pe, i) => html`<td>${usd((bh.total_debt || [])[i])}</td>`)}</tr>` : ''}</tbody></table></div>
       <p class="asof">${clean(f.eps_basis || '')} Earnings uses analysts' basis for EPS, usually adjusted, so the two can differ. Margins are each line over revenue in the same period. ${V.q ? 'Cash flow and the balance sheet are yearly only here.' : ''}</p>
-      <h3>Balance sheet and margins, latest</h3>${kv([['Cash', usd(bs.cash)], ...(isNum(bs.cash_and_short_term) ? [['Cash and short-term investments', usd(bs.cash_and_short_term)]] : []), ['Debt', usd(bs.total_debt)], ['Debt to equity', num(bs.debt_to_equity, 2)], ['Gross margin', pct(m.gross_pct)], ['Operating margin', pct(m.operating_pct)], ['EBITDA margin', pct(m.ebitda_pct)]], 4)}
+      <h3>Balance sheet and margins, ${Y.at(0)}</h3>${kv([['Cash', usd(bs.cash)], ...(isNum(bs.cash_and_short_term) ? [['Cash and short-term investments', usd(bs.cash_and_short_term)]] : []), ['Debt', usd(bs.total_debt)], ['Debt to equity', num(bs.debt_to_equity, 2)], ['Gross margin', pct(m.gross_pct)], ['Operating margin', pct(m.operating_pct)], ['EBITDA margin', pct(m.ebitda_pct)]], 4)}
       ${nd || nm ? html`<p class="asof">${[nd ? html`Net debt ${fig(nd, { sym: D.sym })}, ${regWhen(nd).replace(/^On /, 'on ')}` : '', nm ? html`net margin ${fig(nm, { sym: D.sym })}, ${regWhen(nm).replace(/^Fiscal/, 'fiscal')}` : ''].filter(Boolean).map((x, i) => (i ? html`; ${x}` : x))}: the registry's figures, which can be from a later filing than the columns above.</p>` : ''}
       <ul class="plain">${(f.notes || []).filter((n) => !NET_NOTE.test(n)).map((n) => html`<li>${clean(ccy === 'USD' ? n : n.replace(/\$/g, `${ccy} `))}</li>`)}</ul></details></section>`;
+}
+// A statement or segment column's heading: the company's name for the period with its end date under it, or the date
+// alone when no filing names it (Handoff 2).
+function colHead(d, extra = '') {
+  const long = d && (d.weeks === 53 || d.weeks === 14) ? `, ${d.weeks} weeks` : '';
+  const sub = [d && d.short ? `to ${PER.endText(d)}` : '', extra].filter(Boolean).join(', ');
+  return html`${PER.short(d)}${sub || long ? html`<small class="t-muted fin-end">${sub}${long}</small>` : ''}`;
 }
 function statementCharts() {
   const f = ((D.t || {}).company || {}).financials || {};
@@ -204,20 +212,20 @@ function statementCharts() {
   const V = periodView(f, period), a = V.vals, n = V.per.length;
   const Y = periodView(f, 'year'), ya = Y.vals, yn = Y.per.length;
   const old = (len) => [...Array(len).keys()].reverse();     // oldest first, left to right
-  const G = old(n).map((i) => ({ x: V.label(i) })), GY = old(yn).map((i) => ({ x: Y.label(i) }));
+  const G = old(n).map((i) => V.tick(i)), GY = old(yn).map((i) => Y.tick(i)), lw = 84;   // a date under each name
   const col = (vals, len = n) => old(len).map((i) => (vals || [])[i]);
   const out = {};
-  out.profit = (w) => groupedBars(G, [{ name: 'Revenue', cls: 's1', values: col(a.revenue) }, { name: 'Operating income', cls: 's2', values: col(a.operating_income) }, { name: 'Net income', cls: 's3', values: col(a.net_income) }], { w, h: 220, label: `Revenue, operating income and net income, ${V.q ? 'by quarter' : 'by fiscal year'}`, fmt: usd });
-  out.margins = (w) => periodLines(G, [{ name: 'Gross margin', cls: 's1', values: col(FV.marginSeries(a.gross_profit, a.revenue)) }, { name: 'Operating margin', cls: 's2', values: col(FV.marginSeries(a.operating_income, a.revenue)) }, { name: 'Net margin', cls: 's3', values: col(FV.marginSeries(a.net_income, a.revenue)) }], { w, h: 200, label: 'Gross, operating and net margin, percent of revenue', fmt: (v) => `${num(v, 1)}%`, axisFmt: (v) => `${num(v, 0)}%` });
+  out.profit = (w) => groupedBars(G, [{ name: 'Revenue', cls: 's1', values: col(a.revenue) }, { name: 'Operating income', cls: 's2', values: col(a.operating_income) }, { name: 'Net income', cls: 's3', values: col(a.net_income) }], { w, h: 220, labelWidth: lw, label: `Revenue, operating income and net income, ${V.q ? 'by quarter' : 'by fiscal year'}`, fmt: usd });
+  out.margins = (w) => periodLines(G, [{ name: 'Gross margin', cls: 's1', values: col(FV.marginSeries(a.gross_profit, a.revenue)) }, { name: 'Operating margin', cls: 's2', values: col(FV.marginSeries(a.operating_income, a.revenue)) }, { name: 'Net margin', cls: 's3', values: col(FV.marginSeries(a.net_income, a.revenue)) }], { w, h: 200, labelWidth: lw, label: 'Gross, operating and net margin, percent of revenue', fmt: (v) => `${num(v, 1)}%`, axisFmt: (v) => `${num(v, 0)}%` });
   if ((ya.operating_cash_flow || []).some(isNum) || (ya.free_cash_flow || []).some(isNum)) {
-    out.cashflow = (w) => groupedBars(GY, [{ name: 'Operating cash flow', cls: 's1', values: col(ya.operating_cash_flow, yn) }, { name: 'Capital spending', cls: 's2', values: col(ya.capital_expenditure, yn) }, { name: 'Free cash flow', cls: 's3', values: col(ya.free_cash_flow, yn) }], { w, h: 220, label: 'Operating cash flow, capital spending and free cash flow by fiscal year', fmt: usd });
+    out.cashflow = (w) => groupedBars(GY, [{ name: 'Operating cash flow', cls: 's1', values: col(ya.operating_cash_flow, yn) }, { name: 'Capital spending', cls: 's2', values: col(ya.capital_expenditure, yn) }, { name: 'Free cash flow', cls: 's3', values: col(ya.free_cash_flow, yn) }], { w, h: 220, labelWidth: lw, label: 'Operating cash flow, capital spending and free cash flow by fiscal year', fmt: usd });
     const o = (ya.operating_cash_flow || [])[0], c = (ya.capital_expenditure || [])[0], fc = (ya.free_cash_flow || [])[0];
-    if (FV.bridges(o, c, fc)) out.bridge = (w) => bridgeBars([{ x: 'Operating cash flow', v: o, kind: 'total', cls: 's1' }, { x: 'Capital spending', v: c, kind: 'step' }, { x: 'Free cash flow', v: fc, kind: 'total', cls: 's3' }], { w: Math.min(w, 460), h: 180, fmt: usd, label: `${Y.label(0)}: operating cash flow less capital spending is free cash flow` });
+    if (FV.bridges(o, c, fc)) out.bridge = (w) => bridgeBars([{ x: 'Operating cash flow', v: o, kind: 'total', cls: 's1' }, { x: 'Capital spending', v: c, kind: 'step' }, { x: 'Free cash flow', v: fc, kind: 'total', cls: 's3' }], { w: Math.min(w, 460), h: 180, fmt: usd, label: `${Y.said(0)}: operating cash flow less capital spending is free cash flow` });
   }
   const bh = f.balance_history || {};
-  if ((bh.cash || []).some(isNum)) out.balance = (w) => groupedBars(GY, [{ name: 'Cash and equivalents', cls: 's1', values: col(bh.cash, yn) }, { name: 'Total debt', cls: 's2', values: col(bh.total_debt, yn) }], { w, h: 200, label: 'Cash and debt at each fiscal year end', fmt: usd, note: (i) => { const k = yn - 1 - i, nc = FV.netCash((bh.cash || [])[k], (bh.total_debt || [])[k]); return nc ? `${nc.net < 0 ? 'Net debt' : 'Net cash'} ${usd(Math.abs(nc.net))}` : ''; } });
-  if ((a.diluted_eps || []).some(isNum)) out.eps = (w) => groupedBars(G, [{ name: 'Diluted EPS', cls: 's1', values: col(a.diluted_eps) }], { w, h: 170, label: `Diluted EPS ${V.q ? 'by quarter' : 'by fiscal year'}`, fmt: (v) => num(v, 2), axisFmt: (v) => num(v, Math.abs(v) < 1 && v !== 0 ? 2 : 1) });
-  if ((a.diluted_shares || []).some(isNum)) out.shares = (w) => periodLines(G, [{ name: 'Diluted shares', cls: 's2', values: col(a.diluted_shares) }], { w, h: 170, zero: false, label: `Diluted share count ${V.q ? 'by quarter' : 'by fiscal year'}`, fmt: (v) => compact(v), axisFmt: (v) => compact(v) });
+  if ((bh.cash || []).some(isNum)) out.balance = (w) => groupedBars(GY, [{ name: 'Cash and equivalents', cls: 's1', values: col(bh.cash, yn) }, { name: 'Total debt', cls: 's2', values: col(bh.total_debt, yn) }], { w, h: 200, labelWidth: lw, label: 'Cash and debt at each fiscal year end', fmt: usd, note: (i) => { const k = yn - 1 - i, nc = FV.netCash((bh.cash || [])[k], (bh.total_debt || [])[k]); return nc ? `${nc.net < 0 ? 'Net debt' : 'Net cash'} ${usd(Math.abs(nc.net))}` : ''; } });
+  if ((a.diluted_eps || []).some(isNum)) out.eps = (w) => groupedBars(G, [{ name: 'Diluted EPS', cls: 's1', values: col(a.diluted_eps) }], { w, h: 170, labelWidth: lw, label: `Diluted EPS ${V.q ? 'by quarter' : 'by fiscal year'}`, fmt: (v) => num(v, 2), axisFmt: (v) => num(v, Math.abs(v) < 1 && v !== 0 ? 2 : 1) });
+  if ((a.diluted_shares || []).some(isNum)) out.shares = (w) => periodLines(G, [{ name: 'Diluted shares', cls: 's2', values: col(a.diluted_shares) }], { w, h: 170, zero: false, labelWidth: lw, label: `Diluted share count ${V.q ? 'by quarter' : 'by fiscal year'}`, fmt: (v) => compact(v), axisFmt: (v) => compact(v) });
   return out;
 }
 
@@ -295,73 +303,80 @@ function congress() {
     <p class="asof">${clean(c.caveat || '')} ${CLOSE_NOTE} Source: House Clerk disclosures${c.complete ? '' : ', partly read'}.</p></section>`;
 }
 
-// The reported total a segment table should add up to, on the same period end (within 15 days): revenue or
-// operating income from the statements; null for anything else, and then no reconciliation is claimed.
-function reportedTotal(metric, end, years) {
-  const f = ((D.t || {}).company || {}).financials || {};
-  const per = years ? f.annual_periods || [] : f.quarterly_periods || [], vals = (years ? f.annual || {} : f.quarterly || {})[metric];
-  if (!vals || !end) return null;
-  const day = (x) => Date.parse(String(x).slice(0, 10));
-  const k = per.findIndex((p) => Math.abs(day(p) - day(end)) <= 15 * 86400000);
-  return k >= 0 && isNum(vals[k]) ? vals[k] : null;
-}
+// A segment period as the filings name and date it (the segments payload's own calendar, Handoff 2), and the total its
+// table should add up to: the consolidated figure for the same period from the same filings (/api/segments reported).
+// It came from the provider's statements, matched by date, and so found nothing for Apple's fiscal 2026 the day its
+// 10-K was filed: the product table read "The parts add to $834.4B", its Products subtotal counted on top of iPhone,
+// Mac and the rest, with no total to show it.
+const segPeriod = PER.segmentPeriod, reportedFor = PER.segmentTotal, reconOf = PER.reconOf;
 const SEG_CLS = ['s1', 's2', 's3'];
 function segments() {
   const s = D.sg;
   if (s === undefined) return html`<section class="section">${skeleton('lines', 3, 'Reading segment filings')}</section>`;
   if (!s || !s.available) return s && s.reason ? html`<section class="section"><h2 class="t-h2">Segments and geography</h2><p>${clean(s.reason)}</p></section>` : '';
-  const fy = (((D.t || {}).company || {}).financials || {}).fiscal_year_end;
-  const years = period === 'year' && (s.tables || []).some((t) => ((t.annual || {}).ends || []).length);
-  const name = (e) => (fy ? fiscalLabel(e, fy, years) : null) || `${shortDate(e)} ${String(e).slice(2, 4)}`;
+  const years = period === 'year' && PER.segmentTables(s).some((t) => ((t.annual || {}).ends || []).length);
   const susd = FV.moneyIn('USD');   // segment figures come from the 10-Q and 10-K filings, in US dollars
+  // a breakdown filed only in the 10-K is read by year even in the quarters view, and says so
   const view = (t) => {
-    const ends = years ? (t.annual.ends || []) : (s.quarters || []);   // oldest first, as the filings parse
-    const rows = years ? (t.annual.rows || []) : (t.rows || []);
+    const yr = years || !!t.annual_only;
+    const ends = yr ? (t.annual.ends || []) : (s.quarters || []);   // oldest first, as the filings parse
+    const rows = yr ? (t.annual.rows || []) : (t.rows || []);
     const latest = ends.map((_, i) => rows.some((r) => isNum(r.values[i]))).lastIndexOf(true);
-    const total = latest >= 0 ? reportedTotal(t.metric, ends[latest], years) : null;
-    const comp = latest >= 0 ? FV.composition(rows.map((r) => clean(r.member)), rows.map((r) => r.values[latest]), total) : null;
-    return { ends, rows, latest, comp };
+    const rep = latest >= 0 ? reportedFor(t, latest, yr) : null;
+    const comp = latest >= 0 ? FV.composition(rows.map((r) => clean(r.member)), rows.map((r) => r.values[latest]), rep ? rep.value : null) : null;
+    return { yr, ends, rows, latest, comp, rep, per: latest >= 0 ? segPeriod(s, ends[latest], yr) : null };
   };
   const table = (t) => {
+    const yr = years || !!t.annual_only;
     // newest first, as the statements read
-    const ends = years ? (t.annual.ends || []).slice().reverse() : (s.quarters || []).slice().reverse();
-    const rows = years ? (t.annual.rows || []).map((r) => ({ member: r.member, values: r.values.slice().reverse(), derived: [] }))
+    const ends = yr ? (t.annual.ends || []).slice().reverse() : (s.quarters || []).slice().reverse();
+    const rows = yr ? (t.annual.rows || []).map((r) => ({ member: r.member, values: r.values.slice().reverse(), derived: [] }))
       : t.rows.map((r) => ({ member: r.member, values: r.values.slice().reverse(), derived: (r.derived || []).slice().reverse() }));
     const keep = ends.map((_, i) => rows.some((r) => isNum(r.values[i])));
     const derivedCol = ends.map((_, i) => rows.some((r) => r.derived[i]));
-    return html`<div class="tscroll"><table class="t fin-table"><thead><tr><th scope="col">${t.axis_label}</th>${ends.map((e, i) => (keep[i] ? html`<th scope="col">${name(e)}<small class="t-muted fin-end">${derivedCol[i] ? 'year less three quarters' : `to ${shortDate(e)} ${String(e).slice(2, 4)}`}</small></th>` : ''))}</tr></thead>
+    return html`${t.annual_only && !years ? html`<p class="period-note">${typeBadge('annual')} Annual only: the company reports this breakdown in its 10-K, not each quarter.</p>` : ''}<div class="tscroll"><table class="t fin-table"><thead><tr><th scope="col">${t.axis_label}</th>${ends.map((e, i) => (keep[i] ? html`<th scope="col">${colHead(segPeriod(s, e, yr), derivedCol[i] ? 'year less three quarters' : '')}</th>` : ''))}</tr></thead>
       <tbody>${rows.map((r) => html`<tr><th scope="row">${clean(r.member)}</th>${r.values.map((v, i) => (keep[i] ? html`<td>${susd(v)}</td>` : ''))}</tr>`)}</tbody></table></div>`;
   };
   const figure = (t, k) => {
     const v = view(t), c = v.comp;
     if (!c || !c.rows.length) return html`<figure class="fv"><figcaption><h3>${t.metric_label}, ${t.axis_label.toLowerCase()}</h3><p class="t-muted">No figures for the latest period in the filings read.</p></figcaption></figure>`;
-    const label = name(v.ends[v.latest]), base = c.reconciles ? c.total : c.sum;
+    const base = c.reconciles ? c.total : c.sum;
     const pos = c.rows.filter((r) => r.v >= 0), neg = c.rows.filter((r) => r.v < 0);
-    return html`<figure class="fv"><figcaption><h3>${t.metric_label}, ${t.axis_label.toLowerCase()}</h3><p class="fv-take">${FV.compositionLine(c, t.metric_label, label, susd)}</p>
-        <p class="fv-unit">${label}, US dollars, as filed${c.dropped.length ? html`. ${c.dropped.join(', ')} is a total of other lines here, so it is left out rather than counted twice` : ''}</p>
+    return html`<figure class="fv"><figcaption><h3>${t.metric_label}, ${t.axis_label.toLowerCase()}</h3><p class="fv-take">${FV.compositionLine(c, t.metric_label, PER.inText(v.per), susd, reconOf(t, v.rep))}</p>
+        <p class="fv-unit">${t.annual_only && !years ? html`${typeBadge('annual')} Annual only: the company reports this breakdown in its 10-K, not each quarter. ` : ''}US dollars, as filed${c.dropped.length ? html`. ${c.dropped.join(', ')} is a total of other lines here, so it is left out rather than counted twice` : ''}</p>
         ${(t.notes || []).map((n) => html`<p class="fv-unit">${clean(n)}</p>`)}</figcaption>
       ${raw(hbars(pos.map((r) => ({ label: r.label, v: r.v, text: c.canShare && base > 0 ? `${susd(r.v)}, ${num((r.v / base) * 100, 0)}%` : susd(r.v) })), { fmt: (x) => susd(x) }))}
       ${neg.length ? html`<p class="fv-unit">${neg.map((r) => `${r.label}: ${susd(r.v)}`).join('; ')}. Costs or income the filing does not assign to a segment.</p>` : ''}
-      ${years && c.canShare && v.ends.length > 1 ? html`<p class="t-label fv-bridge-h">Over the fiscal years</p>${key([...c.rows.slice(0, 3).map((r, i) => [SEG_CLS[i], r.label]), ...(c.rows.length > 3 ? [['s0', 'Other']] : [])])}<div class="chart-slot" data-chart="segmix${k}"></div>` : ''}</figure>`;
+      ${v.yr && c.canShare && v.ends.length > 1 ? html`<p class="t-label fv-bridge-h">Over the fiscal years</p>${key([...c.rows.slice(0, 3).map((r, i) => [SEG_CLS[i], r.label]), ...(c.rows.length > 3 ? [['s0', 'Other']] : [])])}<div class="chart-slot" data-chart="segmix${k}"></div>` : ''}</figure>`;
   };
-  return html`<section class="section" id="fin-segments" aria-labelledby="sg-h"><div class="section-head"><div><h2 class="t-h2" id="sg-h">Segments and geography</h2><p class="section-sub">Where the money comes from, as the company reports it in its filings.</p></div>
+  // the block's period: its newest, with the filing it was read from, beside the title
+  const shown = PER.segmentTables(s).map(view).filter((v) => v.per && v.per.available);
+  const newest = shown.reduce((a, v) => (!a || v.per.end > a.per.end ? v : a), null), per = newest ? newest.per : null;
+  const stEnd = ((PER.statementPeriods(D.t, years ? 'annual' : 'quarterly') || [])[0] || {}).end;
+  const notes = [
+    ...PER.notes(shown.map((v) => v.per), (s.calendar && s.calendar.available) ? s.calendar : PER.calendarOf(D.t)),
+    per && per.derived && !years ? `${per.short ? `${per.short} (to ${PER.endText(per)})` : `The quarter to ${PER.endText(per)}`} is not filed on its own: it is the 10-K's year less the three quarters filed before it.` : '',
+    per && stEnd && Date.parse(per.end) - Date.parse(stEnd) > 15 * 864e5 ? `A later period than the statements above, read from the company's filings before the provider has it.` : '',
+  ].filter(Boolean);
+  return html`<section class="section" id="fin-segments" aria-labelledby="sg-h"><div class="section-head"><div><h2 class="t-h2" id="sg-h">Segments and geography</h2>
+    ${periodLine({ type: years ? 'annual' : 'quarter', basis: s.basis || 'GAAP', what: per ? PER.label(per) : PER.UNAVAILABLE, filing: per && (per.read_from || per.filing), notes })}<p class="section-sub">Where the money comes from, as the company reports it in its filings.</p></div>
     ${seg(years ? 'year' : 'quarter', [['year', 'Fiscal years'], ['quarter', 'Quarters']])}</div>
-    <div class="fv-grid">${(s.tables || []).map((t, k) => figure(t, k))}</div>
-    <details class="more-inline fv-data"><summary>View data</summary>${(s.tables || []).map((t) => html`<h3>${t.metric_label}, ${t.axis_label.toLowerCase()}</h3>${table(t)}`)}
+    <div class="fv-grid">${PER.segmentTables(s).map((t, k) => figure(t, k))}</div>
+    <details class="more-inline fv-data"><summary>View data</summary>${PER.segmentTables(s).map((t) => html`<h3>${t.metric_label}, ${t.axis_label.toLowerCase()}</h3>${table(t)}`)}
       ${!years && s.q4_derived ? html`<p class="asof">A 10-K reports the year, not its fourth quarter, so a fourth quarter here is the year less the three quarters filed before it, and its column says so.</p>` : ''}
-      <p class="asof">Based on ${s.filings_read} of the ${s.filings_listed} most recent filings${s.filings_unread ? '; the rest are still being read' : ''}. ${clean(s.method || '')} ${clean(s.blind_spot || '')}</p></details></section>`;
+      <p class="asof">Based on ${s.filings_read} of the ${s.filings_listed} most recent filings${s.filings_unread ? '; the rest are still being read' : ''}. ${clean(s.method || '')} ${clean(s.blind_spot || '')} ${clean(s.basis_note || '')}</p></details></section>`;
 }
 // composition over the fiscal years: the largest parts of the latest year stacked, the rest folded into Other, the
 // aggregate line (if any) left out of every year; for parts at or above zero only
 function segmentCharts() {
   const s = D.sg; if (!s || !s.available || period !== 'year') return {};
-  const fy = (((D.t || {}).company || {}).financials || {}).fiscal_year_end;
   const susd = FV.moneyIn('USD'), out = {};
-  (s.tables || []).forEach((t, k) => {
+  PER.segmentTables(s).forEach((t, k) => {
     const ends = (t.annual || {}).ends || [], rows = (t.annual || {}).rows || [];
     if (ends.length < 2) return;
     const latest = ends.map((_, i) => rows.some((r) => isNum(r.values[i]))).lastIndexOf(true); if (latest < 0) return;
-    const c = FV.composition(rows.map((r) => clean(r.member)), rows.map((r) => r.values[latest]), reportedTotal(t.metric, ends[latest], true));
+    const rep = reportedFor(t, latest, true);
+    const c = FV.composition(rows.map((r) => clean(r.member)), rows.map((r) => r.values[latest]), rep ? rep.value : null);
     if (!c.canShare) return;
     const use = rows.filter((r) => !c.dropped.includes(clean(r.member)));
     if (use.some((r) => r.values.some((x) => isNum(x) && x < 0))) return;
@@ -369,8 +384,8 @@ function segmentCharts() {
     const vals = (m) => (use.find((r) => clean(r.member) === m) || { values: [] }).values;
     const parts = top.map((m, i) => ({ name: m, cls: SEG_CLS[i], values: ends.map((_, e) => vals(m)[e]) }));
     if (rest.length) parts.push({ name: 'Other', cls: 's0', values: ends.map((_, e) => rest.reduce((a, m) => (isNum(vals(m)[e]) ? (a || 0) + vals(m)[e] : a), null)) });
-    const G = ends.map((e) => ({ x: (fy ? fiscalLabel(e, fy, true) : null) || String(e).slice(0, 4) }));
-    out[`segmix${k}`] = (w) => stackedBars(G, parts, { w, h: 200, fmt: susd, label: `${t.metric_label} ${t.axis_label.toLowerCase()} by fiscal year` });
+    const G = ends.map((e) => PER.tick(segPeriod(s, e, true)));
+    out[`segmix${k}`] = (w) => stackedBars(G, parts, { w, h: 200, labelWidth: 84, fmt: susd, label: `${t.metric_label} ${t.axis_label.toLowerCase()} by fiscal year` });
   });
   return out;
 }
@@ -416,7 +431,7 @@ export async function render(main, route) {
   document.title = `${sym} Financials, Optic`;
   if (lp) lp.stop();
   lp = livePrice(main, route.symbol, () => D, 'financials', undefined);
-  provideContext(() => ({ view: 'financials', ticker: sym, quote: FIG.quoteForMilo(D.quote), figures: FIG.forMilo((D.t || {}).figures), company: FIG.companyForMilo((D.t || {}).company), filings: (D.t || {}).filings, extras: D.x }));
+  provideContext(() => ({ view: 'financials', ticker: sym, quote: FIG.quoteForMilo(D.quote), figures: FIG.forMilo((D.t || {}).figures), company: FIG.companyForMilo((D.t || {}).company, (D.t || {}).figures), filings: (D.t || {}).filings, extras: D.x }));
   // folds and Panels (Classic parity B3); Financials keeps its own jump strip
   sections(main, 'financials', { strip: false, norm: (t) => t.replace(/,\s*FY\d+$/i, '') });
   if (!main.dataset.finWired) {
@@ -444,6 +459,13 @@ export async function render(main, route) {
   step(api.get(`/api/extras/${enc}?benchmark=SPY`, { ttl: 600000, timeout: 30000 }), (d) => { D.x = d; }, () => { D.x = null; });
   step(api.get(`/api/congress?ticker=${enc}&limit=40`, { ttl: 600000, timeout: 30000 }), (d) => { D.cg = d; }, () => { D.cg = null; });
   loadSegments(sym);
+}
+/** The Summary, Statements and Segments blocks drawn from one payload ({ sym, t, sg }) and a period view, for a check
+ * that needs no browser (tests/test_fiscal_periods.py); the page's own state is put back as it was. */
+export function blocksFor(d, view = 'year') {
+  const was = [D, period];
+  D = d; period = view === 'quarter' ? 'quarter' : 'year';
+  try { return html`${readings()}${statements(d.sym)}${segments()}`; } finally { [D, period] = was; }
 }
 export function dispose() { if (lp) { lp.stop(); lp = null; } live = false; }
 export const retry = { ticker: (m, r) => render(m, r) };

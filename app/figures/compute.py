@@ -24,6 +24,7 @@ from datetime import date, datetime, timezone
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from ..valuation import inputs as vi
+from . import periods as periods_mod
 from .registry import IDS, REGISTRY, VERSION
 
 log = logging.getLogger("optic")
@@ -603,9 +604,32 @@ def resolve(ticker: str, quote: Optional[Dict[str, Any]], *,
             for fid in IDS:
                 if fid not in figs:
                     figs[fid] = _missing(fid, "unavailable", why)
+    # the company's fiscal calendar from the same filings (Handoff 2): every figure's period and every column of the
+    # provider's statements, named as the company names it and dated as it was filed
+    cal = periods_mod.calendar(fl) if fl is not None else {"available": False, "reason": sec_reason or periods_mod.UNAVAILABLE}
+    _name_periods(figs, cal)
     return {"ticker": sym, "version": VERSION, "available": True, "statement_source": used,
             "generated_at": (now or datetime.now(timezone.utc)).isoformat(timespec="seconds"),
-            "figures": {fid: figs[fid] for fid in IDS}}
+            "figures": {fid: figs[fid] for fid in IDS},
+            "periods": {"calendar": periods_mod.public(cal), "statements": periods_mod.for_statements(cal, fin)}}
+
+
+def _name_periods(figs: Dict[str, Dict[str, Any]], cal: Dict[str, Any]) -> None:
+    """Each figure's period with its badge, and a fiscal year's name and length as the filings give them."""
+    for fv in figs.values():
+        per = fv.get("period")
+        if not isinstance(per, dict):
+            continue
+        kind = per.get("type")
+        per.setdefault("badge", periods_mod.BADGES.get(kind) or ("Forward estimate" if kind == "forward" else None))
+        if kind == "annual" and per.get("end"):
+            d = periods_mod.describe(cal, per["end"], "annual")
+            if d.get("short"):
+                per["fiscal"] = d["short"]
+            if d.get("weeks"):
+                per["weeks"] = d["weeks"]
+                if d.get("note") and not per.get("note"):
+                    per["note"] = d["note"]
 
 
 def for_ticker(provider: Any, ticker: str, yf_provider: Any = None, quote: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
@@ -632,7 +656,9 @@ def for_ticker(provider: Any, ticker: str, yf_provider: Any = None, quote: Optio
 def unavailable(ticker: str, why: str) -> Dict[str, Any]:
     """The whole block when resolving failed: every figure says so, and none is shown from somewhere else."""
     return {"ticker": (ticker or "").upper(), "version": VERSION, "available": False, "reason": why,
-            "figures": {fid: _missing(fid, "unavailable", why) for fid in IDS}}
+            "figures": {fid: _missing(fid, "unavailable", why) for fid in IDS},
+            "periods": {"calendar": {"available": False, "reason": why},
+                        "statements": {"annual": [], "quarterly": [], "basis": None, "dated_by": "unavailable"}}}
 
 
 def compact(block: Dict[str, Any], ids: Optional[Sequence[str]] = None) -> Dict[str, Dict[str, Any]]:
@@ -648,8 +674,11 @@ def compact(block: Dict[str, Any], ids: Optional[Sequence[str]] = None) -> Dict[
             continue
         per = fv.get("period") or {}
         src = fv.get("source") or {}
+        # the period with the company's own name for it, "Fiscal year ended Sep 26, 2026 (FY26)", so an answer that
+        # names the year names it as the filings do (Handoff 2)
+        plabel = "{} ({})".format(per["label"], per["fiscal"]) if per.get("label") and per.get("fiscal") else per.get("label")
         item = {"figure_id": fid, "symbol": sym or None, "name": fv.get("name"), "text": fv.get("text"),
-                "value": fv.get("value"), "status": fv.get("status"), "period": per.get("label"),
+                "value": fv.get("value"), "status": fv.get("status"), "period": plabel,
                 "source": src.get("name"), "filing": src.get("url"), "as_of": fv.get("as_of")}
         if fv.get("why"):
             item["why"] = fv["why"]

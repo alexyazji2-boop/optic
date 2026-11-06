@@ -136,13 +136,23 @@ export function composition(members, values, total = null) {
   // 278.6B sum against 130.4B reported (2026-10-26), which no reader can use
   return { rows, dropped, sum, total: isFig(total) ? total : null, gap, reconciles, canShare: reconciles && rows.length > 0 && rows.every((r) => r.v >= 0) };
 }
-export function compositionLine(c, metric, label, usd = moneyIn('USD')) {
+/** The breakdown in one sentence, and its reconciliation line: what the parts add to against the company's own total
+ * for the same period, from the same filing when the caller has it (`recon.form`, Handoff 2), and why not when it
+ * has not (`recon.why`): a breakdown is never left looking complete when it was not checked. */
+export function compositionLine(c, metric, label, usd = moneyIn('USD'), recon = {}) {
   if (!c.rows.length) return '';
   const top = c.rows[0], base = c.reconciles ? c.total : c.sum;
   const sh = c.canShare ? share(top.v, base) : null;
   const lead = `${top.label} was the largest${sh === null ? `, at ${usd(top.v)}` : `, ${usd(top.v)} or ${num(sh, 0)}% of ${metric.toLowerCase()}`} in ${label}.`;
-  const recon = c.total === null ? `The parts add to ${usd(c.sum)}.` : c.reconciles ? `The parts add to the ${usd(c.total)} reported.` : `The parts add to ${usd(c.sum)}, against ${usd(c.total)} reported; the ${usd(Math.abs(c.gap))} difference is not in any line shown here, so no shares of the total are shown.`;
-  return `${lead} ${recon}`;
+  const by = recon.form ? `the ${recon.form} reports${recon.derived ? ' for the year less its first three quarters' : ''}` : 'reported';
+  let line;
+  if (c.total === null) line = `The parts add to ${usd(c.sum)}. ${recon.why || 'Not reconciled: no reported total for this period, so the parts are not checked against it.'}`;
+  else if (c.reconciles) line = `The parts add to the ${usd(c.total)} ${by}.`;
+  // more than the total: costs the filing assigns to no segment (NVIDIA's stock-based pay, FY2026), or a line that
+  // totals others; the line cannot tell which, so it says both
+  else if (c.gap < 0) line = `The parts add to ${usd(c.sum)}, ${usd(-c.gap)} more than the ${usd(c.total)} ${by}: costs the filing assigns to no segment, or a line that totals others, make the difference, so no shares of the total are shown.`;
+  else line = `The parts add to ${usd(c.sum)}, ${usd(c.gap)} less than the ${usd(c.total)} ${by}: the rest is in lines the filing does not break out here, so no shares of the total are shown.`;
+  return `${lead} ${line}`;
 }
 
 /** An earnings surprise, read the same way every quarter: the dollar difference always; a percentage only when

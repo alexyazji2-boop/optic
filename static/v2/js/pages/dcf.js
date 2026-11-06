@@ -65,6 +65,12 @@ function when(iso) {
   const d = new Date(iso);
   return Number.isNaN(d.getTime()) ? String(iso) : d.toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York', timeZoneName: 'short' });
 }
+// a forecast year by the month and year it ends, "Sep 2027": no filing names a year not yet reported, and its calendar
+// year alone ("2027") reads as a fiscal-year name the company may not give it (Handoff 2)
+function monthYear(iso) {
+  const m = /^(\d{4})-(\d{2})/.exec(String(iso || ''));
+  return m ? `${['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][Number(m[2]) - 1]} ${m[1]}` : 'Year';
+}
 function day(iso) {
   if (!iso) return '';
   const d = new Date(`${String(iso).slice(0, 10)}T12:00:00Z`);
@@ -324,7 +330,7 @@ function forecast(d) {
   return html`<p class="t-muted">Fiscal years ending ${day(r[0].fiscal_year_end)} onward. ${tm.stub_fraction < 0.999 ? `The first year counts ${pct(tm.stub_fraction, 0)} of its cash flow: the balance sheet is from ${day((d.inputs || {}).balance_date)}, so only the part after it is new. ` : ''}Discounting: ${tm.convention === 'mid_year' ? 'mid-year (each year’s cash arrives at its middle)' : 'end of year'}, at ${pct(dcf.discount_rate, 2)}. D&A ${dcf.da_method === 'ppe' ? 'follows net PP&E (depreciation rate × last year’s PP&E)' : 'is a share of revenue'}.</p>
     ${t.available ? html`<p class="t-muted"><b>Trailing twelve months to ${day(t.period_end)}:</b> revenue ${big((tv0.revenue || {}).value)} (${signedPct(t.revenue_change_vs_fy0, 1)} on the fiscal year to ${day(t.fy0_end)}), operating margin ${pct(t.ebit_margin)}. The forecast starts from the fiscal year and assumes ${pct(g1)} growth in the first year, so the two can be compared directly. Built as the fiscal year + this year to date − the same months a year earlier, each from the filings.</p>` : t.reason ? html`<p class="t-muted">Trailing year: ${clean(t.reason)}</p>` : ''}
     ${has(dcf.incremental_return) ? html`<p class="t-muted"><b>What the forecast's own investment earns:</b> ${pct(dcf.incremental_return)} a year (operating profit after tax added by the last year, over the net capital invested on the way), against a ${pct(dcf.discount_rate, 1)} cost of capital. Below the cost of capital, extra capex lowers the value unless the margin or growth it buys is raised too.</p>` : ''}
-    <div class="tscroll"><table class="t dcf-fc"><thead><tr><th class="l" scope="col">Year</th>${r.map((y) => html`<th scope="col">${String(y.fiscal_year_end).slice(0, 4)}</th>`)}</tr></thead><tbody>
+    <div class="tscroll"><table class="t dcf-fc"><thead><tr><th class="l" scope="col">Year</th>${r.map((y) => html`<th scope="col">${monthYear(y.fiscal_year_end)}</th>`)}</tr></thead><tbody>
       ${line('Revenue', (y) => big(y.revenue))}${line('Growth', (y) => pct(y.revenue_growth))}${line('Operating margin', (y) => pct(y.ebit_margin))}${line('EBIT', (y) => big(y.ebit))}
       ${line('Taxes on EBIT', (y) => big(-y.taxes))}${line('NOPAT', (y) => big(y.nopat))}${line('+ D&A', (y) => big(y.da))}${line('− Capex', (y) => big(-y.capex))}
       ${line('− Change in working capital', (y) => big(-y.change_nwc))}${line('Free cash flow to the firm', (y) => html`<b>${big(y.fcff)}</b>`, 'is-total')}
@@ -388,7 +394,7 @@ function sources(d) {
   const ratios = [['Revenue growth', 'revenue_growth'], ['Operating margin', 'ebit_margin'], ['Effective tax rate', 'effective_tax_rate'], ['Capex / revenue', 'capex_pct'], ['Working capital / revenue', 'nwc_pct'], ['Return on invested capital', 'roic'], ['FCFF (rebuilt)', 'fcff', 'money'], ['Operating cash flow − capex', 'fcf_simple', 'money'], ['Tagged restructuring and impairment', 'unusual_items', 'money'], ['Operating margin excluding them', 'ebit_margin_normalized'], ['Acquisitions / revenue', 'acquisitions_pct']];
   const cell = (f) => (f && has(f.value) ? html`<td>${f.url ? html`<a class="textlink" href="${f.url}" target="_blank" rel="noopener" aria-label="${[f.tag, f.form, f.filed && `filed ${f.filed}`].filter(Boolean).join(', ')}">${big(f.value)}</a>` : big(f.value)}${f.restated ? '*' : ''}</td>` : html`<td class="t-muted">not reported</td>`);
   return html`<p class="t-muted">Fiscal years from the company's 10-K filings (SEC EDGAR, US-GAAP XBRL). Each figure links to its filing. * restated in a later filing (the latest figure is used). Filings retrieved ${when((d.inputs || {}).retrieved)}.</p>
-    <div class="tscroll"><table class="t dcf-fc"><thead><tr><th class="l"><span class="sr">Line</span></th>${h.map((y) => html`<th scope="col">FY ${String(y.fy_end).slice(0, 4)}</th>`)}</tr></thead>
+    <div class="tscroll"><table class="t dcf-fc"><thead><tr><th class="l"><span class="sr">Line</span></th>${h.map((y) => html`<th scope="col">${y.fiscal || 'Year'}<small class="t-muted fin-end">to ${day(y.fy_end)}</small></th>`)}</tr></thead>
     <tbody>${rows.map(([label, k]) => html`<tr><th scope="row" class="l">${label}</th>${h.map((y) => cell((y.facts || {})[k]))}</tr>`)}
       <tr class="dcf-sub"><th colspan="${h.length + 1}" class="l">Derived (reported figures, same periods)</th></tr>
       ${ratios.map(([label, k, kind]) => html`<tr><th scope="row" class="l">${label}</th>${h.map((y) => html`<td>${kind === 'money' ? big((y.derived || {})[k]) : pct((y.derived || {})[k])}</td>`)}</tr>`)}</tbody></table></div>
@@ -428,7 +434,7 @@ function overrides(d) {
   const rows = (d.dcf || {}).rows || [];
   if (!rows.length) return '';
   const ov = (editsFor().drivers || {}).overrides || {};
-  return fold('overrides', 'Set individual years', html`<div class="tscroll"><table class="t dcf-ov"><thead><tr><th class="l"><span class="sr">Line</span></th>${rows.map((r) => html`<th scope="col">${String(r.fiscal_year_end).slice(0, 4)}</th>`)}</tr></thead>
+  return fold('overrides', 'Set individual years', html`<div class="tscroll"><table class="t dcf-ov"><thead><tr><th class="l"><span class="sr">Line</span></th>${rows.map((r) => html`<th scope="col">${monthYear(r.fiscal_year_end)}</th>`)}</tr></thead>
     <tbody>${OVERRIDE_ROWS.map(([k, label]) => html`<tr><th scope="row" class="l">${label} %</th>${rows.map((r) => { const typed = (ov[k] || {})[String(r.year)]; return html`<td><input type="text" inputmode="decimal" class="dcf-ovin" data-dcf-ov="${k}" data-year="${r.year}" value="${has(typed) ? String(Number((typed * 100).toFixed(3))) : ''}" placeholder="${(r[k] * 100).toFixed(1)}" aria-label="${label}, ${String(r.fiscal_year_end).slice(0, 4)}" autocomplete="off"></td>`; })}</tr>`)}</tbody></table></div>
     <p class="asof">A year you type here wins over the path the drivers above draw. Empty boxes follow the drivers.</p>`);
 }

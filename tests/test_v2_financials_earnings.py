@@ -34,12 +34,19 @@ def test_a_period_is_named_as_the_company_names_it(end, fy, annual, want):
     assert F.fiscal_label(end, fy, annual=annual) == want
 
 
-def test_the_page_names_periods_the_same_way(tmp_path):
+def test_the_page_names_no_period_from_a_date(tmp_path):
+    """The page's own copy of the rule above (fiscalLabel) is gone (Handoff 2): it named Home Depot's fiscal 2025, the
+    year to Feb 1, 2026, "FY26", and set a Segments block's "FY26" under a Summary dated by the provider. A period's
+    name now comes only from the company's filings (core/periods.js); without one, a column is dated, never named."""
+    assert "fiscalLabel(" not in FIN.replace("(fiscalLabel, retired", "")
+    assert "annual_fiscal" not in FIN and "quarterly_fiscal" not in FIN
     got = _run(tmp_path, f"""
       const f = await import('{(V2 / "js/pages/financials.js").as_posix()}');
-      print(JSON.stringify({json.dumps([c[:3] for c in CASES])}.map(([e, fy, a]) => f.fiscalLabel(e, fy, a))));
+      const t = {{ company: {{ financials: {{ available: true, annual_periods: ['2026-01-31'], annual_fiscal: ['FY26'], annual: {{}} }} }} }};
+      const v = f.periodView(t.company.financials, 'year', t);
+      print(JSON.stringify({{ label: v.label(0), said: v.said(0) }}));
     """)
-    assert got == [c[3] for c in CASES]
+    assert got == {"label": "Jan 31, 2026", "said": "the year to Jan 31, 2026"}
 
 
 def test_a_report_is_named_for_the_quarter_it_covers():
@@ -140,7 +147,11 @@ def test_a_growth_column_with_no_figure_is_left_out(tmp_path):
     got = _run(tmp_path, f"""
       const e = await import('{(V2 / "js/pages/earnings.js").as_posix()}');
       const d = await import('{(V2 / "js/core/dom.js").as_posix()}');
-      const h = d.toString(e.growthTable([{{ period: '2026-06-30', fiscal: 'Q4 FY26', revenue: 1e9, revenue_yoy_pct: 5, net_income: 2e8 }}]));
-      print(JSON.stringify({{ margin: h.includes('Gross margin'), growth: (h.match(/Growth/g) || []).length, naPct: h.includes('n/a%'), fiscal: h.includes('Q4 FY26') }}));
+      const named = {{ type: 'quarter', available: true, end: '2026-06-30', short: 'Q4 FY26', label: 'Quarter ended Jun 30, 2026', dated_by: 'filing' }};
+      const h = d.toString(e.growthTable([{{ period: '2026-06-30', fiscal: 'Q4 FY26', period_info: named, revenue: 1e9, revenue_yoy_pct: 5, net_income: 2e8 }}]));
+      // a row the filings do not name is dated only: its old guessed name is not printed (Handoff 2)
+      const g = d.toString(e.growthTable([{{ period: '2026-06-30', fiscal: 'Q4 FY26', revenue: 1e9 }}]));
+      print(JSON.stringify({{ margin: h.includes('Gross margin'), growth: (h.match(/Growth/g) || []).length, naPct: h.includes('n/a%'), fiscal: h.includes('Q4 FY26') && h.includes('to Jun 30, 2026'),
+        guessed: g.includes('Q4 FY26'), dated: g.includes('Jun 30, 2026') }}));
     """)
-    assert got == {"margin": False, "growth": 1, "naPct": False, "fiscal": True}
+    assert got == {"margin": False, "growth": 1, "naPct": False, "fiscal": True, "guessed": False, "dated": True}

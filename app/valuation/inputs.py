@@ -964,6 +964,12 @@ def gather(provider, ticker: str, today: Optional[date] = None, force: bool = Fa
                "model does not join, so nothing is estimated.")
         return {"available": False, "ticker": sym, "reason": why}
     hist = history(fl, fy_ends)
+    # each year's own name as its 10-K gives it ("FY25"), for text that names a year (Handoff 2): the calendar year
+    # its end falls in is a guess, and wrong for a company that names its years by their start (Home Depot)
+    from ..figures import periods as periods_mod
+    cal = periods_mod.calendar(fl)
+    for y in hist:
+        y["fiscal"] = periods_mod.describe(cal, y["fy_end"], "annual").get("short")
     fy0 = hist[0]
     bal_date = latest_balance_date(fl, fy0["fy_end"])
     bal = balance_sheet(fl, bal_date) if bal_date != fy0["fy_end"] else fy0["balance"]

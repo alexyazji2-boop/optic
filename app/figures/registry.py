@@ -175,14 +175,14 @@ _ENTRIES: List[Dict[str, Any]] = [
                 {"key": "forward_eps", "name": "Forward EPS, analysts' average estimate"}],
      "related": []},
     {"id": "free_cash_flow_fy", "concept": "free_cash_flow", "name": "Free cash flow, fiscal year",
-     "short": "Free cash flow", "unit": "money", "period": "annual", "basis": "GAAP inputs, as filed",
+     "short": "Free cash flow", "unit": "money", "period": "annual", "basis": "Non-GAAP, from GAAP lines as filed",
      "formula": "Operating cash flow minus capital expenditure, both for the same fiscal year.",
      "symbols": "FCF = operating cash flow - capital expenditure",
      "inputs": [{"key": "cfo", "name": "Operating cash flow"},
                 {"key": "capex", "name": "Capital expenditure (purchases of property and equipment)"}],
      "related": ["free_cash_flow_ttm", "operating_cash_flow_fy"]},
     {"id": "free_cash_flow_ttm", "concept": "free_cash_flow", "name": "Free cash flow, last 12 months",
-     "short": "Free cash flow", "unit": "money", "period": "ttm", "basis": "GAAP inputs, as filed",
+     "short": "Free cash flow", "unit": "money", "period": "ttm", "basis": "Non-GAAP, from GAAP lines as filed",
      "formula": "Twelve-month operating cash flow minus twelve-month capital expenditure. " + TTM_RULE,
      "symbols": "FCF (TTM) = operating cash flow (TTM) - capital expenditure (TTM)",
      "inputs": [{"key": "cfo", "name": "Operating cash flow, 12 months"},
@@ -201,7 +201,7 @@ _ENTRIES: List[Dict[str, Any]] = [
      "inputs": [{"key": "cfo", "name": "Net cash provided by operating activities, 12 months"}],
      "related": ["operating_cash_flow_fy", "free_cash_flow_ttm"]},
     {"id": "net_debt", "concept": "net_debt", "name": "Net debt", "short": "Net debt", "unit": "money",
-     "period": "balance", "basis": "GAAP balances, as filed",
+     "period": "balance", "basis": "Non-GAAP, from GAAP balances as filed",
      "formula": "Borrowings plus finance lease liabilities, minus cash and cash equivalents and short-term "
                 "investments, all on the same balance-sheet date. Negative means net cash.",
      "symbols": "net debt = debt + finance leases - cash - short-term investments",
@@ -212,7 +212,7 @@ _ENTRIES: List[Dict[str, Any]] = [
                 {"key": "short_term_investments", "name": "Short-term investments"}],
      "related": ["net_debt_with_leases"]},
     {"id": "net_debt_with_leases", "concept": "net_debt_with_leases", "name": "Net debt including operating leases",
-     "short": "Net debt incl. leases", "unit": "money", "period": "balance", "basis": "GAAP balances, as filed",
+     "short": "Net debt incl. leases", "unit": "money", "period": "balance", "basis": "Non-GAAP, from GAAP balances as filed",
      "formula": "Net debt plus operating lease liabilities, on the same balance-sheet date.",
      "symbols": "net debt incl. leases = net debt + operating lease liabilities",
      "inputs": [{"key": "net_debt", "name": "Net debt"},
@@ -249,4 +249,4 @@ def public() -> Dict[str, Any]:
 
 
 # Bumped whenever an entry's meaning changes, so a cached copy in a reader's session is replaced.
-VERSION = "2026-11-03.1"
+VERSION = "2026-11-04.1"

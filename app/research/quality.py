@@ -20,6 +20,7 @@ from statistics import mean, median
 from typing import Any, Dict, List, Optional, Tuple
 
 from .. import figures as figures_mod
+from ..figures import periods as periods_mod
 from . import policy as policy_mod
 from . import words
 
@@ -104,7 +105,18 @@ def _pts(x: Optional[float], d: int = 1) -> str:
 
 
 def _fy(y: Dict[str, Any]) -> str:
-    return "FY" + str(y.get("fy_end") or "")[:4]
+    """A fiscal year in the evidence: its own name from its 10-K with the day it ended, "FY25 (to Sep 27, 2025)"; the
+    day alone, "the year to Sep 27, 2025", when no filing names it. "FY2025" was the calendar year of the end date,
+    which Home Depot's fiscal 2025, ended Feb 1, 2026, is not (Handoff 2)."""
+    when = periods_mod.words(y.get("fy_end"))
+    if y.get("fiscal") and when:
+        return "{} (to {})".format(y["fiscal"], when)
+    return "the year to {}".format(when) if when else "the fiscal year"
+
+
+def _cap(text: str) -> str:
+    """An evidence line that opens with a year: "The year to Sep 27, 2025 ..." when no filing names it."""
+    return text[:1].upper() + text[1:] if text else text
 
 
 def letter(score: Optional[float]) -> Optional[str]:
@@ -188,7 +200,7 @@ def returns_component(hist: List[Dict[str, Any]], kind: str, wacc: Optional[floa
             "returns", label, "scored", score,
             "Return on equity averaged {} over the last {} years against a {} cost of equity ({}).".format(
                 _pct(avg), min(3, len(roes)), _pct(cost_equity), _pts(spread)),
-            ["{} return on equity {}".format(_fy(y), _pct(r)) for y, r in roes],
+            [_cap("{} return on equity {}".format(_fy(y), _pct(r))) for y, r in roes],
             {"roe_avg_3y": avg, "cost_equity": cost_equity, "spread": spread,
              "years_above": above, "years": len(roes), "method": "net income to common / average equity"},
             [_source(roes[0][0], "net_income_common", "net income"), _source(roes[0][0], "equity")])
@@ -236,7 +248,7 @@ def returns_component(hist: List[Dict[str, Any]], kind: str, wacc: Optional[floa
         "returns", label, "scored", score,
         "Return on capital averaged {} over the last {} years against a {} cost of capital ({}).".format(
             _pct(avg), min(3, len(meaningful)), _pct(wacc), _pts(spread)),
-        ["{} return on capital {}".format(_fy(y), _pct(r)) for y, r in years]
+        [_cap("{} return on capital {}".format(_fy(y), _pct(r))) for y, r in years]
         + (["Measured on total capital: invested capital net of cash is near zero or negative here, "
             "so the usual ratio would be meaningless."] if switched else []),
         {"roic_avg_3y": avg, "wacc": wacc, "spread": spread, "years_above": above, "years": len(years),
@@ -270,7 +282,7 @@ def margins_component(hist: List[Dict[str, Any]], kind: str) -> Dict[str, Any]:
     latest = rows[0][1]
     score = _band(latest, [(0.25, 4), (0.15, 3), (0.08, 2), (0.0, 1)])
     spread = (max(m for _, m in rows) - min(m for _, m in rows)) if len(rows) > 1 else 0.0
-    evidence = ["{} operating margin {}".format(_fy(y), _pct(m)) for y, m in rows]
+    evidence = [_cap("{} operating margin {}".format(_fy(y), _pct(m))) for y, m in rows]
     if len(rows) > 1 and spread > 0.08:
         score = max(score - 1, 0)
         evidence.append("Operating margin ranged {:.1f} points across these years, so one point is taken "
@@ -349,7 +361,7 @@ def growth_component(hist: List[Dict[str, Any]], kind: str) -> Dict[str, Any]:
         "growth", label, "scored", score,
         "Revenue compounded {} a year from {} to {}, up in {} of {} years.".format(
             _pct(cagr), _fy(revs[-1][0]), _fy(revs[0][0]), ups, n),
-        ["{} revenue {:,.0f}".format(_fy(y), r) for y, r in revs],
+        [_cap("{} revenue {:,.0f}".format(_fy(y), r)) for y, r in revs],
         {"revenue_cagr": cagr, "years": n, "years_up": ups,
          "latest_growth": _der(revs[0][0], "revenue_growth")},
         [_source(revs[0][0], "revenue"), _source(revs[-1][0], "revenue")])
@@ -386,7 +398,7 @@ def cash_component(hist: List[Dict[str, Any]], kind: str, window: int) -> Dict[s
                 d_nwc, "most of it" if d_nwc and d_nwc >= 0.5 * (n - c) else "part of it")
                    if d_nwc and d_nwc > 0 else " Working capital does not explain it.")
             gaps.append(y)
-            evidence.append("{}: operating cash flow was {:.0%} of net income.{}".format(_fy(y), c / n, why))
+            evidence.append(_cap("{}: operating cash flow was {:.0%} of net income.{}".format(_fy(y), c / n, why)))
     if gaps and len(gaps) == 1:
         evidence.append("One year of cash below profit is a question to follow up, not a finding of low "
                         "earnings quality.")
@@ -567,7 +579,7 @@ def dilution_component(hist: List[Dict[str, Any]], kind: str,
         "Diluted shares {} {} a year over {} years; stock-based pay was {} of revenue in {}.".format(
             "fell" if chg < 0 else "rose", _pct(abs(chg)), n, _pct(sbc) if sbc is not None else "not tagged",
             _fy(hist[0])),
-        ["{} diluted shares {:,.0f}".format(_fy(y), v) for y, v in shares] + note
+        [_cap("{} diluted shares {:,.0f}".format(_fy(y), v)) for y, v in shares] + note
         + (["Share counts are restated for stock splits dated after each filing, so years compare like for "
             "like."] if adjusted else []),
         {"share_change_a_year": chg, "sbc_pct": sbc, "years": n, "split_adjusted": adjusted},

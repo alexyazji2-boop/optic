@@ -12,6 +12,7 @@ import { lineChart } from '../ui/chart.js';
 import { skeleton, failed } from '../ui/states.js';
 import { etStamp } from '../core/marketTime.js';
 import * as FIG from '../core/figures.js';
+import * as PER from '../core/periods.js';
 import { fig } from '../ui/figure.js';
 
 let D = {}, live = true, mainEl = null;
@@ -36,7 +37,9 @@ export function sheetFacts(d) {
     identity: { sym: d.sym, name: q.name || (d.session || {}).name || d.sym, price: q.price, change_pct: q.change_pct, currency: q.currency || 'USD',
       exchange: q.exchange || (d.session || {}).exchange || null, session: (((d.session || {}).session) || {}).label || null, observed: q.as_of || q.market_time || null },
     business: { summary: firstSentences(clean(((d.session || {}).profile || {}).summary || '').replace(/^The Company\b/, q.name || d.sym)), industry: ((d.session || {}).profile || {}).industry, sector: ((d.session || {}).profile || {}).sector, market_cap: q.market_cap },
-    financials: f.available ? { period: per[0] || null, fiscal: (f.annual_fiscal || [])[0] || null, revenue: (a.revenue || [])[0], net_income: (a.net_income || [])[0],
+    // the year named and dated as the filings do (Handoff 2): "FY25, fiscal year ended Sep 27, 2025"
+    financials: f.available ? { period: (PER.statementPeriods(t, 'annual')[0] || {}).end || per[0] || null, fiscal: (PER.statementPeriods(t, 'annual')[0] || {}).short || null,
+      label: PER.label(PER.statementPeriods(t, 'annual')[0]), basis: PER.basisOf(t), revenue: (a.revenue || [])[0], net_income: (a.net_income || [])[0],
       revenue_yoy: g.revenue_yoy_pct, income_yoy: g.net_income_yoy_pct, op_margin: m.operating_pct } : null,
     // the figure registry's own values, each with its period and source (Handoff 1): free cash flow, the net margin and
     // net debt are printed from here, not from the statements above, whose year can be a different one
@@ -69,7 +72,7 @@ function page1(F) {
         <p>${id.observed ? `Quote at ${etStamp(id.observed)}, delayed up to 15 minutes` : 'Quote time not reported'}${id.session ? `. ${id.session}` : ''}</p></div></header>
     <h2>The business ${tag('reported')}</h2><p>${b.summary || html`<span class="sh-na">No description reported.</span>`}${isNum(b.market_cap) ? ` Market value ${usd(b.market_cap)}.` : ''}</p>
     <h2>Key financials ${tag('reported')}</h2>
-    ${fi ? html`<p class="sh-sub">${fi.fiscal || 'Latest fiscal year'}${fi.period ? `, the year to ${fullDate(fi.period)}` : ''}</p>
+    ${fi ? html`<p class="sh-sub">${fi.label || 'Latest fiscal year'}${fi.basis ? `; ${fi.basis}` : ''}</p>
       <table class="sh-t"><tbody>
         <tr><th>Revenue</th><td>${na(fi.revenue, usd)}</td><td>${na(fi.revenue_yoy, (x) => `${signed(x)} on the year before`)}</td></tr>
         <tr><th>Net income</th><td>${na(fi.net_income, usd)}</td><td>${na(fi.income_yoy, (x) => `${signed(x)} on the year before`)}</td></tr>
