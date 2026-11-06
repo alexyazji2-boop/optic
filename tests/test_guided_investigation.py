@@ -389,7 +389,9 @@ def test_the_risk_step_turns_what_could_not_be_verified_into_questions(model):
     assert "Largest segment's share of segment revenue: Americas: 50.4%" in risk
     health = next(p["prompt"] for p in model["prompts"] if "Financial health" in p["prompt"].split("\n")[0])
     assert "NOT AVAILABLE" in health and "Forward P/E: Not available" in health
-    assert "Do not compute new numbers" in model["prompts"][0]["system"][-1]["text"]
+    # the investigation's own instructions are among the system blocks; the house writing rules (Phase 12,
+    # app/editorial.py) now follow every prompt, so they are no longer the last block
+    assert any("Do not compute new numbers" in b["text"] for b in model["prompts"][0]["system"])
 
 
 def test_advice_is_removed_as_from_every_milo_answer(model):
