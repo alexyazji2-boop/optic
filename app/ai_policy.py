@@ -407,6 +407,11 @@ _SHAPES = {
                     + _NOT_AN_ORDER, _I), None),
         # (not "short" here: "..., short customer-bought puts" and "..., short of the 2.5 an S needs" describe)
         (re.compile(r"^\W{0,6}[^,]{2,60},\s+(?:then\s+)?(?:just\s+)?(?!short\b)(?:" + _A + r")\b" + _NOT_AN_ORDER, _I), "lead_clause"),
+        # a reading made into an order (Handoff 7, Explain This Indicator): "RSI at 72 is overbought, consider taking
+        # profits"; "it's time to take profits"; the reading itself ("RSI is above 70") stays a description
+        (re.compile(r"^\W{0,6}[^,]{2,60},\s+(?:so\s+|then\s+)?(?:you\s+)?(?:may\s+|might\s+|could\s+)?consider\s+" + _A_ING + r"\b", _I), "lead_clause"),
+        (re.compile(r"\b(?:it'?s|it\s+is|now\s+is|now'?s|this\s+is)\s+(?:a\s+|the\s+)?(?:good\s+|great\s+|right\s+|perfect\s+)?"
+                    r"time\s+to\s+(?:" + _A_ALL + r")\b", _I), "hypothetical"),
         # "Add RKLB to your portfolio": bare "add" is an order when its object is a ticker or the reader's holdings
         (re.compile(r"^\W{0,6}(?:just\s+)?add\s+(?:(?-i:[A-Z]{1,5})\b|\w+\s+to\s+your\s+(?:portfolio|ira|roth|account|holdings|position))", _I), None),
         # a negated order is still an order: "Don't sell your META here", "Never buy the open"

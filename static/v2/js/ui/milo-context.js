@@ -73,6 +73,12 @@ export function visibleWords(v) {
   return `${stamp(v.from, !sameYear && !intraday)} to ${stamp(v.to, !intraday)}${intraday ? ' ET' : ''}`;
 }
 
+/** A bar's date as a reader says it: "Nov 4, 2026", or "Nov 4, 2026, 3:00 pm ET" for an intraday bar. */
+export function barWhen(at) {
+  const intraday = String(at || '').length > 10;
+  return at ? `${stamp(String(at).slice(0, 10), true)}${intraday ? `, ${stamp(at, false).split(', ')[1]} ET` : ''}` : '';
+}
+
 /** Each part of the research, labelled, for the bar's menu. */
 export function researchRows(rf) {
   if (rf && !rf.ticker && rf.compare) return [['Comparing', join(rf.compare.tickers)], ['Focus', 'None: the comparison as a whole']];
@@ -114,5 +120,11 @@ export function keepUsed(used) {
   const out = { scope: s(used.scope, 8), general: !!used.general, unavailable: !!used.unavailable, ticker: s(used.ticker, 12), section: s(used.section), timeframe: s(used.timeframe, 12), range: s(used.range), visible: used.visible && s(used.visible.from, 16) && s(used.visible.to, 16) ? { from: s(used.visible.from, 16), to: s(used.visible.to, 16) } : null,
     indicators: list(used.indicators, 12), compared: list(used.compared, 3), removed: list(used.removed, 12), compare: null, at: s(used.at, 40) };
   if (used.compare && Array.isArray(used.compare.tickers)) out.compare = { tickers: list(used.compare.tickers, 4), focus: s(used.compare.focus, 12) };
+  // the indicator explained (Handoff 7): its values as the chart printed them, the bar, or why there was none
+  const ex = used.explain;
+  if (ex && typeof ex === 'object') {
+    out.explain = { id: s(ex.id, 12), short: s(ex.short), name: s(ex.name, 60), symbol: s(ex.symbol, 12), interval: s(ex.interval, 8), values: s(ex.values, 120),
+      at: s(ex.at, 16), forming: !!ex.forming, unavailable: s(ex.unavailable, 160), describes: s(ex.describes, 600), price_source: s(ex.price_source, 120), definition_source: s(ex.definition_source, 120) };
+  }
   return out;
 }

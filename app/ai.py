@@ -31,6 +31,7 @@ from . import ai_policy, ai_store, horizon as horizon_mod, knowledge, weekly_sto
 from .research import milo as research_milo
 from . import milo_tools
 from . import delays
+from . import indicator_registry
 from .runtime import for_reader, is_hosted
 
 import logging
@@ -1561,8 +1562,19 @@ def context_used(snapshot: Any) -> Dict[str, Any]:
     """What this answer used, for the `context` event the panel shows above the answer and keeps with the
     conversation, so a reopened answer still says which ticker, timeframe and indicators it was for."""
     rf = research_focus(snapshot)
-    return {k: rf[k] for k in ("scope", "general", "unavailable", "ticker", "section", "timeframe", "range",
-                               "visible", "indicators", "compared", "compare", "removed")}
+    out = {k: rf[k] for k in ("scope", "general", "unavailable", "ticker", "section", "timeframe", "range",
+                              "visible", "indicators", "compared", "compare", "removed")}
+    # Handoff 7: the indicator the reader pressed Explain on, its values as the chart computed them, or why none
+    out["explain"] = indicator_registry.used(explain_reading(snapshot))
+    return out
+
+
+def explain_reading(snapshot: Any) -> Optional[Dict[str, Any]]:
+    """The reading sent with an Explain press, checked (app/indicator_registry.py), or None. Not in general mode: a
+    reader who removed the page's context sent no chart, so there is no reading of it."""
+    if not isinstance(snapshot, dict) or research_focus(snapshot)["general"]:
+        return None
+    return indicator_registry.clean_reading(snapshot.get("indicator_explain"))
 
 
 def normalize_focus(context: Any) -> Any:
@@ -1688,6 +1700,11 @@ def context_header(snapshot: Dict[str, Any], now: Optional[datetime] = None) -> 
             where += ", with the chart on {}".format(" ".join(x for x in (rng, ivl) if x))
         lines.append(where + ".")
     lines.extend(research)
+    reading = explain_reading(snapshot)
+    if reading:
+        raw = snapshot.get("indicator_explain") or {}
+        lines.extend(indicator_registry.header_lines(reading, str(raw.get("level") or ""),
+                                                     _CTX_TIMEFRAMES.get(reading.get("interval") or "")))
     previous = _ctx_word(focus.get("previous_ticker"), _CTX_SYMBOL)
     if previous and ticker and previous != ticker:
         lines.append("The reader switched from {p} to {t} since their last question. Earlier "
@@ -1913,7 +1930,7 @@ def budget_context(snapshot: Dict[str, Any], question: str = "", horizon: str = 
                    budget: int = CONTEXT_BUDGET) -> Tuple[str, Dict[str, Any]]:
     """The CONTEXT JSON body and a record of what was kept, slimmed and left out."""
     pruned = _prune(_compact_market({k: v for k, v in snapshot.items()
-                                     if k not in ("focus", "data_as_of") + _UNPRUNED}))
+                                     if k not in ("focus", "data_as_of", "indicator_explain") + _UNPRUNED}))
     pruned.update({k: snapshot[k] for k in _UNPRUNED if k in snapshot})
     view = snapshot.get("active_view") or ((snapshot.get("focus") or {}).get("view"))
     order = _section_order(question, horizon, view if isinstance(view, str) else None)

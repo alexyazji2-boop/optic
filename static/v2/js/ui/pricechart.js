@@ -50,6 +50,27 @@ export function bollinger(v, n = 20, k = 2) {
   return { mid: m, up: m.map((x, i) => (x === null ? null : x + k * sd[i])), dn: m.map((x, i) => (x === null ? null : x - k * sd[i])) };
 }
 
+/* ---------- what an Explain press sends Milo (Handoff 7) ---------- */
+// The indicators Milo can explain (app/indicator_registry.py has their definitions), and the values each one's reading
+// carries. A reading is the chart's own numbers at one bar, never computed again, so the value Milo quotes is the
+// value the chart draws.
+export const EXPLAINABLE = { rsi: ['rsi'], macd: ['line', 'signal', 'hist'], ma: ['sma20', 'sma50', 'sma200'], ema: ['ema9', 'ema21', 'ema50'], bb: ['upper', 'middle', 'lower'] };
+const fin = (x) => (Number.isFinite(x) ? x : null);
+/** One indicator's values at bar `i` (the latest by default), with that bar's close and time, from the chart's arrays. */
+export function indicatorReading(id, bars, ind, i = bars.length - 1) {
+  if (!EXPLAINABLE[id]) return null;
+  const b = bars[i];
+  if (!b) return { id, values: {}, close: null, i: -1, t: null, bars: bars.length };
+  const values = {
+    rsi: () => ({ rsi: fin(ind.rsi[i]) }),
+    macd: () => ({ line: fin(ind.macd.line[i]), signal: fin(ind.macd.signal[i]), hist: fin(ind.macd.hist[i]) }),
+    ma: () => ({ sma20: fin(ind.sma20[i]), sma50: fin(ind.sma50[i]), sma200: fin(ind.sma200[i]) }),
+    ema: () => ({ ema9: fin(ind.ema9[i]), ema21: fin(ind.ema21[i]), ema50: fin(ind.ema50[i]) }),
+    bb: () => ({ upper: fin(ind.bb.up[i]), middle: fin(ind.bb.mid[i]), lower: fin(ind.bb.dn[i]) }),
+  }[id]();
+  return { id, values, close: b.c, i, t: b.t, bars: bars.length };
+}
+
 let legendSeq = 0;
 // The panes /api/indicators draws (C19): their names, the 0 to 100 scales kept whole, and the colour of each line
 // (ADX gold with +DI green and -DI red; otherwise gold, then blue).
@@ -482,7 +503,8 @@ export function createPriceChart(host, opts) {
     if (!C && pending && pending.points.length && cross >= 0 && crossY !== null) o += drawing({ kind: pending.kind, points: [...pending.points, { t: bars[cross].t, p: S.snap ? snap(bars[cross], crossY, ps.Y).price : crossY }] }, false, true);
     if (!C) o += msSvg();
     o += '</g>';
-    // panes
+    // panes; a pane's title gives its value at the crosshair's bar, or the latest shown, as the legend does
+    const vi = cross >= 0 ? cross : to;
     panes.slice(1).forEach((p) => {
       if (p.id === 'vol') {
         let vmax = 0; for (let i = from; i <= to; i++) vmax = Math.max(vmax, bars[i].v || 0);
@@ -494,7 +516,7 @@ export function createPriceChart(host, opts) {
       o += `<line class="pane-sep" x1="0" x2="${W}" y1="${p.y0 - 4}" y2="${p.y0 - 4}"/>`;
       if (p.id === 'rsi') {
         const Y = (v) => p.y0 + (1 - v / 100) * (p.y1 - p.y0);
-        o += `<line class="g" x1="0" x2="${W - layout.r}" y1="${Y(70)}" y2="${Y(70)}"/><line class="g" x1="0" x2="${W - layout.r}" y1="${Y(30)}" y2="${Y(30)}"/><text class="ax" x="${W - layout.r + 6}" y="${Y(70) + 4}">70</text><text class="ax" x="${W - layout.r + 6}" y="${Y(30) + 4}">30</text><text class="pane-t" x="6" y="${p.y0 + 12}">RSI 14</text><path class="ov rsi" d="${path(ind.rsi, X, Y)}"/>`;
+        o += `<line class="g" x1="0" x2="${W - layout.r}" y1="${Y(70)}" y2="${Y(70)}"/><line class="g" x1="0" x2="${W - layout.r}" y1="${Y(30)}" y2="${Y(30)}"/><text class="ax" x="${W - layout.r + 6}" y="${Y(70) + 4}">70</text><text class="ax" x="${W - layout.r + 6}" y="${Y(30) + 4}">30</text><text class="pane-t" x="6" y="${p.y0 + 12}">RSI 14${Number.isFinite(ind.rsi[vi]) ? `: ${num(ind.rsi[vi])}` : ''}</text><path class="ov rsi" d="${path(ind.rsi, X, Y)}"/>`;
       } else if (p.server) {
         // a pane /api/indicators computed (C19): its lines, its reference levels dashed, the values at the crosshair's bar
         const sp = ((S.studies || {}).panes || {})[p.id], name = PANE_NAMES[p.id];
@@ -525,7 +547,7 @@ export function createPriceChart(host, opts) {
         const m = ind.macd; let mx = 0; for (let i = from; i <= to; i++) [m.line[i], m.signal[i], m.hist[i]].forEach((v) => { if (Number.isFinite(v)) mx = Math.max(mx, Math.abs(v)); });
         const Y = (v) => p.y0 + (1 - (v + (mx || 1)) / (2 * (mx || 1))) * (p.y1 - p.y0);
         for (let i = from; i <= to; i++) { const h = m.hist[i]; if (!Number.isFinite(h)) continue; o += `<rect class="mh ${h >= 0 ? 'u' : 'd'}" x="${(X(i) - bw * 0.35).toFixed(1)}" y="${Math.min(Y(0), Y(h)).toFixed(1)}" width="${Math.max(0.6, bw * 0.7).toFixed(1)}" height="${Math.abs(Y(h) - Y(0)).toFixed(1)}"/>`; }
-        o += `<text class="pane-t" x="6" y="${p.y0 + 12}">MACD 12, 26, 9</text><path class="ov macd" d="${path(m.line, X, Y)}"/><path class="ov macds" d="${path(m.signal, X, Y)}"/>`;
+        o += `<text class="pane-t" x="6" y="${p.y0 + 12}">MACD 12, 26, 9${Number.isFinite(m.line[vi]) ? `: ${num(m.line[vi])}${Number.isFinite(m.signal[vi]) ? `, signal ${num(m.signal[vi])}` : ''}` : ''}</text><path class="ov macd" d="${path(m.line, X, Y)}"/><path class="ov macds" d="${path(m.signal, X, Y)}"/>`;
       }
     });
     if (layout.last) o += `<rect class="lastp-tag ${layout.last.up ? 'up' : 'dn'}" x="${W - layout.r + 2}" y="${layout.last.y - 9}" width="${layout.r - 4}" height="18" rx="3"/><text class="lastp-t" x="${W - layout.r + 6}" y="${Number(layout.last.y) + 4}">${num(layout.last.v, layout.last.v < 10 ? 2 : layout.last.v < 1000 ? 2 : 0)}</text>`;
@@ -599,7 +621,7 @@ export function createPriceChart(host, opts) {
   function place2() {
     const panes = layout.panes, foot = (panes.find((q) => q.id === 'vol') || panes[0]).y1, sig = [W, H, panes.map((q) => `${q.id}:${q.y0}`).join(',')].join('|');
     const ps2 = S.onRemove ? panes.slice(1).map((q) => q.id).join(',') : '';
-    if (ps2 !== paneSig) { paneSig = ps2; panex.innerHTML = S.onRemove ? panes.slice(1).map((q) => { const k = q.id === 'vol' ? 'volume' : q.id, name = esc(PANE_LABEL[q.id] || q.id); return `<button type="button" class="pc-px" data-pc-pane="${esc(k)}" data-pane-at="${esc(q.id)}" aria-label="Remove the ${name} pane" title="Remove ${name}">${icon('close').s}</button>`; }).join('') : ''; placedSig = ''; }
+    if (ps2 !== paneSig) { paneSig = ps2; panex.innerHTML = S.onRemove ? panes.slice(1).map((q) => { const k = q.id === 'vol' ? 'volume' : q.id, name = esc(PANE_LABEL[q.id] || q.id); return `${S.onExplain && EXPLAINABLE[k] ? `<button type="button" class="pc-px pc-pexp" data-pc-explain="${esc(k)}" data-pane-at="${esc(q.id)}" data-pane-shift="1" aria-label="Explain ${name} with Milo" title="Explain ${name} with Milo">${icon('milo').s}</button>` : ''}<button type="button" class="pc-px" data-pc-pane="${esc(k)}" data-pane-at="${esc(q.id)}" aria-label="Remove the ${name} pane" title="Remove ${name}">${icon('close').s}</button>`; }).join('') : ''; placedSig = ''; }
     // an <svg> has no offsetTop: its place in the host comes from the two boxes, in CSS pixels (cssZoom)
     const r = svg.getBoundingClientRect(), hr = host.getBoundingClientRect(), z = cssZoom(hr), k = r.width / (W || 1) / z, top0 = (r.top - hr.top) / z, left0 = (r.left - hr.left) / z;
     const at = `${sig}|${Math.round(top0)}|${Math.round(left0)}|${k.toFixed(3)}|${ctl.offsetHeight}`;
@@ -613,7 +635,7 @@ export function createPriceChart(host, opts) {
     Object.assign(ctl.style, { left: `${left0 + lx}px`, top: `${top0 + foot * k - bh - 4}px` });
     // Reset zoom over the foot of the price, clear of the volume band's label (or above the buttons with no band)
     if (homeEl) Object.assign(homeEl.style, { left: `${left0 + lx}px`, top: `${(vol ? top0 + vol.y0 * k : top0 + foot * k - bh - 4) - bh - 6}px` });
-    panex.querySelectorAll('[data-pane-at]').forEach((b) => { const q = panes.find((x) => x.id === b.dataset.paneAt); if (q) Object.assign(b.style, { top: `${top0 + (q.y0 - 2) * k}px`, left: `${left0 + (W - layout.r) * k - 40}px` }); });
+    panex.querySelectorAll('[data-pane-at]').forEach((b) => { const q = panes.find((x) => x.id === b.dataset.paneAt); if (q) Object.assign(b.style, { top: `${top0 + (q.y0 - 2) * k}px`, left: `${left0 + (W - layout.r) * k - 40 - (b.dataset.paneShift ? b.offsetWidth + 4 : 0)}px` }); });
   }
 
   // One drawing as SVG: its shape, its labels, and on the selected one a handle at each point (drag one to move
@@ -762,7 +784,8 @@ export function createPriceChart(host, opts) {
         const what = LINES[k] ? `<span class="pc-ln">${LINES[k].map(([id, c, l]) => `<span class="pc-li"><i class="${c}"></i>${l} <b data-lv="${id}"></b></span>`).join('')}</span>`
           : k === 'ins' ? `<span class="pc-ln"><span class="pc-li">${name}</span><span class="pc-li">${ARROW('buy', 'M6 0 12 7H7.5v7h-3V7H0Z')}purchase</span><span class="pc-li">${ARROW('sell', 'M6 14 0 7h4.5V0h3v7H12Z')}sale</span></span>`
             : `<span class="pc-ln"><span class="pc-li">${KEY[k] || ''}${name}${VALUE[k] ? ` <b data-lv="${VALUE[k]}"></b>` : ''}</span></span>`;
-        return `<div class="pc-lr">${what}<button type="button" class="pc-lx" data-pc-off="${esc(k)}" aria-label="Remove ${name}" title="Remove ${name}">${icon('close').s}</button></div>`;
+        const ex = S.onExplain && EXPLAINABLE[k] ? `<button type="button" class="pc-lx pc-lexp" data-pc-explain="${esc(k)}" aria-label="Explain ${name} with Milo" title="Explain ${name} with Milo">${icon('milo').s}</button>` : '';
+        return `<div class="pc-lr">${what}${ex}<button type="button" class="pc-lx" data-pc-off="${esc(k)}" aria-label="Remove ${name}" title="Remove ${name}">${icon('close').s}</button></div>`;
       }).join('') || '<p class="pc-le">Nothing on the price. Add an overlay from Indicators.</p>');
     }
     if (!open) return;
@@ -779,6 +802,8 @@ export function createPriceChart(host, opts) {
   leg.addEventListener('click', (e) => {
     const off = e.target.closest('[data-pc-off]');
     if (off) { legT.focus(); if (S.onRemove) S.onRemove(off.dataset.pcOff); return; }
+    const exp = e.target.closest('[data-pc-explain]');
+    if (exp) { if (S.onExplain) S.onExplain(exp.dataset.pcExplain); return; }
     if (e.target.closest('.pc-lt')) { S.legendOpen = !S.legendOpen; if (S.onLegend) S.onLegend(S.legendOpen); legend(); }
   });
 
@@ -1115,8 +1140,9 @@ export function createPriceChart(host, opts) {
   };
   document.addEventListener('keydown', pageKey);
   host.addEventListener('click', (e) => {
-    const b = e.target.closest('[data-pc-zoom], [data-pc-measure], [data-pc-pane], [data-pc-home]');
+    const b = e.target.closest('[data-pc-zoom], [data-pc-measure], [data-pc-pane], [data-pc-home], [data-pc-explain]');
     if (!b || !host.contains(b)) return;
+    if (b.dataset.pcExplain) { if (S.onExplain) S.onExplain(b.dataset.pcExplain); return; }
     if (b.hasAttribute('data-pc-home')) { home(); return; }
     if (b.dataset.pcZoom) { zoom(b.dataset.pcZoom === 'in' ? 1 / 1.5 : 1.5, to); return; }   // about the latest bar shown
     if (b.hasAttribute('data-pc-measure')) { setMeasure(!mOn); return; }
@@ -1229,6 +1255,8 @@ export function createPriceChart(host, opts) {
       redraw(); return true;
     },
     view: () => ({ from, to }),
+    /** What an Explain press sends (Handoff 7): one indicator's values at the latest bar, from the arrays drawn. */
+    reading: (id) => indicatorReading(id, bars, ind, N - 1),
     height: () => S.height, navH: () => S.navH || 40,
     /** The market structure breaks in view, newest last, for Milo and the page. */
     structure: () => ind.msb.filter((m) => m.at >= from && m.at <= to).map((m) => ({ direction: m.dir === 'bull' ? 'bullish' : 'bearish', swing_formed_on: fmtT(bars[m.from].t), swing_known_on: fmtT(bars[m.known].t), broke_on: fmtT(bars[m.at].t), close: bars[m.at].c, level: m.price })),

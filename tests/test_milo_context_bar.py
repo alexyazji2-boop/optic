@@ -424,7 +424,7 @@ def test_no_portfolio_enters_the_research_context_and_no_holding_is_inferred(tmp
     assert focus["ticker"] is None
     used = ai.context_used({"focus": dict(focus, brokerage_portfolio={"facts": "x"}, holdings=["AAPL"])})
     assert set(used) == {"scope", "general", "unavailable", "ticker", "section", "timeframe", "range", "visible",
-                         "indicators", "compared", "compare", "removed"}
+                         "indicators", "compared", "compare", "removed", "explain"}   # explain: Handoff 7's reading, if any
     head = ai.context_header({"focus": {"scope": "auto", "ticker": "AAPL", "section": "Overview"}})
     assert "never infer a position or a holding from it, and keep the answer an explanation, not a recommendation" in head
 
@@ -458,6 +458,7 @@ def test_the_two_sides_say_the_research_the_same_way(tmp_path):
       print(JSON.stringify({{ rf, rows: C.researchRows(rf), words: C.visibleWords(rf.visible), intraday: C.visibleWords({{ from: '2026-10-28T09:30', to: '2026-11-04T15:00' }}) }}));
     """)
     server = ai.context_used({"focus": focus})
+    assert server.pop("explain") is None, "no Explain press here (Handoff 7)"
     assert got["rf"] == server, "the bar and Milo's header read the same research"
     assert ["Timeframe", "Weekly bars, 1 year loaded"] in got["rows"] and ["Compared with", "QQQ"] in got["rows"]
     assert got["words"] == "Nov 3, 2025 to Nov 2, 2026" and got["intraday"] == "Oct 28, 9:30 am to Nov 4, 3:00 pm ET"

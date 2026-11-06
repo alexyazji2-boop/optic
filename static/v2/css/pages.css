@@ -1035,6 +1035,10 @@ table.chw-table { font-size: var(--t-sm); } table.chw-table th { padding: 6px 4p
 .pc-la { width: 10px; height: 12px; margin-right: 5px; } .pc-la.buy { fill: var(--c-pos); } .pc-la.sell { fill: var(--c-neg); }
 .pc-lx { flex: none; width: 28px; height: 28px; display: grid; place-items: center; padding: 0; border: 0; border-radius: var(--r-ctl-in); background: none; color: var(--c-ink-3); cursor: pointer; }
 .pc-lx:hover { background: var(--c-sunk); color: var(--c-ink); }
+.pc-lexp svg, .pc-pexp svg { fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linejoin: round; }   /* Explain (Handoff 7): Milo's line icon */
+.ch-explain { min-height: 32px; margin: 0 0 4px 26px; font-size: var(--t-sm); font-weight: 500; gap: 6px; text-decoration: underline; text-decoration-color: var(--c-line); text-underline-offset: 3px; }
+.ch-explain .ic { width: 14px; height: 14px; }
+@media (pointer: coarse) { .ch-explain { min-height: var(--tap); } }
 .pc-le { margin: 0; padding: 6px 8px 6px 0; color: var(--c-ink-3); }
 /* the navigator: the whole history small, the bars on screen in the window */
 .pc-nav { display: block; width: 100%; height: auto; margin-top: 6px; touch-action: none; user-select: none; -webkit-user-select: none; cursor: pointer; }
