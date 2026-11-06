@@ -82,6 +82,7 @@ from .analytics import segments as segments_mod
 from .providers import overnight as overnight_mod
 from . import insiders as insiders_mod
 from . import analysts as analysts_mod
+from . import timeline as timeline_mod
 from .analytics import regime as regime_mod
 from .analytics import relperf as relperf_mod
 from .analytics import compare as compare_mod
@@ -5276,6 +5277,38 @@ def _congress_closes(sym: str, trades: List[Dict[str, Any]]) -> None:
             continue
         t["close"] = round(closes[k], 2)
         t["close_date"] = days[k]
+
+
+# One company's events in one list (owner's Handoff 9, 2026-11-03): app/timeline.py merges what the Dossier already
+# reads. The House archive is refreshed exactly as /api/congress refreshes it, so both say the same thing.
+def _timeline_congress_refresh() -> Any:
+    return congress_mod.refresh(None, 0 if CONGRESS_BACKFILL else None)
+
+
+@app.get("/api/timeline/{ticker}")
+async def company_timeline(
+    ticker: str,
+    days: int = Query(timeline_mod.DEFAULT_DAYS, description="The period: 30, 90 or 365 days"),
+    kind: str = Query("all", alias="type", description="all, or one of news, earnings, insiders, congress, "
+                                                       "analysts, filings"),
+    page: int = Query(1, ge=1, le=1000),
+    per: int = Query(timeline_mod.PER_PAGE, ge=1, le=timeline_mod.MAX_PER),
+    fresh: bool = Query(False, description="Build again rather than reuse the last build (Try again)"),
+) -> Dict[str, Any]:
+    """News, earnings, insider trades, congressional trades, analyst actions and SEC filings for one company, newest
+    first, one page at a time. Every entry says what its date is and where it came from; every source says whether
+    it answered, so a source that failed is a note beside the rest, never a silent gap. Reads the feeds the Dossier
+    already reads: no new feed, no model, nothing stored."""
+    sym = ticker.upper().strip()
+    if not re.fullmatch(r"[A-Z0-9.\-^=]{1,12}", sym):
+        raise HTTPException(status_code=400, detail="Not a ticker symbol.")
+    if days not in timeline_mod.PERIODS:
+        raise HTTPException(status_code=422, detail="days must be 30, 90 or 365.")
+    if kind != "all" and kind not in timeline_mod.TYPES:
+        raise HTTPException(status_code=422, detail="type must be all or one of " + ", ".join(timeline_mod.TYPES))
+    built = await _run(timeline_mod.cached, YF_PROVIDER, sym, days, force=fresh,
+                       congress_refresh=_timeline_congress_refresh)
+    return timeline_mod.page(built, kind, page, per)
 
 
 @app.get("/api/catalysts")

@@ -78,6 +78,13 @@ const P = {
   position: '<rect x="5" y="3.5" width="14" height="17" rx="1.5"/><path d="M8 7.5h8"/><path d="M8.5 12h.01M12 12h.01M15.5 12h.01M8.5 16h.01M12 16h.01M15.5 16h.01" stroke-width="2.4"/>',
   magnet: '<path d="M6 3v9a6 6 0 0 0 12 0V3M6 7.5h3.75M14.25 7.5H18"/>',
   redo: '<path d="M15 5l5 5-5 5"/><path d="M20 10H10a5.5 5.5 0 0 0 0 11h3"/>',
+  // the kinds of company event (ui/timeline.js), each beside its word
+  news: '<path d="M4 5h13v13.5a1.5 1.5 0 0 1-1.5 1.5H6a2 2 0 0 1-2-2z"/><path d="M17 9h3v9a2 2 0 0 1-2 2"/><path d="M7.5 9h6M7.5 12.5h6M7.5 16h4"/>',
+  earnings: '<rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/><path d="M9 15l2 2 4-4"/>',
+  insider: '<rect x="4" y="4" width="16" height="16" rx="2.5"/><circle cx="12" cy="10" r="2.6"/><path d="M7.8 17c.9-2 2.4-3 4.2-3s3.3 1 4.2 3"/>',
+  congress: '<path d="M6.5 10a5.5 5.5 0 0 1 11 0M12 4.5V3"/><path d="M4 10h16M6 10v8M10 10v8M14 10v8M18 10v8M3 20h18"/>',
+  analyst: '<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4"/><circle cx="12" cy="12" r=".8"/>',
+  filing: '<path d="M3 6.5A1.5 1.5 0 0 1 4.5 5H9l2 2h8.5A1.5 1.5 0 0 1 21 8.5v9a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 17.5z"/>',
 };
 
 export function icon(name, label = '') {

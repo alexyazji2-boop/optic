@@ -467,6 +467,25 @@ def _failed(value, exc: Optional[BaseException] = None):
     return _Failed(value)
 
 
+# A caller that must tell a failed answer from an empty one. The caller receives a failed fetch's fallback value,
+# usually an empty list or dict, which reads the same as "nothing there". The company timeline
+# (app/timeline.py) must say "this feed did not answer" rather than show a silent gap (Handoff 9), so inside
+# noting_failures() each key whose fetch failed on this thread is listed, whether it raised (a caller such as
+# news() may catch that) or came back as the failure marker.
+_NOTED = threading.local()
+
+
+@contextmanager
+def noting_failures():
+    """On this thread, list the cache keys whose fetch failed while the block ran."""
+    prior = getattr(_NOTED, "keys", None)
+    _NOTED.keys = []
+    try:
+        yield _NOTED.keys
+    finally:
+        _NOTED.keys = prior
+
+
 # An empty price history (2026-10-21, live): SPY's two years, IWM, DIA, the S&P 500, oil and gold came back empty
 # from the live server for hours while every quote, the six-month histories and the same requests from elsewhere
 # answered in full. yfinance hands a refusal back as an empty frame rather than raising, so the empty answer was kept
@@ -584,6 +603,9 @@ def _fill(key: str, ttl: float, producer, gate: bool, fresh_for: float):
             if gate and _is_rate_limit(exc):
                 with _PACE_LOCK:
                     _on_throttle()
+            noted = getattr(_NOTED, "keys", None)
+            if noted is not None:
+                noted.append(key)
             raise
         finally:
             _METER.depth = depth
@@ -595,6 +617,9 @@ def _fill(key: str, ttl: float, producer, gate: bool, fresh_for: float):
         # token its caller took, and counting those too would make the rate
         # recover several times faster than _on_success says it does.
         if isinstance(value, _Failed):
+            noted = getattr(_NOTED, "keys", None)
+            if noted is not None:
+                noted.append(key)
             return value.value
         if gate:
             with _PACE_LOCK:
