@@ -754,6 +754,7 @@ ul.plain { margin: 0; padding-left: 18px; } ul.plain li { margin-bottom: 7px; }
   .dhead .t-display { font-size: 40px; }
   .dhead .acts { width: 100%; flex-wrap: nowrap; justify-content: stretch; }
   .dhead .acts > .btn { flex: 1 1 0; min-width: 0; } .dhead .acts > .acts-milo { flex-grow: 1.4; }
+  .dhead .acts > .lib-save { flex: 1 1 0; min-width: 0; } .dhead .acts > .lib-save > .btn { flex: 1 1 auto; min-width: 0; }
   .tabs { margin-top: 16px; }
   /* onboarding: headline and search first, a short illustration after */
   .welcome { grid-template-columns: 1fr; min-height: 0; border-radius: var(--r-xl); }
@@ -1284,3 +1285,14 @@ th .pbadge, dt .pbadge, .k .pbadge { margin-left: 6px; vertical-align: 1px; }
 /* the filing a period was read from: an inline link in the line's own type, not the standalone .textlink control */
 .period-link { color: var(--c-ink); text-decoration: underline; text-decoration-color: var(--c-line); text-decoration-thickness: 1px; text-underline-offset: 3px; }
 .period-link:hover { text-decoration-color: currentColor; }
+/* ---------- the Save control (ui/library.js, Handoff 5) ---------- */
+/* a toggle like Watch: Saved is the active fill, never gold; a failure says so beside it, in words, with Retry */
+.lib-save { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+.lib-save-btn svg { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linejoin: round; }
+.lib-err { font-size: var(--t-sm); color: var(--c-neg); }
+.lib-err .textlink { font-size: inherit; }
+.lib-form { display: grid; gap: 12px; margin-top: 12px; }
+.lib-field { display: grid; gap: 6px; }
+.lib-form-err { margin: 0; font-size: var(--t-sm); color: var(--c-neg); }
+.lib-del { margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--c-line-2); }
+

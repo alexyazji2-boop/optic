@@ -146,6 +146,11 @@ The owner's mapping (2026-10-24): VWAP the one cool hue (the indicator exception
 - **The section strip.** A page with six or more sections gets a strip of their names with Expand all, Collapse all and Panels. It is sticky under the header on a desktop and scrolls away on a phone, like the header. The section on screen is lit like a tab: ink with the gold bar.
 - **Sideways strips say there is more with an arrow, not a fade.** A fade would be a third gradient. The arrow sits over the strip's edge, in the colour behind it, only while there is more that way, and it scrolls the strip (`ui/strips.js`).
 
+### Saving (Handoff 5, 2026-11-04)
+- **One Save control.** `saveButton(id, key)` from `ui/library.js`, with the page's `provide(id, fn)` saying what it would keep, read at the press. It is a toggle like Watch: "Save", then "Saved" in the active fill, never gold. One press saves under the ticker(s) and the date; Rename is offered after. Pressing Saved shows the saved item with Rename, Update and Delete.
+- **Nothing is saved without a press, and nothing twice by accident.** A second save of the same thing asks whether to update the saved one or keep a copy under another name. A save that fails says so beside the button with Retry, and the button stays "Save".
+- **Where Save sits:** in the Dossier header beside Watch (in its one row on a phone), beside Compare's controls and its take, in the research sheet's actions (not printed), and in Milo's header as an icon. The library is Saved research at `#/research`, reached from the account menu and the palette.
+
 ### Headers
 Every dossier tab uses the Chart page's one-line header (`dossier-frame.js` `header()` now defaults to `bar`):
 - the company's logo (`/api/logo`, over the symbol's initial; `ui/symbols.js`), as in Classic's header (2026-10-25);

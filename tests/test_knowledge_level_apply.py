@@ -138,8 +138,9 @@ def test_the_preferences_carry_their_version_and_a_client_cannot_set_it(signed_i
 def test_the_column_is_added_by_its_own_migration_and_nothing_else_changes():
     from app import db
     versions = [v for v, _name, _s in db.MIGRATIONS]
-    assert versions == sorted(versions) and versions[-1] == 19
-    assert db.MIGRATIONS[-1][2] == ["ALTER TABLE user_preferences ADD COLUMN knowledge_level TEXT"], "additive only"
+    assert versions == sorted(versions) and 19 in versions
+    # found by its number: later migrations (20, the research library) come after it
+    assert dict((v, s) for v, _name, s in db.MIGRATIONS)[19] == ["ALTER TABLE user_preferences ADD COLUMN knowledge_level TEXT"], "additive only"
     assert store.DEFAULT_PREFERENCES["knowledge_level"] is None
 
 

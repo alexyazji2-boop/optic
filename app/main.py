@@ -32,6 +32,7 @@ from . import (ai, brief as brief_mod, feeds as feeds_mod, legal,
 from . import figures as figures_mod
 from . import account as account_mod
 from . import delays as delays_mod
+from . import library as library_mod
 from .valuation import service as valuation_service
 from .valuation import store as valuation_store
 from . import billing as billing_mod
@@ -413,6 +414,8 @@ else:
 # The symbol check asks the quote source about a symbol the exchange directory does not list (app/symbol_check.py):
 # read when called, so a test's stub provider is the one asked
 symbol_check_mod.QUOTE = lambda sym: PROVIDER.quote(sym)
+# A saved item's ticker the exchange directory does not list is asked of the quote source (app/library.py listed)
+library_mod.QUOTE = lambda sym: PROVIDER.quote(sym)
 
 
 # Set by the scheduled loops, so everything they run takes the jobs' lane at
@@ -8761,6 +8764,7 @@ async def research(request: Request,
 # after it, so a router added below that line answers nothing at all.
 app.include_router(auth_routes.router)
 app.include_router(account_mod.router)
+app.include_router(library_mod.router)
 app.include_router(valuation_store.router)
 app.include_router(billing_mod.router)
 app.include_router(brokerage_routes.router)

@@ -18,6 +18,8 @@ import { poll } from '../core/poll.js';
 import { term } from '../ui/term.js';
 import { logoHTML } from '../ui/symbols.js';
 import { advancedOn } from '../core/prefs.js';
+import { saveButton, provide } from '../ui/library.js';
+import { keyOf } from '../core/library.js';
 
 // The price's session and time in words, from the one formatter every price label uses (core/delays.js, Handoff 4):
 // the delay the quote states and its trade's time in the reader's zone during the session; outside it, the close it is
@@ -107,7 +109,7 @@ function actions(sym, label, sm) {
   const s = sm ? 'btn-sm' : '';
   return html`<div class="acts" role="group" aria-label="${sym} actions">
     <span class="acts-2"><a class="btn btn-quiet ${s}" href="#/alerts?symbol=${sym}">Alert</a><a class="btn btn-quiet ${s}" href="#/compare?t=${sym}">Compare</a><a class="btn btn-quiet ${s}" href="#/${encodeURIComponent(sym)}/sheet" title="A printable research sheet">Export</a></span>
-    ${watchButton(sym, { compact: sm })}${miloButton(html`<span class="acts-milo-t">Ask about ${sym}</span>`, { ask: `What is the case for ${sym} right now?`, context: `${sym} Dossier, ${label}`, symbol: sym, cls: `${s} acts-milo` })}
+    ${watchButton(sym, { compact: sm })}${saveButton('company', keyOf('company', [sym]), { cls: s })}${miloButton(html`<span class="acts-milo-t">Ask about ${sym}</span>`, { ask: `What is the case for ${sym} right now?`, context: `${sym} Dossier, ${label}`, symbol: sym, cls: `${s} acts-milo` })}
     <details class="menu acts-more"><summary class="btn btn-quiet ${s}" aria-label="More actions for ${sym}">${icon('more')}</summary><div class="menu-body menu-end">${tickerMenu(sym)}</div></details>
   </div>`;
 }
@@ -133,6 +135,13 @@ function stageLine(sym, st) {
 const staleBars = (D) => (D.ticker && D.ticker.bars_stale_since
   ? html`<p class="stale dh-stale">Charts and indicators from the bars Optic read at ${etStamp(D.ticker.bars_stale_since)}: the feed did not answer just now.</p>` : '');
 export function header(sym, D, view = 'overview', { compact = false, bar = true, stage = null } = {}) {
+  // what Save keeps (Saved research, Handoff 5): this company and the tab, by reference, with its name and the price as
+  // it is now, so the item stays readable if the ticker later goes
+  provide('company', () => {
+    const q2 = D.quote || {}, tab = (pageOf(view) || {}).slug || '';
+    return { kind: 'company', tickers: [sym], ref: { tab }, summary: { names: { [sym]: q2.name || (D.session && D.session.name) || sym },
+      price: isNum(q2.price) ? { price: q2.price, change_pct: isNum(q2.change_pct) ? q2.change_pct : null, trade_time: q2.trade_time || null, delayed_minutes: isNum(q2.delayed_minutes) ? q2.delayed_minutes : null } : null } };
+  });
   const q = D.quote || {};
   const s = (D.session && D.session.prices) || {};
   const name = q.name || (D.session && D.session.name) || '';

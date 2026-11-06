@@ -423,14 +423,16 @@ async def list_research(request: Request,
                         symbol: str = Query("", max_length=20),
                         limit: int = Query(50, ge=1, le=200)) -> Dict[str, Any]:
     user = deps.require_user(request)
+    # questions only: the library's items (app/library.py, item_key set) are not questions to ask again, and Classic
+    # reads this list as exactly that
     if symbol:
         found = db.rows(
-            "SELECT * FROM saved_research WHERE user_id = ? AND symbol = ? "
+            "SELECT * FROM saved_research WHERE user_id = ? AND symbol = ? AND item_key IS NULL "
             "ORDER BY created_at DESC LIMIT ?",
             (user["id"], _symbol(symbol), limit))
     else:
         found = db.rows(
-            "SELECT * FROM saved_research WHERE user_id = ? ORDER BY created_at DESC "
+            "SELECT * FROM saved_research WHERE user_id = ? AND item_key IS NULL ORDER BY created_at DESC "
             "LIMIT ?", (user["id"], limit))
     return {"research": [_research_payload(r) for r in found],
             "limit": store.subscription(user["id"])["limits"]["saved_research"]}

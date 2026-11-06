@@ -963,6 +963,19 @@ MIGRATION_19 = [
     "ALTER TABLE user_preferences ADD COLUMN knowledge_level TEXT",
 ]
 
+# The saved research library (Handoff 5 of the owner's handover pack, 2026-11-03, app/library.py): what a saved item
+# is about and where it reopens. Additive: rows saved before keep NULLs and stay the questions they were, which is how
+# the library tells the two apart (`item_key IS NULL`).
+MIGRATION_20 = [
+    "ALTER TABLE saved_research ADD COLUMN tickers TEXT",
+    "ALTER TABLE saved_research ADD COLUMN ref TEXT",
+    "ALTER TABLE saved_research ADD COLUMN summary TEXT",
+    "ALTER TABLE saved_research ADD COLUMN payload TEXT",
+    "ALTER TABLE saved_research ADD COLUMN item_key TEXT",
+    "CREATE INDEX IF NOT EXISTS idx_research_key ON saved_research(user_id, item_key)",
+    "CREATE INDEX IF NOT EXISTS idx_research_updated ON saved_research(user_id, updated_at)",
+]
+
 
 MIGRATIONS: List[Tuple[int, str, List[str]]] = [
     (1, "accounts", MIGRATION_1),
@@ -984,6 +997,7 @@ MIGRATIONS: List[Tuple[int, str, List[str]]] = [
     (17, "watch_state", MIGRATION_17),
     (18, "usage_metrics", MIGRATION_18),
     (19, "knowledge_level", MIGRATION_19),
+    (20, "research_library", MIGRATION_20),
 ]
 
 
