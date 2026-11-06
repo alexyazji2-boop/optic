@@ -41,6 +41,7 @@ export const PERSONAL_KEYS = [
   'optic.v2.picker.v1',
   'optic.v2.replay.v1',
   'optic.v2.paper.draft.v1',
+  'optic.v2.symbols.known.v1',
   'optic.knowledge.pending.v1',
   'optic.writeToken',
   'optic.auth.passkeyOffered',

@@ -14,6 +14,7 @@ import { icon } from '../ui/icons.js';
 import { scoreLine, tone100 } from '../ui/score.js';
 import { asOfLine } from '../ui/states.js';
 import { fig as figControl } from '../ui/figure.js';
+import * as symbols from '../core/symbolcheck.js';
 
 const MAX = 4, TIE = 5;
 export const GROUPS = [
@@ -154,6 +155,10 @@ export function miloCompare(c) {
 // kept for the session, as the classic page keeps STATE.compare
 let inputs = ['', ''], result = null, running = false, seq = 0, live = true, mainEl = null, showMeans = false;
 const wanted = () => [...new Set(inputs.map((x) => x.trim().toUpperCase()).filter(Boolean))];
+// A name Compare refused (Handoff 3) with the closest listings to it, each a press that puts it in that name's box
+function refusedFixes(c) {
+  return (c.refused || []).filter((r) => (r.suggestions || []).length).map((r) => html`<div class="cluster cmp-fix"><span class="t-muted">Closest to ${r.query}:</span>${r.suggestions.slice(0, 4).map((s) => html`<button type="button" class="btn btn-sm" data-v2-cmp-fix="${r.query}" data-v2-cmp-to="${s.symbol}">${s.symbol}${s.name ? html` <span class="t-muted">${s.name}</span>` : ''}</button>`)}</div>`);
+}
 // the result on screen is for other names than the boxes now hold (one removed, added or changed)
 const stale = () => !!(result && result.available && result.tickers && result.tickers.join(',') !== wanted().join(','));
 
@@ -242,7 +247,7 @@ function paint() {
       ${c && c.available && (c.horizons || []).length ? html`<div class="cmp-hzs">${c.horizons.map((h) => html`<div><p class="t-label">${h.name}</p><p><b>Horizon: ${h.horizon}</b></p><p class="t-muted">${clean(h.basis || '')}</p></div>`)}</div>
         <p class="t-muted cmp-own">These are Compare's own scores, built only from inputs every compared name has. A Dossier's short- and long-term readings weigh more (options activity, news tone, the business's filings), so their numbers differ from these.</p>` : ''}</section>
     <div aria-live="polite">${running ? html`<div class="sk-wrap" role="status" aria-label="Comparing"><p>Pulling ${inputs.filter(Boolean).map((x) => x.toUpperCase()).join(' and ')} in full. The same analysis the Options and Investing tabs run, for each name.</p><div class="sk sk-row"></div><div class="sk sk-row"></div><div class="sk sk-row"></div></div>`
-      : !c ? '' : !c.available ? html`<div class="state err" role="alert"><p class="t-h3">Not compared</p><p>${clean(c.reason || 'Not enough names loaded to compare.')}</p>${(c.failed || []).map((f) => html`<p class="t-muted">${f.ticker}: ${clean(f.reason)}</p>`)}${inputs.filter((x) => x.trim()).length >= 2 ? html`<button type="button" class="btn btn-sm" data-v2-cmp-again>Try again</button>` : ''}</div>`
+      : !c ? '' : !c.available ? html`<div class="state err" role="alert"><p class="t-h3">Not compared</p><p>${clean(c.reason || 'Not enough names loaded to compare.')}</p>${(c.failed || []).map((f) => html`<p class="t-muted">${f.ticker}: ${clean(f.reason)}</p>`)}${refusedFixes(c)}${inputs.filter((x) => x.trim()).length >= 2 && !(c.refused || []).some((r) => r.status !== 'unavailable') ? html`<button type="button" class="btn btn-sm" data-v2-cmp-again>Try again</button>` : ''}</div>`
         : html`${stale() ? html`<div class="stale cmp-stale" role="status"><p>These results are for ${c.tickers.join(', ')}. ${wanted().length >= 2 ? html`Press Compare for ${wanted().join(', ')}.` : 'Add a second name to compare again.'}</p>${wanted().length >= 2 ? html`<button type="button" class="btn btn-sm" data-v2-cmp-again>Compare ${wanted().join(', ')}</button>` : ''}</div>` : ''}<div class="${stale() ? 'cmp-old' : ''}">${take(c)}${perf(c)}${bars(c)}${grid(c)}${asOfLine(c.generated_at, { what: 'Compared', note: 'From delayed quotes and daily closes.' })}</div>`}</div>`);
   // a phone's table header sticks under the top bar, whatever its height
   const bar = document.querySelector('.topbar'); if (bar && mainEl) mainEl.style.setProperty('--cmp-top', `${Math.round(bar.getBoundingClientRect().height)}px`);
@@ -254,6 +259,11 @@ async function run({ force } = {}) {
   if (t.length < 2) { result = { available: false, reason: 'Give at least two tickers.' }; paint(); return; }
   running = true; paint();
   const mine = ++seq;
+  // every name must be one (Handoff 3): a symbol that names nothing is not compared, and the page says which
+  const checks = await Promise.all(t.map((s) => symbols.check(s, { from: '#/compare' })));
+  if (mine !== seq) return;
+  const refused = checks.filter((r) => !symbols.admissible(r));
+  if (refused.length) { running = false; result = { available: false, refused, reason: refused.map((r) => symbols.refusal(r, 'compared')).join(' ') }; paint(); return; }
   let got;
   const path = `/api/compare?tickers=${encodeURIComponent(t.join(','))}`;
   // "Try again" asks again: a refusal kept for five minutes used to come straight back from the cache
@@ -292,6 +302,11 @@ export async function render(main, route) {
   main.addEventListener('click', (e) => {
     const t = (s) => e.target.closest(s); let b;
     if (t('[data-v2-cmp-again]')) { run({ force: !(result && result.available) }); return; }
+    if ((b = t('[data-v2-cmp-fix]'))) {
+      const k = inputs.findIndex((x) => x.trim().toUpperCase() === String(b.dataset.v2CmpFix).toUpperCase());
+      if (k >= 0) inputs[k] = b.dataset.v2CmpTo;
+      result = null; paint(); if (wanted().length >= 2) run(); return;
+    }
     if (t('[data-v2-cmp-means]')) { showMeans = !showMeans; paint(); const b2 = mainEl.querySelector('[data-v2-cmp-means]'); if (b2) b2.focus(); return; }
     if (t('[data-v2-cmp-add]')) { if (inputs.length < MAX) { inputs.push(''); paint(); const i = mainEl.querySelector(`#cmp-${inputs.length - 1}`); if (i) i.focus(); } return; }
     if ((b = t('[data-v2-cmp-drop]'))) { const k = Number(b.dataset.v2CmpDrop); inputs.splice(k, 1); paint(); const i = mainEl.querySelector(`#cmp-${Math.min(k, inputs.length - 1)}`); if (i) i.focus(); return; }

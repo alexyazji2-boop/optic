@@ -7,6 +7,7 @@
 // holds it for the person on screen (device.js), which is what keeps one
 // person's list off another person's page.
 import * as api from './api.js';
+import * as symbols from './symbolcheck.js';
 import { holds } from './device.js';
 import * as prefs from './prefs.js';
 
@@ -284,6 +285,10 @@ async function mutate(apply, remote) {
 export async function follow(sym, listId, { at } = {}) {
   sym = canon(sym);
   if (!sym) return;
+  // only a symbol that names something (Handoff 3): "MARKETS" was saved from the Dossier a bad link drew for it. One
+  // the check could not be made for is not added either, and the reader is told to try again.
+  const known = await symbols.check(sym);
+  if (!symbols.admissible(known)) throw new api.ApiError('bad', 0, symbols.refusal(known));
   if (!state.lists || !state.lists.length) {
     // the first follow makes the first list
     if (signedIn()) {

@@ -33,8 +33,10 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Body, HTTPException, Query, Request
+from starlette.concurrency import run_in_threadpool
 
 from . import db
+from . import symbol_check
 from . import watch_runner
 from .analytics import watches as watches_mod
 from .auth import deps, store
@@ -311,6 +313,13 @@ async def add_item(watchlist_id: str, request: Request,
         # it did not take. Skipping silently is only right for a bulk import,
         # where one bad row should not lose the other forty.
         symbols = [_symbol(payload.get("symbol"))]
+        # ...and it must name something (Handoff 3): "MARKETS" was saved from the Dossier a bad link drew for it.
+        # Against the directory already in memory, so a save never starts its download; a check that cannot be made
+        # does not refuse a symbol, since the page checked it before offering the button.
+        verdict = await run_in_threadpool(symbol_check.check, symbols[0], loaded_only=True)
+        if verdict["status"] in symbol_check.REFUSED:
+            raise HTTPException(status_code=400, detail="No company found for '{}', so it was not added.".format(
+                symbol_check.shown(symbols[0])))
     _put_symbols(watchlist_id, symbols)
     db.execute("UPDATE watchlists SET updated_at = ? WHERE id = ?",
                (db.utcnow(), watchlist_id))

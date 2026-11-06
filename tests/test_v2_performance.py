@@ -26,7 +26,8 @@ def test_only_the_shell_imports_pages_statically():
 
 def test_a_later_route_wins_a_race_and_a_failed_fetch_says_so():
     show = APP[APP.index("async function show(route)"):APP.index("const main = $('#main');")]
-    assert "const my = ++SHOW" in show and show.count("if (my !== SHOW) return;") == 2
+    # three: after the page's code loads, after it fails, and after the symbol check (Handoff 3)
+    assert "const my = ++SHOW" in show and show.count("if (my !== SHOW) return;") == 3
     assert "Its code could not be fetched" in show
     assert "p = null; throw e;" in APP, "a failed fetch is tried again next time, not cached as failed"
 

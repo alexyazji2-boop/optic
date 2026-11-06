@@ -53,6 +53,7 @@ from .auth import store as auth_store
 from .runtime import is_hosted
 from . import snapshots
 from . import universe as universe_mod
+from . import symbol_check as symbol_check_mod
 from . import earnings_week as earnings_week_mod
 from . import research_book as research_book_mod
 from . import priority as priority_mod
@@ -407,6 +408,10 @@ if _tradier_token:
     )
 else:
     PROVIDER = YF_PROVIDER
+
+# The symbol check asks the quote source about a symbol the exchange directory does not list (app/symbol_check.py):
+# read when called, so a test's stub provider is the one asked
+symbol_check_mod.QUOTE = lambda sym: PROVIDER.quote(sym)
 
 
 # Set by the scheduled loops, so everything they run takes the jobs' lane at
@@ -2125,6 +2130,31 @@ async def symbol_search(
         raise HTTPException(status_code=429, detail="That is a lot of searches from this connection in a minute. "
                                                     "Try again in a moment.")
     return await _run(lambda: {"query": q, **universe_mod.search_with_status(q, limit)})
+
+
+@app.get("/api/symbol-check")
+async def symbol_check(request: Request, q: str = Query("", max_length=64),
+                       from_: str = Query("", alias="from", max_length=200)) -> Dict[str, Any]:
+    """Whether a symbol names something Optic can show a page for (app/symbol_check.py, Handoff 3), asked before a
+    Dossier is drawn: listed, an instrument or traded elsewhere opens the page; unknown, no longer trading or not a
+    symbol gets the not-found state with the closest listings; "unavailable" says it could not be checked. A miss is
+    logged with the attempted text and the page the link was on, sanitised. Limited like the search box."""
+    if not _search_allowed(request):
+        raise HTTPException(status_code=429, detail="That is a lot of lookups from this connection in a minute. "
+                                                    "Try again in a moment.")
+    # a listed symbol from the directory in memory, at once; anything else on the check's own threads, so a Dossier's
+    # check never queues behind the other pages' data requests (TCEHY timed out behind them, 2026-11-04)
+    out = symbol_check_mod.listed_now(q)
+    if out is None:
+        loop = asyncio.get_running_loop()
+        out = await loop.run_in_executor(_SYMBOL_POOL, symbol_check_mod.check, q)
+        if out["status"] in symbol_check_mod.REFUSED:
+            out["suggestions"] = await loop.run_in_executor(_SYMBOL_POOL, symbol_check_mod.suggestions, q, out.get("symbol"))
+            symbol_check_mod.note_miss(out, from_)
+    return out
+
+
+_SYMBOL_POOL = ThreadPoolExecutor(max_workers=4, thread_name_prefix="symbol-check")
 
 
 # A daily candle's close keeps moving for a few minutes after the bell, while
@@ -5811,7 +5841,15 @@ async def compare_tickers(
 
 
 def _compare_payload(wanted: List[str]) -> Dict[str, Any]:
-    """The comparison itself: the endpoint above and Milo's compare tool read the same one."""
+    """The comparison itself: the endpoint above and Milo's compare tool read the same one. A symbol that names no
+    company is left out by name before anything is fetched for it (Handoff 3)."""
+    not_found = [s for s in wanted if symbol_check_mod.check(s, loaded_only=True)["status"] in symbol_check_mod.REFUSED]
+    if not_found:
+        wanted = [s for s in wanted if s not in not_found]
+        if len(wanted) < compare_mod.MIN_TICKERS:
+            return {"available": False, "not_found": not_found,
+                    "reason": "No company found for {}, so there are fewer than {} to compare.".format(
+                        ", ".join("'{}'".format(symbol_check_mod.shown(s)) for s in not_found), compare_mod.MIN_TICKERS)}
     def snapshot(sym: str) -> Dict[str, Any]:
         # The same snapshot the Swing tab uses, minus the option chain: the
         # comparison needs technicals and structure, and pulling four chains
@@ -5830,6 +5868,8 @@ def _compare_payload(wanted: List[str]) -> Dict[str, Any]:
             return {}
 
     out = compare_mod.build(snapshot, longterm_for, wanted)
+    if not_found:
+        out["not_found"] = not_found
     # The read across the comparison. The tab's own subtitle said the
     # disagreement between horizons "is the useful part" and then left the
     # reader to find it by eye across twenty-six rows.
@@ -6378,6 +6418,14 @@ def _owner_session_guard(request: Request) -> None:
     if not auth_admin.is_admin(user):
         raise refusal
     auth_deps.csrf_guard(request)
+
+
+@app.get("/api/admin/symbol-misses")
+async def admin_symbol_misses(request: Request) -> JSONResponse:
+    """Links to symbols Optic could not show since the server started (Handoff 3), for finding bad links: each
+    attempted text with its count, when it was seen and the pages the links were on. The owner only, as Metrics."""
+    _owner_session_guard(request)
+    return JSONResponse(content=symbol_check_mod.misses(), headers={"Cache-Control": "no-store"})
 
 
 @app.get("/api/admin/metrics")
@@ -8593,10 +8641,29 @@ def _personal_blocks_for(history: List[Dict[str, Any]], context: Optional[Dict[s
     return {k: v for k, v in context.items() if k not in present}, [_PERSONAL_BLOCKS[k] for k in present]
 
 
+def _without_unknown_page_symbol(context: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    """The page's symbol out of Milo's context when it names no company (Handoff 3): the v2 page never sends one, as a
+    not-found page has no symbol; a request that does gets its figures gathered for nothing, so nothing is gathered."""
+    if not isinstance(context, dict):
+        return context
+    focus = context.get("focus") if isinstance(context.get("focus"), dict) else None
+    sym = str((focus or {}).get("ticker") or context.get("ticker") or "").upper()
+    if not sym or symbol_check_mod.check(sym, loaded_only=True)["status"] not in symbol_check_mod.REFUSED:
+        return context
+    out = dict(context)
+    out.pop("ticker", None)
+    if focus is not None:
+        out["focus"] = dict(focus, ticker=None)
+    out["page_symbol_note"] = ("The page named {}, which is not a company in Optic's symbol directory and no quote "
+                               "source trades: say that no data is available for it.".format(symbol_check_mod.shown(sym)))
+    return out
+
+
 async def _chat_context(request: Request, history: List[Dict[str, Any]], context: Optional[Dict[str, Any]],
                         horizon: str, attachments: Any) -> Optional[Dict[str, Any]]:
     """The CONTEXT block for one Milo answer: the page's figures, with what the question needs added."""
-    context = await _augment_chat_context(history, _without_linked_keys(context))
+    context = await _run(_without_unknown_page_symbol, _without_linked_keys(context))
+    context = await _augment_chat_context(history, context)
     last = next((t for t in reversed(history or []) if t.get("role") != "assistant"), None)
     if _is_definition((last or {}).get("content") or "", context):
         # A plain definition needs no research pack, framework or chart levels: they fetched a company's filings

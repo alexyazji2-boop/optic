@@ -2049,6 +2049,14 @@ html.eff-1100 .ob-ways { grid-template-columns: minmax(0, 1fr); }
 .ds-row:hover { background: var(--c-active); } .ds-row .t-muted { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .ds-row .ic { margin-left: auto; width: 16px; height: 16px; color: var(--c-ink-3); }
 .ds-row .sym-logo { width: 24px; height: 24px; flex: none; background: var(--c-raised); }
 @media (max-width: 560px) { .ds-search { flex-wrap: wrap; } .ds-search .btn { width: 100%; } }
+/* An address that names no company (pages/notfound.js, Handoff 3): the Dossier start page's search box and rows, one
+   suggestion to a row with its kind in words at the right; every row a full tap target, and the box at 16px so a phone
+   does not zoom into it */
+.nf-list { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
+.nf-row .ic { margin-left: 0; color: var(--c-ink-2); }
+.nf-kind { flex: none; color: var(--c-ink-3); font: 500 var(--t-xs)/1 var(--f-label); }
+[data-v2-nf-form] input { font-size: var(--t-lg); }
+.cmp-fix { margin-top: 8px; }
 
 /* Classic's Overview, in v2 (owner's screenshots, 2026-10-25; pages/overview-research.js) */
 /* the header: the company's logo (its base style is the search rows', components.css), the Weinstein stage with
