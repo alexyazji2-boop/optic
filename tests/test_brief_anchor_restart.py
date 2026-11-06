@@ -71,7 +71,10 @@ class _Stop(BaseException):
 
 def test_the_first_pass_after_a_restart_serves_the_days_brief_unforced(archive, monkeypatch):
     now_et = datetime.now(timezone.utc).astimezone(ET)
-    archive(now_et.strftime("%Y-%m-%d"), now_et - timedelta(minutes=5))
+    # built five minutes ago, but never before today's midnight: in the first minutes after midnight ET "five
+    # minutes ago" was yesterday, and the test failed on every commit (2026-11-06, 00:04 ET)
+    midnight = now_et.replace(hour=0, minute=0, second=0, microsecond=0)
+    archive(now_et.strftime("%Y-%m-%d"), max(now_et - timedelta(minutes=5), midnight))
     monkeypatch.setattr(main, "BRIEF_ANCHOR_HOUR", 0)     # the anchor is behind us, whenever this runs
     asked = []
 
