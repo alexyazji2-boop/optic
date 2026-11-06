@@ -6,9 +6,9 @@ import * as api from './api.js';
 import * as store from './store.js';
 import * as prefs from './prefs.js';
 
-export const KINDS = ['company', 'comparison', 'conversation', 'sheet', 'question'];
-export const WORD = { company: 'Company', comparison: 'Comparison', conversation: 'Milo conversation', sheet: 'Research sheet', question: 'Question' };
-export const PLURAL = { company: 'Companies', comparison: 'Comparisons', conversation: 'Milo conversations', sheet: 'Research sheets', question: 'Questions' };
+export const KINDS = ['company', 'comparison', 'conversation', 'sheet', 'screen', 'question'];
+export const WORD = { company: 'Company', comparison: 'Comparison', conversation: 'Milo conversation', sheet: 'Research sheet', screen: 'Screen', question: 'Question' };
+export const PLURAL = { company: 'Companies', comparison: 'Comparisons', conversation: 'Milo conversations', sheet: 'Research sheets', screen: 'Screens', question: 'Questions' };
 
 /** A calendar date in the reader's zone: "Nov 4, 2026". */
 export function dayText(at, zone = prefs.zone()) {
@@ -18,6 +18,7 @@ export function dayText(at, zone = prefs.zone()) {
 /** The name a save takes unless the reader gives one: the ticker(s) and the date, as the handoff asks. */
 export function defaultName(kind, tickers = [], at = Date.now()) {
   const date = dayText(at);
+  if (kind === 'screen') return `Screen, ${date}`;
   if (!tickers.length) return `${kind === 'conversation' ? 'Milo conversation' : 'Saved research'}, ${date}`;
   return `${tickers.join(' vs ')}, ${date}`;
 }
@@ -26,14 +27,42 @@ export function keyOf(kind, tickers = [], ref = {}) {
   if ((kind === 'company' || kind === 'sheet') && tickers[0]) return `${kind}:${tickers[0]}`;
   if (kind === 'comparison' && tickers.length) return `comparison:${[...tickers].sort().join(',')}`;
   if (kind === 'conversation' && ref && ref.conversation) return `conversation:${ref.conversation}`;
+  if (kind === 'screen' && ref && ref.screen) return `screen:${ref.screen}`;
   return null;
 }
+/* A saved screen (Handoff 8) is known by its filters: their canonical form hashed with FNV-1a, as app/library.py
+ * screen_canonical and fnv1a do it, so the two sides agree on whether a screen is already saved. */
+const canonNum = (v) => { const f = Number(v); if (v === null || v === undefined || v === '' || !Number.isFinite(f)) return ''; return f.toFixed(6).replace(/0+$/, '').replace(/\.$/, ''); };
+export function screenCanonical(sp) {
+  const fs = [...((sp || {}).filters || [])].sort((a, b) => (String(a.field) < String(b.field) ? -1 : String(a.field) > String(b.field) ? 1 : 0));
+  const parts = fs.map((f) => [f.field, canonNum(f.min), canonNum(f.max), f.min_exclusive ? 1 : 0, f.max_exclusive ? 1 : 0, f.min_peer || '', f.max_peer || ''].join('|'));
+  return `${parts.join(',')};${[...((sp || {}).states || [])].sort().join(',')};${(sp || {}).sort || 'score'};${(sp || {}).direction || 'desc'}`;
+}
+// the text's UTF-8 bytes, as Python's str.encode('utf-8') gives them
+function utf8(text) {
+  const out = [];
+  for (const ch of String(text)) {
+    const c = ch.codePointAt(0);
+    if (c < 0x80) out.push(c);
+    else if (c < 0x800) out.push(0xc0 | (c >> 6), 0x80 | (c & 63));
+    else if (c < 0x10000) out.push(0xe0 | (c >> 12), 0x80 | ((c >> 6) & 63), 0x80 | (c & 63));
+    else out.push(0xf0 | (c >> 18), 0x80 | ((c >> 12) & 63), 0x80 | ((c >> 6) & 63), 0x80 | (c & 63));
+  }
+  return out;
+}
+export function fnv1a(text) {
+  let h = 0x811c9dc5;
+  for (const byte of utf8(text)) { h ^= byte; h = Math.imul(h, 0x01000193) >>> 0; }
+  return h.toString(16).padStart(8, '0');
+}
+export const screenKey = (sp) => fnv1a(screenCanonical(sp));
 /** Where an item reopens, with the tickers that are still there: its page's address, or null for a Milo conversation
  *  (which opens in Milo's panel) and a question (asked again). */
 export function routeOf(item) {
   const live = (item.tickers || []).filter((t) => !(item.gone || []).includes(t)), e = encodeURIComponent;
   if (item.kind === 'company') return live[0] ? `#/${e(live[0])}${(item.ref || {}).tab ? `/${item.ref.tab}` : ''}` : null;
   if (item.kind === 'sheet') return live[0] ? `#/${e(live[0])}/sheet` : null;
+  if (item.kind === 'screen') return `#/scan?saved=${e(item.id)}`;
   if (item.kind === 'comparison') {
     const gone = (item.gone || []).filter((t) => (item.tickers || []).includes(t));
     return `#/compare?t=${live.map(e).join(',')}${gone.length ? `&gone=${gone.map(e).join(',')}` : ''}`;

@@ -60,6 +60,43 @@ def _rules() -> List[Tuple[re.Pattern, Any]]:
     def add(pattern: str, make) -> None:
         out.append((re.compile(pattern, re.I), make))
 
+    # A business quality the screen has no figure for ("a strong moat", "good management"): taken whole and said to
+    # be unread (Handoff 8), so "strong" in it is never read as a strong price trend
+    add(r"\b(?:(?:a|an|the)\s+)?(?:strong|wide|durable|deep|great|good|solid|excellent|quality|competent|proven|"
+        r"trusted|loyal)\s+(?:economic\s+)?(?:moats?|brands?|management(?:\s+teams?)?|franchises?|culture|"
+        r"competitive\s+(?:advantages?|positions?|edges?)|customer\s+base|balance\s+sheets?|governance|leadership|"
+        r"products?|business(?:es)?|fundamentals|earnings\s+quality)\b",
+        lambda m: (None, None, m.group(0).strip(), None))
+    # Two fundamentals from SEC's filings (Handoff 8, app/analytics/sec_frames.py). First, because "revenue growth of
+    # 10%" must not be read as a 10% move in the price. A vague word ("low debt") is read as a stated rule the reader
+    # sees and can change before anything runs: below the universe's median.
+    _rev = r"(?:revenues?|sales|top[\s-]+line)"
+    add(r"\b" + _rev + r"\s+growth\s+(?:of\s+)?(?:at\s+least|above|over|more\s+than|greater\s+than|of)\s+"
+        r"(\d+(?:\.\d+)?)\s*%",
+        lambda m: ([{"field": "revenue_growth", "min": float(m.group(1)), "max": None}], [],
+                   "Revenue growth of at least {:g}%".format(float(m.group(1))), None))
+    add(r"\b(?:positive|rising|growing|increasing|higher|expanding)\s+" + _rev + r"(?:\s+growth)?\b"
+        r"|\b" + _rev + r"\s+(?:growth|is\s+growing|growing|rising|increasing|up)\b"
+        r"|\bgrowing\s+(?:the\s+)?" + _rev + r"\b",
+        lambda m: ([{"field": "revenue_growth", "min": 0.0, "max": None, "min_exclusive": True}], [],
+                   "Revenue growth above 0%", None))
+    add(r"\b(?:negative|falling|declining|shrinking|lower)\s+" + _rev + r"(?:\s+growth)?\b"
+        r"|\b" + _rev + r"\s+(?:declines?|declining|falling|shrinking|down)\b",
+        lambda m: ([{"field": "revenue_growth", "min": None, "max": 0.0, "max_exclusive": True}], [],
+                   "Revenue growth below 0%", None))
+    _debt = r"(?:debt|leverage|liabilities)(?:[\s-]+(?:to[\s-]+assets|ratios?|levels?|loads?))?"
+    add(r"\b(?:debt|liabilities)[\s-]+(?:to[\s-]+assets|ratios?)\s+(?:below|under|less\s+than|at\s+most|of\s+at\s+most)\s+"
+        r"(\d+(?:\.\d+)?)\s*%",
+        lambda m: ([{"field": "debt_ratio", "min": None, "max": float(m.group(1))}], [],
+                   "Debt ratio of at most {:g}%".format(float(m.group(1))), None))
+    add(r"\b(?:below|under|lower\s+than|less\s+than)[\s-]+(?:the\s+)?average\s+" + _debt + r"\b"
+        r"|\b" + _debt + r"\s+(?:below|under|lower\s+than|less\s+than)\s+(?:the\s+)?average\b"
+        r"|\blow(?:er)?\s+" + _debt + r"\b|\bless\s+(?:debt|leverage)(?:\s+than\s+(?:average|peers|their\s+peers|most))?\b",
+        lambda m: ([{"field": "debt_ratio", "max_peer": "median"}], [], "Debt ratio below the universe's median", None))
+    add(r"\b(?:above|over|higher\s+than|more\s+than)[\s-]+(?:the\s+)?average\s+" + _debt + r"\b"
+        r"|\bhigh(?:er)?\s+" + _debt + r"\b",
+        lambda m: ([{"field": "debt_ratio", "min_peer": "median"}], [], "Debt ratio above the universe's median", None))
+
     # Near, on, testing or holding a moving average.
     add(r"\b(?:on|at|near|around|touching|testing|hugging|holding|retesting|sitting\s+on|"
         r"right\s+on|close\s+to|bouncing\s+off|bouncing\s+on)\s+" + _THE + _MA,
@@ -220,6 +257,23 @@ def labels(filters: List[Dict[str, Any]], states: List[str]) -> List[str]:
     return out
 
 
+_JOINS = re.compile(r"[,;:.]|\b(?:and|with|that|but|or|plus|having|have|has|which|who|where|whose|while|also)\b", re.I)
+
+
+def phrases(remaining: str) -> List[str]:
+    """The parts of a request no rule read, as the reader wrote them (Handoff 8: "I couldn't map 'strong moat'"),
+    each trimmed of the filler words around it. One phrase per run of unread words between joining words."""
+    out: List[str] = []
+    for part in _JOINS.split(remaining or ""):
+        words = re.findall(r"[A-Za-z0-9$%][A-Za-z0-9$%'./-]*", part)
+        keep = [i for i, w in enumerate(words) if w.lower().strip(".-'") not in STOPWORDS and len(w.strip(".-'")) > 1]
+        if keep:
+            phrase = " ".join(words[keep[0]:keep[-1] + 1])
+            if phrase.lower() not in (x.lower() for x in out):
+                out.append(phrase)
+    return out
+
+
 def cache_key(text: str) -> str:
     """The same request in different case or spacing is the same request."""
     norm = re.sub(r"\s+", " ", (text or "").strip().lower())
@@ -237,12 +291,18 @@ def read(text: str) -> Dict[str, Any]:
     understood: List[str] = []
     sort: Tuple[str, str] = ("score", "desc")
     sorted_by_rule = False
+    unread_whole: List[str] = []
     for pattern, make in _RULES:
         while True:
             m = pattern.search(remaining)
             if not m:
                 break
             got_filters, got_states, label, got_sort = make(m)
+            if got_filters is None:                   # a phrase taken whole because nothing can screen for it
+                if label.lower() not in (x.lower() for x in unread_whole):
+                    unread_whole.append(re.sub(r"^(?:a|an|the)\s+", "", label, flags=re.I))
+                remaining = remaining[:m.start()] + " , " + remaining[m.end():]
+                continue
             for f in got_filters:
                 # One bound per field: a later rule narrows, it does not stack.
                 filters = [x for x in filters if x["field"] != f["field"]] + [dict(f)]
@@ -259,4 +319,6 @@ def read(text: str) -> Dict[str, Any]:
     words = re.findall(r"[a-z0-9$%][a-z0-9$%'./-]*", remaining.lower())
     leftover = [w for w in words if w.strip(".-'") not in STOPWORDS and len(w.strip(".-'")) > 1]
     return {"filters": filters, "states": states, "sort": sort[0], "direction": sort[1],
-            "understood": understood, "leftover": leftover}
+            # a quality nothing can screen for is named, but sent to no one: Milo would find no figure for it either
+            "understood": understood, "leftover": leftover,
+            "unmapped": unread_whole + [x for x in phrases(remaining) if x.lower() not in (y.lower() for y in unread_whole)]}

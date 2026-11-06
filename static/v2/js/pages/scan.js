@@ -1,7 +1,9 @@
 // Discover, Scan. Three ways to find stocks over the same ranked universe:
-//   Find stocks: a request in plain words (POST /api/screener/ask). A fixed
-//     parser reads it for free; only words it cannot read go to Milo, which
-//     uses one Milo question from the reader's allowance, and never on load.
+//   Find stocks: a request in plain words, read as filters the reader reviews before anything runs (Handoff 8, the
+//     Describe-It screener: POST /api/screener/read, then POST /api/screener). A fixed parser reads it for free;
+//     only words it cannot read go to Milo, which uses one Milo question from the reader's allowance, and never on
+//     load. A phrase nothing can screen for is named, never replaced. The result says the exact filters, the
+//     universe, the data's dates and sources and its fingerprint, and the screen can be saved and run again.
 //   Named scans: thirteen questions already computed (/api/scanners/{id}).
 //   Build a screen: the reader's own bounds (POST /api/screener).
 // "Does the score work?" replays the score on history (/api/evaluate) when
@@ -18,6 +20,8 @@ import { hrefFor } from '../nav.js';
 import { button as miloButton, provideContext } from '../ui/milo.js';
 import { toast } from '../ui/toast.js';
 import { shortlistBody } from './scan-shortlist.js';
+import * as lib from '../core/library.js';
+import { provide as provideSave, saveButton } from '../ui/library.js';
 import { sectionHead } from './tabs.js';
 
 const RECENT_KEY = 'optic.scan.recent.v1', SCREEN_KEY = 'optic.screener.v1';
@@ -94,28 +98,89 @@ function screenTable(res, emptyText) {
   return html`<div class="tscroll"><table class="t sc-t"><thead><tr><th scope="col">Symbol</th>${cols.map((c) => html`<th scope="col">${c.label}</th>`)}<th scope="col"><span class="sr">Next</span></th></tr></thead><tbody>${res.rows.map((r) => html`<tr><th scope="row"><a href="${hrefFor('overview', r.symbol)}">${r.symbol}</a></th>${cols.map((c) => html`<td>${screenCell(c, r[c.id])}</td>`)}${rowActs(r.symbol)}</tr>`)}</tbody></table></div>${compareTop(res.rows)}`;
 }
 
-/* ---------------- Find stocks ---------------- */
+/* ---------------- Find stocks: describe, review, run (Handoff 8) ---------------- */
 const wideScreen = () => { try { return matchMedia('(min-width: 641px)').matches; } catch (e) { return true; } };
+const PAGE = 25;
+const specOf = (pr) => ({ filters: (pr.filters || []).map(({ field, min, max, min_exclusive, max_exclusive, min_peer, max_peer }) => Object.fromEntries(Object.entries({ field, min, max, min_exclusive, max_exclusive, min_peer, max_peer }).filter(([, v]) => v !== undefined && v !== null && v !== false))), states: (pr.states || []).map((x) => x.id || x), sort: pr.sort || 'score', direction: pr.direction || 'desc' });
+const fieldOf = (id) => ((S.fields || {}).fields || []).find((f) => f.id === id) || {};
+function amount(fd, v) { const n = num(v, fd.decimals ?? 2).replace(/\.0+$|(\.\d*?)0+$/, '$1'); return fd.unit === '$' ? `$${n}` : fd.unit === '%' ? `${n}%` : fd.unit === 'x' ? `${n}×` : n; }
+/** One filter in plain English, as the server's screener.plain says it, so an edit reads the same as the reading. */
+export function plainOf(f, fd = fieldOf(f.field), periods = (S.fields || {}).period_words || {}) {
+  const label = fd.label || f.field; let said;
+  if (f.min_peer || f.max_peer) said = `${label} ${f.min_peer ? 'above' : 'below'} the universe's ${f.min_peer || f.max_peer}`;
+  else if (f.min != null && f.max != null) said = `${label} between ${amount(fd, f.min)} and ${amount(fd, f.max)}`;
+  else if (f.min != null) said = `${label} ${f.min_exclusive ? 'above' : 'at least'} ${amount(fd, f.min)}`;
+  else if (f.max != null) said = `${label} ${f.max_exclusive ? 'below' : 'at most'} ${amount(fd, f.max)}`;
+  else said = `${label}: no bound yet`;
+  return periods[f.field] ? `${said} (${periods[f.field]})` : said;
+}
 function ask() {
-  const r = S.ask, recent = readKey(RECENT_KEY, []);
+  const recent = readKey(RECENT_KEY, []);
   return html`<section class="section first" aria-labelledby="fs-h"><h2 class="t-h2" id="fs-h">Find stocks</h2>
-    <form class="ask-form" data-v2-ask><label class="sr" for="sc-ask">Describe the stocks you want</label><textarea id="sc-ask" name="text" maxlength="300" rows="2" placeholder="Strong stocks on the 200-day average right now">${S.askText || ''}</textarea>
-      <div class="cluster"><button type="submit" class="btn btn-primary" ${S.asking ? 'disabled' : ''}>${S.asking ? 'Screening…' : 'Find symbols now'}</button>${miloButton(S.ask && S.ask.result ? 'Ask Milo about the results' : 'Ask Milo to help phrase it', { ask: S.ask && S.ask.result ? `I asked for "${S.askText}". ${S.ask.result.matched} of ${S.ask.result.considered} ranked names matched: ${(S.ask.result.rows || []).slice(0, 15).map((x) => x.symbol).join(', ')}. Which fit best, and what would make each stop fitting?` : 'Help me turn my idea into a stock screen.', context: 'Discover, Scan' })}</div></form>
-    <p class="asof">Fixed rules read most requests at no cost; words they cannot read use one Milo question, once.</p>
-    ${/* on a phone the six examples fold to one line, so the results start on the first screen (pitch audit, 2026-10-22) */ ''}
+    <form class="ask-form" data-v2-ask><label class="sr" for="sc-ask">Describe the stocks you want</label><textarea id="sc-ask" name="text" maxlength="300" rows="2" placeholder="Positive revenue growth and below-average debt ratios">${S.askText || ''}</textarea>
+      <div class="cluster"><button type="submit" class="btn btn-primary" ${S.reading ? 'disabled' : ''}>${S.reading ? 'Reading…' : 'Read my request'}</button>${miloButton(S.run && S.run.rows ? 'Ask Milo about the results' : 'Ask Milo to help phrase it', { ask: S.run && S.run.rows ? `I screened for "${S.askText}". ${S.run.matched} of ${S.run.considered} ranked names matched: ${(S.run.rows || []).slice(0, 15).map((x) => x.symbol).join(', ')}. Which fit best, and what would make each stop fitting?` : 'Help me turn my idea into a stock screen.', context: 'Discover, Scan' })}</div></form>
+    <p class="asof">Fixed rules read most requests at no cost; words they cannot read use one Milo question, once. Nothing runs until you have seen the filters and pressed Run.</p>
     <details class="sc-ex" ${wideScreen() ? 'open' : ''}><summary>Examples <span class="t-muted">${EXAMPLES.length}</span></summary>
       <div class="chips chips-scroll" role="group" aria-label="Examples">${EXAMPLES.map((e) => html`<button type="button" class="chip" data-v2-ask-ex="${e}">${e}</button>`)}</div></details>
     ${recent.length ? html`<p class="t-label" style="margin-top:12px">Your recent requests <button type="button" class="textlink" data-v2-ask-clear>Clear</button></p><div class="chips chips-scroll">${recent.map((e) => html`<button type="button" class="chip" data-v2-ask-ex="${e}">${e}</button>`)}</div>` : ''}
-    <div aria-live="polite">${r ? (r.error ? html`<div class="state err" role="alert"><p class="t-h3">The request did not run</p><p>${api.explain(r.error, 'The screen')}</p></div>` : html`
-      <p class="t-label" style="margin-top:16px">Read by ${r.read_by === 'pulse' ? 'Milo' : 'the screener'}</p>
-      ${(r.understood || []).length ? html`<div class="chips">${r.understood.map((u) => html`<span class="pill">${clean(u)}</span>`)}</div>` : html`<p>Nothing in that could be read as a screen.</p>`}
-      ${(r.unsupported || []).length || (r.unread || []).length ? html`<p class="t-muted">The screen cannot ask about: ${[...(r.unsupported || []), ...(r.unread || []).map((w) => `not read: ${w}`)].join(', ')}.</p>` : ''}
-      ${r.note ? html`<p class="stale">${clean(r.note)}</p>` : ''}
-      ${r.spec ? html`<button type="button" class="btn btn-sm" data-v2-ask-edit>Edit as filters</button>` : ''}
-      ${r.result ? (r.result.available === false ? html`<p>${clean(r.result.reason || '')}</p>${buildBar(r.result.building)}` : html`<p class="asof">${r.result.matched} of ${r.result.considered} ranked names match, showing the first ${(r.result.rows || []).length}. Ranking ${num(r.result.ranking_age_hours, 1)} hours old.</p>${screenTable(r.result, 'Nothing matches every part of that request.')}`) : ''}`) : ''}</div>
+    <div aria-live="polite">${S.propErr ? html`<div class="state err" role="alert"><p class="t-h3">The request was not read</p><p>${api.explain(S.propErr, 'Reading the request')}</p></div>` : S.prop ? html`${review()}${resultView()}` : ''}</div>
   </section>`;
 }
-
+/** The filters as read, before anything runs: each in plain English, each editable or removable. */
+function review() {
+  const pr = S.prop, n = pr.filters.length + pr.states.length, fields = (S.fields || {}).fields || [];
+  const used = new Set(pr.filters.map((x) => x.field));
+  return html`<div class="ds-review" aria-labelledby="ds-rh"><h3 id="ds-rh">${n ? 'The filters, before anything runs' : 'Nothing to screen on yet'}</h3>
+    <p class="asof">${pr.read_by === 'saved' ? 'A saved screen, as you saved it.' : pr.read_by === 'pulse' ? 'Read by Milo (one question, kept so it is never paid for twice).' : 'Read by Optic\'s fixed rules, at no cost.'}${pr.note ? ` ${clean(pr.note)}` : ''}</p>
+    ${(pr.unmapped || []).map((u) => html`<p class="ds-unmapped" role="note">Couldn't map “${u}” to a filter, so it was left out. Nothing was put in its place.</p>`)}
+    ${n ? html`<ul class="ds-filters">${pr.filters.map((f, i) => { const fd = fieldOf(f.field), peer = f.min_peer || f.max_peer; return html`<li class="ds-f">
+        <p class="ds-said">${plainOf(f, fd)}</p>
+        <div class="ds-edit">${peer ? html`<label class="select"><span class="sr">How ${fd.label || f.field} is compared</span><select data-ds-peer="${i}"><option value="median" ${peer === 'median' ? 'selected' : ''}>Against the universe's median</option><option value="mean" ${peer === 'mean' ? 'selected' : ''}>Against the universe's mean</option><option value="value">Against a number</option></select></label>`
+          : html`<label class="field field-xs"><span class="sr">${fd.label || f.field}, from</span><input data-ds-min="${i}" inputmode="decimal" placeholder="min" value="${f.min ?? ''}"></label><span>to</span><label class="field field-xs"><span class="sr">${fd.label || f.field}, to</span><input data-ds-max="${i}" inputmode="decimal" placeholder="max" value="${f.max ?? ''}"></label><span class="t-muted">${fd.unit === 'x' ? '×' : fd.unit || ''}</span>`}
+          <button type="button" class="icon-btn" data-ds-del="${i}" aria-label="${`Remove the ${fd.label || f.field} filter`}" title="Remove">${icon('close')}</button></div></li>`; })}
+      ${pr.states.map((st, k) => html`<li class="ds-f"><p class="ds-said">${st.label}</p><div class="ds-edit"><button type="button" class="icon-btn" data-ds-sdel="${k}" aria-label="${`Remove “${st.label}”`}" title="Remove">${icon('close')}</button></div></li>`)}</ul>`
+      : html`<p>Nothing in that could be read as a filter. Build one yourself, or describe it another way.</p>`}
+    <div class="cluster">${n ? html`<button type="button" class="btn btn-primary" data-ds-run ${S.running ? 'disabled' : ''}>${S.running ? 'Screening…' : 'Run screen'}</button>` : ''}
+      ${fields.length && pr.filters.length < 8 ? html`<label class="select"><span class="sr">Add a filter</span><select data-ds-add><option value="">Add a filter…</option>${fields.filter((f) => !used.has(f.id)).map((f) => html`<option value="${f.id}">${f.label}</option>`)}</select></label>` : ''}
+      <button type="button" class="btn btn-quiet btn-sm" data-ds-build>Open in Build a screen</button></div></div>`;
+}
+const fmtDay = (d) => { const t = d ? new Date(`${d}T12:00:00Z`) : null; return t && Number.isFinite(t.getTime()) ? t.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' }) : ''; };
+/** What the screen ran on, said once above its list: the filters, the universe, the dates, the sources, the fingerprint. */
+function pinned(r) {
+  const fund = (r.as_of || {}).fundamentals, p = (fund || {}).periods || {};
+  const used = new Set((r.filters || []).map((f) => f.field));
+  const asOf = [r.as_of && r.as_of.bars_through ? `Daily bars through ${fmtDay(r.as_of.bars_through)}` : `Ranking built ${num(r.ranking_age_hours, 1)} hours ago`];
+  if (fund && used.has('revenue_growth')) asOf.push(`revenue growth: fiscal years that fall mostly in ${p.revenue_year}, against those in ${p.revenue_prior}`);
+  if (fund && used.has('debt_ratio')) asOf.push(`debt ratio: balance sheets at ${fmtDay(p.balance_end)}, or the nearest quarter-end each company reports`);
+  const unmeasured = (r.funnel || []).filter((x) => x.unmeasured && fieldOf(x.field).family === 'fundamental');
+  return html`<dl class="ds-pin">
+      <div><dt>Filters</dt><dd><ul class="plain">${(r.filters_said || []).map((x) => html`<li>${x}</li>`)}</ul></dd></div>
+      <div><dt>Universe</dt><dd>NASDAQ-listed stocks: ${r.prefiltered ?? r.considered} of ${r.universe} pass the price and liquidity gates (at least $${num((r.gates || {}).min_price, 0)}, and $${compact((r.gates || {}).min_dollar_volume)} a day).</dd></div>
+      <div><dt>As of</dt><dd>${capFirst(asOf.join('; '))}.${r.stale ? ' The ranking is stale.' : ''}</dd></div>
+      ${(r.peers || []).length ? html`<div><dt>Compared with</dt><dd>${r.peers.map((x) => (x.value === null ? `${x.label}: no stock in the universe reports it, so nothing passes` : `${x.label} ${x.side === 'max' ? 'below' : 'above'} ${x.value}%, the ${x.basis} of the ${x.of} stocks in the universe that report it`)).join('; ')}.</dd></div>` : ''}
+      <div><dt>Sources</dt><dd>Prices: ${r.sources.price}.${r.sources.fundamental ? ` Revenue and balance sheets: ${r.sources.fundamental}.` : ''}</dd></div>
+      <div><dt>Screen</dt><dd>${r.fingerprint}: the same filters on the same data give the same list.</dd></div></dl>
+    ${unmeasured.map((x) => html`<p class="ds-note">${x.unmeasured} stocks in the universe have no ${x.label.toLowerCase()} in SEC's US-GAAP filings (most file in IFRS or are funds), so this filter cannot pass them.</p>`)}
+    ${(r.considered || 0) < 30 ? html`<p class="stale">A small universe: only ${r.considered} stocks were screened.</p>` : ''}`;
+}
+function resultView() {
+  const r = S.run;
+  if (!r) return '';
+  if (r.error) return failed('The screen', r.error, { retry: 'describe' });
+  if (r.available === false) return html`<div class="state" role="status"><p>${clean(r.reason || '')}</p>${buildBar(r.building)}${r.building ? html`<button type="button" class="btn btn-sm" data-ds-stop>Stop waiting</button>` : r.retry ? html`<button type="button" class="btn btn-sm" data-ds-run>Try again</button>` : ''}</div>`;
+  const shown = (r.rows || []).slice(0, S.shown || PAGE), b = r.binding;
+  return html`<section class="ds-result" aria-labelledby="ds-mh">
+    ${S.runKey && S.runKey !== lib.screenKey(specOf(S.prop)) ? html`<p class="stale">These matches are for the filters as they were when you ran the screen. Run it again for the ones above.</p>` : ''}
+    <div class="section-head"><h3 id="ds-mh">${r.matched} of ${r.considered} match</h3><div class="cluster">${saveButton('screen', `screen:${lib.screenKey(specOf(S.prop))}`, { label: 'Save screen' })}</div></div>
+    ${pinned(r)}
+    <p class="ds-disc">Screening is not investment advice: being on a list is not a recommendation. Check the figures before acting on them.</p>
+    ${r.matched ? html`${screenTable(Object.assign({}, r, { rows: shown }), '')}
+      ${(r.rows || []).length > shown.length ? html`<p class="cluster"><button type="button" class="btn btn-sm" data-ds-more>Show ${Math.min(PAGE, r.rows.length - shown.length)} more</button><span class="t-muted">${shown.length} of ${r.rows.length} shown</span></p>` : ''}
+      ${r.matched > (r.rows || []).length ? html`<p class="asof">These are the first ${(r.rows || []).length} of ${r.matched}, in the order shown. Narrow the filters to see the rest.</p>` : ''}`
+      : html`<div class="state" role="status"><p><b>Nothing matched.</b>${b ? ` The filter that left nothing: ${b.said} (${b.reached} stocks reached it).` : ''}</p>
+        ${b && b.suggest ? html`<p>Loosen it to “${b.suggest_said}”? That would let ${b.keeps} of those ${b.reached} through this filter. <button type="button" class="btn btn-sm" data-ds-loosen>Use this bound</button></p><p class="asof">It changes the filter above; nothing runs until you press Run.</p>` : b && b.why ? html`<p class="t-muted">${capFirst(b.why)}.</p>` : ''}</div>`}
+  </section>`;
+}
 /* ---------------- named scans ---------------- */
 function named() {
   const g = (S.groups || {}).groups || [], sc = S.scans || {};
@@ -197,7 +262,8 @@ function paint() {
 }
 
 async function runScan(id, quiet) {
-  S.scanId = id; remember(`id=${encodeURIComponent(id)}`); if (!quiet) { S.result = null; paint(); }
+  // a saved screen keeps the address, so a reload or Back reopens it rather than the named scan under it
+  S.scanId = id; if (!S.savedId) remember(`id=${encodeURIComponent(id)}`); if (!quiet) { S.result = null; paint(); }
   try { const r = await api.get(`/api/scanners/${encodeURIComponent(id)}?limit=25`, { ttl: quiet ? 0 : 60000, force: !!quiet }); if (S.scanId !== id || !live) return; S.result = r; }
   catch (e) { if (S.scanId === id) S.result = { error: e }; }
   paint(); whenBuilt(S.result && S.result.building, () => runScan(id, true));
@@ -212,20 +278,44 @@ async function runScreen(again) {
   try { S.screen = Object.assign(await api.post('/api/screener', S.spec, { timeout: 60000 }), { spec_key: key }); if (!S.screen.building && S.screen.available !== false) SCREENED.set(key, S.screen); } catch (e) { S.screen = { error: e }; }
   S.screening = false; remember('mode=build'); paint(); whenBuilt(S.screen && S.screen.building, () => runScreen(true));
 }
-async function runAsk(text) {
+async function readRequest(text) {
   text = String(text || '').trim();
-  if (S.asking) return;   // one request at a time: a second click does not ask twice
-  // nothing typed: the box is focused and the reader told what goes in it. The button did nothing at all, and the
-  // grey example in the box is a placeholder, not a request (investor audit, 2026-10-27)
+  if (S.reading) return;   // one request at a time: a second click does not ask twice
+  // nothing typed: the box is focused and the reader told what goes in it (investor audit, 2026-10-27)
   if (!text) { const box = document.getElementById('sc-ask'); if (box) box.focus(); toast('Describe the stocks you want first, in a few words.'); return; }
-  S.askText = text; S.asking = true; S.ask = null; paint();
+  S.askText = text; S.reading = true; S.propErr = null; S.run = null; S.savedId = null; paint();
   try {
-    S.ask = await api.post('/api/screener/ask', { text }, { timeout: 60000 });
-    if (S.ask && !S.ask.error) ASKED.set(text, S.ask);
-    const rec = [text, ...readKey(RECENT_KEY, []).filter((x) => x.toLowerCase() !== text.toLowerCase())].slice(0, 6);
-    writeKey(RECENT_KEY, rec);
-  } catch (e) { S.ask = { error: e }; }
-  S.asking = false; remember(`q=${encodeURIComponent(text)}`); paint();
+    if (S.fields === undefined) await loadFields(true);
+    const r = await api.post('/api/screener/read', { text }, { timeout: 60000 });
+    S.prop = { text: r.text, read_by: r.read_by, note: r.note, unmapped: r.unmapped || [], filters: r.filters || [], states: r.states || [], sort: r.sort, direction: r.direction };
+    ASKED.set(text, S.prop);
+    writeKey(RECENT_KEY, [text, ...readKey(RECENT_KEY, []).filter((x) => x.toLowerCase() !== text.toLowerCase())].slice(0, 6));
+  } catch (e) { S.propErr = e; S.prop = null; }
+  S.reading = false; remember(`q=${encodeURIComponent(text)}`); paint();
+  const h = mainEl && mainEl.querySelector('#ds-rh'); if (h) { h.setAttribute('tabindex', '-1'); h.focus({ preventScroll: false }); }
+}
+async function runDescribed(again) {
+  if (!S.prop || (S.running && !again)) return;
+  const sp = specOf(S.prop);
+  if (sp.filters.some((x) => Number.isNaN(x.min) || Number.isNaN(x.max))) { toast('One of the bounds is not a number, so the screen did not run.'); return; }
+  S.running = true; if (!again) { S.run = null; S.shown = PAGE; } paint();
+  try { S.run = await api.post('/api/screener', Object.assign({}, sp, { limit: 200, text: S.prop.text || '' }), { timeout: 90000 }); S.runKey = lib.screenKey(sp); }
+  catch (e) { S.run = { error: e }; }
+  S.running = false; paint();
+  // still being built (the ranking, or SEC's figures for the universe): asked again every 5 seconds, until Stop waiting
+  whenBuilt(S.run && S.run.building && !S.stopped, () => runDescribed(true));
+  if (!again) { const h = mainEl && mainEl.querySelector('#ds-mh'); if (h) { h.setAttribute('tabindex', '-1'); h.focus({ preventScroll: false }); } }
+}
+// a saved screen (Saved research, Handoff 8): its filters as saved, run at once (a screen costs nothing to run)
+async function openSaved(id) {
+  try {
+    const r = await lib.get(id), sc = (r.item || {}).screen;
+    if (!sc) throw new Error('This saved item is not a screen.');
+    S.savedId = id;
+    if (S.fields === undefined) await loadFields(true);
+    S.askText = sc.text || ''; S.prop = { text: sc.text || '', read_by: 'saved', unmapped: [], filters: sc.filters || [], states: (sc.states || []).map((k) => ({ id: k, label: ((S.fields || {}).states || []).find((x) => x.id === k)?.label || k })), sort: sc.sort, direction: sc.direction };
+    paint(); runDescribed();
+  } catch (e) { S.propErr = e; paint(); }
 }
 
 export async function render(main, route) {
@@ -241,14 +331,17 @@ export async function render(main, route) {
   // this page from a result, the answer already given is shown again. Any other link with ?q= (a shared one) puts the
   // words in the box and waits for the press, so opening a link never spends a reader's Milo message (Phase 02).
   const q = String(prm.q || '').trim().slice(0, 300);
-  if (q && ASKED.has(q)) { S.askText = q; S.ask = ASKED.get(q); paint(); } else if (q && pressedInMilo(q)) runAsk(q); else if (q) { S.askText = q; paint(); }
+  if (prm.saved) openSaved(String(prm.saved));
+  else if (q && ASKED.has(q)) { S.askText = q; S.prop = ASKED.get(q); paint(); } else if (q && pressedInMilo(q)) readRequest(q); else if (q) { S.askText = q; paint(); }
+  // what Save keeps for a screen: the request in words and the filters exactly as confirmed (Handoff 8)
+  provideSave('screen', () => (S.prop ? { kind: 'screen', tickers: [], screen: Object.assign(specOf(S.prop), { text: S.prop.text || '' }), summary: { text: S.prop.text || '', said: [...S.prop.filters.map((f) => plainOf(f)), ...S.prop.states.map((x) => x.label)] }, name: `${S.prop.text ? `${S.prop.text.slice(0, 60)}` : 'Screen'}, ${lib.dayText(Date.now())}` } : { blocked: 'Read a request first: there is no screen to save yet.' }));
   try { [S.scans, S.groups] = await Promise.all([api.get('/api/scanners', { ttl: 120000 }), api.get('/api/scanners/groups', { ttl: 600000 }).catch(() => null)]); if (!S.groups && S.scans) S.groups = { groups: [{ id: 'all', name: 'Screens', count: S.scans.scans.length, scans: S.scans.scans }] }; }
   catch (e) { S.scansErr = e; S.scans = null; }
   paint();
   if (S.scans && S.mode === 'named') runScan(S.scanId);
 }
 export function dispose() { live = false; clearTimeout(poll); }
-export const retry = { scan: () => runScan(S.scanId), catalogue: (m, r) => render(m, r), shortlist: () => loadShortlist() };
+export const retry = { scan: () => runScan(S.scanId), catalogue: (m, r) => render(m, r), shortlist: () => loadShortlist(), describe: () => runDescribed() };
 async function loadShortlist() {
   S.shortlist = undefined; paint(); remember('mode=shortlist');
   try { S.shortlist = await api.get('/api/shortlist', { ttl: 300000, timeout: 120000 }); } catch (e) { S.shortlist = { error: e }; }
@@ -266,29 +359,52 @@ function wire(main) {
   if (main.__v2Wired) return;
   main.__v2Wired = true;
   main.addEventListener('submit', (e) => {
-    if (e.target.closest('[data-v2-ask]')) { e.preventDefault(); runAsk(e.target.text.value); return; }
+    if (e.target.closest('[data-v2-ask]')) { e.preventDefault(); readRequest(e.target.text.value); return; }
     if (e.target.closest('[data-v2-screen]')) { e.preventDefault(); runScreen(); }
   });
-  main.addEventListener('keydown', (e) => { if (e.target.id === 'sc-ask' && e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); runAsk(e.target.value); } });
+  main.addEventListener('keydown', (e) => { if (e.target.id === 'sc-ask' && e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); readRequest(e.target.value); } });
   main.addEventListener('input', (e) => {
     const t = e.target; let i;
     const val = (v) => { const s = String(v).trim().replace(/,/g, ''); if (!s) return null; const n = Number(s); return Number.isFinite(n) ? n : NaN; };
     if ((i = t.dataset.v2FltMin) !== undefined) { S.spec.filters[i].min = val(t.value); t.closest('.field').classList.toggle('bad', Number.isNaN(S.spec.filters[i].min)); saveSpec(); }
     else if ((i = t.dataset.v2FltMax) !== undefined) { S.spec.filters[i].max = val(t.value); t.closest('.field').classList.toggle('bad', Number.isNaN(S.spec.filters[i].max)); saveSpec(); }
     else if (t.id === 'sc-ask') S.askText = t.value;
+    else if ((i = t.dataset.dsMin) !== undefined || (i = t.dataset.dsMax) !== undefined) {
+      const f = S.prop.filters[i], side = t.dataset.dsMin !== undefined ? 'min' : 'max';
+      f[side] = val(t.value); delete f[`${side}_exclusive`];   // a bound the reader typed is "at least" or "at most"
+      t.closest('.field').classList.toggle('bad', Number.isNaN(f[side]));
+      const said = t.closest('.ds-f') && t.closest('.ds-f').querySelector('.ds-said'); if (said) said.textContent = plainOf(f);
+    }
   });
   main.addEventListener('change', (e) => {
     const t = e.target;
     if (t.dataset.v2FltField !== undefined) { const f = S.spec.filters[t.dataset.v2FltField]; f.field = t.value; f.min = null; f.max = null; saveSpec(); paint(); return; }
+    if (t.dataset.dsPeer !== undefined) {
+      const f = S.prop.filters[t.dataset.dsPeer], side = f.min_peer ? 'min' : 'max';
+      if (t.value === 'value') { delete f.min_peer; delete f.max_peer; f[side] = null; } else f[`${side}_peer`] = t.value;
+      paint(); return;
+    }
+    if (t.dataset.dsAdd !== undefined && t.value) { S.prop.filters.push({ field: t.value, min: null, max: null }); paint(); const ins = mainEl.querySelectorAll('[data-ds-min]'); if (ins.length) ins[ins.length - 1].focus(); return; }
     if (t.dataset.v2State !== undefined) { const id = t.dataset.v2State; S.spec.states = t.checked ? [...new Set([...S.spec.states, id])] : S.spec.states.filter((x) => x !== id); saveSpec(); return; }
     if (t.matches('[data-v2-screen-sort]')) { S.spec.sort = t.value; saveSpec(); return; }
     if (t.matches('[data-v2-screen-dir]')) { S.spec.direction = t.value; saveSpec(); }
   });
   main.addEventListener('click', async (e) => {
     const t = (s) => e.target.closest(s); let b;
-    if ((b = t('[data-v2-ask-ex]'))) { runAsk(b.dataset.v2AskEx); return; }
+    if ((b = t('[data-v2-ask-ex]'))) { readRequest(b.dataset.v2AskEx); return; }
+    if (t('[data-ds-run]')) { S.stopped = false; runDescribed(); return; }
+    if (t('[data-ds-stop]')) { S.stopped = true; clearTimeout(poll); S.run = null; S.running = false; paint(); toast('Stopped waiting. Nothing was screened; press Run to try again.'); return; }
+    if (t('[data-ds-more]')) { S.shown = (S.shown || PAGE) + PAGE; paint(); return; }
+    if ((b = t('[data-ds-del]'))) { S.prop.filters.splice(Number(b.dataset.dsDel), 1); paint(); return; }
+    if ((b = t('[data-ds-sdel]'))) { S.prop.states.splice(Number(b.dataset.dsSdel), 1); paint(); return; }
+    if (t('[data-ds-loosen]')) {
+      const s2 = S.run && S.run.binding && S.run.binding.suggest; if (!s2) return;
+      const f = S.prop.filters.find((x) => x.field === s2.field);
+      if (f) { delete f.min_peer; delete f.max_peer; delete f.min_exclusive; delete f.max_exclusive; f.min = s2.min; f.max = s2.max; }
+      paint(); const r2 = mainEl.querySelector('[data-ds-run]'); if (r2) r2.focus(); toast('The filter is loosened above. Press Run to screen again.'); return;
+    }
+    if (t('[data-ds-build]')) { S.spec = Object.assign(blankSpec(), S.prop ? specOf(S.prop) : {}); saveSpec(); S.mode = 'build'; if (S.fields === undefined) loadFields(); paint(); const sec = mainEl.querySelector('#sc-h'); if (sec) sec.scrollIntoView({ block: 'start' }); return; }
     if (t('[data-v2-ask-clear]')) { writeKey(RECENT_KEY, null); paint(); return; }
-    if (t('[data-v2-ask-edit]')) { const sp = S.ask.spec; S.spec = Object.assign(blankSpec(), sp); saveSpec(); S.screen = S.ask.result; S.mode = 'build'; if (S.fields === undefined) loadFields(); paint(); return; }
     if ((b = t('[data-v2-scan-mode]'))) {
       S.mode = b.dataset.v2ScanMode;
       if (S.mode === 'build') { if (S.fields === undefined) loadFields(); remember('mode=build'); } else if (S.mode === 'shortlist') { if (S.shortlist === undefined || (S.shortlist && S.shortlist.error)) { loadShortlist(); return; } remember('mode=shortlist'); } else { remember(`id=${encodeURIComponent(S.scanId)}`); if (!S.result) runScan(S.scanId); }
@@ -302,5 +418,5 @@ function wire(main) {
     if (t('[data-v2-eval]')) { S.evalD = 'loading'; paint(); try { S.evalD = await api.get('/api/evaluate', { ttl: 3600000, timeout: 180000 }); } catch (err) { S.evalD = { available: false, reason: api.explain(err, 'The test') }; } paint(); }
   });
 }
-async function loadFields() { try { S.fields = await api.get('/api/screener/fields', { ttl: 3600000 }); } catch (e) { S.fields = null; } paint(); }
+async function loadFields(quiet) { try { S.fields = await api.get('/api/screener/fields', { ttl: 3600000 }); } catch (e) { S.fields = null; } if (!quiet) paint(); }
 void capFirst;
