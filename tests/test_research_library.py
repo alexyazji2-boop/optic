@@ -73,7 +73,9 @@ PAGE_SPECS = """
   globalThis.history = { state: null, replaceState() {} };
   const COMPARE = { available: true, tickers: ['AAPL', 'MSFT'], rows: [{ ticker: 'AAPL', name: 'Apple Inc.' }, { ticker: 'MSFT', name: 'Microsoft Corporation' }, { ticker: 'SPY', name: 'SPDR S&P 500', is_benchmark: true }],
     take: { available: false }, horizons: [], performance: { series: [] } };
-  globalThis.fetch = async (url) => ({ ok: true, status: 200, statusText: '', headers: { get: () => null }, text: async () => JSON.stringify(String(url).startsWith('/api/compare') ? COMPARE : {}) });
+  globalThis.fetch = async (url) => ({ ok: true, status: 200, statusText: '', headers: { get: () => null }, text: async () => JSON.stringify(String(url).startsWith('/api/compare') ? COMPARE
+    // Compare asks the symbol check before it runs (Handoff 3): both tickers are listed
+    : String(url).startsWith('/api/symbol-check') ? { status: 'listed', symbol: decodeURIComponent(String(url).split('q=')[1].split('&')[0]), kind: 'stock' } : {}) });
   localStorage.setItem('optic.timezone', 'America/New_York');
   const U = await import('@UI@'), L = await import('@CORE@'), F = await import('@FRAME@'), C = await import('@COMPARE@'), M = await import('@MILO@'), { toString } = await import('@DOM@');
   const D = { sym: 'AAPL', quote: { name: 'Apple Inc.', price: 352.79, change_pct: 6.29, trade_time: '2026-11-04T18:46:30Z', delayed_minutes: 15 },
