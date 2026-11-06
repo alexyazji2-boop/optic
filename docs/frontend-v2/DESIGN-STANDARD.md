@@ -124,6 +124,13 @@ One family, the line icons in `ui/icons.js`: a 24px grid, a stroke of about 1.6 
 ### Price chart indicators
 The owner's mapping (2026-10-24): VWAP the one cool hue (the indicator exception to "no purple"), EMA 50 red and dashed, EMA 21 green, EMA 9 the ink, white on charcoal. Tokens `--c-ind-vwap`, `--c-ind-ema50`, `--c-ind-ema21`, `--c-ind-ema9` in `css/tokens.css`. The red and green are deeper and shifted from `--c-neg` and `--c-pos` so a line never reads as a candle, every one clears 4.5:1 on a panel in both themes, and each line is named at its right end in its own colour (`.endl` in `ui/pricechart.js`), so none is identified by colour alone.
 
+### Milo's context bar (Handoff 6, 2026-11-04)
+- **What Milo is researching is said once, at the top of the panel**, in one form: "Researching AAPL · Daily · RSI 14, MACD 12, 26, 9 · Chart" (the ticker, the chart's bar size, its indicators with their settings, the Dossier tab). It is the summary of the menu that changes it ("Change": what it holds, Compare's focus, what Milo receives), with Remove (×) beside it: one press, and Milo answers in general, about no company. Built from `ui/milo-context.js`, never written by hand on a page.
+- **It follows the page.** A page that changes what is on screen without a navigation calls `contextChanged()` from `ui/milo.js` (the chart does on every view change). A page with no ticker shows the "What Milo receives" picker instead of the bar.
+- **Every answer says what it was for** above it, in the bar's words ("For AAPL · Daily · RSI 14 · Chart"), from the server's own account (`app/ai.py` `context_used`), and keeps it in the conversation's history.
+- **Compare never chooses for the reader.** Its bar names the comparison and "No single focus" until the reader picks a name in the menu.
+- **Room:** beside the page (about 440 px) the bar has the first line to itself and Response settings sits beside the data line; at under 500 px the word "Change" gives way to its chevron. On a phone the bar is the ticker and the timeframe on Response settings' line, and its menu holds the rest.
+
 ### Explanations
 - **Visible:** a section shows its finding and one useful line.
 - **Folded:** methods, formulas, conventions and caveats go behind one shared fold, "How this works" (`ui/states.js` `how()`), under those words everywhere.

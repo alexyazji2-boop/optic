@@ -10,6 +10,11 @@
 // it names a different symbol from the one on screen. The label the reader
 // sees is built the same way, so it always names the page actually open.
 //
+// The Milo Context Bar (Handoff 6): what Milo is researching, from the same context, at the top of the panel:
+// "Researching AAPL · Daily · RSI 14, MACD 12, 26, 9 · Chart", with Change (the menu: what it holds, a focus on
+// Compare, what Milo receives) and Remove (one press: general questions, no ticker). It follows the page as it
+// changes (contextChanged, from the chart), and each answer says what it was for, kept with the conversation.
+//
 // Nothing is sent until the reader presses Send, and every entry point elsewhere in the terminal drafts. The panel's
 // three opening starters and Deep research are the exceptions, by the owner's decision: a starter sends as it reads
 // ("must send meaningful requests", 2026-10-20), and Deep research is itself the ask (BUG-049).
@@ -35,6 +40,7 @@ import { miloNotice } from '../core/legal.js';
 import { icon } from './icons.js';
 import { levelSlider } from './levelslider.js';
 import { begin as actBegin, on as actOn, companionHTML, syncCompanion } from './milo-activity.js';
+import { researchOf, researchLine, researchWords, researchRows, removedSince, usedLine, keepUsed } from './milo-context.js';
 
 const HISTORY_KEY = 'optic.pulse.history.v1', PERSONA_KEY = 'optic.pulse.persona.v1', HORIZON_KEY = 'optic.milo.horizon.v1', RESEARCH_KEY = 'optic.research.v1';
 const MAX_CONVERSATIONS = 30, MAX_MESSAGES = 60, MAX_CHARS = 12000, MAX_Q = 4000;
@@ -94,10 +100,10 @@ export function panelFigures(el) {
   return figures.length || notes.length || out.table ? out : null;
 }
 /** Pages register what Milo may see from them, as they render. */
-export function provideContext(fn) { provider = typeof fn === 'function' ? fn : null; }
+export function provideContext(fn) { provider = typeof fn === 'function' ? fn : null; contextChanged(); }
 /** Called by the app on every navigation, before the new page renders. */
 export function resetContext(r) {
-  provider = null; route = r || { view: 'home' }; asked = null; S.dropped.clear();
+  provider = null; route = r || { view: 'home' }; asked = null; S.dropped.clear(); S.pick = null;
   if (drawer.isOpen() && !drawer.isDocked()) drawer.close({ silent: true });
   // an open panel redraws its answers' "About" lines against the page now open (not while one streams)
   if (typeof paintLog === 'function' && host() && !S.live) { try { paintLog(false); paintChrome(); } catch (e) { /* drawn on next open */ } }
@@ -118,10 +124,14 @@ export function contextLabel(scope = S.scope) {
   return DOSSIER.has(r.view) && r.symbol ? `${r.symbol} Dossier, ${base}` : base;
 }
 const safeCall = (fn) => { try { return fn() || {}; } catch (e) { console.error(e); return {}; } };
+// A page whose context could not be read sends none: general mode, said so, never a guessed ticker (Handoff 6)
+const unreadable = (r, now) => ({ focus: { scope: 'none', unavailable: true, view: r.view, view_label: 'Page context unavailable', ticker: null, section: null, captured_at: now.toISOString() } });
 /** The context sent with a question, checked against the route on screen. */
 export function buildContext(scope, prevTicker, now = new Date()) {
   const panel = scope === 'auto' && asked && asked.panel ? asked.panel : null;
-  const r = route, ctx = scope === 'auto' && provider ? { ...safeCall(provider) } : {};
+  const r = route;
+  let ctx = {};
+  if (scope === 'auto' && provider) { try { ctx = { ...(provider() || {}) }; } catch (e) { console.error(e); return unreadable(r, now); } }
   // a Dossier page's data must be about the symbol on screen; anything naming another is dropped
   if (DOSSIER.has(r.view) && r.symbol) {
     Object.keys(ctx).forEach((k) => { const v = ctx[k]; const own = v && typeof v === 'object' && !Array.isArray(v) ? (v.symbol || v.ticker) : null; if (own && typeof own === 'string' && own.toUpperCase() !== r.symbol) delete ctx[k]; });
@@ -132,15 +142,31 @@ export function buildContext(scope, prevTicker, now = new Date()) {
   const own = DOSSIER.has(r.view) || r.view === 'instrument' ? r.symbol || null : null;
   // a block about one symbol on a page about none (a Brokerage thesis) names it; it never overrides the page's own
   const ticker = scope === 'auto' ? own || (asked && asked.symbol) || null : null;
-  const focus = { scope, view: r.view, view_label: contextLabel(scope), ticker, captured_at: now.toISOString() };
+  // the Dossier tab, if any: its key is always there, so the server knows the panel describes the research
+  const focus = { scope, view: r.view, view_label: contextLabel(scope), ticker, section: own && DOSSIER.has(r.view) ? pageLabel(r) : null, captured_at: now.toISOString() };
   if (scope === 'auto' && asked && asked.about) focus.asked_from = asked.about;
-  if (r.view === 'chart' && scope === 'auto' && ctx.chart) focus.chart = { range: ctx.chart.range, interval: ctx.chart.interval };
-  if (prevTicker && ticker && prevTicker !== ticker) focus.previous_ticker = prevTicker;
+  // the chart's identity, never its bars: the size and range, the dates in view, the indicators with their settings
+  if (r.view === 'chart' && scope === 'auto' && ctx.chart) {
+    const c = ctx.chart;
+    focus.chart = { range: c.range, interval: c.interval, visible_from: c.visible_from || null, visible_to: c.visible_to || null, indicators: (c.indicators || []).map((x) => ({ id: x.id, label: x.label, settings: x.settings })), compared: (c.compared || []).slice(0, 3) };
+  }
+  // Compare: the names compared, and the one the reader picked, or none; never one chosen for the reader
+  const cmpNames = scope === 'auto' && r.view === 'compare' && ctx.compare && Array.isArray(ctx.compare.tickers) ? ctx.compare.tickers.slice(0, 4) : [];
+  if (cmpNames.length >= 2) { focus.compare = { tickers: cmpNames, focus: cmpNames.includes(S.pick) ? S.pick : null }; if (!own) focus.ticker = focus.compare.focus; }
+  if (prevTicker && focus.ticker && prevTicker !== focus.ticker) focus.previous_ticker = prevTicker;
   delete ctx.focus_label; delete ctx.focus;
   if (scope === 'none') return { focus };
   if (scope === 'market') { const out = { focus }; ['macro', 'sectors', 'indices', 'read'].forEach((k) => { if (ctx[k]) out[k] = ctx[k]; }); return out; }
   // the panel an Ask Milo button sat in (B4a.3) is one of the attached parts, so it can be taken out like the rest
   return panel && !S.dropped.has('panel') ? { ...ctx, panel, focus } : { ...ctx, focus };
+}
+
+/** A page whose context changed without a navigation (the chart's bar size, an indicator on or off) says so here:
+ *  the bar follows at once. One paint a frame, and only the panel's controls, never the conversation. */
+let ctxFrame = null;
+export function contextChanged() {
+  if (ctxFrame || !host()) return;
+  ctxFrame = requestAnimationFrame(() => { ctxFrame = null; if (host()) paintChrome(); });
 }
 
 /* ---------------- history (the classic format) ---------------- */
@@ -158,15 +184,17 @@ function persist() {
   // the advice-policy notes go with their answer, so a reopened conversation still says what was declined or removed
   const from = Math.max(0, S.conv.messages.length - MAX_MESSAGES);
   const messages = S.conv.messages.slice(-MAX_MESSAGES).map((m, k) => { const inf = meta.get(from + k) || {}, o = { role: m.role, content: String(m.content || '').slice(0, MAX_CHARS) };
-    if (inf.policyLine) o.policy = String(inf.policyLine).slice(0, 400); if (inf.amended) o.amended = String(inf.amended).slice(0, 400); if (inf.level) o.level = String(inf.level).slice(0, 20); return o; });
+    if (inf.policyLine) o.policy = String(inf.policyLine).slice(0, 400); if (inf.amended) o.amended = String(inf.amended).slice(0, 400); if (inf.level) o.level = String(inf.level).slice(0, 20);
+    // what the answer was for (ticker, timeframe, indicators, tab), so a reopened answer still says it (Handoff 6)
+    if (inf.used) o.context = keepUsed({ ...inf.used, at: ((inf.context || {}).focus || {}).captured_at }); return o; });
   const list = loadHistory().filter((c) => c.id !== S.conv.id);
   list.unshift({ id: S.conv.id, at: new Date().toISOString(), title: titleOf(messages), ticker: route.symbol || null, messages });
   saveHistory(list.slice(0, MAX_CONVERSATIONS));
 }
 
 /* ---------------- state ---------------- */
-const blankConv = () => ({ id: newId(), messages: [], lastTicker: null });
-const S = { files: [], web: false, deepHint: false, conv: blankConv(), items: [], busy: false, abort: null, scope: 'auto', showHistory: false, showSettings: false, showInfo: false, allowance: null, personas: null, modes: null, draft: '', live: null, mounted: null, panel: null, toEnd: false, symbolAtAsk: null, dropped: new Set(), report: null, follow: true, view: null, lastTop: null, cutPaste: 0 };
+const blankConv = () => ({ id: newId(), messages: [], lastTicker: null, lastChart: null });
+const S = { files: [], web: false, deepHint: false, conv: blankConv(), items: [], busy: false, abort: null, scope: 'auto', pick: null, showHistory: false, showSettings: false, showInfo: false, allowance: null, personas: null, modes: null, draft: '', live: null, mounted: null, panel: null, toEnd: false, symbolAtAsk: null, dropped: new Set(), report: null, follow: true, view: null, lastTop: null, cutPaste: 0 };
 // items: what the log shows this session: {kind:'msg', i} for conv.messages[i], or {kind:'note', text}; meta per message index
 const meta = new Map();
 /* ---------------- attachments (Classic parity B4b; Classic's app.js:46216-46345) ----------------
@@ -511,6 +539,8 @@ const dataless = (info, syms) => syms.filter((s) => ![...((info || {}).loaded ||
 // data concerns are said apart: an NVDA answer asked from AAPL's Investing page read "About AAPL" (pitch audit,
 // 2026-10-22). Before the data is known (while it streams), the page is all there is to say.
 export function aboutLine(info, now = route) {
+  const used = (info || {}).used;
+  if (used && (used.ticker || used.general || used.unavailable || used.compare)) return forLine(info, used, now);
   const f = ((info || {}).context || {}).focus || {};
   const page = (info || {}).symbol || f.ticker || null, where = f.view_label || '';
   const data = concerns(info), unknown = (((info || {}).named || {}).unknown || []);
@@ -530,6 +560,27 @@ function figureList(figs) {
   if (!list.length) return '';
   const own = (x) => JSON.stringify({ name: x.name, text: x.text, status: x.status, why: x.why || null, period: { label: x.period || '' }, source: { name: x.source || '', url: x.filing || null }, as_of: x.as_of || null });
   return html`<ul class="plain milo-figs">${list.map((x) => html`<li>${x.name || ''}${x.symbol ? `, ${x.symbol}` : ''}: <button type="button" class="fig" data-v2-fig="${x.figure_id}" data-v2-fig-sym="${x.symbol || ''}" data-v2-fig-value="${own(x)}" aria-haspopup="dialog" aria-expanded="false" aria-label="${x.name || 'Figure'}: ${x.text || ''}. Show how it is defined">${x.text || ''}</button>${x.period ? html` <small class="t-muted">${x.period}</small>` : ''}</li>`)}</ul>`;
+}
+// What an answer was for (Handoff 6), in the context bar's words: "For AAPL · Daily · RSI 14 · Chart, 3:41 pm". When
+// the question named another company, that is what it is about and the page was only its context; a general answer
+// says it had no ticker, and one whose page context could not be read says that, as a note.
+function forLine(info, used, now) {
+  const f = ((info || {}).context || {}).focus || {}, t = used.ticker, at = f.captured_at || used.at;
+  const data = concerns(info), unknown = (((info || {}).named || {}).unknown || []);
+  const join = (xs) => (xs.length > 1 ? `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}` : xs[0]);
+  let head = usedLine(used), about = t ? [t] : data;
+  if (used.general || used.unavailable) head += data.length ? `; about ${join(data)}` : unknown.length ? `; about ${join(unknown)}, a symbol Optic has no data for` : '';
+  else if (t && data.length && !data.includes(t)) { about = data; head = `About ${join(data)}; ${researchLine(used)} attached as context`; }
+  else if (t) { const also = (info || {}).named ? alsoLooked(info, [t, ...data]) : []; if (also.length) head += `; also looked up ${join(also)}`; }
+  const other = about.length && now && now.symbol && !about.includes(now.symbol);
+  return html`<p class="milo-about milo-for ${other || used.unavailable ? 'is-other' : ''}" ${used.unavailable ? html`role="note"` : ''}>${head}${at ? `, ${prefs.clock(at)}` : ''}${other ? html`. <b>Not about ${now.symbol}, the page now open.</b>` : ''}</p>`;
+}
+// The line above one answer drawn again in place (its `context` event came after the answer was first drawn)
+function paintAbout(i) {
+  const h = host(), box = h && $(`[data-v2-milo-i="${i}"]`, h); if (!box) return;
+  const tmp = document.createElement('div'); render(tmp, aboutLine(meta.get(i) || {}));
+  const was = $('.milo-about', box), now = tmp.firstElementChild;
+  if (was && now) was.replaceWith(now); else if (was) was.remove(); else if (now) { const who = $('.milo-who', box); if (who) who.after(now); }
 }
 // Every source behind an answer, one fold away: what it cited, what it read, the data it looked up
 export function sourceLists(info) {
@@ -595,14 +646,16 @@ const placeholder = () => { const sym = S.scope === 'auto' ? onSymbol() : null; 
 // the Chart page's bar sizes as its menu names them: '60' is 1h, 'daily' 1D
 const barWord = (k) => { const n = Number(k); return Number.isFinite(n) && n > 0 ? (n >= 60 ? `${n / 60}h` : `${n}m`) : ({ daily: '1D', weekly: '1W' }[k] || String(k || '')); };
 const partName = (k) => String(k).replace(/_/g, ' ').replace(/([a-z])([A-Z])/g, '$1 $2').replace(/^./, (x) => x.toUpperCase());
-function attachedParts() {
+function attachedParts(built, bar = false) {
   if (S.scope !== 'auto') return '';
-  const ctx = buildContext('auto'), f = ctx.focus || {};
+  const ctx = built || buildContext('auto'), f = ctx.focus || {};
+  if (f.unavailable) return '';
   // `view` only names the page, which the focus already says
   const parts = Object.keys(ctx).filter((k) => k !== 'focus' && k !== 'view' && ctx[k] !== null && ctx[k] !== undefined && ctx[k] !== '');
   const dropped = [...S.dropped];
   if (!parts.length && !dropped.length) return html`<p class="milo-parts-none">This page sends no figures of its own: only which page it is${f.ticker ? ` and ${f.ticker}` : ''}.</p>`;
-  return html`<details class="more-inline milo-parts" ${S.partsOpen ? 'open' : ''}><summary>What is attached: ${parts.length} part${parts.length === 1 ? '' : 's'}${f.ticker ? `, ${f.ticker}` : ''}${f.chart ? `, ${barWord(f.chart.interval)} bars${f.chart.range ? `, ${f.chart.range}` : ''}` : ''}</summary>
+  // with the context bar above it, the ticker and the chart are said there already
+  return html`<details class="more-inline milo-parts" ${S.partsOpen ? 'open' : ''}><summary>What is attached: ${parts.length} part${parts.length === 1 ? '' : 's'}${!bar && f.ticker ? `, ${f.ticker}` : ''}${!bar && f.chart ? `, ${barWord(f.chart.interval)} bars${f.chart.range ? `, ${f.chart.range}` : ''}` : ''}</summary>
     <ul class="milo-parts-l">${parts.map((k) => html`<li><span>${partName(k)}</span><button type="button" class="textlink" data-v2-milo-drop="${k}" aria-label="Remove ${partName(k)} from what Milo receives">Remove</button></li>`)}
       ${dropped.map((k) => html`<li class="is-off"><span>${partName(k)}, removed</span><button type="button" class="textlink" data-v2-milo-undrop="${k}">Put back</button></li>`)}</ul>
     <p class="asof">Read from the page when you press Send. Removed parts stay out until you change page.</p></details>`;
@@ -719,12 +772,37 @@ function paintSuggest() {
   const slot = $('[data-v2-milo-suggest]', h), ta = $('#milo-q', h); if (!slot) return;
   draw(slot, suggestHTML(!ta || !ta.value.trim()));
 }
+// The Milo Context Bar (Handoff 6). With a ticker (or Compare's names) in the page's context: "Researching", the
+// ticker and timeframe (all a phone shows), then the indicators and the Dossier tab, as the summary of the menu that
+// changes it (Change), and Remove beside it, one press to general questions. Without one, the picker as before.
+function researchMenu(rf, built) {
+  const rows = researchRows(rf), layers = ((built.chart || {}).layers || []).filter(Boolean);
+  const cur = rf.compare ? rf.compare.focus : undefined;
+  return html`<div class="milo-rs-detail"><p class="menu-help milo-rs-h">Milo is researching</p>
+      ${rows.length ? html`<dl class="milo-rs-dl">${rows.map(([k, v]) => html`<div><dt>${k}</dt><dd>${v}</dd></div>`)}${layers.length ? html`<div><dt>Also on the chart</dt><dd>${layers.join('; ')}</dd></div>` : ''}</dl>` : ''}
+      ${rf.compare ? html`<div class="milo-rs-focus" role="group" aria-labelledby="milo-rs-fh"><p class="t-label" id="milo-rs-fh">Which name Milo answers about</p>
+        ${[null, ...rf.compare.tickers].map((t) => html`<button type="button" class="milo-ctx-opt" aria-pressed="${cur === t ? 'true' : 'false'}" data-v2-milo-pick="${t || ''}">${cur === t ? icon('check') : html`<span class="milo-ctx-gap"></span>`}<span><b>${t || 'The comparison as a whole'}</b><small>${t ? `Milo answers about ${t}, against the others.` : 'No single name: Milo answers about all of them, and asks which one when a question needs one.'}</small></span></button>`)}</div>` : ''}
+      <p class="menu-help">Read from the page when you press Send. Milo only reads it: it never changes your chart, watchlists or alerts.</p></div>`;
+}
+function barHTML(rf, menu) {
+  const short = researchLine(rf, { short: true }), full = researchLine(rf);
+  const rest = rf.ticker && full.startsWith(short) ? full.slice(short.length) : '';
+  const what = rf.ticker || `the comparison of ${rf.compare.tickers.join(', ')}`;
+  return html`<div class="milo-rs" role="group" aria-label="What Milo is researching"><span class="milo-rs-lab" aria-hidden="true">Researching</span>
+      <details class="menu milo-ctx-pick milo-rs-pick"><summary class="milo-ctx-btn milo-rs-btn" title="${`Researching ${full}. Change what Milo receives`}"><span class="sr">Researching ${researchWords(rf)}. Change: </span><span class="milo-ctx-now milo-rs-now" aria-hidden="true">${rest ? html`<b>${short}</b><span class="milo-rs-rest">${rest}</span>` : html`<b>${rf.ticker ? short : full}</b>`}</span><span class="milo-rs-chg" aria-hidden="true">Change</span>${icon('chev')}</summary>${menu}</details>
+      <button type="button" class="icon-btn milo-rs-x" data-v2-milo-scope="none" aria-label="${`Remove ${what} from what Milo receives`}" title="Remove: Milo answers in general, about no company">${icon('close')}</button></div>`;
+}
 function ctxHTML() {
   const opts = [['auto', `This page: ${contextLabel('auto')}`, 'The figures on the page you have open.'], ['market', SCOPES.market, "The market's state: indices, sectors and the macro read. No company."], ['none', SCOPES.none, 'Your question and this conversation only.']];
-  return html`<div class="milo-ctx"><div class="milo-ctx-l">
-      <details class="menu milo-ctx-pick"><summary class="milo-ctx-btn" title="What Milo receives with your question"><span class="sr">What Milo receives: </span><span class="milo-ctx-now">${contextShort()}</span>${icon('chev')}</summary>
-        <div class="menu-body milo-ctx-menu" role="group" aria-label="What Milo receives">${opts.map(([k, l, d]) => html`<button type="button" class="milo-ctx-opt" aria-pressed="${S.scope === k ? 'true' : 'false'}" data-v2-milo-scope="${k}">${S.scope === k ? icon('check') : html`<span class="milo-ctx-gap"></span>`}<span><b>${l}</b><small>${d}</small></span></button>`)}</div></details>
-      ${attachedParts()}
+  const built = S.scope === 'auto' ? buildContext('auto') : null, rf = built ? researchOf(built.focus) : null;
+  const bar = !!(rf && (rf.ticker || rf.compare));
+  const menu = html`<div class="menu-body milo-ctx-menu" role="group" aria-label="What Milo receives">${bar ? researchMenu(rf, built) : ''}${opts.map(([k, l, d]) => html`<button type="button" class="milo-ctx-opt" aria-pressed="${S.scope === k ? 'true' : 'false'}" data-v2-milo-scope="${k}">${S.scope === k ? icon('check') : html`<span class="milo-ctx-gap"></span>`}<span><b>${l}</b><small>${d}</small></span></button>`)}</div>`;
+  // after Remove, one press puts the page's ticker back (the choice holds across pages until it is changed)
+  const back = S.scope === 'none' && onSymbol() ? html`<button type="button" class="textlink milo-rs-back" data-v2-milo-scope="auto">Use ${onSymbol()}</button>` : '';
+  return html`<div class="milo-ctx ${bar ? 'has-rs' : ''}"><div class="milo-ctx-l">
+      ${bar ? barHTML(rf, menu) : (() => { const pick = html`<details class="menu milo-ctx-pick"><summary class="milo-ctx-btn" title="What Milo receives with your question"><span class="sr">What Milo receives: </span><span class="milo-ctx-now">${built && built.focus.unavailable ? 'Page context unavailable' : contextShort()}</span>${icon('chev')}</summary>${menu}</details>`; return back ? html`<div class="milo-rs is-general">${pick}${back}</div>` : pick; })()}
+      ${built && built.focus.unavailable ? html`<p class="milo-rs-err" role="status">This page's context could not be read. Milo will answer in general, about no company, until it can be.</p>` : ''}
+      ${attachedParts(built, bar)}
       <p class="milo-ctx-meta"><span>${freshness()} Not financial advice.</span><button type="button" class="milo-info-btn" data-v2-milo-info aria-expanded="${S.showInfo ? 'true' : 'false'}" aria-controls="milo-info" aria-label="About Milo's data and its limits" title="About Milo's data and its limits">${icon('info')}</button></p></div>
     <button type="button" class="btn btn-quiet btn-sm milo-set-btn" data-v2-milo-settings aria-expanded="${S.showSettings ? 'true' : 'false'}" aria-controls="milo-settings" title="Response settings: Level and Timeframe">${icon('sliders')}<span class="milo-set-l">Response settings</span></button>
     ${settingsHTML()}</div>
@@ -1054,15 +1132,23 @@ function offlineOr(status) {
 }
 export async function send(text, { deep = false } = {}) {
   text = String(text || '').trim();
-  const sym0 = onSymbol();
+  // with the page's context removed, Deep research is about the market too: no company is taken from the page
+  const sym0 = S.scope === 'auto' ? onSymbol() : null;
   // Deep research may run on an empty box: on the symbol open, or the market (Classic's runResearch)
   if (deep && !text) text = sym0 ? `Deep research: ${sym0}` : 'Deep research: the market';
   if (!text || S.busy || blocked()) return;
   S.deepHint = false;
   const h = host(), ta = h && $('#milo-q', h);
-  const context = buildContext(S.scope, S.conv.lastTicker);
+  // a context that cannot be built or sent goes as none: general mode, said so, never a guessed ticker (Handoff 6)
+  let context;
+  try { context = buildContext(S.scope, S.conv.lastTicker); JSON.stringify(context); } catch (e) { console.error(e); context = unreadable(route, new Date()); }
   const focusTicker = context.focus.ticker;
   if (context.focus.previous_ticker) S.items.push({ kind: 'note', text: `Now asking about ${focusTicker}. The earlier answers were about ${context.focus.previous_ticker}, and Milo is told so.` });
+  // an indicator taken off the chart since the last question: Milo is told, in case an earlier answer leaned on it
+  const gone = removedSince(S.conv.lastChart, context.focus);
+  if (gone.length) { context.focus.indicators_removed = gone; S.items.push({ kind: 'note', text: `${gone.map((x) => x.label).join(' and ')} ${gone.length === 1 ? 'is' : 'are'} no longer on the chart. Milo is told, in case an earlier answer used ${gone.length === 1 ? 'it' : 'them'}.` }); }
+  if (context.focus.chart && focusTicker) S.conv.lastChart = { ticker: focusTicker, indicators: context.focus.chart.indicators.map((x) => ({ id: x.id, label: x.label })) };
+  else if (S.conv.lastChart && focusTicker && S.conv.lastChart.ticker !== focusTicker) S.conv.lastChart = null;
   S.conv.messages.push({ role: 'user', content: text }); S.items.push({ kind: 'msg', i: S.conv.messages.length - 1 }); S.fresh = S.conv.messages.length - 1;
   const going = S.files.filter((f) => f.data && !f.error), attachments = going.map((f) => ({ name: f.name, media_type: f.type, data: f.data }));
   if (going.length) meta.set(S.conv.messages.length - 1, { files: going.map((f) => f.name) });
@@ -1070,8 +1156,11 @@ export async function send(text, { deep = false } = {}) {
   if (focusTicker) S.conv.lastTicker = focusTicker;
   const ai = S.conv.messages.length; // index the answer will take
   S.conv.messages.push({ role: 'assistant', content: '' }); S.items.push({ kind: 'msg', i: ai });
-  meta.set(ai, { question: text, symbol: focusTicker || route.symbol || null, context, deep, web: !deep && !!S.web, level: prefs.knowledge() });
-  S.busy = true; S.live = { i: ai, text: '', status: MILO_STATES.submitted, symbol: focusTicker || route.symbol || null, lastAt: performance.now(), quiet: false,
+  // a general question is about no company, whatever page it was asked on: its answer is not labelled with the page's
+  const answerSym = S.scope === 'auto' && !context.focus.unavailable ? focusTicker || route.symbol || null : focusTicker || null;
+  // what the answer is for, as sent; the server's own account (its `context` event) replaces it when it comes
+  meta.set(ai, { question: text, symbol: answerSym, context, used: researchOf(context.focus), deep, web: !deep && !!S.web, level: prefs.knowledge() });
+  S.busy = true; S.live = { i: ai, text: '', status: MILO_STATES.submitted, symbol: answerSym, lastAt: performance.now(), quiet: false,
     // what he is doing, from the server's own events (ui/milo-activity.js); the line above is still the words
     act: actBegin(deep) };
   if (ta) { ta.value = ''; grow(ta); } S.draft = ''; S.showHistory = false; S.showSettings = false; S.toEnd = true; S.follow = true;
@@ -1118,6 +1207,8 @@ export async function send(text, { deep = false } = {}) {
           let p; try { p = JSON.parse(data); } catch (e) { continue; }
           if (ev === 'delta') { S.live.text += p.text || ''; S.live.status = ''; S.live.act = actOn(S.live.act, 'delta'); S.conv.messages[ai].content = S.live.text; paintLive(); }
           else if (ev === 'status') { const w = stepWords(String(p.state || ''), S.live.symbol); S.live.status = w; S.live.act = actOn(S.live.act, 'status', p); paintLive(); }
+          // what the server used for this answer (Handoff 6): the line above it says so, and it is kept with it
+          else if (ev === 'context') { const m = meta.get(ai); if (m && p && typeof p === 'object') { m.used = p; paintAbout(ai); } }
           else if (ev === 'attachments') { const m = meta.get(ai); if (m && Array.isArray(p.problems)) m.notSent = [...(m.notSent || []), ...p.problems.map(String)].slice(0, 6); }   // files the model refused, and the reader's own blocks left out (BUG-071)
           else if (ev === 'assumed') { const hz = (((S.personas || {}).horizons || {}).horizons || []).find((x) => x.id === p.horizon); if (hz && p.horizon_source === 'question' && p.horizon !== horizon()) meta.get(ai).assumed = `Answered for a ${hz.label.toLowerCase()} timeframe, from your question. Your setting is unchanged.`; }
           else if (ev === 'retrieved') { S.live.got = Array.isArray(p.items) ? p.items : []; S.live.act = actOn(S.live.act, 'retrieved', p.items); paintLive(); }
@@ -1392,6 +1483,8 @@ function resizable(panel) {
   const apply = (px, save) => {
     w = Math.round(Math.min(Math.max(px, W_MIN), wMax()));
     panel.style.setProperty('--milo-w', `${w}px`);
+    // a narrow panel (beside the page it is about 440 px) gives the context bar's words the room "Change" took
+    panel.classList.toggle('milo-narrow', w < 500);
     if (drawer.isDocked()) { document.documentElement.style.setProperty('--milo-dock-w', `${w}px`); layout(w); }
     grip.setAttribute('aria-valuenow', String(w)); grip.setAttribute('aria-valuemin', String(W_MIN)); grip.setAttribute('aria-valuemax', String(wMax()));
     if (save) { try { localStorage.setItem(W_KEY, String(w)); } catch (e) { /* private mode */ } }
@@ -1424,7 +1517,7 @@ function resizable(panel) {
   // a narrower window re-clamps the panel, without overwriting the width the reader chose
   const onResize = () => { if (relaying) return; const w2 = layout(); apply(w2 || storedWidth() || W_DEFAULT, false); };
   window.addEventListener('resize', onResize);
-  return () => { window.removeEventListener('resize', onResize); grip.remove(); panel.style.removeProperty('--milo-w'); panel.classList.remove('milo-panel'); };
+  return () => { window.removeEventListener('resize', onResize); grip.remove(); panel.style.removeProperty('--milo-w'); panel.classList.remove('milo-panel', 'milo-narrow'); };
 }
 
 // History and a new conversation, from the header's icons or the moved-symbol note; neither touches the draft
@@ -1554,7 +1647,17 @@ function wire(root) {
       S.scope = b.dataset.v2MiloScope;
       const d = b.closest('details'); if (d) d.open = false;
       paintChrome(); if (!S.items.length) paintLog(false);
-      const sm = $('.milo-ctx-pick > .milo-ctx-btn', root); if (sm) sm.focus(); return;
+      const sm = $('.milo-ctx-pick > .milo-ctx-btn', root); if (sm) sm.focus();
+      announce(S.scope === 'none' ? 'Page context removed. Milo answers in general, about no company.' : S.scope === 'market' ? 'Milo will see the market only.' : `Milo will see ${contextLabel('auto')}.`);
+      return;
+    }
+    if ((b = t('[data-v2-milo-pick]'))) {
+      S.pick = b.dataset.v2MiloPick || null;
+      const d = b.closest('details'); if (d) d.open = false;
+      paintChrome(); if (!S.items.length) paintLog(false);
+      const sm = $('.milo-ctx-pick > .milo-ctx-btn', root); if (sm) sm.focus();
+      announce(S.pick ? `Milo will answer about ${S.pick}.` : 'Milo will answer about the comparison as a whole.');
+      return;
     }
     if ((b = t('[data-v2-milo-pp]'))) { pickPersona(b.dataset.v2MiloPp, root, true); return; }
     if ((b = t('[data-v2-milo-hz]'))) { setPref(HORIZON_KEY, b.dataset.v2MiloHz); paintChrome(); const hb = $(`[data-v2-milo-hz="${b.dataset.v2MiloHz}"]`, root); if (hb) hb.focus(); return; }
@@ -1567,9 +1670,9 @@ function wire(root) {
     if ((b = t('[data-v2-milo-open]'))) {
       if (S.busy) return;
       const c = loadHistory().find((x) => x.id === b.dataset.v2MiloOpen); if (!c) return;
-      S.conv = { id: c.id, messages: (c.messages || []).map((m) => ({ role: m.role, content: m.content })), lastTicker: c.ticker || null }; S.report = null;
+      S.conv = { id: c.id, messages: (c.messages || []).map((m) => ({ role: m.role, content: m.content })), lastTicker: c.ticker || null, lastChart: null }; S.report = null;
       meta.clear(); SC.rest = 'idle'; clearTimeout(settleT); S.items = S.conv.messages.map((m, i) => ({ kind: 'msg', i }));
-      S.conv.messages.forEach((m, i) => { if (m.role === 'assistant') { const saved = (c.messages || [])[i] || {}; meta.set(i, { question: (S.conv.messages[i - 1] || {}).content || '', symbol: c.ticker || null, policyLine: saved.policy || '', amended: saved.amended || '', level: saved.level || '' }); } });
+      S.conv.messages.forEach((m, i) => { if (m.role === 'assistant') { const saved = (c.messages || [])[i] || {}; meta.set(i, { question: (S.conv.messages[i - 1] || {}).content || '', symbol: c.ticker || null, policyLine: saved.policy || '', amended: saved.amended || '', used: keepUsed(saved.context), level: saved.level || '' }); } });
       S.showHistory = false; S.toEnd = true; S.follow = true; S.view = null; paintChrome(); paintLog(); const ta = $('#milo-q', root); if (ta) ta.focus(); return;
     }
     if ((b = t('[data-v2-milo-del]'))) { const id = b.dataset.v2MiloDel; if (S.busy && id === S.conv.id) { toast(WAIT_HISTORY); return; } saveHistory(loadHistory().filter((c) => c.id !== id)); if (S.conv.id === id && !S.busy) { S.conv = blankConv(); S.items = []; meta.clear(); } paintChrome(); paintLog(false); const hd = $('#milo-hist-h', root); if (hd) { hd.setAttribute('tabindex', '-1'); hd.focus({ preventScroll: true }); } return; }
@@ -1634,3 +1737,5 @@ function pickPersona(id, root, close = false) {
   const cur = curPersona(); announce(`${cur.label}. Applies from your next question.`);
 }
 void compact; void ACT_SECTIONS;
+// for the tests (tests/test_milo_context_bar.py): the bar as drawn, and the panel's state
+export const _test = { ctxHTML: () => ctxHTML(), state: S };

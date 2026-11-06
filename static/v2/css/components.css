@@ -370,6 +370,38 @@ ul.plain { margin: 0; padding-left: 18px; } ul.plain li { margin-bottom: 7px; }
 .milo-ctx-opt b { display: block; font-weight: 600; font-size: var(--t-md); line-height: 1.3; }
 .milo-ctx-opt small { display: block; margin-top: 2px; font-size: var(--t-sm); line-height: 1.35; color: var(--c-ink-3); }
 .milo-ctx-meta { margin: 0; font-size: var(--t-sm); line-height: 1.35; color: var(--c-ink-3); }
+/* the Milo Context Bar (Handoff 6): "Researching", then the ticker and timeframe in ink and the rest of the line in
+   ink-2, as the summary of the menu that changes it, with Remove beside it; one line, cut with an ellipsis */
+.milo-rs { grid-column: 1; grid-row: 1; display: flex; align-items: center; gap: 2px; min-width: 0; margin-left: -8px; }
+/* beside the page (a docked panel is about 440 px) the bar needs the whole width to say more than the ticker: it takes
+   the first line, and Response settings moves down beside the data line. A phone keeps one line for both, the bar
+   collapsed to the ticker and timeframe, so nothing pushes the box further down there. */
+@media (min-width: 861px) and (min-height: 521px) {
+  .milo-ctx.has-rs > .milo-ctx-l > .milo-rs { grid-column: 1 / -1; }
+  .milo-ctx.has-rs > .milo-set-btn { grid-row: 2; }
+  .milo-ctx.has-rs > .milo-ctx-l > .milo-ctx-meta { grid-column: 1; }
+}
+.milo-rs-lab { flex: none; padding-left: 8px; font: 500 var(--t-xs)/1.2 var(--f-label); color: var(--c-ink-3); }
+.milo-rs .milo-ctx-pick { margin-left: 0; max-width: 100%; min-width: 0; }
+.milo-rs-btn { max-width: 100%; }
+.milo-rs-now { min-width: 0; } .milo-rs-now b { font-weight: 600; color: var(--c-ink); }
+.milo-rs-rest { font-weight: 500; color: var(--c-ink-2); }
+.milo-rs-chg { flex: none; margin-left: 4px; font: 500 var(--t-sm)/1.2 var(--f-sans); color: var(--c-ink-3); }
+.milo-rs-btn:hover .milo-rs-chg, .milo-rs-pick[open] .milo-rs-chg { color: var(--c-ink); }
+.milo-narrow .milo-rs-chg { display: none; }   /* the chevron stays, and the summary is still named Change */
+.milo-rs-x { width: 36px; height: 36px; } .milo-rs-x svg { width: 16px; height: 16px; }
+.milo-rs-back { min-height: 36px; margin-left: 4px; font-size: var(--t-sm); font-weight: 500; text-decoration: underline; text-decoration-color: var(--c-line); text-underline-offset: 3px; color: var(--c-ink-2); white-space: nowrap; }
+.milo-rs.is-general .milo-ctx-pick { margin-left: 0; }
+.milo-rs-err { grid-column: 1 / -1; margin: 2px 0 0; font-size: var(--t-sm); line-height: 1.4; color: var(--c-ink-2); }
+.menu-body.milo-ctx-menu { max-height: min(70vh, 560px); overflow-y: auto; overscroll-behavior: contain; }
+.milo-rs-detail { display: grid; gap: 6px; padding: 6px 10px 10px; margin-bottom: 4px; border-bottom: 1px solid var(--c-line-2); }
+.milo-rs-detail .menu-help { margin: 0; }
+.milo-rs-h { font-weight: 600; color: var(--c-ink-2); }
+.milo-rs-dl { display: grid; gap: 4px; margin: 0; }
+.milo-rs-dl > div { display: grid; grid-template-columns: 7.5em minmax(0, 1fr); gap: 8px; font-size: var(--t-sm); line-height: 1.4; }
+.milo-rs-dl dt { color: var(--c-ink-3); } .milo-rs-dl dd { margin: 0; color: var(--c-ink); overflow-wrap: anywhere; }
+.milo-rs-focus { display: grid; gap: 2px; margin: 2px -10px 0; } .milo-rs-focus .t-label { margin: 4px 10px 2px; }
+.milo .milo-about.milo-for[role="note"] { color: var(--c-ink-2); }
 .milo-info-btn { position: relative; display: inline-grid; place-items: center; vertical-align: middle; width: 28px; height: 28px; margin: -6px 0 -4px 2px; border: 0; border-radius: 50%; background: none; color: var(--c-ink-3); cursor: pointer; }
 .milo-info-btn::after { content: ""; position: absolute; inset: -8px; }   /* a 44 px target without stretching the line */
 .milo-info-btn .ic { width: 15px; height: 15px; }
@@ -578,6 +610,7 @@ ul.plain { margin: 0; padding-left: 18px; } ul.plain li { margin-bottom: 7px; }
 @media (pointer: coarse) {
   .milo-send, .milo-stop { width: var(--tap); height: var(--tap); }
   .milo-act-btn, .milo-ctx-btn, .milo-up, .milo-src-all > summary, .milo-latest, .milo-pp-opt { min-height: var(--tap); }
+  .milo-rs-x { width: var(--tap); height: var(--tap); } .milo-rs-back { min-height: var(--tap); }
   .milo-compose textarea { min-height: var(--tap); padding: 11px 0; }
 }
 /* a phone: the whole screen, inside its safe areas, the composer above the keyboard (the panel is the part of the
@@ -596,6 +629,8 @@ ul.plain { margin: 0; padding-left: 18px; } ul.plain li { margin-bottom: 7px; }
   .milo-settings .milo-lens-blurb { display: block; }
   .milo-set-btn { width: var(--tap); min-width: var(--tap); min-height: var(--tap); padding: 0; justify-content: center; }
   .milo-set-l { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .milo-rs-rest, .milo-rs-chg { display: none; }   /* AAPL · Daily, and the chevron that opens the rest */
+  .menu-body.milo-ctx-menu { max-height: calc(var(--vvh, 100dvh) - 160px); }
   .menu-body.milo-pp-menu { top: auto; left: max(16px, env(safe-area-inset-left, 0px)); right: max(16px, env(safe-area-inset-right, 0px)); max-width: none; max-height: calc(var(--vvh, 100dvh) - 160px); }   /* low on the screen, as the context menu is */
   .milo-sheet-scrim { display: block; position: fixed; inset: 0; z-index: 7; background: var(--c-scrim); }
   .milo-settings { position: fixed; z-index: 8; top: auto; left: 0; right: 0; bottom: 0; width: auto; max-height: 78%; padding: 12px max(16px, env(safe-area-inset-right, 0px)) max(16px, env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px)); border-radius: var(--r-xl) var(--r-xl) 0 0; border-width: 1px 0 0; box-shadow: var(--sh-sheet); }
