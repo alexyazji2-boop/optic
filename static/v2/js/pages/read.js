@@ -115,8 +115,16 @@ function priority() {
   const p = D.priority;
   if (p === undefined) return skeleton('lines', 4, "Loading today's priority");
   if (!p || !p.available) return empty('Nothing on the board right now', '');
-  return html`${p.columns.map((c) => html`<h3>${c.name} <span class="t-muted">${c.total ?? (c.rows || []).length}</span></h3><p class="t-muted">${clean(c.blurb || '')}</p>
-    ${(c.rows || []).length ? html`<ul class="plain">${c.rows.slice(0, 8).map((r) => html`<li>${r.ticker ? html`<a class="tk-link" href="#/${r.ticker}"><b>${r.ticker}</b></a> ` : ''}<b>${clean(r.title)}</b> <span class="t-muted">${[r.when, r.time, r.impact ? `${r.impact} impact` : ''].filter(Boolean).join(', ')}</span>. ${clean(r.why || '')}</li>`)}</ul>` : html`<p class="quiet">Nothing here today.</p>`}`)}
+  // A row's day and time are left out when its title already says them ("AAPL reports Monday after the close
+  // Monday, After close"), and a reason every row shares is said once, under the list (Phase 12 editorial pass)
+  const bare = (t) => String(t || '').toLowerCase().replace(/\bthe\s+/g, '');      // "after the close" says "After close"
+  const told = (r, x) => x && bare(r.title).includes(bare(x));
+  const shared = (rows) => (rows.length > 1 && rows.every((r) => r.why && r.why === rows[0].why) ? rows[0].why : '');
+  return html`${p.columns.map((c) => { const rows = (c.rows || []).slice(0, 8), why = shared(rows); return html`<h3>${c.name} <span class="t-muted">${c.total ?? (c.rows || []).length}</span></h3><p class="t-muted">${clean(c.blurb || '')}</p>
+    ${rows.length ? html`<ul class="plain">${rows.map((r) => { const meta = [told(r, r.when) ? '' : r.when, told(r, r.time) ? '' : r.time, r.impact ? `${r.impact} impact` : ''].filter(Boolean).join(', ');
+      // a title that starts with its ticker ("AAPL reports Monday after the close") links that word, so the ticker is not said twice
+      const lead = r.ticker && String(r.title || '').startsWith(`${r.ticker} `);
+      return html`<li>${r.ticker ? html`<a class="tk-link" href="#/${r.ticker}"><b>${r.ticker}</b></a> ` : ''}<b>${clean(lead ? String(r.title).slice(r.ticker.length + 1) : r.title)}</b>${meta ? html`<span class="t-muted">, ${meta}</span>` : ''}. ${why ? '' : clean(r.why || '')}</li>`; })}</ul>${why ? html`<p class="t-muted">${clean(why)}</p>` : ''}` : html`<p class="quiet">Nothing here today.</p>`}`; })}
     <p class="asof">${clean(p.method || '')}</p>`;
 }
 

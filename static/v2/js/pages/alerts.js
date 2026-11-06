@@ -154,7 +154,7 @@ function watchesBlock() {
   const ws = S.watches;
   if (!ws) return skeleton('rows', 2, 'Loading your alerts');
   const undo = S.undo ? html`<p class="wl-undo" role="status">${S.undo.text} <button type="button" class="btn btn-sm" data-v2-al-undo>Undo</button></p>` : '';
-  if (!ws.length) return html`${undo}${empty('No alerts yet', 'A price level, a day\'s move, an RSI line, a change in Optic\'s stance or an earnings date.')}`;
+  if (!ws.length) return html`${undo}${empty('No alerts yet', 'Press New alert to watch a price level, a day\'s move, an RSI line, a change in Optic\'s stance or an earnings date.')}`;
   const bySym = {};
   ws.forEach((w) => { (bySym[w.symbol] = bySym[w.symbol] || []).push(w); });
   return html`${undo}
@@ -264,7 +264,7 @@ function ledger() {
 }
 const bookSub = () => {
   const n = S.alerts && S.alerts.unseen, owner = isOwner();
-  return html`Not yours: these fire on the paper book Optic keeps for its scans and on the ranked universe, the same for every reader. Each names the rule that tripped it and the readings it tripped on.${owner && n ? html` <b>${n} unread.</b>` : ''}`;
+  return html`Not yours: these fire on the Optic Portfolio's simulated books and on the ranked universe, the same for every reader. Each names the rule that tripped it and the readings it tripped on.${owner && n ? html` <b>${n} unread.</b>` : ''}`;
 };
 
 function paint(main) {

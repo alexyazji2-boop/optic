@@ -773,3 +773,103 @@ recorded. The decision names what would unblock each, and the manual checks a hu
 hotfix of BUG-200 and BUG-201 while this branch stays held (D-100). It went from its own branch, cut from live main and
 rebased onto `a10eaba`, so nothing else from this branch reached the live site. This branch carries the same code and
 the same test file, so merging it later changes nothing for these two defects.
+
+## Phase 12 (directive 14, 2026-11-02): writing, Milo's evaluation, red team
+
+**D-102 Phase 12 works on its own branch from live main.** The overhaul's branch shipped on 2026-11-01, so Phase 12 is
+`phase-12-writing-milo-security` in `~/Optic/wt-phase12`, cut from live `d22522a`, with the same tracking files.
+Nothing is pushed or deployed; the directive says so too.
+
+**D-103 Classic gets security fixes only.** The owner's rule is that Classic is left as it is unless asked, and that
+ports from Classic keep its analytical copy word for word. Phase 12 therefore inventories and checks Classic's copy
+but does not rewrite it. The editorial gate does not fail on Classic. Two security fixes do go into `static/app.js`:
+MRT-02's link rule and MRT-03's history guard. Server-written notes change in both apps, since both show them.
+
+**D-104 One set of writing rules for every model request.** `app/editorial.py WRITING_RULES` goes on every request,
+after the writer's own prompt and before the advice policy, so the policy reads last. Writer prompts keep their
+structure and lose their duplicated voice rules and the invitation to ellipses. `FORMAT_PROMPT` keeps the risk
+paragraph and the closing condition but not a fixed **Bottom line** heading. The rules cost about 500 tokens a
+request, inside the cached prefix for chat.
+
+**D-105 Copy pinned by the owner's briefs stays word for word.** Where a test pins wording from an owner's brief (the
+beginner brief's Home sentences, the Classic glossary), the copy is changed only to fix a real defect, never to
+restyle it. My first rewrite of four Home sentences was reverted on these grounds.
+
+**D-106 The benchmark extends Phase 08's suite.** There is no second framework: `tests/milo_eval/cases.py` keeps its
+format and gains the directive's suites and fields (`annotate`). Runs are archived per benchmark version and commit
+under `docs/ai/eval-results/`. Phase 13 is to reuse this, as directive 15 asks.
+
+**D-107 How the advice checks are measured.** Patterns are written against development sets only, and measured on a
+set written afterwards by a separate agent and scored before anyone reads it. A set whose misses have been read
+becomes development material. E was scored, then used; F is the held-out measure, kept outside the repository. A
+model writing my sets would anchor them on my patterns, so the sets come from an agent told not to read the code.
+
+**D-108 No real-model evaluation.** BL-01 was rechecked on 2026-11-02 and the key is still refused. The answer-level
+checks stay ready, with a `--model`, `--suite` and `--trials` runner. Latency is measured end to end with the stand-in
+and labelled as Optic's own time.
+
+**D-109 What counts as a server-owned key.** These are the keys the server writes and Milo is told are Optic's own
+retrieval: `auto_loaded`, `auto_load_skipped`, `question_named`, `research`, `chart_levels`, `screen_candidates`,
+`market`, `portfolio_summary` and the two brokerage keys. `framework` and `track_record` are page data the Overview
+sends, so they stay. No v2 or Classic page sends a dropped key (checked by reading every `provideContext` and
+Classic's payload).
+
+**D-110 MRT-06 and MRT-07 are left.** Clearing Milo's conversations at sign-out would remove the come-back that the
+device shelves exist for; that trade is the owner's. Model-chosen tool inputs write the same shared rows an anonymous
+`/api/ticker/{t}?expiries=` already can, so Milo adds no capability.
+
+**D-111 Legal and consent text is flagged, not rewritten.** Two disclaimers that repeat the line above them
+(Earnings, Retirement) and the brokerage consent's "count towards your Optic portfolio" are listed for counsel and
+the owner (WRITING_CORRECTIONS M).
+
+## Phase 13 (directive 15, 2026-11-02)
+
+**D-112 One request for every model.** The comparison sends Optic's own request (`ai.build_chat_request`), tools and
+checks to every candidate, and an adapter changes only what a provider requires. Each adaptation is written down
+with its reason (`docs/ai/MILO_MODEL_COMPARISON.md` section 3):
+- OpenAI runs on the Responses API, statelessly, because its current models need it for tool calls;
+- Gemini's parts go back unchanged, because its thought signatures live inside them;
+- open-weight hosts get their reasoning field back;
+- Haiku 5.5 gets no fallback parameter;
+- every model gets production's output cap.
+
+Prompting written for Claude is tested as it is. A change made for one model is recorded, and the baseline is rerun
+with it.
+
+**D-113 Costs are modelled, and the model is checked against the cost audit.** No model answered, so cost per
+question comes from the code's measured sizes, the audit's answer shapes and verified list prices.
+- **The check:** given the audit's prefix, the model reproduces the audit's $0.14, $0.18 and $0.10 and its monthly
+  lines, held by a test.
+- **Planning date:** prices are those in force on 2027-01-01, the earliest a change of model could reach readers;
+  both Gemini models' announced rises fall before it.
+- **Token ratio:** the audit's 4 characters a token is kept, and its uncertainty is shown at 3 and at 1.7.
+
+**D-114 No routing.** The router is analysis code under `tests/`, not in the app. A perfect router saves 10% on the
+directive's example architecture, and the measured router's extra saving comes from misroutes, high-risk ones among
+them. Caching the CONTEXT turn saves 27%. The recommendation is one model, C1, and the small models tested as whole
+replacements (`docs/ai/MILO_ROUTING_RECOMMENDATION.md`).
+
+**D-115 No ranking without results.** No candidate was evaluated (BL-01, BL-14), so no model is called best,
+cheapest-qualifying or best value. Sonnet 5.5 is not said to meet the standard: the one earlier sample of its
+answers (14, on 2026-10-16's code) has a factual error in 5.
+
+**D-116 Nothing spent.** Paid evaluation runs, accounts and keys are the owner's to approve. The budget per model is
+proposed in the cost analysis (section 8), and the runner refuses without a key or a `--max-dollars` cap.
+
+**D-117 C1 by the API's automatic caching, not by marking turns.** The owner said "Yes, do C1 here" after the
+Phase 13 report. The chat request gains one top-level `cache_control`, beside the system block's explicit
+breakpoint, which stays. That is the combination the Claude API reference recommends for agent loops.
+- **What it does:** the API places the marker on the last block and moves it forward each round, so a round reads
+  everything the one before it sent.
+- **Why not markers on the turns:** they would have turned the CONTEXT turn's text into a block. Every reader of
+  that turn would then change: the sources list, tests, and the harness's request checks. The automatic marker
+  changes no message.
+- **Limits:**
+  - two breakpoints of the four allowed;
+  - each round adds three or four positions, inside the 20-position lookback;
+  - a last round sent with `tool_choice: none` (when a limit is reached) reads only the system block's entry,
+    because a `tool_choice` change invalidates the messages cache;
+  - a one-call answer pays the 1.25x write on its unshared tail, about $0.0015 for a definition.
+- **Shipping:** on the owner's word, like any production change. The owner said "Ship C1 alone", and it shipped
+  from a worktree at live main as `1a1cf58b` on 2026-11-03 (only `app/ai.py` and its test; suite 8,231 passed).
+

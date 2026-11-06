@@ -133,12 +133,12 @@ function preferences() {
     else segs.push({ ...g });
   });
   return html`<section class="section" aria-labelledby="ap-h"><h2 class="t-h2" id="ap-h">Appearance</h2>
-      <p class="section-sub">Both themes are hand-picked rather than one flipped into the other, so contrast and colour-vision separation hold either way.</p>
+      <p class="section-sub">Both themes are checked for contrast and for colour-vision separation.</p>
       ${row('Theme', 'Dark is the default. "Follow system" tracks your operating system setting and changes with it.', seg('Theme', [['dark', 'Dark'], ['light', 'Light'], ['system', 'Follow system']], prefs.theme(), 'theme'))}
       ${row('Motion', 'How much the interface moves: drawers sliding, a chart tracing itself in, tabs fading. "Reduce" stills all of it, as your system\'s reduced-motion setting does; "Follow system" uses that setting.', seg('Motion', [['system', 'Follow system'], ['reduce', 'Reduce']], prefs.motion(), 'motion'))}</section>
     <section class="section" aria-labelledby="ts-h"><h2 class="t-h2" id="ts-h">Text size</h2>
       <p class="section-sub">Scales the whole interface, type and spacing together, so the proportions stay as they are and only the size changes.</p>
-      ${row('Size', 'Default is 15% larger than the terminal shipped with. Compact is that original density, for a small screen or a reader who wants more on it at once.', seg('Text size', [['compact', 'Compact'], ['default', 'Default'], ['large', 'Large']], prefs.scale(), 'scale'))}</section>
+      ${row('Size', 'Default is 15% larger than Compact. Compact fits more on a small screen.', seg('Text size', [['compact', 'Compact'], ['default', 'Default'], ['large', 'Large']], prefs.scale(), 'scale'))}</section>
     <section class="section" aria-labelledby="kb-h"><h2 class="t-h2" id="kb-h">Keyboard</h2>
       ${row('Shortcuts', 'Every key the terminal answers to, in one list. Press ? anywhere outside a field to open it.', html`<button type="button" class="btn btn-sm" data-v2-shortcuts>Show the shortcuts</button>`)}</section>
     <!-- two settings, kept apart (Phase 04, D-019): what a page shows, and how Milo explains it -->
@@ -165,7 +165,7 @@ function about() {
   const rows = [
     ['Data source', h && h.realtime_chain ? `Option chains ${delays.chainWords(true)}. ${delays.quotesSentence()}` : `Yahoo Finance. ${delays.quotesSentence()}`],
     ['Assistant', !h ? 'Checking…' : (h.assistant || {}).enabled ? 'Milo is configured and answering' : 'Milo is switched off in this build'],
-    ['Optic Portfolio', 'One shared simulated ledger, no real money'],
+    ['Optic Portfolio', 'Three shared simulated books, no real money'],
     ['Stored on this device', signed ? 'Theme, time zone, chart preferences, recent symbols, Milo chats, drawings, notes, Paper Desk trades and Retirement holdings' : GUEST_STORED],
     ['Stored on the server', signed ? 'Your account: name, email, watchlists, watches, saved research, theses, valuation scenarios, signal history, preferences and sessions' : 'Nothing about you'],
   ];

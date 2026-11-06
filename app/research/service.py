@@ -172,7 +172,12 @@ def build(provider, yf, ticker: str, mode: str = "combined", *, rate: float = 0.
     sym = (ticker or "").upper().strip()
     mode = mode if mode in ("long_term", "swing", "pre_earnings", "post_earnings", "earnings", "combined") else "combined"
     key = "{}:{}".format(sym, mode)
-    if now is None and not overrides:
+    # A read built on a caller's `vol_event` is that caller's alone: it never enters the shared cache, whose key does
+    # not hold it, and never becomes the day's saved forecast (Phase 12 red team, MRT-01: a browser-sent event did both)
+    shared = vol_event is None
+    if not shared:
+        save_forecast = False
+    if now is None and not overrides and shared:
         with _LOCK:
             hit = _CACHE.get(key)
         if hit and time.time() - hit[0] < CACHE_TTL:
@@ -250,7 +255,7 @@ def build(provider, yf, ticker: str, mode: str = "combined", *, rate: float = 0.
         g.close()
     # A read with a missing source is never cached: the next request should
     # try again rather than serve the gap for ten minutes.
-    if now is None and not overrides and not out["data"]["gaps"]:
+    if now is None and not overrides and shared and not out["data"]["gaps"]:
         with _LOCK:
             _CACHE[key] = (time.time(), out)
     return out

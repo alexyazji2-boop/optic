@@ -65,7 +65,7 @@ function hero(sym) {
   const upcoming = nr.date && !lr.just_reported;
   const R = rows8(), beats = R.filter((r) => r.cls === 'beat').length, misses = R.filter((r) => r.cls === 'miss').length, inl = R.filter((r) => r.cls === 'in line').length;
   const ab = afterBeats(R);
-  const when = upcoming ? html`<p class="ern-when"><b>${name} reports on ${longDate(nr.date)}</b>, in ${nr.days_away} ${nr.days_away === 1 ? 'day' : 'days'}: ${RP.dateStatus(nr)}${nr.confirmed ? '' : ', so it may move'}. ${RP.habitLine(nr, `${name}'s`)}</p>`
+  const when = upcoming ? html`<p class="ern-when">${nr.days_away === 0 ? html`<b>${name} reports today, ${longDate(nr.date)}</b>` : html`<b>${name} reports on ${longDate(nr.date)}</b>, in ${plural(nr.days_away, 'day')}`}: ${RP.dateStatus(nr)}${nr.confirmed ? '' : ', so it may move'}. ${RP.habitLine(nr, `${name}'s`)}</p>`
     : lr.date ? html`<p class="ern-when"><b>${name} last reported on ${fullDate(lr.date)}.</b> ${nr.date ? '' : 'No next date is in the data yet.'}</p>`
       : html`<p class="ern-when"><b>No report date on record for ${sym}.</b> There is no next report date and no latest result in the feed for this company.</p>`;
   const expect = upcoming && isNum(nr.eps_consensus) ? html`<p>Analysts expect ${term('earnings per share', 'earnings per share')} (${term('eps', 'EPS')}) of <b>$${num(nr.eps_consensus)}</b> for the quarter, the average of their estimates (the ${term('consensus', 'consensus')})${isNum(nr.eps_low) && isNum(nr.eps_high) ? `, within a range of $${num(nr.eps_low)} to $${num(nr.eps_high)}` : ''}${nr.revenue_consensus_label ? html`, on revenue of about <b>${nr.revenue_consensus_label}</b>` : ''}.${nr.consensus_note ? html` <span class="t-muted">${clean(nr.consensus_note)}</span>` : ''}</p>` : '';
@@ -102,7 +102,7 @@ function history(sym) {
       <figure class="fv"><figcaption><h3>Reported against expected</h3><p class="fv-take">${R.filter((r) => r.cls === 'beat').length} beats, ${R.filter((r) => r.cls === 'miss').length} misses and ${R.filter((r) => r.cls === 'in line').length} in line in the last ${R.length} quarters.${lastWords}</p>
         <p class="legend-line fv-key"><span><i class="sw s0 hollow"></i>Analysts' estimate</span><span><i class="sw s1"></i>Reported EPS</span></p><p class="fv-unit">EPS in dollars a share, by quarter, on analysts' basis. Under each quarter: beat, miss or in line.</p></figcaption>
         <div class="chart-slot" data-chart="eps"></div></figure>
-      <figure class="fv"><figcaption><h3>What the price did after</h3><p class="fv-take">The price rose after ${up} of ${moves.length} reports and fell after ${moves.length - up}${ab.n ? `; after the ${ab.n} beats it fell ${ab.fell} ${ab.fell === 1 ? 'time' : 'times'}` : ''}. Largest move ${signed(s.largest_move_pct)}.</p>
+      <figure class="fv"><figcaption><h3>What the price did after</h3><p class="fv-take">The price rose after ${up} of ${moves.length} reports and fell after ${moves.length - up}. Largest move ${signed(s.largest_move_pct)}.</p>
         <p class="fv-unit">The move in the session that traded on each report: that session for a report before the open, the next one for a report after the close. After-hours and longer moves are not in this data. ${moves.length} reports.</p></figcaption>
         <div class="chart-slot" data-chart="react"></div></figure>
     </div>
@@ -132,7 +132,7 @@ function pricing(sym) {
 }
 function brief(sym) {
   const b = D.brief;
-  return html`<section class="section" aria-labelledby="br-h"><div class="section-head"><div><h2 class="t-h2" id="br-h">Pre-earnings brief</h2><p class="section-sub">A short summary of this page's figures, written by an AI model when a reader asks, then kept for six hours per report date for everyone.</p></div></div>
+  return html`<section class="section" aria-labelledby="br-h"><div class="section-head"><div><h2 class="t-h2" id="br-h">Pre-earnings brief</h2><p class="section-sub">A short summary of this page's figures, written by an AI model when a reader asks.</p></div></div>
     ${b === undefined ? html`<p class="t-muted" role="status">Looking for a brief already written...</p>`
     : b === 'loading' ? skeleton('lines', 4, 'Writing the brief')
       : b.error && b.error.kind === 'auth' ? html`<p>Writing a brief uses one Milo message, so it needs a free account. A brief someone has already written shows here for everyone.</p><a class="btn btn-primary" href="#/signin">Sign in or create an account</a>`

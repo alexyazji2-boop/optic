@@ -186,7 +186,7 @@ function named() {
   const g = (S.groups || {}).groups || [], sc = S.scans || {};
   const active = g.find((x) => (x.scans || []).some((s) => s.id === S.scanId)) || g[0];
   const r = S.result;
-  return html`<p class="section-sub">${sc.considered ? `${sc.considered} of ${sc.universe_size} symbols pass the price and volume filters. Each scan below is already computed over them.` : 'The ranking is still loading. Each scan fills when it finishes; this page checks every 5 seconds.'}</p>
+  return html`<p class="section-sub">${sc.considered ? `${sc.considered} of ${sc.universe_size} symbols pass the price and volume filters. Each scan below is already computed over them.` : 'The ranking is still being built; this page checks every 5 seconds.'}</p>
     <div class="chips" role="group" aria-label="Scan groups">${g.map((x) => html`<button type="button" class="chip" data-v2-scan-group="${x.id}" aria-pressed="${active && active.id === x.id}">${x.name} <span class="t-muted">${x.count}</span></button>`)}</div>
     ${active ? html`<p class="t-muted">${clean(active.blurb || '')}</p><div class="seg scan-tabs" role="group" aria-label="Scans">${active.scans.map((s) => html`<button type="button" data-v2-scan="${s.id}" aria-pressed="${S.scanId === s.id}" title="${s.looks_for || ''}">${s.name}</button>`)}</div>` : ''}
     <div class="scan-result">${!r ? skeleton('rows', 6, 'Running the scan') : r.error ? failed('This scan', r.error, { retry: 'scan' }) : r.available === false ? html`<p>${clean(r.reason || 'This scan is unavailable.')}</p>${buildBar(r.building)}` : html`

@@ -8,7 +8,8 @@ import { skeleton, empty, generated, whenText } from '../ui/states.js';
 
 export function sectorBoard(board, readLabel) {
   if (board === undefined) return skeleton('rows', 4, 'Loading the board');
-  if (!board || !board.available) return empty('The board is not available', clean((board || {}).reason || ''));
+  // an empty state says what happened and what to do; with no reason from the server it said neither (Phase 12)
+  if (!board || !board.available) return empty('The board is not available', clean((board || {}).reason || '') || 'It did not load this time. Reload the page to try again.');
   const c = board.counts || {};
   // counts only when the board sent them: missing ones printed "0 in uptrends"
   return html`${['uptrend', 'downtrend', 'neutral'].every((k) => isNum(c[k])) ? html`<p>${c.uptrend} in uptrends, ${c.downtrend} in downtrends, ${c.neutral} inside their prior range${board.benchmark ? `, each against ${board.benchmark}` : ''}.</p>` : ''}

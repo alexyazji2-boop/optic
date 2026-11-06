@@ -64,7 +64,7 @@ def test_a_cash_flow_bridge_only_when_the_figures_reconcile(tmp_path):
         noBridge: F.cashFlowLine([111482e6], [-12715e6], [90000e6, 80000e6], ['FY25', 'FY24']) }));
     """)
     assert got["ok"] is True and got["off"] is False and got["gap"] is False
-    assert got["line"] == "Free cash flow was $98.8B in FY25: $111.5B from operations less $12.7B of capital spending, down 9.2% from $108.8B in FY24."
+    assert got["line"] == "Free cash flow was $98.8B in FY25, down 9.2% from $108.8B in FY24. That is $111.5B from operations less $12.7B of capital spending."
     assert "which is not the statement's figure, so no bridge is drawn" in got["noBridge"]
 
 

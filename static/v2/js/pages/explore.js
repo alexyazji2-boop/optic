@@ -40,7 +40,7 @@ function guided() {
     <div class="guided">${GUIDED.map(([id, q, d]) => { const r = (D.prev || {})[id], c = r && (r.columns || [])[0];
       return html`<article class="gq"><h3>${q}</h3><p class="t-muted">${d}</p>
         ${r === undefined ? skeleton('lines', 2, 'Loading a preview') : r && (r.rows || []).length ? html`<ul class="gq-prev" aria-label="The first three it finds">${r.rows.slice(0, 3).map((x) => html`<li><a class="textlink" href="#/${encodeURIComponent(x.symbol)}">${x.symbol}</a> <span class="t-muted">${c ? `${colText(c, x[c.key])} ${c.label.toLowerCase()}` : ''}</span></li>`)}</ul>
-          <p class="asof">${r.matched} of ${r.considered} stocks match${isNum(r.age_hours) ? `, ranked ${r.age_hours < 1 ? 'within the hour' : `${num(r.age_hours, 0)} hours ago`}` : ''}.</p>` : html`<p class="t-muted">Nothing to preview right now.</p>`}
+          <p class="asof">${r.matched} of ${r.considered} stocks match${isNum(r.age_hours) ? `, ranked ${r.age_hours < 1 ? 'within the hour' : `${num(r.age_hours, 0)} hours ago`}` : ''}.</p>` : html`<p class="t-muted">No stock matches this right now.</p>`}
         <a class="btn btn-sm" href="#/scan?id=${encodeURIComponent(id)}">See the full list</a></article>`; })}</div></section>`;
 }
 

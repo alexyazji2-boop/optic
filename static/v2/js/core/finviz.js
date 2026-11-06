@@ -70,7 +70,8 @@ export function cashFlowLine(ocf, capex, fcf, labels, usd = moneyIn('USD')) {
   const ch = pctChange(f, (fcf || [])[1]);
   const how = bridges(o, c, f) ? `: ${usd(o)} from operations less ${usd(Math.abs(c))} of capital spending` : isFig(o) && isFig(c) ? `. Operating cash flow less capital spending gives ${usd(o + c)}, which is not the statement's figure, so no bridge is drawn` : '';
   const vs = ch === null ? '' : flat(ch) ? `, unchanged from ${labels[1]}` : `, ${ch > 0 ? 'up' : 'down'} ${num(Math.abs(ch), 1)}% from ${usd(fcf[1])} in ${labels[1]}`;
-  return `Free cash flow was ${usd(f)} in ${labels[0]}${how}${vs}.`;
+  // the change first, so "down 9.2%" reads as free cash flow's and not as capital spending's (Phase 12 editorial pass)
+  return how && vs ? `Free cash flow was ${usd(f)} in ${labels[0]}${vs}${how.replace(/^: /, '. That is ')}.` : `Free cash flow was ${usd(f)} in ${labels[0]}${how}${vs}.`;
 }
 
 /** Cash less debt, and whether it matches the net figure reported beside them. */

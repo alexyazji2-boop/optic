@@ -24,7 +24,7 @@ import { $, $$, html, render as draw, raw } from '../core/dom.js';
 import * as api from '../core/api.js';
 import * as store from '../core/store.js';
 import { sections } from '../ui/sections.js';
-import { num, signed, dir, money, compact, clean, longDate, fullDate, shortDate, isNum, score100 } from '../core/format.js';
+import { num, signed, dir, money, compact, clean, longDate, fullDate, shortDate, isNum, score100, plural } from '../core/format.js';
 import * as RP from '../core/reports.js';
 import { lineChart, mountCharts } from '../ui/chart.js';
 import { skeleton, empty, failed, staleLine, how } from '../ui/states.js';
@@ -170,7 +170,7 @@ export function historyRatio(pr, im, quartersIn) {
   const n = pr.baseline_sessions;
   const quarters = quartersIn || ((D.earnings || {}).surprise || {}).quarters || 8;
   const basis = k === 'event-plus-ordinary'
-    ? `typical for the same ${n} sessions: the ±${num(pr.event_day_avg_pct)}% report-day average (${quarters} quarters) combined with a typical ${Math.max(n - 1, 1)}-session move over two years`
+    ? `typical for the same ${plural(n, 'session')}: the ±${num(pr.event_day_avg_pct)}% report-day average (${quarters} quarters) combined with a typical ${Math.max(n - 1, 1)}-session move over two years`
     : k === 'event-day' ? `the average move on the session after past reports (${quarters} quarters)`
       : `a matched ${n}-session move over the past two years`;
   return html`<div class="ratio"><p class="t-label">Priced against history</p>
@@ -349,7 +349,7 @@ const phase = () => ((D.session || {}).prices || {}).phase || ((D.session || {})
 // history" for a history that has not arrived yet.
 function simpleView(sym, c) {
   const level = prefs.knowledge(), label = levelLabel(level);
-  if (D.tickerError && !D.ticker) return simpleSection({ sym }, level, { label, error: `The figures behind it did not load: ${clean(String(D.tickerError.message || 'no answer').replace(/\.$/, ''))}. The chart above has a Try again.` });
+  if (D.tickerError && !D.ticker) return simpleSection({ sym }, level, { label, error: `The figures behind it did not load: ${clean(String(D.tickerError.message || 'no answer').replace(/\.$/, ''))}. Press Try again on the chart above.` });
   if (!D.ticker || D.session === undefined || D.longterm === undefined || D.earnings === undefined) return simpleSection({ sym }, level, { label, loading: true });
   const F = simpleFacts({ sym, kind: kindOf(sym, D), t: D.ticker, lt: D.longterm, quote: D.quote, session: D.session, earnings: D.earnings, price: c.price, f: c.f, today: c.today });
   D.simpleKey = quoteKey();

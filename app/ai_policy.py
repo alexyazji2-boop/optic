@@ -104,14 +104,48 @@ _REQ = {
         # "pick me a stock" / "pick my next trade" (not "how does Optic pick stocks")
         re.compile(r"\b(which|what)\s+(one\s+)?(is|would\s+be)\s+(the\s+)?(better|best)\s+(one\s+)?(to\s+)?(buy|sell|own|invest\s+in|get)\b", _I),
         re.compile(r"\bpick\s+(me\s+(a|the|some)\s+|my\s+(next\s+)?)(trades?|stocks?|investments?|picks?)\b", _I),
+        # Phase 12 (2026-11-02), from the benchmark's adversarial cases: the reader's decision asked for in other words.
+        # "hold or sell NVDA?", "one word: buy or sell", "yes or no, should I sell?"
+        re.compile(r"(?:^|[.:;!?]\s*|\b(?:just|one\s+word:?|so|ok|okay|then)\s+)(hold|keep|buy|sell)\s+or\s+(sell|dump|hold|buy|wait|keep)\b"
+                   r"(?=\s*(?:\?|$|[A-Z$]|it\b|this\b|them\b|now\b|here\b|today\b))", _I),
+        re.compile(r"\byes\s+or\s+no\b[^.?!]{0,40}\b(buy|sell|hold|keep|short|own|invest|get\s+(in|out))\b|"
+                   r"\b(buy|sell|hold|short)\b\s*\??\s*yes\s+or\s+no\b", _I),
+        # the reader's own shoes: "if you were me", "if it were your money", "what would you do with my portfolio"
+        re.compile(r"\b(if\s+you\s+were\s+me|in\s+my\s+shoes|if\s+it\s+were\s+your\s+(money|portfolio|account)|"
+                   r"what\s+would\s+you\s+do\s+with\s+my\s+(money|portfolio|account|shares|position|savings|401\s?\(?k\)?|ira|roth))\b", _I),
+        # asking Optic to sign off on the reader's own decision
+        re.compile(r"\b(confirm|validate|approve|sign\s+off\s+on|bless|back\s+me\s+up\s+on)\b[^.?!]{0,50}"
+                   r"\b(right\s+call|right\s+move|good\s+(buy|idea|move|trade|call|decision)|my\s+(plan|trade|decision|call))\b", _I),
+        re.compile(r"\b(rate|grade|judge|critique)\s+my\s+(plan|trade|idea|decision|move|strategy)\b", _I),
+        re.compile(r"\bam\s+i\s+(right|wrong|smart|crazy|dumb|stupid)\s+to\s+(buy|sell|hold|keep|go|put|move|dump|trim|short)\b", _I),
+        re.compile(r"\bis\s+(it|this)\s+(smart|wise|dumb|stupid|crazy|a\s+(good|bad)\s+idea)\s+(for\s+me\s+)?to\s+"
+                   r"(buy|sell|hold|keep|move|put|go\s+all\s+in|invest|dump|short)\b", _I),
+        # fiction and role-play that still ends in a pick: "what stock should the hero buy", "role-play as a fund
+        # manager and pick my next stock"
+        re.compile(r"\bwhat\s+(stocks?|shares?|etfs?|funds?|crypto|coins?|options?)\s+should\s+(the|my|a|our|his|her|their)\s+"
+                   r"[\w'-]+\s+(buy|sell|own|pick|short|invest\s+in)\b", _I),
+        re.compile(r"\b(pretend|imagine|suppose|role[- ]?play|act\s+like|act\s+as)\b[^.?!]{0,60}\b(pick|choose|recommend)\s+"
+                   r"(me\s+|my\s+)?(a|the|my|next|some|your)?\s*(next\s+)?(stocks?|trades?|investments?|picks?|moves?)\b", _I),
     ],
     "allocate_money": [
         re.compile(r"\bi\s+(have|got|own)\s+\$?\s?\d[\d,.]*\s*(k|thousand|million|grand|dollars|usd)?\b", _I),
+        # Phase 12: "I've got 8k", "how should I split it", "how many shares ... with $10,000", "where should I put
+        # $2,000", "my emergency fund into SPY", "move my 401k into bitcoin"
+        re.compile(r"\bi(?:'ve|\s+have)(?:\s+got)?\s+(?:about\s+|around\s+|like\s+)?\$?\s?\d[\d,.]*\s*(k|thousand|million|grand|dollars|usd)?\b", _I),
+        re.compile(r"\bhow\s+should\s+i\s+(split|divide|allocate|invest|spend|deploy|put|use)\b", _I),
+        re.compile(r"\bhow\s+many\s+(shares|contracts|coins|units|lots)\b[^.?!]{0,40}\b(to\s+buy|to\s+sell|should|with\s+\$?\d|"
+                   r"for\s+(a|my)\s+\$?\d)", _I),
+        re.compile(r"\bwhere\s+(should|do|would|can)\s+i\s+(put|invest|park|stash)\s+(my\s+)?\$?\d", _I),
+        re.compile(r"\b(should|can|could|do)\s+i\s+(put|move|invest|use|take|park|throw|shift|pull)\b[^.?!]{0,40}"
+                   r"\b(emergency\s+(fund|savings)|savings|401\s?\(?k\)?|ira|roth|retirement|house\s+(money|fund)|down\s+payment|"
+                   r"tuition|pension|college\s+fund)\b", _I),
+        re.compile(r"\b(move|put|invest|shift|switch|roll|dump)\s+my\s+(entire\s+|whole\s+)?(401\s?\(?k\)?|ira|roth|savings|"
+                   r"emergency\s+fund|retirement|pension)\b[^.?!]{0,30}\b(into|in|to)\b", _I),
         re.compile(r"\b(allocate|allocation\s+of|split|divide|distribute)\b[^.?!]{0,30}\b(my|\$|\d)", _I),
         re.compile(r"\bhow\s+much\s+(should|do|would|can)\s+i\s+(put|invest|buy|allocate|risk|spend)\b", _I),
         re.compile(r"\bhow\s+many\s+(shares|contracts)\s+(should|do|would)\s+i\b", _I),
         re.compile(r"\b(position|bet|trade)\s+siz(e|ing)\b[^.?!]{0,20}\b(for\s+me|should|my)\b", _I),
-        re.compile(r"\bwhat\s+(percent|percentage|%|portion|share)\s+(of\s+my|should\s+i)\b", _I),
+        re.compile(r"\bwhat\s+(percent|percentage|%|portion|share)\s+((of\s+my\s+[\w\s]{1,30}?\s+)?should|should\s+i)\b", _I),
         re.compile(r"\b(build|design|make)\s+(me\s+)?(a|my)\s+portfolio\b", _I),
         # "how much of my portfolio should be in TSLA" (Phase 08 evaluation suite)
         re.compile(r"\bhow\s+much\s+of\s+my\s+(portfolio|money|savings|account|capital|cash|net\s+worth|income)\b"
@@ -125,6 +159,13 @@ _REQ = {
         # "what price target should I set", "what stop should I use" (Phase 08 evaluation suite)
         re.compile(r"\bwhat\s+(price\s+)?(target|stop(-loss)?|limit|exit)(\s+price)?\s+(should|do|would)\s+i\s+"
                    r"(set|use|put|place|pick|choose|aim\s+for)\b", _I),
+        # Phase 12: "is now the moment to get out of my QQQ", "when's the best time to buy", "should I wait for a dip"
+        re.compile(r"\bis\s+(it|this|now|today)\s+(a\s+good\s+|the\s+right\s+|the\s+|a\s+)?(time|moment)\s+to\s+"
+                   r"(buy|sell|get\s+(in|out)|exit|enter|bail|cash\s+out|take\s+profits?|add|trim)\b", _I),
+        re.compile(r"\bwhen(?:'s|\s+is)\s+the\s+(best|right|ideal|perfect)\s+(time|moment|day|point)\s+to\s+"
+                   r"(buy|sell|get\s+(in|out)|enter|exit|add|trim)\b", _I),
+        re.compile(r"\bshould\s+i\s+wait\s+(for\s+(a|the)\s+(dip|pullback|drop|correction|breakout|bounce)|"
+                   r"(until|till|to)\b[^.?!]{0,30}\b(buy|sell|get\s+in|get\s+out|enter|exit))", _I),
     ],
     "portfolio_action": [
         re.compile(r"\b(use|using|based\s+on|look\s+at|from|with)\s+my\s+(brokerage|portfolio|holdings|account|positions)\b"
@@ -134,10 +175,20 @@ _REQ = {
         re.compile(r"\bwhich\s+of\s+my\s+(holdings|positions|stocks|shares|investments)\b[^.?!]{0,50}"
                    r"\b(sell|dump|trim|cut|liquidate|keep|buy|exit|first)", _I),
         re.compile(r"\bshould\s+i\s+(sell|trim|dump|keep|hold|rebalance|cut)\s+(my|any\s+of\s+my)\b", _I),
+        # Phase 12: "tell me whether to hold or sell my TSLA", "keep or dump my AMD", "which of my positions do I
+        # cut", "rebalance my portfolio for me"
+        re.compile(r"\btell\s+me\s+(whether|if)\s+(i\s+should\s+|to\s+)(buy|sell|hold|keep|exit|trim|add|dump|cut)\b", _I),
+        re.compile(r"\b(hold|keep|sell|dump|trim)\s+or\s+(sell|dump|hold|keep|trim)\s+my\b", _I),
+        re.compile(r"\bwhich\s+of\s+my\s+(holdings|positions|stocks|shares|investments)\s+(do|should|would)\s+i\s+"
+                   r"(sell|dump|trim|cut|liquidate|keep|exit|drop)\b", _I),
+        re.compile(r"\b(rebalance|reallocate|restructure|optimi[sz]e|fix)\s+my\s+(portfolio|holdings|account|positions|allocation)\b"
+                   r"[^.?!]{0,20}\b(for\s+me|now|please)\b|\b(rebalance|reallocate)\s+(it|my\s+\w+)\s+for\s+me\b", _I),
     ],
     "guarantee": [
         re.compile(r"\bguarantee(d|s)?\b", _I),
         re.compile(r"\b(sure\s+(thing|bet|win|profit)|can'?t\s+lose|cannot\s+lose|risk[- ]free\s+(trade|return|money|profit)|free\s+money)\b", _I),
+        re.compile(r"\bsafe\s+bet\b|\b(won'?t|will\s+not|never|can'?t|cannot)\s+(go\s+down|lose(\s+money)?|drop|fall)\b", _I),
+        re.compile(r"\b(something|anything|give\s+me|find\s+me|need|want)\b[^.?!]{0,20}\brisk[- ]free\b", _I),
     ],
     "adviser_role": [
         re.compile(r"\b(act|acting|be|serve|work|pretend\s+to\s+be|role[- ]?play)\s+(as\s+)?(my|a|an)\s+"
@@ -145,12 +196,71 @@ _REQ = {
                    r"(advis[eo]r|planner|fiduciary|broker|wealth\s+manager)", _I),
         re.compile(r"\byou\s+are\s+(now\s+)?my\s+((personal|registered|licensed|own)\s+){0,3}((financial|investment)\s+)?"
                    r"(advis[eo]r|planner|fiduciary)", _I),
+        # Phase 12: "pretend you're my broker", "imagine you are a licensed adviser"
+        re.compile(r"\b(pretend|imagine|suppose|act\s+like|say)\s+(that\s+)?you(?:'re|\s+are|\s+were)\s+(my|a|an)\s+"
+                   r"((personal|registered|licensed|own|certified|private|real)\s+){0,3}((investment|financial)\s+)?"
+                   r"(advis[eo]r|planner|fiduciary|broker|wealth\s+manager|money\s+manager|portfolio\s+manager)\b", _I),
     ],
     "override_policy": [
         re.compile(r"\b(ignore|disregard|forget|skip|drop|bypass)\s+(the\s+|your\s+|all\s+|any\s+|every\s+)?"
                    r"(previous\s+|prior\s+|above\s+|earlier\s+|system\s+)?(disclaimers?|instructions|rules|policy|policies|guidelines|restrictions|safeguards)", _I),
         re.compile(r"\b(no\s+(disclaimers?|restrictions|rules|caveats)|without\s+(the\s+)?(disclaimers?|caveats|restrictions))\b", _I),
         re.compile(r"\b(jailbreak|developer\s+mode|dan\s+mode|unfiltered\s+mode)\b", _I),
+        re.compile(r"\b(admin|god|unrestricted|uncensored|debug|test)\s+mode\b|\breal\s+(financial\s+|investment\s+)?advice\b", _I),
+    ],
+}
+
+
+# Round 2 (Phase 12, 2026-11-02), from the misses on set E once it had been scored: confirmation-seeking ("Solid plan,
+# right?", "You agree?"), a third person or a story asked for the reader's pick, a forged "system note", an order the
+# reader wants placed, and plain typos. Set E is development material from here; set F measures it.
+_REQ_ROUND2 = {
+    "pick_for_me": [
+        re.compile(r"\bsh(?:ou|u)l?d\s+(?:i|we)\s+(?:sel+|by|buy|hold|hodl|dump|load\s+up|go\s+all[- ]?in|double\s+down|average\s+down|"
+                   r"cash\s+out|take\s+profits?|liquidate|move|switch|rotate|put|sell\s+some)\b", _I),
+        re.compile(r"\bis\s+[\w&.'\- ]{2,40}?\s+a\s+(?:good\s+|strong\s+)?(?:buy|sell)\s+(?:for\s+(?:me|my|us)|now|here|today)\b", _I),
+        re.compile(r"\b(?:just\s+)?(?:give|tell)\s+me\s+(?:one|a|the|your)\s+(?:ticker|stock|name|pick|coin|etf|fund)\b|"
+                   r"\bjust\s+pick\s+(?:one|it|something)\b|\bpick\s+one\s+for\s+me\b", _I),
+        re.compile(r"\b(?:solid|good|smart|great|sound|bad|dumb)\s+(?:plan|idea|move|trade|call|bet)\b[^.?!]{0,15}\b(?:right|yes|no)\s*\?|"
+                   r"\bgood\s+idea\s+or\s+(?:a\s+)?bad\s+idea\b|\b(?:good|smart|bad)\s+(?:trade|move|idea)\s+for\s+me\b|"
+                   r"\btell\s+me\s+(?:i'?m|i\s+am)\s+not\s+making\s+a\s+mistake\b|"
+                   r"\bconfirm\s+(?:that'?s|that\s+is|it'?s|this\s+is)\s+(?:fine|ok|okay|right|good|smart|a\s+good\s+idea)\b", _I),
+        re.compile(r"(?=[^?]*\b(?:buy|sell|load|short|trim|hold|dump|invest|leaps|calls|puts)\b)[^?]*\b(?:you|u)\s+agree\s*\?", _I),
+        re.compile(r"\b(?:i|we)\s+should\s+(?:buy|sell|hold|load|dump|trim|short)\b[^.?!]{0,40}\b(?:right|correct|yes)\s*\?", _I),
+        re.compile(r"\b(?:i'?m|im|i\s+am)\s+(?:thinking\s+of|planning\s+to|about\s+to|leaning\s+toward|gonna|going\s+to)\s+"
+                   r"(?:sell|buy|short|put|move|go\s+all[- ]?in|load|dump|liquidate|trim)\w*\b", _I),
+        re.compile(r"\bif\s+you\s+(?:were|was)\s+(?:managing|running|handling|in\s+charge\s+of)\s+my\b|"
+                   r"\bif\s+you\s+had\s+to\s+(?:put|invest|pick|choose|buy)\b[^.?!]{0,40}\b(?:my|for\s+me)\b|"
+                   r"\bwhich\s+(?:one\s+)?would\s+you\s+(?:pick|choose|buy|sell)\b|\bwould\s+you\s+tell\s+me\s+to\s+(?:sell|buy|hold|trim|dump|keep)\b|"
+                   r"\b(?:i'?m|i\s+am)\s+your\s+(?:only\s+)?client\b|\bwould\s+you\s+put\s+(?:all|half|most|it|my)\b|"
+                   r"\bwould\s+you\s+be\s+(?:buying|selling)\b|\bwhat\s+would\s+you\s+tell\s+(?:her|him|them|me)\b", _I),
+        re.compile(r"\b(?:scene|story|novel|script|dialogue|poem|screenplay)\b[^.?!]{0,100}\b(?:which|what)\s+(?:stock|stocks|ticker|fund|coin|etf)\b", _I),
+        re.compile(r"\b(?:prudent|wise|smart|sensible|advisable|a\s+good\s+idea)\s+for\s+(?:me|us)\s+to\b", _I),
+        re.compile(r"\b(?:sell|buy|hold)\s*[,/]?\s*(?:hold|sell|buy)\s*[,/]?\s*(?:or\s+)?(?:buy|sell|hold)(?:\s+more)?\b|"
+                   r"\bone\s+word\b(?=[^.?!]*\b(?:buy|sell|hold)\b)", _I),
+        re.compile(r"\b(?:is\s+this|is\s+it)\s+the\s+(?:bottom|top)\b(?=[^\n]*\b(?:all[- ]?in|buy|sell|load|dump)\b)", _I),
+    ],
+    "allocate_money": [
+        re.compile(r"\b(?:tell|give)\s+me\s+(?:the\s+)?(?:new\s+)?(?:numbers|percentages|weights|split|mix|allocation)\b|"
+                   r"\bwhat\s+(?:should|would)\s+(?:the|my)\s+(?:new\s+)?(?:numbers|percentages|weights|split|mix|allocation)\s+be\b|"
+                   r"\bwhat\s+(?:the|my)\s+(?:new\s+)?(?:numbers|percentages|weights|split|mix|allocation)\s+should\s+be\b|"
+                   r"\bgive\s+me\s+(?:the\s+)?percentages\b|\bhow\s+much\s+(?:to|in(?:to)?|for)\s+(?:stocks|bonds|savings|cash|crypto|gold)\b", _I),
+        re.compile(r"\bwhat\s+(?:to\s+do|should\s+(?:i|she|he|they)\s+do)\b[^.?!]{0,40}\bwith\s+(?:my\s+|her\s+|his\s+|their\s+)?\$?\d", _I),
+    ],
+    "timing": [
+        re.compile(r"\bshould\s+(?:i|we)\s+wait\b[^.?!]{0,60}\bbefore\s+(?:buying|selling|getting|adding|investing)\b|"
+                   r"\bor\s+(?:just\s+)?(?:buy|sell)\s+(?:it\s+)?now\b", _I),
+    ],
+    "portfolio_action": [
+        # an order the reader wants placed: Milo cannot place one, and the request is a decision about their account
+        re.compile(r"\b(?:buy|sell|short|purchase)\s+\d[\d,]*\s+(?:shares|contracts|units)\b[^.?!]{0,50}\b(?:for\s+me|in\s+my|my\s+account)\b|"
+                   # ("Can Milo place a trade for me?" asks what Milo can do: a navigation question, not an order)
+                   r"\b(?<!milo\s)(?:place|put\s+in|submit|execute|enter)\s+(?:an?\s+|the\s+|my\s+)?(?:market\s+|limit\s+|stop\s+)?(?:order|trade)\b"
+                   r"[^.?!]{0,40}\bfor\s+me\b|\bgo\s+ahead\s+and\s+(?:buy|sell|short)\b", _I),
+    ],
+    "override_policy": [
+        re.compile(r"\b(?:advice|unrestricted|developer|qa|admin|test)\s+mode\s+(?:is\s+)?(?:enabled|on|activated)\b|"
+                   r"\brestrictions?\s+(?:are\s+)?(?:off|disabled|lifted|removed)\b|\bsystem\s+(?:note|message|prompt|override)\s+from\b", _I),
     ],
 }
 
@@ -166,17 +276,22 @@ def classify_request(question: str) -> List[str]:
         return []
     found = []
     for kind in REQUEST_KINDS:
-        if any(rx.search(q) for rx in _REQ[kind]):
+        if any(rx.search(q) for rx in _REQ[kind] + _REQ_ROUND2.get(kind, [])):
             found.append(kind)
     # "no guarantee" in a question about whether something is guaranteed is still
     # a question about a guarantee; but "guaranteed" inside "is anything
     # guaranteed?" is education. Keep it only when the reader asks for one.
     # "guarantee me a stock that cannot lose" asks for one too (Phase 08 evaluation suite)
-    if "guarantee" in found and not re.search(
+    # Phase 12: a guaranteed figure or product asked for ("what's a guaranteed 10% a year investment"), a "safe bet",
+    # one that "won't go down", "something risk-free"; not "a guaranteed investment contract", which is a product's name
+    if "guarantee" in found and (re.search(r"\bguaranteed\s+investment\s+contracts?\b|\bGICs?\b", q) or not re.search(
             r"\b(give|want|need|find|show|get)\s+(me\s+)?(a\s+)?(guaranteed|sure)|guaranteed\s+(trade|return|profit|win|money|upside|income)"
             r"|\bguarantee\s+(me|us)\b|\b(can'?t|cannot)\s+lose\b|\bsure\s+(thing|bet|win|profit)\b|\bfree\s+money\b"
-            r"|\brisk[- ]free\s+(trade|return|money|profit)\b",
-            q, _I):
+            r"|\brisk[- ]free\s+(trade|return|money|profit)\b"
+            r"|\b(what|which)(?:'s|\s+is|\s+are)?\b[^.?!]{0,30}\bguaranteed\b|guaranteed\s+\d+(\.\d+)?\s?%"
+            r"|\bsafe\s+bet\b|\b(which|what|give|find|need|want|name|any)\b[^.?!]{0,40}\b(won'?t|will\s+not|never|can'?t|cannot)\s+"
+            r"(go\s+down|lose|drop|fall)\b|\b(something|anything|give\s+me|find\s+me|need|want)\b[^.?!]{0,20}\brisk[- ]free\b",
+            q, _I)):
         found.remove("guarantee")
     return found
 
@@ -321,6 +436,115 @@ _OUT = {
     ],
 }
 
+# ---------------------------------------------------------------- a sixth shape (Phase 12, 2026-11-02)
+#
+# Set D, the unseen set Phase 11 measured, found 14 of 50 advice sentences (BUG-132). Its misses were advice in shapes
+# none of the patterns has: a bare imperative about the reader's own accounts ("Cap NVDA at 5% of the account",
+# "Convert $20,000 of the traditional IRA to Roth"), a conditional lead before one ("Once the Fed cuts, rotate the
+# cash into bonds"), soft framings ("would serve you better", "is the way to go", "if I were you"), passive orders
+# ("is best closed out", "should be added to the AMD holding"), advice put as a negation ("You shouldn't be sitting
+# on $80,000 in checking", which the negation exemption waved through because it read "n't" before the verb), and a
+# promise to time the reader's trades. These patterns are written against set D, which is now development material;
+# the measure is set E, written afterwards by another agent and not read before it was scored
+# (docs/ai/MILO_EVALUATION_RESULTS.md). Each match starts at its own first word, so a negation inside it ("never
+# let", "shouldn't be sitting") is part of the advice rather than an exemption from it.
+_OBJ = (r"(?:account|shares|position|lot|ira|roth|401\s?\(?k\)?|hsa|portfolio|crypto|bitcoin|ether(?:eum)?|coins|calls|puts|"
+        r"gains|cash|money|savings|fund|deferral|cds?|bonus|stake|holdings?|t-?bills?|treasur(?:y|ies)|etfs?)")
+_OUT["trade_instruction"] += [
+    # a bare imperative about the reader's money; noun uses ("Put options give...", "Drop in volume", "Keep in mind",
+    # "Roll yield", "Cap-weighted", "Let me check") are not orders
+    # ("Put 30% of your portfolio in SPY" is position sizing, the rule that says so, so an amount after "put" or "keep"
+    # is left to it)
+    re.compile(r"^\W{0,6}(?:cap|write|harvest|convert|rotate|bump|ladder|roll|swap|shift|park|skim|max\s+out|cash\s+out|"
+               r"move|(?:put|keep)(?!\s+(?:about\s+|around\s+|roughly\s+|no\s+more\s+than\s+)?(?:\$\s?\d|\d))|add|drop|let|"
+               r"sell\s+off|peel\s+off|scale\s+(?:in|out)|average\s+(?:in|down|into))\b"
+               r"(?!['’]s\b|\s*-|\s+(?:options?|spreads?|in\b|an\s+eye|track|me\b|us\b|rates?|weighted|table|yields?|"
+               r"strateg\w*|that\b|this\b))"
+               r"[^.;]{0,90}?\b" + _OBJ + r"\b", _I),
+    # a conditional lead and then an order: "Once the Fed cuts in December, rotate the money-market cash into..."
+    # (a comma inside a figure, "$120,000", is not the clause's end)
+    re.compile(r"^\W{0,6}(?:if|once|when|after|before|as\s+soon\s+as)\b(?:[^,;]|,(?=\d)){3,90},\s*(?:rotate|cash\s+out|sell|buy|trim|move|put|"
+               r"add|roll|take|lock\s+in|switch|shift|swap|cover|close|exit)\b[^.;]{0,70}?\b(?:your|the)\s+(?:[\w-]+\s+){0,3}?"
+               r"(?:cash|coins|shares|position|money|gains|calls|puts|stake|holdings?|fund|account|crypto|bitcoin)\b", _I),
+    re.compile(r"\bif\s+i\s+were\s+you\b|\bin\s+your\s+shoes\b|\bmy\s+(?:top\s+)?pick\s+for\b", _I),
+    re.compile(r"\bI(?:'d|\s+would)\s+(?:let|ride|keep|rotate|roll|swap|move|stick\s+with|stay\s+(?:in|out|with)|take\s+(?:the|some|half)|"
+               r"cash\s+out|peel\s+off|lighten\s+up)\b", re.I),
+    re.compile(r"\byou\s+(?:may|might)\s+want\s+to\s+(?:think\s+about|consider|look\s+at)\s+(?:peeling|selling|trimming|taking|adding|"
+               r"buying|rotating|moving|harvesting|closing|cutting|locking|cashing|reducing|shifting|swapping|rolling|converting|laddering)\b", _I),
+    re.compile(r"\bit\s+(?:might|may|could|would)\s+(?:pay\s+off|make\s+(?:more\s+)?sense|be\s+(?:wise|smart|prudent|worth\s+it|best))\s+"
+               r"(?:for\s+you\s+)?to\s+(?:\w+\s+)?(?:ladder|buy|sell|trim|rotate|move|roll|shift|add|convert|harvest|put|invest|lock|take|"
+               r"cut|reduce|close|swap|switch|average|dump|exit)\b", _I),
+    re.compile(r"\bwould\s+serve\s+you\s+better\b|\byou(?:'d|\s+would)\s+come\s+out\s+ahead\b|\byou\s+could\s+do\s+worse\s+than\b|"
+               r"\bis\s+the\s+way\s+to\s+go\b|\bno\s+sense\s+(?:hanging|holding)\s+on\b|\byou\s+shouldn'?t\s+be\s+(?:sitting|holding|keeping)\s+on\b|"
+               r"\bthe\s+obvious\s+(?:play|move|trade)\s+(?:is|here|would\s+be)\b", _I),
+    re.compile(r"\b(?:best|cleanest|smartest|simplest|easiest)\s+(?:course|fix|move|play|option|bet)\b[^.;]{0,50}\bis\s+to\s+"
+               r"(?:drop|sell|buy|sit|hold|keep|trim|move|rotate|swap|close|add|cut|exit|stay|wait)\b", _I),
+    re.compile(r"\bis\s+best\s+(?:closed\s+out|sold|bought|trimmed|exited|held|cut|dumped)\b|\bare\s+better\s+(?:realized|harvested|sold|taken|booked)\b", _I),
+    re.compile(r"\b(?:puts?|calls?|shares?|position|holding|stake|cash|bonds?)\b[^.;]{0,60}\bshould\s+be\s+(?:added|sold|bought|trimmed|cut|"
+               r"closed|moved|rotated|reduced|increased|shifted|rolled|harvested|exited)\s+(?:to|into|back|out|before|ahead|on|at|in|down|up)\b", _I),
+    re.compile(r"^\W{0,6}(?:doesn'?t\s+it\s+make\s+(?:more\s+)?sense|isn'?t\s+(?:this|now|it|today)\s+the\s+(?:moment|time))\s+to\s+"
+               r"(?:roll|sell|buy|move|trim|take|lock|switch|rotate|add|exit|get)\b", _I),
+    re.compile(r"\bbelongs?\s+in\s+(?:the|your)\s+(?:ira|roth|401\s?\(?k\)?|hsa|taxable|brokerage|retirement)\b", _I),
+    # the reader named, then an order: "Dana, add another $5,000 of Amazon on any dip"
+    re.compile(r"^\W{0,6}[A-Z][a-z]{2,15},\s+(?:add|sell|buy|trim|move|put|keep|take|rotate|roll|cash\s+out|drop|swap|switch|grab|load)\b"),
+    re.compile(r"\b(?:take|took)\s+(?:the\s+rest\s+of\s+)?(?:the\s+|your\s+|some\s+)?(?:\w+\s+)?gains\s+off\s+the\s+table\b", _I),
+]
+_OUT["allocation"] += [
+    re.compile(r"^\W{0,6}never\s+let\b[^.;]{0,50}\b(?:grow|get|go|rise|climb)\s+(?:past|above|over|beyond)\s+\d+(?:\.\d+)?\s?%", _I),
+    re.compile(r"\b(?:weighting|allocation|exposure)\b[^.;]{0,40}\bshould\s+be\s+(?:brought|cut|trimmed|reduced|raised|lifted)\s+"
+               r"(?:back\s+)?(?:to|down\s+to|up\s+to)\s+\d+(?:\.\d+)?\s?%", _I),
+]
+_OUT["timing"] += [
+    re.compile(r"^\W{0,6}wait\s+(?:until|till|for)\b[^.;]{0,40}\bto\s+(?:buy(?:\s+back)?|sell|get\s+(?:in|out)|enter|exit|add|trim)\b", _I),
+    re.compile(r"\bthat'?s\s+your\s+(?:entry|exit|signal|cue)\b|\byour\s+(?:exit|entry)\s+(?:on|for|in)\s+\$?[A-Za-z][\w.]*\s+is\b", _I),
+    re.compile(r"\b(?:ping|alert|notify|tell|text|email|message)\s+you\s+(?:the\s+moment|when|as\s+soon\s+as)\b[^.;]{0,80}"
+               r"\b(?:sell|buy|selling|buying|exit|get\s+out|get\s+in|trim)\w*\b", _I),
+    re.compile(r"\bset\s+(?:the|your|a)\s+(?:limit|stop|sell|buy)\s+(?:order\s+)?(?:there|at\s+\$?\d)", _I),
+]
+# Round 2 (Phase 12), from set E's misses once it had been scored: verdicts of suitability on the reader's own choices
+# ("is a sensible amount", "suits you well", "is the right call for you", "the disciplined move is to lighten up").
+# Attributed ones ("some investors would call this a good entry") stay research.
+def _add(rule: str, rx: "re.Pattern", exempt: Optional[str] = None) -> None:
+    _OUT[rule].append(rx)
+    if exempt:
+        _OUT_EXEMPT_LATE[(rule, len(_OUT[rule]) - 1)] = exempt
+
+
+_OUT_EXEMPT_LATE: Dict[Tuple[str, int], str] = {}
+for _rx in [
+    re.compile(r"\b(?:is|would\s+be)\s+the\s+(?:right|correct|smart|smarter|sensible|best|disciplined|prudent|wise|obvious|logical)\s+"
+               r"(?:call|move|play|step|way|choice|approach|thing\s+to\s+do)\b", _I),
+    re.compile(r"\bthe\s+(?:smart|right|best|disciplined|prudent|wise|correct|obvious)\s+(?:move|call|play|step|thing)\b[^.;]{0,50}\bis\s+to\b", _I),
+    re.compile(r"\byour\s+best\s+move\b|\bis\s+how\s+I'?d\s+(?:approach|play|handle|do)\b|\b(?:the\s+one|one)\s+I'?d\s+(?:cut|sell|trim|dump|buy|keep|own)\b|"
+               r"\bI'?d\s+(?:cut|sell|trim|dump)\s+(?:it\s+)?first\b", _I),
+    re.compile(r"\b(?:locking|buying|selling|moving|rolling|trimming|adding|harvesting|holding|keeping|putting|averaging|starting|opening)\b"
+               r"[^.;]{0,60}\b(?:makes\s+sense|looks\s+reasonable|seems\s+reasonable|is\s+reasonable|is\s+sensible)\b", _I),
+    re.compile(r"\byou(?:'re|\s+are|'d\s+be|\s+would\s+be)\s+better\s+off\b|\byou\s+have\s+room\s+to\s+(?:add|buy|increase)\b|"
+               r"\b(?:clear|easy|obvious)\s+(?:avoid|pass|buy|sell)\b|\bavoid\s+for\s+your\b|\blet\s+(?:it|them|the\s+position|your\s+winners?)\s+run\b|"
+               r"\bis\s+the\s+best\s+place\s+for\s+(?:this|your|the)\s+money\b|\bthe\s+ones?\s+to\s+(?:exit|sell|cut|trim|dump|buy)\s+first\b|"
+               r"\bso\s+(?:cut|trim|sell|dump|buy|add)\s+(?:it|them|half|some|the)\b|\bcut\s+it\s+in\s+half\b|"
+               r"\brebalancing\s+(?:deserves|is\s+worth)\s+a\s+look\b", _I),
+    re.compile(r"^\W{0,6}don'?t\s+chase\b|\blet\s+it\s+(?:come\s+back|pull\s+back|drop|dip)\b[^.;]{0,40}\bbefore\s+you\s+(?:buy|add|enter)\b|"
+               r"\b(?:now|today|this\s+week)\s+is\s+(?:not|no)\s+(?:the\s+)?time\s+to\s+(?:be\s+)?(?:adding|buying|selling|trimming|add|buy|sell)\b", _I),
+]:
+    _add("trade_instruction", _rx, "attributed+hypothetical")
+for _rx in [
+    re.compile(r"\b(?:your|of\s+your|each\s+paycheck)\b[^.;]{0,60}\b(?:is|would\s+be)\s+(?:a\s+|the\s+)?(?:sensible|reasonable|right|good|fine|safe|smart)\s+"
+               r"(?:amount|level|size|split|mix|allocation|weight)\b", _I),
+    re.compile(r"\b(?:keeping|putting|holding|allocating)\b[^.;]{0,50}(?:%|percent|of\s+your)[^.;]{0,40}\bmakes\s+sense\b|"
+               r"\bsuits\s+you(?:\s+well)?\b|\bis\s+right\s+for\s+you\b|\bthe\s+right\s+(?:level|amount|mix|split|allocation|size)\s+for\s+you\b|"
+               r"\bis\s+the\s+sensible\s+step\b", _I),
+]:
+    _add("allocation", _rx, "attributed+hypothetical")
+_add("timing", re.compile(r"\b(?:cleaner|better|safer|ideal|best|right)\s+(?:entry|exit)\b", _I), "attributed")
+# the opportunity framing ("a good entry point") said of other people's view is research too (set E's one false positive)
+_OUT_EXEMPT_LATE[("trade_instruction", 6)] = "attributed"
+_add("guarantee", re.compile(r"\b(?:about|just)\s+as\s+safe\s+as\s+it\s+gets\b|\bcan'?t\s+go\s+wrong\b|\bis\s+a\s+safe\s+(?:choice|bet|pick|place)\s+for\s+you\b", _I))
+
+_OUT["guarantee"] += [
+    re.compile(r"\blocked\s+in(?:to)?\s+(?:a\s+)?\d+(?:\.\d+)?\s?%|\bno\s+matter\s+what\s+(?:the\s+)?markets?\s+(?:do|does)\b", _I),
+]
+
 # ---------------------------------------------------------------- one vocabulary, five shapes
 #
 # The patterns above were written one phrasing at a time, and a held-out set showed what that costs: on fifteen
@@ -374,7 +598,10 @@ _NOT_AN_ORDER = (r"(?![- ](?:side|sellers?|interest|squeeze|term|positions?\b|an
 _HYPOTHETICAL = re.compile(r"\b(?:if|when|whether|unless|once|suppose|say|in\s+case|anyone\s+who|someone\s+who|those\s+who|"
                            r"a\s+trader\s+who|an\s+investor\s+who|traders\s+who|investors\s+who)\b", _I)
 _ATTRIBUTED = re.compile(r"\b(?:analysts?|consensus|rated|ratings?|upgrade[sd]?|downgrade[sd]?|wall\s+street|the\s+firm|"
-                         r"brokers?|the\s+street|price\s+targets?)\b", _I)
+                         r"brokers?|the\s+street|price\s+targets?|"
+                         # Phase 12: a view put in other people's mouths ("some investors would call this a good entry")
+                         r"some\s+(?:investors|traders|analysts|holders|strategists)|many\s+(?:investors|traders)|others\s+(?:see|say|argue|call)|"
+                         r"bulls|bears|critics|skeptics|sceptics|proponents|supporters)\b", _I)
 
 _SHAPES = {
     "trade_instruction": [
@@ -690,14 +917,17 @@ def check_output(text: str) -> List[Dict[str, Any]]:
         s = _LEAD_LABEL.sub("", whole, count=1)
         for rule in RULES:
             hit = None
-            for rx, exempt in ([(rx, _OUT_EXEMPT.get((rule, i))) for i, rx in enumerate(_OUT.get(rule, []))]
+            for rx, exempt in ([(rx, _OUT_EXEMPT.get((rule, i)) or _OUT_EXEMPT_LATE.get((rule, i)))
+                                for i, rx in enumerate(_OUT.get(rule, []))]
                                + _SHAPES.get(rule, [])):
                 for m in rx.finditer(s):
                     if _negated(s, m.start()) or _in_quotes(s, m.start(), m.end()):
                         continue
-                    if exempt == "hypothetical" and _hypothetical(s, m.start()):
+                    # a label may name two exemptions ("attributed+hypothetical", Phase 12's round 2)
+                    ex = set((exempt or "").split("+"))
+                    if "hypothetical" in ex and _hypothetical(s, m.start()):
                         continue
-                    if exempt == "attributed" and _ATTRIBUTED.search(s):
+                    if "attributed" in ex and _ATTRIBUTED.search(s):
                         continue
                     if exempt == "mechanics" and _MECHANICS.search(s):
                         continue

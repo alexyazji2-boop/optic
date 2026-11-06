@@ -304,8 +304,7 @@ def _equal_weight_breadth(provider) -> Dict[str, Any]:
         note = ("The average stock is falling behind the index, so the index is being "
                 "carried by its largest names. Concentration risk.")
     elif chg_63 is not None and chg_63 > 2:
-        note = ("The average stock is ahead of the index. Broad participation, "
-                "a healthier advance.")
+        note = "The average stock is ahead of the index: the advance is broad."
     else:
         note = "The average stock is keeping pace with the index. No unusual concentration."
 
@@ -346,7 +345,8 @@ def analyse(provider) -> Dict[str, Any]:
     # The note's whole percent comes from the unrounded share: 6 of 11 is 54.5% in the payload, which Python's
     # format would then round to 54 (half to even) beside the page's 55 (BUG-012, Phase 09)
     if breadth_200 >= 70:
-        breadth_note = "Broad participation: {:.0f}% of sectors above their 200-day. Breakouts have follow-through.".format(share_200)
+        # "Breakouts have follow-through" was a claim nothing here measures (Phase 12 editorial pass)
+        breadth_note = "Broad participation: {:.0f}% of sectors above their 200-day.".format(share_200)
     elif breadth_200 >= 45:
         breadth_note = "Mixed participation ({:.0f}% above 200-day). Leadership is narrowing: fewer sectors are carrying the market.".format(share_200)
     else:

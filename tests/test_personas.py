@@ -129,10 +129,13 @@ def test_the_format_prompt_exempts_short_questions_from_structure_but_not_follow
     assert "the follow-ups below still come after it" in f
 
 
-def test_the_format_prompt_asks_for_a_bottom_line_and_follow_ups():
-    f = ai.FORMAT_PROMPT
-    assert "Bottom line" in f
-    assert "→ " in f, "follow-ups need a machine-detectable prefix"
+def test_the_format_prompt_ends_on_what_would_change_the_read_and_follow_ups():
+    """A long answer still closes on the condition that would change it. It no longer closes on a fixed
+    **Bottom line** heading, which invites a restatement of the answer (Phase 12, 2026-11-02: the directive's
+    empty conclusions and repeated shapes)."""
+    f = " ".join(ai.FORMAT_PROMPT.split())
+    assert "End on what would change the read" in f and "not a summary of it" in f
+    assert "→ " in ai.FORMAT_PROMPT, "follow-ups need a machine-detectable prefix"
 
 
 def test_format_is_separate_from_persona():

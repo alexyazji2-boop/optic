@@ -70,7 +70,8 @@ def test_deep_research_and_the_research_route_take_the_level():
     src = open("app/ai.py", encoding="utf-8").read()
     deep = src[src.index("async def deep_research("):src.index("async def deep_research(") + 6000]
     assert "mode: Optional[str] = None," in deep
-    assert '{"type": "text", "text": RESEARCH_PROMPT + "\\n\\n" + ai_policy.POLICY_TEXT,' in deep
+    # the house writing rules sit before the policy since Phase 12 (app/editorial.py)
+    assert '{"type": "text", "text": RESEARCH_PROMPT + "\\n\\n" + editorial.WRITING_RULES + "\\n\\n" + ai_policy.POLICY_TEXT,' in deep
     assert '{"type": "text", "text": knowledge.prompt_for(mode)},' in deep
     route = open("app/main.py", encoding="utf-8").read()
     assert 'ai.deep_research(ticker, question=question, context=context, mode=mode)' in route

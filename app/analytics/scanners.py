@@ -261,9 +261,8 @@ SCANS: List[Dict[str, Any]] = [
         "id": "high-risk-up",
         "name": "High-risk swings, upside",
         "looks_for": "Bullish structure in names whose ordinary daily range is wide "
-                     "enough to take out a normal stop. Labelled as risk rather than "
-                     "opportunity because that is the honest framing: the setup and "
-                     "the danger are the same property.",
+                     "enough to take out a normal stop. Labelled as risk: the wide range "
+                     "behind the setup is also its danger.",
         "blind_spot": "A wide average range means position sizing matters more than "
                       "the setup does. These names can be right about direction and "
                       "still stop you out on the way.",
@@ -544,7 +543,7 @@ SCAN_GROUPS: List[Dict[str, Any]] = [
     {
         "id": "risk",
         "name": "High risk",
-        "blurb": "Wide daily ranges, both directions. Sizing matters more than the setup.",
+        "blurb": "Wide daily ranges, in both directions: the move behind a setup can also reverse it.",
         "scans": ["high-risk-up", "high-risk-down"],
     },
 ]

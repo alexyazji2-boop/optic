@@ -301,7 +301,7 @@ function congress() {
   if (c === undefined) return '';
   if (!c || !c.available) return '';
   return html`<section class="section" id="fin-congress" aria-labelledby="cg-h"><h2 class="t-h2" id="cg-h">Congressional disclosures</h2>
-    <p>${c.count} trades by ${c.members} members of the House: ${c.buys} buys and ${c.sells} sales, worth ${money(c.amount_low, 0)} to ${money(c.amount_high, 0)} in the bands filed. Filed a median ${plural(c.lag_median, 'day')} after the trade.</p>
+    <p>${plural(c.count, 'trade')} by ${plural(c.members, 'member')} of the House: ${plural(c.buys, 'buy')} and ${plural(c.sells, 'sale')}, worth ${money(c.amount_low, 0)} to ${money(c.amount_high, 0)} in the bands filed. Filed a median ${plural(c.lag_median, 'day')} after the trade.</p>
     <div class="tscroll"><table class="t"><thead><tr><th>Traded</th><th>Member</th><th>Action</th><th>Amount</th><th>Close that day</th><th>Filed after</th></tr></thead>
       <tbody>${(c.trades || []).slice(0, 15).map((t) => html`<tr><td>${t.traded_iso ? fullDate(t.traded_iso) : t.traded}</td><td>${t.member} <small class="t-muted">${t.district || ''}</small></td><td>${capFirst(t.transaction || '')}</td><td>${money(t.amount_low, 0)} to ${money(t.amount_high, 0)}</td><td>${closeCell(t)}</td><td>${isNum(t.disclosure_lag_days) ? `${plural(t.disclosure_lag_days, 'day')}` : ''}</td></tr>`)}</tbody></table></div>
     <p class="asof">${clean(c.caveat || '')} ${CLOSE_NOTE} Source: House Clerk disclosures${c.complete ? '' : ', partly read'}.</p></section>`;

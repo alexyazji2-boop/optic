@@ -254,7 +254,7 @@ def test_the_chart_studies_are_defined_in_the_servers_own_words():
     gm = src("ui/glossmark.js")
     assert "sp.dataset.v2TermInline = ''; sp.textContent = ` (${def})`;" in gm, "text, never HTML"
     assert "prefs.onChange((what) => { if (what === 'knowledge' || what === 'knowledge-synced') relevel(); });" in gm
-    assert "const NO_INLINE = 'table, dl, .kv';" in gm and "const def = inline && !btn.closest(NO_INLINE) ? gloss(k) : '';" in gm, \
+    assert "const NO_INLINE = 'table, dl, .kv, .rd .k';" in gm and "const def = inline && !insideParens && !btn.closest(NO_INLINE) && endsPhrase(rest.nodeValue) ? gloss(k) : '';" in gm, \
         "a definition joins prose only: a table cell or a figure's label keeps the mark (directive 05 section 4)"
 
 

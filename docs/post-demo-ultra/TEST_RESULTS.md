@@ -1453,3 +1453,60 @@ closed (a Saturday).
 - **MSFT:** its report of 2026-10-28 stays in its resolved catalyst events on both, as it should.
 - **What else could change:** nothing. The changed code runs only inside `_swing_snapshot`. Earnings this week, the
   weekly digest and the Desk edition read the provider, which the hotfix does not touch.
+
+## Phase 12 (directive 14, 2026-11-02)
+
+Branch `phase-12-writing-milo-security` (`~/Optic/wt-phase12`, from live `d22522a`). Working folder
+`~/Optic/work/phase12-2026-11-02/`.
+
+| Check | Command | Outcome |
+|---|---|---|
+| Baseline suite on `d22522a` | `.venv/bin/python -m pytest -q` | 8,230 passed, 1 skipped (243 s) |
+| The model key (BL-01) | a free `GET /v1/models` with the `.env` key, value never printed | 401 `authentication_error`: no model answers in this phase |
+| Phase 08's eval suite, before the fixes | `python -m tests.milo_eval.run` | 137 of 137 cases, 949 of 949 checks (7 s) |
+| The 181-case benchmark on live `main`'s server code (scratch copy) | same, with `ai_policy.py`, `main.py`, `ai.py`, `research/service.py` from `origin/main` | 173 of 181 cases, 1,223 of 1,231 checks; failures ADV-R09 to R12, MUL-11, INJ-09 (policy), POR-10, INJ-11 (authorization) |
+| The benchmark after the fixes | `python -m tests.milo_eval.run` | 181 of 181 cases, 1,231 of 1,231 checks; no critical failure |
+| Red team | `pytest tests/test_milo_redteam.py` | 38 passed |
+| Red team, mutation | each fixed file restored from `origin/main` in a scratch copy | `main.py`: 7 tests fail (MRT-01, 04, 05 x3, 08, 09); `research/service.py`: MRT-01's service test fails; `milo-text.js`: MRT-02 v2 fails; `app.js`: MRT-02 Classic and MRT-03 fail. MRT-01's chat test first passed vacuously (a suite-wide stub of the hook); marked `framework_live` and re-run: it fails on the vulnerable code |
+| Editorial gate and rules | `pytest tests/test_editorial_standards.py` | passes: no error finding in v2 or server copy outside `allow.txt` (3 lines, REJECTED_SOURCES); the directive's 11 bad examples caught, 9 good ones clean |
+| Inventory | `python -m tests.editorial.review inventory` | 18,036 texts from 321 files; 3 errors (allowed), 243 warnings, 3 info; 10 terminology variants; 462 texts written out in more than one file |
+| Page captures | `tools/pagetext.py` (headless, guest, local server) | 27 routes at New, Intermediate and Expert (81 captures); the changed pages recaptured after the fixes |
+| Advice checks, set E (unseen when scored) | `tools/measure_advice.py` | live main: request reader 23 of 60, output check 17 of 50; Phase 12 round 1: 32 of 60, 21 of 50; false positives 0 of 60 and 1 of 50 |
+| Advice checks, set F (unseen, final) | same | live main: 11 of 60, 12 of 50; Phase 12 final: 18 of 60, 16 of 50; false positives 1 of 60 and 2 of 50, the same items on both |
+| Advice checks, development sets A to D and the research corpus | inline | 190 of 190 advice sentences, 0 of 190 research removed; corpus 0 of 1,506 removed, before and after |
+| Latency end to end (stand-in model, real providers, local) | `tools/latency.py OUT 2` | 72 answers, 0 errors, 0 timeouts; first text median 0.31 s, p95 4.67 s; total median 0.65 s, p95 4.98 s (a first run stopped at 30 answers on the hourly cap, `AI_CALLS_PER_HOUR`, working as designed) |
+| Browser, the changed pages | Browser pane on :8270 at 1440, 390 and 375x549 | Read, Home, the Overview, Macro and Options: no sideways overflow, no error state; Read's rows read "AAPL reports Monday after the close, high impact." with the shared reason once; New to Markets: no definition inside a compound noun or a parenthesis, no "earnings Per Share" |
+| Final suite on this branch | `.venv/bin/python -m pytest -q` | 8,628 passed, 1 skipped (249 s): 398 more than the baseline, all new tests passing |
+
+## Phase 13 (directive 15, 2026-11-02, evening)
+
+Same branch and working folder as Phase 12. No model was called and nothing was spent.
+
+| Check | Command | Outcome |
+|---|---|---|
+| The model key (BL-01) | a free models-list request with the `.env` key, value never printed | 401 `AuthenticationError`: no answers, no token counts |
+| Other providers' keys (BL-14) | presence of `OPENAI_API_KEY`, `GEMINI_API_KEY`, `GOOGLE_API_KEY`, `TOGETHER_API_KEY`, `FIREWORKS_API_KEY`, `GROQ_API_KEY`, `OPENROUTER_API_KEY`, `DEEPINFRA_API_KEY`, values never printed | none set |
+| Three questions traced | `harness.assemble` on BEG-01, FUN-01, POR-01 | 66,544, 67,972 and 70,580 characters; 16, 16 and 17 tools; 0.041, 0.423 and 0.019 s to the model call |
+| The harness, offline | `pytest tests/test_milo_compare.py` | 12 passed: the Responses, Chat Completions and Gemini loops; Anthropic's request unchanged; Haiku without the fallback; a tool not offered is Severity 0 and never runs; one cost convention; the output cap; refusals without a cap or key |
+| Dry runs of five adapters | `compare --dry-run --only ACC-quote-AAPL` for Sonnet 5.5, Haiku 5.5, GPT-6.1 Sol, Kimi K3 (Together) and Gemini 3.8 Flash | exit 0 each; requests of 69,845 to 71,110 characters with the same 16 tools; nothing sent |
+| The cost model | `pytest tests/test_milo_cost_model.py`; `python -m tests.milo_eval.cost_model --budget` | 11 passed; the cost audit's $0.14, $0.18, $0.10 and its four monthly lines reproduced within 1%; 15 models priced; `docs/ai/eval-results/cost-model/cost-model.json` |
+| The router | `python -m tests.milo_eval.router` | 126 of 181 routed as labelled (69.6%, 95% interval 62.6% to 75.8%), 0.127 ms a decision; `docs/ai/eval-results/routing/routing.json` |
+| Intervals | `pytest tests/test_milo_stats.py` | 3 passed |
+| Milo, policy, red team and editorial suites | 9 files, `pytest` | 1,042 passed |
+| Diff scan before the commit | keys and email addresses in the added lines | none in 8,891 lines |
+| Final suite on this branch | `.venv/bin/python -m pytest -q` | 8,654 passed, 1 skipped (423 s): the 26 new tests on top of Phase 12's 8,628, all passing |
+
+### C1: the conversation cached across tool rounds (after Phase 13, the owner's "Yes, do C1 here")
+
+| Check | Command | Outcome |
+|---|---|---|
+| The rounds' requests | `pytest tests/test_milo_tools.py -k cache` | passes: all three rounds carry the top-level marker and the system block's; one explicit marker each; model, system, tools, thinking and effort identical across rounds; each round's messages begin with the round before, unchanged |
+| The harness sends production's request | `pytest tests/test_milo_compare.py` | 13 passed, with the top-level marker in the Anthropic adapter's request |
+| Mutation | `build_chat_request` wrapped in-process to drop the field (no file changed) | both new assertions fail |
+| End to end, local | one question to `/api/chat` on :8270 with the stand-in model (launch config `optic-phase12`) | answered with a tool round; the stand-in's log shows both requests with `cache_control {"type": "ephemeral"}` at the top level and the system marker on the first block only |
+| Related suites | `pytest` on the loop, harness, flavour, reasoning, policy and brokerage files | 592 passed before the new test; 36 passed in the loop and harness files after it |
+| Tests that read the edited docs | 13 files | 983 passed |
+| Final suite | `.venv/bin/python -m pytest -q` | 8,655 passed, 1 skipped (247 s) |
+| The saving itself | the ledger's `cache_read_tokens` per chat call | **not measurable here** (no working key, BL-01): measured after deployment |
+| Shipped alone | a worktree at origin/main `d22522a4` with only `app/ai.py` and its test; full suite there | 8,231 passed, 1 skipped, 0 failed; pushed `d22522a4..1a1cf58b`; live booted `1a1cf58b2b01` at 04:29:29 UTC on 2026-11-03; `/`, `/classic`, `/api/build`, `/healthz` 200; same boot 45 s later |
+

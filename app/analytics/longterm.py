@@ -711,17 +711,10 @@ def analyse_indices(provider) -> Dict[str, Any]:
             line = joined["q"] / joined["s"]
             chg_3m = _f((line.iloc[-1] / line.iloc[-64] - 1.0) * 100.0, 2)
             if chg_3m is not None and chg_3m > 2:
-                gv_note = (
-                    "Growth is leading the broad market by {:.1f}% over 3 months. Long-duration, "
-                    "higher-multiple names are in favor, which typically needs falling or stable "
-                    "rates to persist.".format(chg_3m)
-                )
+                # Phase 12: the second sentence was a cause nothing here measures
+                gv_note = "Growth is leading the broad market by {:.1f}% over 3 months.".format(chg_3m)
             elif chg_3m is not None and chg_3m < -2:
-                gv_note = (
-                    "Growth is lagging the broad market by {:.1f}% over 3 months. Leadership is "
-                    "rotating toward value and cyclicals, often a sign rates or margins are the "
-                    "market's main worry.".format(abs(chg_3m))
-                )
+                gv_note = "Growth is lagging the broad market by {:.1f}% over 3 months.".format(abs(chg_3m))
             else:
                 gv_note = "Growth and the broad market are moving together. No clear style leadership."
             growth_value = {
@@ -735,12 +728,17 @@ def analyse_indices(provider) -> Dict[str, Any]:
     bulls = [r for r in rows if r.get("above_200w_sma")]
     if rows:
         share = len(bulls) / len(rows) * 100.0
+        # Phase 12: the measure in its own words. It said "Favor the strongest" (an instruction), "regime" (the
+        # word WRITING_GUIDELINES rule 3 retired for this panel) and "secular uptrends" beside a Phase column that
+        # counts those differently.
+        above = ("All {} major indices are above their 200-week averages".format(len(rows)) if len(bulls) == len(rows)
+                 else "{} of {} major indices are above their 200-week averages".format(len(bulls), len(rows)))
         if share >= 80:
-            regime = "Global equity regime is broadly bullish. Most major indices are in secular uptrends."
+            regime = above + "."
         elif share >= 50:
-            regime = "Mixed global regime. US and international indices are diverging. Favor the strongest."
+            regime = above + ": US and international indices are diverging."
         else:
-            regime = "Defensive global regime. A majority of major indices sit below their 200-week averages."
+            regime = above + ": most are below them."
     else:
         regime = "Index data unavailable."
 

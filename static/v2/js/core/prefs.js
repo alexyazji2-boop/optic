@@ -17,10 +17,10 @@ const DEFAULT_MODE = 'intermediate';
 // The classic list, word for word (static/app.js TIMEZONES).
 export const TIMEZONES = [
   { id: 'auto', label: 'My device’s time zone' },
-  { id: 'America/New_York', label: 'New York. Eastern (market time)' },
+  { id: 'America/New_York', label: 'New York: Eastern (market time)' },
   { id: 'America/Chicago', label: 'Chicago: Central' },
   { id: 'America/Denver', label: 'Denver: Mountain' },
-  { id: 'America/Los_Angeles', label: 'Los Angeles. Pacific' },
+  { id: 'America/Los_Angeles', label: 'Los Angeles: Pacific' },
   { id: 'America/Toronto', label: 'Toronto' },
   { id: 'America/Sao_Paulo', label: 'São Paulo' },
   { id: 'Europe/London', label: 'London' },

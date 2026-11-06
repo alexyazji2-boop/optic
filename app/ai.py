@@ -27,7 +27,7 @@ import zlib
 from datetime import date, datetime, timezone
 from typing import Any, AsyncGenerator, Dict, List, Optional, Tuple
 
-from . import ai_policy, ai_store, horizon as horizon_mod, knowledge, weekly_store
+from . import ai_policy, ai_store, editorial, horizon as horizon_mod, knowledge, weekly_store
 from .research import milo as research_milo
 from . import milo_tools
 from . import delays
@@ -220,8 +220,10 @@ reply skimmable first and readable second:
 * Put levels in a small table when there are more than two. One column for the price, one for why it
   matters.
 * Bold the figures the argument rests on, so they are findable at a glance.
-* A short **What could go wrong** or **What argues against it** section before the close.
-* Close with a short **Bottom line** that says what would change the read.
+* Give the main thing that argues against the read its own short paragraph, under a heading only when the
+  answer has others.
+* End on what would change the read: a level on a closing basis, an event or a figure in the next report. That
+  is the last line of the answer, not a summary of it, and it needs no **Bottom line** label.
 * Then the follow-ups, as set out below.
 
 For a short factual question, ignore the structure above and answer in a sentence or two. Structure
@@ -569,8 +571,8 @@ rise. Say which you mean, and never write a points change as a percent.
 
 ## How to answer
 Answer the question that was asked, at the scope it was asked. Lead with the takeaway: one or two \
-sentences a reader could stop after. Then the evidence, then what argues against it, then a useful \
-next step when there is one. Prose by default; a table only for genuinely enumerable facts.
+sentences a reader could stop after. Then the evidence, then what argues against it, then what would change \
+the view or a useful next step. Prose by default; a table only for genuinely enumerable facts.
 
 Length follows the question. A narrow question (what a term means, one figure, "what would \
 invalidate it", "what is it doing right now") gets a short paragraph or a few bullets, roughly 60 to \
@@ -682,8 +684,8 @@ event volatility; a day-trading question on fresh data (say the quote's time), l
 and intraday conditions; a swing question on price structure together with the events inside the \
 window, the market backdrop and the level that invalidates it. Do not answer a question about a \
 business or the economy from chart indicators.
-- **Lead with the assessment.** Open with a clear answer in a sentence or two. Then the strongest \
-evidence for it, then the strongest evidence against it, then what would change the view. Depth \
+- **Lead with the assessment.** The order under How to answer holds at every level and length: the \
+answer, the strongest evidence for it, the strongest against it, what would change the view. Depth \
 adapts to the reader; the standards do not.
 - **Five judgments, kept apart.** Business quality, valuation, a swing setup, earnings expectations and \
 event risk are different questions with different evidence. Answer the one asked; when a question spans \
@@ -968,8 +970,7 @@ invalidate the current read.
 Write it the way a good newsletter reads. Open with a hook or the finding itself, never a summary of \
 what is coming. Short section headings in sentence case, connected prose underneath, and real \
 explanation where the story is counterintuitive. If the market rallied on bad news, the paragraph \
-reconciling that is the whole point of the piece. Translate jargon in line as you use it. Ellipses are \
-fine as a pacing device...sparingly. Tickers as $NVDA. Do not number the sections, do not nest lettered \
+reconciling that is the whole point of the piece. Translate jargon in line as you use it. Tickers as $NVDA. Do not number the sections, do not nest lettered \
 sub-points, and do not reduce an argument to a stack of fragments. Lists are for genuinely parallel \
 items such as dated catalysts or earnings by day.
 
@@ -1031,13 +1032,15 @@ def _ask(client: Any, feature: str, **kwargs: Any) -> Any:
     """`client.messages.create(**kwargs)`, recorded in the ledger under `feature`.
 
     Every writer passes through here, so this is where the advice policy is
-    enforced for all of them (app/ai_policy.py): its rules ride on the system
+    enforced for all of them (app/ai_policy.py), and where the house writing
+    rules join every system prompt (app/editorial.py): the policy's rules ride on the system
     prompt, and every sentence of the reply that breaks them is removed before
     the writer's own parser reads it. A removal is logged and noted on the
     ledger row, never hidden."""
     _LAST_CALL.id = None
     _LAST_CALL.removed = 0
-    kwargs["system"] = ai_policy.with_policy(kwargs.get("system") or [])
+    # The house writing rules, then the policy, so the policy reads last and outranks them (app/editorial.py)
+    kwargs["system"] = ai_policy.with_policy(editorial.with_rules(kwargs.get("system") or []))
     try:
         msg = client.messages.create(**kwargs)
     except Exception as exc:
@@ -2616,11 +2619,8 @@ out at the start of the week and frames it: what the data said, what is due, who
 and where the index stands.
 
 Voice: a market newsletter someone reads because they enjoy it. Conversational and \
-opinionated about the data. Open with a hook, not a summary. "Woohoo! The U.S. labor \
-market isn't doing well. Wait, what?" is the register: a genuine reaction, then the \
-explanation. Ellipses are fine as a pacing device. Rhetorical questions are fine when you \
-answer them. Emphatic capitals for the single conditional the week hinges on, used ONCE. \
-Write tickers as $NVDA. Real paragraphs of varied length.
+opinionated about the data. Open with the most surprising thing the week's figures show, \
+then explain it. A rhetorical question only when the next sentence answers it. Write tickers as $NVDA. Real paragraphs of varied length.
 
 Structure it under these exact "## " headings, skipping any the data cannot support:
 - "## What happened". The releases that actually printed, with their numbers, and why the \
@@ -3075,8 +3075,8 @@ reads it in two minutes before the open.
 
 Voice: a person talking, not a report generating. Lead with what actually happened and \
 why it matters, in that order. Connect the dots. A soft inflation print plus cooling \
-employment is a Fed story, and saying so is the whole point of the note. Occasional \
-ellipses for pacing are fine. Plain words over desk jargon.
+employment is a Fed story, and saying so is the whole point of the note. Plain words \
+over desk jargon.
 
 Structure it in short paragraphs under a few plain headings, in this order:
 - What happened, and what it means. The one or two things that actually set the tone.
@@ -3694,8 +3694,8 @@ def build_chat_request(
         # worded, the horizon which figures matter, the lens how much doubt
         # they carry; the more specific instruction reads last.
         "system": [
-            {"type": "text", "text": SYSTEM_PROMPT + FORMAT_PROMPT + "\n\n" + ai_policy.POLICY_TEXT,
-             "cache_control": {"type": "ephemeral"}},
+            {"type": "text", "text": SYSTEM_PROMPT + FORMAT_PROMPT + "\n\n" + editorial.WRITING_RULES
+             + "\n\n" + ai_policy.POLICY_TEXT, "cache_control": {"type": "ephemeral"}},
             {"type": "text", "text": level_prompt},
         ] + ([{"type": "text", "text": horizon_prompt}] if horizon_prompt else [])
           + ([{"type": "text", "text": framework_prompt}] if framework_prompt else [])
@@ -4060,7 +4060,7 @@ async def deep_research(
             model=PULSE_MODEL,
             max_tokens=12000,
             system=[
-                {"type": "text", "text": RESEARCH_PROMPT + "\n\n" + ai_policy.POLICY_TEXT,
+                {"type": "text", "text": RESEARCH_PROMPT + "\n\n" + editorial.WRITING_RULES + "\n\n" + ai_policy.POLICY_TEXT,
                  "cache_control": {"type": "ephemeral"}},
                 # the reader's knowledge level, after the cached prefix as in chat (Phase 05)
                 {"type": "text", "text": knowledge.prompt_for(mode)},

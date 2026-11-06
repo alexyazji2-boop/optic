@@ -182,8 +182,9 @@ def test_a_flat_dollar_is_not_a_direction():
     said that it was."""
     tape = {"ten_year": {"chg_1d": -0.9}, "dollar": {"chg_1d": 0.02}}
     out = md._overall(tape, {"available": False}, [])
-    assert "do not tell a clear story" in out
+    assert "so together they give no clear signal" in out
     assert "where they think interest rates are headed" not in out
+    assert "barely moved" not in out, "the move words already say which one is flat (Phase 12)"
 
 
 def test_yields_and_the_dollar_moving_together_is_named():
@@ -196,8 +197,9 @@ def test_a_quiet_day_says_levels_rather_than_narrative():
     out = md._overall({}, {"available": False}, [])
     # Levels over narrative, in words: it was "the moves here are flow. That
     # makes levels worth more than narrative today."
-    assert "no big news" in out
-    assert "where prices actually end up matters more than any explanation" in out
+    assert "no big report" in out
+    assert "where prices close says more than any move during the day" in out
+    assert "shuffling their bets" not in out, "a platitude, removed in the Phase 12 editorial pass"
 
 
 def test_a_day_with_releases_warns_off_the_first_reaction():

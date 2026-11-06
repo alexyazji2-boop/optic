@@ -25,7 +25,8 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 from unittest import mock
 
-PRICE_IN, PRICE_OUT, PRICE_CACHED, PRICE_CACHE_WRITE = 2.0, 10.0, 0.2, 2.5     # per million tokens
+# the fallback when a model is not in the ledger's table; the cache read matches it, $0.10 since BUG-180
+PRICE_IN, PRICE_OUT, PRICE_CACHED, PRICE_CACHE_WRITE = 2.0, 10.0, 0.1, 2.5     # per million tokens
 
 
 def _app_key() -> None:
@@ -54,20 +55,30 @@ def key_status() -> Dict[str, Any]:
         return {"usable": False, "reason": "{} {}".format(type(exc).__name__, getattr(exc, "status_code", "") or "").strip()}
 
 
-def cost(usage: Dict[str, int]) -> float:
+def cost(usage: Dict[str, int], model: Optional[str] = None) -> float:
+    """List price of one answer's usage: the ledger's own table for the model asked (app/ai_store.py PRICES), else
+    the chat model's prices above."""
+    if model:
+        from app import ai_store
+        got = ai_store.cost(model, usage.get("input_tokens", 0), usage.get("output_tokens", 0),
+                            usage.get("cache_read_input_tokens", 0), usage.get("cache_creation_input_tokens", 0))
+        if got is not None:
+            return got
     return (usage.get("input_tokens", 0) * PRICE_IN + usage.get("output_tokens", 0) * PRICE_OUT
             + usage.get("cache_read_input_tokens", 0) * PRICE_CACHED) / 1e6
 
 
-async def answer(case: Dict[str, Any], client: Any) -> Dict[str, Any]:
-    """One case's answer from `client` (the real AsyncAnthropic, or a stand-in in tests)."""
+async def answer(case: Dict[str, Any], client: Any, model: Optional[str] = None) -> Dict[str, Any]:
+    """One case's answer from `client` (the real AsyncAnthropic, or a stand-in in tests), on `model` when one is named
+    (Phase 12, directive 14 Part 4.6: another model on the same cases, the production default untouched)."""
     from app import ai
     from tests.milo_eval import harness
     got = harness.assemble(case)
     messages = list(case.get("history") or []) + [{"role": "user", "content": case["question"]}]
     text, first, usage, retrieved = [], None, {}, []
     t0 = time.perf_counter()
-    with harness.world(case.get("user"), case.get("world")) as m, mock.patch.object(ai, "_client", lambda: client):
+    with harness.world(case.get("user"), case.get("world")) as m, mock.patch.object(ai, "_client", lambda: client), \
+            mock.patch.object(ai, "PULSE_MODEL", model or ai.PULSE_MODEL):
         box = m._milo_toolbox(__import__("types").SimpleNamespace(), got["context"])
         async for chunk in ai.stream_chat(messages, context=got["context"], use_web=bool(case.get("web")), toolbox=box,
                                           mode=case.get("mode") or "intermediate"):
@@ -82,7 +93,8 @@ async def answer(case: Dict[str, Any], client: Any) -> Dict[str, Any]:
                 text.append("[ERROR] " + str(data.get("message")))
         tool_results = [json.loads(c) for c, _ in box._memo.values()]
     return {"answer": "".join(text), "first_text_s": first, "total_s": time.perf_counter() - t0, "usage": usage,
-            "cost": cost(usage), "retrieved": retrieved, "context": got["context"], "tool_results": tool_results}
+            "cost": cost(usage, model or ai.PULSE_MODEL), "retrieved": retrieved, "context": got["context"],
+            "tool_results": tool_results, "tools_called": [r.get("tool") or r.get("name") for r in retrieved]}
 
 
 def evaluate(case: Dict[str, Any], res: Dict[str, Any]) -> list:
@@ -98,6 +110,9 @@ def main(argv=None, client: Optional[Any] = None):
     ap.add_argument("--max-dollars", type=float, required=True)
     ap.add_argument("--only")
     ap.add_argument("--out", default="milo-eval-answers")
+    ap.add_argument("--model", help="an Anthropic model id to answer with instead of ai.PULSE_MODEL (nothing in the app changes)")
+    ap.add_argument("--suite", help="only the cases of one of the directive's suites (cases.SUITES)")
+    ap.add_argument("--trials", type=int, default=1, help="answers per case, for the spread of a nondeterministic model")
     a = ap.parse_args(argv)
     out = Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
@@ -109,19 +124,27 @@ def main(argv=None, client: Optional[Any] = None):
             return 2
         from anthropic import AsyncAnthropic
         client = AsyncAnthropic(max_retries=2)
-    from tests.milo_eval.cases import CASES
+    from app import ai
+    from tests.milo_eval.cases import CASES, BENCH_VERSION
     spent, rows = 0.0, []
     for case in CASES:
         if a.only and not case["id"].startswith(a.only):
             continue
-        if spent >= a.max_dollars:
-            rows.append({"id": case["id"], "skipped": "spend cap reached"})
+        if a.suite and case.get("suite") != a.suite:
             continue
-        res = asyncio.run(answer(case, client))
-        spent += res["cost"]
-        rows.append({"id": case["id"], "category": case["category"], "answer": res["answer"], "first_text_s": res["first_text_s"],
-                     "total_s": res["total_s"], "usage": res["usage"], "cost": res["cost"], "checks": evaluate(case, res)})
-    (out / "answers.json").write_text(json.dumps({"spent": spent, "rows": rows}, indent=1, default=str))
+        for trial in range(max(1, a.trials)):
+            if spent >= a.max_dollars:
+                rows.append({"id": case["id"], "trial": trial, "skipped": "spend cap reached"})
+                continue
+            res = asyncio.run(answer(case, client, a.model))
+            spent += res["cost"]
+            rows.append({"id": case["id"], "trial": trial, "category": case["category"], "suite": case.get("suite"),
+                         "risk": case.get("risk"), "answer": res["answer"], "first_text_s": res["first_text_s"],
+                         "total_s": res["total_s"], "usage": res["usage"], "cost": res["cost"],
+                         "tools_called": res["tools_called"], "checks": evaluate(case, res)})
+    meta = {"benchmark": BENCH_VERSION, "model": a.model or ai.PULSE_MODEL, "trials": a.trials,
+            "run_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
+    (out / "answers.json").write_text(json.dumps({"meta": meta, "spent": spent, "rows": rows}, indent=1, default=str))
     print("answers: {}  spent: ${:.2f}".format(sum(1 for r in rows if "answer" in r), spent))
     return 0
 

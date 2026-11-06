@@ -239,7 +239,8 @@ const setPref = (k, v) => { try { localStorage.setItem(k, v); } catch (e) { /* p
 // the title, the large one only above a new conversation's question). Without the script the panel reads the
 // same, without him.
 const OS = () => window.OpticScout || null;
-const CAN_ASK = 'Ask me anything: about the company or the page you have open, about the market as a whole, or about how Optic works something out. I read Optic\'s own figures for what is on your screen, and look up more of Optic\'s data when a question needs it.';
+// Phase 12 editorial pass: five commas and "how Optic works something out" became two plain sentences
+const CAN_ASK = 'Ask about the company or page you have open, the market as a whole, or how Optic calculates a figure. I start from the figures on your screen and look up more of Optic\'s data when a question needs it.';
 // the classic panel's starters, word for word; the ones about a symbol only when one is on screen
 const EXAMPLES = [
   ['ticker', 'Walk me through the composite score on {T}. Which inputs are carrying it, and where do they disagree?'],
