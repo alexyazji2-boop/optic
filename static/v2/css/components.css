@@ -1226,7 +1226,7 @@ html.eff-1100 .answers { grid-template-columns: 1fr 1fr; } html.eff-1100 .answer
    header, so the conversation below never jumps. */
 .milo-panel .drawer-head { position: relative; justify-content: center; padding: 8px 16px 8px; }
 .milo-panel .drawer-acts { position: absolute; top: 8px; right: 8px; }
-.milo-co { display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 0; padding: 0 92px; }
+.milo-co { display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 0; padding: 0 136px; }
 .milo-co-stage { display: grid; place-items: center; width: 88px; height: 116px; }
 .milo-co-stage .scout-full { width: 88px; }
 .milo-co-stage .scout-btn { display: block; border: 0; background: none; padding: 0; cursor: pointer; border-radius: var(--r-md); }
@@ -1250,8 +1250,9 @@ html.eff-1100 .answers { grid-template-columns: 1fr 1fr; } html.eff-1100 .answer
 @media (max-height: 720px), (max-width: 480px) {
   .milo-panel .drawer-head { padding: 8px 12px; }
   /* The controls sit at the right, so the compact row clears them rather than centring under them: on a
-     375 px screen a centred row ran 10 px under the close button (measured 2026-11-03). */
-  .milo-co { flex-direction: row; align-items: center; gap: 10px; padding: 0 104px 0 4px; max-width: 100%; }
+     375 px screen a centred row ran 10 px under the close button (measured 2026-11-03). Save conversation
+     (Handoff 5) made the controls four buttons, 182 px, so the clearance grew by one button (44 px). */
+  .milo-co { flex-direction: row; align-items: center; gap: 10px; padding: 0 148px 0 4px; max-width: 100%; }
   .milo-co-say { min-width: 0; max-width: 100%; }
   .milo-co-name, .milo-co-status > b { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .milo-co-stage { width: 58px; height: 77px; }

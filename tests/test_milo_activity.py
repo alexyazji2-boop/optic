@@ -231,7 +231,7 @@ def test_the_stage_reserves_its_space_so_the_conversation_never_jumps():
     assert ".milo-co-stage .scout-full { width: 88px; }" in CSS
     # and the compact arrangements the brief asks for
     assert "@media (max-height: 720px), (max-width: 480px)" in CSS
-    assert "padding: 0 104px 0 4px" in CSS, "the compact row clears the panel controls"
+    assert "padding: 0 148px 0 4px" in CSS, "the compact row clears the panel controls (four buttons since Save conversation)"
     assert ".milo-co-stage { width: 58px; height: 77px; }" in CSS
     assert ".milo-co-stage { width: 48px; height: 63px; }" in CSS
 
