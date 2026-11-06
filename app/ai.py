@@ -1595,7 +1595,10 @@ _ORDER_BASE = [
     # It was in no order, so a crowded budget dropped it first (post-demo Phase 08, from the tool audit).
     "question_named",
     "portfolio_summary", "reader_holdings", "auto_loaded", "auto_loaded_note", "auto_load_skipped", "screen_candidates",
-    "desk_section", "research", "framework", "market", "compare", "ticker", "quote", "chart_levels", "pulse", "verdict", "track_record", "cases", "why", "digest",
+    "desk_section", "research", "framework", "market", "compare", "ticker", "quote",
+    # the figure registry's values for the company on screen (app/figures, Handoff 1): small, and the one copy of
+    # each financial figure the page prints, so it sits beside the quote rather than where a full budget drops it
+    "figures", "chart_levels", "pulse", "verdict", "track_record", "cases", "why", "digest",
     "whats_next", "next_earnings_date", "options_research", "vol_surface", "iv_rank", "iv_hv", "rate",
     "reader_watchlist", "active_view", "chart", "technicals",
     "company", "long_term", "valuation", "earnings", "news", "macro", "sector_confirm", "earnings_momentum",

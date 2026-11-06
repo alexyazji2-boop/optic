@@ -19,6 +19,7 @@ from __future__ import annotations
 from statistics import mean, median
 from typing import Any, Dict, List, Optional, Tuple
 
+from .. import figures as figures_mod
 from . import policy as policy_mod
 from . import words
 
@@ -437,7 +438,8 @@ def health_component(hist: List[Dict[str, Any]], balance: Dict[str, Any], kind: 
         return _component("health", label, "insufficient",
                           reason="Needs operating income and a cash balance from the filings.")
     ebitda = ebit + (da or 0.0)
-    net_debt = debt - cash
+    # the figure registry's net debt (app/figures), one function for this check and every page that prints it
+    net_debt = figures_mod.net_debt_value(balance)
     lev = (net_debt / ebitda) if ebitda > 0 else None
     cov = (ebit / interest) if interest and interest > 0 else None
     ca, cl = _v(balance.get("assets_current")), _v(balance.get("liabilities_current"))

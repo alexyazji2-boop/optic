@@ -33,6 +33,8 @@ import { valuationWord } from '../core/research-words.js';
 import { resolve } from '../core/resolve.js';
 import { poll } from '../core/poll.js';
 import { scoreLine, signedLine, toneSign, toneBand } from '../ui/score.js';
+import * as FIG from '../core/figures.js';
+import { fig } from '../ui/figure.js';
 
 const KEY = 'optic.v2.workspace.v1';
 const VERSION = 5;   // 5: each layout knows whether the reader changed it, panel settings are kept, and any older version carries over (2026-10-20)
@@ -695,7 +697,7 @@ export const PANELS = {
       const row = (label, key) => html`<tr><th scope="row">${label}</th>${yrs.map((_, i) => html`<td class="n">${isNum((a[key] || [])[i]) ? compact(a[key][i]) : 'n/a'}</td>`)}</tr>`;
       return html`<table class="ws-t"><caption class="sr">${link} annual figures</caption><thead><tr><th scope="col">Fiscal year</th>${yrs.map((y) => html`<th scope="col" class="n">${String(y).slice(0, 4)}</th>`)}</tr></thead>
         <tbody>${row('Revenue', 'revenue')}${row('Net income', 'net_income')}${row('Free cash flow', 'free_cash_flow')}</tbody></table>
-        <p class="ws-read">Operating margin ${num(m.operating_pct, 1)}%, net margin ${num(m.net_pct, 1)}%. Revenue ${signed(g.revenue_yoy_pct, 1)} on the year.</p>
+        <p class="ws-read">Operating margin ${num(m.operating_pct, 1)}%${FIG.ok(FIG.of(t, 'net_margin_fy')) ? html`, net margin ${fig(FIG.of(t, 'net_margin_fy'), { sym: link })} (${FIG.period(FIG.of(t, 'net_margin_fy')).replace(/^Fiscal/, 'fiscal')})` : ''}. Revenue ${signed(g.revenue_yoy_pct, 1)} on the year.</p>
         <p><a class="textlink" href="#/${enc(link)}/financials">${link} financials in full ${icon('arrow')}</a></p>`;
     },
     foot: (t) => ({ source: 'Company statements via Yahoo Finance', at: (t || {}).generated_at }),

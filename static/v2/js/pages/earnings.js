@@ -21,6 +21,7 @@ import { button as miloButton, provideContext } from '../ui/milo.js';
 import { core, header, tabs, isFund, livePrice } from './dossier-frame.js';
 import { etStamp, sessionWord } from '../core/marketTime.js';
 import { historyRatio } from './dossier.js';
+import * as FIG from '../core/figures.js';
 
 // The brief's stance in words that describe the evidence rather than call the stock (advice policy, 2026-10-29).
 const STANCE_WORDS = { 'leaning bullish': 'The evidence leans positive', 'leaning bearish': 'The evidence leans negative', 'two-sided': 'The evidence is two-sided' };
@@ -234,7 +235,7 @@ export async function render(main, route) {
   document.title = `${sym} Earnings, Optic`;
   if (lp) lp.stop();
   lp = livePrice(main, route.symbol, () => D, 'earnings', undefined);
-  provideContext(() => ({ view: 'earnings', ticker: sym, quote: D.quote, earnings: D.e }));
+  provideContext(() => ({ view: 'earnings', ticker: sym, quote: FIG.quoteForMilo(D.quote), earnings: D.e }));
   paint();
   // the strip, folds and Panels (Classic parity B3); the implied move opens from Advanced, as Classic's event pricing did
   sections(main, 'earnings', { levels: { 'what options price for the report': 2 }, norm: (t) => { const n = ((main.querySelector('.dhead .name span') || {}).textContent || '').trim(); return n ? t.split(n).join('the company') : t; } });

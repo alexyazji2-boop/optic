@@ -26,6 +26,8 @@ import { icon } from '../ui/icons.js';
 import { button as miloButton } from '../ui/milo.js';
 import { toast } from '../ui/toast.js';
 import * as TR from '../core/track.js';
+import * as FIG from '../core/figures.js';
+import { fig } from '../ui/figure.js';
 
 /* The classic marks, drawn to the rail's recipe: a 24-unit box, no fill, a 1.8 stroke, round caps. */
 export const WIDGETS = [
@@ -186,7 +188,9 @@ const BODY = {
     const t = p.t, q = t.quote || {}, rows = [];
     if (isNum(q.analyst_target)) rows.push(['Mean target', money(q.analyst_target)]);
     if (q.recommendation) rows.push(['Consensus', capFirst(String(q.recommendation).replace(/_/g, ' '))]);   // "strong_buy" is a machine token
-    if (isNum(q.forward_pe)) rows.push(['Forward P/E', num(q.forward_pe, 1)]);
+    // the figure registry's forward P/E (Handoff 1): the Dossier's own text, opening its definition
+    const fpe = FIG.of(t, 'forward_pe');
+    if (FIG.ok(fpe)) rows.push(['Forward P/E', fig(fpe, { sym: C.sym() })]);
     if (isNum(q.peg_ratio)) rows.push(['PEG', num(q.peg_ratio, 2)]);
     if (isNum(q.revenue_growth)) rows.push(['Revenue growth', signed(q.revenue_growth * 100, 1)]);
     const em = t.earnings_momentum || {};
@@ -259,7 +263,8 @@ const BODY = {
     if (isNum(g.revenue_yoy_pct)) rows.push(['Revenue growth, year on year', signed(g.revenue_yoy_pct, 1)]);
     if (isNum(m.gross_pct)) rows.push(['Gross margin', `${num(m.gross_pct, 1)}%`]);
     if (isNum(q.trailing_pe) && q.trailing_pe > 0) rows.push(['P/E (trailing)', num(q.trailing_pe, 1)]);
-    if (isNum(q.forward_pe) && q.forward_pe > 0) rows.push(['P/E (forward)', num(q.forward_pe, 1)]);
+    const fpe = FIG.of(t, 'forward_pe');
+    if (FIG.ok(fpe)) rows.push(['P/E (forward)', fig(fpe, { sym })]);
     if (isNum(eh.beat_rate_pct)) rows.push(['EPS beat rate', `${num(eh.beat_rate_pct, 0)}%${eh.sample_size ? ` of ${num(eh.sample_size, 0)} quarters` : ''}`]);
     const f = ((t.filings || {}).filings || []).slice(0, 5);
     if (!rows.length && !f.length) return none('No filings or financials.');

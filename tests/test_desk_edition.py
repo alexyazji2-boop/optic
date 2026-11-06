@@ -397,8 +397,9 @@ class _Fin:
                 "balance_annual": rows(**{"Total Debt": [15.3e9, 13.4e9], "Cash And Cash Equivalents": [9.6e9, 8.1e9]})}
 
     def quote(self, t):
+        # the forward EPS the quote carries: the pack's forward P/E is the figure registry's, price over it (Handoff 1)
         return {"price": 100.0, "sector": self.sector, "industry": self.industry, "trailing_pe": 13.2,
-                "forward_pe": 8.1, "market_cap": 1.1e11, "as_of": "2026-10-13T20:00:00+00:00"}
+                "forward_pe": 8.1, "forward_eps": 100.0 / 8.1, "market_cap": 1.1e11, "as_of": "2026-10-13T20:00:00+00:00"}
 
 
 def test_a_long_term_pack_measures_capex_against_free_cash_flow():
@@ -408,7 +409,7 @@ def test_a_long_term_pack_measures_capex_against_free_cash_flow():
     assert got["Capex growth"] == pytest.approx(89.3, abs=0.1)
     assert got["Free cash flow as a share of net income"] == pytest.approx(20, abs=1)
     assert got["Change in diluted share count"] == pytest.approx(0.89, abs=0.01)
-    assert got["Forward P/E"] == 8.1
+    assert got["Forward P/E"] == "8.1", "the registry's text, as the Dossier prints it"
     assert all(i.get("source") and i.get("period") for i in p["items"] if i.get("value") is not None)
     assert any("multiple alone" in n for n in p["not_available"])
 

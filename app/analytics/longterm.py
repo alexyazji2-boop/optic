@@ -17,6 +17,7 @@ from typing import Any, Dict, List, Optional
 import numpy as np
 import pandas as pd
 
+from .. import figures as figures_mod
 from .. import news as news_mod
 
 from .series_stats import _f
@@ -224,29 +225,36 @@ def _long_trend(weekly: pd.DataFrame) -> Dict[str, Any]:
     }
 
 
-def _valuation_read(quote: Dict[str, Any]) -> Dict[str, Any]:
+def _valuation_read(quote: Dict[str, Any], figs: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """Plain-language valuation read. Deliberately conservative: absolute
     multiples are only a rough guide without sector context, and this says so
-    rather than pretending to a precise fair value."""
+    rather than pretending to a precise fair value.
+
+    The forward P/E and the net margin are the figure registry's (app/figures), passed in as `figs`, so the
+    numbers this read prints are the ones the Dossier and Compare print. The margin was Yahoo's own twelve-month
+    figure, printed as "Net margin 27.6%" with no period beside a fiscal-year 26.9% (owner's Handoff 1)."""
     flags: List[str] = []
-    fwd = quote.get("forward_pe")
+    figs = figs or {}
+    fpe = figs.get("forward_pe") or figures_mod.forward_pe(quote)
+    fwd = fpe.get("value")
     trailing = quote.get("trailing_pe")
     pb = quote.get("price_to_book")
     peg = quote.get("peg_ratio")
-    margin = quote.get("profit_margin")
+    nm = figs.get("net_margin_ttm") or {}
+    margin = nm["value"] / 100.0 if nm.get("value") is not None else None
     rev_growth = quote.get("revenue_growth")
 
-    if fwd is not None:
-        if fwd < 0:
-            flags.append("Negative forward earnings. Unprofitable on consensus estimates.")
-        elif fwd < 15:
-            flags.append("Forward P/E {:.1f}. Cheap on an absolute basis.".format(fwd))
+    if fpe.get("status") == "not_meaningful":
+        flags.append("Negative forward earnings. Unprofitable on consensus estimates.")
+    elif fwd is not None:
+        if fwd < 15:
+            flags.append("Forward P/E {}. Cheap on an absolute basis.".format(fpe["text"]))
         elif fwd < 25:
-            flags.append("Forward P/E {:.1f}. Reasonable.".format(fwd))
+            flags.append("Forward P/E {}. Reasonable.".format(fpe["text"]))
         elif fwd < 40:
-            flags.append("Forward P/E {:.1f}. Priced for growth; execution risk is real.".format(fwd))
+            flags.append("Forward P/E {}. Priced for growth; execution risk is real.".format(fpe["text"]))
         else:
-            flags.append("Forward P/E {:.1f}. Expensive; leaves no room for disappointment.".format(fwd))
+            flags.append("Forward P/E {}. Expensive; leaves no room for disappointment.".format(fpe["text"]))
 
     if trailing is not None and fwd is not None and trailing > 0 and fwd > 0:
         if fwd < trailing * 0.85:
@@ -266,7 +274,9 @@ def _valuation_read(quote: Dict[str, Any]) -> Dict[str, Any]:
             flags.append("Price/book {:.1f}. Valuation rests entirely on future earnings.".format(pb))
 
     if margin is not None:
-        flags.append("Net margin {:.1f}%.".format(margin * 100))
+        label = (nm.get("period") or {}).get("label")
+        flags.append("Net margin {}, over the {}.".format(nm["text"], label) if label
+                     else "Net margin {}.".format(nm["text"]))
     if rev_growth is not None:
         flags.append("Revenue growth {:.1f}% y/y.".format(rev_growth * 100))
 
@@ -285,6 +295,8 @@ def _valuation_read(quote: Dict[str, Any]) -> Dict[str, Any]:
         "market_cap": quote.get("market_cap"),
         "notes": flags,
         "caveat": "Absolute multiples mean little without sector comparables. Treat as a screen, not a verdict.",
+        # the registry's own values, for a page or a tool that prints them with their period and source
+        "figures": {k: v for k, v in (("forward_pe", fpe), ("net_margin_ttm", figs.get("net_margin_ttm"))) if v},
     }
 
 
@@ -429,7 +441,12 @@ def analyse_holding(provider, ticker: str,
 
     drawdown = _drawdown_profile(close)
     risk = _risk_stats(close, bench["Close"].dropna() if bench is not None and not bench.empty else None)
-    valuation = _valuation_read(quote)
+    try:
+        figs = figures_mod.for_ticker(provider, ticker, quote=quote).get("figures") or {}
+    except Exception as exc:                                       # noqa: BLE001 - the read survives without them
+        log.info("long-term: figures unavailable for %s: %s", ticker, exc)
+        figs = {}
+    valuation = _valuation_read(quote, figs)
     zones = _accumulation_zones(close, trend)
     quality = _data_quality(close)
 

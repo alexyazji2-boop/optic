@@ -6,11 +6,25 @@ a failed save, Delete and Undo, Milo's drafted question) were driven in headless
 docs/frontend-v2/CLASSIC-PARITY.md, B6a.
 """
 from tests.test_frontend_v2_stage0 import V2, _run
+import json
+
+from app import figures as figures_mod
 
 JS = V2 / "js"
+def _registry(net=None, *, net_debt=None, fwd=None, price=100.0, fy_end="2025-12-31"):
+    """The figure registry's block for a fixture (app/figures, Handoff 1), built by the server's own resolver from
+    statements shaped like the provider's: the Overview prints the registry's figures and nothing else."""
+    bs = {} if net_debt is None else ({"total_debt": net_debt, "cash_and_short_term": 0.0} if net_debt >= 0
+                                      else {"total_debt": 0.0, "cash_and_short_term": -net_debt})
+    fin = {"available": True, "annual_periods": [fy_end], "annual": {"revenue": [100.0], "net_income": [net]},
+           "quarterly": {}, "balance_sheet": bs}
+    quote = {"price": price, "forward_eps": (price / fwd) if fwd else None, "quote_type": "EQUITY", "currency": "USD"}
+    return figures_mod.resolve("TEST", quote, sec=(None, None, "a test fixture"), financials=fin)
+
+
 THESIS = (JS / "pages/thesis.js").read_text()
 CLASSIC = (V2.parent / "app.js").read_text()
-D = """{ quote: { price: 250, revenue_growth: -0.02, profit_margin: 0.2 }, technicals: { bias: 'bullish', rsi: { value: 61 }, moving_averages: { sma200: { value: 240 } } },
+D = """{ figures: """ + json.dumps(_registry(21.5, price=250)) + """, quote: { price: 250, revenue_growth: -0.02, profit_margin: 0.2 }, technicals: { bias: 'bullish', rsi: { value: 61 }, moving_averages: { sma200: { value: 240 } } },
   company: { financials: { margins: { net_pct: 21.5 } }, earnings_history: { quarters: [{ date: '2026-07-30', surprise_pct: -1.5 }], upcoming: [{ date: '2026-11-02' }] } },
   sector_confirm: { available: true, rs_vs_sector_label: 'Lagging its sector', window_sessions: 21, rs_vs_sector_pct: -3.2 },
   pulse: { stance: 'bullish', conviction: 'low' }, gex: { regime: { state: 'positive' } }, flow: { stance: 'neutral' } }"""
@@ -105,7 +119,7 @@ def test_the_thesis_section_survives_the_overviews_redraws():
 
 # ---------------------------------------------------------------- the Overview's deeper research (B6a.2 to B6a.6)
 RESEARCH = (JS / "pages/overview-research.js").read_text()
-T = """{ quote: { price: 250, market_cap: 3.7e12, trailing_pe: 30, forward_pe: 0, trailing_eps: 8.3, dividend_yield: 0, volume: 4.1e7, fifty_two_high: 260, fifty_two_low: 180, profit_margin: 0.27, revenue_growth: 0.164, beta: 1.1 },
+T = """{ figures: """ + json.dumps(_registry(26.9, net_debt=6e10, price=250)) + """, quote: { price: 250, market_cap: 3.7e12, trailing_pe: 30, forward_pe: 0, trailing_eps: 8.3, dividend_yield: 0, volume: 4.1e7, fifty_two_high: 260, fifty_two_low: 180, profit_margin: 0.27, revenue_growth: 0.164, beta: 1.1 },
   company: { financials: { available: true, growth: { revenue_yoy_pct: 6.4, net_income_yoy_pct: -3 }, margins: { net_pct: 26.9 }, balance_sheet: { net_cash: -6e10 } },
     earnings_history: { available: true, sample_size: 8, beat_count: 7, upcoming: [{ date: '2026-11-02', timing: 'before_open', eps_estimate: 1.98 }] },
     short_interest: { available: true, percent_of_float: 0.0083, days_to_cover: 2.8, settlement_date: '2026-09-30', squeeze_potential: 'low' }, ownership: { available: true, insider_signal: 'selling' } },

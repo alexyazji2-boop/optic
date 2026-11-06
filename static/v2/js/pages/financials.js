@@ -18,6 +18,8 @@ import { button as miloButton, provideContext } from '../ui/milo.js';
 import { core, header, tabs, isFund, livePrice } from './dossier-frame.js';
 import { kindOf, can, kindWord } from '../core/instrument.js';
 import { icon } from '../ui/icons.js';
+import * as FIG from '../core/figures.js';
+import { fig } from '../ui/figure.js';
 let lp = null;   // the header's price refresh (dossier-frame livePrice), stopped in dispose()
 
 let D = {}, live = true, mainEl = null;
@@ -74,10 +76,17 @@ export function insiderLine(ow) {
   const dirn = (i6.net_shares || 0) > 0 ? 'Net buying' : (i6.net_shares || 0) < 0 ? 'Net selling' : 'Even';
   return `${dirn} on the open market over six months: ${num(i6.purchase_count, 0)} ${i6.purchase_count === 1 ? 'purchase' : 'purchases'} and ${num(i6.sale_count, 0)} ${i6.sale_count === 1 ? 'sale' : 'sales'}, net ${signed(i6.net_shares, 0, '')} shares.${open && i6.other_count ? ` ${i6.other_count} awards, grants and exercises not counted.` : ''}${open ? '' : ' As Yahoo Finance tallies them, awards included.'}`;
 }
+// A registry figure for a reading (Handoff 1): its own text as the control that defines it, and its period, which can
+// be a later year than the statements' when the filings are ahead of the provider (AAPL's 10-K, 2026-11-03).
+const regFig = (id) => { const fv = FIG.of(D.t, id); return fv && fv.status === 'ok' ? fv : null; };
+const regWhen = (fv) => (fv ? FIG.period(fv) : '');
+// the statements' own notes print the provider's net margin and net cash; the registry's are printed instead
+const NET_NOTE = /net margin|net (cash|debt) position/i;
 function readings() {
   const c = (D.t || {}).company || {}, f = c.financials || {}, m = f.margins || {}, g = f.growth || {}, eh = c.earnings_history || {}, si = c.short_interest || {}, ow = c.ownership || {};
-  const items = [];
-  if (f.available) items.push(['Margins', `Gross ${pct(m.gross_pct)}, operating ${pct(m.operating_pct)}, net ${pct(m.net_pct)}.`]);
+  const items = [], nm = regFig('net_margin_fy');
+  if (f.available) items.push(['Margins', `Gross ${pct(m.gross_pct)}, operating ${pct(m.operating_pct)}.`]);
+  if (nm) items.push(['Net margin', html`${fig(nm, { sym: D.sym })}, ${regWhen(nm).replace(/^Fiscal/, 'fiscal')}.`]);
   // a swing to a loss is said as one, with no margin clause: CRCL read "net income -483.83% ... revenue outpaced net
   // income, so the net margin narrowed" for a margin that went from positive to negative (audit 2026-10-22)
   const ni0 = ((f.annual || {}).net_income || [])[0], niGo = isNum(g.net_income_yoy_pct) && isNum(g.revenue_yoy_pct) && isNum(ni0) && ni0 > 0;
@@ -88,15 +97,19 @@ function readings() {
   if (si.available) { const parts = [isNum(si.percent_of_float) ? `${pct(si.percent_of_float * 100)} of float` : 'Share of float not reported', isNum(si.days_to_cover) ? `${num(si.days_to_cover, 1)} days to cover` : '', isNum(si.change_vs_prior_pct) ? `${signed(si.change_vs_prior_pct, 1)} since the last report` : ''].filter(Boolean); items.push(['Short interest', `${parts.join(', ')}.${isNum(si.percent_of_float) && si.squeeze_potential ? ` Squeeze potential ${si.squeeze_potential}.` : ''}`]); }
   if (ow.available) items.push(['Insiders', insiderLine(ow)]);
   if (!items.length && !f.available) return '';
-  const a = f.annual || {}, per = f.annual_periods || [], bs = f.balance_sheet || {};
+  const a = f.annual || {}, per = f.annual_periods || [];
   const yr = (f.annual_fiscal || [])[0] || (per[0] ? String(per[0]).slice(0, 4) : '');
+  // free cash flow, the net margin and net debt are the registry's, each with its own period and source
+  const fcf = regFig('free_cash_flow_fy'), nd = FIG.of(D.t, 'net_debt');
+  const from = (fv) => [regWhen(fv), (fv.source || {}).form ? `from the ${fv.source.form}` : (fv.source || {}).provider ? `from ${fv.source.provider}` : ''].filter(Boolean).join(', ');
   const latest = (k) => (a[k] || [])[0];
   const cells = f.available ? [
     ['Revenue', usd(latest('revenue')), isNum(g.revenue_yoy_pct) ? `${signed(g.revenue_yoy_pct)} on the year before` : noRate(latest('revenue'))],
     ['Net income', usd(latest('net_income')), isNum(g.net_income_yoy_pct) ? (latest('net_income') < 0 ? `swung to a loss from a profit the year before (${signed(g.net_income_yoy_pct, 0)})` : `${signed(g.net_income_yoy_pct)} on the year before`) : noRate(latest('net_income'))],
-    ['Free cash flow', usd(latest('free_cash_flow')), isNum(latest('free_cash_flow')) && latest('revenue') ? `${num((latest('free_cash_flow') / latest('revenue')) * 100, 1)}% of revenue` : ''],
-    ['Operating margin', pct(m.operating_pct), `Gross ${pct(m.gross_pct)}, net ${pct(m.net_pct)}`],
-    [isNum(bs.net_cash) && bs.net_cash < 0 ? 'Net debt' : 'Net cash', usd(isNum(bs.net_cash) ? Math.abs(bs.net_cash) : null), isNum(bs.cash_and_short_term) ? `Cash and short-term investments ${usd(bs.cash_and_short_term)}, debt ${usd(bs.total_debt)}` : `Cash ${usd(bs.cash)}, debt ${usd(bs.total_debt)}`],
+    ['Free cash flow', fcf ? fig(fcf, { sym: D.sym }) : 'n/a', fcf ? from(fcf) : 'Not reported'],
+    ['Operating margin', pct(m.operating_pct), `Gross ${pct(m.gross_pct)}`],
+    ['Net margin', nm ? fig(nm, { sym: D.sym }) : 'n/a', nm ? from(nm) : 'Not reported'],
+    ['Net debt', nd ? fig(nd, { sym: D.sym }) : 'n/a', nd && nd.status === 'ok' ? from(nd) : (nd && nd.why) || 'Not reported'],
   ] : [];
   return html`<section class="section fin-sum" id="fin-summary" aria-labelledby="fr-h"><h2 class="t-h2" id="fr-h">Summary${yr ? `, ${/^FY/.test(yr) ? yr : `fiscal ${yr}`}` : ''}</h2>${per[0] ? html`<p class="section-sub">The fiscal year to ${fullDate(per[0])}.</p>` : ''}
     ${cells.length ? html`<div class="readings fin-figs" style="--rn:${cells.length}">${cells.map(([k, v, d]) => html`<div class="rd"><span class="k">${k}</span><span class="v">${v}</span><span class="d">${d}</span></div>`)}</div>` : ''}
@@ -148,6 +161,7 @@ function statements(sym) {
   const f = ((D.t || {}).company || {}).financials || {};
   if (!f.available) return '';
   const V = periodView(f, period), a = V.vals, per = V.per, bs = f.balance_sheet || {}, m = f.margins || {};
+  const nd = FIG.of(D.t, 'net_debt'), nm = regFig('net_margin_fy');
   const Y = periodView(f, 'year'), ya = Y.vals, ylab = Y.per.map((_, i) => Y.label(i));
   const labels = per.map((_, i) => V.label(i)), C = compare(V);
   const opm = FV.marginSeries(a.operating_income, a.revenue), gpm = FV.marginSeries(a.gross_profit, a.revenue), npm = FV.marginSeries(a.net_income, a.revenue);
@@ -180,8 +194,9 @@ function statements(sym) {
         <tbody>${rows.filter(([, k]) => (a[k] || []).some(isNum)).map(([l, k]) => html`<tr><th scope="row">${l}</th>${per.map((pe, i) => html`<td>${cell(k, (a[k] || [])[i])}</td>`)}</tr>`)}
           ${!V.q && hasBal ? html`<tr><th scope="row">Cash and equivalents</th>${per.map((pe, i) => html`<td>${usd((bh.cash || [])[i])}</td>`)}</tr><tr><th scope="row">Total debt</th>${per.map((pe, i) => html`<td>${usd((bh.total_debt || [])[i])}</td>`)}</tr>` : ''}</tbody></table></div>
       <p class="asof">${clean(f.eps_basis || '')} Earnings uses analysts' basis for EPS, usually adjusted, so the two can differ. Margins are each line over revenue in the same period. ${V.q ? 'Cash flow and the balance sheet are yearly only here.' : ''}</p>
-      <h3>Balance sheet and margins, latest</h3>${kv([['Cash', usd(bs.cash)], ...(isNum(bs.cash_and_short_term) ? [['Cash and short-term investments', usd(bs.cash_and_short_term)]] : []), ['Debt', usd(bs.total_debt)], [isNum(bs.net_cash) && bs.net_cash < 0 ? 'Net debt' : 'Net cash', usd(isNum(bs.net_cash) ? Math.abs(bs.net_cash) : null)], ['Debt to equity', num(bs.debt_to_equity, 2)], ['Gross margin', pct(m.gross_pct)], ['Operating margin', pct(m.operating_pct)], ['EBITDA margin', pct(m.ebitda_pct)], ['Net margin', pct(m.net_pct)]], 4)}
-      <ul class="plain">${(f.notes || []).map((n) => html`<li>${clean(ccy === 'USD' ? n : n.replace(/\$/g, `${ccy} `))}</li>`)}</ul></details></section>`;
+      <h3>Balance sheet and margins, latest</h3>${kv([['Cash', usd(bs.cash)], ...(isNum(bs.cash_and_short_term) ? [['Cash and short-term investments', usd(bs.cash_and_short_term)]] : []), ['Debt', usd(bs.total_debt)], ['Debt to equity', num(bs.debt_to_equity, 2)], ['Gross margin', pct(m.gross_pct)], ['Operating margin', pct(m.operating_pct)], ['EBITDA margin', pct(m.ebitda_pct)]], 4)}
+      ${nd || nm ? html`<p class="asof">${[nd ? html`Net debt ${fig(nd, { sym: D.sym })}, ${regWhen(nd).replace(/^On /, 'on ')}` : '', nm ? html`net margin ${fig(nm, { sym: D.sym })}, ${regWhen(nm).replace(/^Fiscal/, 'fiscal')}` : ''].filter(Boolean).map((x, i) => (i ? html`; ${x}` : x))}: the registry's figures, which can be from a later filing than the columns above.</p>` : ''}
+      <ul class="plain">${(f.notes || []).filter((n) => !NET_NOTE.test(n)).map((n) => html`<li>${clean(ccy === 'USD' ? n : n.replace(/\$/g, `${ccy} `))}</li>`)}</ul></details></section>`;
 }
 function statementCharts() {
   const f = ((D.t || {}).company || {}).financials || {};
@@ -401,7 +416,7 @@ export async function render(main, route) {
   document.title = `${sym} Financials, Optic`;
   if (lp) lp.stop();
   lp = livePrice(main, route.symbol, () => D, 'financials', undefined);
-  provideContext(() => ({ view: 'financials', ticker: sym, quote: D.quote, company: (D.t || {}).company, filings: (D.t || {}).filings, extras: D.x }));
+  provideContext(() => ({ view: 'financials', ticker: sym, quote: FIG.quoteForMilo(D.quote), figures: FIG.forMilo((D.t || {}).figures), company: FIG.companyForMilo((D.t || {}).company), filings: (D.t || {}).filings, extras: D.x }));
   // folds and Panels (Classic parity B3); Financials keeps its own jump strip
   sections(main, 'financials', { strip: false, norm: (t) => t.replace(/,\s*FY\d+$/i, '') });
   if (!main.dataset.finWired) {

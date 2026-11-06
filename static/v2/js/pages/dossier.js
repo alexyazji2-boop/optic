@@ -41,6 +41,7 @@ import * as prefs from '../core/prefs.js';
 import { defineLive } from '../ui/term.js';
 import * as TR from '../core/track.js';
 import { convictionPhrase } from '../core/research-words.js';
+import * as FIG from '../core/figures.js';
 let lp = null;   // the header's price refresh (dossier-frame livePrice), stopped in dispose()
 let unPrefs = null;   // the analysis view's and the knowledge level's subscription, ended in dispose()
 let advMoved = false;   // set when the view was swapped, so the next paint fades the new one in and keeps its place
@@ -437,7 +438,7 @@ export async function render(main, route) {
   D = { sym, visit };
   const mine = () => live && D.visit === visit;
   // data_as_of: when the company data was read, so the server's stale-context line can fire, as Classic's does (Phase 09, B11)
-  provideContext(() => ({ view: 'overview', ticker: sym, data_as_of: (D.ticker || {}).generated_at || null, quote: D.quote, verdict: (D.ticker || {}).verdict, company: (D.ticker || {}).company, news: (D.ticker || {}).news, framework: D.framework, fair_value: D.fairValue, earnings: D.earnings, digest: D.digest, stage: D.stage && D.stage.available ? { stage: D.stage.stage, name: D.stage.name, transition: D.stage.transition_short } : null, thesis_check: thesisContext() }));
+  provideContext(() => ({ view: 'overview', ticker: sym, data_as_of: (D.ticker || {}).generated_at || null, quote: FIG.quoteForMilo(D.quote), figures: FIG.forMilo((D.ticker || {}).figures), verdict: (D.ticker || {}).verdict, company: FIG.companyForMilo((D.ticker || {}).company), news: (D.ticker || {}).news, framework: D.framework, fair_value: D.fairValue, earnings: D.earnings, digest: D.digest, stage: D.stage && D.stage.available ? { stage: D.stage.stage, name: D.stage.name, transition: D.stage.transition_short } : null, thesis_check: thesisContext() }));
   document.title = `${sym} Dossier, Optic`;
   if (lp) lp.stop();
   lp = livePrice(main, route.symbol, () => D, 'overview', { stage: () => stageFor(sym), onQuote: () => { if (mine()) refreshSimple(main, sym); } });

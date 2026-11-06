@@ -38,6 +38,8 @@ from datetime import datetime, timedelta, timezone
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
+from . import figures as figures_mod
+
 # A leading caret is allowed: index symbols (^VIX, ^GSPC) start with one, and the description below offers
 # ^GSPC as an example while the first pattern rejected it (milo-reasoning evaluation, 2026-10-16; milo-upgrade
 # 795a766; post-demo Phase 08).
@@ -449,6 +451,12 @@ def compact_quote(q: Dict[str, Any]) -> Dict[str, Any]:
     # Tradier overlays its price on Yahoo's quote and keeps Yahoo's `trade_time`, which is then the delayed
     # print's time, not this price's; its own `as_of` is the fetch of a real-time quote (app/providers/tradier.py).
     stamp = q.get("as_of") if realtime else (q.get("trade_time") or q.get("as_of") or q.get("market_time"))
+    # The forward P/E is the figure registry's (app/figures), worked from this quote's own price, so Milo quotes
+    # the number the Dossier and Compare print, with its definition one press away under the answer (Handoff 1).
+    fpe = figures_mod.forward_pe(q)
+    body.pop("forward_pe", None)
+    if fpe.get("value") is not None:
+        body["forward_pe"] = fpe["value"]
     out = {"source": "Tradier quote (labelled real-time by the provider)" if realtime else "Yahoo Finance quote (delayed)",
            "as_of": et(stamp), "as_of_utc": stamp,
            "as_of_is": ("when Optic fetched the real-time quote" if realtime else "the trade's time" if q.get("trade_time")
@@ -457,6 +465,7 @@ def compact_quote(q: Dict[str, Any]) -> Dict[str, Any]:
            "currency": q.get("currency")}
     if q.get("delayed_minutes") is not None and not realtime:
         out["delayed_minutes"] = q.get("delayed_minutes")
+    out["figures"] = figures_mod.compact({"ticker": q.get("ticker"), "figures": {"forward_pe": fpe}})
     return {k: v for k, v in out.items() if v is not None}
 
 
@@ -599,6 +608,19 @@ def compact_levels(block: Dict[str, Any], tech: Optional[Dict[str, Any]] = None)
     if block and block.get("chart_tag"):
         out["chart_tag"] = block["chart_tag"]
     return fit(out)
+
+
+def with_figures(result: Dict[str, Any], figs: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    """The figure registry's values beside a tool's own result, inside the same size limit: the result is trimmed
+    to make room, never the figures, which are what an answer about these numbers must quote (Handoff 1)."""
+    if not figs or not isinstance(result, dict):
+        return result
+    room = RESULT_CHARS - len(json.dumps(figs, default=str)) - 40
+    body = dict(result)
+    if len(json.dumps(body, default=str)) > room:
+        body = fit(body, max(2000, room))
+    body["figures"] = figs
+    return body
 
 
 def compact_generic(source: str, payload: Any, as_of: Optional[str] = None) -> Dict[str, Any]:
@@ -764,6 +786,7 @@ class Record:
     as_of: Optional[str] = None
     error: Optional[str] = None
     retrieved_at: Optional[str] = None
+    figures: List[Dict[str, Any]] = field(default_factory=list)
 
     def symbols(self) -> List[str]:
         one = self.args.get("ticker")
@@ -790,9 +813,13 @@ class Record:
         Each record names its instrument, its kind of data, when the data was observed (`as_of`, the
         quote's own time where the result carries one) and when Milo fetched it (`retrieved_at`): an
         NVDA answer asked from AAPL's page was labelled only "About AAPL" (pitch audit, 2026-10-22)."""
-        return {"label": self.label(), "symbols": self.symbols(), "data_type": self.data_type(),
-                "source": self.source, "as_of": self.as_of, "retrieved_at": self.retrieved_at,
-                "ok": self.ok, "status": self.status}
+        out = {"label": self.label(), "symbols": self.symbols(), "data_type": self.data_type(),
+               "source": self.source, "as_of": self.as_of, "retrieved_at": self.retrieved_at,
+               "ok": self.ok, "status": self.status}
+        if self.figures:
+            # the registry figures this lookup returned: each opens its definition under the answer (Handoff 1)
+            out["figures"] = self.figures
+        return out
 
 
 @dataclass
@@ -849,7 +876,7 @@ class Toolbox:
             content = json.dumps(body, default=str)
             rec = Record(name, args, not is_error, status, time.monotonic() - t0,
                          source=(result or {}).get("source") if isinstance(result, dict) else None,
-                         as_of=_as_of(result))
+                         as_of=_as_of(result), figures=_figures_of(result))
         except asyncio.TimeoutError:
             content, is_error = json.dumps({"status": "unavailable", "error": (
                 "The data source did not answer within {:.0f} seconds. Say it could not be retrieved this time; "
@@ -869,6 +896,17 @@ class Toolbox:
 
     def retrieved(self) -> List[Dict[str, Any]]:
         return [r.public() for r in self.records if r.status != "invalid"]
+
+
+def _figures_of(result: Any) -> List[Dict[str, Any]]:
+    """The registry figures in one tool result, as the sources list names them."""
+    figs = result.get("figures") if isinstance(result, dict) else None
+    out = []
+    for item in (figs.values() if isinstance(figs, dict) else []):
+        if isinstance(item, dict) and item.get("figure_id"):
+            out.append({k: item.get(k) for k in ("figure_id", "symbol", "name", "text", "status", "period", "source",
+                                                  "filing", "as_of") if item.get(k) is not None})
+    return out
 
 
 def _as_of(result: Any) -> Optional[str]:

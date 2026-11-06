@@ -82,7 +82,9 @@ def test_the_benchmark_and_a_fund_are_said_as_such():
     lt = _longterm()
     lt["holding"]["fundamentals"]["quote_type"] = "ETF"
     lt["holding"]["valuation"]["forward_pe"] = None
-    snap = lambda sym: dict(_snapshot(), ticker=sym)                          # noqa: E731
+    # a fund's quote carries no forward EPS, so the registry's forward P/E is not reported for it
+    fund_quote = dict(_snapshot()["quote"], forward_eps=None, quote_type="ETF")
+    snap = lambda sym: dict(_snapshot(), ticker=sym, **({"quote": fund_quote} if sym == "SPY" else {}))   # noqa: E731
     out = compare.build(snap, lambda sym: lt if sym == "SPY" else _longterm(), ["SPY", "NVDA"])
     spy = next(r for r in out["rows"] if r["ticker"] == "SPY")
     assert spy["is_benchmark"] and spy["kind"] == "fund"

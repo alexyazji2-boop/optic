@@ -516,6 +516,14 @@ export function aboutLine(info, now = route) {
   const none = data.length ? dataless(info, data).filter((x) => x !== page) : [];   // the page's own data is attached
   return html`<p class="milo-about ${other || unknown.length ? 'is-other' : ''}">${about.length ? `About ${join(about)}` : unknown.length ? `About ${join(unknown)}, a symbol Optic has no data for` : `From ${where}`}${none.length ? ` (no ${join(none)} data came back)` : ''}${also.length ? `; also looked up ${join(also)}` : ''}${ctx ? `; ${ctx}` : ''}${f.captured_at ? `, ${prefs.clock(f.captured_at)}` : ''}${other ? html`. <b>Not about ${now.symbol}, the page now open.</b>` : ''}</p>`;
 }
+// The figure registry's figures a lookup returned (Handoff 1): each as Milo retrieved it, opening the same definition
+// the Dossier opens (ui/figure.js reads the value from the button, so the panel shows what this answer was given)
+function figureList(figs) {
+  const list = (Array.isArray(figs) ? figs : []).filter((x) => x && x.figure_id);
+  if (!list.length) return '';
+  const own = (x) => JSON.stringify({ name: x.name, text: x.text, status: x.status, why: x.why || null, period: { label: x.period || '' }, source: { name: x.source || '', url: x.filing || null }, as_of: x.as_of || null });
+  return html`<ul class="plain milo-figs">${list.map((x) => html`<li>${x.name || ''}${x.symbol ? `, ${x.symbol}` : ''}: <button type="button" class="fig" data-v2-fig="${x.figure_id}" data-v2-fig-sym="${x.symbol || ''}" data-v2-fig-value="${own(x)}" aria-haspopup="dialog" aria-expanded="false" aria-label="${x.name || 'Figure'}: ${x.text || ''}. Show how it is defined">${x.text || ''}</button>${x.period ? html` <small class="t-muted">${x.period}</small>` : ''}</li>`)}</ul>`;
+}
 // Every source behind an answer, one fold away: what it cited, what it read, the data it looked up
 function sourceLists(info) {
   const cites = info.citations || [], read = info.read || [], got = info.retrieved || [], loaded = info.loaded || [];
@@ -524,7 +532,7 @@ function sourceLists(info) {
   return html`<details class="milo-src-all"><summary>Sources (${n})</summary><div class="milo-src-body">
     ${cites.length ? html`<div class="milo-sources"><p class="t-label">Cited</p>${cites.map((c) => (/^https?:\/\//i.test(c.url || '') ? html`<a href="${c.url}" target="_blank" rel="noopener">${c.title || c.url}</a>` : html`<span>${c.title || ''}</span>`))}</div>` : ''}
     ${read.length ? html`<div class="milo-read"><p class="t-label">Sources Milo read (${read.length})</p><ul class="plain">${read.map((r) => html`<li>${r.symbol ? html`<b>${r.symbol}</b> ` : ''}${/^https?:\/\//i.test(r.url || '') ? html`<a href="${r.url}" target="_blank" rel="noopener">${r.source}</a>` : r.source} <small class="t-muted">${[r.what, readWhen(r.period), r.kind === 'headline' ? 'the headline only, not the article' : ''].filter(Boolean).join(', ')}</small></li>`)}</ul></div>` : ''}
-    ${got.length ? html`<div class="milo-read"><p class="t-label">Data Milo retrieved (${got.length})</p><ul class="plain">${got.map((r) => html`<li>${r.label || ''} <small class="t-muted">${[r.source, r.as_of ? `observed ${prefs.clock(r.as_of)}` : '', r.retrieved_at ? `retrieved ${prefs.clock(r.retrieved_at)}` : '', r.ok === false ? 'could not be retrieved' : ''].filter(Boolean).join(', ')}</small></li>`)}</ul></div>` : ''}
+    ${got.length ? html`<div class="milo-read"><p class="t-label">Data Milo retrieved (${got.length})</p><ul class="plain">${got.map((r) => html`<li>${r.label || ''} <small class="t-muted">${[r.source, r.as_of ? `observed ${prefs.clock(r.as_of)}` : '', r.retrieved_at ? `retrieved ${prefs.clock(r.retrieved_at)}` : '', r.ok === false ? 'could not be retrieved' : ''].filter(Boolean).join(', ')}</small>${figureList(r.figures)}</li>`)}</ul></div>` : ''}
     ${loaded.length ? html`<div class="milo-read"><p class="t-label">Loaded because the question named them (${loaded.length})</p><ul class="plain">${loaded.map((r) => html`<li>${r.label || ''} <small class="t-muted">${[r.source, r.as_of ? `quote observed ${prefs.clock(r.as_of)}` : ''].filter(Boolean).join(', ')}</small></li>`)}</ul></div>` : ''}</div></details>`;
 }
 // History takes the conversation's place while it is open; the composer and its draft stay as they are

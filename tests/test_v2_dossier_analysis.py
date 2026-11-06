@@ -12,6 +12,7 @@ import json
 import re
 
 from app import ai_policy
+from app import figures as figures_mod
 from tests.test_frontend_v2_stage0 import V2, _run
 
 JS = V2 / "js"
@@ -44,6 +45,15 @@ def dates(n=300):
     return out
 
 
+def registry(net=55.6, fwd=13.4, price=212.6, fy_end="2026-01-31", statements=True):
+    """The figure registry's block for a fixture (app/figures, Handoff 1), built by the server's own resolver from
+    statements shaped like the provider's: the Simple Analysis prints the registry's figures and nothing else."""
+    fin = {"available": True, "annual_periods": [fy_end], "annual": {"revenue": [100.0], "net_income": [net]},
+           "quarterly": {}, "balance_sheet": {}} if statements else None
+    quote = {"price": price, "forward_eps": (price / fwd) if fwd else None, "quote_type": "EQUITY", "currency": "USD"}
+    return figures_mod.resolve("TEST", quote, sec=(None, None, "a fixture"), financials=fin)
+
+
 def company(**over):
     t = {"quote": {"price": 212.6, "change_pct": -0.8, "trailing_pe": 27.0, "forward_pe": 13.4, "revenue_growth": 1.059, "profit_margin": 0.556,
                    "delayed_minutes": 15, "name": "Test Corporation", "fifty_two_low": 150, "fifty_two_high": 240},
@@ -51,7 +61,8 @@ def company(**over):
                                     "margins": {"gross_pct": 71.07, "operating_pct": 60.38, "net_pct": 55.6},
                                     "annual_periods": ["2026-01-31"], "annual_fiscal": ["FY26"]}},
          "technicals": {"price_series": {"dates": dates(), "close": closes()}},
-         "news": {"earnings_date": "2026-11-17", "days_to_earnings": 19, "article_count": 2, "overall_tone": "neutral"}}
+         "news": {"earnings_date": "2026-11-17", "days_to_earnings": 19, "article_count": 2, "overall_tone": "neutral"},
+         "figures": registry()}
     lt = {"holding": {"valuation_history": {"available": True, "usable_years": 4, "current_pe": 27.0, "median_pe": 36.2, "low_pe": 32.2, "high_pe": 102.8}}}
     earnings = {"implied": {"available": True, "implied_move_pct": 8.52, "expiry": "2026-11-20"}}
     session = {"session": {"is_regular": False}, "profile": {"name": "Test Corporation"}}
@@ -70,7 +81,7 @@ def build(tmp_path, fx, levels=LEVELS):
       const c = OR.context({{ sym: fx.sym, t: fx.t, lt: fx.lt, stars: null, fund: fx.kind === 'fund', advanced: false, phase: '', now }});
       const F = S.simpleFacts({{ sym: fx.sym, kind: fx.kind, t: fx.t, lt: fx.lt, quote: fx.t.quote, session: fx.session, earnings: fx.earnings, price: c.price, f: c.f, today: new Date(now) }});
       const out = {{}};
-      for (const L of {json.dumps(levels)}) out[L] = S.simpleAnalysis(F, L).map(([q, lines]) => [q, lines.join(' ')]);
+      for (const L of {json.dumps(levels)}) out[L] = S.simpleAnalysis(F, L).map(([q, lines]) => [q, lines.map((l) => S.plainText(l, F)).join(' ')]);
       print(JSON.stringify({{ F, out }}));
     """)
 
@@ -97,7 +108,7 @@ def test_the_same_figures_at_every_level(tmp_path):
     # each figure, in the form each level writes it: rounding changes with the level, the figure does not
     want = {
         "new": ["up 6%", "11% below", "down 0.8%", "grew 65%", "56 cents", "$27", "$36", "4 years", "Nov 17, in 19 days", "Jan 31, 2026"],
-        "beginner": ["up 6%", "11% below", "down 0.8%", "65%", "56%", "27.0", "36.2", "Nov 17, in 19 days", "Jan 31, 2026"],
+        "beginner": ["up 6%", "11% below", "down 0.8%", "65%", "55.6%", "27.0", "36.2", "Nov 17, in 19 days", "Jan 31, 2026"],
         "intermediate": ["6.3%", "10.7%", "0.8%", "65.5%", "64.8%", "55.6%", "27.0", "36.2", "25%", "Nov 17, in 19 days", "Jan 31, 2026"],
         "advanced": ["+6.3%", "−10.7%", "−0.80%", "+65.5%", "+64.8%", "55.6%", "27.0", "36.2", "32.2 to 102.8", "−25%", "13.4", "Nov 17 (19 days)", "±8.5%", "Nov 20"],
         "expert": ["+6.3%", "−10.7%", "−0.80%", "+65.5%", "+64.8%", "NM 55.6%", "27.0x", "36.2x", "−25%", "13.4x", "Nov 17, 19d", "±8.5%", "Nov 20"],
@@ -125,6 +136,7 @@ def test_every_level_keeps_the_caveats_and_none_gives_advice(tmp_path):
 def test_a_company_losing_money_says_so_and_invents_no_multiple(tmp_path):
     fx = company(t={"quote": {"price": 11.45, "change_pct": -1.9, "trailing_pe": None, "forward_pe": -6.6, "revenue_growth": 0.272, "profit_margin": -0.55, "delayed_minutes": 15, "name": "Loss Co"}})
     fx["t"]["company"]["financials"].update({"growth": {"revenue_yoy_pct": 8.39, "net_income_yoy_pct": None}, "margins": {"gross_pct": 2.7, "operating_pct": -66.5, "net_pct": -67.7}})
+    fx["t"]["figures"] = registry(net=-67.7, fwd=-6.6, price=11.45)
     fx["lt"] = {"holding": {"valuation_history": {"available": False}}}
     got = build(tmp_path, fx)
     assert "losing money: about 68 cents on every dollar of sales" in text(got["out"]["new"])
@@ -139,6 +151,7 @@ def test_missing_statements_are_said_to_be_missing(tmp_path):
     fx = company()
     fx["t"]["company"]["financials"] = {"available": False}
     fx["t"]["quote"]["profit_margin"] = None
+    fx["t"]["figures"] = registry(statements=False)
     got = build(tmp_path, fx, ["new", "intermediate", "expert"])
     assert "could not read TEST's financial statements" in text(got["out"]["new"]) and "missing information, not a bad result" in text(got["out"]["new"])
     assert "missing data, not a bad result" in text(got["out"]["intermediate"])
@@ -228,3 +241,18 @@ def test_the_simple_analysis_follows_the_headers_price_refresh():
     assert "onQuote: () => { if (mine()) refreshSimple(main, sym); }" in d
     assert "if (prefs.advancedOn() || quoteKey() === D.simpleKey) return;" in d and "sec.replaceWith(tmp.firstElementChild);" in d, \
         "redrawn in place, alone, when the quote it was written from has moved on"
+
+
+def test_a_net_margin_from_a_later_year_says_its_year_at_every_level(tmp_path):
+    """The filings can be a year ahead of the provider's statements for a few days after a 10-K (AAPL's fiscal 2026,
+    2026-11-03): the registry's net margin is then said with its own year, never listed under the statements' year."""
+    fx = company()
+    fx["t"]["figures"] = registry(net=27.6, fy_end="2027-01-31")
+    got = build(tmp_path, fx)
+    for L in LEVELS:
+        t = text(got["out"][L])
+        assert "27.6%" in t and "Jan 31, 2027" in t, (L, t)
+    assert "margins 71.1% gross, 60.4% operating." in text(got["out"]["advanced"])
+    assert "Net margin 27.6% in the fiscal year ended Jan 31, 2027." in text(got["out"]["advanced"])
+    assert "GM 71.1%, OM 60.4%; NM 27.6% (fiscal year ended Jan 31, 2027)" in text(got["out"]["expert"])
+    assert "Its net margin for the fiscal year ended Jan 31, 2027 was 27.6%." in text(got["out"]["intermediate"])

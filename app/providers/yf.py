@@ -1968,6 +1968,13 @@ class YFinanceProvider(MarketDataProvider):
 
         return _cached("actions:" + ticker, 3600, build)
 
+    def sec_filings(self, ticker: str):
+        """The company's own SEC filings (XBRL company facts) for the figure registry (app/figures): (filings, cik,
+        reason when there are none). Here, beside the statements, so the registry reaches EDGAR the way every other
+        source is reached, through the provider a test can stub; app/valuation/inputs.py caches it a day."""
+        from ..figures import load
+        return load(ticker)
+
     def financials(self, ticker: str) -> Dict[str, Any]:
         """Annual and quarterly statement lines, keyed by the labels yfinance uses."""
 

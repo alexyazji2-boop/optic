@@ -54,7 +54,7 @@ def _lock(desc):
 
 def test_the_ticker_route_sends_the_header(monkeypatch):
     def build(ticker, expiries, max_expiries, include_macro, *, include_earnings=True,
-              include_company=True, budget=None, parallel=False, timings=None):
+              include_company=True, include_figures=False, budget=None, parallel=False, timings=None):
         timings.begin()
         legs = main._Legs(parallel, timings)
         legs.start("quote", lambda: Y._cached("t:q", 60, lambda: time.sleep(0.05) or 1))

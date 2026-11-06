@@ -30,6 +30,9 @@ import { watchTables } from './ui/align.js';
 import { startUnread } from './core/unread.js';
 import { startStrips } from './ui/strips.js';
 import { watch as watchGlossary } from './ui/glossmark.js';
+// A registry figure's definition opens from any page, including a Milo answer's sources on a page that printed none
+// (Handoff 1): the press handlers are ui/figure.js's, registered when it loads.
+import './ui/figure.js';
 import { catalogue as levelCatalogue } from './ui/levelslider.js';
 import { wire as wireTypeahead } from './ui/typeahead.js';
 
