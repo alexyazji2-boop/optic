@@ -52,7 +52,7 @@ export function researchWords(rf) {
   const out = [rf.timeframe ? `${rf.ticker}, ${rf.timeframe} chart` : rf.ticker];
   if (rf.indicators.length) out.push(`with ${join(rf.indicators)}`);
   if (rf.compare) out.push(`in the comparison with ${join(rf.compare.tickers.filter((t) => t !== rf.ticker))}`);
-  else if (rf.section) out.push(`${rf.section} tab`);
+  else if (rf.section) out.push(rf.section === 'Investigation' ? 'Investigate this company' : `${rf.section} tab`);
   return out.join(', ');
 }
 

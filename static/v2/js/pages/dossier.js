@@ -380,6 +380,12 @@ function stack(main) {
   return cssPx('--topbar-h') + cssPx('--dstick-h') + (nav && getComputedStyle(nav).position === 'sticky' ? nav.offsetHeight : 0);
 }
 
+// Investigate this company (Handoff 10): the way into the checklist, after the analysis it goes deeper than. It opens
+// the plan; nothing runs and nothing is spent until the reader starts it there.
+const investigateEntry = (sym) => html`<section class="section gi-entry" aria-labelledby="gi-entry-h"><h2 class="t-h2" id="gi-entry-h">Investigate this company</h2>
+  <p class="section-sub">Six steps, each one Milo answer from figures Optic has already read, with their sources: what it does, financial health, segments, peers, recent events, and risks to check. You choose the steps, and see how much of your Milo allowance they use, before anything runs.</p>
+  <a class="btn" href="#/${encodeURIComponent(sym)}/investigate">See the steps</a></section>`;
+
 /* ---------------- page ---------------- */
 function paint(main, sym) {
   if (!live) return;
@@ -412,6 +418,7 @@ function paint(main, sym) {
     ${about(sym)}
     <section class="section dchart" aria-labelledby="py-h">${D.tickerError ? failed('The price history', D.tickerError, { retry: 'dossier' }) : chartBlock(sym)}</section>
     <div class="ov-analysis" id="ov-analysis" data-v2-analysis="${mode}" ${swapped ? 'data-swapped' : ''}>${mode === 'advanced' ? advancedView(sym, c, fund) : simpleView(sym, c)}</div>
+    ${investigateEntry(sym)}
     <div data-tl-slot></div>
     <p class="sr" role="status" data-v2-analysis-status></p>
     <p class="asof disclaimer">${clean((D.ticker || {}).disclaimer || 'Not financial advice. For research and education only.')}</p>`);

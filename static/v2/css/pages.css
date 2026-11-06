@@ -2296,3 +2296,72 @@ html.eff-1100 .dhead.bar.is-wide .dh-price { flex-basis: 100%; }
   .tl-when { flex-direction: row; flex-wrap: wrap; align-items: baseline; gap: 2px var(--s-2); }
   .tl-dl > div { grid-template-columns: minmax(0, 1fr); gap: 0; }
 }
+/* Investigate this company (Handoff 10, pages/investigate.js): the checklist, its steps as they run, and the summary.
+   A step's state is a word beside an icon, never a colour alone; Optic's verified figures are a table apart from
+   Milo's text, and what could not be verified is its own list. On a phone the steps are a progress list with the
+   current one open. */
+.gi-head { display: grid; gap: var(--s-2); justify-items: start; }
+.gi-entry .section-sub { max-width: 72ch; }
+.gi-entry .btn { margin-top: var(--s-2); }
+.gi-name { font-weight: 400; color: var(--c-ink-2); }
+.gi-plan-list { margin: var(--s-3) 0; padding: 0; list-style: none; border-top: 1px solid var(--c-line-2); }
+.gi-plan-item { display: flex; align-items: center; gap: var(--s-3); padding: var(--s-2) 0; border-bottom: 1px solid var(--c-line-2); }
+.gi-plan-item.is-off .gi-check b { color: var(--c-ink-3); text-decoration: line-through; }
+.gi-check { display: flex; align-items: flex-start; gap: var(--s-3); flex: 1 1 auto; min-width: 0; min-height: var(--tap); padding: var(--s-1) 0; cursor: pointer; }
+.gi-check input { width: 20px; height: 20px; margin-top: 2px; flex: none; accent-color: var(--c-ink); }
+.gi-check span { display: grid; gap: 2px; min-width: 0; }
+.gi-check b { font: 600 var(--t-lg)/1.35 var(--f-sans); color: var(--c-ink); }
+.gi-check small { font-size: var(--t-md); line-height: 1.45; color: var(--c-ink-2); }
+.gi-move { display: inline-flex; gap: var(--s-1); flex: none; }
+.gi-before { margin-top: var(--s-4); padding: var(--s-4); border: 1px solid var(--c-line); border-radius: var(--r-lg); background: var(--c-raised); }
+.gi-before h3 { margin: 0 0 var(--s-2); }
+.gi-kv { display: grid; gap: var(--s-2); margin: 0 0 var(--s-3); }
+.gi-kv > div { display: grid; grid-template-columns: minmax(0, 9rem) minmax(0, 1fr); gap: var(--s-3); }
+.gi-kv dt { font-size: var(--t-md); color: var(--c-ink-3); }
+.gi-kv dd { margin: 0; font-size: var(--t-md); line-height: 1.5; color: var(--c-ink); }
+.gi-run-acts { display: flex; flex-wrap: wrap; gap: var(--s-2); align-items: center; }
+.gi-progress { margin: var(--s-1) 0 0; font-size: var(--t-base); color: var(--c-ink-2); font-variant-numeric: tabular-nums; }
+.gi-meter { height: 4px; margin: var(--s-3) 0; border-radius: 2px; background: var(--c-sunk); overflow: hidden; }
+.gi-meter span { display: block; height: 100%; background: var(--c-ink-2); }
+.gi-steps { margin: 0; padding: 0; list-style: none; border-top: 1px solid var(--c-line-2); }
+.gi-step { padding: var(--s-3) 0; border-bottom: 1px solid var(--c-line-2); }
+.gi-step-head { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: var(--s-2) var(--s-3); }
+.gi-step-t { margin: 0; }
+.gi-state { display: inline-flex; align-items: center; gap: 6px; min-width: 6.5rem; font: 600 var(--t-sm)/1.2 var(--f-label); color: var(--c-ink-2); }
+.gi-state .ic { width: 16px; height: 16px; }
+.gi-state-failed, .gi-state-running { color: var(--c-ink); }
+.gi-step-acts { display: flex; flex-wrap: wrap; gap: var(--s-2); justify-content: flex-end; }
+.gi-step-body { padding: var(--s-3) 0 0; }
+.gi-step[data-state="pending"] .gi-step-t, .gi-step[data-state="skipped"] .gi-step-t { color: var(--c-ink-2); }
+.gi-prose p { margin: 0 0 var(--s-3); font-size: var(--t-lg); line-height: 1.6; max-width: 72ch; }
+.gi-cite { display: inline-flex; align-items: center; min-height: 24px; margin: 0 1px; padding: 0 5px; border: 1px solid var(--c-line); border-radius: var(--r-xs); background: var(--c-sunk); color: var(--c-ink-2); font: 600 var(--t-xs)/1 var(--f-label); vertical-align: 2px; cursor: pointer; }
+.gi-cite:hover { color: var(--c-ink); border-color: var(--c-ink-3); }
+.gi-nodata { margin: 0 0 var(--s-3); padding: var(--s-3); border: 1px solid var(--c-line); border-radius: var(--r-md); background: var(--c-sunk); }
+.gi-sub { margin: var(--s-4) 0 var(--s-2); }
+.gi-textfact { margin: 0 0 var(--s-3); padding: var(--s-3); border-left: 2px solid var(--c-line); }
+.gi-textfact p { margin: 0 0 var(--s-1); line-height: 1.55; }
+.gi-fid { display: inline-block; min-width: 2.2em; font: 600 var(--t-xs)/1 var(--f-label); color: var(--c-ink-3); }
+.gi-facts th[scope="row"] { font-weight: 500; text-align: left; vertical-align: top; }
+.gi-facts tr:focus { outline: 2px solid var(--c-focus); outline-offset: -2px; }
+.gi-def { margin-top: var(--s-1); font-size: var(--t-sm); color: var(--c-ink-2); }
+.gi-def summary { cursor: pointer; color: var(--c-ink-3); min-height: 28px; display: inline-flex; align-items: center; }
+.gi-def p { margin: var(--s-1) 0 0; max-width: 60ch; }
+.gi-unv-list, .gi-sources { margin: 0 0 var(--s-2); padding-left: 1.4em; }
+.gi-unv-list li, .gi-sources li { margin: 0 0 var(--s-1); font-size: var(--t-md); line-height: 1.5; overflow-wrap: anywhere; }
+.gi-status { margin: 0 0 var(--s-3); font-size: var(--t-base); }
+.gi-status.is-partial { padding: var(--s-2) var(--s-3); border: 1px solid var(--c-line); border-radius: var(--r-md); background: var(--c-sunk); }
+.gi-sum-step { margin: 0 0 var(--s-3); }
+.gi-sum-step h3 { margin: var(--s-3) 0 var(--s-2); }
+.gi-sum-unv { margin: var(--s-4) 0; }
+.gi-edit { display: grid; gap: var(--s-1); margin: 0 0 var(--s-3); }
+.gi-edit textarea { width: 100%; min-height: 6rem; resize: vertical; font: 400 var(--t-lg)/1.55 var(--f-sans); }
+.gi-sum-acts { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2) var(--s-3); margin: 0 0 var(--s-6); }
+.gi-sum-acts .ic { width: 18px; height: 18px; }
+.gi-saved { flex-basis: 100%; margin: 0; color: var(--c-ink-2); }
+@media (max-width: 640px) {
+  .gi-kv > div { grid-template-columns: minmax(0, 1fr); gap: 0; }
+  .gi-step-head { grid-template-columns: auto minmax(0, 1fr); }
+  .gi-step-acts { grid-column: 1 / -1; justify-content: flex-start; }
+  .gi-state { min-width: 0; }
+  .gi-prose p { font-size: var(--t-base); }
+}

@@ -83,6 +83,7 @@ from .providers import overnight as overnight_mod
 from . import insiders as insiders_mod
 from . import analysts as analysts_mod
 from . import timeline as timeline_mod
+from . import investigation as investigation_mod
 from .analytics import regime as regime_mod
 from .analytics import relperf as relperf_mod
 from .analytics import compare as compare_mod
@@ -8323,6 +8324,208 @@ async def ai_allowance_state(request: Request) -> Dict[str, Any]:
                   {"enabled": False, "hint": ai.available().get("hint") if not status.get("key_refused") else
                    "Milo cannot answer on this deployment right now. Every other panel works without it."})
     return {"allowance": ai_allowance(request), "ai": status}
+
+
+# ------------------------------------------------------------------ Guided Investigation (owner's Handoff 10)
+#
+# "Investigate this company": six fixed steps, one Milo answer each, grounded in what Optic already reads (see
+# app/investigation.py). The page runs the steps one at a time; each step's facts are gathered here, its answer
+# checked figure by figure, and, for a signed-in reader, the result kept in the library as a draft.
+
+def _investigation_user(request: Request) -> Optional[Dict[str, Any]]:
+    try:
+        return auth_deps.current_user(request)
+    except Exception:                                                # noqa: BLE001 - signed out, said so
+        return None
+
+
+def _investigation_order(raw: Any) -> List[str]:
+    """The reader's order: each step once, known ones only, any left out added at the end in the fixed order."""
+    out: List[str] = []
+    for s in raw if isinstance(raw, list) else []:
+        if s in investigation_mod.STEP_IDS and s not in out:
+            out.append(s)
+    return out + [s for s in investigation_mod.STEP_IDS if s not in out]
+
+
+def _investigation_facts(step: str, sym: str, level: str, earlier: List[str]) -> Dict[str, Any]:
+    """What one step reads, from the calls the Dossier already makes. Each source that fails is said by the step's
+    `missing`, never filled from somewhere else."""
+    today = session_mod.market_today().isoformat()
+
+    def segments() -> Optional[Dict[str, Any]]:
+        try:
+            return segments_mod.build(sym)
+        except Exception as exc:                                     # noqa: BLE001
+            return {"available": False, "reason": "The segment tables could not be read ({}).".format(
+                public_errors.public(exc))}
+
+    def figures() -> Dict[str, Any]:
+        try:
+            return figures_mod.for_ticker(PROVIDER, sym, YF_PROVIDER)
+        except Exception as exc:                                     # noqa: BLE001
+            return figures_mod.unavailable(sym, "The figures could not be worked out just now ({}).".format(
+                public_errors.public(exc)))
+
+    def comps() -> Optional[Dict[str, Any]]:
+        try:
+            return valuation_service.comps(YF_PROVIDER, sym)
+        except Exception as exc:                                     # noqa: BLE001
+            return {"available": False, "reason": "The peer comparison could not be read ({}).".format(
+                public_errors.public(exc))}
+
+    def events() -> Optional[Dict[str, Any]]:
+        try:
+            return timeline_mod.cached(YF_PROVIDER, sym, 90, congress_refresh=_timeline_congress_refresh)
+        except Exception:                                            # noqa: BLE001
+            return None
+
+    if step == "business":
+        return investigation_mod.business_facts(sym, YF_PROVIDER, segments())
+    if step == "health":
+        return investigation_mod.health_facts(sym, figures(), level)
+    if step == "segments":
+        return investigation_mod.segments_facts(sym, segments())
+    if step == "peers":
+        return investigation_mod.peer_facts(sym, comps(), today)
+    if step == "events":
+        return investigation_mod.event_facts(sym, events())
+    return investigation_mod.risk_facts(sym, figures(), segments(), events(), comps(), today, earlier, level)
+
+
+def _investigation_owned(request: Request, item_id: str) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+    user = auth_deps.require_user(request)
+    inv = investigation_mod.load(user["id"], item_id)
+    if not inv:
+        raise HTTPException(status_code=404, detail="That investigation is not here.")
+    return user, inv
+
+
+@app.get("/api/investigate/{ticker}/plan")
+async def investigation_plan(ticker: str, request: Request) -> Dict[str, Any]:
+    """What a reader sees before anything runs: the six steps, what each reads, the most it can cost against their
+    Milo allowance, the longest it can take, and whether it will be kept. Spends nothing."""
+    sym = _brief_symbol(ticker)
+    user = _investigation_user(request)
+    out = investigation_mod.plan(ai_allowance(request), bool(user))
+    status = _assistant_status()
+    out.update(ticker=sym, ai={"enabled": bool(status.get("enabled"))}, signed_in=bool(user))
+    return out
+
+
+@app.post("/api/investigate/{ticker}")
+async def investigation_start(ticker: str, request: Request,
+                              payload: Dict[str, Any] = Body(default={})) -> Dict[str, Any]:
+    """Begin: the reader's order and skips, kept as a draft in the library when signed in. Runs no step."""
+    sym = _brief_symbol(ticker)
+    order = _investigation_order(payload.get("order"))
+    skipped = [s for s in (payload.get("skip") or []) if s in order]
+    if len(skipped) >= len(order):
+        raise HTTPException(status_code=400, detail="Choose at least one step to run.")
+    inv = investigation_mod.new(sym, order, skipped, knowledge_mod.normalise(payload.get("level")))
+    user = _investigation_user(request)
+    item_id = None
+    if user:
+        auth_deps.csrf_guard(request)
+        limit = auth_store.subscription(user["id"])["limits"]["saved_research"]
+        item_id = await _run(investigation_mod.store_new, user["id"], inv, limit)
+    note = (None if item_id else "Saved research is full, so this investigation is not kept: leaving this page loses it."
+            if user else "Signed out, nothing is kept: leaving this page loses the investigation.")
+    return {"investigation": dict(inv, item_id=item_id), "item_id": item_id, "kept": bool(item_id), "note": note,
+            "status": investigation_mod.status_of(inv)}
+
+
+@app.post("/api/investigate/{ticker}/step")
+async def investigation_step(ticker: str, request: Request,
+                             payload: Dict[str, Any] = Body(default={})) -> Dict[str, Any]:
+    """One step: its facts gathered, one Milo answer asked for (charged like a question), the answer checked figure
+    by figure. A step with none of its data asks nothing and costs nothing. A model failure is the step's, said with
+    a way to retry; the allowance refusing is a 429 or 401, as for any question."""
+    sym = _brief_symbol(ticker)
+    step = str(payload.get("step") or "")
+    if step not in investigation_mod.STEP_IDS:
+        raise HTTPException(status_code=422, detail="step must be one of " + ", ".join(investigation_mod.STEP_IDS))
+    item_id = str(payload.get("item_id") or "") or None
+    user, inv = (None, None)
+    if item_id:
+        user, inv = _investigation_owned(request, item_id)
+        auth_deps.csrf_guard(request)
+        if inv.get("ticker") != sym:
+            raise HTTPException(status_code=409, detail="That investigation is about {}.".format(inv.get("ticker")))
+    level = knowledge_mod.normalise(payload.get("level") or (inv or {}).get("level"))
+    order = (inv or {}).get("order") or _investigation_order(payload.get("order"))
+    n = order.index(step) + 1
+    total = len(order)
+    earlier = payload.get("earlier") if isinstance(payload.get("earlier"), list) else []
+    if inv is not None:
+        # what the earlier steps could not verify comes from the draft, not from the page
+        earlier = [u.get("text") for sid in order[:order.index(step)]
+                   for u in ((inv.get("steps") or {}).get(sid) or {}).get("unverified") or [] if u.get("text")]
+    started = time.perf_counter()
+    gathered = await _run(_investigation_facts, step, sym, level, earlier)
+    if not gathered.get("facts"):
+        out = investigation_mod.result(step, gathered, None, took=time.perf_counter() - started, no_data=True)
+    else:
+        _spend_guard(request)
+        _count_question(request, "investigation")
+        try:
+            name = (PROVIDER.quote(sym) or {}).get("name") or sym
+        except Exception:                                            # noqa: BLE001
+            name = sym
+        prompt = investigation_mod.prompt_for(investigation_mod.STEPS[investigation_mod.STEP_IDS.index(step)], n,
+                                              total, sym, name, session_mod.market_today().isoformat(), gathered)
+        try:
+            said = await asyncio.wait_for(_run(investigation_mod.answer, prompt, level),
+                                          timeout=investigation_mod.STEP_TIMEOUT + 10)
+            out = investigation_mod.result(step, gathered, said, took=time.perf_counter() - started)
+        except asyncio.TimeoutError:
+            out = investigation_mod.failed(step, "Milo did not finish this step within {} minutes.".format(
+                int(investigation_mod.STEP_TIMEOUT // 60)))
+        except Exception as exc:                                     # noqa: BLE001 - the step's failure, said
+            logging.getLogger("optic").warning("investigation step %s for %s failed: %s", step, sym, exc)
+            out = investigation_mod.failed(step, "Milo did not answer this step. " + ai._human_error(exc))
+    if inv is not None:
+        inv.setdefault("steps", {})[step] = out
+        inv["stopped"] = False
+        await _run(investigation_mod.store, user["id"], item_id, inv)
+    return {"result": out, "status": investigation_mod.status_of(inv) if inv is not None else None}
+
+
+@app.get("/api/investigate/item/{item_id}")
+async def investigation_get(item_id: str, request: Request) -> Dict[str, Any]:
+    """One kept investigation, its steps' results as they finished, for resuming or reading."""
+    _, inv = _investigation_owned(request, item_id)
+    return {"investigation": inv, "status": investigation_mod.status_of(inv)}
+
+
+@app.patch("/api/investigate/item/{item_id}")
+async def investigation_update(item_id: str, request: Request,
+                               payload: Dict[str, Any] = Body(default={})) -> Dict[str, Any]:
+    """The reader's changes: the summary's text per step, notes, a name, a step skipped or brought back, stopped,
+    or saved (status "saved"). The facts and their sources are never edited."""
+    user, inv = _investigation_owned(request, item_id)
+    auth_deps.csrf_guard(request)
+    edits = payload.get("edits")
+    if isinstance(edits, dict):
+        for sid, text in edits.items():
+            if sid in investigation_mod.STEP_IDS:
+                text = str(text or "").strip()[:8000]
+                if text:
+                    inv.setdefault("edits", {})[sid] = text
+                else:
+                    inv.setdefault("edits", {}).pop(sid, None)
+    if "notes" in payload:
+        inv["notes"] = str(payload.get("notes") or "").strip()[:8000]
+    if payload.get("name"):
+        inv["name"] = re.sub(r"\s+", " ", str(payload["name"])).strip()[:120]
+    if isinstance(payload.get("skip"), list):
+        inv["skipped"] = [s for s in payload["skip"] if s in (inv.get("order") or [])]
+    if "stopped" in payload:
+        inv["stopped"] = bool(payload.get("stopped"))
+    if payload.get("status") in ("draft", "saved"):
+        inv["status"] = payload["status"]
+    await _run(investigation_mod.store, user["id"], item_id, inv)
+    return {"investigation": investigation_mod.load(user["id"], item_id), "status": investigation_mod.status_of(inv)}
 
 
 @app.get("/api/knowledge/modes")
