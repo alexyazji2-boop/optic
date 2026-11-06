@@ -1,6 +1,7 @@
 """yfinance adapter.
 
-Free, keyless; quotes delayed up to 15 minutes, each with its own trade time and stated delay. Good enough for swing-timeframe work:
+Free, keyless; quotes delayed by exchange, as app/delays.py records, each with its own trade time and stated delay. Good
+enough for swing-timeframe work:
 full option chains with IV and open interest, daily/weekly OHLCV, headlines.
 Everything is cached briefly so a dashboard refresh doesn't re-hammer Yahoo.
 """
@@ -1265,6 +1266,8 @@ class YFinanceProvider(MarketDataProvider):
                     # for the Arca-listed ETFs here on 2026-10-14, so the board
                     # names the print's time rather than a delay it assumed.
                     "delayed_minutes": _f(row.get("exchangeDataDelayedBy")),
+                    # the exchange that delay is for, as quote() names it (a 20 is NYSE's, a 15 Nasdaq's)
+                    "exchange": row.get("fullExchangeName") or row.get("exchange"),
                 }
             # Nothing usable is a failure, so the next request asks again
             # rather than reading an empty answer for a minute.

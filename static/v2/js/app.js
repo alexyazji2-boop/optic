@@ -24,6 +24,7 @@ import { handleAuthLinks } from './core/authlinks.js';
 import { areaNotice } from './core/legal.js';
 import { watchBuild, isClosed } from './core/build.js';
 import { watchStatus } from './core/status.js';
+import * as delays from './core/delays.js';
 import { openReport } from './pages/settings.js';
 import * as bridge from './pages/bridge.js';
 import * as symbols from './core/symbolcheck.js';
@@ -156,6 +157,7 @@ async function show(route) {
   // v2 closed to this reader since the page loaded: the move lands on the classic app instead
   if (isClosed()) { location.href = `${CLASSIC}${location.hash}`; return; }
   if (route.view === 'signin' && store.signedIn() && (route.params || {}).mode !== 'reset') { router.go('#/'); return; }
+  delays.load();   // the delay record every price label reads; asked again here after a failure (core/delays.js)
   // the page's module: at once once fetched; on a first visit, fetched now (a later route wins a race)
   const my = ++SHOW;
   // The symbol is checked side by side with the page's code being fetched, and nothing about it is drawn until the
@@ -370,6 +372,7 @@ async function boot() {
   watchTables($('#app'));   // every shared table aligned by what its columns hold (ui/align.js)
   wireGlobal();
   watchBuild();
+  delays.load(); delays.watch();   // labels follow the timezone and the clock (Handoff 4)
   watchStatus();
   await store.loadMe();
   const r = await deviceCheck();

@@ -12,40 +12,40 @@ import { button as miloButton } from '../ui/milo.js';
 import { GROUPS, pageOf } from '../nav.js';
 import { tabSelect, tabLinks } from './tabs.js';
 import { learn, kindOf, can, onLearn } from '../core/instrument.js';
-import { etStamp, etDay, sessionWord, tradeTime, sessionFreshness } from '../core/marketTime.js';
+import { etStamp, tradeTime } from '../core/marketTime.js';
+import * as delays from '../core/delays.js';
 import { poll } from '../core/poll.js';
 import { term } from '../ui/term.js';
 import { logoHTML } from '../ui/symbols.js';
 import { advancedOn } from '../core/prefs.js';
 
-// The price's session and time in words: the close it is, or the trade time when the session is open, and any
-// extended print with the moment it was struck (core/marketTime.js).
+// The price's session and time in words, from the one formatter every price label uses (core/delays.js, Handoff 4):
+// the delay the quote states and its trade's time in the reader's zone during the session; outside it, the close it is
+// and the session by name, with "regular session only" when the data holds no print of that session.
 // The quote's own market state, for when the session read has not answered.
 const QUOTE_PHASE = { REGULAR: 'regular', PRE: 'pre', PREPRE: 'pre', POST: 'after', POSTPOST: 'after', CLOSED: 'closed' };
-export function stateLine(D) {
+/** What the label needs from the page's data: the session, the last close, and whether an extended print is held. */
+export function quoteCtx(D) {
   const q = D.quote || {}, sess = (D.session || {}).session || {}, s = (D.session || {}).prices || {};
-  const ext = s.extended && isNum(s.extended.price) ? s.extended : null;
-  const phase = s.phase || sess.phase || QUOTE_PHASE[String(q.market_state || '').toUpperCase()] || null;
-  let base;
-  if (phase === 'regular' || sess.is_regular) base = `Regular session. ${sessionFreshness(q).text}.`;
   // In real Safari a cold server answered the session read after the client's 20 s limit, and the header
   // said "Closed" at 9:58 AM on a trading day (2026-10-19). Not knowing the session, it claims none.
-  else if (!phase) base = `${sessionFreshness(q).text}.`;
-  else base = `${sessionWord(s.phase_label || sess.label || phase)}. Price is the close of ${etDay((sess.last_close || {}).date) || 'the last session'}.`;
-  return { base, ext };
+  const phase = sess.is_regular ? 'regular' : (s.phase || sess.phase || QUOTE_PHASE[String(q.market_state || '').toUpperCase()] || null);
+  return { phase, lastClose: (sess.last_close || {}).date || null, extended: !!(s.extended && isNum(s.extended.price)) };
+}
+export function stateLine(D) {
+  const s = (D.session || {}).prices || {}, c = quoteCtx(D);
+  const ext = s.extended && isNum(s.extended.price) ? s.extended : null;
+  const text = delays.quoteLabel(D.quote, c).text;
+  return { base: c.phase === 'regular' ? `Regular session. ${text}.` : `${text}.`, ext };
 }
 /**
  * The same, short, for the one-line header: what the price is and when (editorial pass, 2026-10-19). During the
  * session it is a delayed trade with its time, never "the close"; outside it, the close of the named day; and an
  * extended-hours print is said apart, with the moment it was struck.
  */
-export function priceWhen(D) {
-  const q = D.quote || {}, sess = (D.session || {}).session || {}, s = (D.session || {}).prices || {};
-  const phase = s.phase || sess.phase || QUOTE_PHASE[String(q.market_state || '').toUpperCase()] || null;
-  if (phase === 'regular' || sess.is_regular || !phase) return sessionFreshness(q).text;
-  const day = etDay((sess.last_close || {}).date);
-  return day ? `Close of ${day}` : 'Last close';
-}
+export const priceWhen = (D) => delays.quoteLabel(D.quote, quoteCtx(D)).text;
+/** The header's label as an element that keeps itself current (core/delays.js relabel). */
+const priceTag = (D) => delays.label(D.quote, quoteCtx(D), 'dh-when');
 
 /**
  * Two quotes for one ticker (the 20-second /api/quote and the ticker snapshot's, cached two minutes) merged so the
@@ -78,7 +78,7 @@ export async function core(sym) {
  *  how fresh it is from the quote's own time (priceWhen), never from how often this asks. Stop it in dispose(). */
 export function livePrice(root, sym, getD, view, opts) {
   const enc = encodeURIComponent(sym);
-  const key = (D) => JSON.stringify([D.quote && D.quote.price, D.quote && D.quote.change_pct, tradeTime(D.quote), D.quote && D.quote.delayed_minutes, D.quote ? sessionFreshness(D.quote).word : '',
+  const key = (D) => JSON.stringify([D.quote && D.quote.price, D.quote && D.quote.change_pct, tradeTime(D.quote), D.quote && D.quote.delayed_minutes, D.quote ? delays.quoteLabel(D.quote, quoteCtx(D)).state : '',
     ((D.session || {}).prices || {}).extended]);
   // the Chart tab asks every 15 s (`every`) and takes each new quote for its last bar and the tab's title (`onQuote`)
   const { every = 20000, onQuote = null } = opts || {};
@@ -146,7 +146,7 @@ export function header(sym, D, view = 'overview', { compact = false, bar = true,
       <h1 class="name"><b class="tick">${sym}</b>${name && name !== sym ? html`<span>${name}</span>` : ''}<span class="sr">, ${label}</span></h1>
       <p class="dh-price">${isNum(q.price) ? html`<span class="dh-px">${num(q.price)}</span>` : D.quoteError ? '' : html`<span class="sk dh-sk dh-sk-sm" role="status" aria-label="Loading the price"></span>`}
         <span class="dh-chg ${dir(q.change_pct)}">${isNum(q.change_pct) ? html`${signed(q.change, 2, '')} (${signed(q.change_pct)})` : ''}</span>
-        ${isNum(q.price) ? html`<span class="dh-ext">${priceWhen(D)}</span>` : ''}${ext ? html`<span class="dh-ext">${capFirst(ext.kind)} ${num(ext.price)} <span class="${dir(ext.change_pct)}">${signed(ext.change_pct)}</span>${ext.as_of ? ` at ${etStamp(ext.as_of)}` : ''}</span>` : ''}</p>
+        ${isNum(q.price) ? html`<span class="dh-ext">${priceTag(D)}</span>` : ''}${ext ? html`<span class="dh-ext">${capFirst(ext.kind)} ${num(ext.price)} <span class="${dir(ext.change_pct)}">${signed(ext.change_pct)}</span>${ext.as_of ? html` ${delays.atTag(ext.as_of, '· as of ')}` : ''}</span>` : ''}</p>
       ${staleBars(D)}${stageLine(sym, st)}${actions(sym, label, true)}
     </header>`;
   }
@@ -155,7 +155,7 @@ export function header(sym, D, view = 'overview', { compact = false, bar = true,
       <h1 class="name"><b class="tick">${sym}</b>${name && name !== sym ? html`<span>${name}</span>` : ''}${q.sector ? html`<span class="t-muted dh-sector">${q.sector}</span>` : ''}<span class="sr">, ${label}</span></h1>
       <p class="dh-price">${isNum(q.price) ? html`<span class="t-display">${num(q.price)}</span>` : D.quoteError ? '' : html`<span class="sk dh-sk" role="status" aria-label="Loading the price"></span>`}
         <span class="dh-chg ${dir(q.change_pct)}">${isNum(q.change_pct) ? html`${signed(q.change, 2, '')} (${signed(q.change_pct)})` : ''}</span></p>
-      <p class="dh-state">${stateLine(D).base}${ext ? html` ${capFirst(ext.kind)} ${num(ext.price)}, <span class="${dir(ext.change_pct)}">${signed(ext.change_pct)}</span>${ext.as_of ? `, struck ${etStamp(ext.as_of)}` : ''}.` : ''}</p>
+      <p class="dh-state">${stateLine(D).base}${ext ? html` ${capFirst(ext.kind)} ${num(ext.price)}, <span class="${dir(ext.change_pct)}">${signed(ext.change_pct)}</span>${ext.as_of ? html`, ${delays.atTag(ext.as_of, 'struck ')}` : ''}.` : ''}</p>
     </div>
     ${actions(sym, label, false)}
   </header>`;

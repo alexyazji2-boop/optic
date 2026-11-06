@@ -68,7 +68,7 @@ def test_overview_opens_on_what_the_company_does():
     paint = OV[OV.index("function paint(main, sym) {"):]
     assert paint.index("${about(sym)}") < paint.index('section class="section dchart"')
     ab = OV[OV.index("function about(sym) {"):OV.index("/* ---------------- the rest, one step away")]
-    for want in ("What ${name} does", "<dt>${fund ? 'Kind of fund' : 'Industry'}</dt>", "Where its revenue comes from", "US dollars; quotes delayed up to 15 minutes", "replace(/^The Company\\b/, name)"):
+    for want in ("What ${name} does", "<dt>${fund ? 'Kind of fund' : 'Industry'}</dt>", "Where its revenue comes from", "US dollars. ${delays.label(q, quoteCtx(D))}", "replace(/^The Company\\b/, name)"):
         assert want in ab, want
     assert "String(d.data_caveat).split(" in OV, "the chart's footer is the delay, not Greeks and Black-Scholes"
     # A company's four answers are Classic's four questions since 2026-10-25 (owner's screenshots; the owner chose to

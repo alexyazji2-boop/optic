@@ -19,12 +19,13 @@ def test_freshness_comes_from_the_feed_never_from_the_refresh_rate(tmp_path):
         stated: w({{ trade_time: at(900), delayed_minutes: 15 }}), unknown: w({{ trade_time: at(900) }}), bare: w({{}}),
         older: w({{ market_time: at(30), delayed_minutes: 0 }}), prefer: M.tradeTime({{ trade_time: 'a', market_time: 'b' }}) }}));
     """)
-    assert got["live"]["word"] == "live" and got["live"]["text"].startswith("Live, last trade "), "no delay stated and a trade 20 s old"
-    assert got["stale"]["word"] == "quiet" and got["stale"]["text"].startswith("Last trade "), "no delay, but ten minutes since a trade: not live"
-    assert got["stated"]["text"].startswith("Delayed 15 minutes, last trade "), "the feed's own number"
-    # "up to 15 minutes" since Phase 09: the feed's quotes run from real time to 15 minutes behind (BUG-098)
-    assert got["unknown"]["text"].startswith("Delayed up to 15 minutes, last trade "), "the site's standing wording when the feed is silent"
-    assert got["bare"] == {"word": "delayed", "text": "Delayed up to 15 minutes"}
+    # Handoff 4 (2026-11-04): one formatter for every price label (core/delays.js), "Delayed X min · as of HH:MM zone"
+    assert got["live"]["word"] == "live" and got["live"]["text"].startswith("Live · as of "), "no delay stated and a trade 20 s old"
+    assert got["stale"]["word"] == "asof" and got["stale"]["text"].startswith("As of "), "no delay, but ten minutes since a trade: not live"
+    assert got["stated"]["text"].startswith("Delayed 15 min · as of "), "the feed's own number"
+    # the longest delay any exchange in the feed states (NYSE's 20) when the quote states none: 15 was too few for NYSE
+    assert got["unknown"]["text"].startswith("Delayed up to 20 min · as of "), "the conservative wording when the feed is silent"
+    assert got["bare"] == {"word": "delayed", "text": "Delayed up to 20 min · trade time not reported"}
     assert got["older"]["word"] == "live", "the older market_time still counts"
     assert got["prefer"] == "a"
 
@@ -55,7 +56,7 @@ def test_the_chart_tab_ticks_live_and_never_under_the_readers_hand():
     assert "document.title = `${D.sym} ${num(p)}" in page
     assert "if (!(Number(price) > 0) || drag || tg || pointers.size) return false;" in pc, "nothing is drawn under a drag"
     assert "closes[N - 1] = price; Object.assign(ind, indicators());" in pc
-    assert "sessionFreshness(q).text" in frame and "Delayed up to 15 minutes${last}" not in frame
+    assert "delays.quoteLabel(D.quote, quoteCtx(D))" in frame and "Delayed up to 15 minutes" not in frame
 
 
 def test_options_has_a_price_chart_whose_insider_arrows_open_the_filings():

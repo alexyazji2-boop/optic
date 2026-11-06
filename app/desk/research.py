@@ -41,6 +41,7 @@ from datetime import date, datetime, timedelta, timezone
 from typing import Any, Callable, Dict, List, Optional
 
 from .. import figures as figures_mod
+from .. import delays
 
 log = logging.getLogger(__name__)
 
@@ -445,7 +446,7 @@ def earnings(p: Pack, d: Deps, t: str) -> None:
 
 def tape(p: Pack, d: Deps, t: str) -> None:
     q = d.provider.quote(t) or {}
-    src = "Yahoo Finance quote (about 15 minutes delayed in session)"
+    src = "Yahoo Finance quote ({} by exchange in session)".format(delays.quotes_up_to())
     url = "https://finance.yahoo.com/quote/{}".format(t)
     if q.get("price") is not None:
         p.add("Last price", _f(q["price"], 2), unit="$", period="latest quote", as_of=q.get("as_of"), source=src, url=url,

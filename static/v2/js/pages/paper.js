@@ -9,6 +9,7 @@ import * as api from '../core/api.js';
 import * as store from '../core/store.js';
 import { holds } from '../core/device.js';
 import { num, compact, clean, shortDate, isNum, dir, plural } from '../core/format.js';
+import * as delays from '../core/delays.js';
 import { signedBars } from '../ui/bars.js';
 import { mountCharts } from '../ui/chart.js';
 import { provideContext } from '../ui/milo.js';
@@ -197,7 +198,7 @@ function openTable() {
           <td class="pt-src">${m.mark_source ? m.mark_source : html`<span class="t-muted">${m.reason || (marking ? 'pricing…' : 'not marked')}</span>`}</td><td class="${cls}">${isNum(pnl) ? money2(pnl) : 'n/a'}</td><td class="${cls}">${rText(r)}</td>
           <td>${p.read ? html`<span class="${ag === null ? 't-muted' : ag ? 'up' : 'down'}" title="${p.read.summary || ''}">${p.read.stance}${ag === null ? '' : ag ? ', with' : ', against'}</span>` : html`<span class="t-muted">n/a</span>`}</td>
           <td><button type="button" class="btn btn-sm" data-v2-pt-close="${p.id}" ${isNum(m.mark_price) ? '' : 'disabled'} title="Close at the current mark" aria-label="Close ${posLabel(p)} at the current mark">Close</button></td></tr>`; })}</tbody></table></div>
-      <p class="asof">${leftOut ? `Not everything was priced: ${leftOut} ` : ''}${markedAt ? `Marks taken ${etStamp(markedAt)}; a mark is a quote, delayed up to 15 minutes in session and the last close outside it. ` : ''}Closing takes the current mark: the last trade for shares, the chain's mid for an option, or a model's estimate when the contract has no quote. A real fill would be at the bid or the ask.</p>`
+      <p class="asof">${leftOut ? `Not everything was priced: ${leftOut} ` : ''}${markedAt ? `Marks taken ${etStamp(markedAt)}; a mark is a quote, delayed ${delays.upTo()} by exchange in session and the last close outside it. ` : ''}Closing takes the current mark: the last trade for shares, the chain's mid for an option, or a model's estimate when the contract has no quote. A real fill would be at the bid or the ask.</p>`
       : html`<p class="quiet">No open positions. The ticket above opens one.</p>`}${o.length ? html`<div class="pt-revs">${o.map(planEditRow)}</div>` : ''}</section>`;
 }
 

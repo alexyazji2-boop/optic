@@ -31,6 +31,7 @@ from . import (ai, brief as brief_mod, feeds as feeds_mod, legal,
                news as news_mod, paper, session as session_mod)
 from . import figures as figures_mod
 from . import account as account_mod
+from . import delays as delays_mod
 from .valuation import service as valuation_service
 from .valuation import store as valuation_store
 from . import billing as billing_mod
@@ -1021,7 +1022,7 @@ def _swing_snapshot(
             earnings_momentum = {"available": False,
                                  "reason": "earnings momentum unavailable: {}".format(public_errors.public(exc))}
 
-    if PROVIDER.name == "tradier":
+    if _realtime_chain():
         data_caveat = (
             "Quote and options chain are real-time via Tradier. Greeks are computed locally via "
             "Black-Scholes with a {} risk-free rate. Company fundamentals and news still come "
@@ -1029,8 +1030,8 @@ def _swing_snapshot(
         )
     else:
         data_caveat = (
-            "Quotes are delayed up to 15 minutes, and each states its own trade time. Greeks are computed locally via "
-            "Black-Scholes with a {} risk-free rate.".format(rate_info["label"])
+            "{} Greeks are computed locally via Black-Scholes with a {} risk-free rate.".format(
+                delays_mod.quote_sentence(), rate_info["label"])
         )
 
     payload = {
@@ -1210,8 +1211,7 @@ async def health(request: Request) -> Dict[str, Any]:
         "provider": PROVIDER.name,
         # Tradier's sandbox serves the same API fifteen minutes late, so a
         # sandbox token is not a real-time feed and the page must not say so.
-        "realtime_chain": PROVIDER.name == "tradier"
-        and "sandbox." not in str(getattr(PROVIDER, "base", "")),
+        "realtime_chain": _realtime_chain(),
         "server_time": now.isoformat(),
         # The commit and uptime stay public: the repository is public, publish.sh reads `commit` to see a deploy land,
         # and DEPLOY.md reads `uptime_seconds` to tell a crashloop from a deploy (BUG-181, Phase 11)
@@ -1234,6 +1234,17 @@ async def health(request: Request) -> Dict[str, Any]:
         "assistant": assistant,
         "accounts": _accounts_health(),
     }
+
+
+def _realtime_chain() -> bool:
+    """Tradier's chain is real-time when it is configured; its sandbox serves the same API fifteen minutes late."""
+    return PROVIDER.name == "tradier" and "sandbox." not in str(getattr(PROVIDER, "base", ""))
+
+
+@app.get("/api/delays")
+async def delays() -> Dict[str, Any]:
+    """How delayed each source is, from app/delays.py: every page labels prices from this (Handoff 4)."""
+    return delays_mod.public(realtime_chain=_realtime_chain(), chain_provider="Tradier")
 
 
 def _accounts_health() -> Dict[str, Any]:
@@ -1691,7 +1702,7 @@ async def options_picker(
                                        american=vol_surface_mod.is_american(sym), ex_dividend=_ex_dividend(sym))
         out.update({"ticker": sym, "expiries": usable, "rate": rate_info,
                     "fetched_at": str(frame["fetched_at"].iloc[0]) if "fetched_at" in frame and len(frame) else None,
-                    "quote_note": "Option quotes are delayed about 15 minutes on this feed."})
+                    "quote_note": delays_mod.chain_sentence(_realtime_chain())})
         return out
 
     return await _run(build)
@@ -2912,11 +2923,9 @@ async def setups_options(
         out["spot"] = spot
         # The same test /api/health uses: Tradier's chain is live when it is
         # configured, and the free feed's is delayed.
-        out["realtime"] = (PROVIDER.name == "tradier"
-                           and "sandbox." not in str(getattr(PROVIDER, "base", "")))
+        out["realtime"] = _realtime_chain()
         if not out["realtime"]:
-            out["notes"] = out["notes"] + [
-                "Quotes from this feed are delayed, typically by about 15 minutes."]
+            out["notes"] = out["notes"] + [delays_mod.chain_sentence()]
         return out
 
     return await _run(build)
@@ -8832,13 +8841,13 @@ def _latest_print(q: Dict[str, Any]) -> Dict[str, Any]:
         (float(price) / float(base) - 1.0) * 100.0 if price and base else None)
     stamp = when.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ") if when and when.tzinfo else q.get("regular_market_time")
     return {"price": price, "prev_close": base, "change_pct": change_pct, "session": session, "as_of": stamp,
-            "market_time": stamp}
+            "market_time": stamp, "trade_time": stamp}
 
 
 def _ws_quotes(symbols: List[str]) -> Dict[str, Dict[str, Any]]:
     got = YF_PROVIDER.session_quotes(list(symbols)) or {}
     return {s: dict(_latest_print(q), delayed_minutes=q.get("delayed_minutes"), market_state=q.get("market_state"),
-                    source="Yahoo Finance") for s, q in got.items()}
+                    exchange=q.get("exchange"), source="Yahoo Finance") for s, q in got.items()}
 
 
 def _ws_closes(symbols: List[str], period: str = "1y") -> Dict[str, List[List[Any]]]:

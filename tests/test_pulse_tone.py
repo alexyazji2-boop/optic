@@ -181,8 +181,8 @@ def test_the_tone_pass_did_not_drop_the_data_limits():
     """Delayed prices, the flow proxy and the dealer assumption are the three
     facts that make every number on screen an approximation. They were in the
     prompt before the rewrite and they have to be in it after."""
-    # "up to 15 minutes" since Phase 09: the feed's quotes run from real time to 15 minutes behind (BUG-098)
-    assert "delayed up to 15 minutes" in SYSTEM
+    # "up to 15 minutes" since Phase 09 (BUG-098); the longest any exchange states since Handoff 4 (NYSE's 20), by exchange
+    assert "delayed up to 20 minutes during the session, by exchange" in SYSTEM
     assert "proxy" in SYSTEM
     # The dealer assumption, stated the way gex.py computes it: long the calls
     # customers sold, short the puts they bought. It used to say the reverse

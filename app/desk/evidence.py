@@ -21,6 +21,7 @@ from typing import Any, Callable, Dict, List, Optional
 from zoneinfo import ZoneInfo
 
 from .model import Evidence, cluster, now_iso
+from .. import delays
 
 log = logging.getLogger(__name__)
 ET = ZoneInfo("America/New_York")
@@ -174,7 +175,7 @@ def _bar_moves(frame) -> Optional[Dict[str, Any]]:
 def gather_prices(g: Gatherer, provider, sectors: List[Dict[str, str]], themes: List[Dict[str, str]]) -> None:
     syms = [s for s, _ in BENCHMARKS] + [r["symbol"] for r in sectors + themes]
     frames = provider.batch_history(syms, period="1y", interval="1d") or {}
-    src = "Yahoo Finance daily bars (about 15 minutes delayed in session)"
+    src = "Yahoo Finance daily bars ({} by exchange in session)".format(delays.quotes_up_to())
     for sym, label in BENCHMARKS:
         mv = _bar_moves(frames.get(sym))
         if not mv:
@@ -463,7 +464,7 @@ def gather_options(g: Gatherer, read_index: Callable[[str], Optional[Dict[str, A
                   symbol=sym, value=_f(r.get("straddle_move_pct"), 2), unit="% (+/-)",
                   url="https://finance.yahoo.com/quote/{}/options".format(sym),
                   period="to the {} expiry ({} days)".format(r.get("expiry"), r.get("dte")),
-                  source="Optic's options surface from the Yahoo chain (about 15 minutes delayed)",
+                  source="Optic's options surface from the Yahoo chain (about {} minutes delayed)".format(delays.CHAIN_MINUTES),
                   method="At-the-money straddle mid divided by the price: roughly the average absolute move options are priced for over the whole period to that expiry, not a forecast and not an event-only move.",
                   detail={"atm_iv_pct": r.get("atm_iv_pct"), "one_sd_pct": r.get("one_sd_move_pct"),
                           "rr25_pts": r.get("rr25_pts"), "expiry": r.get("expiry"), "dte": r.get("dte")})

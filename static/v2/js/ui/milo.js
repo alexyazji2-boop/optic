@@ -20,6 +20,7 @@ import { toast } from './toast.js';
 import * as api from '../core/api.js';
 import * as store from '../core/store.js';
 import * as prefs from '../core/prefs.js';
+import * as delays from '../core/delays.js';
 import * as router from '../core/router.js';
 import { holds } from '../core/device.js';
 import { esc, compact } from '../core/format.js';
@@ -576,7 +577,7 @@ function settingsHTML() {
     <p class="asof">A change applies to your next question. Answers already given stay as they were.</p></div>`;
 }
 // What Milo receives (the page, the market only, or nothing), the data's freshness and the disclosure
-const freshness = () => ((S.health && S.health.realtime_chain) ? 'Option chains are real-time; other prices may be delayed.' : 'Prices are delayed up to 15 minutes.');
+const freshness = () => ((S.health && S.health.realtime_chain) ? `Option chains are ${delays.chainWords(true)}. ${delays.quotesSentence()}` : delays.quotesSentence());
 function attachedLine() {
   if (S.scope === 'none') return 'No page context attached';
   if (S.scope === 'market') return 'The market only attached';

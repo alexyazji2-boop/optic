@@ -29,7 +29,8 @@ import * as RP from '../core/reports.js';
 import { lineChart, mountCharts } from '../ui/chart.js';
 import { skeleton, empty, failed, staleLine, how } from '../ui/states.js';
 import { icon } from '../ui/icons.js';
-import { header as frameHeader, tabs as frameTabs, isFund, fresher, livePrice, advToggle } from './dossier-frame.js';
+import { header as frameHeader, tabs as frameTabs, isFund, fresher, livePrice, advToggle, quoteCtx } from './dossier-frame.js';
+import * as delays from '../core/delays.js';
 import { simpleFacts, simpleSection } from './overview-simple.js';
 import { levelLabel } from '../ui/levelslider.js';
 import { button as miloButton, provideContext } from '../ui/milo.js';
@@ -295,7 +296,7 @@ function about(sym) {
   const lead = firstSentences(summary);
   const rev = fund ? '' : revenueLine();
   const ses = ((D.session || {}).session) || {};
-  const price = isNum(q.price) ? html`${money(q.price)}${isNum(q.change_pct) ? html`, <span class="${dir(q.change_pct)}">${signed(q.change_pct)}</span> ${ses.is_regular ? 'today' : 'at the last close'}` : ''}<small>US dollars; quotes delayed up to 15 minutes</small>` : '';
+  const price = isNum(q.price) ? html`${money(q.price)}${isNum(q.change_pct) ? html`, <span class="${dir(q.change_pct)}">${signed(q.change_pct)}</span> ${ses.is_regular ? 'today' : 'at the last close'}` : ''}<small>US dollars. ${delays.label(q, quoteCtx(D))}</small>` : '';
   const items = [
     ...(summary && summary.length > lead.length + 20 ? [[`${fund ? 'What it is' : 'What it does'}, in full`, html`<p>${summary}</p>${prof.summary_source && prof.summary_source.form_name ? html`<p class="asof">From its ${prof.summary_source.form_name}${prof.summary_source.filed ? `, filed ${fullDate(prof.summary_source.filed)}` : ''}.</p>` : ''}`, '']] : []),
     ...((news.articles || []).length ? [['Latest headlines', html`<ul class="plain">${news.articles.slice(0, 6).map((a) => html`<li><a href="${a.url}" target="_blank" rel="noopener">${clean(a.title)}</a> <span class="t-muted">${a.publisher}, published ${a.age_words || ''}${a.tone && (a.keywords || []).length ? `, ${a.tone} wording` : ''}</span></li>`)}</ul><a class="textlink" href="${hrefFor('news', sym)}">All headlines on News ${icon('out')}</a>`, news.overall_tone || '']] : []),

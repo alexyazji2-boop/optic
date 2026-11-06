@@ -81,15 +81,15 @@ def test_the_later_quote_wins_and_the_header_says_when(tmp_path):
       const older = {{ price: 100, market_time: '2026-10-19T19:00:00Z', name: 'A' }}, newer = {{ price: 101, market_time: '2026-10-19T19:30:00Z' }};
       print(JSON.stringify({{
         a: F.fresher(older, newer).price, b: F.fresher(newer, older).price, name: F.fresher(newer, older).name,
-        open: F.priceWhen({{ quote: {{ market_time: '2026-10-19T19:30:00Z' }}, session: {{ prices: {{ phase: 'regular' }}, session: {{ last_close: {{ date: '2026-10-16' }} }} }} }}),
+        open: F.priceWhen({{ quote: {{ market_time: new Date(Date.now() - 60000).toISOString() }}, session: {{ prices: {{ phase: 'regular' }}, session: {{ last_close: {{ date: '2026-10-16' }} }} }} }}),
         shut: F.priceWhen({{ quote: {{}}, session: {{ prices: {{ phase: 'closed' }}, session: {{ last_close: {{ date: '2026-10-19' }} }} }} }}),
       }}));
     """)
     assert got["a"] == 101 and got["b"] == 101 and got["name"] == "A", "the later trade wins, the other fills gaps"
-    assert got["open"].startswith("Delayed up to 15 minutes, last trade "), "in session a delayed trade, never the close"
-    assert got["shut"] == "Close of Mon Oct 19"
+    assert got["open"].startswith("Delayed up to 20 min · as of "), "in session a delayed trade, never the close"
+    assert got["shut"] == "Market closed · last close Mon Oct 19", "Handoff 4's words for a closed market"
     frame = SRC["pages/dossier-frame.js"]
-    assert "${isNum(q.price) ? html`<span class=\"dh-ext\">${priceWhen(D)}</span>` : ''}" in frame
+    assert "${isNum(q.price) ? html`<span class=\"dh-ext\">${priceTag(D)}</span>` : ''}" in frame
     assert "D.quote = fresher(D.quote, d.quote || d);" in SRC["pages/dossier.js"] and "D.quote = fresher(D.quote, t.quote);" in SRC["pages/options.js"]
 
 

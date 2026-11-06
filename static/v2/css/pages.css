@@ -1394,7 +1394,7 @@ tr.sh-notes td { padding-top: 0; font-size: var(--t-md); color: var(--c-ink-3); 
 .roth-legend i.r2 { border-top: 2px solid var(--c-gold); } .roth-legend i.r3 { border-top: 2px dashed var(--c-ink-3); }
 /* Brokerage */
 .bk-head { display: flex; flex-wrap: wrap; align-items: end; gap: 12px 20px; margin: 4px 0 14px; }
-.bk-head .select { display: grid; gap: 4px; } .bk-fresh { display: flex; flex-wrap: wrap; gap: 6px; flex: 1; }
+.bk-head .select { display: grid; gap: 4px; } .bk-fresh { display: flex; flex-wrap: wrap; gap: 6px; flex: 1; } .bk-fresh .pill { line-height: 1.35; }
 .bk-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--c-line); overflow-x: auto; scrollbar-width: none; margin-bottom: 8px; }
 .bk-tabs button { flex: none; min-height: var(--tap); padding: 0 14px; border: 0; background: none; color: var(--c-ink-3); font: 500 var(--t-base)/1 var(--f-sans); border-bottom: 2px solid transparent; cursor: pointer; }
 .bk-tabs button[aria-selected="true"] { color: var(--c-ink); border-bottom-color: var(--c-gold); }
@@ -1512,10 +1512,11 @@ html[data-milo="off"] .ws-ask { opacity: .55; }
 .ws-panel[data-kind="list"][data-h="s"] { --bh: 210px; }
 .ws-panel[data-kind="list"][data-h="l"] { --bh: 470px; }
 .ws-panel[data-kind="list"] .ws-body { flex: 1 1 var(--bh); min-height: 0; height: var(--bh); }
-.ws-foot { margin-top: auto; display: flex; flex-wrap: nowrap; align-items: baseline; gap: 12px; padding: 6px 12px 7px; border-top: 1px solid var(--c-line-2); font: 500 var(--t-xs)/1.35 var(--f-label); color: var(--c-ink-3); white-space: nowrap; overflow: hidden; }
+/* the prices' delay label (core/delays.js) is never clipped: in a narrow panel it wraps to a second line (Handoff 4) */
+.ws-foot { margin-top: auto; display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 12px; padding: 6px 12px 7px; border-top: 1px solid var(--c-line-2); font: 500 var(--t-xs)/1.35 var(--f-label); color: var(--c-ink-3); white-space: nowrap; overflow: hidden; }
 .ws-foot > span { flex: none; }
 .ws-foot .ws-src { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-.ws-foot .ws-state { color: var(--c-ink-2); }
+.ws-foot .ws-state { color: var(--c-ink-2); white-space: normal; min-width: 0; }
 .ws-srcd { display: grid; gap: 6px; margin: 10px 0 0; padding-top: 10px; border-top: 1px solid var(--c-line-2); }
 .ws-srcd:empty { display: none; }
 .ws-srcd > div { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 10px; }

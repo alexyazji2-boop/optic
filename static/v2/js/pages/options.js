@@ -12,6 +12,7 @@ import * as api from '../core/api.js';
 import * as store from '../core/store.js';
 import { holds } from '../core/device.js';
 import { num, signed, money, signedMoney, clean, shortDate, isNum, capFirst } from '../core/format.js';
+import * as delays from '../core/delays.js';
 import { etStamp } from '../core/marketTime.js';
 import { mountCharts } from '../ui/chart.js';
 import { xyChart } from '../ui/xychart.js';
@@ -131,7 +132,7 @@ function legQuote(l) {
   if (!m || !isNum(m.mid)) return '';
   return `Bid ${num(m.bid)}, ask ${num(m.ask)}, mid ${num(m.mid)}: ${money(m.mid * 100 * l.qty, 2)} for ${l.qty} contract${l.qty === 1 ? '' : 's'} of 100 shares${liq && liq.label ? `. Liquidity: ${liq.label.toLowerCase()}` : ''}.`;
 }
-const quotedAt = (iso) => (iso ? `Quotes read ${etStamp(iso)}${((D.session || {}).prices || {}).phase === 'regular' ? ', delayed about 15 minutes' : ', from the last session the feed has'}` : '');
+const quotedAt = (iso) => (iso ? `Quotes read ${etStamp(iso)}${((D.session || {}).prices || {}).phase === 'regular' ? `, ${delays.chainWords()}` : ', from the last session the feed has'}` : '');
 function result(sym) {
   if (B.analyzing) return skeleton('chart', 1, 'Pricing the position');
   if (B.error) return html`<div class="state err" role="alert"><p class="t-h3">The position could not be priced</p><p>${clean(B.error)}</p></div>`;
