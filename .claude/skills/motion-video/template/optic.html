@@ -1,0 +1,223 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>optic</title>
+<!-- Optic Terminal promo starter, built from the brand's own assets (see "Optic" in SKILL.md):
+     the eye-and-line mark from static/v2/js/ui/icons.js, Milo's sprites from static/scout/, the v2 charcoal
+     tokens, Inter + Space Grotesk from the same jsDelivr packages the app loads, and a real screen captured
+     with capture.mjs. The owner's rules hold here too: no glows, gradients, purple or emoji, no em dashes,
+     gold only for the mark, focus, Milo and chart data, and no figure that the captured screen does not show. -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource-variable/inter/opsz.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource-variable/space-grotesk/index.css">
+<script src="lib.js"></script>
+<style>
+  :root { --plane: #0b0b0a; --raised: #161614; --ink: #f3f1eb; --ink-2: #d3cfc6; --ink-3: #b4afa5; --line: #363430;
+    --gold: #d4b144; --sans: "Inter Variable", Inter, system-ui, sans-serif; --label: "Space Grotesk Variable", "Inter Variable", sans-serif; }
+  * { box-sizing: border-box; margin: 0; }
+  html, body { width: 1920px; height: 1080px; overflow: hidden; background: var(--plane); }
+  body { font-family: var(--sans); color: var(--ink); -webkit-font-smoothing: antialiased; }
+  .scene { position: absolute; inset: 0; display: none; transform-origin: 50% 50%; }
+  .mark { position: absolute; width: 240px; height: 240px; overflow: visible; }
+  /* pass 2: the mark was 240px in the top-left third with the right two thirds empty (graded 6/10) */
+  #s-mark .mark { left: 200px; top: 190px; width: 400px; height: 400px; }
+  .brand { position: absolute; left: 236px; top: 650px; font: 600 64px/1 var(--label); letter-spacing: .2em; }
+  .what { position: absolute; left: 238px; top: 750px; font: 400 44px/1.3 var(--sans); color: var(--ink-3); }
+  .headline { position: absolute; left: 220px; top: 340px; font-weight: 600; font-size: 128px; letter-spacing: -.035em; line-height: 1.06; }
+  .headline .line { overflow: hidden; padding-bottom: .06em; }
+  .headline .line span { display: inline-block; }
+  .headline .line + .line { color: var(--ink-3); }
+  /* pass 2: the caption sat on the frame's bottom edge, and at full size the figures were too small to read */
+  .shot { position: absolute; left: 260px; top: 70px; width: 1400px; height: 875px; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: var(--raised); }
+  .cam { position: absolute; left: 0; top: 0; width: 1400px; transform-origin: 0 0; }
+  .cam img { display: block; width: 100%; }
+  .focus { position: absolute; left: 0; top: 0; border: 3px solid var(--gold); border-radius: 8px; }
+  .caption { position: absolute; left: 262px; top: 984px; font: 500 26px/1 var(--label); letter-spacing: .02em; color: var(--ink-3); }
+  .milo { position: absolute; left: 300px; top: 312px; width: 346px; height: 456px; } /* 1.2x the 3x sprite: still sharp */
+  .milo div { position: absolute; inset: 0; background-repeat: no-repeat; }
+  .milo .tail { background-image: url("assets/scout-full-tail@3x.webp"); background-size: 1200% 100%; }
+  .milo .pose { background-image: url("assets/scout-full@3x.webp"); background-size: 2200% 100%; }
+  .ask { position: absolute; left: 760px; top: 400px; width: 960px; }
+  .ask h2 { font-size: 84px; font-weight: 600; letter-spacing: -.03em; line-height: 1.08; }
+  .ask p { margin-top: 36px; font-size: 36px; line-height: 1.35; color: var(--ink-3); }
+  #s-end .mark { left: 840px; top: 250px; }
+  .url { position: absolute; left: 0; right: 0; top: 560px; text-align: center; font: 600 80px/1 var(--sans); letter-spacing: -.03em; }
+  .note { position: absolute; left: 0; right: 0; top: 680px; text-align: center; font: 400 32px/1 var(--sans); color: var(--ink-3); }
+</style>
+</head>
+<body>
+<template id="mark-tpl">
+  <svg class="mark" viewBox="0 0 32 32">
+    <path class="eye" pathLength="1" d="M2.6 16C6.3 8.9 10.9 5.4 16 5.4S25.7 8.9 29.4 16C25.7 23.1 21.1 26.6 16 26.6S6.3 23.1 2.6 16Z"
+      fill="none" stroke="#f3f1eb" stroke-opacity=".7" stroke-width="1.3" stroke-linejoin="round" stroke-dasharray="1"/>
+    <path class="zig" pathLength="1" d="M7.4 20.2 11.4 15.6 14.6 17.8 18.6 11.6 21.6 14 23.9 11.4"
+      fill="none" stroke="#d4b144" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="1"/>
+    <circle class="dot" cx="23.9" cy="11.4" r="1.5" fill="#d4b144"/>
+  </svg>
+</template>
+
+<section class="scene" id="s-mark">
+  <div class="slot"></div>
+  <div class="brand">OPTIC TERMINAL</div>
+  <p class="what">Stock and options research</p>
+</section>
+
+<section class="scene" id="s-headline">
+  <h1 class="headline">
+    <div class="line"><span>Read</span> <span>the</span> <span>figures.</span></div>
+    <div class="line"><span>Reach</span> <span>the</span> <span>finding.</span></div>
+  </h1>
+</section>
+
+<section class="scene" id="s-product">
+  <div class="shot"><div class="cam"><img src="assets/chart.png" alt=""><div class="focus"></div></div></div>
+  <p class="caption">SPY, 1 hour chart, at the close on Fri Oct 23, 2026. Captured from Optic.</p>
+</section>
+
+<section class="scene" id="s-milo">
+  <div class="milo"><div class="tail"></div><div class="pose"></div></div>
+  <div class="ask">
+    <h2>Ask Milo about what you are looking at.</h2>
+    <p>Milo drafts the question from the page you are on. Nothing is sent until you press Send.</p>
+  </div>
+</section>
+
+<section class="scene" id="s-end">
+  <div class="slot"></div>
+  <div class="url">theopticterminal.com</div>
+  <p class="note">Research, not financial advice.</p>
+</section>
+
+<script>
+const M = window.Motion;
+const grid = { bpm: 120, fps: 30 };
+const SCENES = M.scenes([["mark", 4], ["headline", 4], ["product", 8], ["milo", 4], ["end", 4]], grid);
+window.SCENES = SCENES;
+window.VIDEO = { width: 1920, height: 1080, fps: grid.fps, bpm: grid.bpm, beatsPerCut: 4,
+  frames: SCENES[SCENES.length - 1].end + 1, bed: "pulse", out: "optic.mp4" };
+const beat = (b) => M.beatFrame(b, grid);
+const S = Object.fromEntries(SCENES.map((s) => [s.name, s]));
+
+// Where the focus box lands on the captured chart, in the screenshot's CSS pixels (1600 x 1000 capture):
+// first the OHLC readout, then the last price tag. Re-measure these after capturing a new screen.
+const CAPTURE_W = 1600;
+const FOCUS = [
+  { at: S.product.start + beat(3), x: 308, y: 204, w: 600, h: 40 },
+  { at: S.product.start + beat(5), x: 1424, y: 478, w: 70, h: 26 },
+];
+const WAVE = S.milo.start + beat(1);
+window.CUES = [
+  { frame: S.mark.start + beat(2), sound: "pop", gain: 0.9 },
+  ...SCENES.slice(1).map((s) => ({ frame: s.start, sound: "whoosh", gain: 0.6 })),
+  ...SCENES.slice(1).map((s) => ({ frame: s.start, sound: "bass", gain: 0.8 })),
+  ...FOCUS.map((f) => ({ frame: f.at, sound: "tick", gain: 0.9 })),
+  { frame: WAVE, sound: "pop", gain: 0.7 },
+  { frame: S.end.start, sound: "riser", gain: 0.45 },
+];
+
+const $ = (q, el = document) => el.querySelector(q);
+const els = Object.fromEntries(SCENES.map((s) => [s.name, $(`#s-${s.name}`)]));
+for (const name of ["mark", "end"]) $(".slot", els[name]).replaceWith($("#mark-tpl").content.cloneNode(true));
+const words = [...document.querySelectorAll("#s-headline .line span")];
+
+// Milo's sprite: 22 poses and 12 scarf frames (static/scout/frames.json order).
+const POSE = { idle: 0, half: 1, closed: 2, "arm-1": 10, "arm-2": 11, "arm-3": 12, "nod-1": 17, "nod-2": 18 };
+const WAVE_SEQ = ["arm-1", "arm-2", "arm-3", "arm-2", "arm-3", "arm-2", "arm-1"];
+const BLINK_SEQ = ["half", "closed", "closed", "half"];
+const spriteX = (i, n) => `${(i / (n - 1)) * 100}%`;
+function miloPose(lf) {
+  const w = Math.floor((lf - beat(1)) / 3);
+  if (w >= 0 && w < WAVE_SEQ.length) return WAVE_SEQ[w];
+  const b = lf - beat(3);
+  if (b >= 0 && b < BLINK_SEQ.length) return BLINK_SEQ[b];
+  return "idle";
+}
+
+function drawMark(el, lf) {
+  const eye = M.spring(M.since(lf, 0, grid.fps), { stiffness: 60, damping: 14 });
+  const zig = M.spring(M.since(lf, 10, grid.fps), { stiffness: 90, damping: 16 });
+  $(".eye", el).style.strokeDashoffset = 1 - M.clamp(eye, 0, 1);
+  $(".zig", el).style.strokeDashoffset = 1 - M.clamp(zig, 0, 1);
+  const dot = M.spring(M.since(lf, beat(2), grid.fps), M.SPRINGS.pop);
+  const d = $(".dot", el);
+  d.setAttribute("r", 1.5 * dot);
+}
+
+function renderFrame(f) {
+  const cur = SCENES.find((s) => f >= s.start && f <= s.end);
+  for (const s of SCENES) els[s.name].style.display = s === cur ? "block" : "none";
+  const el = els[cur.name], lf = f - cur.start, t = (dt = 0) => M.since(lf, dt, grid.fps);
+  const sceneT = lf / (cur.end - cur.start);
+  // A slow push on every scene keeps the hold alive without decoration.
+  el.style.transform = `scale(${1 + sceneT * 0.035})`;
+
+  if (cur.name === "mark") {
+    drawMark(el, lf);
+    const b = M.spring(t(beat(2)), M.SPRINGS.gentle);
+    $(".brand", el).style.cssText = `opacity:${M.clamp(b * 1.5)};transform:translateX(${(1 - b) * -40}px)`;
+    const w = M.spring(t(beat(2) + 4), M.SPRINGS.gentle);
+    $(".what", el).style.cssText = `opacity:${M.clamp(w * 1.5)};transform:translateX(${(1 - w) * -40}px)`;
+  }
+
+  if (cur.name === "headline") {
+    words.forEach((w, i) => {
+      const p = M.spring(t(i * 3 + (i >= 3 ? 6 : 0)), M.SPRINGS.snappy);
+      w.style.transform = `translateY(${(1 - p) * 110}%)`;
+    });
+  }
+
+  if (cur.name === "product") {
+    const shot = $(".shot", el);
+    const p = M.spring(t(), M.SPRINGS.heavy);
+    shot.style.transform = `translateY(${(1 - p) * 160}px)`;
+    shot.style.opacity = M.clamp(p * 1.4);
+    const FW = 1400, FH = 875, k = FW / CAPTURE_W;
+    const box = $(".focus", el);
+    const a = FOCUS[0], b = FOCUS[1];
+    const q = f >= b.at ? M.spring(M.since(f, b.at, grid.fps), M.SPRINGS.snappy) : 0;
+    // Camera: push in toward the focus target a beat before the box lands, then pan with it, so the figures it
+    // points at are readable. Clamped so the frame never shows past the screenshot's edge.
+    const z = M.spring(M.since(f, a.at - beat(1), grid.fps), { stiffness: 70, damping: 18 });
+    const sc = 1 + 0.75 * z;
+    const cx = (M.lerp(a.x + a.w / 2, b.x + b.w / 2, q)) * k, cy = (M.lerp(a.y + a.h / 2, b.y + b.h / 2, q)) * k;
+    const tx = M.clamp((FW / 2 - cx * sc) * z, FW - FW * sc, 0), ty = M.clamp((FH / 2 - cy * sc) * z, FH - FH * sc, 0);
+    $(".cam", el).style.transform = `translate(${tx}px, ${ty}px) scale(${sc})`;
+    if (f < a.at) box.style.opacity = 0;
+    else {
+      const g = M.spring(M.since(f, a.at, grid.fps), M.SPRINGS.pop);
+      const x = M.lerp(a.x, b.x, q) - 8, y = M.lerp(a.y, b.y, q) - 8, w = M.lerp(a.w, b.w, q) + 16, h = M.lerp(a.h, b.h, q) + 16;
+      const grow = 1.25 - 0.25 * g; // lands from slightly larger, like a camera finding focus
+      box.style.cssText = `opacity:${M.clamp(g * 2)};left:${x * k}px;top:${y * k}px;width:${w * k}px;height:${h * k}px;transform:scale(${grow})`;
+    }
+    const c = M.spring(t(beat(1)), M.SPRINGS.gentle);
+    $(".caption", el).style.opacity = M.clamp(c);
+  }
+
+  if (cur.name === "milo") {
+    const milo = $(".milo", el);
+    const p = M.spring(t(), M.SPRINGS.heavy);
+    milo.style.transform = `translateY(${(1 - p) * 240}px)`;
+    milo.style.opacity = M.clamp(p * 2);
+    $(".pose", milo).style.backgroundPosition = `${spriteX(POSE[miloPose(lf)], 22)} 0`;
+    $(".tail", milo).style.backgroundPosition = `${spriteX(Math.floor(f / 3) % 12, 12)} 0`; // 1200 ms loop, as on the site
+    const a = M.spring(t(6), M.SPRINGS.gentle);
+    $(".ask", el).style.cssText = `opacity:${M.clamp(a * 1.4)};transform:translateY(${(1 - a) * 40}px)`;
+  }
+
+  if (cur.name === "end") {
+    drawMark(el, lf + beat(2) - 4); // the mark arrives drawn, only the dot lands again
+    const u = M.spring(t(4), M.SPRINGS.snappy);
+    $(".url", el).style.cssText = `opacity:${M.clamp(u * 1.5)};transform:translateY(${(1 - u) * 36}px)`;
+    $(".note", el).style.opacity = M.clamp(M.spring(t(14), M.SPRINGS.gentle));
+  }
+}
+window.renderFrame = renderFrame;
+window.ready = Promise.all([
+  document.fonts.load('600 128px "Inter Variable"'), document.fonts.load('400 36px "Inter Variable"'),
+  document.fonts.load('600 40px "Space Grotesk Variable"'),
+  ...[...document.images].map((i) => i.decode().catch(() => {})),
+  ...["assets/scout-full@3x.webp", "assets/scout-full-tail@3x.webp"].map((src) => { const i = new Image(); i.src = src; return i.decode().catch(() => {}); }),
+]);
+</script>
+</body>
+</html>

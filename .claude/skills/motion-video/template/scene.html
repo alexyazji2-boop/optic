@@ -1,0 +1,174 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>scene</title>
+<!-- Starter scene. Replace the placeholder mark, copy and colors with the real brand assets in assets/. -->
+<script src="lib.js"></script>
+<style>
+  :root { --bg: #0e0d0b; --ink: #f4efe6; --dim: #9d978c; --accent: #e8b04a; --card: #1a1814; --line: #2c2924; }
+  * { box-sizing: border-box; margin: 0; }
+  html, body { width: 1920px; height: 1080px; overflow: hidden; background: var(--bg); }
+  body { font-family: "Inter", -apple-system, "Helvetica Neue", Arial, sans-serif; color: var(--ink); }
+  #stage { position: absolute; inset: 0; overflow: hidden; }
+  #grid { position: absolute; inset: -120px; background-image:
+    linear-gradient(var(--line) 1px, transparent 1px), linear-gradient(90deg, var(--line) 1px, transparent 1px);
+    background-size: 120px 120px; opacity: .35; }
+  #glow { position: absolute; width: 1400px; height: 1400px; border-radius: 50%;
+    background: radial-gradient(circle, rgba(232,176,74,.16), transparent 60%); }
+  .scene { position: absolute; inset: 0; display: none; }
+  .mark { position: absolute; left: 240px; top: 330px; width: 220px; height: 220px; }
+  .tag { position: absolute; left: 240px; top: 600px; font-size: 44px; letter-spacing: -.01em; color: var(--dim); }
+  .tag b { color: var(--ink); font-weight: 600; }
+  .rule { position: absolute; left: 240px; top: 690px; height: 3px; width: 520px; background: var(--accent); transform-origin: left; }
+  .headline { position: absolute; left: 240px; top: 330px; font-size: 132px; font-weight: 700; letter-spacing: -.035em; line-height: 1.02; }
+  .headline span { display: inline-block; margin-right: .22em; }
+  .headline .hl { color: var(--accent); }
+  .line { overflow: hidden; padding-bottom: .08em; }
+  .card { position: absolute; left: 420px; top: 170px; width: 1080px; height: 740px; background: var(--card);
+    border: 1px solid var(--line); border-radius: 28px; box-shadow: 0 40px 120px rgba(0,0,0,.5); }
+  .card h3 { position: absolute; left: 56px; top: 48px; font-size: 30px; font-weight: 500; color: var(--dim); letter-spacing: 0; }
+  .num { position: absolute; left: 56px; top: 96px; font-size: 112px; font-weight: 700; letter-spacing: -.03em; font-variant-numeric: tabular-nums; }
+  .bars { position: absolute; left: 56px; right: 56px; bottom: 150px; height: 300px; display: flex; gap: 18px; align-items: flex-end; }
+  .bar { flex: 1; background: #3a352d; border-radius: 10px 10px 4px 4px; transform-origin: bottom; }
+  .bar.on { background: var(--accent); }
+  .btn { position: absolute; right: 56px; bottom: 48px; padding: 22px 40px; border-radius: 16px; background: var(--accent);
+    color: #1a1408; font-size: 30px; font-weight: 600; }
+  .cursor { position: absolute; left: 0; top: 0; width: 40px; height: 40px; }
+  .end { position: absolute; left: 0; right: 0; top: 0; bottom: 0; }
+  .end .mark { left: 840px; top: 300px; width: 240px; height: 240px; }
+  .word { position: absolute; left: 0; right: 0; top: 590px; text-align: center; font-size: 96px; font-weight: 700; letter-spacing: -.03em; }
+  .url { position: absolute; left: 0; right: 0; top: 720px; text-align: center; font-size: 36px; color: var(--dim); }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div id="glow"></div>
+  <div id="grid"></div>
+
+  <section class="scene" id="s-mark">
+    <svg class="mark" viewBox="0 0 100 100"><circle cx="50" cy="50" r="44" fill="none" stroke="#e8b04a" stroke-width="8"/>
+      <circle cx="50" cy="50" r="18" fill="#f4efe6"/></svg>
+    <p class="tag"><b>Northwind</b> &nbsp;quarterly reports, written for you</p>
+    <div class="rule"></div>
+  </section>
+
+  <section class="scene" id="s-headline">
+    <h1 class="headline">
+      <div class="line"><span>Ship</span><span>the</span><span>report</span></div>
+      <div class="line"><span>before</span><span>the</span><span class="hl">meeting.</span></div>
+    </h1>
+  </section>
+
+  <section class="scene" id="s-product">
+    <div class="card">
+      <h3>Revenue this quarter</h3>
+      <div class="num">$0</div>
+      <div class="bars"></div>
+      <div class="btn">Send to team</div>
+    </div>
+    <svg class="cursor" viewBox="0 0 24 24"><path d="M3 2l17 9-7 2-3 7z" fill="#f4efe6" stroke="#0e0d0b" stroke-width="1.5"/></svg>
+  </section>
+
+  <section class="scene" id="s-end">
+    <div class="end">
+      <svg class="mark" viewBox="0 0 100 100"><circle cx="50" cy="50" r="44" fill="none" stroke="#e8b04a" stroke-width="8"/>
+        <circle cx="50" cy="50" r="18" fill="#f4efe6"/></svg>
+      <div class="word">Northwind</div>
+      <div class="url">northwind.example</div>
+    </div>
+  </section>
+</div>
+
+<script>
+const M = window.Motion;
+const grid = { bpm: 120, fps: 30 };
+const SCENES = M.scenes([["mark", 4], ["headline", 4], ["product", 8], ["end", 4]], grid);
+window.SCENES = SCENES;
+window.VIDEO = { width: 1920, height: 1080, fps: grid.fps, bpm: grid.bpm, beatsPerCut: 4,
+  frames: SCENES[SCENES.length - 1].end + 1, bed: "pulse", out: "out.mp4" };
+
+const beat = (b) => M.beatFrame(b, grid);
+const S = Object.fromEntries(SCENES.map((s) => [s.name, s]));
+const CLICK = S.product.start + beat(6); // the button press lands on beat 6 of the product scene
+window.CUES = [
+  { frame: S.mark.start, sound: "pop", gain: 0.8 },
+  ...SCENES.slice(1).map((s) => ({ frame: s.start, sound: "whoosh", gain: 0.7 })),
+  ...SCENES.slice(1).map((s) => ({ frame: s.start, sound: "bass", gain: 0.8 })),
+  { frame: S.product.start + beat(2), sound: "tick", gain: 0.8 },
+  { frame: CLICK, sound: "pop", gain: 1 },
+  { frame: S.end.start, sound: "riser", gain: 0.5 }, // riser ends on the cut (audio.mjs starts it 1.5s early)
+];
+
+const $ = (q, el = document) => el.querySelector(q);
+const $$ = (q, el = document) => [...el.querySelectorAll(q)];
+const sceneEls = Object.fromEntries(SCENES.map((s) => [s.name, $(`#s-${s.name}`)]));
+const HEIGHTS = [0.32, 0.45, 0.38, 0.6, 0.52, 0.71, 0.66, 0.84, 0.78, 1];
+$(".bars").innerHTML = HEIGHTS.map((_, i) => `<div class="bar${i === HEIGHTS.length - 1 ? " on" : ""}"></div>`).join("");
+const words = $$("#s-headline span");
+const bars = $$(".bar");
+
+function renderFrame(f) {
+  const t = f / grid.fps;
+  // Always-on motion so no frame is ever dead: drifting grid and wandering light.
+  $("#grid").style.transform = `translate(${(-t * 18) % 120}px, ${(-t * 10) % 120}px)`;
+  $("#glow").style.transform = `translate(${700 + Math.sin(t * 0.6) * 260}px, ${-300 + Math.cos(t * 0.45) * 160}px)`;
+
+  const cur = SCENES.find((s) => f >= s.start && f <= s.end);
+  for (const s of SCENES) sceneEls[s.name].style.display = s === cur ? "block" : "none";
+  const ls = (startOffset = 0) => M.since(f, cur.start + startOffset, grid.fps);
+  const sceneT = (f - cur.start) / (cur.end - cur.start);
+
+  if (cur.name === "mark") {
+    const el = sceneEls.mark;
+    const p = M.spring(ls(), M.SPRINGS.pop);
+    $(".mark", el).style.transform = `scale(${p}) rotate(${(1 - M.spring(ls(), M.SPRINGS.wobbly)) * -40}deg)`;
+    const tp = M.spring(ls(8), M.SPRINGS.gentle);
+    $(".tag", el).style.cssText = `opacity:${M.clamp(tp * 1.5)};transform:translateX(${(1 - tp) * -60}px)`;
+    $(".rule", el).style.transform = `scaleX(${M.spring(ls(14), M.SPRINGS.snappy)})`;
+    el.style.transform = `translateX(${sceneT * -30}px)`; // slow push keeps the hold alive
+  }
+
+  if (cur.name === "headline") {
+    words.forEach((w, i) => {
+      const p = M.spring(ls(i * 3), M.SPRINGS.snappy);
+      w.style.transform = `translateY(${(1 - p) * 110}%)`;
+      w.style.opacity = M.clamp(p * 2);
+    });
+    sceneEls.headline.style.transform = `scale(${1 + sceneT * 0.03})`;
+    sceneEls.headline.style.transformOrigin = "240px 400px";
+  }
+
+  if (cur.name === "product") {
+    const el = sceneEls.product;
+    const cp = M.spring(ls(), M.SPRINGS.heavy);
+    $(".card", el).style.transform = `translateY(${(1 - cp) * 140}px) scale(${0.94 + 0.06 * cp})`;
+    $(".card", el).style.opacity = M.clamp(cp * 1.6);
+    bars.forEach((b, i) => { b.style.height = `${HEIGHTS[i] * 100}%`; b.style.transform = `scaleY(${M.spring(ls(beat(1) + i * 2), M.SPRINGS.pop)})`; });
+    const np = M.spring(ls(beat(2)), { stiffness: 60, damping: 16 });
+    $(".num", el).textContent = "$" + Math.round(M.clamp(np, 0, 1.2) * 2481).toLocaleString("en-US") + "k";
+    // Cursor travels to the button on a spring, then presses on the beat.
+    const mp = M.spring(ls(beat(4)), M.SPRINGS.gentle);
+    const x = M.lerp(1500, 1360, mp), y = M.lerp(1040, 830, mp);
+    const pressed = f >= CLICK && f < CLICK + 3;
+    $(".cursor", el).style.transform = `translate(${x}px, ${y}px) scale(${pressed ? 0.9 : 1})`;
+    // Release: the button springs from 0.94 back to 1 with a little overshoot.
+    const release = f >= CLICK + 3 ? M.springTo(0.94, 1, M.since(f, CLICK + 3, grid.fps), M.SPRINGS.wobbly) : 1;
+    $(".btn", el).style.transform = `scale(${pressed ? 0.94 : release})`;
+    $(".btn", el).textContent = f >= CLICK + 3 ? "Sent ✓" : "Send to team";
+  }
+
+  if (cur.name === "end") {
+    const el = sceneEls.end;
+    const p = M.spring(ls(), M.SPRINGS.pop);
+    $(".mark", el).style.transform = `scale(${p})`;
+    const wp = M.spring(ls(5), M.SPRINGS.snappy);
+    $(".word", el).style.cssText = `opacity:${M.clamp(wp * 1.5)};transform:translateY(${(1 - wp) * 40}px)`;
+    $(".url", el).style.opacity = M.clamp(M.spring(ls(12), M.SPRINGS.gentle));
+    el.style.transform = `scale(${1 + sceneT * 0.04})`;
+  }
+}
+window.renderFrame = renderFrame;
+</script>
+</body>
+</html>
