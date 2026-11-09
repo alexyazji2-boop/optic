@@ -108,8 +108,11 @@ def server(stub, tmp_path_factory):
     log.close()
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="module")
 def chrome():
+    """Per module, not per session: Playwright's sync API keeps an event loop running in this thread while it is
+    open, and the rest of the suite (which runs after tests/e2e) calls asyncio.run(), which refuses inside one.
+    Measured: 143 later tests failed with a session-wide browser, none with this."""
     with pw.sync_playwright() as p:
         try:
             b = p.chromium.launch()

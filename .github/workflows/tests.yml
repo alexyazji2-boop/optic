@@ -29,12 +29,6 @@ jobs:
     env:
       # the floor: what Pass 1 closed with. Lower it only with a reason in the pull request.
       MIN_PASSED: "9000"
-      HTTP_PROXY: http://127.0.0.1:9
-      HTTPS_PROXY: http://127.0.0.1:9
-      http_proxy: http://127.0.0.1:9
-      https_proxy: http://127.0.0.1:9
-      NO_PROXY: 127.0.0.1,localhost
-      no_proxy: 127.0.0.1,localhost
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -45,16 +39,16 @@ jobs:
             requirements.txt
             requirements-dev.txt
       - name: Install
-        env:
-          HTTP_PROXY: ""
-          HTTPS_PROXY: ""
-          http_proxy: ""
-          https_proxy: ""
         run: |
           python -m pip install -r requirements-dev.txt
           python -m playwright install chromium
       - name: Tests
-        run: python -m pytest -q -p no:cacheprovider --junitxml=junit.xml
+        # outbound HTTP pinned to a closed port, both spellings (curl reads the lowercase ones), set in the shell
+        # because the workflow's env section treats the two spellings as one key
+        run: |
+          export HTTP_PROXY=http://127.0.0.1:9 HTTPS_PROXY=http://127.0.0.1:9 http_proxy=http://127.0.0.1:9 https_proxy=http://127.0.0.1:9
+          export NO_PROXY=127.0.0.1,localhost no_proxy=127.0.0.1,localhost
+          python -m pytest -q -p no:cacheprovider --junitxml=junit.xml
       - name: Count
         if: always()
         run: |
@@ -90,7 +84,7 @@ jobs:
       - name: Start it and read /healthz
         run: |
           docker run -d --name optic -p 8077:8077 -e HTTPS_PROXY=http://127.0.0.1:9 -e HTTP_PROXY=http://127.0.0.1:9 optic:ci
-          for i in $(seq 1 30); do curl -fsS http://127.0.0.1:8077/healthz && exit 0; sleep 2; done
+          for _ in $(seq 1 30); do curl -fsS http://127.0.0.1:8077/healthz && exit 0; sleep 2; done
           docker logs optic; exit 1
 
   secrets:
