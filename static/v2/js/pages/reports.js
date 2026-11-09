@@ -95,6 +95,39 @@ function accounts() {
 
 /* ---------------- Metrics ---------------- */
 const pct = (v) => (v === null || v === undefined ? '' : `${Math.round(Number(v))}%`);
+/* ---------------- the three signals and the front end (2026-11-09) ----------------
+ * Raw counts of the owner's three signals (app/usage.py): a company opened from Home, a question to Milo, and visits
+ * with returns within a week, signed-in and signed-out readers alike. Counts only; the reporting page is a later
+ * round. And which front end the public gets, with the one setting that changes it (app/frontend.py). */
+function frontEnd() {
+  const f = (D.health || {}).frontend;
+  if (!f) return html`<p class="asof" data-v2-frontend>The front end in use could not be read just now.</p>`;
+  return html`<p class="asof" data-v2-frontend="${f.active}">Front end for the public: <b>${f.active === 'v2' ? 'the new design (v2)' : 'the classic app'}</b>. ${f.classic
+    ? `Classic is on (${f.setting}=on); remove the setting or set it to off, and restart, to serve the new design to everyone.`
+    : `Classic is off. To turn it back on, set ${f.setting}=on and restart.`}</p>`;
+}
+function signals() {
+  const g = D.signals;
+  if (!g) return '';
+  if (g.available === false) return html`<section class="section" aria-labelledby="sg-h"><h2 class="t-h2" id="sg-h">Your three signals</h2><p>${clean(g.reason || 'The usage records could not be read.')}</p></section>`;
+  const w = g.windows || {}, cols = [['today', 'Today'], ['week', '7 days'], ['month', '30 days'], ['all', `Since ${g.since ? shortDate(g.since) : 'recording began'}`]];
+  const cell = (k, f) => { const x = w[k] || {}; return f(x); };
+  const back = g.returned_within_week || {};
+  return html`<section class="section" aria-labelledby="sg-h"><h2 class="t-h2" id="sg-h">Your three signals</h2>
+    <p class="section-sub">Raw counts, signed-in and signed-out readers together.${g.capture === false ? ' Recording is switched off (OPTIC_USAGE_CAPTURE=off).' : ''} Kept ${g.keep_days} days.</p>
+    <div class="tscroll"><table class="t" data-v2-signals><caption class="sr">The three signals</caption>
+      <thead><tr><th scope="col">Signal</th>${cols.map(([, l]) => html`<th scope="col" class="n">${l}</th>`)}</tr></thead>
+      <tbody>
+        <tr><th scope="row">Opened a stock from Home</th>${cols.map(([k]) => html`<td class="n">${cell(k, (x) => count((x.home_stock_open || {}).events))}</td>`)}</tr>
+        <tr><th scope="row">Readers who did</th>${cols.map(([k]) => html`<td class="n">${cell(k, (x) => count((x.home_stock_open || {}).readers))}</td>`)}</tr>
+        <tr><th scope="row">Asked Milo a question</th>${cols.map(([k]) => html`<td class="n">${cell(k, (x) => count((x.milo_question || {}).events))}</td>`)}</tr>
+        <tr><th scope="row">Readers who did</th>${cols.map(([k]) => html`<td class="n">${cell(k, (x) => count((x.milo_question || {}).readers))}</td>`)}</tr>
+        <tr><th scope="row">Visit days</th>${cols.map(([k]) => html`<td class="n">${cell(k, (x) => count((x.visit || {}).days))}</td>`)}</tr>
+        <tr><th scope="row">Readers who visited</th>${cols.map(([k]) => html`<td class="n">${cell(k, (x) => count((x.visit || {}).readers))}</td>`)}</tr>
+      </tbody></table></div>
+    <p data-v2-returned>Came back within a week of their first visit: <b>${count(back.readers)}</b> reader${back.readers === 1 ? '' : 's'}, of ${count(back.had_a_full_week)} whose first visit was at least a week ago.</p>
+  </section>`;
+}
 function metrics() {
   const d = D.d, a = d.accounts || {}, weeks = d.weeks || [], cohorts = (d.retention || {}).cohorts || [];
   const q = d.questions || {}, kinds = q.by_kind || [], calls = d.model_calls || {}, since = d.tracking_since;
@@ -106,7 +139,8 @@ function metrics() {
     : html`${count(w.active_accounts)}${w.active_from ? html` <small class="t-muted">from ${shortDate(w.active_from)}</small>` : ''}`);
   const shown = weeks.slice().reverse(), recent = cohorts.slice().reverse();
   const anyQ = kinds.some((k) => k.all);
-  return html`<p class="section-sub">${lead}</p>
+  return html`${frontEnd()}<p class="section-sub">${lead}</p>
+    ${signals()}
     <dl class="kv mt-kv"><div><dt>Accounts</dt><dd>${count(a.total)}</dd></div><div><dt>Active, 7 days</dt><dd>${count(a.active_7_days)}</dd></div><div><dt>Active, 30 days</dt><dd>${count(a.active_30_days)}</dd></div><div><dt>Verified email</dt><dd>${count(a.verified)}</dd></div></dl>
 
     <h2 class="t-h2 mt-h">Sign-ups and weekly active accounts</h2>
@@ -156,7 +190,7 @@ async function load() {
     let d;
     if (view === 'reports') d = await api.get(`/api/feedback?limit=50&status=${tab}`, { force: true, timeout: 20000 });
     else if (view === 'usage') { [d, D.health] = await Promise.all([api.get('/api/ai/usage', { force: true }), api.get('/api/health', { ttl: 60000 }).catch(() => null)]); }
-    else if (view === 'metrics') d = await api.get('/api/admin/metrics', { force: true });
+    else if (view === 'metrics') { [d, D.signals, D.health] = await Promise.all([api.get('/api/admin/metrics', { force: true }), api.get('/api/admin/usage-signals', { force: true }).catch((e) => ({ available: false, reason: e.message })), api.get('/api/health', { ttl: 0, force: true }).catch(() => null)]); }
     else d = await api.get('/api/admin/accounts', { force: true });
     if (my !== seq || !live || !isOwner()) return;
     D.d = d;

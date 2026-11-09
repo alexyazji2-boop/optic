@@ -278,6 +278,16 @@ export function deskBody(md) {
     ${limits.length ? html`<details class="more-inline desk-limits" data-v2-fold="desk-limits"><summary>What this does not tell you (${limits.length})</summary><ul>${limits.map((l) => html`<li>${clean(l)}</li>`)}</ul></details>` : ''}
     ${voiceWhy(md) ? html`<p class="asof desk-why">${voiceWhy(md)}</p>` : ''}`;
 }
+/** The Desk at Beginner (2026-11-09): when it is for, its bottom line and what it does not tell you, with `more` (a
+ *  Show more button) for the whole edition. The caveats are the same at every level; only the edition is folded. */
+export function deskBottom(md, more) {
+  const limits = md.limits || [];
+  return html`<p class="ws-sub">${md.date ? `For ${shortDate(md.date)}. ` : ''}${voiceWords(md)}${reExplain(md)}</p>
+    ${md.overall ? html`<p class="desk-bottom"><b>Bottom line.</b> ${clean(md.overall)}</p>` : html`<p>${clean((md.lead || [])[0] || '')}</p>`}
+    ${more || ''}
+    ${limits.length ? html`<details class="more-inline desk-limits" data-v2-fold="desk-limits"><summary>What this does not tell you (${limits.length})</summary><ul>${limits.map((l) => html`<li>${clean(l)}</li>`)}</ul></details>` : ''}
+    ${voiceWhy(md) ? html`<p class="asof desk-why">${voiceWhy(md)}</p>` : ''}`;
+}
 /* ---------------- what changed since yesterday ---------------- */
 // The briefing for the reader's own names (app/briefing.py; Classic app.js dailyChangesHTML, parity B8.3): the latest
 // completed session against the one before, item by item, each with why it may matter and where it shows. The

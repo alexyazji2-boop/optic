@@ -25,8 +25,10 @@ import { marketQuestions } from '../core/market-questions.js';
 import { toast } from '../ui/toast.js';
 import { icon } from '../ui/icons.js';
 import { go } from '../core/router.js';
-import { levelSlider } from '../ui/levelslider.js';
-import { hello, etDate, portfolio, eventsBlock, STARTERS, STARTER_NAMES, STARTER_ABOUT, portfolioSeries, deskBody, evPress, changesBlock, trendsBlock, briefingHoldings } from './home.js';
+import { levelControl } from '../ui/levelcontrol.js';
+import { miloPrompt, press as askPrompt, resume as resumePrompt, homeQuestion } from '../ui/miloprompt.js';
+import { expansions, moreList, moreButton } from '../ui/showmore.js';
+import { hello, etDate, portfolio, eventsBlock, STARTERS, STARTER_NAMES, STARTER_ABOUT, portfolioSeries, deskBody, deskBottom, evPress, changesBlock, trendsBlock, briefingHoldings } from './home.js';
 import { term } from '../ui/term.js';
 import * as FV from '../core/finviz.js';
 import { valuationWord } from '../core/research-words.js';
@@ -161,7 +163,45 @@ function defaultsFor(preset, dens) {
   const keep = dens === 'advanced' ? null : SIMPLE[preset] || SIMPLE.market;
   return p.map(([id, span, h]) => ({ id, span, h, hidden: !!keep && !keep.includes(id) }));
 }
-const defaults = (preset) => defaultsFor(preset, prefs.density());
+// Home's layouts are the Advanced level's (2026-11-09): what a layout shows is no longer the View setting; below
+// Advanced the level matrix decides (LEVEL_PANELS), and Advanced shows each layout whole, as Advanced view did.
+const defaults = (preset) => defaultsFor(preset, 'advanced');
+
+/* ---------------- the level matrix (2026-11-09, workflow map section C, three levels) ----------------
+ * Beginner: what matters today in plain words, one market strip, the Desk's bottom line, the names the reader
+ * follows, and the Milo prompt. Intermediate: adds the quote panel and the market panels (Market Overview whole);
+ * the layouts are one press away behind Customize. Advanced: everything Home has (every layout, the linked ticker,
+ * the options and dealer gamma panels). Every panel a level leaves out is listed below with Show more. */
+export const LEVEL_PANELS = {
+  beginner: [['indices', 12, 'm'], ['priority', 8, 'm'], ['watch', 4, 'm'], ['desk', 12, 'm']],
+  intermediate: null,   // Market Overview, every panel of it
+};
+const LEVEL_TRIM = { beginner: ['desk'] };   // shown, but only its bottom line, with Show more for the rest
+const OPEN = expansions();
+const lvl = () => prefs.level();
+/** The reader's own layout choice wins at Intermediate: a layout they picked or changed behind Customize. */
+const ownLayout = () => S.preset !== 'market' || !!S.custom[S.preset];
+/** The panels Home shows at this level, in order, with any the reader opened by Show more after them. */
+function shownPanels() {
+  const level = lvl();
+  if (level === 'advanced' || EDIT || (level === 'intermediate' && ownLayout())) return layout().filter((x) => !x.hidden);
+  const base = (LEVEL_PANELS[level] || PRESETS.market.panels).map(([id, span, h]) => ({ id, span, h, hidden: false }));
+  const have = new Set(base.map((x) => x.id));
+  const extra = OPEN.list().filter((id) => PANELS[id] && !have.has(id)).map((id) => ({ id, span: PANELS[id].span || 6, h: 'm', hidden: false, opened: true }));
+  return [...base, ...extra];
+}
+/** The panels this level leaves out (each listed with Show more), never the optional ones with nothing to show. */
+function leftOut() {
+  const level = lvl();
+  if (level === 'advanced' || EDIT || (level === 'intermediate' && ownLayout())) return [];
+  const shown = new Set(shownPanels().map((x) => x.id));
+  // the market layout's panels first, then the company and options ones the Advanced layouts add
+  const order = [...PRESETS.market.panels.map((x) => x[0]), ...Object.keys(PANELS)];
+  return [...new Set(order)].filter((id) => PANELS[id] && !shown.has(id) && !(PANELS[id].optional && (DATA[id] || {}).absent) && !PANELS[id].linkedOnly)
+    .map((id) => ({ id, title: PANELS[id].title, blurb: BLURB[id] || '' }));
+}
+const trimmed = (id) => (LEVEL_TRIM[lvl()] || []).includes(id) && !OPEN.has(`${id}:full`) && !EDIT;
+
 const snap = (n) => SPANS.reduce((best, c) => (Math.abs(c - n) < Math.abs(best - n) ? c : best), 6);
 /** A saved layout made safe to use: known panels once each, a span on the grid's steps, a height. */
 function norm(list) {
@@ -290,7 +330,9 @@ function moveText(i) {
   if (i.group === 'rates' && isNum(i.last)) { const bp = Math.round((i.last - i.last / (1 + i.chg_1d / 100)) * 100); return `${bp > 0 ? '+' : bp < 0 ? '−' : ''}${Math.abs(bp)} bp`; }
   return signed(i.chg_1d);
 }
-const tickBtn = (sym, label) => html`<button type="button" class="ws-tick" data-ws-pick="${sym}" aria-pressed="${S.link === sym}">${label || sym}</button>`;
+// Below Advanced there is no linked ticker to set, so a ticker opens its company (core flow 3: any ticker on Home)
+const tickBtn = (sym, label) => (lvl() === 'advanced' ? html`<button type="button" class="ws-tick" data-ws-pick="${sym}" aria-pressed="${S.link === sym}">${label || sym}</button>`
+  : html`<a class="ws-tick" href="#/${encodeURIComponent(sym)}">${label || sym}</a>`);
 
 export const PANELS = {
   portfolio: {
@@ -766,9 +808,11 @@ let EDIT = false;
 function bar() {
   const hidden = layout().filter((x) => x.hidden && !(PANELS[x.id].optional && (DATA[x.id] || {}).absent));
   const recent = [...new Set([...(store.recent() || []), ...((store.activeList() || {}).symbols || [])])].filter((x) => x !== S.link).slice(0, 5);
+  // the layouts are Advanced's; at Intermediate they are behind Customize (the level matrix, 2026-11-09)
+  const layouts = lvl() === 'advanced' || EDIT;
   return html`<div class="ws-layoutbar">
-    <div class="ws-presets" role="tablist" aria-label="Layout">${Object.entries(PRESETS).map(([k, p]) => html`<button type="button" role="tab" aria-selected="${S.preset === k}" data-ws-preset="${k}">${p.label}</button>`)}</div>
-    <label class="tabsel ws-presetsel"><span class="tabsel-k">Layout</span><select data-ws-presetsel aria-label="Layout">${Object.entries(PRESETS).map(([k, p]) => html`<option value="${k}" ${S.preset === k ? 'selected' : ''}>${p.label}</option>`)}</select></label>
+    ${layouts ? html`<div class="ws-presets" role="tablist" aria-label="Layout">${Object.entries(PRESETS).map(([k, p]) => html`<button type="button" role="tab" aria-selected="${S.preset === k}" data-ws-preset="${k}">${p.label}</button>`)}</div>
+    <label class="tabsel ws-presetsel"><span class="tabsel-k">Layout</span><select data-ws-presetsel aria-label="Layout">${Object.entries(PRESETS).map(([k, p]) => html`<option value="${k}" ${S.preset === k ? 'selected' : ''}>${p.label}</option>`)}</select></label>` : html`<span></span>`}
     <button type="button" class="btn btn-sm ws-edit ${EDIT ? 'btn-primary' : ''}" data-ws-edit aria-pressed="${EDIT}">${EDIT ? 'Done' : 'Customize'}</button>
   </div>
   ${EDIT ? html`<div class="ws-toolbar ws-editbar" role="group" aria-label="Customize ${PRESETS[S.preset].label}">
@@ -860,8 +904,6 @@ function onboard() {
       <li><p><b>Save a company to follow.</b> Following adds it to your ${term('watchlist', 'watchlist')}; it does not buy shares or spend money. <span class="ob-more">SPY is a fund that tracks the S&P 500. ${store.signedIn() ? '' : 'Kept in this browser until you sign in.'}</span></p>
         <div class="ob-picks" role="group" aria-label="Follow a company">${STARTERS.map((sym) => followBtn(sym))}</div></li>
     </ul>
-    <div class="ob-level">${levelSlider({ id: 'ob-lvl', label: 'How should Optic speak to you?', compact: true })}
-      <p class="ws-sub">It changes the wording, never the figures. Change it any time in Settings or in Milo.</p></div>
     <button type="button" class="btn btn-sm" data-ws-onboard-done>${following.length ? 'Done' : 'Not now'}</button>
   </section>`;
 }
@@ -883,17 +925,53 @@ function fillRows() {
 }
 
 function paintAll() {
-  const shown = layout().filter((x) => !x.hidden);
+  const shown = shownPanels(), level = lvl();
   const ses = ((DATA.indices || {}).session) || {};
-  draw(root, html`<div class="ws-page">
-    <header class="ws-pagehead"><div><h1 class="t-h2" tabindex="-1">${hello()}</h1><p class="ws-sub" id="ws-date">${etDate(ses.now_et)}${ses.label ? `. ${clean(ses.label)}.` : ''}</p></div>
-      </header>
+  // Customize is Intermediate's and Advanced's: at Beginner Home is the level's panels and nothing to arrange
+  const showBar = level !== 'beginner' || EDIT;
+  draw(root, html`<div class="ws-page" data-v2-level-now="${level}">
+    <header class="ws-pagehead page-lead"><div><h1 class="t-h2" tabindex="-1">${hello()}</h1><p class="ws-sub" id="ws-date">${etDate(ses.now_et)}${ses.label ? `. ${clean(ses.label)}.` : ''}</p></div>
+      ${levelControl({ id: 'home-lc' })}</header>
+    ${miloPrompt(homeAsk())}
     ${showOnboard() ? onboard() : ''}
-    ${bar()}
-    <div class="ws-grid ${EDIT ? 'is-editing' : 'is-locked'}">${shown.length ? shown.map((x, i) => html`${!EDIT && i === shown.findIndex((y) => PANELS[y.id].linked) ? linkRow() : ''}${panelShell(x, i, shown.length)}`) : html`<p class="ws-note">Every panel is hidden. Use Add panel, or Reset.</p>`}</div></div>`);
+    ${showBar ? bar() : ''}
+    <div class="ws-grid ${EDIT ? 'is-editing' : 'is-locked'}">${shown.length ? shown.map((x, i) => html`${!EDIT && level === 'advanced' && i === shown.findIndex((y) => PANELS[y.id].linked) ? linkRow() : ''}${panelShell(x, i, shown.length)}`) : html`<p class="ws-note">Every panel is hidden. Use Add panel, or Reset.</p>`}</div>
+    ${moreList(leftOut(), { heading: 'More on Home', screen: 'home' })}</div>`);
   shown.forEach((x) => { if (DATA[x.id] !== undefined || ERR[x.id]) paintBody(x.id); if (!folded(x.id)) loadPanel(x.id, { quiet: DATA[x.id] !== undefined }); });
   fillRows();
   provideContext(miloContext);
+}
+
+// The Desk at Beginner: its bottom line, and what it does not tell you, with Show more for the whole edition
+function deskTrim(d) {
+  const md = (d || {}).morning_desk;
+  if (!md || !md.available) return html`<p class="ws-note">${clean((md && md.reason) || 'No Desk edition is available right now.')}</p>`;
+  return deskBottom(md, moreButton('desk:full', 'Optic Desk', { label: 'Show more' }));
+}
+
+/* ---------------- the Milo prompt (2026-11-09) ----------------
+ * "Why did my holdings move today?" with holdings (open paper positions, the retirement box, a linked brokerage);
+ * "Why did the names I follow move today?" with followed names and no holdings; "Why did the market move today?"
+ * with neither. The figures that go with it are the ones Home is showing for those names, or the market strip. */
+function homeAsk() {
+  const brokerage = ((((DATA.portfolio || {}).ov || {}).today || {}).rows) || [];
+  const holdings = briefingHoldings(brokerage), followed = store.allSymbols();
+  const question = homeQuestion({ holdings: holdings.length, followed: followed.length });
+  const rows = ((DATA.watch || {}).rows) || [];
+  const move = (sym) => { const r = rows.find((x) => x.symbol === sym) || brokerage.find((x) => x.symbol === sym); return r && isNum(r.change_pct) ? signed(r.change_pct) : null; };
+  let figures;
+  if (holdings.length || followed.length) {
+    const names = (holdings.length ? holdings : followed).slice(0, 20);
+    figures = { name: holdings.length ? 'Your holdings, today' : 'The names you follow, today', figures: names.map((sym) => [sym, move(sym) || 'move not on Home yet']), notes: [] };
+  } else {
+    const cells = STRIP.map(([g, l]) => inst(DATA.indices, g, l)).filter((i) => i && isNum(i.chg_1d));
+    figures = { name: 'Markets at a glance, today', figures: cells.map((i) => [i.label, moveText(i)]), notes: [] };
+  }
+  return { question, about: `Home: ${figures.name}`, symbol: '', figures, screen: 'home' };
+}
+function paintPrompt() {
+  const t = $('[data-v2-mp="home"] [data-v2-mp-text]', root); if (!t) return;
+  const q = homeAsk().question; if (t.textContent !== q) t.textContent = q;
 }
 
 function paintBody(id) {
@@ -910,7 +988,7 @@ function paintBody(id) {
   const forLink = p.linked ? DLINK[id] : S.link;
   // a repaint keeps what the reader opened in it and where they were in it (a fold by its name, the panel's own scroll)
   const opened = [...body.querySelectorAll('details[data-v2-fold]')].filter((x) => x.open).map((x) => x.dataset.v2Fold), top = body.scrollTop;
-  draw(body, p.body(d, P, forLink)); keep();
+  draw(body, id === 'desk' && trimmed('desk') ? deskTrim(d) : p.body(d, P, forLink)); keep();
   opened.forEach((k) => { const x = body.querySelector(`details[data-v2-fold="${k}"]`); if (x) x.open = true; });
   if (top) body.scrollTop = top;
   if (p.charts) mountCharts(body, p.charts(d, P, forLink));
@@ -923,6 +1001,7 @@ function paintBody(id) {
   draw(foot, html`<span class="ws-src">${SRC[id] || f.source || ''}</span>${f.at ? html`<span>${asof(f.at, f.verb)}</span>` : ''}${st ? html`<span class="ws-state">${st}</span>` : ''}${old ? html`<span class="ws-stale">${old}</span>` : ''}${f.stale ? html`<span class="ws-stale">${f.stale}</span>` : ''}`);
   const dl = $(`#wsd-${id}`, root);
   if (dl) draw(dl, html`<div><dt>Source</dt><dd>${f.source || SRC[id] || ''}</dd></div>${freshOf(id) ? html`<div><dt>How fresh</dt><dd class="ws-fresh">${freshOf(id)}</dd></div>` : ''}${f.note || f.staleWhy ? html`<div><dt>Note</dt><dd>${[f.note, f.staleWhy].filter(Boolean).join(' ')}</dd></div>` : ''}${f.gap ? html`<div><dt>Not in Optic</dt><dd>${f.gap}</dd></div>` : ''}`);
+  if (id === 'watch' || id === 'portfolio' || id === 'indices') paintPrompt();
   if (id === 'indices') { const dt = $('#ws-date', root), ses = d.session || {}; if (dt) dt.textContent = `${etDate(ses.now_et)}${ses.label ? `. ${clean(ses.label)}.` : ''}`; }
 }
 
@@ -1055,7 +1134,7 @@ function miloContext() {
   const q = ((DATA.quote || {}).q || {}).quote || null;
   return {
     focus_label: `Home, ${PRESETS[S.preset].label}${S.link ? `, linked to ${S.link}` : ''}`,
-    workspace: { layout: PRESETS[S.preset].label, linked_ticker: S.link, panels: layout().filter((x) => !x.hidden).map((x) => PANELS[x.id].title),
+    workspace: { layout: PRESETS[S.preset].label, linked_ticker: S.link, panels: shownPanels().map((x) => PANELS[x.id].title), level: lvl(),
       kept: Object.fromEntries(layout().filter((x) => !x.hidden && PANELS[x.id].linked && ps(x.id).pin).map((x) => [PANELS[x.id].title, ps(x.id).pin])) },
     macro: m.regime ? { regime: m.regime, risk_score: m.risk_score, stance: m.stance, expected_move: m.expected_move } : undefined,
     sentiment: (DATA.regime || {}).s && DATA.regime.s.available !== false ? { score: DATA.regime.s.score, label: DATA.regime.s.label } : undefined,
@@ -1096,6 +1175,15 @@ function holdInView(id, sym) {
 function wire() {
   root.addEventListener('click', async (e) => {
     const t = (s2) => e.target.closest(s2); let b;
+    if ((b = t('[data-v2-mp-ask]'))) { askPrompt(homeAsk, b); return; }
+    if ((b = t('[data-v2-show-more]'))) {
+      const id = b.dataset.v2ShowMore; OPEN.add(id); paintAll();
+      // focus lands on what opened: the panel's own heading, or the Desk's body
+      const pid = id.split(':')[0], to = $(`[data-ws-panel="${pid}"] .ws-tbtn`, root) || $(`#wsb-${pid}`, root);
+      if (to) to.focus({ preventScroll: false });
+      announce(`${(PANELS[pid] || {}).title || 'The panel'} is open. Your level is unchanged.`);
+      return;
+    }
     if ((b = t('[data-ws-preset]'))) { if (b.dataset.wsPreset === 'mine' && !S.layouts.mine.some((x) => !x.hidden)) S.layouts.mine = JSON.parse(JSON.stringify(S.layouts.market)); S.preset = b.dataset.wsPreset; save(); paintAll(); say(`${PRESETS[S.preset].label} layout.`); return; }
     if ((b = t('[data-ws-pick]'))) { setLink(b.dataset.wsPick); return; }
     if ((b = t('[data-ws-fold]'))) { setFold(b.dataset.wsFold, b.getAttribute('aria-expanded') === 'true'); return; }
@@ -1247,7 +1335,11 @@ export async function render(main) {
     // ... and Simple or Advanced changed in another tab: a layout nobody changed follows it (D-020)
     window.addEventListener('storage', (e) => { if ((e.key === KEY || e.key === 'optic.mode.v1') && live && !EDIT) { load(); paintAll(); } });
   }
-  root = main; live = true; load();
+  root = main; live = true; load(); OPEN.clear();
+  // the level, from this page's control, Settings, Milo or another tab: Home draws the new level's panels, and what
+  // Show more opened closes again (it was opened past the old level)
+  if (unLevel) unLevel();
+  unLevel = prefs.onChange((what) => { if (!live || (what !== 'knowledge' && what !== 'knowledge-synced')) return; OPEN.clear(); paintAll(); });
   Object.keys(TRIES).forEach((k) => delete TRIES[k]); Object.keys(POLLS).forEach((k) => delete POLLS[k]);
   document.title = 'Home, Optic';
   wire(); paintAll();
@@ -1261,8 +1353,11 @@ export async function render(main) {
     if (!live || !open || !current()) return;
     await Promise.all(layout().filter((x) => !x.hidden && MARKET_PANELS.includes(x.id) && DATA[x.id] !== undefined).map((x) => loadPanel(x.id, { quiet: true })));
   }, { every: 20000, closed: 300000 });
+  // a question asked from Home's prompt before signing in: Milo asks it now (ui/miloprompt.js)
+  resumePrompt('home', null);
 }
-export function dispose() { lastScroll = window.scrollY; live = false; if (timer) { timer.stop(); timer = null; } if (mq) mq.onchange = null; if (mq2) mq2.onchange = null; Object.values(LATE).forEach(clearTimeout); Object.values(AUTO).forEach(clearTimeout); }
+let unLevel = null;
+export function dispose() { lastScroll = window.scrollY; live = false; if (unLevel) { unLevel(); unLevel = null; } if (timer) { timer.stop(); timer = null; } if (mq) mq.onchange = null; if (mq2) mq2.onchange = null; Object.values(LATE).forEach(clearTimeout); Object.values(AUTO).forEach(clearTimeout); }
 export function onLists() {
   if (!live) return;
   if (!!$('#ws-new', root) !== showOnboard()) { paintAll(); return; }

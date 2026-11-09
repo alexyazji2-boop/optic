@@ -54,8 +54,9 @@ def test_density_and_the_knowledge_level_move_apart(tmp_path):
       print(JSON.stringify({ a, b, c, d }));
     """)
     assert got["a"] == {"d": "advanced", "k": "literate", "m": "pro", "seen": ["density"]}, "not read yet, so not yet mapped"
-    assert got["b"] == {"d": "advanced", "k": "expert", "m": "pro", "seen": ["density", "knowledge"]}
-    assert got["c"] == {"d": "simple", "k": "expert", "level": "expert"}, "the density switch leaves the level alone"
+    # three levels since 2026-11-09: Expert is written as Advanced
+    assert got["b"] == {"d": "advanced", "k": "advanced", "m": "pro", "seen": ["density", "knowledge"]}
+    assert got["c"] == {"d": "simple", "k": "advanced", "level": "advanced"}, "the density switch leaves the level alone"
     assert got["d"] == {"d": "simple", "k": "beginner"}, "and the level leaves density alone"
 
 
@@ -76,10 +77,11 @@ def test_settings_has_both_controls_and_says_each_leaves_the_other_alone():
     st = (JS / "pages/settings.js").read_text()
     assert "seg('View', [['simple', 'Simple'], ['advanced', 'Advanced']], prefs.density(), 'density')" in st
     assert "prefs.setDensity(b.dataset.v2Density)" in st
-    assert "${levelSlider({ id: 'set-lvl', label: 'Explain things for' })}" in st, "the level is the five-position slider (Phase 05)"
+    assert "${levelSlider({ id: 'set-lvl', label: 'Explain things for' })}" in st, "the level is the slider, three positions since 2026-11-09"
     assert "it does not change what a page shows" in st
+    # The Overview's own switch is gone (decision card B, 2026-11-09): there the level control decides
     frame = (JS / "pages/dossier-frame.js").read_text()
-    assert "Milo's level is set in Settings." in frame
+    assert "data-v2-adv-toggle" not in frame and "data-v2-adv-toggle" not in (JS / "pages/dossier.js").read_text()
 
 
 def home_layout(tmp_path, density, stored=None):
@@ -94,11 +96,12 @@ def home_layout(tmp_path, density, stored=None):
     """)
 
 
-def test_home_opens_six_panels_in_simple_and_every_panel_in_advanced(tmp_path):
+def test_home_layouts_no_longer_follow_the_view_setting(tmp_path):
+    # Since 2026-11-09 (decision card B) Home's layouts are whole whatever the View setting says; what Home shows
+    # below Advanced is the level matrix's (pages/workspace.js LEVEL_PANELS, tests/test_pass1_levels.py)
     market = ["indices", "regime", "expected", "sectors", "quote", "watch", "calendar", "earnings", "priority", "news", "desk", "movers", "portfolio"]
     simple = home_layout(tmp_path, "simple")
-    assert simple["shown"] == ["indices", "quote", "watch", "priority", "desk", "portfolio"]
-    assert set(market) <= set(simple["all"]), "the other panels are hidden, not removed: Add panel brings each back"
+    assert simple["shown"] == market
     adv = home_layout(tmp_path, "pro")
     assert adv["shown"] == market and adv["all"] == simple["all"]
 

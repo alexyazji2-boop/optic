@@ -1,0 +1,116 @@
+"""Three levels, and the five stored before them (Pass 1, 2026-11-09; decision card A).
+
+Every value a browser or an account may hold from before (Phase 05's five, and the ids before Phase 05) reads as one
+of Beginner, Intermediate or Advanced, in the browser (core/prefs.js, run in JavaScriptCore against the module itself)
+and on the server (app/knowledge.py, app/auth/store.py), and only the three are written from now on. The server's
+five wording tiers stay: each of the three writes at its own tier of the same name. The screens' level matrix and
+Show more are driven in a real browser in tests/e2e/test_pass1_journeys.py; the contracts that keep them wired are
+read here, as this project reads client contracts (tests/test_ui_refactor.py)."""
+from __future__ import annotations
+
+import pytest
+from fastapi.testclient import TestClient
+
+import app.main as main
+from app import db, knowledge
+from app.auth import config, store
+from tests.test_v2_density import prefs_run
+
+client = TestClient(main.app)
+GOOD = "tungsten-carbide-9"
+JS = main.STATIC_DIR / "v2" / "js"
+MAP = {"new": "beginner", "beginner": "beginner", "intermediate": "intermediate", "advanced": "advanced", "expert": "advanced"}
+
+
+# ------------------------------------------------------------------ the browser's copy
+
+@pytest.mark.parametrize("stored,expected", sorted(MAP.items()) + [("simple", "beginner"), ("literate", "intermediate"),
+                                                                   ("professional", "advanced"), ("adaptive", "intermediate")])
+def test_a_stored_level_reads_as_one_of_three_and_is_rewritten_once(tmp_path, stored, expected):
+    got = prefs_run(tmp_path, f"localStorage.setItem('optic.knowledge.v1', '{stored}');", """
+      const level = p.level(), after = ls('optic.knowledge.v1'), index = p.levelIndex();
+      print(JSON.stringify({ level, after, index, ids: p.LEVEL_IDS }));
+    """)
+    assert got["level"] == expected and got["after"] == expected
+    assert got["ids"] == ["beginner", "intermediate", "advanced"] and got["index"] == got["ids"].index(expected)
+
+
+@pytest.mark.parametrize("value,written", [("new", "beginner"), ("expert", "advanced"), ("beginner", "beginner"), ("advanced", "advanced")])
+def test_only_the_three_are_written(tmp_path, value, written):
+    got = prefs_run(tmp_path, "", f"p.setKnowledge('{value}'); print(JSON.stringify({{ k: ls('optic.knowledge.v1') }}));")
+    assert got["k"] == written
+
+
+def test_an_unknown_value_reads_as_the_default_and_a_first_visit_is_intermediate(tmp_path):
+    got = prefs_run(tmp_path, "localStorage.setItem('optic.knowledge.v1', 'zzz');", "print(JSON.stringify({ k: p.level() }));")
+    assert got["k"] == "intermediate"
+
+
+# ------------------------------------------------------------------ the server's copy
+
+@pytest.mark.parametrize("stored,expected", sorted(MAP.items()))
+def test_the_server_maps_each_stored_level_to_three(stored, expected):
+    assert knowledge.three(stored) == expected
+    # and the wording tier stays the server's own: each of the three is its own tier
+    assert knowledge.normalise(expected) == expected
+
+
+def test_the_catalogue_offers_three_and_keeps_the_five_tiers():
+    cat = client.get("/api/knowledge/modes").json()
+    assert cat["levels"] == ["beginner", "intermediate", "advanced"]
+    assert [m["id"] for m in cat["modes"]] == knowledge.ORDER
+
+
+@pytest.fixture
+def signed_in(accounts):
+    client.cookies.clear()
+    client.post("/api/auth/register", json={"first_name": "A", "last_name": "B", "email": "lv@example.com",
+                                            "password": GOOD, "confirm_password": GOOD})
+    yield client.cookies.get(config.CSRF_COOKIE)
+    client.cookies.clear()
+
+
+@pytest.mark.parametrize("stored,expected", sorted(MAP.items()))
+def test_an_accounts_level_stored_before_reads_as_three(signed_in, stored, expected):
+    uid = store.get_user_by_email("lv@example.com")["id"]
+    db.execute("INSERT INTO user_preferences (user_id, updated_at) VALUES (?, ?) ON CONFLICT(user_id) DO NOTHING", (uid, db.utcnow()))
+    db.execute("UPDATE user_preferences SET knowledge_level = ? WHERE user_id = ?", (stored, uid))   # as Phase 05 wrote it
+    assert client.get("/api/auth/preferences").json()["preferences"]["knowledge_level"] == expected
+    assert client.get("/api/auth/me").json()["preferences"]["knowledge_level"] == expected
+
+
+@pytest.mark.parametrize("sent,written", sorted(MAP.items()))
+def test_an_account_is_written_only_the_three(signed_in, sent, written):
+    r = client.patch("/api/auth/preferences", headers={"X-Optic-CSRF": signed_in}, json={"knowledge_level": sent})
+    assert r.json()["preferences"]["knowledge_level"] == written
+    uid = store.get_user_by_email("lv@example.com")["id"]
+    assert db.row("SELECT knowledge_level FROM user_preferences WHERE user_id = ?", (uid,))["knowledge_level"] == written
+
+
+# ------------------------------------------------------------------ the contracts that keep the screens wired
+
+def test_one_level_control_with_real_buttons_and_announced_state():
+    lc = (JS / "ui" / "levelcontrol.js").read_text()
+    assert 'role="group" aria-labelledby="${id}-q"' in lc and 'aria-pressed="${lv === now}"' in lc
+    assert "How should Optic speak to you?" in lc and "announce(" in lc
+    for page in ("workspace.js", "dossier.js"):
+        src = (JS / "pages" / page).read_text()
+        assert "levelControl({ id:" in src, page
+        assert "data-v2-adv-toggle" not in src and "levelSlider(" not in src, "the overlapping controls are retired on " + page
+
+
+def test_show_more_is_a_button_that_says_whether_it_is_open():
+    sm = (JS / "ui" / "showmore.js").read_text()
+    assert '<button type="button" class="btn btn-sm" data-v2-show-more="${id}" aria-expanded="false"' in sm
+
+
+def test_the_milo_prompts_and_their_fallbacks():
+    from pathlib import Path
+    mp = (JS / "ui" / "miloprompt.js").read_text()
+    for words in ("'Why did my holdings move today?'", "'Why did the names I follow move today?'", "'Why did the market move today?'",
+                  "`Why is ${shortName(name) || String(sym || '').toUpperCase()} moving today?`"):
+        assert words in mp
+    assert "openMilo({ question: ask.question, opener, about: ask.about, symbol: ask.symbol || '', figures: ask.figures || null, send: true })" in mp
+    assert "go(`#/signin?next=${encodeURIComponent(location.hash || '#/')}`)" in mp and "sessionStorage" in mp
+    assert Path(main.STATIC_DIR / "v2" / "js" / "ui" / "milo.js").read_text().count("mode: prefs.knowledge()") == 2, \
+        "both Milo requests carry the reader's level"

@@ -53,10 +53,17 @@ def test_page_names_are_the_classic_ones():
     assert {v for v, _ in pages} >= set(labels) - {"overview"} | {"overview"}
 
 
-def test_sections_and_phone_bar_are_the_classic_ones():
+def test_the_rail_is_the_owners_and_the_phone_bar_the_classic_names():
+    # The rail is the owner's layout of 2026-11-09, item for item (his yes for the names, nav.js), replacing the
+    # classic section headings (Research, Tracking, Owner) the rail drew before; Classic itself is unchanged.
     assert re.search(r"portfolio: 'Tracking', follow: 'Tracking', brokerage: 'Tracking'", APP)
-    for gid, section in re.findall(r"(\w+): '(Research|Tracking|Owner)'", NAV):
-        assert re.search(r"%s: '%s'" % (gid, section), APP), gid
+    research = re.findall(r"label: '([^']+)'", NAV[NAV.index("export const RESEARCH = ["):][:900])[:5]
+    assert research == ["Company Overview", "Financials & Valuation", "Charts & Technicals", "Options & Derivatives", "Filings & Ownership"]
+    lists = re.findall(r"label: '([^']+)'", NAV[NAV.index("export const LISTS = ["):][:600])[:3]
+    assert lists == ["Watchlist", "Ideas", "Research"]
+    shell_src = (V2 / "js/ui/shell.js").read_text()
+    for name in ("'Home'", "<span>Research</span>", "'Markets'", "'Discover'", "'Portfolio'", ">Lists<"):
+        assert name in shell_src, name
     classic = re.findall(r"label: '([^']+)', (?:nav|more)", APP[APP.index("const MOBILE_TABS = ["):][:600])
     block = NAV[NAV.index("export const MOBILE_TABS = ["):]
     v2 = re.findall(r"label: '([^']+)'", block[:block.index("];")])

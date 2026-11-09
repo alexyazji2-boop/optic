@@ -52,8 +52,9 @@ def test_a_layout_nobody_changed_follows_the_standard(tmp_path):
     got = load_with(tmp_path, stored)
     assert "market" not in got["custom"]                  # so a panel added to the standard later reaches it
     assert got["market"] == got["std"]
-    # and under Simple, the default since Phase 04 (D-020), the standard opens six panels, the rest one Add panel away
-    assert got["std"] == ["indices", "quote", "watch", "priority", "desk", "portfolio"]
+    # the standard is the whole layout whatever the View setting (2026-11-09): below Advanced the level matrix decides
+    # what Home shows (pages/workspace.js LEVEL_PANELS), not a hidden flag in the saved layout
+    assert got["std"] == [x[0] for x in std]
 
 
 def test_an_unknown_layout_name_falls_back_without_wiping_my_desk(tmp_path):

@@ -7,11 +7,13 @@
 
 const THEME_KEY = 'optic.theme', SCALE_KEY = 'optic.ui.scale.v1', TZ_KEY = 'optic.timezone';
 const KNOW_KEY = 'optic.knowledge.v1', ASKED_KEY = 'optic.knowledge.asked.v1';
-// The five levels in slider order (post-demo Phase 05, app/knowledge.py). Their labels, blurbs and previews are the
-// server's (/api/knowledge/modes); only the ids and their order are here, and the ids before Phase 05 map on read.
-export const LEVEL_IDS = ['new', 'beginner', 'intermediate', 'advanced', 'expert'];
-const LEVELS = { new: 0, beginner: 1, intermediate: 2, advanced: 3, expert: 4 };
-const LEGACY = { simple: 'new', literate: 'intermediate', professional: 'expert', adaptive: 'intermediate' };
+// Three levels since 2026-11-09, the owner's names: Beginner, Intermediate, Advanced ("How should Optic speak to
+// you?"). Their labels, blurbs and previews are the server's (/api/knowledge/modes); only the ids and their order are
+// here. A value stored before (Phase 05's five, and the ids before Phase 05) maps on read and is rewritten once as one
+// of the three, so only the three are written from now on (app/knowledge.py THREE).
+export const LEVEL_IDS = ['beginner', 'intermediate', 'advanced'];
+const LEVELS = { beginner: 0, intermediate: 1, advanced: 2 };
+const LEGACY = { new: 'beginner', expert: 'advanced', simple: 'beginner', literate: 'intermediate', professional: 'advanced', adaptive: 'intermediate' };
 const DEFAULT_MODE = 'intermediate';
 
 // The classic list, word for word (static/app.js TIMEZONES).
@@ -120,7 +122,7 @@ export function knowledge() {
   if (id && id !== k) put(KNOW_KEY, id);   // an id from before Phase 05, rewritten once so both apps read the same
   return id || DEFAULT_MODE;
 }
-/** The level's position on the slider, 0 (New to Markets) to 4 (Expert). */
+/** The level's position, 0 (Beginner) to 2 (Advanced). */
 export const levelIndex = (id = knowledge()) => LEVELS[levelOf(id) || DEFAULT_MODE];
 /** Whether the reader has chosen a level (or answered the question by keeping the default). */
 export const knowledgeChosen = () => get(ASKED_KEY) === '1';
@@ -137,11 +139,18 @@ export function setKnowledge(id, { quiet = false } = {}) {
 // here. Only the sliders followed it, so a Dossier's Simple Analysis kept its old wording under a slider showing the
 // new level (BUG-197, Phase 11). Quiet: the other tab has already sent it to the account.
 try { window.addEventListener('storage', (e) => { if (e.key === KNOW_KEY && levelOf(e.newValue)) emit('knowledge-synced'); }); } catch (e) { /* no window */ }
-/** How a page's own terms explain themselves at this level, as Classic's catalogue says: the definition shown with the
- *  term (New to Markets), the term marked to explain itself (Beginner to Advanced), or left plain (Expert). */
-export const explainPolicy = (id = knowledge()) => (levelOf(id) === 'new' ? 'inline' : levelOf(id) === 'expert' ? 'off' : 'on_demand');
+/** How a page's own terms explain themselves at this level, as the server's catalogue says for these three tiers: the
+ *  term marked to explain itself when pressed. (Inline definitions and plain terms were New to Markets' and Expert's.) */
+export const explainPolicy = () => 'on_demand';
+
+/** Which of the three levels the reader has: what Home and a company's Overview show (2026-11-09, the level
+ *  matrix). The level governs the words everywhere and, on those two screens, which panels appear. */
+export const level = () => knowledge();
+export const atLeast = (id, now = knowledge()) => (LEVELS[now] ?? 1) >= (LEVELS[id] ?? 1);
 
 /* ---------------- density (what a page shows) ---------------- */
+// Not read on Home or a company's Overview since 2026-11-09: the level decides what those two show (one control,
+// the owner's layout). The other pages keep this setting until their own round.
 // Simple or Advanced, one state of its own (post-demo overhaul, Phase 04, D-019). Simple leads with each page's main
 // finding and folds the specialist research; Advanced opens it, and Home shows every panel of its layout. It used to
 // be the knowledge level read as a switch, so "Show advanced analysis" on a Dossier also changed how Milo and every

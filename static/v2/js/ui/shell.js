@@ -4,7 +4,7 @@
 import { html, render, $, $$ } from '../core/dom.js';
 import { icon, brandMark } from './icons.js';
 import { footer as legalFooter } from '../core/legal.js';
-import { GROUPS, SECTIONS, SETTINGS, MOBILE_TABS, visibleGroups, hrefFor, groupOf } from '../nav.js';
+import { GROUPS, SETTINGS, MOBILE_TABS, visibleGroups, hrefFor, groupOf, RESEARCH, LISTS, RAIL_MORE, researchHref } from '../nav.js';
 import { state as store, openedNow } from '../core/store.js';
 
 let flags = { admin: false, brokerage: false };
@@ -97,23 +97,34 @@ export function paint(route) {
   // it opens the search, where the Recent list is offered rather than followed
   const sym = (route.view !== 'instrument' && route.symbol) || openedNow() || null;
   const groups = visibleGroups(flags);
-  let lastSec = '';
-  const rows = [];
-  groups.forEach((gr) => {
-    const sec = SECTIONS[gr.id];
-    if (sec !== lastSec) { rows.push(html`<p class="rail-sec">${sec}</p>`); lastSec = sec; }
-    const href = groupHref(gr, sym);
-    const cur = g && g.id === gr.id ? 'page' : null;
-    const out = !groupIsV2(gr);
-    const inner = html`${icon(gr.icon)}<span>${gr.label}</span>${out ? html`<span class="legacy" aria-hidden="true">${icon('out')}</span>` : ''}`;
-    const name = out ? `${gr.label}, opens in the classic app` : gr.label;
-    rows.push(href
-      ? html`<a class="rail-row" href="${href}" aria-label="${name}" ${cur ? html`aria-current="page"` : ''}>${inner}</a>`
-      : html`<button type="button" class="rail-row" data-v2-open-palette aria-label="${name}, search for a company" ${cur ? html`aria-current="page"` : ''}>${inner}</button>`);
-  });
+  const has = (id) => groups.some((x) => x.id === id);
+  const byId = (id) => GROUPS.find((x) => x.id === id);
+  const cur = (on) => (on ? html`aria-current="page"` : '');
+  const row = (href, ic, label, on, cls = 'rail-row') => html`<a class="${cls}" href="${href}" ${cur(on)}>${icon(ic)}<span>${label}</span></a>`;
+  const gid = g ? g.id : null, view = route.view;
+  // The owner's rail of 2026-11-09 (nav.js RESEARCH and LISTS), item for item, over today's routes
+  const inResearch = gid === 'security' || view === 'dossierstart' || view === 'insiders';
+  const research = RESEARCH.map((e) => row(researchHref(e, sym), e.icon, e.label,
+    e.filter ? view === 'insiders' : (gid === 'security' && (view === e.view || (e.view === 'overview' && !['financials', 'chart', 'swing'].includes(view)))), 'rail-row rail-sub'));
+  const more = RAIL_MORE.filter((m) => (m.group ? has(m.group) : true)).map((m) => row(m.group ? groupHref(byId(m.group), sym) : hrefFor(m.view), m.icon, m.label,
+    m.group ? gid === m.group : view === m.view, 'rail-row rail-sub'));
   render($('.rail'), html`<a class="brand" href="#/" aria-label="Optic Terminal, Home">${brandMark()}<span class="brand-word" aria-hidden="true">OPTIC <span>TERMINAL</span></span></a>
-    <nav class="rail-nav" aria-label="Sections">${rows}</nav>
-    <div class="rail-foot"><a class="rail-row" href="${hrefFor('settings')}" ${SETTINGS.v2 ? '' : html`aria-label="${SETTINGS.label}, opens in the classic app"`} ${route.view === 'settings' ? html`aria-current="page"` : ''}>${icon(SETTINGS.icon)}<span>${SETTINGS.label}</span>${SETTINGS.v2 ? '' : html`<span class="legacy" aria-hidden="true">${icon('out')}</span>`}</a><button type="button" class="rail-row" data-v2-rail-collapse aria-pressed="${railTight()}" aria-label="Collapse">${icon('chev')}<span>Collapse</span></button></div>`);
+    <nav class="rail-nav" aria-label="Sections">
+      ${row('#/', 'home', 'Home', view === 'home')}
+      <div class="rail-group ${inResearch ? 'is-in' : ''}" role="group" aria-labelledby="rail-research">
+        <p class="rail-row rail-head" id="rail-research">${icon('research')}<span>Research</span></p>
+        ${research}
+      </div>
+      ${row(groupHref(byId('market'), sym), 'markets', 'Markets', gid === 'market')}
+      ${row(groupHref(byId('discover'), sym), 'discover', 'Discover', gid === 'discover' && view !== 'scan')}
+      ${row(groupHref(byId('portfolio'), sym), 'positions', 'Portfolio', gid === 'portfolio')}
+      <div class="rail-lists" role="group" aria-labelledby="rail-lists-h">
+        <p class="rail-sec rail-lists-h"><span id="rail-lists-h">Lists</span><a class="rail-plus" href="#/watchlist" aria-label="Your lists: open or make one">${icon('plus')}</a></p>
+        ${LISTS.map((l) => row(l.href, l.icon, l.label, l.views.includes(view), 'rail-row rail-sub'))}
+      </div>
+      <div class="rail-more" role="group" aria-labelledby="rail-more-h"><p class="rail-sec" id="rail-more-h">More</p>${more}</div>
+    </nav>
+    <div class="rail-foot"><a class="rail-row" href="${hrefFor('settings')}" ${route.view === 'settings' ? html`aria-current="page"` : ''}>${icon(SETTINGS.icon)}<span>${SETTINGS.label}</span></a><button type="button" class="rail-row" data-v2-rail-collapse aria-pressed="${railTight()}" aria-label="Collapse">${icon('chev')}<span>Collapse</span></button></div>`);
 
   render($('.tabbar'), MOBILE_TABS.map((t) => {
     if (t.more) {

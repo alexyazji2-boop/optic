@@ -29,7 +29,11 @@ import * as RP from '../core/reports.js';
 import { lineChart, mountCharts } from '../ui/chart.js';
 import { skeleton, empty, failed, staleLine, how } from '../ui/states.js';
 import { icon } from '../ui/icons.js';
-import { header as frameHeader, tabs as frameTabs, isFund, fresher, livePrice, advToggle, quoteCtx } from './dossier-frame.js';
+import { header as frameHeader, tabs as frameTabs, isFund, fresher, livePrice, quoteCtx } from './dossier-frame.js';
+import { levelControl } from '../ui/levelcontrol.js';
+import { miloPrompt, press as askPrompt, resume as resumePrompt, companyQuestion } from '../ui/miloprompt.js';
+import { expansions, moreList, moreButton } from '../ui/showmore.js';
+
 import * as delays from '../core/delays.js';
 import { simpleFacts, simpleSection } from './overview-simple.js';
 import { levelLabel } from '../ui/levelslider.js';
@@ -37,7 +41,7 @@ import { button as miloButton, provideContext } from '../ui/milo.js';
 import * as drawer from '../ui/drawer.js';
 import { hrefFor } from '../nav.js';
 import { kindOf, learn } from '../core/instrument.js';
-import { mountThesis, disposeThesis, thesisContext } from './thesis.js';
+import { mountThesis, disposeThesis, thesisContext, setThesisEdit } from './thesis.js';
 import { mountTimeline, startTimeline, disposeTimeline } from '../ui/timeline.js';
 import * as OR from './overview-research.js';
 import * as prefs from '../core/prefs.js';
@@ -53,6 +57,19 @@ let VISIT = 0;   // each render is a visit; a response is drawn only into the vi
 let live = true;
 let D = {};
 let range = '1Y';
+const OPEN = expansions();   // panels opened past the level by Show more, for this visit (ui/showmore.js)
+
+/** The Overview's Milo prompt: "Why is Apple moving today?", or the ticker when no name is known (a fund, an index,
+ *  a name the feeds cannot give), with the quote's figures as the page shows them and the company in focus. */
+function stockAsk(sym) {
+  const q = D.quote || {}, name = q.name || (D.session && (D.session.name || (D.session.profile || {}).name)) || '';
+  const figures = [];
+  if (isNum(q.price)) figures.push(['Price', num(q.price)]);
+  if (isNum(q.change_pct)) figures.push(['Change today', `${signed(q.change, 2, '')} (${signed(q.change_pct)})`]);
+  if (isNum(q.volume)) figures.push(['Volume', compact(q.volume)]);
+  if (isNum(q.market_cap)) figures.push(['Market value', `$${compact(q.market_cap)}`]);
+  return { question: companyQuestion(sym, name), about: `${sym} Overview`, symbol: sym, figures: { name: `${sym} quote`, figures, notes: [] }, screen: 'overview' };
+}
 // Sessions of change each range spans. The chart draws one more close than that, so its first point is the
 // close the one-year answer measures from: the chart started a session later and read 33.7% against the
 // answer's 31.5% (pitch audit, 2026-10-22).
@@ -360,7 +377,7 @@ const quoteKey = () => JSON.stringify([D.quote && D.quote.price, D.quote && D.qu
  *  move and the same last trade, so when the quote it was written from has moved on it is redrawn in place: the
  *  section alone, not the page, so the chart and the reader's place are left as they are. */
 function refreshSimple(main, sym) {
-  if (prefs.advancedOn() || quoteKey() === D.simpleKey) return;
+  if (prefs.level() === 'advanced' || OPEN.has('advanced') || quoteKey() === D.simpleKey) return;
   const sec = $('#ov-analysis > .ov-simple', main); if (!sec || sec.hasAttribute('aria-busy')) return;
   const c = OR.context({ sym, t: D.ticker || null, fw: D.fwRaw, fwError: D.fwNetError, lt: D.longterm || null, stars: (D.fairValue || {}).stars, fund: isFundHere(sym), advanced: false, phase: phase() });
   const tmp = document.createElement('div'); draw(tmp, simpleView(sym, c));
@@ -390,10 +407,13 @@ const investigateEntry = (sym) => html`<section class="section gi-entry" aria-la
 function paint(main, sym) {
   if (!live) return;
   const swapped = advMoved; advMoved = false;
-  const mode = prefs.advancedOn() ? 'advanced' : 'simple';
+  // The level decides what the Overview shows (2026-11-09, decision card B: no View setting or "Show advanced
+  // analysis" here any more). Beginner and Intermediate read the simple analysis; Advanced, the advanced one.
+  const level = prefs.level();
+  const mode = level === 'advanced' || OPEN.has('advanced') ? 'advanced' : 'simple';
   const keepFocus = document.activeElement && main.contains(document.activeElement) ? document.activeElement : null;
   // the page's heading, focused on arrival for a screen reader, keeps focus through the redraws as data arrives
-  const key = keepFocus && (keepFocus.dataset.v2Answer || keepFocus.dataset.v2Range || keepFocus.dataset.v2Watch || (keepFocus.hasAttribute('data-v2-adv-toggle') ? 'adv' : '') || (keepFocus.tagName === 'H1' ? 'h1' : ''));
+  const key = keepFocus && (keepFocus.dataset.v2Answer || keepFocus.dataset.v2Range || keepFocus.dataset.v2Watch || (keepFocus.dataset.v2Level ? `lv:${keepFocus.dataset.v2Level}` : '') || (keepFocus.tagName === 'H1' ? 'h1' : ''));
   // what the reader opened stays open while later data arrives
   const openDetails = $$('details[open] summary', main).map((x) => x.textContent.trim());
   const openEvs = $$('[data-v2-ev][aria-expanded="true"]', main).map((x) => x.getAttribute('aria-controls'));
@@ -408,18 +428,40 @@ function paint(main, sym) {
   // symbol that does not exist (investor audit, 2026-10-27).
   const unlisted = !!(D.quoteError && !D.quote && D.quoteError.kind === 'notfound' && D.tickerError && D.tickerError.kind === 'notfound' && !D.ticker);
   if (unlisted) {
-    draw(main, html`<div class="dstick has-tools">${frameHeader(sym, D, 'overview', { stage: () => stageFor(sym) })}${frameTabs(sym, 'overview', { fund: isFund(D) })}</div>
+    draw(main, html`<div class="dstick has-tools">${frameHeader(sym, D, 'overview', { stage: () => stageFor(sym), level })}${frameTabs(sym, 'overview', { fund: isFund(D) })}</div>
       ${empty(`Optic has no listing for ${sym}`, 'No quote and no price history came back for this symbol. It may be misspelled, delisted, or listed outside the US under another form.', html`<div class="cluster"><button type="button" class="btn btn-primary btn-sm" data-v2-open-palette>Search for the company</button><a class="btn btn-sm" href="#/">Go to Home</a></div>`)}`);
     return;
   }
-  draw(main, html`<div class="dstick has-tools">${frameHeader(sym, D, 'overview', { stage: () => stageFor(sym) })}${frameTabs(sym, 'overview', { fund: isFund(D) })}<div class="dh-tools">${advToggle(mode)}</div></div>
+  // The level matrix for the Overview (workflow map section C, three levels). Beginner: the simple Overview, the quote,
+  // the past year's chart, Watch and Ask Milo. Intermediate: adds the bull and bear case, the thesis check (to read;
+  // writing it is one Show more away), Alert and Compare. Advanced: the advanced analysis, thesis edits, Export and
+  // every panel the Overview had. A panel a level leaves out is listed with Show more. Figures, caveats and the
+  // disclaimer are the same at every level: the header, the about block, the chart and the notices are never trimmed.
+  const has = (id) => level === 'advanced' || OPEN.has(id);
+  const adv = mode === 'advanced';
+  const cases = !adv && (level === 'intermediate' || OPEN.has('cases'));
+  const thesisShown = adv || level === 'intermediate' || OPEN.has('thesis');
+  setThesisEdit(level === 'advanced' || OPEN.has('thesis:edit') || OPEN.has('advanced'), moreButton('thesis:edit', 'Your thesis check', { label: 'Show more' }));
+  const out = [
+    ...(adv ? [] : [['advanced', 'Advanced analysis', 'The four questions, the Optic Score, key statistics, the combined and short-term reads, what changed and the method.']]),
+    ...(adv || cases || level === 'intermediate' ? [] : [['cases', 'Bull and bear case', 'The strongest arguments on each side, from the figures on this page.']]),
+    ...(thesisShown ? [] : [['thesis', 'Your thesis check', 'Write down why you are interested and what would change your mind; Optic checks it each visit.']]),
+    ...(has('investigate') ? [] : [['investigate', 'Investigate this company', 'Six steps, each one Milo answer from figures Optic has already read.']]),
+    ...(has('timeline') ? [] : [['timeline', 'Company events', 'Reports, filings, dividends and other dated events for the company.']]),
+  ].map(([id, title, blurb]) => ({ id, title, blurb }));
+  draw(main, html`<div class="dstick has-tools">${frameHeader(sym, D, 'overview', { stage: () => stageFor(sym), level })}${frameTabs(sym, 'overview', { fund: isFund(D) })}</div>
+    <div class="page-lead ov-lead" data-v2-level-now="${level}"><span></span>${levelControl({ id: 'ov-lc' })}</div>
+    ${miloPrompt(stockAsk(sym))}
     ${D.quoteError && !D.quote ? (D.quoteError.kind === 'notfound' ? empty(`Optic has no listing for ${sym}`, 'No quote came back for this symbol. It may be misspelled, delisted, or listed outside the US under another form.', html`<button type="button" class="btn btn-sm" data-v2-open-palette>Search for the company</button>`) : failed(`${sym}'s quote`, D.quoteError, { retry: 'dossier' })) : ''}
     ${((D.framework || {}).freshness || {}).state === 'stale' ? staleLine({ text: clean(D.framework.freshness.text) }) : ''}
     ${about(sym)}
     <section class="section dchart" aria-labelledby="py-h">${D.tickerError ? failed('The price history', D.tickerError, { retry: 'dossier' }) : chartBlock(sym)}</section>
-    <div class="ov-analysis" id="ov-analysis" data-v2-analysis="${mode}" ${swapped ? 'data-swapped' : ''}>${mode === 'advanced' ? advancedView(sym, c, fund) : simpleView(sym, c)}</div>
-    ${investigateEntry(sym)}
-    <div data-tl-slot></div>
+    <div class="ov-analysis" id="ov-analysis" data-v2-analysis="${mode}" ${swapped ? 'data-swapped' : ''}>${adv ? advancedView(sym, c, fund) : simpleView(sym, c)}</div>
+    ${cases ? html`<div data-v2-ov-panel="cases">${OR.casesSection(c)}</div>` : ''}
+    ${!adv && thesisShown ? html`<div data-tc-slot></div>` : ''}
+    ${has('investigate') ? investigateEntry(sym) : ''}
+    ${has('timeline') ? html`<div data-tl-slot></div>` : ''}
+    ${moreList(out, { heading: `More on ${sym}`, screen: 'overview' })}
     <p class="sr" role="status" data-v2-analysis-status></p>
     <p class="asof disclaimer">${clean((D.ticker || {}).disclaimer || 'Not financial advice. For research and education only.')}</p>`);
   mountThesis(main, sym, () => D);   // the thesis check: one node for the visit, so a half-typed note survives this redraw and a swap
@@ -440,13 +482,13 @@ function paint(main, sym) {
     setTimeout(() => { if (st && st.isConnected) st.textContent = `Showing the ${mode} analysis.`; }, 60);
   }
   if (key) {
-    const el = key === 'adv' ? $('[data-v2-adv-toggle]', main) : key === 'h1' ? $('h1', main) : $(`[data-v2-answer="${key}"],[data-v2-range="${key}"],[data-v2-watch="${key}"]`, main);
+    const el = key.startsWith('lv:') ? $(`[data-v2-level="${key.slice(3)}"]`, main) : key === 'h1' ? $('h1', main) : $(`[data-v2-answer="${key}"],[data-v2-range="${key}"],[data-v2-watch="${key}"]`, main);
     if (el) { if (key === 'h1') el.setAttribute('tabindex', '-1'); el.focus({ preventScroll: true }); }
   }
 }
 
 export async function render(main, route) {
-  live = true;
+  live = true; OPEN.clear();
   const sym = route.symbol, visit = ++VISIT;
   D = { sym, visit };
   const mine = () => live && D.visit === visit;
@@ -460,7 +502,9 @@ export async function render(main, route) {
   // level, from anywhere, rewords the simple analysis
   unPrefs = prefs.onChange((what) => {
     if (!mine()) return;
-    if (what === 'density') { advMoved = true; paint(main, sym); } else if (what === 'knowledge' || what === 'knowledge-synced') paint(main, sym);
+    // the level, from this page's control or anywhere else: the panels and the words follow it, and what Show more
+    // opened closes (it was opened past the old level). The View setting no longer changes this page.
+    if (what === 'knowledge' || what === 'knowledge-synced') { OPEN.clear(); advMoved = true; paint(main, sym); }
   });
   paint(main, sym);
   wire(main);
@@ -495,6 +539,8 @@ export async function render(main, route) {
     () => { D.stage = null; if (tries > 0) setTimeout(() => { if (mine()) stageRead(tries - 1); }, 30000); });
   stageRead(1);
   TR.load().then(() => { if (mine() && D.stage) stageFor(sym); });   // the stage's explanation adds what history says (B6c)
+  // a question asked from this page's prompt before signing in: Milo asks it now (ui/miloprompt.js)
+  resumePrompt('overview', sym);
 }
 
 export function dispose() { if (lp) { lp.stop(); lp = null; } if (unPrefs) { unPrefs(); unPrefs = null; } live = false; disposeThesis(); disposeTimeline(); drawer.close({ silent: true }); }
@@ -508,7 +554,15 @@ function wire(main) {
     const sym = D.sym;
     const r = e.target.closest('[data-v2-range]');
     if (r) { range = r.dataset.v2Range; paint(main, sym); return; }
-    if (e.target.closest('[data-v2-adv-toggle]')) { prefs.setAdvanced(!prefs.advancedOn()); return; }   // the repaint follows from prefs.onChange
+    if (e.target.closest('[data-v2-mp-ask]')) { askPrompt(() => stockAsk(sym), e.target.closest('[data-v2-mp-ask]')); return; }
+    const more = e.target.closest('[data-v2-show-more]');
+    if (more) {
+      const id = more.dataset.v2ShowMore; OPEN.add(id); if (id === 'advanced') advMoved = true; paint(main, sym);
+      const to = { cases: '[data-v2-ov-panel="cases"] h2', thesis: '#tc-h', 'thesis:edit': '#ov-thesis [data-tc-start], #ov-thesis [data-tc-edit]', investigate: '#gi-entry-h', timeline: '#tl-h', advanced: '#ov-analysis h2' }[id];
+      const el = to && $(to, main); if (el) { if (!el.matches('button, a')) el.setAttribute('tabindex', '-1'); el.focus({ preventScroll: false }); }
+      const st = $('[data-v2-analysis-status]', main); if (st) setTimeout(() => { if (st.isConnected) st.textContent = 'Opened. Your level is unchanged.'; }, 60);
+      return;
+    }
     const a = e.target.closest('[data-v2-answer]');
     if (a) {   // a fund's answers (a company's four questions carry their own folds)
       const k = a.dataset.v2Answer;

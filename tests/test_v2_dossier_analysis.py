@@ -191,16 +191,11 @@ def test_the_section_says_its_level_and_leaves_its_own_explanations_unmarked():
 
 def test_one_view_at_a_time_from_one_state(tmp_path):
     d = src("pages/dossier.js")
-    assert "${mode === 'advanced' ? advancedView(sym, c, fund) : simpleView(sym, c)}" in d
-    assert "const mode = prefs.advancedOn() ? 'advanced' : 'simple';" in d, "the density setting is the one state"
+    # one view at a time, decided by the level since 2026-11-09 (Advanced, or Show more on the advanced analysis)
+    assert "${adv ? advancedView(sym, c, fund) : simpleView(sym, c)}" in d
+    assert "const mode = level === 'advanced' || OPEN.has('advanced') ? 'advanced' : 'simple';" in d, "the level is the one state"
     assert d.count("data-v2-analysis=") == 1 and "ov-simple" not in src("pages/overview-research.js")
-    got = _run(tmp_path, f"""
-      const dom = await import('{(JS / "core/dom.js").as_posix()}');
-      const fr = await import('{(JS / "pages/dossier-frame.js").as_posix()}');
-      print(JSON.stringify({{ s: dom.toString(fr.advToggle('simple')), a: dom.toString(fr.advToggle('advanced')) }}));
-    """)
-    assert ">Show advanced analysis</button>" in got["s"] and ">Show simple analysis</button>" in got["a"]
-    assert 'aria-controls="ov-analysis"' in got["s"] and 'role="switch"' not in got["s"]
+    assert "advToggle" not in src("pages/dossier-frame.js"), "the switch is retired with the View setting on this page"
 
 
 def test_a_response_is_drawn_only_into_the_visit_that_asked_for_it():
@@ -240,7 +235,7 @@ def test_a_search_opened_before_the_arrival_frame_keeps_focus():
 def test_the_simple_analysis_follows_the_headers_price_refresh():
     d = src("pages/dossier.js")
     assert "onQuote: () => { if (mine()) refreshSimple(main, sym); }" in d
-    assert "if (prefs.advancedOn() || quoteKey() === D.simpleKey) return;" in d and "sec.replaceWith(tmp.firstElementChild);" in d, \
+    assert "if (prefs.level() === 'advanced' || OPEN.has('advanced') || quoteKey() === D.simpleKey) return;" in d and "sec.replaceWith(tmp.firstElementChild);" in d, \
         "redrawn in place, alone, when the quote it was written from has moved on"
 
 

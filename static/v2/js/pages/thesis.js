@@ -149,7 +149,7 @@ function localWrite(fn) {
 }
 
 /* ---------------- the section ---------------- */
-const TC = { sym: null, node: null, getD: null, editing: false, draft: null, account: null, accountErr: null, failed: new Set(), sig: '', undo: null, focus: null, sel: null };
+const TC = { canEdit: true, more: '', sym: null, node: null, getD: null, editing: false, draft: null, account: null, accountErr: null, failed: new Set(), sig: '', undo: null, focus: null, sel: null };
 const saved = () => { const all = store.signedIn() && TC.account ? TC.account : localAll(); return all[TC.sym] || null; };
 function where(t) {
   if (!store.signedIn()) return 'Kept in this browser. Sign in and it follows you between them.';
@@ -171,9 +171,9 @@ function viewHTML(t) {
         ${d && r.flipped ? html` <b class="tc-flip">Changed since you wrote this (it ${r.was} then).</b>` : ''}</span></span></li>`)}</ul>
     ${t.bull ? html`<blockquote class="tc-note">${t.bull}</blockquote>` : ''}
     ${next && next.date ? html`<p class="asof">Next real test: the earnings report on ${shortDate(next.date)}. Revenue, profit and the estimate conditions update when it is out.</p>` : ''}
-    <div class="cluster tc-acts"><button type="button" class="btn btn-sm" data-tc-edit>Edit</button>
+    <div class="cluster tc-acts">${TC.canEdit ? html`<button type="button" class="btn btn-sm" data-tc-edit>Edit</button>` : TC.more}
       ${miloButton('Ask Milo to stress-test it', { ask: stressText(TC.sym, t), context: `${TC.sym} thesis check`, symbol: TC.sym, cls: 'btn-sm' })}
-      <button type="button" class="btn btn-sm btn-quiet" data-tc-delete>Delete</button></div>
+      ${TC.canEdit ? html`<button type="button" class="btn btn-sm btn-quiet" data-tc-delete>Delete</button>` : ''}</div>
     <p class="asof">These are your conditions and what the data says about them. Whether a change breaks your case is your call. ${where(t)}</p>`;
 }
 function optNow(c, d, lt) {
@@ -198,11 +198,11 @@ function formHTML(t) {
 }
 function bodyHTML() {
   const t = checkOf(saved());
-  if (TC.editing) return formHTML(t);
+  if (TC.editing && TC.canEdit) return formHTML(t);
   if (t) return viewHTML(t);
   return html`<p class="section-sub">Why are you interested in ${TC.sym}, and what would change your mind? Pick the conditions that matter to you and Optic checks them each time you come back.</p>
     ${TC.undo ? html`<p class="wl-undo" role="status">${TC.undo.text} <button type="button" class="btn btn-sm" data-tc-undo>Undo</button></p>` : ''}
-    <div class="cluster"><button type="button" class="btn" data-tc-start>Start a thesis check</button></div>`;
+    <div class="cluster">${TC.canEdit ? html`<button type="button" class="btn" data-tc-start>Start a thesis check</button>` : TC.more}</div>`;
 }
 function paintTC(focusSel) {
   const n = TC.node; if (!n) return;
@@ -329,6 +329,15 @@ export function mountThesis(main, sym, getD) {
     }
   }
   update();
+}
+/** Whether the thesis check can be written and changed here (2026-11-09, the level matrix): at Intermediate the
+ *  Overview shows the check and what the data says about it; writing and editing are Advanced's, or one Show more
+ *  away (`more`, the button). A change repaints the section. */
+export function setThesisEdit(on, more = '') {
+  const was = TC.canEdit;
+  TC.canEdit = !!on; TC.more = more;
+  if (!on) TC.editing = false;
+  if (was !== TC.canEdit && TC.node) paintTC();
 }
 /** Leaving the page: the next visit starts from what is saved. */
 export function disposeThesis() { TC.sym = null; TC.node = null; TC.draft = null; TC.editing = false; }

@@ -39,6 +39,7 @@ import { CLASSIC } from '../core/classic.js';
 import { miloNotice } from '../core/legal.js';
 import { icon } from './icons.js';
 import { levelSlider } from './levelslider.js';
+import { visitorId } from '../core/usage.js';
 import { begin as actBegin, on as actOn, companionHTML, syncCompanion } from './milo-activity.js';
 import { researchOf, researchLine, researchWords, researchRows, removedSince, usedLine, keepUsed, barWhen, TIMEFRAMES } from './milo-context.js';
 
@@ -1206,7 +1207,8 @@ export async function send(text, { deep = false } = {}) {
     const askedText = /^Deep research: /.test(text) && deep ? null : text;
     const res = await fetch(deep ? '/api/research' : '/api/chat', {
       method: 'POST', credentials: 'same-origin', signal: ctl.signal,
-      headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream', 'X-Optic-CSRF': (document.cookie.match(/(?:^|; )optic_csrf=([^;]*)/) || [])[1] || '' },
+      // the visitor id goes with a question so one asked without an account (where the owner allows it) is counted
+      headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream', 'X-Optic-CSRF': (document.cookie.match(/(?:^|; )optic_csrf=([^;]*)/) || [])[1] || '', 'X-Optic-Visitor': visitorId() },
       body: JSON.stringify(deep
         ? { ticker: focusTicker || sym0 || null, question: askedText || (focusTicker || sym0 ? null : MARKET_BRIEF), context, mode: prefs.knowledge() }
         : { messages: S.conv.messages.slice(0, ai).map((m) => ({ role: m.role, content: m.content })), context, web: !!S.web, attachments, persona: persona(), mode: prefs.knowledge(), horizon: horizon() }),
