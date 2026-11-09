@@ -13,8 +13,8 @@ import { icon } from './icons.js';
 export const NAMES = { beginner: 'Beginner', intermediate: 'Intermediate', advanced: 'Advanced' };
 // What each level means on these two screens, one sentence, said under the control
 const SAYS = {
-  beginner: 'Plain words and the essentials. Every panel you do not see is one Show more away.',
-  intermediate: 'The essentials plus the market detail and the bull and bear case.',
+  beginner: 'Plain words and the essentials; the rest is under Show more.',
+  intermediate: 'Adds the market detail and the bull and bear case.',
   advanced: 'Everything, in denser words.',
 };
 

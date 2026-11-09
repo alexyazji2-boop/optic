@@ -1179,7 +1179,7 @@ function wire() {
     if ((b = t('[data-v2-show-more]'))) {
       const id = b.dataset.v2ShowMore; OPEN.add(id); paintAll();
       // focus lands on what opened: the panel's own heading, or the Desk's body
-      const pid = id.split(':')[0], to = $(`[data-ws-panel="${pid}"] .ws-tbtn`, root) || $(`#wsb-${pid}`, root);
+      const pid = id.split(':')[0], to = $(`#wsb-${pid}`, root);
       if (to) to.focus({ preventScroll: false });
       announce(`${(PANELS[pid] || {}).title || 'The panel'} is open. Your level is unchanged.`);
       return;

@@ -2365,3 +2365,10 @@ html.eff-1100 .dhead.bar.is-wide .dh-price { flex-basis: 100%; }
   .gi-state { min-width: 0; }
   .gi-prose p { font-size: var(--t-base); }
 }
+
+/* Pass 1 (2026-11-09): the level control sits beside Home's greeting, top-aligned as on the owner's home screen; after
+   the .ws-pagehead rules above, which bottom-align it */
+.ws-pagehead.page-lead { align-items: flex-start; }
+.ov-lead { margin-top: 16px; align-items: flex-end; }
+.ov-lead .mp { flex: 1 1 380px; margin: 0; }
+@media (max-width: 860px) { .ws-pagehead.page-lead { flex-direction: column; align-items: stretch; } }

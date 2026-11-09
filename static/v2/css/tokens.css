@@ -101,7 +101,7 @@
   --sh-pop: 0 12px 32px rgba(0, 0, 0, .28);
   --sh-sheet: -24px 0 60px rgba(0, 0, 0, .30);
   --ctl-sm: 36px;     /* a dense toolbar's controls (the Chart page), with a 44px row around them */
-  --rail: 236px;
+  --rail: 256px;   /* 236px until 2026-11-09: "Financials & Valuation" and "Options & Derivatives" wrapped in the owner's rail */
   --page: 1560px;   /* one canvas for every page, Home's workspace included (2026-10-18) */
 
   /* motion */

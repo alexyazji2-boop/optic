@@ -450,8 +450,7 @@ function paint(main, sym) {
     ...(has('timeline') ? [] : [['timeline', 'Company events', 'Reports, filings, dividends and other dated events for the company.']]),
   ].map(([id, title, blurb]) => ({ id, title, blurb }));
   draw(main, html`<div class="dstick has-tools">${frameHeader(sym, D, 'overview', { stage: () => stageFor(sym), level })}${frameTabs(sym, 'overview', { fund: isFund(D) })}</div>
-    <div class="page-lead ov-lead" data-v2-level-now="${level}"><span></span>${levelControl({ id: 'ov-lc' })}</div>
-    ${miloPrompt(stockAsk(sym))}
+    <div class="page-lead ov-lead" data-v2-level-now="${level}">${miloPrompt(stockAsk(sym))}${levelControl({ id: 'ov-lc' })}</div>
     ${D.quoteError && !D.quote ? (D.quoteError.kind === 'notfound' ? empty(`Optic has no listing for ${sym}`, 'No quote came back for this symbol. It may be misspelled, delisted, or listed outside the US under another form.', html`<button type="button" class="btn btn-sm" data-v2-open-palette>Search for the company</button>`) : failed(`${sym}'s quote`, D.quoteError, { retry: 'dossier' })) : ''}
     ${((D.framework || {}).freshness || {}).state === 'stale' ? staleLine({ text: clean(D.framework.freshness.text) }) : ''}
     ${about(sym)}
