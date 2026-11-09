@@ -613,17 +613,20 @@ def preferences(user_id: str) -> Dict[str, Any]:
     if not found:
         return dict(DEFAULT_PREFERENCES, updated_at=None)
     out = {k: found.get(k) or DEFAULT_PREFERENCES[k] for k in DEFAULT_PREFERENCES}
+    # Three levels since 2026-11-09 (app/knowledge.py THREE): a level stored before then reads as its three-level id
+    if out.get("knowledge_level"):
+        out["knowledge_level"] = knowledge.three(out["knowledge_level"])
     out["updated_at"] = found.get("updated_at")
     return out
 
 
 def set_preferences(user_id: str, patch: Dict[str, Any]) -> Dict[str, Any]:
     fields = {k: v for k, v in patch.items() if k in DEFAULT_PREFERENCES}
-    # a level is stored as one of the five ids (an old id is mapped), and an unknown one is
-    # dropped like an unknown landing view, never stored as something no page can read
+    # a level is stored as one of the three ids (2026-11-09: an old or five-level id is mapped), and an unknown one
+    # is dropped like an unknown landing view, never stored as something no page can read
     if "knowledge_level" in fields:
         if knowledge.known(fields["knowledge_level"]):
-            fields["knowledge_level"] = knowledge.normalise(fields["knowledge_level"])
+            fields["knowledge_level"] = knowledge.three(fields["knowledge_level"])
         else:
             fields.pop("knowledge_level")
     if "default_landing" in fields and fields["default_landing"] not in LANDING_VIEWS:

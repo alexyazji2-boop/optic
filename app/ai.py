@@ -1002,6 +1002,16 @@ def _client():
         # two tries. Five attempts costs nothing when the API is healthy and
         # absorbs the short spikes that cause almost all of these.
         kwargs: Dict[str, Any] = {"max_retries": 5}
+        # Both overridable (2026-11-09), defaults unchanged: the timeout and the retry count Milo's calls run under,
+        # so a test can play Anthropic timing out in seconds rather than in the SDK's ten minutes times six tries.
+        # Unset or unreadable, the SDK's own timeout and the five retries above stand.
+        try:
+            if (os.environ.get("ANTHROPIC_TIMEOUT_SECONDS") or "").strip():
+                kwargs["timeout"] = max(1.0, float(os.environ["ANTHROPIC_TIMEOUT_SECONDS"]))
+            if (os.environ.get("ANTHROPIC_MAX_RETRIES") or "").strip():
+                kwargs["max_retries"] = max(0, min(10, int(os.environ["ANTHROPIC_MAX_RETRIES"])))
+        except ValueError:
+            pass
         # A personal API key -- one created as a user, rather than inside a
         # workspace -- is refused on every call unless the request names a
         # workspace: "This API key is not scoped to a workspace, so this request

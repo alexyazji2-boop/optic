@@ -31,10 +31,12 @@ def test_assets_must_be_revalidated():
         assert "no-cache" in resp.headers.get("cache-control", ""), path
 
 
-def test_asset_version_is_stamped_not_hardcoded():
+def test_asset_version_is_stamped_not_hardcoded(monkeypatch):
     """The served version comes from the asset mtimes, so shipping an edit does
-    not depend on anyone remembering to bump a literal by hand."""
+    not depend on anyone remembering to bump a literal by hand. The classic page's
+    stamp, so Classic is turned on (OPTIC_CLASSIC, 2026-11-09: off, "/" is v2)."""
     import re
+    monkeypatch.setenv("OPTIC_CLASSIC", "on")
 
     html = client.get("/").text
     versions = set(re.findall(r"(?:app\.js|charts\.js|styles\.css)\?v=(\d+)", html))
