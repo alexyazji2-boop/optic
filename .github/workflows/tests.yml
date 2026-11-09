@@ -29,6 +29,9 @@ jobs:
     env:
       # the floor: what Pass 1 closed with. Lower it only with a reason in the pull request.
       MIN_PASSED: "8994"
+      # Optic's dates are market dates in New York; the suite was written and is run there (a UTC runner after 7 pm
+      # New York time put "in 12 days" a day out in tests/test_v2_parity_b6a.py)
+      TZ: America/New_York
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v6

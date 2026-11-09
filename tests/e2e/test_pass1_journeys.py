@@ -422,7 +422,8 @@ def test_the_level_control_and_show_more_work_from_the_keyboard(chrome, server):
     assert page.evaluate("document.activeElement.dataset.v2Level") == "intermediate"
     page.keyboard.press("Space")
     page.wait_for_function("() => document.querySelector('[data-v2-level-now]').dataset.v2LevelNow === 'intermediate'")
-    assert page.evaluate("document.activeElement.dataset.v2Level") == "intermediate", "focus stays on the pressed level"
+    # the page redraws for the new level, then focus is put back on the pressed button in the next frame
+    page.wait_for_function("() => (document.activeElement || {}).dataset && document.activeElement.dataset.v2Level === 'intermediate'", timeout=5000)
     page.keyboard.press("Shift+Tab")
     page.keyboard.press("Enter")
     page.wait_for_function("() => document.querySelector('[data-v2-level-now]').dataset.v2LevelNow === 'beginner'")
