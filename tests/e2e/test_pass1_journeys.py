@@ -430,5 +430,6 @@ def test_the_level_control_and_show_more_work_from_the_keyboard(chrome, server):
     page.focus("[data-v2-show-more='regime']")
     page.keyboard.press("Enter")
     page.wait_for_selector("[data-ws-panel='regime']")
-    assert page.evaluate("!!document.activeElement.closest('[data-ws-panel=\"regime\"]')"), "focus moves to what opened"
+    # focus moves to what opened (the panel's body), once it is drawn
+    page.wait_for_function("() => !!(document.activeElement && document.activeElement.closest('[data-ws-panel=\"regime\"]'))", timeout=5000)
     ctx.close()
