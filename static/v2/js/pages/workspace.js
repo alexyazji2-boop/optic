@@ -932,6 +932,7 @@ function paintAll() {
   draw(root, html`<div class="ws-page" data-v2-level-now="${level}">
     <header class="ws-pagehead page-lead"><div><h1 class="t-h2" tabindex="-1">${hello()}</h1><p class="ws-sub" id="ws-date">${etDate(ses.now_et)}${ses.label ? `. ${clean(ses.label)}.` : ''}</p></div>
       ${levelControl({ id: 'home-lc' })}</header>
+    ${featureBlock()}
     ${miloPrompt(homeAsk())}
     ${showOnboard() ? onboard() : ''}
     ${showBar ? bar() : ''}
@@ -940,6 +941,67 @@ function paintAll() {
   shown.forEach((x) => { if (DATA[x.id] !== undefined || ERR[x.id]) paintBody(x.id); if (!folded(x.id)) loadPanel(x.id, { quiet: DATA[x.id] !== undefined }); });
   fillRows();
   provideContext(miloContext);
+  mountFeature(); loadFeature();
+}
+
+/* ---------------- the day's one figure (visual hierarchy review, 2026-11-10, change 1) ----------------
+ * Home's largest type was the greeting (28px, no information) and the eight tiles' 16px figures sat level with each
+ * other, so nothing on the first screen ranked (F1). One figure leads now, at the display size, with one line chart
+ * under it: the S&P 500's level and move, or the reader's own first holding or followed name once there is one (the
+ * owner's drawing of 2026-11-09 leads with one large chart and its figure). Every value is one Home already reads: the
+ * market strip's (/api/home), the quote panel's quote and take-chart for a name. The tiles stay as the strip below. */
+const MARKET_FIGURE = '^GSPC';
+let FEAT = { sym: null, q: null, c: null, failed: false, seq: 0 };
+function featureSym() {
+  const holdings = briefingHoldings(((((DATA.portfolio || {}).ov || {}).today || {}).rows) || []);
+  return holdings[0] || (store.allSymbols() || [])[0] || MARKET_FIGURE;
+}
+/** What the block shows: {label, sub, value, chg, href}, or null while it loads. */
+function featureFigure() {
+  if (FEAT.sym === MARKET_FIGURE || !FEAT.sym) {
+    const i = inst(DATA.indices, 'equity', 'S&P 500');
+    if (!i || !isNum(i.last)) return null;
+    return { label: 'S&P 500', sub: UNIT['S&P 500'], value: num(i.last, 0), chg: i.chg_1d, chgText: moveText(i), href: `#/instrument/${enc(i.symbol || MARKET_FIGURE)}` };
+  }
+  const q = ((FEAT.q || {}).quote) || FEAT.q || {};
+  if (!isNum(q.price)) return null;
+  return { label: FEAT.sym, sub: q.name && q.name !== FEAT.sym ? q.name : '', value: num(q.price), chg: q.change_pct, chgText: isNum(q.change_pct) ? signed(q.change_pct) : '', href: `#/${enc(FEAT.sym)}` };
+}
+function featureBody() {
+  const f = featureFigure(), ch = ((FEAT.c || {}).chart) || {};
+  const head = (label, sub) => html`<p class="hm-feat-k" id="hm-feat-k">${label}${sub ? html` <span class="hm-feat-u">${sub}</span>` : ''}</p>`;
+  if (!f) {
+    const off = FEAT.failed || ERR.indices;
+    return html`${head(FEAT.sym && FEAT.sym !== MARKET_FIGURE ? FEAT.sym : 'S&P 500', '')}${off ? html`<p class="ws-note">The day's figure did not load. The strip below has the markets.</p>` : skeleton('lines', 1, "Loading the day's figure")}`;
+  }
+  return html`${head(f.label, f.sub)}
+    <p class="hm-feat-fig"><a class="hm-feat-v" href="${f.href}">${f.value}</a>${f.chgText ? html`<span class="hm-feat-d ${dir(f.chg)}">${f.chgText}<span class="sr"> today</span></span>` : ''}</p>
+    ${(ch.close || []).length > 1 ? html`<div class="chart-slot hm-feat-chart" data-chart="hm-feature"></div>` : ''}`;
+}
+const featureBlock = () => html`<section class="hm-feature" id="hm-feature" aria-labelledby="hm-feat-k">${featureBody()}</section>`;
+function mountFeature() {
+  const el = $('#hm-feature', root); if (!el) return;
+  const ch = ((FEAT.c || {}).chart) || {}, dates = ch.dates || [];
+  if (dates.length > 1) mountCharts(el, { 'hm-feature': (w) => lineChart(dates.map((d, i) => ({ d, c: ch.close[i] })), { w, h: Math.round(Math.max(140, Math.min(200, w * 0.16))), area: true, label: `${FEAT.c.ticker || FEAT.sym} daily closes`, summary: `${FEAT.c.ticker || FEAT.sym} daily closes over ${FEAT.c.span_words || 'six months'}.` }) });
+}
+function paintFeature() {
+  const el = $('#hm-feature', root); if (!el) return;
+  draw(el, featureBody()); mountFeature();
+}
+function loadFeature() {
+  const sym = featureSym();
+  if (FEAT.sym === sym && (FEAT.c || FEAT.pending)) return;
+  const seq = ++FEAT.seq;
+  FEAT = { sym, q: null, c: null, failed: false, pending: true, seq };
+  const quote = sym === MARKET_FIGURE ? Promise.resolve(null) : get(`/api/quote/${enc(sym)}`, { ttl: 20000 });
+  Promise.allSettled([quote, get(`/api/take-chart/${enc(sym)}?span=6m`, { ttl: 600000, timeout: 30000 })]).then(([q, c]) => {
+    if (!live || FEAT.seq !== seq) return;
+    FEAT.pending = false;
+    FEAT.q = q.status === 'fulfilled' ? q.value : null;
+    FEAT.c = c.status === 'fulfilled' && c.value && c.value.available ? c.value : null;
+    FEAT.failed = sym !== MARKET_FIGURE && !featureFigure();
+    paintFeature();
+  });
 }
 
 // The Desk at Beginner: its bottom line, and what it does not tell you, with Show more for the whole edition
@@ -1001,7 +1063,7 @@ function paintBody(id) {
   draw(foot, html`<span class="ws-src">${SRC[id] || f.source || ''}</span>${f.at ? html`<span>${asof(f.at, f.verb)}</span>` : ''}${st ? html`<span class="ws-state">${st}</span>` : ''}${old ? html`<span class="ws-stale">${old}</span>` : ''}${f.stale ? html`<span class="ws-stale">${f.stale}</span>` : ''}`);
   const dl = $(`#wsd-${id}`, root);
   if (dl) draw(dl, html`<div><dt>Source</dt><dd>${f.source || SRC[id] || ''}</dd></div>${freshOf(id) ? html`<div><dt>How fresh</dt><dd class="ws-fresh">${freshOf(id)}</dd></div>` : ''}${f.note || f.staleWhy ? html`<div><dt>Note</dt><dd>${[f.note, f.staleWhy].filter(Boolean).join(' ')}</dd></div>` : ''}${f.gap ? html`<div><dt>Not in Optic</dt><dd>${f.gap}</dd></div>` : ''}`);
-  if (id === 'watch' || id === 'portfolio' || id === 'indices') paintPrompt();
+  if (id === 'watch' || id === 'portfolio' || id === 'indices') { paintPrompt(); if (featureSym() !== FEAT.sym) loadFeature(); else paintFeature(); }
   if (id === 'indices') { const dt = $('#ws-date', root), ses = d.session || {}; if (dt) dt.textContent = `${etDate(ses.now_et)}${ses.label ? `. ${clean(ses.label)}.` : ''}`; }
 }
 

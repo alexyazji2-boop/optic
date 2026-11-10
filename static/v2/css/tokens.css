@@ -75,7 +75,11 @@
   --t-lg: 16px;     /* body */
   --t-xl: 18px;     /* h3, a row's lead figure */
   --t-lead: 20px;   /* a section's one-line finding */
-  --t-2xl: 24px;    /* h2, the header's price */
+  --t-2xl: 24px;    /* h2 */
+  /* a screen's one headline figure: the company page's price and Home's figure for the day (visual hierarchy review,
+     2026-11-10, F1: the price was 24px against 18px headings, 1.33 times the next tier; the standard and the owner's
+     mockup put it at about twice). The tall header's display size, so both headers agree; 34px on a phone. */
+  --t-figure: clamp(34px, 3.2vw, 44px);
   --t-h2: var(--t-2xl);
   --t-h3: var(--t-xl);
   --t-body: var(--t-lg);
