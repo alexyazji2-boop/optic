@@ -520,7 +520,7 @@ def rail(page):
     return page.eval_on_selector_all(".rail-nav a.rail-row", "els => Object.fromEntries(els.map(e => [e.textContent.trim(), e.getAttribute('href')]))")
 
 
-@pytest.mark.parametrize("width", [390, 360, 320])
+@pytest.mark.parametrize("width", [390, 360, 340, 320])
 def test_the_phone_bar_has_the_rails_names_and_opens_what_the_rail_opens(chrome, server, width):
     ctx, page = open_page(chrome, server, level="beginner", viewport={"width": width, "height": 844})
     home(page, server)
