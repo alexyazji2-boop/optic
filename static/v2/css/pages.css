@@ -636,7 +636,6 @@ table.scen td { font-weight: 600; }
 .chart-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 18px; margin-bottom: 16px; }
 /* Financials (pages/financials.js) */
 .fin-figs { margin: 4px 0 14px; border-top: 0; }
-.fin-figs .v { font-size: 26px; }
 .fin-nav { position: sticky; top: 70px; z-index: 6; display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; padding: 8px 0; background: var(--c-plane); }
 .fin-nav .chip { min-height: 36px; font-size: var(--t-md); }
 .fin-nav .fin-jumpsel { display: none; }
@@ -2422,3 +2421,11 @@ html.eff-1100 .dhead.bar.is-wide .dh-price { flex-basis: 100%; }
 .read-hero #rd-h.t-display-m { font-size: 32px; letter-spacing: -0.02em; }
 .read-hero .read-build .textlink { font-size: var(--t-sm); font-weight: 500; }
 .read-hero .read-ask { margin-top: 14px; }
+
+/* Financials: one figure leads the summary row (visual hierarchy review, 2026-11-10, change 10, F10). Six figures at
+   26px sat in one row and the largest type on the page was any of them. Revenue now leads at 34px with its year, the
+   other five at the lead size, and the summary's own growth line sits above the row as its finding. */
+.fin-figs .v { font-size: var(--t-lead); }
+.fin-figs .rd-lead .v { font-size: 34px; letter-spacing: -0.03em; }
+.fin-figs .rd-when { font-weight: 400; color: var(--c-ink-3); }
+.fin-lead { margin: 6px 0 10px; max-width: 72ch; font-size: var(--t-lead); line-height: 1.4; color: var(--c-ink); }
