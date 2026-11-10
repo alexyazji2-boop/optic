@@ -38,3 +38,41 @@ def route_fixtures(page):
 
     page.route(re.compile(r".*/api/symbol-check\?.*"), symbol_check)
     page.route(re.compile(r".*/api/quote/[A-Za-z0-9.^=-]+(\?.*)?$"), quote)
+
+
+# A year and a bit of daily closes for the stock page's past-year chart, with four earnings reports inside it, so the
+# chart draws in the suite with its E marks (which are buttons). Without it the history never arrives (the feeds are
+# refused) and the chart's SVG was never drawn by any journey: the accessibility scans passed while the live stock page
+# failed axe's nested-interactive on that chart (gauntlet D1, 2026-11-10). Invented values, a smooth made-up path.
+def _sessions(end="2026-11-09", n=300):
+    import datetime as dt
+    d, out = dt.date.fromisoformat(end), []
+    while len(out) < n:
+        if d.weekday() < 5:
+            out.append(d.isoformat())
+        d -= dt.timedelta(days=1)
+    return out[::-1]
+
+
+def ticker_payload(sym):
+    import math
+    q = QUOTES[sym]
+    dates = _sessions()
+    base = q["price"]
+    close = [round(base * (0.78 + 0.22 * i / (len(dates) - 1)) + 6 * math.sin(i / 9.0), 2) for i in range(len(dates))]
+    close[-1] = base
+    quarters = [{"date": d, "timing": "amc", "eps_reported": e, "eps_estimate": round(e - 0.04, 2), "surprise_pct": 2.5}
+                for d, e in (("2026-01-29", 2.40), ("2026-04-30", 1.65), ("2026-07-30", 1.57), ("2026-10-30", 1.85))]
+    return {"ticker": sym, "quote": q, "company": {"name": q.get("name") or sym, "earnings_history": {"quarters": quarters}},
+            "technicals": {"price_series": {"dates": dates, "close": close}}}
+
+
+def route_price_history(page):
+    """Serve ticker_payload for the symbols above at /api/ticker; opt-in, for the journeys that need the chart drawn."""
+    def ticker(route):
+        sym = route.request.url.split("/api/ticker/", 1)[1].split("?", 1)[0].upper()
+        if sym not in QUOTES:
+            return route.fallback()
+        route.fulfill(status=200, content_type="application/json", body=json.dumps(ticker_payload(sym)))
+
+    page.route(re.compile(r".*/api/ticker/[A-Za-z0-9.^=-]+(\?.*)?$"), ticker)

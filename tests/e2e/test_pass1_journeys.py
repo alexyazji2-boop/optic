@@ -11,7 +11,7 @@ import time
 import pytest
 
 from tests.e2e.conftest import PASSWORD, make_account, usage_rows
-from tests.e2e.fixtures import route_fixtures
+from tests.e2e.fixtures import route_fixtures, route_price_history
 
 DESKTOP = {"width": 1440, "height": 900}
 PHONE = {"width": 390, "height": 844}
@@ -432,4 +432,52 @@ def test_the_level_control_and_show_more_work_from_the_keyboard(chrome, server):
     page.wait_for_selector("[data-ws-panel='regime']")
     # focus moves to what opened (the panel's body), once it is drawn
     page.wait_for_function("() => !!(document.activeElement && document.activeElement.closest('[data-ws-panel=\"regime\"]'))", timeout=5000)
+    ctx.close()
+
+
+# ------------------------------------------------------------------ the past-year chart, drawn (gauntlet D1, 2026-11-10)
+
+def stock_with_chart(chrome, server, level, viewport=DESKTOP, sym="AAPL"):
+    ctx, page = open_page(chrome, server, level=level, viewport=viewport)
+    route_price_history(page)
+    stock(page, server, sym)
+    page.wait_for_selector(".chart-slot[data-chart='price'] svg.chart")
+    return ctx, page
+
+
+@pytest.mark.parametrize("viewport", [DESKTOP, PHONE], ids=["desktop", "phone"])
+@pytest.mark.parametrize("level", LEVELS)
+def test_axe_finds_no_violation_on_the_stock_page_with_its_chart_drawn(chrome, server, level, viewport):
+    """The scans above never drew the chart (the feeds are refused, so no price history arrives); the live copy failed
+    axe's nested-interactive on it at every level. Here the history and four earnings reports come from a fixture."""
+    from axe_playwright_python.sync_playwright import Axe
+    ctx, page = stock_with_chart(chrome, server, level, viewport)
+    marks = page.locator(".chart-slot[data-chart='price'] svg.chart .ev-mark[role='button']")
+    assert marks.count() == 4, "the four reports are drawn as buttons"
+    page.wait_for_timeout(1500)
+    result = Axe().run(page, options={"runOnly": {"type": "tag", "values": ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"]}})
+    violations = result.response.get("violations", [])
+    assert violations == [], json.dumps([{"id": v["id"], "nodes": [n["target"] for n in v["nodes"]][:4], "help": v["help"]} for v in violations], indent=1)
+    assert page.errors == []
+    ctx.close()
+
+
+def test_the_charts_marks_are_named_buttons_and_open_from_the_keyboard(chrome, server):
+    ctx, page = stock_with_chart(chrome, server, "beginner")
+    svg = page.locator(".chart-slot[data-chart='price'] svg.chart")
+    assert svg.get_attribute("role") == "group" and svg.get_attribute("aria-roledescription") == "chart"
+    assert svg.get_attribute("aria-label").startswith("AAPL closing price: from ")
+    names = page.eval_on_selector_all(".chart-slot[data-chart='price'] .ev-mark", "els => els.map(e => e.getAttribute('aria-label'))")
+    assert names[-1] == "Earnings report, Oct 30, 2026", names
+    # the chart itself still takes focus for the crosshair, and the next Tab reaches the first mark; read once the page
+    # has stopped repainting as its other reads land (each paint draws the chart anew, and focus with it)
+    page.wait_for_load_state("networkidle")
+    svg.focus()
+    page.keyboard.press("End")
+    assert page.locator(".chart-wrap .chart-tip").is_visible()
+    page.keyboard.press("Tab")
+    assert page.evaluate("document.activeElement.classList.contains('ev-mark')")
+    page.keyboard.press("Enter")
+    page.wait_for_selector(".drawer.is-open")
+    assert "earnings" in page.text_content(".drawer.is-open").lower()
     ctx.close()
