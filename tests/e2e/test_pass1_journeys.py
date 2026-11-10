@@ -367,8 +367,21 @@ def test_signed_out_the_prompt_leads_to_sign_in_and_milo_asks_it_after(chrome, s
     page.fill("form[data-v2-auth] input[name=password]", PASSWORD)
     page.click("form[data-v2-auth] button[type=submit]")
     page.wait_for_url(re.compile(r".*#/AAPL$"))
+    # The guest opened AAPL, so the browser holds a recent search and the "Keep what you made?" sheet asks first. Milo
+    # waits for the answer (core/device.js whenSettled): asked at once, it answered under the sheet and the reload
+    # that followed the reader's next move took the answer away (the copy, 2026-11-10).
+    page.wait_for_selector("[data-v2-guest='bring']", timeout=30000)
+    page.wait_for_timeout(3000)
+    assert page.locator("#milo-q").count() == 0 and not milo_requests(stub), \
+        "Milo neither opens nor asks while the browser may still reload into the account's things"
+    page.click("[data-v2-guest='bring']")
     page.wait_for_function("() => (document.querySelector('.milo-log') || {}).textContent && document.querySelector('.milo-log').textContent.includes('Stand-in answer')", timeout=60000)
     assert "Why is Apple moving today?" in milo_requests(stub)[-1]
+    # the reader's next move keeps the page and the answer
+    page.evaluate("window.__same = 1")
+    page.evaluate("location.hash = '#/read'"); page.wait_for_timeout(2000)
+    assert page.evaluate("window.__same") == 1, "no reload"
+    assert "Stand-in answer" in page.text_content(".milo-log")
     ctx.close()
 
 

@@ -446,12 +446,21 @@ function blocked() {
   const ai = r.ai || {}, a = r.allowance || {};
   if (ai.enabled === false) return { kind: 'off', text: 'Milo is switched off right now, so it cannot answer questions. Everything else in Optic works without it.' };
   if (a.requires_account && !store.signedIn()) return { kind: 'signin', text: 'Asking Milo needs a free account.', perDay: a.signed_in_allowance };
-  if (Number.isFinite(a.allowed) && a.allowed > 0 && a.left === 0) return { kind: 'spent', text: `You have used today's ${a.allowed} questions.${a.next_at ? ` The next one is available ${new Date(a.next_at).toLocaleString('en-US', { weekday: 'short', hour: 'numeric', minute: '2-digit' })}.` : ''}` };
+  if (Number.isFinite(a.allowed) && a.allowed > 0 && a.left === 0) {
+    const at = a.next_at ? new Date(a.next_at).toLocaleString('en-US', { weekday: 'short', hour: 'numeric', minute: '2-digit' }) : '';
+    // `short` is the box's placeholder, so the box itself says why Send does nothing
+    return { kind: 'spent', text: `You have used today's ${a.allowed} questions.${at ? ` The next one is available ${at}.` : ''}`, short: `Today's ${a.allowed} questions are used${at ? `; the next one frees at ${at}` : ''}` };
+  }
   return null;
 }
+// A spent allowance is said here, from the allowance itself, on open and on every repaint. It used to be blank
+// exactly then: the box kept "Ask about AAPL" and Send was dead with no sentence, and the reason appeared only after
+// an ask failed with 429, so the reader took it for a broken button (spent free account on the evaluation copy,
+// 2026-11-10: notes on open none, Send disabled, the box enabled).
 function allowanceLine() {
   const a = (S.allowance || {}).allowance || {};
-  if (blocked()) return '';
+  const b = blocked();
+  if (b) return b.kind === 'spent' ? b.text : '';
   return Number.isFinite(a.left) && Number.isFinite(a.allowed) && a.allowed > 0 ? `${a.left} of ${a.allowed} questions left today.` : '';
 }
 async function loadAllowance() {
@@ -1018,7 +1027,8 @@ function paintForm() {
   // the send control turns into Stop while Milo answers; focus follows it rather than falling to the page
   if (S.busy && hadFocus === send && stop) stop.focus({ preventScroll: true });
   if (!S.busy && hadFocus === stop && ta) ta.focus({ preventScroll: true });
-  if (ta) { ta.disabled = !!b && b.kind !== 'spent'; ta.placeholder = placeholder(); }
+  // spent: the box stays enabled so the reader may draft for later; Send stays disabled and the placeholder says why
+  if (ta) { ta.disabled = !!b && b.kind !== 'spent'; ta.placeholder = b && b.kind === 'spent' ? b.short : placeholder(); }
   // no conversation form that cannot be used: hidden while asking needs an account or Milo is off
   const fm = $('.milo-form', h); if (fm) fm.hidden = !!b && b.kind !== 'spent';
   const at = $('#milo-attached span', h); if (at) at.textContent = attachedLine();

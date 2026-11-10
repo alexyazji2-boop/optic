@@ -27,7 +27,7 @@ import { icon } from '../ui/icons.js';
 import { go } from '../core/router.js';
 import { levelControl } from '../ui/levelcontrol.js';
 import { miloPrompt, press as askPrompt, resume as resumePrompt, homeQuestion } from '../ui/miloprompt.js';
-import { expansions, moreList, moreButton } from '../ui/showmore.js';
+import { expansions, moreList, moreButton, revealOpened } from '../ui/showmore.js';
 import { hello, etDate, portfolio, eventsBlock, STARTERS, STARTER_NAMES, STARTER_ABOUT, portfolioSeries, deskBody, deskBottom, evPress, changesBlock, trendsBlock, briefingHoldings } from './home.js';
 import { term } from '../ui/term.js';
 import * as FV from '../core/finviz.js';
@@ -1252,9 +1252,10 @@ function wire() {
     if ((b = t('[data-v2-mp-ask]'))) { askPrompt(homeAsk, b); return; }
     if ((b = t('[data-v2-show-more]'))) {
       const id = b.dataset.v2ShowMore; OPEN.add(id); paintAll();
-      // focus lands on what opened: the panel's own heading, or the Desk's body
+      // focus lands on what opened, the panel's body, after a smooth scroll that stops with the panel's heading under
+      // the top bar (ui/showmore.js); the body alone put the heading out of sight above it
       const pid = id.split(':')[0], to = $(`#wsb-${pid}`, root);
-      if (to) to.focus({ preventScroll: false });
+      if (to) revealOpened($(`[data-ws-panel="${pid}"]`, root) || to, to);
       announce(`${(PANELS[pid] || {}).title || 'The panel'} is open. Your level is unchanged.`);
       return;
     }

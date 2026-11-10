@@ -114,3 +114,53 @@ def test_the_milo_prompts_and_their_fallbacks():
     assert "go(`#/signin?next=${encodeURIComponent(location.hash || '#/')}`)" in mp and "sessionStorage" in mp
     assert Path(main.STATIC_DIR / "v2" / "js" / "ui" / "milo.js").read_text().count("mode: prefs.knowledge()") == 2, \
         "both Milo requests carry the reader's level"
+
+
+def test_show_more_scrolls_smoothly_then_focuses_without_a_second_scroll():
+    # Focus with preventScroll: false, and the swap keeping its place, moved the page in one frame: 1,335 px on AAPL at
+    # Beginner, 1440 x 900 (gauntlet, 2026-11-10). The opened panel is scrolled to smoothly, then focused.
+    sm = (JS / "ui" / "showmore.js").read_text()
+    assert "target.scrollIntoView({ behavior: reducedMotion() ? 'auto' : 'smooth', block: 'start' })" in sm
+    assert "focus.focus({ preventScroll: true })" in sm
+    ov = (JS / "pages" / "dossier.js").read_text()
+    branch = ov[ov.index("const more = e.target.closest('[data-v2-show-more]');"):ov.index("const a = e.target.closest('[data-v2-answer]');")]
+    assert "revealOpened(el)" in branch and "preventScroll: false" not in branch
+    assert "advMoved = 'reveal'" in branch and "swapped !== 'reveal'" in ov
+    assert "Opened. Your level is unchanged." in branch
+    ws = (JS / "pages" / "workspace.js").read_text()
+    branch = ws[ws.index("if ((b = t('[data-v2-show-more]')))"):ws.index("if ((b = t('[data-ws-preset]')))")]
+    assert "revealOpened(" in branch and "preventScroll: false" not in branch
+    assert "Your level is unchanged." in branch
+
+
+def test_a_spent_allowance_is_said_from_the_allowance_not_only_from_a_failed_send():
+    # A spent free account (evaluation copy, 2026-11-10) opened Milo to an "Ask about AAPL" box and a dead Send with no
+    # sentence; the reason came only after a 429. The note and the placeholder are painted from the allowance itself.
+    mi = (JS / "ui" / "milo.js").read_text()
+    line = mi[mi.index("function allowanceLine()"):mi.index("async function loadAllowance()")]
+    assert "return b.kind === 'spent' ? b.text : '';" in line
+    form = mi[mi.index("function paintForm()"):mi.index("const draw = (el, tpl)")]
+    assert "ta.placeholder = b && b.kind === 'spent' ? b.short : placeholder();" in form
+    assert "ta.disabled = !!b && b.kind !== 'spent';" in form, "the reader may still draft"
+    assert "send.disabled = S.busy || !!b;" in form
+    assert "$('#milo-allow', h); if (al) al.textContent = !S.busy ? allowanceLine()" in form
+    assert "short: `Today's ${a.allowed} questions are used${at ? `; the next one frees at ${at}` : ''}`" in mi
+    assert "Milo could not answer. Your question is back in the box." in mi
+
+
+def test_the_kept_milo_question_waits_for_the_device_question():
+    # Signed in from the AAPL bar with a guest's things on the browser, Milo asked at once, docked over the "Keep what
+    # you made?" sheet, and the reader's next move reloaded the page and lost the answer (the copy, 2026-11-10). The
+    # kept question now waits for the answer to the sheet; a reload drops the wait and leaves the question kept.
+    dv = (JS / "core" / "device.js").read_text()
+    assert "export function whenSettled(fn) {\n  if (ending) return;\n  if (!askPending) { fn(); return; }\n  waiting.push(fn);\n}" in dv
+    bring = dv[dv.index("export function bringGuestThings()"):dv.index("export function keepGuestThingsOut()")]
+    assert "setTimeout(runWaiting, 0);" in bring
+    out = dv[dv.index("export function keepGuestThingsOut()"):dv.index("export function keepDeviceSession(")]
+    assert "waiting = [];" in out and "location.reload();" in out
+    mp = (JS / "ui" / "miloprompt.js").read_text()
+    res = mp[mp.index("export function resume(screen, symbol) {"):]
+    assert res.index("whenSettled(() => resume(screen, symbol))") < res.index("const ask = take(screen, symbol);"), \
+        "the question is not taken from sessionStorage until the page is known to stay"
+    # the rule itself is unchanged: another person's session still reloads before anything is read
+    assert "ending = true;\n  location.reload();\n  return 'reload';" in dv
