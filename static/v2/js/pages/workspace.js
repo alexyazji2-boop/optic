@@ -969,8 +969,15 @@ function featureFigure() {
   if (!isNum(q.price)) return null;
   return { label: FEAT.sym, sub: q.name && q.name !== FEAT.sym ? q.name : '', value: num(q.price), chg: q.change_pct, chgText: isNum(q.change_pct) ? signed(q.change_pct) : '', href: `#/${enc(FEAT.sym)}` };
 }
+// The day's one sentence under the figure (hierarchy change 5): Market conditions' own first sentence, its plain
+// regime words and what the inputs lean toward, from the same /api/home the panel reads. No new claim.
+function featureSay() {
+  const m = ((DATA.indices || {}).macro) || {};
+  if (!m.regime || !PLAIN_REGIME[m.regime]) return '';
+  return `${PLAIN_REGIME[m.regime]}. ${clean(STANCE[m.regime] || m.stance || '')}`.trim();
+}
 function featureBody() {
-  const f = featureFigure(), ch = ((FEAT.c || {}).chart) || {};
+  const f = featureFigure(), ch = ((FEAT.c || {}).chart) || {}, say = featureSay();
   const head = (label, sub) => html`<p class="hm-feat-k" id="hm-feat-k">${label}${sub ? html` <span class="hm-feat-u">${sub}</span>` : ''}</p>`;
   if (!f) {
     const off = FEAT.failed || ERR.indices;
@@ -978,6 +985,7 @@ function featureBody() {
   }
   return html`${head(f.label, f.sub)}
     <p class="hm-feat-fig"><a class="hm-feat-v" href="${f.href}">${f.value}</a>${f.chgText ? html`<span class="hm-feat-d ${dir(f.chg)}">${f.chgText}<span class="sr"> today</span></span>` : ''}</p>
+    ${say ? html`<p class="hm-feat-say">${say}</p>` : ''}
     ${(ch.close || []).length > 1 ? html`<div class="chart-slot hm-feat-chart" data-chart="hm-feature"></div>` : ''}`;
 }
 const featureBlock = () => html`<section class="hm-feature" id="hm-feature" aria-labelledby="hm-feat-k">${featureBody()}</section>`;

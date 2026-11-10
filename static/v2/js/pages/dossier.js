@@ -35,7 +35,7 @@ import { miloPrompt, press as askPrompt, resume as resumePrompt, companyQuestion
 import { expansions, moreList, moreButton } from '../ui/showmore.js';
 
 import * as delays from '../core/delays.js';
-import { simpleFacts, simpleSection } from './overview-simple.js';
+import { simpleFacts, simpleSection, simpleAnalysis, plainText } from './overview-simple.js';
 import { levelLabel } from '../ui/levelslider.js';
 import { button as miloButton, provideContext } from '../ui/milo.js';
 import * as drawer from '../ui/drawer.js';
@@ -98,15 +98,17 @@ function implied() {
 }
 function chartBlock(sym) {
   const pts = series();
-  const head = (bar) => html`<div class="section-head"><div><h2 class="t-h2" id="py-h">${RANGE_TITLE[range]}</h2></div>${bar || ''}</div>`;
+  // the chart's own one-line reading is its title, in the heading at 18px (hierarchy change 5: it sat under the range
+  // buttons at 16px, so the chart had a period for a heading and no title)
+  const head = (bar, title) => html`<div class="section-head"><div><h2 class="t-h2" id="py-h">${RANGE_TITLE[range]}</h2>${title ? html`<p class="py-title">${title}</p>` : ''}</div>${bar || ''}</div>`;
   if (!D.ticker) return html`${head()}<div class="chart-slot">${skeleton('chart', 1, 'Loading the price history')}</div>`;
   if (pts.length < 20) return html`${head()}${empty('No price history to draw', 'The quote above is current; the chart returns when the history does.')}`;
   const im = implied();
   const shown = windowOf(pts, range), last = pts[pts.length - 1];
   const up = ((((D.ticker || {}).company || {}).earnings_history || {}).upcoming || [])[0] || {};
   const next = String(((D.earnings || {}).next_report || {}).date || up.date || '').slice(0, 10);
-  return html`${head(html`<div class="seg" role="group" aria-label="Chart range">${Object.keys(RANGES).map((r) => html`<button type="button" data-v2-range="${r}" aria-pressed="${r === range}">${r}</button>`)}</div>`)}
-    <p class="py-title">${OR.chartTitle(sym, shown.map((p) => p.c), OR.tradesDaily(pts.map((p) => p.d)) ? { year: range === '1Y' && OR.windowStart(pts.map((p) => p.d), RANGES['1Y']).full } : {})}</p>
+  return html`${head(html`<div class="seg" role="group" aria-label="Chart range">${Object.keys(RANGES).map((r) => html`<button type="button" data-v2-range="${r}" aria-pressed="${r === range}">${r}</button>`)}</div>`,
+    OR.chartTitle(sym, shown.map((p) => p.c), OR.tradesDaily(pts.map((p) => p.d)) ? { year: range === '1Y' && OR.windowStart(pts.map((p) => p.d), RANGES['1Y']).full } : {}))}
     <p class="section-sub">${OR.chartSource(D.ticker, last.d, next)}${im ? html` The gold cone is the ±${num(im.pct)}% range options price through the ${shortDate(im.expiry)} expiry.` : ''}</p>
     <div class="chart-slot" data-chart="price"></div>
     ${OR.marksFold(chartEvents(shown))}
@@ -372,6 +374,18 @@ function simpleView(sym, c) {
   D.simpleKey = quoteKey();
   return simpleSection(F, level, { label });
 }
+/** The one sentence lifted to the top of the page (visual hierarchy review, 2026-11-10, change 5): the simple analysis's
+ *  first line ("What's happening?") at Beginner and Intermediate, the "Taken together" synthesis at Advanced. Both
+ *  are on the page already, from the same figures; nothing new is said. The simple analysis sat about 1,400px down, so
+ *  the first screen had a figure and no finding (directive 04's thirty seconds). Null until the figures arrive. */
+function leadLine(sym, c, level) {
+  if (level === 'advanced') { const s = synthesisLine(); if (s) return s; }
+  if (!D.ticker || D.session === undefined || D.longterm === undefined || D.earnings === undefined) return null;
+  const F = simpleFacts({ sym, kind: kindOf(sym, D), t: D.ticker, lt: D.longterm, quote: D.quote, session: D.session, earnings: D.earnings, price: c.price, f: c.f, today: c.today });
+  const first = ((simpleAnalysis(F, prefs.knowledge())[0] || [])[1] || [])[0];
+  return first ? plainText(first, F) : null;
+}
+const sayBlock = (t) => html`<p class="ov-say${t ? '' : ' is-loading'}" data-v2-ov-say>${t || ''}</p>`;
 const quoteKey = () => JSON.stringify([D.quote && D.quote.price, D.quote && D.quote.change_pct, D.quote && D.quote.delayed_minutes, !!(((D.session || {}).session) || {}).is_regular]);
 /** The header's price refreshes every 20 seconds (dossier-frame livePrice). The simple analysis says the same day's
  *  move and the same last trade, so when the quote it was written from has moved on it is redrawn in place: the
@@ -382,6 +396,8 @@ function refreshSimple(main, sym) {
   const c = OR.context({ sym, t: D.ticker || null, fw: D.fwRaw, fwError: D.fwNetError, lt: D.longterm || null, stars: (D.fairValue || {}).stars, fund: isFundHere(sym), advanced: false, phase: phase() });
   const tmp = document.createElement('div'); draw(tmp, simpleView(sym, c));
   if (tmp.firstElementChild) sec.replaceWith(tmp.firstElementChild);
+  const say = $('[data-v2-ov-say]', main), t = leadLine(sym, c, prefs.level());
+  if (say && t && say.textContent !== t) say.textContent = t;
 }
 function advancedView(sym, c, fund) {
   return html`${fund ? (D.fwError && D.fvError && D.earnError ? failed('The four answers', D.fwError, { retry: 'dossier' }) : answers(sym)) : OR.fourQuestions(c)}${fund ? OR.fundRisk(sym, c.f) : ''}
@@ -452,6 +468,7 @@ function paint(main, sym) {
   // the level control on the tabs row, right-aligned (visual hierarchy review, 2026-11-10, change 3): it shared a row
   // with the Milo bar at y 280 to 340, so neither led; the bar now has its row to itself
   draw(main, html`<div class="dstick has-tools">${frameHeader(sym, D, 'overview', { stage: () => stageFor(sym), level })}${frameTabs(sym, 'overview', { fund: isFund(D) })}${levelControl({ id: 'ov-lc' })}</div>
+    ${sayBlock(leadLine(sym, c, level))}
     <div class="page-lead ov-lead" data-v2-level-now="${level}">${miloPrompt(stockAsk(sym))}</div>
     ${D.quoteError && !D.quote ? (D.quoteError.kind === 'notfound' ? empty(`Optic has no listing for ${sym}`, 'No quote came back for this symbol. It may be misspelled, delisted, or listed outside the US under another form.', html`<button type="button" class="btn btn-sm" data-v2-open-palette>Search for the company</button>`) : failed(`${sym}'s quote`, D.quoteError, { retry: 'dossier' })) : ''}
     ${((D.framework || {}).freshness || {}).state === 'stale' ? staleLine({ text: clean(D.framework.freshness.text) }) : ''}

@@ -2155,7 +2155,10 @@ html.eff-1100 .dhead.bar.is-wide .dh-price { flex-basis: 100%; }
 .dh-stage.stage-4 .term { color: var(--c-neg); } .dh-stage.stage-4 .stage-dot { background: var(--c-neg); }
 .dh-stage .dh-explain { min-height: 30px; padding: 0 10px; font-size: var(--t-sm); }
 /* the past year's chart */
-.py-title { margin: 0 0 4px; font-size: var(--t-lg); font-weight: 600; color: var(--c-ink); }
+.py-title { margin: 4px 0 0; font-size: var(--t-xl); font-weight: 600; line-height: 1.3; color: var(--c-ink); }
+/* the lifted sentence (hierarchy change 5): the page's finding, at the lead size, the visible second tier under the
+   price; one line's height is kept while the figures load, so it does not push the page when it arrives */
+.ov-say { margin: 18px 0 0; max-width: 72ch; font-size: var(--t-lead); line-height: 1.4; color: var(--c-ink); min-height: 1.4em; }
 .ovx-marks td:first-child { white-space: nowrap; } .ovx-marks td:last-child { white-space: normal; text-align: left; }
 /* four questions, answered separately: one container, divided */
 .q-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border-top: 1px solid var(--c-line-2); }
@@ -2410,3 +2413,4 @@ html.eff-1100 .dhead.bar.is-wide .dh-price { flex-basis: 100%; }
 .hm-feat-v:hover { text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 6px; }
 .hm-feat-d { font: 600 var(--t-lead)/1 var(--f-sans); font-variant-numeric: tabular-nums; }
 .hm-feat-chart { margin-top: 12px; }
+.hm-feat-say { margin: 10px 0 0; max-width: 72ch; font-size: var(--t-lead); line-height: 1.4; color: var(--c-ink); }
