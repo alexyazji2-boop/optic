@@ -684,13 +684,15 @@ table.scen td { font-weight: 600; }
 .dhead.bar .dh-price { display: flex; align-items: baseline; gap: 4px 10px; margin: 0; flex-wrap: wrap; flex: 1 1 auto; min-width: 0; }
 /* Where the header wraps, the price has a row of its own whether it has arrived or not: the short loading placeholder
    fitted beside the ticker, so the name and price arriving added two rows and pushed the page down about 70 px (BUG-031) */
-@media (max-width: 1100px) { .dhead.bar .dh-price { flex-basis: 100%; } }
+/* the price's own line under the ticker below 1,200px, not 1,100 (visual hierarchy review, 2026-11-10, change 17, F8):
+   between them the h1 was squeezed beside a 44px price into the smallest text of its row */
+@media (max-width: 1199px) { .dhead.bar .dh-price { flex-basis: 100%; } }
 html.eff-1100 .dhead.bar .dh-price { flex-basis: 100%; }
 /* the actions keep their row; the price's time wraps inside its own space */
 @media (min-width: 861px) { .dhead.bar { flex-wrap: nowrap; } .dhead.bar .acts { flex: none; } }
 /* 861 to 1100 px of page (a 1024 window, or beside a docked Milo): one row squeezed the name and the price into
    narrow columns, so the actions take a row of their own and the identity keeps its line (B4a, 2026-10-21) */
-@media (min-width: 861px) and (max-width: 1100px) { .dhead.bar { flex-wrap: wrap; } .dhead.bar .acts { margin-left: auto; } .dhead.bar .name { white-space: nowrap; } }
+@media (min-width: 861px) and (max-width: 1199px) { .dhead.bar { flex-wrap: wrap; } .dhead.bar .acts { margin-left: auto; } .dhead.bar .name { white-space: nowrap; } }
 html.eff-1100 .dhead.bar { flex-wrap: wrap; } html.eff-1100 .dhead.bar .acts { margin-left: auto; } html.eff-1100 .dhead.bar .name { white-space: nowrap; }
 /* The price is the page's one headline figure, at the display size (hierarchy review F1: it was 24px, 1.33 times the
    18px section headings; now 44px at 1440, 34px on a phone, about twice the next tier). The day's change sits beside it
@@ -701,6 +703,8 @@ html.eff-1100 .dhead.bar { flex-wrap: wrap; } html.eff-1100 .dhead.bar .acts { m
 .dhead.bar.dhead-overview .dh-px { font-size: var(--t-figure); letter-spacing: -0.03em; }
 .dhead.bar.dhead-overview .dh-chg { font-size: var(--t-lead); font-weight: 600; }
 .dhead.bar .name .tick { font: 600 var(--t-xl)/1.2 var(--f-label); color: var(--c-ink); }
+/* the h1: the ticker at 18px/600 leads it, the name beside it at 15px/400 (change 17, F8: the h1 was 15px/400 whole) */
+.dhead.bar .name > span:not(.sr) { font: 400 var(--t-base)/1.3 var(--f-sans); color: var(--c-ink-2); }
 .dhead.bar .dh-ext { font-size: var(--t-sm); color: var(--c-ink-3); }
 .dhead.bar .acts { margin-left: auto; gap: 6px; }
 .dhead.bar .acts .btn { min-height: 34px; padding: 0 12px; font-size: var(--t-md); }
@@ -2126,7 +2130,7 @@ html.eff-1100 .ob-ways { grid-template-columns: minmax(0, 1fr); }
 .dhead.bar .sym-logo { width: 32px; height: 32px; border-radius: var(--r-sm); }
 /* the Overview's header carries the stage and the switch too, so its actions take a second line when the first is full */
 .dhead.bar.is-wide { flex-wrap: wrap; justify-content: flex-start; } .dhead.bar.is-wide .dh-price { flex: 0 1 auto; } .dhead.bar.is-wide .dh-ext { white-space: nowrap; }
-@media (max-width: 1100px) { .dhead.bar.is-wide .dh-price { flex-basis: 100%; } }   /* the price's own row there, as above (BUG-031) */
+@media (max-width: 1199px) { .dhead.bar.is-wide .dh-price { flex-basis: 100%; } }   /* the price's own row there, as above (BUG-031) */
 html.eff-1100 .dhead.bar.is-wide .dh-price { flex-basis: 100%; }
 /* "Show advanced analysis" at the end of the tab row, as in Classic; under the tabs on a phone */
 .dstick.has-tools { display: flex; flex-wrap: wrap; align-items: flex-end; }

@@ -570,8 +570,10 @@ def test_the_dossier_header_keeps_its_rows_while_the_quote_loads():
     name and price arriving added two rows and pushed the page down about 70 px. Measured after the fix with the quote
     held (tools/phase10_coldhead.py): 148 to 149 px at 1024, 158 to 159 px at 800."""
     css = read("static/v2/css/pages.css")
-    assert "@media (max-width: 1100px) { .dhead.bar .dh-price { flex-basis: 100%; } }" in css
-    assert "@media (max-width: 1100px) { .dhead.bar.is-wide .dh-price { flex-basis: 100%; } }" in css
+    # 1,199 px since the hierarchy review of 2026-11-10 (change 17): the price is 44px on the Overview now
+    assert "@media (max-width: 1199px) { .dhead.bar .dh-price { flex-basis: 100%; } }" in css
+    assert "@media (max-width: 1199px) { .dhead.bar.is-wide .dh-price { flex-basis: 100%; } }" in css
+    assert "@media (min-width: 861px) and (max-width: 1199px) { .dhead.bar { flex-wrap: wrap; }" in css
     # the wide header's own rule comes first, so the row of its own wins over it
     assert css.index(".dhead.bar.is-wide .dh-price { flex: 0 1 auto; }") < css.index("{ .dhead.bar.is-wide .dh-price { flex-basis: 100%; } }")
 
