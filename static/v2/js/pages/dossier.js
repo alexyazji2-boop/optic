@@ -449,8 +449,10 @@ function paint(main, sym) {
     ...(has('investigate') ? [] : [['investigate', 'Investigate this company', 'Six steps, each one Milo answer from figures Optic has already read.']]),
     ...(has('timeline') ? [] : [['timeline', 'Company events', 'Reports, filings, dividends and other dated events for the company.']]),
   ].map(([id, title, blurb]) => ({ id, title, blurb }));
-  draw(main, html`<div class="dstick has-tools">${frameHeader(sym, D, 'overview', { stage: () => stageFor(sym), level })}${frameTabs(sym, 'overview', { fund: isFund(D) })}</div>
-    <div class="page-lead ov-lead" data-v2-level-now="${level}">${miloPrompt(stockAsk(sym))}${levelControl({ id: 'ov-lc' })}</div>
+  // the level control on the tabs row, right-aligned (visual hierarchy review, 2026-11-10, change 3): it shared a row
+  // with the Milo bar at y 280 to 340, so neither led; the bar now has its row to itself
+  draw(main, html`<div class="dstick has-tools">${frameHeader(sym, D, 'overview', { stage: () => stageFor(sym), level })}${frameTabs(sym, 'overview', { fund: isFund(D) })}${levelControl({ id: 'ov-lc' })}</div>
+    <div class="page-lead ov-lead" data-v2-level-now="${level}">${miloPrompt(stockAsk(sym))}</div>
     ${D.quoteError && !D.quote ? (D.quoteError.kind === 'notfound' ? empty(`Optic has no listing for ${sym}`, 'No quote came back for this symbol. It may be misspelled, delisted, or listed outside the US under another form.', html`<button type="button" class="btn btn-sm" data-v2-open-palette>Search for the company</button>`) : failed(`${sym}'s quote`, D.quoteError, { retry: 'dossier' })) : ''}
     ${((D.framework || {}).freshness || {}).state === 'stale' ? staleLine({ text: clean(D.framework.freshness.text) }) : ''}
     ${about(sym)}

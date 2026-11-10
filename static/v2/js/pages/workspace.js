@@ -930,8 +930,8 @@ function paintAll() {
   // Customize is Intermediate's and Advanced's: at Beginner Home is the level's panels and nothing to arrange
   const showBar = level !== 'beginner' || EDIT;
   draw(root, html`<div class="ws-page" data-v2-level-now="${level}">
-    <header class="ws-pagehead page-lead"><div><h1 class="t-h2" tabindex="-1">${hello()}</h1><p class="ws-sub" id="ws-date">${etDate(ses.now_et)}${ses.label ? `. ${clean(ses.label)}.` : ''}</p></div>
-      ${levelControl({ id: 'home-lc' })}</header>
+    <header class="ws-pagehead page-lead"><h1 class="t-h2" tabindex="-1">${hello()}</h1>
+      <div class="ws-dateline"><p class="ws-sub" id="ws-date">${etDate(ses.now_et)}${ses.label ? `. ${clean(ses.label)}.` : ''}</p>${levelControl({ id: 'home-lc' })}</div></header>
     ${featureBlock()}
     ${miloPrompt(homeAsk())}
     ${showOnboard() ? onboard() : ''}

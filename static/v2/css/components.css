@@ -1370,19 +1370,27 @@ th .pbadge, dt .pbadge, .k .pbadge { margin-left: 6px; vertical-align: 1px; }
 .shell.is-tight .rail-group { border: 0; padding: 0; }
 .shell.is-tight .rail-lists-h, .shell.is-tight .rail-more .rail-sec { display: none; }
 
-.lc { display: grid; gap: 8px; justify-items: end; }
-.lc-q { margin: 0; display: inline-flex; align-items: center; gap: 6px; font-size: var(--t-md); color: var(--c-ink-2); }
+/* The level control, a setting in the second tier (visual hierarchy review, 2026-11-10, change 3, F3): one row, the
+   question a 13px label, 14px labels on 36px buttons (the dense toolbar size), and the pressed level marked the way the
+   current tab is, ink text over a 2px gold bar (gold marks the current selection). The pressed fill was 1.37:1 against
+   its own track; the bar is --c-gold-ink, 12:1 on charcoal and 5.6:1 on ivory. The preview sentence is the group's
+   description, shown as a line for a few seconds after a change (.is-said). */
+.lc { position: relative; display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 4px 10px; }
+.lc-q { margin: 0; display: inline-flex; align-items: center; gap: 6px; font-size: var(--t-sm); color: var(--c-ink-3); }
 .lc-i svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.6; vertical-align: -3px; }
-.lc-seg { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); padding: 3px; border-radius: var(--r-ctl); background: var(--c-plane-2); border: 1px solid var(--c-line); min-width: min(100%, 420px); }
-.lc-b { min-height: var(--tap); padding: 0 16px; border: 0; border-radius: var(--r-ctl-in); background: none; color: var(--c-ink-2); cursor: pointer; font: 500 var(--t-base)/1 var(--f-sans); transition: background-color var(--dur-ui) var(--ease-ui), color var(--dur-ui) var(--ease-ui); }
+.lc-seg { display: grid; grid-template-columns: repeat(3, auto); padding: 2px; border-radius: var(--r-ctl); background: var(--c-plane-2); border: 1px solid var(--c-line); }
+.lc-b { min-height: var(--ctl-sm); padding: 0 12px; border: 0; border-bottom: 2px solid transparent; border-radius: var(--r-ctl-in) var(--r-ctl-in) 0 0; background: none; color: var(--c-ink-2); cursor: pointer; font: 500 var(--t-md)/1 var(--f-sans); transition: background-color var(--dur-ui) var(--ease-ui), color var(--dur-ui) var(--ease-ui); }
 .lc-b:hover:not([aria-pressed="true"]) { color: var(--c-ink); }
-.lc-b[aria-pressed="true"] { background: var(--c-active); color: var(--c-ink); font-weight: 600; box-shadow: 0 0 0 1px var(--c-line); }
-.lc-says { margin: 0; font-size: var(--t-sm); color: var(--c-ink-3); text-align: right; max-width: 420px; }
+.lc-b[aria-pressed="true"] { background: var(--c-active); color: var(--c-ink); font-weight: 600; border-bottom-color: var(--c-gold-ink); }
+.lc-says { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; margin: 0; }
+.lc.is-said .lc-says { position: static; width: auto; height: auto; overflow: visible; clip-path: none; white-space: normal; flex-basis: 100%; font-size: var(--t-sm); color: var(--c-ink-3); text-align: right; }
 .page-lead { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 16px 24px; margin-bottom: 18px; }
 @media (max-width: 719px) {
-  .lc { justify-items: stretch; width: 100%; }
-  .lc-seg { min-width: 0; }
-  .lc-says { text-align: left; }
+  .lc { justify-content: stretch; width: 100%; }
+  .lc-seg { flex: 1 1 auto; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .lc.is-said .lc-says { text-align: left; }
+  /* one compact 36px row on a phone: the question is the group's name for a screen reader, not a second line */
+  .lc-q { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 }
 
 .sm-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; margin: 18px 0 8px; padding: 0; list-style: none; }
