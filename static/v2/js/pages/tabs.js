@@ -26,8 +26,13 @@ export function groupTabs(groupId, current, symbol) {
 // A destination's heading is the name the reader chose in the rail or the phone bar, and its tabs name
 // the view within it (owner's brief, item 11: Markets opened on a page headed "Read", Discover on one
 // headed "Explore").
-export function sectionHead(groupId, current, symbol) {
+// Where the rail of 2026-11-09 names a page by another word than its group, the heading says the rail's word
+// (visual hierarchy review, 2026-11-10, change 8, F9): Portfolio opened on "Positions", Ideas and Filings & Ownership on
+// "Discover", Alerts on "Watchlist". The group and its tabs keep their names. `title` overrides both.
+export const RAIL_TITLES = { tracker: 'Portfolio', paper: 'Portfolio', roth: 'Portfolio', scan: 'Ideas', insiders: 'Filings & Ownership', alerts: 'Alerts' };
+export function sectionHead(groupId, current, symbol, title = '') {
   const g = GROUPS.find((x) => x.id === groupId);
   const p = g && g.pages.find((x) => x.view === current);
-  return html`<h1 class="t-display-m">${g ? g.label : ''}${p && g.pages.length > 1 ? html`<span class="sr">, ${p.label}</span>` : ''}</h1>${groupTabs(groupId, current, symbol)}`;
+  const head = title || RAIL_TITLES[current] || (g ? g.label : '');
+  return html`<h1 class="t-display-m">${head}${p && g.pages.length > 1 ? html`<span class="sr">, ${p.label}</span>` : ''}</h1>${groupTabs(groupId, current, symbol)}`;
 }
