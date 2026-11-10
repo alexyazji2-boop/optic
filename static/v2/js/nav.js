@@ -56,14 +56,18 @@ export const GROUPS = [
 
 export const SETTINGS = { view: 'settings', label: 'Settings', slug: 'settings', icon: 'settings', v2: true };
 
-// The phone bar, in the owner's order (2026-10-19): "Home · Markets · Watchlist · Dossier · More, with
-// Discover accessible through More and search". The names are unchanged; Discover moves into More, which
-// lists every destination the bar does not.
+// The phone bar takes the rail's names and sections (the owner's layout of 2026-11-09, below): Home, Research,
+// Markets, Discover, Portfolio and Lists, each opening what the rail's entry opens, and More holding the rest (the
+// Research and Lists entries by name, Compare, Brokerage, Alerts, Reports, Settings). It kept the names of
+// 2026-10-19 (Home, Markets, Watchlist, Dossier, More) through Pass 1's first round, so a phone said Dossier where
+// the rail said Research (gauntlet L3, 2026-11-10; the operator's decision to change it in this pass).
 export const MOBILE_TABS = [
   { label: 'Home', group: 'home', icon: 'home' },
+  { label: 'Research', group: 'security', icon: 'research' },
   { label: 'Markets', group: 'market', icon: 'markets' },
-  { label: 'Watchlist', group: 'follow', icon: 'watchlist' },
-  { label: 'Dossier', group: 'security', icon: 'dossier' },
+  { label: 'Discover', group: 'discover', icon: 'discover' },
+  { label: 'Portfolio', group: 'portfolio', icon: 'positions' },
+  { label: 'Lists', lists: true, icon: 'star' },
   { label: 'More', more: true, icon: 'more' },
 ];
 

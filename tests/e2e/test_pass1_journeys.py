@@ -481,3 +481,56 @@ def test_the_charts_marks_are_named_buttons_and_open_from_the_keyboard(chrome, s
     page.wait_for_selector(".drawer.is-open")
     assert "earnings" in page.text_content(".drawer.is-open").lower()
     ctx.close()
+
+
+# ------------------------------------------------------------------ the phone bar takes the rail's names (gauntlet L3, 2026-11-10)
+
+def bar(page):
+    return page.eval_on_selector_all(".tabbar > a, .tabbar > button", """els => els.map(e => ({ name: e.textContent.trim(),
+      href: e.getAttribute('href'), current: e.getAttribute('aria-current') === 'page',
+      fits: e.querySelector('span').scrollWidth <= e.clientWidth, lines: Math.round(e.querySelector('span').getBoundingClientRect().height) }))""")
+
+
+def rail(page):
+    return page.eval_on_selector_all(".rail-nav a.rail-row", "els => Object.fromEntries(els.map(e => [e.textContent.trim(), e.getAttribute('href')]))")
+
+
+@pytest.mark.parametrize("width", [390, 360, 320])
+def test_the_phone_bar_has_the_rails_names_and_opens_what_the_rail_opens(chrome, server, width):
+    ctx, page = open_page(chrome, server, level="beginner", viewport={"width": width, "height": 844})
+    home(page, server)
+    tabs = bar(page)
+    assert [t["name"] for t in tabs] == ["Home", "Research", "Markets", "Discover", "Portfolio", "Lists", "More"]
+    assert all(t["fits"] for t in tabs), tabs
+    assert len({t["lines"] for t in tabs}) == 1, "every label on one line"
+    assert page.evaluate("(() => { const b = document.querySelector('.tabbar'); return b.scrollWidth <= b.clientWidth && b.getBoundingClientRect().right <= window.innerWidth; })()"), "the bar fits the screen"
+    r = rail(page)
+    by = {t["name"]: t for t in tabs}
+    assert by["Home"]["href"] == "#/" and by["Home"]["current"]
+    assert by["Research"]["href"] == r["Company Overview"] == "#/dossier", "no company open yet: the company search, as the rail"
+    for name in ("Markets", "Discover", "Portfolio"):
+        assert by[name]["href"] == r[name], name
+    assert by["Lists"]["href"] == r["Watchlist"] == "#/watchlist"
+    ctx.close()
+
+
+def test_the_phone_bar_follows_the_page_and_more_holds_the_rest(chrome, server):
+    ctx, page = open_page(chrome, server, level="beginner", viewport=PHONE)
+    stock(page, server, "AAPL")
+    by = {t["name"]: t for t in bar(page)}
+    assert by["Research"]["current"] and by["Research"]["href"] == "#/AAPL", "Research opens the company open on this visit"
+    for route, name in (("#/read", "Markets"), ("#/explore", "Discover"), ("#/portfolio", "Portfolio"), ("#/scan", "Lists"), ("#/watchlist", "Lists")):
+        page.goto(server["base"] + "/" + route, wait_until="domcontentloaded")
+        page.wait_for_function("(n) => [...document.querySelectorAll('.tabbar [aria-current=\"page\"]')].map(e => e.textContent.trim()).join() === n", arg=name)
+    page.click(".tabbar [data-v2-more]")
+    page.wait_for_selector(".drawer.is-open .more-list")
+    groups = page.eval_on_selector_all(".drawer.is-open .more-glab", "els => els.map(e => e.textContent.trim())")
+    assert groups == ["Research", "Lists", "More"]
+    rows = page.eval_on_selector_all(".drawer.is-open .more-row .more-lab", "els => els.map(e => e.firstChild.textContent.trim())")
+    for name in ("Company Overview", "Financials & Valuation", "Charts & Technicals", "Options & Derivatives", "Filings & Ownership",
+                 "Watchlist", "Ideas", "Research", "Compare", "Alerts", "Settings", "Sign in"):
+        assert name in rows, name
+    hrefs = page.eval_on_selector_all(".drawer.is-open .more-row", "els => Object.fromEntries(els.map(e => [e.querySelector('.more-lab').firstChild.textContent.trim(), e.getAttribute('href')]))")
+    assert hrefs["Financials & Valuation"] == "#/AAPL/financials" and hrefs["Filings & Ownership"] == "#/insiders?symbol=AAPL"
+    assert hrefs["Ideas"] == "#/scan" and hrefs["Research"] == "#/research" and hrefs["Alerts"] == "#/alerts"
+    ctx.close()

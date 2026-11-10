@@ -68,11 +68,13 @@ def test_the_rail_is_the_owners_and_the_phone_bar_the_classic_names():
     block = NAV[NAV.index("export const MOBILE_TABS = ["):]
     v2 = re.findall(r"label: '([^']+)'", block[:block.index("];")])
     assert classic == ["Home", "Dossier", "Markets", "Discover", "More"]     # Classic is unchanged
-    # The owner's order for v2's bar (2026-10-19): "Home · Markets · Watchlist · Dossier · More, with
-    # Discover accessible through More and search". Same names; More lists every group the bar does not.
-    assert v2 == ["Home", "Markets", "Watchlist", "Dossier", "More"]
+    # v2's bar takes the rail's names and sections (operator's decision on gauntlet L3, 2026-11-10), replacing the
+    # 2026-10-19 order (Home, Markets, Watchlist, Dossier, More); More holds the rest by the rail's names.
+    assert v2 == ["Home", "Research", "Markets", "Discover", "Portfolio", "Lists", "More"]
     shell = (V2 / "js/ui/shell.js").read_text()
-    assert "visibleGroups(flags).filter((g) => !shown.has(g.id))" in shell, "Discover must stay reachable in More"
+    more = shell[shell.index("export function moreBody() {"):shell.index("export function paintAccount()")]
+    for part in ("RESEARCH.map(", "LISTS.map(", "RAIL_MORE.filter(", "hrefFor('settings')"):
+        assert part in more, "More holds what the bar does not: " + part
 
 
 def test_every_navigation_page_is_in_the_coverage_tracker():

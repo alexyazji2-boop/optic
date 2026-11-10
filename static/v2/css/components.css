@@ -805,11 +805,18 @@ ul.plain { margin: 0; padding-left: 18px; } ul.plain li { margin-bottom: 7px; }
   .drawer-panel { top: auto; left: 0; width: 100%; height: 88vh; border-radius: var(--r-xl) var(--r-xl) 0 0; border-left: 0; transform: translateY(32px); }
   .drawer-head { padding-left: 20px; } .drawer-body { padding: 16px 20px 40px; }
   .drawer-panel.is-form { height: min(88vh, var(--vvh, 100dvh)); max-height: var(--vvh, 100dvh); }
-  .tabbar { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); position: fixed; left: 0; right: 0; bottom: 0; z-index: 40; background: color-mix(in srgb, var(--c-raised) 94%, transparent); backdrop-filter: blur(12px); border-top: 1px solid var(--c-line-2); padding: 4px 4px max(8px, env(safe-area-inset-bottom));
+  /* the bar counts its own columns (seven since the rail's names, gauntlet L3, 2026-11-10): a count written here goes
+     stale against MOBILE_TABS, and Classic's .mtabs put a sixth tab on a second row that way (tests/test_nav_coherence.py) */
+  .tabbar { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); position: fixed; left: 0; right: 0; bottom: 0; z-index: 40; background: color-mix(in srgb, var(--c-raised) 94%, transparent); backdrop-filter: blur(12px); border-top: 1px solid var(--c-line-2); padding: 4px 2px max(8px, env(safe-area-inset-bottom));
     /* its full height before its buttons arrive: the shell mounts it empty and the route paints it, and empty it was
        13px tall, so every load grew it 54px upward (motion check 2026-10-24: top 831 to 777, part of a 0.58 shift) */
     min-height: calc(55px + 4px + max(8px, env(safe-area-inset-bottom))); }
-  .tabbar a, .tabbar button { min-width: 0; overflow-wrap: anywhere; text-align: center; min-height: 54px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; text-decoration: none; font: 500 var(--t-sm)/1 var(--f-sans); color: var(--c-ink-3); border: 0; background: none; cursor: pointer; }
+  /* seven labels share 390px, about 55px each: at 13px "Portfolio" is wider than its column and broke mid-word, so the
+     bar's words are the 12px step and never break; measured in Chromium, "Research" needs 52px at 12px, so 11px below
+     375px (51px columns at 360) and 10px below 340px (45px columns at 320) */
+  .tabbar a, .tabbar button { min-width: 0; white-space: nowrap; text-align: center; min-height: 54px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; text-decoration: none; font: 500 var(--t-xs)/1 var(--f-sans); letter-spacing: -0.01em; color: var(--c-ink-3); border: 0; background: none; cursor: pointer; }
+  @media (max-width: 374px) { .tabbar a, .tabbar button { font-size: 11px; letter-spacing: -0.02em; } }
+  @media (max-width: 339px) { .tabbar a, .tabbar button { font-size: 10px; } }
   .tabbar svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.6; }
   .tabbar [aria-current="page"] { color: var(--c-ink); font-weight: 600; } .tabbar [aria-current="page"] svg { stroke: var(--c-gold); }
 }
