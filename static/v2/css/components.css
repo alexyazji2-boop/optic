@@ -1420,6 +1420,21 @@ th .pbadge, dt .pbadge, .k .pbadge { margin-left: 6px; vertical-align: 1px; }
 .sm-stub p { margin: 0; font-size: var(--t-sm); color: var(--c-ink-3); }
 .sm-stub .btn { justify-self: start; }
 .sm-less { margin-top: 8px; }
+/* On a phone the panels a level leaves out are one list of one-line rows, a title and its Show more, not a card each
+   (visual hierarchy review, 2026-11-10, change 7, F11: 23 stubs as cards made Home 5,067px long at Beginner). The
+   blurb stays in the page for a screen reader. */
+@media (max-width: 719px) {
+  .sm-list { display: block; margin: 10px 0 8px; border-top: 1px solid var(--c-line-2); }
+  .sm-stub { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 4px 0; border: 0; border-bottom: 1px solid var(--c-line-2); border-radius: 0; background: none; }
+  .sm-stub h3 { font: 500 var(--t-base)/1.3 var(--f-sans); }
+  .sm-stub p { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  .sm-stub .btn { flex: none; }
+}
+/* the company events list, folded on a phone at Advanced (hierarchy change 7): about 8,600px of rows otherwise */
+.ov-tl-fold { margin-top: 20px; border: 1px solid var(--c-line); border-radius: var(--r-lg); }
+.ov-tl-fold > summary { display: flex; align-items: center; min-height: var(--tap); padding: 0 16px; font: 600 var(--t-xl)/1.3 var(--f-sans); color: var(--c-ink); cursor: pointer; }
+.ov-tl-fold[open] > summary { border-bottom: 1px solid var(--c-line-2); }
+.ov-tl-fold > [data-tl-slot], .ov-tl-fold > .tl { margin: 0; }
 
 /* The Milo bar is the question on the page and one gold button (visual hierarchy review, 2026-11-10, change 2, F4): the
    grey box (1.1:1 against the page) and its border are gone, the question is at the lead size, and the button is the

@@ -62,7 +62,9 @@ function apply(root) {
     const title = s.dataset.secTitle, id = panelId(view, title), min = levelOf(opts.levels, title);
     if (!s.id) s.id = `sec-${slug(title)}`;
     if (s.dataset.secKey !== id) s.dataset.secKey = id;
-    const off = !!hidden[id], open = startsOpen(saved, id, min, level, openByDefault(opts.open, title));
+    // opts.folded(section): a page's own rule for what starts folded (the Overview on a phone at Advanced, hierarchy
+    // change 7); what the reader chose still wins
+    const off = !!hidden[id], open = startsOpen(saved, id, min, level, openByDefault(opts.open, title) && !(opts.folded && opts.folded(s)));
     if (s.hidden !== off) s.hidden = off;
     s.classList.toggle('is-folded', !open);
     let b = h.querySelector('.sec-fold');

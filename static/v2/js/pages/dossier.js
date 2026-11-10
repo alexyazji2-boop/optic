@@ -413,6 +413,17 @@ function stack(main) {
   return cssPx('--topbar-h') + cssPx('--dstick-h') + cssPx('--secidx-h') * (nav && getComputedStyle(nav).position === 'sticky' ? 1 : 0);
 }
 
+// On a phone at Advanced the sections after the four questions start folded, so the page is a list of headings to
+// open (visual hierarchy review, 2026-11-10, change 7, F11: the page was 27,482px on a phone at Advanced). The about
+// block, the chart and the four questions stay open; a section the reader opened stays open (ui/sections.js).
+const phoneAdv = () => prefs.level() === 'advanced' && matchMedia('(max-width: 640px)').matches;
+const phoneFold = (s) => {
+  if (!phoneAdv()) return false;
+  if (s.matches('.about, .dchart')) return false;
+  const an = s.closest('#ov-analysis');
+  return !(an && s === an.querySelector(':scope > section.section'));
+};
+
 // Investigate this company (Handoff 10): the way into the checklist, after the analysis it goes deeper than. It opens
 // the plan; nothing runs and nothing is spent until the reader starts it there.
 const investigateEntry = (sym) => html`<section class="section gi-entry" aria-labelledby="gi-entry-h"><h2 class="t-h2" id="gi-entry-h">Investigate this company</h2>
@@ -478,7 +489,7 @@ function paint(main, sym) {
     ${cases ? html`<div data-v2-ov-panel="cases">${OR.casesSection(c)}</div>` : ''}
     ${!adv && thesisShown ? html`<div data-tc-slot></div>` : ''}
     ${has('investigate') ? investigateEntry(sym) : ''}
-    ${has('timeline') ? html`<div data-tl-slot></div>` : ''}
+    ${has('timeline') ? (phoneAdv() ? html`<details class="ov-tl-fold"><summary>Company events</summary><div data-tl-slot></div></details>` : html`<div data-tl-slot></div>`) : ''}
     ${moreList(out, { heading: `More on ${sym}`, screen: 'overview' })}
     <p class="sr" role="status" data-v2-analysis-status></p>
     <p class="asof disclaimer">${clean((D.ticker || {}).disclaimer || 'Not financial advice. For research and education only.')}</p>`);
@@ -528,7 +539,7 @@ export async function render(main, route) {
   wire(main);
   // the strip floats in only past the header, and Expand all, Collapse all and Panels are in the header's More (hierarchy
   // change 4)
-  sections(main, 'overview', { float: true, bulkIn: '.dhead .acts-more .menu-body', norm: (t) => { const n = ((main.querySelector('.dhead .name span') || {}).textContent || '').trim(); return n ? t.split(n).join('the company') : t; } });   // folds, Expand all, Panels (Classic parity B3)
+  sections(main, 'overview', { float: true, bulkIn: '.dhead .acts-more .menu-body', folded: phoneFold, norm: (t) => { const n = ((main.querySelector('.dhead .name span') || {}).textContent || '').trim(); return n ? t.split(n).join('the company') : t; } });   // folds, Expand all, Panels (Classic parity B3)
   const enc = encodeURIComponent(sym);
   const step = (p, ok, bad) => { p.then((d) => { if (mine()) ok(d); }, (e) => { if (mine()) bad(e); }).finally(() => { if (mine()) paint(main, sym); }); };
   // A copy kept past its time is drawn at once and asked for again behind it; the fresh one is drawn when it lands. It
