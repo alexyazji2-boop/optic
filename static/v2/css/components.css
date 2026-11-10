@@ -1171,6 +1171,21 @@ h2.sec-head { cursor: pointer; }
 .sec-bulk { display: flex; gap: 4px; flex: none; align-items: center; }
 @media (pointer: coarse) { .sec-chip { min-height: var(--tap); } }
 @media (max-width: 640px) { .sec-index { flex-wrap: wrap; } .sec-bulk { width: 100%; justify-content: flex-end; } }
+/* A floating strip (visual hierarchy review, 2026-11-10, change 4, F7): where the strip is sticky it takes no room in the
+   page, and its list of 13px links shows under the sticky header only once the reader has scrolled past the page's
+   head (.is-past). Where it is not sticky (a phone, a short window) it stays in the page as before. */
+@media (min-width: 641px) and (min-height: 561px) {
+  .sec-index.is-float { height: 0; margin: 0; padding: 0; border: 0; overflow: visible; }
+  .sec-index.is-float > .sec-list { position: absolute; left: 0; right: 0; top: 0; padding: 4px 0; background: var(--c-plane); border-bottom: 1px solid var(--c-line-2); visibility: hidden; opacity: 0; transition: opacity var(--m-content) var(--ease-out), visibility 0s linear var(--m-content); }
+  .sec-index.is-float.is-past > .sec-list { visibility: visible; opacity: 1; transition: opacity var(--m-content) var(--ease-out); }
+  .sec-index.is-float .sec-chip { min-height: 28px; font-size: var(--t-sm); }
+}
+/* Expand all, Collapse all and the chooser inside a page's own More menu (bulkIn) */
+.sec-menu { display: grid; margin-top: 4px; padding-top: 4px; border-top: 1px solid var(--c-line-2); }
+.sec-menu > button, .sec-menu > details > summary { display: flex; align-items: center; min-height: 44px; padding: 0 10px; border: 0; border-radius: var(--r-md); background: none; color: var(--c-ink); font: 500 var(--t-base)/1.2 var(--f-sans); text-align: left; cursor: pointer; }
+.sec-menu > button:hover, .sec-menu > details > summary:hover { background: var(--c-sunk); }
+.sec-menu > button:disabled { color: var(--c-ink-3); cursor: default; background: none; }
+.sec-panels-in { display: grid; gap: 4px; padding: 4px 10px 8px; }
 /* sideways strips (ui/strips.js): an arrow at an edge while there is more that way, taking no room */
 .strip-edge { position: sticky; z-index: 2; flex: none; align-self: stretch; width: 32px; min-height: 32px; display: grid; place-items: center; padding: 0; border: 0; background: var(--strip-bg, var(--c-plane)); color: var(--c-ink-2); cursor: pointer; }
 .strip-edge.strip-start { left: calc(0px - var(--strip-pl, 0px)); margin-right: -32px; }

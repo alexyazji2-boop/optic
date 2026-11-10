@@ -810,6 +810,8 @@ function bar() {
   const recent = [...new Set([...(store.recent() || []), ...((store.activeList() || {}).symbols || [])])].filter((x) => x !== S.link).slice(0, 5);
   // the layouts are Advanced's; at Intermediate they are behind Customize (the level matrix, 2026-11-09)
   const layouts = lvl() === 'advanced' || EDIT;
+  // at Intermediate Customize alone made a row of its own at y 288; it joins the level control's row (customizeBtn)
+  if (!layouts) return '';
   return html`<div class="ws-layoutbar">
     ${layouts ? html`<div class="ws-presets" role="tablist" aria-label="Layout">${Object.entries(PRESETS).map(([k, p]) => html`<button type="button" role="tab" aria-selected="${S.preset === k}" data-ws-preset="${k}">${p.label}</button>`)}</div>
     <label class="tabsel ws-presetsel"><span class="tabsel-k">Layout</span><select data-ws-presetsel aria-label="Layout">${Object.entries(PRESETS).map(([k, p]) => html`<option value="${k}" ${S.preset === k ? 'selected' : ''}>${p.label}</option>`)}</select></label>` : html`<span></span>`}
@@ -931,7 +933,7 @@ function paintAll() {
   const showBar = level !== 'beginner' || EDIT;
   draw(root, html`<div class="ws-page" data-v2-level-now="${level}">
     <header class="ws-pagehead page-lead"><h1 class="t-h2" tabindex="-1">${hello()}</h1>
-      <div class="ws-dateline"><p class="ws-sub" id="ws-date">${etDate(ses.now_et)}${ses.label ? `. ${clean(ses.label)}.` : ''}</p>${levelControl({ id: 'home-lc' })}</div></header>
+      <div class="ws-dateline"><p class="ws-sub" id="ws-date">${etDate(ses.now_et)}${ses.label ? `. ${clean(ses.label)}.` : ''}</p>${level === 'intermediate' && !EDIT ? html`<button type="button" class="btn btn-sm btn-quiet ws-edit ws-edit-lone" data-ws-edit aria-pressed="false">Customize</button>` : ''}${levelControl({ id: 'home-lc' })}</div></header>
     ${featureBlock()}
     ${miloPrompt(homeAsk())}
     ${showOnboard() ? onboard() : ''}

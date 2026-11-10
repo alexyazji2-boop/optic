@@ -394,7 +394,7 @@ function advancedView(sym, c, fund) {
 const cssPx = (name) => parseFloat(getComputedStyle(document.documentElement).getPropertyValue(name)) || 0;
 function stack(main) {
   const nav = main.querySelector(':scope > .sec-index:not(.sec-only-bulk)');
-  return cssPx('--topbar-h') + cssPx('--dstick-h') + (nav && getComputedStyle(nav).position === 'sticky' ? nav.offsetHeight : 0);
+  return cssPx('--topbar-h') + cssPx('--dstick-h') + cssPx('--secidx-h') * (nav && getComputedStyle(nav).position === 'sticky' ? 1 : 0);
 }
 
 // Investigate this company (Handoff 10): the way into the checklist, after the analysis it goes deeper than. It opens
@@ -509,7 +509,9 @@ export async function render(main, route) {
   });
   paint(main, sym);
   wire(main);
-  sections(main, 'overview', { norm: (t) => { const n = ((main.querySelector('.dhead .name span') || {}).textContent || '').trim(); return n ? t.split(n).join('the company') : t; } });   // folds, Expand all, Panels (Classic parity B3)
+  // the strip floats in only past the header, and Expand all, Collapse all and Panels are in the header's More (hierarchy
+  // change 4)
+  sections(main, 'overview', { float: true, bulkIn: '.dhead .acts-more .menu-body', norm: (t) => { const n = ((main.querySelector('.dhead .name span') || {}).textContent || '').trim(); return n ? t.split(n).join('the company') : t; } });   // folds, Expand all, Panels (Classic parity B3)
   const enc = encodeURIComponent(sym);
   const step = (p, ok, bad) => { p.then((d) => { if (mine()) ok(d); }, (e) => { if (mine()) bad(e); }).finally(() => { if (mine()) paint(main, sym); }); };
   // A copy kept past its time is drawn at once and asked for again behind it; the fresh one is drawn when it lands. It

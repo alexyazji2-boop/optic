@@ -2394,6 +2394,9 @@ html.eff-1100 .dhead.bar.is-wide .dh-price { flex-basis: 100%; }
 /* on the tabs row the question's words would push the control onto a row of its own below 1,500px (the tabs take 606px
    of 1,072 at 1440): the words stay the group's name for a screen reader, and the help mark and its explanation stay beside the buttons */
 @media (max-width: 1499px) { .dstick.has-tools > .lc .lc-qt { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; } }
+/* Customize joins the level control's row at Intermediate (hierarchy change 4): quiet, at the control's 36px */
+.ws-edit-lone { margin-left: auto; min-height: var(--ctl-sm); }
+.ws-dateline .ws-edit-lone + .lc { margin-left: 0; }
 @media (max-width: 860px) { .dstick.has-tools > .lc { flex: 1 1 100%; margin: 8px 0 4px; padding-left: 0; } }
 
 /* Home's one figure for the day (visual hierarchy review, 2026-11-10, change 1): the largest type on Home, at the
