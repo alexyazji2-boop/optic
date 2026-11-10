@@ -2437,3 +2437,12 @@ html.eff-1100 .dhead.bar.is-wide .dh-price { flex-basis: 100%; }
 @media (max-width: 860px) { .ch-toolsbtn { display: none; } }
 /* Options: the one gold action on the form's first row, at its right (hierarchy change 12) */
 .pk-row .pk-go { margin-left: auto; }
+
+/* Portfolio (visual hierarchy review, 2026-11-10, change 13, F10): the notice is one 15px line that opens, and each
+   account's value and return lead its card at 24px (they were 15px inside three equal cards) */
+details.whose { display: block; padding: var(--s-2) var(--s-4); }
+details.whose > summary { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; min-height: var(--tap); align-content: center; font-size: var(--t-base); cursor: pointer; }
+details.whose > summary .whose-more { font-size: var(--t-sm); color: var(--c-gold-ink); text-decoration: underline; text-underline-offset: 3px; }
+details.whose[open] > summary .whose-more { display: none; }
+details.whose > p { margin: 4px 0 6px; }
+.bk-figs > span:nth-child(-n+2) { font: 600 var(--t-2xl)/1.15 var(--f-sans); letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }

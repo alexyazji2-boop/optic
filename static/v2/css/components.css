@@ -1180,8 +1180,12 @@ h2.sec-head { cursor: pointer; }
    head (.is-past). Where it is not sticky (a phone, a short window) it stays in the page as before. */
 @media (min-width: 641px) and (min-height: 561px) {
   .sec-index.is-float { height: 0; margin: 0; padding: 0; border: 0; overflow: visible; }
-  .sec-index.is-float > .sec-list { position: absolute; left: 0; right: 0; top: 0; padding: 4px 0; background: var(--c-plane); border-bottom: 1px solid var(--c-line-2); visibility: hidden; opacity: 0; transition: opacity var(--m-content) var(--ease-out), visibility 0s linear var(--m-content); }
+  .sec-index.is-float > .sec-list { z-index: 1; position: absolute; left: 0; right: 0; top: 0; padding: 4px 0; background: var(--c-plane); border-bottom: 1px solid var(--c-line-2); visibility: hidden; opacity: 0; transition: opacity var(--m-content) var(--ease-out), visibility 0s linear var(--m-content); }
   .sec-index.is-float.is-past > .sec-list { visibility: visible; opacity: 1; transition: opacity var(--m-content) var(--ease-out); }
+  /* a page without a menu for them keeps Expand all, Collapse all and Panels on the strip's row, shown with it */
+  .sec-index.is-float:has(> .sec-bulk) > .sec-list { right: 330px; border-bottom: 0; }
+  .sec-index.is-float > .sec-bulk { position: absolute; left: 0; right: 0; top: 0; justify-content: flex-end; min-height: 36px; padding: 4px 0; background: var(--c-plane); border-bottom: 1px solid var(--c-line-2); visibility: hidden; opacity: 0; transition: opacity var(--m-content) var(--ease-out), visibility 0s linear var(--m-content); }
+  .sec-index.is-float.is-past > .sec-bulk { visibility: visible; opacity: 1; transition: opacity var(--m-content) var(--ease-out); }
   .sec-index.is-float .sec-chip { min-height: 28px; font-size: var(--t-sm); }
 }
 /* Expand all, Collapse all and the chooser inside a page's own More menu (bulkIn) */
