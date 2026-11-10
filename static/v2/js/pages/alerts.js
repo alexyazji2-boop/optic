@@ -178,8 +178,10 @@ function watchesBlock() {
 }
 
 function hitsBlock() {
+  // the sign-in note's way in is a text link: New alert is the view's one gold action (visual hierarchy review,
+  // 2026-11-10, change 16: a guest saw two gold fills, New alert at y 227 and this at y 665)
   if (!store.signedIn()) {
-    return html`<div class="state"><p class="t-h3">A history needs an account</p><p>Signed in, Optic checks your alerts on its own schedule and keeps each one that fires here, with what it read. In this browser, each alert shows when it last fired at your own check.</p><a class="btn btn-primary" href="#/signin">Sign in or create an account</a></div>`;
+    return html`<div class="state"><p class="t-h3">A history needs an account</p><p>Signed in, Optic checks your alerts on its own schedule and keeps each one that fires here, with what it read. In this browser, each alert shows when it last fired at your own check.</p><a class="textlink" href="#/signin">Sign in or create an account</a></div>`;
   }
   if (S.hitsErr) return failed('What fired', S.hitsErr, { retry: 'hits' });
   if (!S.hits) return skeleton('rows', 2, 'Loading what fired');
