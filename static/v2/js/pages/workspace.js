@@ -420,8 +420,10 @@ export const PANELS = {
       const cells = STRIP.map(([g, l]) => inst(d, g, l)).filter((i) => i && isNum(i.last));
       if (!cells.length) return html`<p class="ws-note">No index readings came back from the feed.</p>`;
       // each figure with its unit, and each move coloured by its direction only, as Classic coloured its strip (owner,
-      // 2026-10-21): green up, red down, the VIX and the 10-year included; the colour says which way, not good or bad
-      return html`<div class="ws-strip">${cells.map((i) => html`<a class="ws-cell" href="#/instrument/${enc(i.symbol)}"><span class="k">${i.label}</span><span class="v">${num(i.last, i.last < 20 ? 2 : i.last > 1000 ? 0 : 2)}${i.group === 'rates' ? '%' : ''}</span><span class="d ${dir(i.chg_1d)}">${moveText(i)}</span><span class="u">${UNIT[i.label] || ''}</span>${basisLine(i)}</a>`)}</div>`;
+      // 2026-10-21): green up, red down, the VIX and the 10-year included; the colour says which way, not good or bad.
+      // The figure carries the colour too, not only the 13px move under it (visual hierarchy review, 2026-11-10, change
+      // 18, F5: the only saturated colour on Home was its smallest text)
+      return html`<div class="ws-strip">${cells.map((i) => html`<a class="ws-cell" href="#/instrument/${enc(i.symbol)}"><span class="k">${i.label}</span><span class="v ${dir(i.chg_1d)}">${num(i.last, i.last < 20 ? 2 : i.last > 1000 ? 0 : 2)}${i.group === 'rates' ? '%' : ''}</span><span class="d ${dir(i.chg_1d)}">${moveText(i)}</span><span class="u">${UNIT[i.label] || ''}</span>${basisLine(i)}</a>`)}</div>`;
     },
     // the tiles' own prices, each with the delay the feed states and its trade's time (app/analytics/macro.py stated_times)
     foot: (d) => ({ source: 'Yahoo Finance via Optic', at: d.generated_at, quotes: STRIP.map(([g, l]) => inst(d, g, l)).filter((i) => i && isNum(i.last)).map((i) => ({ delayed_minutes: i.delayed_minutes, trade_time: i.trade_time, exchange: i.exchange })), note: ((d.session || {}).is_regular ? '' : 'Outside the regular session, equities are at the last close; futures and crypto keep trading.'), stale: (d.degraded || []).length ? 'Some missing' : '', staleWhy: (d.degraded || []).length ? `Not available: ${d.degraded.join(', ')}.` : '' }),
