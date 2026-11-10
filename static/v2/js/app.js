@@ -209,12 +209,18 @@ async function show(route) {
   // answer, above the evidence, i.e. after the page's first section. Pages repaint themselves, so an
   // observer puts it back after every paint; no page can drop it.
   if (noticeWatch) noticeWatch.disconnect();
+  const FOOT_NOTICE = new Set(['compare', 'watchlist', 'explore']);
   const notice = areaNotice(route.view);
   if (notice) {
     const place = () => {
       if (view.querySelector(':scope .legal-area')) return;
       const holder = document.createElement('div'); render(holder, notice);
-      const first = view.querySelector(':scope > section.section, :scope > .section');
+      // Its place, not its words (visual hierarchy review, 2026-11-10, change 6, F13): drawn between the Overview's
+      // about block and its chart, 14px/700 in a filled 1,000px block, it ranked third by weight on the page, above
+      // every finding. It now sits under the chart on the Overview, and at the page's foot on Compare, Watchlist and
+      // Explore, where it came second only to the title.
+      if (FOOT_NOTICE.has(route.view)) { if (view.firstElementChild) view.appendChild(holder.firstElementChild); return; }
+      const first = view.querySelector(':scope > section.dchart') || view.querySelector(':scope > section.section, :scope > .section');
       const anchor = first ? first.nextSibling : null;
       if (first) view.insertBefore(holder.firstElementChild, anchor); else if (view.firstElementChild) view.appendChild(holder.firstElementChild);
     };

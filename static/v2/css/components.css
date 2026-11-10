@@ -901,6 +901,10 @@ table.st td a { text-decoration: none; font-weight: 600; } table.st td a:hover {
 .legal-full p { line-height: 1.5; }
 .legal-slot:empty { display: none; }
 .legal-area { margin: 20px 0 0; padding: 12px 14px; border-radius: var(--r-2); background: var(--c-plane-2, var(--c-sunk)); font-size: var(--t-md); line-height: 1.5; color: var(--c-ink-2); max-width: 90ch; }
+/* A page's notice is read, not led with (hierarchy change 6, F13): a 1px-bordered note at regular weight, no fill. The
+   words are counsel's and unchanged; only the weight and the box. Milo's inset (#pulse-legal) keeps its own rules. */
+.page-view .legal-area { background: none; border: 1px solid var(--c-line-2); font-weight: 500; }
+.page-view .legal-area strong { font-weight: 500; color: var(--c-ink-2); }
 .legal-milo { font-size: var(--t-sm); color: var(--c-ink-3); } .legal-milo summary { cursor: pointer; min-height: 32px; display: flex; align-items: center; gap: 4px; } .legal-milo p { margin: 4px 0 0; line-height: 1.45; }
 .build-new { position: fixed; z-index: 60; left: 50%; transform: translateX(-50%); bottom: calc(24px + env(safe-area-inset-bottom, 0px)); display: flex; align-items: center; gap: 10px; padding: 10px 12px 10px 16px; border-radius: var(--r-3); background: var(--c-raised); border: 1px solid var(--c-line); box-shadow: 0 16px 40px rgba(20, 18, 15, .18); }
 .build-new p { margin: 0; font-weight: 500; }
