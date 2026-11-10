@@ -21,7 +21,8 @@ import { num, clean, isNum, signed, fullDate } from '../core/format.js';
 import { tradeTime } from '../core/marketTime.js';
 import { skeleton, failed } from '../ui/states.js';
 import { icon } from '../ui/icons.js';
-import { chartReadCard } from '../ui/chartread.js';
+import { chartReadCard, chartReadModel } from '../ui/chartread.js';
+import * as prefs from '../core/prefs.js';
 import { button as miloButton, provideContext, openMilo, contextChanged } from '../ui/milo.js';
 import { toast } from '../ui/toast.js';
 import { createPriceChart, EXPLAINABLE } from '../ui/pricechart.js';
@@ -437,6 +438,7 @@ function toolbar() {
     : html`<button type="button" class="btn btn-sm" data-v2-ch-read aria-pressed="${!!V.read}" aria-controls="ch-read" title="The trend, the nearest levels, RSI and MACD, from daily sessions">Chart read</button>
     <button type="button" class="btn btn-sm" data-v2-ch-reset ${isClean() ? 'disabled' : ''} title="Back to price and volume. Your drawings are kept.">Reset</button>`}
     <button type="button" class="btn btn-sm ch-drawtoggle" data-v2-ch-drawtoggle aria-expanded="${drawOpen()}" aria-controls="ch-draw">${icon('pencil')}<span>Draw</span></button>
+    ${!isPhone() && quiet() ? html`<button type="button" class="btn btn-sm ch-toolsbtn" data-v2-ch-toolsopen aria-expanded="${!!D.toolsOpen}" aria-controls="ch-draw ch-wrail">${icon('pencil')}<span>Tools</span></button>` : ''}
     <span class="spacer"></span>
     <label class="select ch-iv"><span class="sr">Bar size</span><select data-v2-ch-iv title="Bar size">${INTERVALS.map((x) => html`<option value="${x.key}" ${x.key === V.interval ? 'selected' : ''}>${x.label}</option>`)}</select></label>
     ${iv.intraday ? html`<label class="select ch-ses"><span class="sr">Session</span><select data-v2-ch-sessionsel title="${noExtended() ? `${D.sym} trades no extended session` : 'Which hours the bars cover'}">${[['regular', isPhone() ? 'Regular' : 'Regular hours'], ['extended', noExtended() ? 'Extended (none here)' : isPhone() ? 'Extended' : 'Extended hours']].map(([k, l]) => html`<option value="${k}" ${V.session === k ? 'selected' : ''} ${k === 'extended' && noExtended() ? 'disabled' : ''}>${l}</option>`)}</select></label>`
@@ -459,7 +461,12 @@ function toolbar() {
 // The drawing tools: the classic rail, two columns of named icons beside the plot in their groups, then snap,
 // undo, redo, delete and remove all; on a phone a row above the plot, shown when Draw is on (or while a tool other
 // than select is in use).
-const drawOpen = () => !isPhone() || !!D.drawOpen || V.tool !== 'select';
+// Below Advanced, on a wide screen, the drawing tools and the widget rail wait behind one Tools button (visual hierarchy
+// review, 2026-11-10, change 11, F6: 62 controls on the first screen, the most of any page; the workflow map's own
+// proposal for the chart at Beginner is "line, range, nothing else"). Advanced keeps both rails out, as before.
+const quiet = () => prefs.level() !== 'advanced';
+const drawOpen = () => (!isPhone() && (!quiet() || !!D.toolsOpen)) || !!D.drawOpen || V.tool !== 'select';
+const railOpen = () => isPhone() || !quiet() || !!D.toolsOpen || shown().length > 0;
 function drawbar() {
   return html`<div class="ch-draw" role="toolbar" aria-label="Drawing tools" aria-orientation="${isPhone() ? 'horizontal' : 'vertical'}" ${drawOpen() ? '' : 'hidden'}>
     ${isPhone() ? html`<button type="button" class="ch-tool" data-v2-ch-undo aria-label="Undo the last drawing change" ${D.can && D.can.canUndo ? '' : 'disabled'}>${icon('undo')}</button><button type="button" class="ch-tool" data-v2-ch-del aria-label="Delete the selected drawing" ${D.can && D.can.selected ? '' : 'disabled'}>${icon('trash')}</button><span class="ch-sep" aria-hidden="true"></span>` : ''}
@@ -650,9 +657,10 @@ const noExtended = () => ['index', 'crypto'].includes(kindOf(D.sym));   // an in
 function paint() {
   draw(mainEl, html`${header(D.sym, D, 'chart', { bar: true })}${tabs(D.sym, 'chart', { fund: isFund(D) })}
     <section class="section chart-page" aria-label="${D.sym} chart">
+      <p class="ch-title" id="ch-title">${chartTitle()}</p>
       <div id="ch-tools">${toolbar()}</div>
       <div class="ch-stage"><div id="ch-draw">${drawbar()}</div><div id="ch-body"></div>
-        <div class="ch-wrail" id="ch-wrail">${W.rail(shown(), isPhone())}${miloButton(html`<span class="sr">Ask Milo about the ${D.sym} chart</span>`, { context: `${D.sym} Dossier, Chart`, symbol: D.sym, cls: 'chw-milo' })}</div>
+        <div class="ch-wrail" id="ch-wrail" ${railOpen() ? '' : 'hidden'}>${W.rail(shown(), isPhone())}${miloButton(html`<span class="sr">Ask Milo about the ${D.sym} chart</span>`, { context: `${D.sym} Dossier, Chart`, symbol: D.sym, cls: 'chw-milo' })}</div>
         <div class="ch-side" id="ch-side" ${V.read || shown().length ? '' : 'hidden'}><aside class="ch-read" id="ch-read" aria-labelledby="cr-h" ${V.read ? '' : 'hidden'}></aside></div></div>
       <div class="ch-foot"><p class="asof" id="ch-note"></p><p class="asof ch-snote" id="ch-snote" aria-live="polite"></p>
         <p class="asof">${matchMedia('(pointer: coarse)').matches ? 'Pinch to zoom, drag sideways or the strip under the chart to move along, tap a bar to read it. Tap a drawing to select it, then drag it or a handle.' : 'Wheel or pinch to zoom, drag the chart or the strip under it to move along, arrows to read each bar, plus and minus to zoom. Click a drawing to select it; drag it to move it, or drag a handle to move one point.'}</p><div id="ch-wt"></div></div>
@@ -660,7 +668,14 @@ function paint() {
   applyColours(); paintChart(); paintRead(); syncSide();
 }
 // The chart read (ui/chartread.js), from the daily technicals this page already loads.
+// The chart's one title line: Chart read's own first words, the trend and the fact it rests on first (hierarchy change
+// 11: Chart read existed only as a button, so nothing on the page said what the reader was looking at)
+function chartTitle() {
+  const m = D.t ? chartReadModel(D.t) : null;
+  return m ? `${m.trend}, daily. ${m.facts[0] || ''}`.trim() : '';
+}
 function paintRead() {
+  const ti = $('#ch-title', mainEl); if (ti) { const t = chartTitle(); if (ti.textContent !== t) ti.textContent = t; }
   const h = $('#ch-read', mainEl); if (!h) return;
   h.hidden = !V.read;
   const side = $('#ch-side', mainEl); if (side) side.hidden = !V.read && !shown().length;
@@ -839,6 +854,13 @@ function wire(main) {
     if ((b = t('[data-v2-cc]'))) { pickColour(b.dataset.v2Cc, b.dataset.v2CcV, `[data-v2-cc="${b.dataset.v2Cc}"][data-v2-cc-v="${b.dataset.v2CcV}"]`); return; }
     if ((b = t('[data-v2-cc-clear]'))) { pickColour(b.dataset.v2CcClear, '', `[data-v2-cc-pick="${b.dataset.v2CcClear}"]`); return; }
     if (t('[data-v2-cc-reset]')) { pickColour(null, null, '[data-v2-cc]'); return; }
+    if (t('[data-v2-ch-toolsopen]')) {
+      D.toolsOpen = !D.toolsOpen; paintTools();
+      const rail = $('#ch-wrail', mainEl); if (rail) rail.hidden = !railOpen();
+      try { window.dispatchEvent(new Event('resize')); } catch (err) { /* the plot takes its width at the next resize */ }
+      const again = $('[data-v2-ch-toolsopen]', mainEl); if (again) again.focus();
+      return;
+    }
     if (t('[data-v2-ch-drawtoggle]')) { D.drawOpen = !drawOpen(); paintTools(); const f = $('#ch-draw .ch-tool', mainEl); if (D.drawOpen && f) f.focus(); return; }
     if ((b = t('[data-v2-tool]'))) { V.tool = b.dataset.v2Tool; paintTools(); if (chart) { chart.set({ tool: V.tool }); } if (V.tool !== 'select') toast(`${TOOL_HOW[V.tool] || `${TOOLS.find((x) => x[0] === V.tool)[1]}: click the chart to place it.`} Escape cancels.`); return; }
     if (t('[data-v2-ch-undo]')) { if (chart) chart.undo(); return; }
