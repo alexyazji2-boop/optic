@@ -196,7 +196,9 @@ def test_the_dossier_link_follows_this_visit_never_the_saved_recent_list(tmp_pat
     assert got == {"before": None, "instrument": None, "after": "AAPL", "recent": ["AAPL", "^TNX", "NVDA", "AMD"]}, "the Recent list is kept as it was, and offered in the search"
     shell = (JS / "ui/shell.js").read_text()
     assert "const sym = (route.view !== 'instrument' && route.symbol) || openedNow() || null;" in shell
-    assert "const sym = openedNow() || null;" in shell and "recent()" not in shell
+    # More reads the company the rail and bar were last painted for (that same route-or-this-visit rule) before this
+    # visit's own (phone bar round two, 2026-11-10); never the Recent list
+    assert "const sym = PAINTED_SYM || openedNow() || null;" in shell and "PAINTED_SYM = sym;" in shell and "recent()" not in shell
     # with no company yet, Dossier opens its own start page, not the search (owner, 2026-10-21: "pressing dossier
     # redirects me to the search bar, fix this issue")
     assert ": '#/dossier';" in shell and "SLUG_VIEW.dossier = 'dossierstart';" in (JS / "core/router.js").read_text()
