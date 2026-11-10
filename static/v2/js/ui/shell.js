@@ -18,6 +18,10 @@ export function setRailTight(on) { try { localStorage.setItem(RAIL_KEY, on ? '1'
 // The page last open in each section on this visit (the classic app's NAV_LAST, kept in memory as it was): a
 // section's button returns to it, so leaving Markets on Macro and coming back is Macro, not Markets' first page.
 const NAV_LAST = {};
+// the company the rail and the phone bar point at, as last painted: More's Research entries follow it, so they match
+// the bar's Research tab on a company's page (the visit's recents alone lagged behind the quote, and More said the
+// company search while the bar said the company; round two's live run, 2026-11-10)
+let PAINTED_SYM = null;
 function groupHref(g, symbol) {
   const page = g.pages.find((p) => p.view === NAV_LAST[g.id]) || g.pages[0];
   // with no company open, Dossier's own start page rather than the search (owner, 2026-10-21)
@@ -96,6 +100,7 @@ export function paint(route) {
   // an instrument page (^TNX) has no Dossier: the Dossier link stays on the company opened on this visit; with none,
   // it opens the search, where the Recent list is offered rather than followed
   const sym = (route.view !== 'instrument' && route.symbol) || openedNow() || null;
+  PAINTED_SYM = sym;
   const groups = visibleGroups(flags);
   const has = (id) => groups.some((x) => x.id === id);
   const byId = (id) => GROUPS.find((x) => x.id === id);
@@ -145,7 +150,7 @@ export function paint(route) {
 }
 
 export function moreBody() {
-  const sym = openedNow() || null;
+  const sym = PAINTED_SYM || openedNow() || null;
   const groups = visibleGroups(flags), has = (id) => groups.some((x) => x.id === id), byId = (id) => GROUPS.find((x) => x.id === id);
   // What the phone bar does not hold, in the rail's sections and by the rail's names: Research's and Lists' entries,
   // the rail's More (Compare, Brokerage, Alerts, the owner's Reports), Settings; Sign in for a guest, whose top bar

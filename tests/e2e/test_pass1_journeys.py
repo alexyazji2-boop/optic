@@ -547,6 +547,19 @@ def test_the_phone_bar_follows_the_page_and_more_holds_the_rest(chrome, server):
     for route, name in (("#/read", "Markets"), ("#/explore", "Discover"), ("#/portfolio", "Portfolio"), ("#/scan", "Lists"), ("#/watchlist", "Lists")):
         page.goto(server["base"] + "/" + route, wait_until="domcontentloaded")
         page.wait_for_function("(n) => [...document.querySelectorAll('.tabbar [aria-current=\"page\"]')].map(e => e.textContent.trim()).join() === n", arg=name)
+    # More's Research entries follow the same company as the bar's Research tab, whether or not its quote has come:
+    # they followed the visit's recents, which wait on the quote, and on the live copy More said the company search
+    # while the bar said the company (round two, 2026-11-10). MSFT's quote is held back here so the two can differ.
+    page.route(re.compile(r".*/api/quote/MSFT(\?.*)?$"), lambda route: route.abort())
+    page.goto(server["base"] + "/#/MSFT", wait_until="domcontentloaded")
+    page.wait_for_function("() => (document.querySelector('.tabbar [data-v2-tab=\"security\"]') || {}).getAttribute && document.querySelector('.tabbar [data-v2-tab=\"security\"]').getAttribute('href') === '#/MSFT'")
+    page.click(".tabbar [data-v2-more]")
+    page.wait_for_selector(".drawer.is-open .more-list")
+    early = page.eval_on_selector_all(".drawer.is-open .more-row", "els => Object.fromEntries(els.map(e => [e.querySelector('.more-lab').firstChild.textContent.trim(), e.getAttribute('href')]))")
+    assert early["Financials & Valuation"] == "#/MSFT/financials", early
+    page.keyboard.press("Escape")
+    page.goto(server["base"] + "/#/AAPL", wait_until="domcontentloaded")
+    page.wait_for_selector("#ov-analysis")
     page.click(".tabbar [data-v2-more]")
     page.wait_for_selector(".drawer.is-open .more-list")
     groups = page.eval_on_selector_all(".drawer.is-open .more-glab", "els => els.map(e => e.textContent.trim())")
