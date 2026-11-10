@@ -32,7 +32,7 @@ import { icon } from '../ui/icons.js';
 import { header as frameHeader, tabs as frameTabs, isFund, fresher, livePrice, quoteCtx } from './dossier-frame.js';
 import { levelControl } from '../ui/levelcontrol.js';
 import { miloPrompt, press as askPrompt, resume as resumePrompt, companyQuestion } from '../ui/miloprompt.js';
-import { expansions, moreList, moreButton } from '../ui/showmore.js';
+import { expansions, moreList, moreButton, revealOpened } from '../ui/showmore.js';
 
 import * as delays from '../core/delays.js';
 import { simpleFacts, simpleSection } from './overview-simple.js';
@@ -52,6 +52,10 @@ import * as FIG from '../core/figures.js';
 let lp = null;   // the header's price refresh (dossier-frame livePrice), stopped in dispose()
 let unPrefs = null;   // the analysis view's and the knowledge level's subscription, ended in dispose()
 let advMoved = false;   // set when the view was swapped, so the next paint fades the new one in and keeps its place
+// 'reveal' when Show more swapped it: the new view still fades in, but the place is not kept by an instant scroll.
+// Kept that way, the swap put the analysis under the header in one frame from the More list below it (the jump the
+// operator saw: 1,335 px on AAPL at Beginner, 1440 x 900, 2026-11-10; 693 px on a local server the same day), and
+// the Show more handler scrolls there smoothly instead (ui/showmore.js revealOpened).
 let VISIT = 0;   // each render is a visit; a response is drawn only into the visit that asked for it
 
 let live = true;
@@ -474,7 +478,7 @@ function paint(main, sym) {
     // the browser draws a frame, so the new view is never seen in the wrong place
     queueMicrotask(() => {
       const now = $('#ov-analysis', main), top = stack(main);
-      if (now && anchor !== null && anchor < wasTop) window.scrollTo(0, Math.max(0, window.scrollY + now.getBoundingClientRect().top - top - 8));
+      if (swapped !== 'reveal' && now && anchor !== null && anchor < wasTop) window.scrollTo(0, Math.max(0, window.scrollY + now.getBoundingClientRect().top - top - 8));
     });
     // said once the new view is in the page, so a screen reader hears what changed and focus stays on the button
     const st = $('[data-v2-analysis-status]', main);
@@ -556,9 +560,10 @@ function wire(main) {
     if (e.target.closest('[data-v2-mp-ask]')) { askPrompt(() => stockAsk(sym), e.target.closest('[data-v2-mp-ask]')); return; }
     const more = e.target.closest('[data-v2-show-more]');
     if (more) {
-      const id = more.dataset.v2ShowMore; OPEN.add(id); if (id === 'advanced') advMoved = true; paint(main, sym);
+      const id = more.dataset.v2ShowMore; OPEN.add(id); if (id === 'advanced') advMoved = 'reveal'; paint(main, sym);
       const to = { cases: '[data-v2-ov-panel="cases"] h2', thesis: '#tc-h', 'thesis:edit': '#ov-thesis [data-tc-start], #ov-thesis [data-tc-edit]', investigate: '#gi-entry-h', timeline: '#tl-h', advanced: '#ov-analysis h2' }[id];
-      const el = to && $(to, main); if (el) { if (!el.matches('button, a')) el.setAttribute('tabindex', '-1'); el.focus({ preventScroll: false }); }
+      // focus moves into what opened (the keyboard journey relies on it); ui/showmore.js scrolls there smoothly first
+      const el = to && $(to, main); if (el) { if (!el.matches('button, a')) el.setAttribute('tabindex', '-1'); revealOpened(el); }
       const st = $('[data-v2-analysis-status]', main); if (st) setTimeout(() => { if (st.isConnected) st.textContent = 'Opened. Your level is unchanged.'; }, 60);
       return;
     }

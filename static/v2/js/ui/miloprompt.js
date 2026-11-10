@@ -9,6 +9,7 @@ import * as prefs from '../core/prefs.js';
 import { go } from '../core/router.js';
 import { openMilo } from './milo.js';
 import { icon } from './icons.js';
+import { whenSettled } from '../core/device.js';
 
 const KEY = 'optic.milo.ask.v1';
 const KEEP_MS = 30 * 60 * 1000;   // a question kept longer than half an hour is not asked unannounced
@@ -68,6 +69,11 @@ export function press(getAsk, opener) {
  *  once it has drawn. The level the reader has now goes with it (core/prefs.js, sent with every question). */
 export function resume(screen, symbol) {
   if (!store.signedIn()) return false;
+  // not while the browser may still reload into the account's own things (core/device.js whenSettled): the question
+  // stays kept until then, so it is asked on the page that stays, once, and its answer is not lost to the reload
+  let now = false;
+  whenSettled(() => { now = true; });
+  if (!now) { whenSettled(() => resume(screen, symbol)); return false; }
   const ask = take(screen, symbol);
   if (!ask) return false;
   setTimeout(() => openMilo({ question: ask.question, about: ask.about, symbol: ask.symbol || '', figures: ask.figures || null, send: true }), 0);

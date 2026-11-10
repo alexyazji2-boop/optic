@@ -211,7 +211,9 @@ def test_a_response_is_drawn_only_into_the_visit_that_asked_for_it():
 
 def test_the_swap_fades_and_keeps_its_place():
     d = src("pages/dossier.js")
-    assert "if (now && anchor !== null && anchor < wasTop) window.scrollTo(0, Math.max(0, window.scrollY + now.getBoundingClientRect().top - top - 8));" in d
+    # a swap from the level keeps its place at once; Show more's swap ('reveal') is scrolled to smoothly by its handler,
+    # because the instant keep-place scroll moved the page 1,335 px in one frame from the More list (2026-11-10)
+    assert "if (swapped !== 'reveal' && now && anchor !== null && anchor < wasTop) window.scrollTo(0, Math.max(0, window.scrollY + now.getBoundingClientRect().top - top - 8));" in d
     assert "queueMicrotask(() => {" in d, "after the section strip is redrawn for the new view, before a frame is drawn"
     assert "st.textContent = `Showing the ${mode} analysis.`" in d and '<p class="sr" role="status" data-v2-analysis-status></p>' in d
     css = (V2 / "css/pages.css").read_text()

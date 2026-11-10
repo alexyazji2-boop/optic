@@ -1,7 +1,7 @@
 // Show more, per panel (2026-11-09). On Home and a company's Overview the level decides which panels appear; a panel
 // the level leaves out, or trims, is never gone: it is listed with one Show more, which opens that panel only and
 // leaves the level as it is. What was opened stays open until the level changes or the reader leaves the screen.
-import { html } from '../core/dom.js';
+import { html, reducedMotion } from '../core/dom.js';
 
 /** A screen's set of panels opened past its level. Cleared when the level changes. */
 export function expansions() {
@@ -22,4 +22,19 @@ export function moreList(items, { heading = 'More on this screen', sub = 'Each o
 /** One Show more button: for a stub above, or inside a panel the level trims. */
 export function moreButton(id, title, { label = 'Show more' } = {}) {
   return html`<button type="button" class="btn btn-sm" data-v2-show-more="${id}" aria-expanded="false" aria-label="${label}: ${title}">${label}</button>`;
+}
+
+/** Bring what Show more opened into view, then focus it. `target` is scrolled to (a panel or its heading); `focus`,
+ *  if given, takes focus instead (Home focuses the panel's body under the heading it scrolls to).
+ *  Focus with preventScroll: false (and, on the Overview, the swap keeping its place) jumped the page in one frame: on
+ *  AAPL at Beginner, 1440 x 900, Show more on the advanced analysis moved it 1,335 px between two frames (gauntlet, 2026-11-10; "the browser jumped"). So the page
+ *  scrolls smoothly (at once under Reduce motion, the system's or Settings'), the heading stopping under the sticky
+ *  stack by html's scroll-padding-top (components.css), and focus moves without a second scroll. Already in view
+ *  below the stack, nothing moves. */
+export function revealOpened(target, focus = target) {
+  if (!target) return;
+  const pad = parseFloat(getComputedStyle(document.documentElement).scrollPaddingTop) || 0;
+  const r = target.getBoundingClientRect();
+  if (r.top < pad || r.top > window.innerHeight - 48) target.scrollIntoView({ behavior: reducedMotion() ? 'auto' : 'smooth', block: 'start' });
+  if (focus) focus.focus({ preventScroll: true });
 }
