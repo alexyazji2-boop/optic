@@ -123,6 +123,10 @@
 /* the ticker menus' buttons read as their links do (ui/company.js tickerMenu); other menus style their own */
 .acts-more .menu-body > button, .co-more .menu-body > button { display: flex; align-items: center; min-height: 44px; padding: 0 10px; border: 0; border-radius: var(--r-md); background: none; color: var(--c-ink); font: 500 var(--t-base)/1.2 var(--f-sans); text-align: left; cursor: pointer; }
 .acts-more .menu-body > button:hover, .co-more .menu-body > button:hover { background: var(--c-sunk); }
+/* Save inside the Overview's More (hierarchy change 2): drawn as a menu item, not a button */
+.acts-more .menu-body > .lib-save { display: block; }
+.acts-more .menu-body .acts-save { width: 100%; min-height: 44px; justify-content: flex-start; gap: 8px; padding: 0 10px; border: 0; border-radius: var(--r-md); background: none; color: var(--c-ink); font: 500 var(--t-base)/1.2 var(--f-sans); }
+.acts-more .menu-body .acts-save:hover { background: var(--c-sunk); }
 @media (max-width: 640px) { .acts-2 { display: none; } .acts-more .menu-phone { display: block; } }
 .dchart { margin-top: 26px; }
 .chart-bar { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; flex-wrap: wrap; margin-bottom: 12px; }

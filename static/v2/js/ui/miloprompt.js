@@ -32,12 +32,15 @@ export function shortName(name) {
   return cut.replace(/,?\s+(Inc\.?|Corp\.?|Corporation|Ltd\.?|plc|Holdings?)\s*$/i, '').trim() || n;
 }
 
-/** The prompt bar. `ask` is {question, about, symbol, figures: {name, figures: [[label, value]]}, screen}. */
+/** The prompt bar. `ask` is {question, about, symbol, figures: {name, figures: [[label, value]]}, screen}. Its button is
+ *  the screen's one primary action, in the design system's gold (visual hierarchy review, 2026-11-10, change 2: Home and
+ *  the company page had no .btn-primary at any level, and the bar was a grey box at 1.1:1 against the page with a quiet
+ *  58px "Ask"). The question he measures, a Milo question, is the one gold thing in the content. */
 export function miloPrompt(ask, { label = 'Ask Milo' } = {}) {
   return html`<section class="mp" aria-label="Ask Milo about this screen" data-v2-mp="${ask.screen}">
     <span class="mp-head" aria-hidden="true">${icon('milo')}</span>
     <p class="mp-q"><span class="mp-k">${label}:</span> <span class="mp-text" data-v2-mp-text>${ask.question}</span></p>
-    <button type="button" class="btn btn-milo btn-sm mp-go" data-v2-mp-ask>${store.signedIn() ? 'Ask' : 'Sign in to ask'}</button>
+    <button type="button" class="btn btn-primary mp-go" data-v2-mp-ask>${store.signedIn() ? 'Ask' : 'Sign in to ask'}</button>
   </section>`;
 }
 

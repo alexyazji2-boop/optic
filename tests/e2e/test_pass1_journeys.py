@@ -117,13 +117,25 @@ def actions(page):
     return page.eval_on_selector_all(".dhead .acts a, .dhead .acts button", "els => els.filter(e => !e.closest('details')).map(e => (e.textContent || '').trim()).filter(Boolean)")
 
 
+def menu_items(page):
+    # what the header's More offers (hierarchy review change 2: Alert, Compare, Save and Export moved there)
+    return page.eval_on_selector_all(".dhead .acts details .menu-body a, .dhead .acts details .menu-body button", "els => els.map(e => (e.textContent || '').trim()).filter(Boolean)")
+
+
+def primaries(page):
+    return page.eval_on_selector_all("#main .btn-primary", "els => els.filter(e => e.offsetParent !== null).map(e => e.matches('[data-v2-mp-ask]') ? 'milo bar' : (e.textContent || '').trim())")
+
+
 def test_stock_page_at_beginner(chrome, server):
     ctx, page = open_page(chrome, server, level="beginner")
     stock(page, server)
     acts = " ".join(actions(page))
-    assert "Watch" in acts and "Ask about AAPL" in acts
+    # Watch is the header's one action; the Milo bar's gold button is the page's one primary and its one Milo entry
+    assert acts == "Watch", acts
+    assert primaries(page) == ["milo bar"]
+    menu = " ".join(menu_items(page))
     for gone in ("Alert", "Compare", "Export", "Save"):
-        assert gone not in acts, gone
+        assert gone not in acts and gone not in menu, gone
     assert page.get_attribute("#ov-analysis", "data-v2-analysis") == "simple"
     assert page.locator("[data-v2-ov-panel='cases']").count() == 0 and page.locator("#ov-thesis").count() == 0
     assert page.locator(".dchart").count() == 1
@@ -134,8 +146,10 @@ def test_stock_page_at_beginner(chrome, server):
 def test_stock_page_at_intermediate(chrome, server):
     ctx, page = open_page(chrome, server, level="intermediate")
     stock(page, server)
-    acts = " ".join(actions(page))
-    assert "Alert" in acts and "Compare" in acts and "Export" not in acts
+    acts, menu = " ".join(actions(page)), " ".join(menu_items(page))
+    assert acts == "Watch", acts
+    assert "Set an alert" in menu and "Compare" in menu and "Save" in menu and "Export" not in menu
+    assert primaries(page) == ["milo bar"]
     assert page.get_attribute("#ov-analysis", "data-v2-analysis") == "simple"
     assert page.locator("[data-v2-ov-panel='cases']").count() == 1
     page.wait_for_selector("#ov-thesis")
@@ -148,8 +162,10 @@ def test_stock_page_at_intermediate(chrome, server):
 def test_stock_page_at_advanced(chrome, server):
     ctx, page = open_page(chrome, server, level="advanced")
     stock(page, server)
-    acts = " ".join(actions(page))
-    assert all(w in acts for w in ("Alert", "Compare", "Export", "Watch"))
+    acts, menu = " ".join(actions(page)), " ".join(menu_items(page))
+    assert acts == "Watch", acts
+    assert all(w in menu for w in ("Set an alert", "Compare", "Export research sheet", "Save"))
+    assert primaries(page) == ["milo bar"]
     assert page.get_attribute("#ov-analysis", "data-v2-analysis") == "advanced"
     page.wait_for_selector("#ov-thesis [data-tc-start], #ov-thesis [data-tc-edit]")
     assert page.locator("#gi-entry-h").count() == 1 and page.locator("[data-tl-slot], #ov-events").count() == 1

@@ -109,10 +109,27 @@ export function livePrice(root, sym, getD, view, opts) {
 function actions(sym, label, sm, level = null) {
   const s = sm ? 'btn-sm' : '';
   const mid = !level || level !== 'beginner', all = !level || level === 'advanced';
+  if (level) return overviewActions(sym, s, mid, all);
   return html`<div class="acts" role="group" aria-label="${sym} actions">
     ${mid ? html`<span class="acts-2"><a class="btn btn-quiet ${s}" href="#/alerts?symbol=${sym}">Alert</a><a class="btn btn-quiet ${s}" href="#/compare?t=${sym}">Compare</a>${all ? html`<a class="btn btn-quiet ${s}" href="#/${encodeURIComponent(sym)}/sheet" title="A printable research sheet">Export</a>` : ''}</span>` : ''}
     ${watchButton(sym, { compact: sm })}${mid ? saveButton('company', keyOf('company', [sym]), { cls: s }) : ''}${miloButton(html`<span class="acts-milo-t">Ask about ${sym}</span>`, { ask: `What is the case for ${sym} right now?`, context: `${sym} Dossier, ${label}`, symbol: sym, cls: `${s} acts-milo` })}
     <details class="menu acts-more"><summary class="btn btn-quiet ${s}" aria-label="More actions for ${sym}">${icon('more')}</summary><div class="menu-body menu-end">${tickerMenu(sym)}</div></details>
+  </div>`;
+}
+
+// The Overview's header (visual hierarchy review, 2026-11-10, change 2, finding F6): Watch, the one quiet secondary
+// beside the price, and More. The header carried 4 to 7 controls at one weight (Watch, Alert, Compare, Save, Export,
+// "Ask about AAPL", More), and "Ask about AAPL" repeated the Milo bar's question 200px below it; the bar's gold button
+// is now the page's one primary action and its one Milo entry (the top bar keeps its outlined Ask Milo). Alert,
+// Compare, Save and Export are in More at every width; the level still decides which of them the menu offers.
+function overviewActions(sym, s, mid, all) {
+  const e = encodeURIComponent(sym);
+  return html`<div class="acts" role="group" aria-label="${sym} actions">
+    ${watchButton(sym, { compact: !!s })}
+    <details class="menu acts-more"><summary class="btn btn-quiet ${s}" aria-label="More actions for ${sym}">${icon('more')}</summary><div class="menu-body menu-end">
+      ${mid ? html`<a href="#/alerts?symbol=${e}">Set an alert</a><a href="#/compare?t=${e}">Compare</a>${saveButton('company', keyOf('company', [sym]), { cls: 'acts-save' })}` : ''}
+      ${all ? html`<a href="#/${e}/sheet">Export research sheet</a>` : ''}
+      ${tickerMenu(sym, { phone: false })}</div></details>
   </div>`;
 }
 

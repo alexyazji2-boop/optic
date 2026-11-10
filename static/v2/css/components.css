@@ -51,7 +51,7 @@ kbd { font: 500 var(--t-xs)/1 var(--f-sans); padding: 4px 7px; border-radius: va
 /* Milo switched off on this deployment (ui/milo.js checkAvailability): the buttons still open the drawer,
    which says why, but no longer look ready to answer */
 html[data-milo="off"] .btn-milo, html[data-milo="off"] [data-v2-milo].btn { border-style: dashed; border-color: var(--c-line); color: var(--c-ink-2); }
-html[data-milo="off"] .btn-milo::after, html[data-milo="off"] [data-v2-milo].btn::after { content: "Off"; margin-left: 2px; padding: 3px 6px; border-radius: var(--r-xs); background: var(--c-sunk); color: var(--c-ink-3); font: 600 var(--t-xs)/1 var(--f-label); }
+html[data-milo="off"] .btn-milo::after, html[data-milo="off"] [data-v2-milo].btn::after, html[data-milo="off"] .mp-go::after { content: "Off"; margin-left: 2px; padding: 3px 6px; border-radius: var(--r-xs); background: var(--c-sunk); color: var(--c-ink-3); font: 600 var(--t-xs)/1 var(--f-label); }
 /* Home's panel headers: thirteen "Off" tags on one screen was noise; the dashed outline and the description
    say it, and the top bar's launcher carries the tag */
 html[data-milo="off"] [data-v2-milo].btn.ws-ask::after { content: none; }
@@ -1394,10 +1394,13 @@ th .pbadge, dt .pbadge, .k .pbadge { margin-left: 6px; vertical-align: 1px; }
 .sm-stub .btn { justify-self: start; }
 .sm-less { margin-top: 8px; }
 
-.mp { display: flex; align-items: center; gap: 12px; margin: 0 0 18px; padding: 10px 12px 10px 14px; border: 1px solid var(--c-line); border-radius: var(--r-ctl); background: var(--c-plane-2); }
+/* The Milo bar is the question on the page and one gold button (visual hierarchy review, 2026-11-10, change 2, F4): the
+   grey box (1.1:1 against the page) and its border are gone, the question is at the lead size, and the button is the
+   gold primary, the full height of the bar. */
+.mp { display: flex; align-items: center; gap: 12px; margin: 0 0 18px; padding: 0; border: 0; background: none; }
 .mp-head { display: inline-grid; place-items: center; width: 32px; height: 32px; border-radius: var(--r-pill); background: var(--c-sunk); color: var(--c-ink-2); flex: none; }
 .mp-head svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.6; }
-.mp-q { margin: 0; flex: 1; font-size: var(--t-base); color: var(--c-ink-2); }
-.mp-k { font-weight: 600; color: var(--c-ink); }
-.mp-go { flex: none; }
+.mp-q { margin: 0; flex: 1; font-size: var(--t-lead); line-height: 1.3; color: var(--c-ink); }
+.mp-k { font-weight: 600; color: var(--c-ink-2); }
+.mp-go { flex: none; min-height: var(--tap); padding: 0 22px; font-size: var(--t-base); }
 @media (max-width: 719px) { .mp { flex-wrap: wrap; } .mp-q { flex-basis: calc(100% - 44px); } .mp-go { width: 100%; justify-content: center; } }
