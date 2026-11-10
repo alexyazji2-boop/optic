@@ -1348,6 +1348,17 @@ html.eff-1100 .answers { grid-template-columns: 1fr 1fr; } html.eff-1100 .answer
 .milo-panel .drawer-head { overflow: visible; }
 .milo-panel .drawer-head .scout-menu { position: absolute; top: calc(100% - 6px); left: 50%; transform: translateX(-50%); z-index: 3; }
 @media (max-height: 720px), (max-width: 480px) { .milo-panel .drawer-head .scout-menu { left: 12px; transform: none; } }
+/* The question first (visual hierarchy review, 2026-11-10, change 14, F12): a one-line head at every size, Scout at
+   48px beside his name rather than 88px over it, and, while the conversation is empty, the composer at the top of the
+   panel under the head, so the gold Send is in the first 150px instead of at y 798. A conversation keeps the composer
+   at the foot, under the answers. */
+.milo-panel .drawer-head { justify-content: flex-start; padding: 8px 12px; }
+.milo-panel .drawer-head .scout-menu { left: 12px; transform: none; }
+.milo-panel .milo-co { flex-direction: row; align-items: center; gap: 10px; padding: 0 148px 0 4px; max-width: 100%; }
+.milo-panel .milo-co-stage { width: 48px; height: 63px; }
+.milo-panel .milo-co-stage .scout-full { width: 48px; }
+.milo-panel .milo-co-say, .milo-panel .milo-co-status { align-items: flex-start; }
+.milo:has(.milo-opening) > .milo-form { order: -1; border-top: 0; border-bottom: 1px solid var(--c-line-2); }
 
 /* Period line (Handoff 2, ui/period.js): a statement or segment block's period under its title. Badges are words in
    squared tags (the period type, the accounting basis), never colour; the line wraps under the title on a phone. */

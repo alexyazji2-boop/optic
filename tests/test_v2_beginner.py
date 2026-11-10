@@ -116,7 +116,7 @@ def test_milo_tells_a_guest_what_needs_an_account():
     acc = MILO[MILO.index("function accessHTML(b) {"):MILO.index("function chromeHTML() {")]
     assert "Milo is available. A free account lets you ask it" in acc and 'href="#/signin">Sign in or create an account' in acc
     assert "Without an account you can search companies, read every page" in acc
-    assert "return html`${accessHTML(b)}${ctxHTML()}${movedHTML()}${personaHTML()}`;" in MILO, "said first, the personas still shown"
+    assert "return html`${accessHTML(b)}${ctxHTML()}${movedHTML()}`;" in MILO and "${personaHTML()}" in MILO, "said first, the personas in Response settings"
     assert "const fm = $('.milo-form', h); if (fm) fm.hidden = !!b && b.kind !== 'spent';" in MILO, "no disabled form presented as ready"
     assert "'Milo is available with a free account.'" in STATUS and "'Milo is answering.'" not in STATUS
 

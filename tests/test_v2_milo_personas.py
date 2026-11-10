@@ -20,8 +20,10 @@ CSS = (V2 / "css/components.css").read_text()
 
 def test_the_personas_are_on_show_and_the_level_and_timeframe_in_response_settings():
     chrome = MILO[MILO.index("function chromeHTML() {"):MILO.index("function logHTML() {")]
-    assert "${ctxHTML()}${movedHTML()}${personaHTML()}" in chrome, "under the context bar, always drawn"
+    # in Response settings since the hierarchy review of 2026-11-10 (change 14): the question comes first in the panel
+    assert "${personaHTML()}" not in chrome, "not above the question"
     sheet = MILO[MILO.index("function settingsHTML() {"):MILO.index("// What Milo receives")]
+    assert "${personaHTML()}" in sheet, "the persona is a response setting"
     order = [sheet.index(x) for x in ('class="milo-level"', "data-v2-milo-hz=")]   # the level is the slider now (Phase 05)
     assert order == sorted(order), "the classic order: the level, then the timeframe"
     assert 'aria-labelledby="milo-set-h"' in sheet and ">Response settings<" in sheet

@@ -656,6 +656,7 @@ function settingsHTML() {
   return html`<div class="milo-sheet-scrim" data-v2-milo-settings-done aria-hidden="true"></div>
     <div class="milo-settings" id="milo-settings" role="dialog" aria-modal="false" aria-labelledby="milo-set-h">
     <div class="milo-set-head"><h3 id="milo-set-h" tabindex="-1">Response settings</h3><button type="button" class="icon-btn" data-v2-milo-settings-done aria-label="Close Response settings" title="Close">${icon('close')}</button></div>
+    ${personaHTML()}
     ${ms.length ? html`<div class="milo-level">${levelSlider({ id: 'milo-lvl', label: 'Level', compact: true })}</div>` : ''}
     ${hz.length ? html`<div class="milo-hz" role="group" aria-labelledby="milo-hz-lab"><span class="t-label" id="milo-hz-lab">Timeframe</span>
       <div class="seg">${hz.map((x) => html`<button type="button" aria-pressed="${h && x.id === h.id ? 'true' : 'false'}" data-v2-milo-hz="${x.id}" title="${x.blurb || ''}">${HZ_SHORT[x.id] || x.label}</button>`)}</div></div>
@@ -854,9 +855,12 @@ function accessHTML(b) {
     <p class="milo-guest-sub">Without an account you can search companies, read every page, follow companies in this browser, and tap an underlined term for its meaning.</p></div>`;
   return html`<div class="state milo-block" role="status"><p>${b.text}</p></div>`;
 }
+// The persona is a response setting, so it sits in Response settings, not above the question (visual hierarchy
+// review, 2026-11-10, change 14, F12: signed in, the head, the context block and the persona row put the greeting at
+// y 490 and the gold Send at y 798 of the panel)
 function chromeHTML() {
   const b = blocked();
-  return html`${accessHTML(b)}${ctxHTML()}${movedHTML()}${personaHTML()}`;
+  return html`${accessHTML(b)}${ctxHTML()}${movedHTML()}`;
 }
 function logHTML() {
   if (S.showHistory) return historyHTML();
