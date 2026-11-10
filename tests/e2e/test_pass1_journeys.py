@@ -596,3 +596,23 @@ def test_the_phone_bar_follows_the_page_and_more_holds_the_rest(chrome, server):
     assert hrefs["Financials & Valuation"] == "#/AAPL/financials" and hrefs["Filings & Ownership"] == "#/insiders?symbol=AAPL"
     assert hrefs["Ideas"] == "#/scan" and hrefs["Research"] == "#/research" and hrefs["Alerts"] == "#/alerts"
     ctx.close()
+
+
+# ------------------------------------------------------------------ the visual hierarchy round (review of 2026-11-10)
+
+@pytest.mark.parametrize("viewport", [DESKTOP, PHONE], ids=["desktop", "phone"])
+@pytest.mark.parametrize("level", LEVELS)
+@pytest.mark.parametrize("screen", ["home", "stock"])
+def test_one_primary_action_and_one_leading_figure(chrome, server, screen, level, viewport):
+    """One gold .btn-primary on the screen, the Milo bar's, and on the stock page the price at the display size, at
+    least 1.8 times every section heading (it was 24px against 18px, 1.33 times)."""
+    ctx, page = open_page(chrome, server, level=level, viewport=viewport)
+    (home if screen == "home" else stock)(page, server)
+    assert primaries(page) == ["milo bar"], primaries(page)
+    if screen == "stock":
+        px = page.eval_on_selector(".dhead .dh-px", "e => parseFloat(getComputedStyle(e).fontSize)")
+        heads = page.eval_on_selector_all("#main section.section h2", "els => els.map(e => parseFloat(getComputedStyle(e).fontSize))")
+        assert px >= 34 and px >= 1.8 * max(heads), (px, heads)
+    lc = page.eval_on_selector("[data-v2-lc] [aria-pressed='true']", "e => [parseFloat(getComputedStyle(e).fontSize), Math.round(e.getBoundingClientRect().height)]")
+    assert lc[0] == 14 and lc[1] <= 40, lc
+    ctx.close()
