@@ -414,24 +414,49 @@ def test_axe_finds_no_wcag_a_or_aa_violation(chrome, server, screen, level, view
     ctx.close()
 
 
+FOCUS_LOG = """(() => { if (window.__focusLog) return; window.__focusLog = [];
+  document.addEventListener('focusin', (e) => { const t = e.target; window.__focusLog.push({ level: (t.dataset || {}).v2Level || '',
+    panel: (t.closest && t.closest('[data-ws-panel]') || { dataset: {} }).dataset.wsPanel || '' }); }, true); })()"""
+
+
+def _focus_reached(page, what, value, since):
+    """Wait on the focus move itself: a focusin event on the element named, recorded in the page, after entry `since`.
+    No time budget of its own (Playwright's default applies): the journey failed once in three suite runs while it
+    waited 5 s on a reading of activeElement under load (gauntlet D2, 2026-11-10)."""
+    page.wait_for_function("([k, v, n]) => window.__focusLog.slice(n).some((f) => f[k] === v)", arg=[what, value, since])
+
+
+def _settled(page):
+    """Two animation frames, so anything the page deferred to a frame has run before focus is read."""
+    page.evaluate("() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => r())))")
+
+
 def test_the_level_control_and_show_more_work_from_the_keyboard(chrome, server):
     ctx, page = open_page(chrome, server, level="beginner")
     home(page, server)
+    page.evaluate(FOCUS_LOG)
     page.focus("[data-v2-lc] [data-v2-level='beginner']")
     page.keyboard.press("Tab")
     assert page.evaluate("document.activeElement.dataset.v2Level") == "intermediate"
+    n = page.evaluate("window.__focusLog.length")
     page.keyboard.press("Space")
     page.wait_for_function("() => document.querySelector('[data-v2-level-now]').dataset.v2LevelNow === 'intermediate'")
-    # the page redraws for the new level, then focus is put back on the pressed button in the next frame
-    page.wait_for_function("() => (document.activeElement || {}).dataset && document.activeElement.dataset.v2Level === 'intermediate'", timeout=5000)
+    # the page redraws for the new level, which drops the button that had focus; focus goes back to the new pressed one
+    _focus_reached(page, "level", "intermediate", n)
+    _settled(page)
+    assert page.evaluate("document.activeElement.dataset.v2Level") == "intermediate"
     page.keyboard.press("Shift+Tab")
     page.keyboard.press("Enter")
     page.wait_for_function("() => document.querySelector('[data-v2-level-now]').dataset.v2LevelNow === 'beginner'")
     page.focus("[data-v2-show-more='regime']")
+    n = page.evaluate("window.__focusLog.length")
     page.keyboard.press("Enter")
     page.wait_for_selector("[data-ws-panel='regime']")
-    # focus moves to what opened (the panel's body), once it is drawn
-    page.wait_for_function("() => !!(document.activeElement && document.activeElement.closest('[data-ws-panel=\"regime\"]'))", timeout=5000)
+    # focus moves to what opened (the panel's body), and nothing deferred from the level change takes it back
+    _focus_reached(page, "panel", "regime", n)
+    _settled(page)
+    assert page.evaluate("!!(document.activeElement && document.activeElement.closest('[data-ws-panel=\"regime\"]'))"), \
+        page.evaluate("JSON.stringify(window.__focusLog)")
     ctx.close()
 
 

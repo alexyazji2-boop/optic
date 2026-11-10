@@ -43,11 +43,18 @@ if (typeof document !== 'undefined' && document.addEventListener) {
     const b = e.target.closest && e.target.closest('[data-v2-level]'); if (!b) return;
     const lv = b.dataset.v2Level;
     if (lv === prefs.level()) return;
-    // the page repaints itself from prefs.onChange; focus goes back to the pressed button once it has
+    // The page repaints itself from prefs.onChange, synchronously inside chooseLevel, so focus goes back to the
+    // pressed button here, in the same task. It was put back in the next animation frame, unconditionally: under load
+    // that frame ran after the reader had already moved on and pressed Show more, and took focus back from the panel
+    // Show more had opened (the keyboard journey failed once in three suite runs, gauntlet D2, 2026-11-10). The frame
+    // is kept only as a fallback for a page that repaints later, and only takes focus that the repaint dropped.
     if (chooseLevel(lv)) {
       syncControls();
       announce(`Optic now speaks at ${NAMES[lv]}. The screen shows ${lv === 'advanced' ? 'every panel' : 'the panels for that level'}.`);
-      requestAnimationFrame(() => { const again = document.querySelector(`[data-v2-lc] [data-v2-level="${lv}"]`); if (again && document.activeElement !== again) again.focus({ preventScroll: true }); });
+      const back = () => { const again = document.querySelector(`[data-v2-lc] [data-v2-level="${lv}"]`); if (again && document.activeElement !== again) again.focus({ preventScroll: true }); };
+      const dropped = () => !document.activeElement || document.activeElement === document.body || !document.activeElement.isConnected;
+      if (dropped() || !b.isConnected) back();
+      requestAnimationFrame(() => { if (dropped()) back(); });
     }
   });
   prefs.onChange((what) => { if (what === 'knowledge' || what === 'knowledge-synced') syncControls(); });
