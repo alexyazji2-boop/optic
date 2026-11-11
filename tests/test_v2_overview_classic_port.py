@@ -310,7 +310,8 @@ def test_the_header_and_the_switch():
     # shows, and each section of the advanced one is its own Show more below Advanced. It still never opens folds.
     assert "data-v2-adv-toggle" not in FRAME and "data-v2-adv-toggle" not in DOS
     assert "const mode = level === 'advanced' ? 'advanced' : 'simple';" in DOS, "one state: the level"
-    assert "${adv ? advancedView(sym, c, fund) : simpleView(sym, c)}" in DOS
+    # below Advanced the figures, and the words one row away (the visual update, 2026-11-11)
+    assert "${adv ? html`${figuresView(sym, c, level, fund)}${advancedView(sym, c, fund)}` : figuresView(sym, c, level, fund)}" in DOS
     assert "data-adv" not in OVR and "data-adv" not in DOS and 'role="switch"' not in FRAME
 
 

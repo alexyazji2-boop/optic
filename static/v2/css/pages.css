@@ -2490,3 +2490,35 @@ details.whose > p { margin: 4px 0 6px; }
 .ws-onboard.is-compact .ws-title { font-size: var(--t-md); }
 @media (max-width: 719px) { .hm-feature { padding: 14px 14px 10px; } .ws-watch .ws-sparkc { width: 72px; } .ws-watch .spark { width: 64px; } }
 
+/* ---------- the company Overview, the visual update (2026-11-11): figures first ----------
+   The chart's one-line caption; "Why does it matter?" as four small figures; what the company does with its revenue
+   mix beside estimates against results (Beginner) or the bull and bear lines (Intermediate); and at Intermediate and
+   Advanced a row of estimates, the day after each report and who owns it. */
+.dchart-cap { margin: 8px 0 0; font-size: var(--t-sm); color: var(--c-ink-3); }
+.dchart-cone { white-space: normal; }
+.ov-figs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; margin-top: 18px; }
+.ov-fig, .ov-card { min-width: 0; padding: 16px 16px 14px; border: 1px solid var(--c-line); border-radius: var(--r-lg); background: var(--c-raised); }
+.ov-fig-k { margin: 0; font: 600 var(--t-sm)/1.3 var(--f-label); letter-spacing: .04em; text-transform: uppercase; color: var(--c-gold-ink); }
+.ov-fig-h { margin: 4px 0 8px; font: 600 var(--t-lg)/1.3 var(--f-sans); color: var(--c-ink); text-wrap: balance; }
+.ov-fig-c { margin: 8px 0 0; font-size: var(--t-sm); line-height: 1.45; color: var(--c-ink-2); }
+.ov-fig-c b { color: var(--c-ink); }
+.ov-fig-big { margin: 6px 0 0; font: 600 var(--t-2xl)/1.1 var(--f-sans); color: var(--c-ink); }
+.ov-fig-big small { margin-left: 8px; font: 400 var(--t-md)/1 var(--f-sans); color: var(--c-ink-3); }
+.ov-fig-none { margin: 8px 0; font-size: var(--t-sm); color: var(--c-ink-3); }
+.ov-fig .pbars { margin-top: 14px; }
+.ov-fig .ov-fig-chart .grid { display: none; }
+.ov-row2 { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 14px; margin-top: 14px; align-items: start; }
+.ov-row3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin-top: 14px; align-items: start; }
+.ov-row2 > .section.about { margin: 0; padding: 16px; border: 1px solid var(--c-line); border-radius: var(--r-lg); background: var(--c-raised); }
+.ov-row2 .about .donut { margin-top: 12px; }
+.ov-card h2 small { margin-left: 6px; font: 400 var(--t-sm)/1 var(--f-sans); color: var(--c-ink-3); }
+.ov-card h2 { margin: 0 0 8px; }
+.ov-key { display: flex; flex-wrap: wrap; gap: 4px 14px; margin: 8px 0 0; font-size: var(--t-sm); color: var(--c-ink-3); }
+.ov-key .sw { display: inline-block; width: 10px; height: 10px; margin-right: 6px; border-radius: 2px; vertical-align: -1px; }
+.ov-sw-up { background: var(--c-up); } .ov-sw-down { background: var(--c-down); }
+.cs-glance { display: grid; gap: 8px; margin: 4px 0 0; padding: 0; list-style: none; font-size: var(--t-md); color: var(--c-ink-2); }
+.cs-glance li { display: grid; grid-template-columns: 18px minmax(0, 1fr); gap: 6px; align-items: baseline; }
+.cs-glance .textlink { color: var(--c-ink-2); font-weight: 400; }
+@media (max-width: 1100px) { .ov-figs { grid-template-columns: repeat(2, minmax(0, 1fr)); } .ov-row3 { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 860px) { .ov-row2 { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 520px) { .ov-figs { grid-template-columns: minmax(0, 1fr); } }

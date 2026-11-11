@@ -3,6 +3,7 @@
 // the only place the Dossier's pages are listed. Each tab module renders its
 // own body under it and loads the core quote through core(), which the API
 // cache shares across tabs so switching tabs does not refetch.
+import { ARROW } from '../ui/glance.js';   // the price's move carries its arrow beside its sign (visual update, 2026-11-11)
 import { html, raw, render as draw } from '../core/dom.js';
 import * as api from '../core/api.js';
 import { num, signed, dir, clean, capFirst, isNum } from '../core/format.js';
@@ -164,7 +165,7 @@ export function header(sym, D, view = 'overview', { compact = false, bar = true,
     return html`<header class="dhead bar${st ? ' is-wide' : ''}${view === 'chart' ? ' dhead-chart' : ''}${view === 'overview' ? ' dhead-overview' : ''}">${raw(logoHTML(sym, { lazy: false }))}
       <h1 class="name"><b class="tick">${sym}</b>${name && name !== sym ? html`<span>${name}</span>` : ''}<span class="sr">, ${label}</span></h1>
       <p class="dh-price">${isNum(q.price) ? html`<span class="dh-px">${num(q.price)}</span>` : D.quoteError ? '' : html`<span class="sk dh-sk dh-sk-sm" role="status" aria-label="Loading the price"></span>`}
-        <span class="dh-chg ${dir(q.change_pct)}">${isNum(q.change_pct) ? html`${signed(q.change, 2, '')} (${signed(q.change_pct)})` : ''}</span>
+        <span class="dh-chg ${dir(q.change_pct)}">${isNum(q.change_pct) ? html`${ARROW[dir(q.change_pct)] ? html`<span class="mv-a" aria-hidden="true">${ARROW[dir(q.change_pct)]}</span>` : ''}${signed(q.change, 2, '')} (${signed(q.change_pct)})` : ''}</span>
         ${isNum(q.price) ? html`<span class="dh-ext">${priceTag(D)}</span>` : ''}${ext ? html`<span class="dh-ext">${capFirst(ext.kind)} ${num(ext.price)} <span class="${dir(ext.change_pct)}">${signed(ext.change_pct)}</span>${ext.as_of ? html` ${delays.atTag(ext.as_of, '· as of ')}` : ''}</span>` : ''}</p>
       ${staleBars(D)}${stageLine(sym, st)}${actions(sym, label, true, level)}
     </header>`;

@@ -193,7 +193,8 @@ def test_one_view_at_a_time_from_one_state(tmp_path):
     d = src("pages/dossier.js")
     # one view at a time, decided by the level since 2026-11-09; below Advanced each advanced section opens on its own
     # under the simple view and never swaps it (round-one corrections, 2026-11-10)
-    assert "${adv ? advancedView(sym, c, fund) : simpleView(sym, c)}" in d
+    # below Advanced the figures, and the words one row away (the visual update, 2026-11-11)
+    assert "${adv ? html`${figuresView(sym, c, level, fund)}${advancedView(sym, c, fund)}` : figuresView(sym, c, level, fund)}" in d
     assert "const mode = level === 'advanced' ? 'advanced' : 'simple';" in d, "the level is the one state"
     assert d.count("data-v2-analysis=") == 1 and "ov-simple" not in src("pages/overview-research.js")
     assert "advToggle" not in src("pages/dossier-frame.js"), "the switch is retired with the View setting on this page"
