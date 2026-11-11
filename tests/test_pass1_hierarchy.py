@@ -94,3 +94,17 @@ def test_the_level_control_is_off_the_milo_bars_row():
     assert "${miloPrompt(stockAsk(sym))}${levelControl(" not in ov
     ws = (JS / "pages" / "workspace.js").read_text()
     assert '<div class="ws-dateline">' in ws and "${levelControl({ id: 'home-lc' })}</div></header>" in ws, "on the date line"
+
+
+# ------------------------------------------------------------------ the chart's tools, in view at every level
+
+def test_the_chart_tools_are_in_view_at_every_level_and_the_title_line_stays():
+    """Hierarchy change 11 hid the drawing tools and the widget rail behind a Tools button below Advanced; it was
+    reverted in the round-one corrections of 2026-11-10. The one title line from Chart read is not part of the revert."""
+    ch = (JS / "pages" / "chart.js").read_text()
+    assert "data-v2-ch-toolsopen" not in ch and "ch-toolsbtn" not in ch and "toolsOpen" not in ch, "no Tools button"
+    assert "const drawOpen = () => !isPhone() || !!D.drawOpen || V.tool !== 'select';" in ch, "the rail is out on a wide screen"
+    assert '<div class="ch-wrail" id="ch-wrail">' in ch and "railOpen" not in ch, "the widget rail is never hidden by the level"
+    assert "prefs.level()" not in ch, "the chart page does not read the level"
+    assert '<p class="ch-title" id="ch-title">${chartTitle()}</p>' in ch and "chartReadModel(D.t)" in ch
+    assert ".ch-title { margin: 12px 0 8px;" in PAGES and "ch-toolsbtn" not in PAGES

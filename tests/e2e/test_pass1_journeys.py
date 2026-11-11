@@ -724,3 +724,20 @@ def test_one_primary_action_and_one_leading_figure(chrome, server, screen, level
     lc = page.eval_on_selector("[data-v2-lc] [aria-pressed='true']", "e => [parseFloat(getComputedStyle(e).fontSize), Math.round(e.getBoundingClientRect().height)]")
     assert lc[0] == 14 and lc[1] <= 40, lc
     ctx.close()
+
+
+# ------------------------------------------------------------------ the chart's tools at every level (round-one corrections)
+
+@pytest.mark.parametrize("level", LEVELS)
+def test_the_chart_tools_and_the_widget_rail_are_in_view_at_every_level(chrome, server, level):
+    """Hierarchy change 11 put them behind a Tools button below Advanced; the customer wants them in view, so it was
+    reverted on 2026-11-10. The title line from Chart read stays."""
+    ctx, page = open_page(chrome, server, level=level)
+    route_price_history(page)
+    page.goto(server["base"] + "/#/AAPL/chart", wait_until="domcontentloaded")
+    page.wait_for_selector("#ch-draw .ch-draw")
+    assert page.locator("[data-v2-ch-toolsopen]").count() == 0, "no Tools button"
+    assert page.is_visible("#ch-draw .ch-draw") and page.is_visible("#ch-wrail"), "the drawing tools and the widget rail"
+    assert page.locator("#ch-title").count() == 1
+    assert page.errors == []
+    ctx.close()
