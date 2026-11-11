@@ -194,6 +194,55 @@ def test_the_owner_reads_raw_counts_of_the_three_signals(monkeypatch):
     assert V1 not in r.text and V2 not in r.text
 
 
+def test_the_owners_own_signed_in_activity_is_left_out_of_every_signal(monkeypatch):
+    """The owner testing his own site is not a reader. His signed-in visits, opens and questions are left out of
+    the three signals and of came-back-within-a-week; another account and a guest are counted as before."""
+    now = datetime.now(timezone.utc)
+    monkeypatch.setenv(admin.ENV_NAME, OWNER)
+    register("reader@example.com")
+    reader = store.get_user_by_email("reader@example.com")["id"]
+    client.cookies.clear()
+    csrf = register(OWNER)
+    owner = store.get_user_by_email(OWNER)["id"]
+    store.mark_verified(owner)
+    me, them, guest = ("signed_in", owner, owner), ("signed_in", reader, reader), ("visitor", V1, None)
+    for who in (me, them, guest):
+        usage.record("visit", who, now=now - timedelta(days=10))
+        usage.record("visit", who, now=now - timedelta(days=8))
+        usage.record("home_stock_open", who, symbol="AAPL", now=now)
+        usage.record("milo_question", who, source_screen="overview", now=now)
+    # the owner's own page load, through the real endpoint, is left out too
+    assert send({"event": "visit", "visitor": V2}, csrf=csrf).json()["recorded"] is True
+    d = client.get("/api/admin/usage-signals", headers={"X-Optic-CSRF": csrf}).json()
+    assert d["owners_left_out"] == 1
+    for name in ("today", "week", "month", "all"):
+        assert d["windows"][name]["home_stock_open"] == {"events": 2, "readers": 2}
+        assert d["windows"][name]["milo_question"] == {"events": 2, "readers": 2}
+    assert d["windows"]["all"]["visit"] == {"days": 4, "readers": 2, "signed_out_days": 2}
+    assert d["windows"]["today"]["visit"]["readers"] == 0
+    assert d["returned_within_week"] == {"readers": 2, "had_a_full_week": 2}
+    # the rows themselves are kept; only the counts leave the owner out
+    assert sum(1 for r in rows() if r["actor_ref"] == owner) == 5
+
+
+def test_with_no_owner_configured_nobody_is_left_out():
+    now = datetime.now(timezone.utc)
+    register("reader@example.com")
+    reader = store.get_user_by_email("reader@example.com")["id"]
+    usage.record("milo_question", ("signed_in", reader, reader), now=now)
+    d = usage.signals(now)
+    assert d["owners_left_out"] == 0 and d["windows"]["today"]["milo_question"]["events"] == 1
+
+
+def test_the_owner_page_says_whose_activity_the_signals_leave_out():
+    src = (main.STATIC_DIR / "v2" / "js" / "pages" / "reports.js").read_text()
+    assert ("${g.owners_left_out ? html`<p class=\"asof\" data-v2-signals-owner>Your own signed-in activity (your visits, the stocks "
+            "you open from Home and your questions to Milo) is left out of these counts; what you do signed out cannot be told "
+            "from a guest's and is counted.</p>`") in src
+    # the account figures keep their own sentence
+    assert "left out of every count." in src
+
+
 def test_the_owner_page_shows_the_three_signals():
     src = (main.STATIC_DIR / "v2" / "js" / "pages" / "reports.js").read_text()
     for words in ("Opened a stock from Home", "Asked Milo a question", "Came back within a week", "/api/admin/usage-signals", "${signals()}"):

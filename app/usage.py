@@ -35,7 +35,7 @@ from collections import defaultdict, deque
 from datetime import datetime, timedelta, timezone
 from typing import Any, Deque, Dict, List, Optional, Tuple
 
-from . import db
+from . import db, metrics
 
 EVENTS = ("home_stock_open", "milo_question", "visit")
 # What the page may send. A Milo question is written by the chat route alone.
@@ -167,20 +167,27 @@ def signals(now: Optional[datetime] = None) -> Dict[str, Any]:
     windows = {"today": now.strftime("%Y-%m-%dT00:00:00Z"), "week": _since(now, 7), "month": _since(now, 30), "all": ""}
     out: Dict[str, Any] = {"capture": capture_on(), "keep_days": KEEP_DAYS, "windows": {}}
     try:
-        first = db.row("SELECT MIN(occurred_at) AS at FROM usage_event")
+        # The owner's own signed-in rows are left out of every count, as the Metrics page's account figures already
+        # are (app/metrics.py owner_ids): the owner's testing is not a reader. Only signed-in rows can be left out; a
+        # visit the owner makes signed out carries a browser's random id and cannot be told from a guest's.
+        owners = sorted(str(i) for i in metrics.owner_ids())
+        skip = " AND NOT (actor_kind = 'signed_in' AND actor_ref IN ({}))".format(",".join("?" * len(owners))) if owners else ""
+        first = db.row("SELECT MIN(occurred_at) AS at FROM usage_event WHERE 1 = 1" + skip, tuple(owners))
         out["since"] = (first or {}).get("at")
         for name, since in windows.items():
             w: Dict[str, Any] = {}
             for ev in ("home_stock_open", "milo_question"):
                 r = db.row("SELECT COUNT(*) AS n, COUNT(DISTINCT actor_ref) AS who FROM usage_event "
-                           "WHERE event = ? AND occurred_at >= ?", (ev, since))
+                           "WHERE event = ? AND occurred_at >= ?" + skip, (ev, since, *owners))
                 w[ev] = {"events": int(r["n"] or 0), "readers": int(r["who"] or 0)}
             r = db.row("SELECT COUNT(*) AS n, COUNT(DISTINCT actor_ref) AS who, "
                        "SUM(CASE WHEN actor_kind = 'visitor' THEN 1 ELSE 0 END) AS guests FROM usage_event "
-                       "WHERE event = 'visit' AND occurred_at >= ?", (since,))
+                       "WHERE event = 'visit' AND occurred_at >= ?" + skip, (since, *owners))
             w["visit"] = {"days": int(r["n"] or 0), "readers": int(r["who"] or 0), "signed_out_days": int(r["guests"] or 0)}
             out["windows"][name] = w
-        rows = db.rows("SELECT actor_ref, occurred_at FROM usage_event WHERE event = 'visit' ORDER BY occurred_at")
+        out["owners_left_out"] = len(owners)
+        rows = db.rows("SELECT actor_ref, occurred_at FROM usage_event WHERE event = 'visit'" + skip + " ORDER BY occurred_at",
+                       tuple(owners))
         back, eligible = returned_within_week(rows, now)
         out["returned_within_week"] = {"readers": back, "had_a_full_week": eligible}
         out["available"] = True

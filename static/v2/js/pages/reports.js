@@ -126,6 +126,7 @@ function signals() {
         <tr><th scope="row">Visit days</th>${cols.map(([k]) => html`<td class="n">${cell(k, (x) => count((x.visit || {}).days))}</td>`)}</tr>
         <tr><th scope="row">Readers who visited</th>${cols.map(([k]) => html`<td class="n">${cell(k, (x) => count((x.visit || {}).readers))}</td>`)}</tr>
       </tbody></table></div>
+    ${g.owners_left_out ? html`<p class="asof" data-v2-signals-owner>Your own signed-in activity (your visits, the stocks you open from Home and your questions to Milo) is left out of these counts; what you do signed out cannot be told from a guest's and is counted.</p>` : ''}
     ${back.had_a_full_week ? html`<p data-v2-returned>Came back within a week of their first visit: <b>${count(back.readers)}</b> reader${back.readers === 1 ? '' : 's'}, of ${count(back.had_a_full_week)} whose first visit was at least a week ago.</p>`
     : html`<p data-v2-returned="none">Not enough history yet: the first readers have to be a week old before this can be counted.</p>`}
   </section>`;
