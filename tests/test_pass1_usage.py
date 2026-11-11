@@ -200,6 +200,26 @@ def test_the_owner_page_shows_the_three_signals():
         assert words in src
 
 
+def test_returned_within_week_counts_both_figures_over_the_same_readers():
+    """The owner saw "2 of 0" on 2026-11-10: readers who came back on day two were counted as returned while
+    nobody was a week old. A reader whose first visit was yesterday is in neither figure."""
+    now = datetime(2026, 11, 10, 12, tzinfo=timezone.utc)
+    rows_ = [{"actor_ref": V1, "occurred_at": "2026-11-09T09:00:00Z"},
+             {"actor_ref": V1, "occurred_at": "2026-11-10T09:00:00Z"}]
+    assert usage.returned_within_week(rows_, now) == (0, 0)
+    # a reader a week old who came back on day two counts in both; one a week old who did not, in the second only
+    rows_ += [{"actor_ref": V2, "occurred_at": "2026-11-01T09:00:00Z"}, {"actor_ref": V2, "occurred_at": "2026-11-03T09:00:00Z"},
+              {"actor_ref": "v-" + "c" * 32, "occurred_at": "2026-11-02T09:00:00Z"}]
+    assert usage.returned_within_week(rows_, now) == (1, 2)
+
+
+def test_the_owner_page_says_there_is_no_history_yet_instead_of_zero_of_zero():
+    src = (main.STATIC_DIR / "v2" / "js" / "pages" / "reports.js").read_text()
+    assert "Not enough history yet: the first readers have to be a week old before this can be counted." in src
+    # the sentence is the branch taken when nobody has had a full week, and the figures are the other branch
+    assert "${back.had_a_full_week ? html`<p data-v2-returned>Came back within a week" in src
+
+
 # ------------------------------------------------------------------ retention
 
 def test_rows_older_than_400_days_are_deleted_by_the_sweep():

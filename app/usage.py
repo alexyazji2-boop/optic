@@ -139,21 +139,25 @@ def _since(now: datetime, days: int) -> str:
     return (now - timedelta(days=days)).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def returned_within_week(rows: List[Dict[str, Any]]) -> Tuple[int, int]:
-    """(readers who came back within seven days of their first visit, readers whose first visit is at least
-    seven days old, so they have had the whole week to come back). From visit rows, oldest first."""
+def returned_within_week(rows: List[Dict[str, Any]], now: Optional[datetime] = None) -> Tuple[int, int]:
+    """(of the readers whose first visit is at least seven days old, so they have had the whole week to come
+    back, how many came back within seven days of it; how many such readers there are). From visit rows.
+
+    Both numbers are counted over the same group. Counting "came back" over every reader showed the owner
+    "2 of 0" on 2026-11-10: two readers had returned on day two, and neither was a week old yet."""
     days: Dict[str, List[str]] = defaultdict(list)
     for r in rows:
         days[r["actor_ref"]].append(utc_day(r["occurred_at"]))
     came_back = eligible = 0
-    today = datetime.now(timezone.utc).date()
+    today = (now or datetime.now(timezone.utc)).astimezone(timezone.utc).date()
     for ds in days.values():
         first = datetime.strptime(min(ds), "%Y-%m-%d").date()
+        if (today - first).days < 7:
+            continue
+        eligible += 1
         later = [datetime.strptime(d, "%Y-%m-%d").date() for d in ds]
         if any(0 < (d - first).days <= 7 for d in later):
             came_back += 1
-        if (today - first).days >= 7:
-            eligible += 1
     return came_back, eligible
 
 
@@ -177,7 +181,7 @@ def signals(now: Optional[datetime] = None) -> Dict[str, Any]:
             w["visit"] = {"days": int(r["n"] or 0), "readers": int(r["who"] or 0), "signed_out_days": int(r["guests"] or 0)}
             out["windows"][name] = w
         rows = db.rows("SELECT actor_ref, occurred_at FROM usage_event WHERE event = 'visit' ORDER BY occurred_at")
-        back, eligible = returned_within_week(rows)
+        back, eligible = returned_within_week(rows, now)
         out["returned_within_week"] = {"readers": back, "had_a_full_week": eligible}
         out["available"] = True
     except Exception as exc:                                      # noqa: BLE001

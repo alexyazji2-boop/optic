@@ -112,6 +112,7 @@ function signals() {
   if (g.available === false) return html`<section class="section" aria-labelledby="sg-h"><h2 class="t-h2" id="sg-h">Your three signals</h2><p>${clean(g.reason || 'The usage records could not be read.')}</p></section>`;
   const w = g.windows || {}, cols = [['today', 'Today'], ['week', '7 days'], ['month', '30 days'], ['all', `Since ${g.since ? shortDate(g.since) : 'recording began'}`]];
   const cell = (k, f) => { const x = w[k] || {}; return f(x); };
+  // with nobody a week old yet the figures are 0 of 0, which reads as a fault; one sentence says why there is no figure
   const back = g.returned_within_week || {};
   return html`<section class="section" aria-labelledby="sg-h"><h2 class="t-h2" id="sg-h">Your three signals</h2>
     <p class="section-sub">Raw counts, signed-in and signed-out readers together.${g.capture === false ? ' Recording is switched off (OPTIC_USAGE_CAPTURE=off).' : ''} Kept ${g.keep_days} days.</p>
@@ -125,7 +126,8 @@ function signals() {
         <tr><th scope="row">Visit days</th>${cols.map(([k]) => html`<td class="n">${cell(k, (x) => count((x.visit || {}).days))}</td>`)}</tr>
         <tr><th scope="row">Readers who visited</th>${cols.map(([k]) => html`<td class="n">${cell(k, (x) => count((x.visit || {}).readers))}</td>`)}</tr>
       </tbody></table></div>
-    <p data-v2-returned>Came back within a week of their first visit: <b>${count(back.readers)}</b> reader${back.readers === 1 ? '' : 's'}, of ${count(back.had_a_full_week)} whose first visit was at least a week ago.</p>
+    ${back.had_a_full_week ? html`<p data-v2-returned>Came back within a week of their first visit: <b>${count(back.readers)}</b> reader${back.readers === 1 ? '' : 's'}, of ${count(back.had_a_full_week)} whose first visit was at least a week ago.</p>`
+    : html`<p data-v2-returned="none">Not enough history yet: the first readers have to be a week old before this can be counted.</p>`}
   </section>`;
 }
 function metrics() {
