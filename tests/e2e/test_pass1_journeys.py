@@ -16,7 +16,11 @@ from tests.e2e.fixtures import route_fixtures, route_intraday, route_price_histo
 DESKTOP = {"width": 1440, "height": 900}
 PHONE = {"width": 390, "height": 844}
 LEVELS = ["beginner", "intermediate", "advanced"]
-MARKET = ["indices", "regime", "expected", "sectors", "quote", "watch", "calendar", "earnings", "priority", "news", "desk", "movers"]
+# Market Overview whole, as Advanced shows it (Sentiment beside Market conditions since the visual update, 2026-11-11)
+MARKET = ["indices", "regime", "sentiment", "expected", "sectors", "quote", "watch", "calendar", "earnings", "priority", "news", "desk", "movers"]
+# the level matrix of the visual update's confirmed prototype (2026-11-11)
+BEGINNER_HOME = ["indices", "sectors", "desk"]
+INTERMEDIATE_HOME = ["indices", "regime", "sentiment", "expected", "sectors", "watch", "desk"]
 
 
 def open_page(chrome, server, *, level=None, viewport=DESKTOP, cookies=None, store=None, onboarded=True):
@@ -82,11 +86,11 @@ def pressed(page):
 def test_home_at_beginner_shows_the_beginner_panels_only(chrome, server):
     ctx, page = open_page(chrome, server, level="beginner")
     home(page, server)
-    assert shown_panels(page) == ["indices", "priority", "watch", "desk"]
+    assert shown_panels(page) == BEGINNER_HOME
     assert page.locator("[data-ws-edit]").count() == 0, "no layouts or Customize at Beginner"
     assert page.locator(".ws-linkrow").count() == 0
     left = stubs(page)
-    assert {"regime", "quote", "contracts", "gex"} <= set(left) and "indices" not in left
+    assert {"regime", "quote", "contracts", "gex", "priority", "watch"} <= set(left) and "indices" not in left
     assert page.errors == []
     ctx.close()
 
@@ -94,10 +98,10 @@ def test_home_at_beginner_shows_the_beginner_panels_only(chrome, server):
 def test_home_at_intermediate_adds_the_quote_and_market_panels_with_layouts_behind_customize(chrome, server):
     ctx, page = open_page(chrome, server, level="intermediate")
     home(page, server)
-    assert shown_panels(page) == MARKET
+    assert shown_panels(page) == INTERMEDIATE_HOME
     assert page.locator("[data-ws-preset]").count() == 0, "the layouts are behind Customize, not on the page"
     assert page.locator(".ws-linkrow").count() == 0, "the linked ticker is Advanced's"
-    assert {"contracts", "gex", "vol"} <= set(stubs(page))
+    assert {"contracts", "gex", "vol", "calendar", "quote"} <= set(stubs(page))
     page.click("[data-ws-edit]")
     assert page.locator("[data-ws-preset='options']").is_visible(), "the layouts are behind Customize"
     ctx.close()
@@ -144,7 +148,8 @@ def test_stock_page_at_beginner(chrome, server):
     assert page.get_attribute("#ov-analysis", "data-v2-analysis") == "simple"
     assert page.locator("[data-v2-ov-panel='cases']").count() == 0 and page.locator("#ov-thesis").count() == 0
     assert page.locator(".dchart").count() == 1
-    assert other_stubs(page) == {"cases", "thesis", "investigate", "timeline"}
+    # the simple analysis's words are one row away since the visual update (2026-11-11); its figures are on the page
+    assert other_stubs(page) == {"words", "cases", "thesis", "investigate", "timeline"}
     assert "adv:questions" in stubs(page) and "advanced" not in stubs(page), "each advanced section has its own stub"
     ctx.close()
 
@@ -158,10 +163,13 @@ def test_stock_page_at_intermediate(chrome, server):
     assert primaries(page) == ["milo bar"]
     assert page.get_attribute("#ov-analysis", "data-v2-analysis") == "simple"
     assert page.locator("[data-v2-ov-panel='cases']").count() == 1
+    # the thesis check is one row away below Advanced since the visual update (2026-11-11), as the prototype lists it;
+    # opened, it is to read, and writing it is Advanced's
+    assert other_stubs(page) == {"words", "thesis", "investigate", "timeline"}
+    page.click("[data-v2-show-more='thesis']")
     page.wait_for_selector("#ov-thesis")
     assert page.locator("#ov-thesis [data-tc-start], #ov-thesis [data-tc-edit]").count() == 0, "writing it is Advanced's"
     assert page.locator("#ov-thesis [data-v2-show-more='thesis:edit']").count() == 1
-    assert other_stubs(page) == {"investigate", "timeline"}
     assert "adv:questions" in stubs(page)
     ctx.close()
 
@@ -201,7 +209,7 @@ def test_show_more_on_the_stock_page_opens_that_panel_only_and_keeps_the_level(c
     page.wait_for_selector("[data-v2-ov-panel='cases']", state="attached")
     assert page.get_attribute("#ov-analysis", "data-v2-analysis") == "simple", "the advanced analysis stays folded"
     assert page.locator("#ov-thesis").count() == 0
-    assert other_stubs(page) == {"thesis", "investigate", "timeline"}
+    assert other_stubs(page) == {"words", "thesis", "investigate", "timeline"}
     assert pressed(page) == "beginner"
     # one section of the advanced analysis opens alone, under the simple one, which stays
     page.click("[data-v2-show-more='adv:questions']")
@@ -263,7 +271,7 @@ def test_changing_the_level_closes_what_show_more_opened(chrome, server):
     page.wait_for_function("() => document.querySelector('[data-v2-level-now]').dataset.v2LevelNow === 'intermediate'")
     page.click("[data-v2-lc] [data-v2-level='beginner']")
     page.wait_for_function("() => document.querySelector('[data-v2-level-now]').dataset.v2LevelNow === 'beginner'")
-    assert shown_panels(page) == ["indices", "priority", "watch", "desk"]
+    assert shown_panels(page) == BEGINNER_HOME
     ctx.close()
 
 
@@ -346,6 +354,8 @@ def test_home_prompt_without_holdings_or_names_asks_about_the_market(chrome, ser
 def test_home_prompt_with_followed_names_asks_about_them(chrome, server):
     ctx, page = open_page(chrome, server, level="beginner")
     home(page, server)
+    # the watchlist is one row away at Beginner since the visual update (2026-11-11)
+    page.click("[data-v2-show-more='watch']")
     page.click("[data-ws-panel='watch'] [data-v2-watch='AAPL']")
     page.wait_for_function("() => document.querySelector('[data-v2-mp=\"home\"] [data-v2-mp-text]').textContent.includes('names I follow')")
     assert prompt_text(page, "home") == "Why did the names I follow move today?"
@@ -462,6 +472,8 @@ def test_opening_a_stock_from_home_is_recorded_once_with_nothing_personal(chrome
     before = len(usage_rows(server, "home_stock_open"))
     ctx, page = open_page(chrome, server, level="beginner")
     home(page, server)
+    # the watchlist is one row away at Beginner since the visual update (2026-11-11)
+    page.click("[data-v2-show-more='watch']")
     page.click("[data-ws-panel='watch'] [data-v2-watch='MSFT']")
     page.wait_for_selector("[data-ws-panel='watch'] a.ws-tick[href='#/MSFT']")
     page.click("[data-ws-panel='watch'] a.ws-tick[href='#/MSFT']")
