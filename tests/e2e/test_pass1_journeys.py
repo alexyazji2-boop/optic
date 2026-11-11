@@ -777,3 +777,41 @@ def test_no_chart_control_sits_over_the_plot_the_readout_or_the_price_scale(chro
     assert page.errors == []
     ctx.close()
 
+
+# ------------------------------------------------------------------ a sign-in the page itself abandons (round-one corrections)
+
+def _signin_with_a_dropped_request(chrome, server, leaving):
+    """The sign-in form with the login request dropped before it reaches the server, the page either going (a pagehide,
+    as a reload or a move away fires) or staying. Returns what the form's error line says."""
+    email, _ = make_account(server)
+    ctx, page = open_page(chrome, server, level="beginner")
+    home(page, server)
+    page.evaluate("location.hash = '#/signin'")
+    page.wait_for_selector("form[data-v2-auth='in'] input[name=email]")
+    page.fill("input[name=email]", email)
+    page.fill("input[name=password]", PASSWORD)
+    seen = []
+
+    def drop(route):
+        seen.append(route.request.url)
+        if leaving:
+            page.evaluate("window.dispatchEvent(new PageTransitionEvent('pagehide', { persisted: false }))")
+        route.abort("connectionreset")
+
+    page.route("**/api/auth/login", drop)
+    page.click("form[data-v2-auth='in'] button[type=submit]")
+    page.wait_for_timeout(1500)   # the rejection and the catch run within a frame or two of the abort
+    said = page.evaluate("document.querySelector('#si-err').textContent")
+    ctx.close()
+    assert len(seen) == 1
+    return said
+
+
+def test_a_sign_in_dropped_by_the_network_still_says_optic_could_not_be_reached(chrome, server):
+    assert _signin_with_a_dropped_request(chrome, server, leaving=False) == "Could not reach Optic."
+
+
+def test_a_sign_in_dropped_because_the_page_is_going_says_nothing(chrome, server):
+    """A fetch the browser drops as the page reloads rejects like an unreachable server; the form said "Could not reach
+    Optic" for a request the page itself abandoned. It says nothing now and lets the page go."""
+    assert _signin_with_a_dropped_request(chrome, server, leaving=True) == ""

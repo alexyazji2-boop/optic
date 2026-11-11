@@ -206,3 +206,17 @@ def test_the_kept_milo_question_waits_for_the_device_question():
         "the question is not taken from sessionStorage until the page is known to stay"
     # the rule itself is unchanged: another person's session still reloads before anything is read
     assert "ending = true;\n  location.reload();\n  return 'reload';" in dv
+
+
+def test_a_request_the_page_abandons_is_not_called_an_outage():
+    """Round-one corrections, 2026-11-10: a fetch dropped because the page is reloading or leaving rejected as
+    "Could not reach Optic". core/api.js marks the page as going on pagehide and beforeunload (lapsing if a leave guard
+    keeps the page), throws 'unloading' instead, and the sign-in form says nothing for it."""
+    a = (JS / "core" / "api.js").read_text()
+    assert "window.addEventListener('pagehide', () => { unloading = true; });" in a
+    assert "if (e.persisted) unloading = false;" in a and "if (document.visibilityState === 'visible') unloading = false;" in a
+    catch = a[a.index("  } catch (e) {\n    clearTimeout(timer);"):a.index("  clearTimeout(timer);\n  // The server answered")]
+    assert catch.index("'unloading'") < catch.index("'Could not reach Optic.'"), "checked before the outage sentence"
+    assert "if (!err || err.kind === 'unloading') return '';" in a
+    si = (JS / "pages" / "signin.js").read_text()
+    assert "if (x && x.kind === 'unloading') return;" in si and "x.kind === 'unloading')))" in si
