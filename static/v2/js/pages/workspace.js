@@ -27,7 +27,7 @@ import { icon } from '../ui/icons.js';
 import { go } from '../core/router.js';
 import { levelControl } from '../ui/levelcontrol.js';
 import { miloPrompt, press as askPrompt, resume as resumePrompt, homeQuestion } from '../ui/miloprompt.js';
-import { expansions, moreList, moreButton, revealOpened } from '../ui/showmore.js';
+import { expansions, moreList, moreButton, lessButton, revealOpened } from '../ui/showmore.js';
 import { hello, etDate, portfolio, eventsBlock, STARTERS, STARTER_NAMES, STARTER_ABOUT, portfolioSeries, deskBody, deskBottom, evPress, changesBlock, trendsBlock, briefingHoldings } from './home.js';
 import { term } from '../ui/term.js';
 import * as FV from '../core/finviz.js';
@@ -201,6 +201,8 @@ function leftOut() {
     .map((id) => ({ id, title: PANELS[id].title, blurb: BLURB[id] || '' }));
 }
 const trimmed = (id) => (LEVEL_TRIM[lvl()] || []).includes(id) && !OPEN.has(`${id}:full`) && !EDIT;
+/** What Show less closes on a panel, if Show more opened it: the panel itself, or the rest of a trimmed one. */
+const lessOf = (x) => (EDIT ? null : x.opened ? x.id : (LEVEL_TRIM[lvl()] || []).includes(x.id) && OPEN.has(`${x.id}:full`) ? `${x.id}:full` : null);
 
 const snap = (n) => SPANS.reduce((best, c) => (Math.abs(c - n) < Math.abs(best - n) ? c : best), 6);
 /** A saved layout made safe to use: known panels once each, a span on the grid's steps, a height. */
@@ -857,6 +859,7 @@ function panelShell(x, i, n) {
       <h2 class="ws-title" id="wsh-${x.id}"><span class="ws-tt">${p.title}</span><button type="button" class="ws-tbtn" data-ws-fold="${x.id}" aria-expanded="${!fold}" aria-controls="wsb-${x.id}"><span>${p.title}</span>${icon('chev')}</button></h2>
       ${p.linked ? linkLabel(x.id) : SCOPE[x.id] ? html`<span class="ws-scope">${SCOPE[x.id]}</span>` : ''}
       <span class="spacer"></span>
+      ${lessOf(x) ? lessButton(lessOf(x), p.title) : ''}
       <button type="button" class="ws-ibtn ws-howbtn" data-ws-how="${x.id}" aria-expanded="false" aria-controls="wsw-${x.id}" aria-label="About ${p.title}: how to read it, its source and how fresh it is" title="About this panel">${icon('help')}</button>
       <button type="button" class="ws-ibtn ws-ask" data-v2-milo="${ask}" data-v2-milo-ctx="Home: ${p.title}" data-v2-milo-sym="${p.linked ? link : ''}" aria-label="Ask Milo about ${p.title}" title="Ask Milo about ${p.title}">${icon('milo')}</button>
       <details class="ws-menu menu"><summary class="ws-hbtn" aria-label="${p.title} options">${icon('more')}</summary><div class="ws-menu-body">
@@ -1257,6 +1260,14 @@ function wire() {
       const pid = id.split(':')[0], to = $(`#wsb-${pid}`, root);
       if (to) revealOpened($(`[data-ws-panel="${pid}"]`, root) || to, to);
       announce(`${(PANELS[pid] || {}).title || 'The panel'} is open. Your level is unchanged.`);
+      return;
+    }
+    if ((b = t('[data-v2-show-less]'))) {
+      // that panel only closes and goes back to More on Home (a trimmed one back to its bottom line); focus goes back to
+      // its Show more, so a keyboard reader is where they were before they opened it. The level is not touched.
+      const id = b.dataset.v2ShowLess; OPEN.remove(id); paintAll();
+      revealOpened($(`[data-v2-show-more="${id}"]`, root));
+      announce(`${(PANELS[id.split(':')[0]] || {}).title || 'The panel'} is closed. Your level is unchanged.`);
       return;
     }
     if ((b = t('[data-ws-preset]'))) { if (b.dataset.wsPreset === 'mine' && !S.layouts.mine.some((x) => !x.hidden)) S.layouts.mine = JSON.parse(JSON.stringify(S.layouts.market)); S.preset = b.dataset.wsPreset; save(); paintAll(); say(`${PRESETS[S.preset].label} layout.`); return; }

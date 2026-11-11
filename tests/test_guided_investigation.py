@@ -451,7 +451,8 @@ def test_entry_points_and_the_page_rules():
     assert 'href="#/${encodeURIComponent(sym)}/investigate">See the steps</a>' in ov
     # the Overview's View switch is gone (2026-11-09): the level control decides, and Investigate is Advanced's or one
     # Show more away below it
-    assert "${has('investigate') ? investigateEntry(sym) : ''}" in ov and "['investigate', 'Investigate this company'" in ov
+    assert "${has('investigate') ? (adv ? investigateEntry(sym) : opened('investigate', 'Investigate this company', investigateEntry(sym))) : ''}" in ov \
+        and "['investigate', 'Investigate this company'" in ov
     page = (JS / "pages" / "investigate.js").read_text()
     assert "IntersectionObserver" not in page and "—" not in page
     # one gold action at a time: Start before, Continue while steps remain, then Save to library

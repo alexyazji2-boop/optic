@@ -76,7 +76,10 @@ def test_overview_opens_on_what_the_company_does():
     # setup. A fund keeps its four, with the price trend in place of a trade setup.
     ans = OV[OV.index("function answers(sym) {"):OV.index("function answerGrid(out) {")]
     assert "return answerGrid(fundAnswers(sym, trendItem(sym)));" in ans
-    assert "${fund ? (D.fwError && D.fvError && D.earnError ? failed('The four answers', D.fwError, { retry: 'dossier' }) : answers(sym)) : OR.fourQuestions(c)}" in OV
+    # the fund's branch is one function since the advanced sections got a Show more each (2026-11-10), so Advanced and the
+    # adv:questions stub draw the same thing
+    assert "const fourAnswers = (sym) => (D.fwError && D.fvError && D.earnError ? failed('The four answers', D.fwError, { retry: 'dossier' }) : answers(sym));" in OV
+    assert "${fund ? fourAnswers(sym) : OR.fourQuestions(c)}" in OV
     ovr = (JS / "pages/overview-research.js").read_text()
     assert "This describes the stock, not the business." in ovr and "tile('trade', 'Is there a short-term setup?', setupGrade(sw.grade), sw.why" in ovr
 

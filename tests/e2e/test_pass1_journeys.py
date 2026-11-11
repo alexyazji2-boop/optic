@@ -68,6 +68,11 @@ def stubs(page):
     return page.eval_on_selector_all("[data-v2-sm-stub]", "els => els.map(e => e.dataset.v2SmStub)")
 
 
+def other_stubs(page):
+    """The stubs that are not sections of the advanced analysis (those depend on which figures arrived)."""
+    return {s for s in stubs(page) if not s.startswith("adv:")}
+
+
 def pressed(page):
     return page.eval_on_selector("[data-v2-lc] [aria-pressed='true']", "e => e.dataset.v2Level")
 
@@ -139,7 +144,8 @@ def test_stock_page_at_beginner(chrome, server):
     assert page.get_attribute("#ov-analysis", "data-v2-analysis") == "simple"
     assert page.locator("[data-v2-ov-panel='cases']").count() == 0 and page.locator("#ov-thesis").count() == 0
     assert page.locator(".dchart").count() == 1
-    assert set(stubs(page)) == {"advanced", "cases", "thesis", "investigate", "timeline"}
+    assert other_stubs(page) == {"cases", "thesis", "investigate", "timeline"}
+    assert "adv:questions" in stubs(page) and "advanced" not in stubs(page), "each advanced section has its own stub"
     ctx.close()
 
 
@@ -155,7 +161,8 @@ def test_stock_page_at_intermediate(chrome, server):
     page.wait_for_selector("#ov-thesis")
     assert page.locator("#ov-thesis [data-tc-start], #ov-thesis [data-tc-edit]").count() == 0, "writing it is Advanced's"
     assert page.locator("#ov-thesis [data-v2-show-more='thesis:edit']").count() == 1
-    assert set(stubs(page)) == {"advanced", "investigate", "timeline"}
+    assert other_stubs(page) == {"investigate", "timeline"}
+    assert "adv:questions" in stubs(page)
     ctx.close()
 
 
@@ -194,11 +201,56 @@ def test_show_more_on_the_stock_page_opens_that_panel_only_and_keeps_the_level(c
     page.wait_for_selector("[data-v2-ov-panel='cases']", state="attached")
     assert page.get_attribute("#ov-analysis", "data-v2-analysis") == "simple", "the advanced analysis stays folded"
     assert page.locator("#ov-thesis").count() == 0
-    assert set(stubs(page)) == {"advanced", "thesis", "investigate", "timeline"}
+    assert other_stubs(page) == {"thesis", "investigate", "timeline"}
     assert pressed(page) == "beginner"
-    page.click("[data-v2-show-more='advanced']")
-    page.wait_for_function("() => document.querySelector('#ov-analysis').dataset.v2Analysis === 'advanced'")
+    # one section of the advanced analysis opens alone, under the simple one, which stays
+    page.click("[data-v2-show-more='adv:questions']")
+    page.wait_for_selector("[data-v2-ov-panel='adv:questions']", state="attached")
+    assert page.get_attribute("#ov-analysis", "data-v2-analysis") == "simple"
+    assert page.locator("[data-v2-ov-panel^='adv:']").count() == 1, "only the section asked for"
+    assert "adv:questions" not in stubs(page)
     assert pressed(page) == "beginner" and page.evaluate("localStorage.getItem('optic.knowledge.v1')") == "beginner"
+    ctx.close()
+
+
+def test_with_the_figures_in_every_advanced_section_is_its_own_stub(chrome, server):
+    ctx, page = open_page(chrome, server, level="beginner")
+    route_price_history(page)
+    stock(page, server)
+    page.wait_for_selector("[data-v2-sm-stub='adv:method']", state="attached")
+    adv = [s for s in stubs(page) if s.startswith("adv:")]
+    assert {"adv:questions", "adv:stats", "adv:method"} <= set(adv) and len(adv) >= 3, adv
+    page.click("[data-v2-show-more='adv:method']")
+    page.wait_for_selector("[data-v2-ov-panel='adv:method'] #mt-h", state="attached")
+    assert page.locator("[data-v2-ov-panel^='adv:']").count() == 1 and page.locator("#kf-h").count() == 0, \
+        "the method opened without the key statistics or any other section"
+    ctx.close()
+
+
+def test_show_less_closes_that_panel_only_and_keeps_the_level(chrome, server):
+    ctx, page = open_page(chrome, server, level="beginner")
+    stock(page, server)
+    page.click("[data-v2-show-more='cases']")
+    page.wait_for_selector("[data-v2-ov-panel='cases']", state="attached")
+    page.click("[data-v2-show-more='investigate']")
+    page.wait_for_selector("#gi-entry-h")
+    page.click("[data-v2-show-less='cases']")
+    page.wait_for_selector("[data-v2-ov-panel='cases']", state="detached")
+    assert page.locator("#gi-entry-h").count() == 1, "the other opened panel stays open"
+    assert "cases" in stubs(page) and "investigate" not in stubs(page)
+    assert page.evaluate("document.activeElement.dataset.v2ShowMore") == "cases", "focus is back on its Show more"
+    assert pressed(page) == "beginner" and page.evaluate("localStorage.getItem('optic.knowledge.v1')") == "beginner"
+    home(page, server)
+    before = shown_panels(page)
+    page.click("[data-v2-show-more='regime']")
+    page.wait_for_selector("[data-ws-panel='regime']")
+    page.click("[data-v2-show-more='expected']")
+    page.wait_for_selector("[data-ws-panel='expected']")
+    page.click("[data-v2-show-less='regime']")
+    page.wait_for_selector("[data-ws-panel='regime']", state="detached")
+    assert shown_panels(page) == before + ["expected"]
+    assert "regime" in stubs(page) and page.evaluate("document.activeElement.dataset.v2ShowMore") == "regime"
+    assert pressed(page) == "beginner"
     ctx.close()
 
 
@@ -486,6 +538,49 @@ def test_the_level_control_and_show_more_work_from_the_keyboard(chrome, server):
     _settled(page)
     assert page.evaluate("!!(document.activeElement && document.activeElement.closest('[data-ws-panel=\"regime\"]'))"), \
         page.evaluate("JSON.stringify(window.__focusLog)")
+    ctx.close()
+
+
+def test_show_less_works_from_the_keyboard(chrome, server):
+    """Enter on Show more opens the panel and focus moves into it; Tab reaches its Show less; Enter closes it and focus
+    is back on the same Show more, with the level unchanged. On Home, then on the stock page."""
+    ctx, page = open_page(chrome, server, level="beginner")
+    home(page, server)
+    page.focus("[data-v2-show-more='regime']")
+    page.keyboard.press("Enter")
+    page.wait_for_selector("[data-v2-show-less='regime']")
+    page.focus("[data-v2-show-less='regime']")
+    page.keyboard.press("Enter")
+    page.wait_for_selector("[data-ws-panel='regime']", state="detached")
+    page.wait_for_function("() => document.activeElement && document.activeElement.dataset.v2ShowMore === 'regime'")
+    stock(page, server)
+    page.focus("[data-v2-show-more='adv:questions']")
+    page.keyboard.press("Enter")
+    page.wait_for_selector("[data-v2-show-less='adv:questions']")
+    # from what opened, the keyboard reaches its Show less by Tab alone
+    for _ in range(60):
+        page.keyboard.press("Tab")
+        if page.evaluate("document.activeElement.dataset.v2ShowLess") == "adv:questions":
+            break
+    assert page.evaluate("document.activeElement.dataset.v2ShowLess") == "adv:questions"
+    page.keyboard.press("Enter")
+    page.wait_for_selector("[data-v2-ov-panel='adv:questions']", state="detached")
+    page.wait_for_function("() => document.activeElement && document.activeElement.dataset.v2ShowMore === 'adv:questions'")
+    assert pressed(page) == "beginner"
+    ctx.close()
+
+
+def test_on_a_phone_the_stubs_stay_rows_and_show_less_fits(chrome, server):
+    """8ec0379 made the stubs one list of one-line rows below 720px; the new stubs and Show less keep that."""
+    ctx, page = open_page(chrome, server, level="beginner", viewport=PHONE)
+    stock(page, server)
+    rows = page.eval_on_selector_all("[data-v2-sm-stub]", "els => els.map(e => [getComputedStyle(e).display, Math.round(e.getBoundingClientRect().height)])")
+    assert rows and all(d == "flex" and h <= 60 for d, h in rows), rows
+    page.click("[data-v2-show-more='adv:questions']")
+    page.wait_for_selector("[data-v2-show-less='adv:questions']")
+    box = page.eval_on_selector("[data-v2-show-less='adv:questions']", "e => { const r = e.getBoundingClientRect(); return [r.left, r.right]; }")
+    assert box[0] >= 0 and box[1] <= PHONE["width"], box
+    assert page.evaluate("document.documentElement.scrollWidth") <= PHONE["width"], "no sideways scroll"
     ctx.close()
 
 

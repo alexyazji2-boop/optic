@@ -307,9 +307,9 @@ def test_the_header_and_the_switch():
     assert "main: `Stage ${r.stage} · ${r.name || ''}`.trim(), tag: r.transition_short || ''" in OVR, "Classic's 'Stage 3 · Topping' and 'breakdown'"
     assert "miloButton('Explain', { ask: st.ask(sym)" in FRAME, "Explain drafts the question; nothing is sent"
     # The switch is retired on the Overview (2026-11-09, decision card B): the level control decides which analysis
-    # shows, and the advanced one is one Show more away below Advanced. It still never opens folds.
+    # shows, and each section of the advanced one is its own Show more below Advanced. It still never opens folds.
     assert "data-v2-adv-toggle" not in FRAME and "data-v2-adv-toggle" not in DOS
-    assert "const mode = level === 'advanced' || OPEN.has('advanced') ? 'advanced' : 'simple';" in DOS, "one state: the level"
+    assert "const mode = level === 'advanced' ? 'advanced' : 'simple';" in DOS, "one state: the level"
     assert "${adv ? advancedView(sym, c, fund) : simpleView(sym, c)}" in DOS
     assert "data-adv" not in OVR and "data-adv" not in DOS and 'role="switch"' not in FRAME
 

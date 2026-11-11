@@ -32,7 +32,7 @@ import { icon } from '../ui/icons.js';
 import { header as frameHeader, tabs as frameTabs, isFund, fresher, livePrice, quoteCtx } from './dossier-frame.js';
 import { levelControl } from '../ui/levelcontrol.js';
 import { miloPrompt, press as askPrompt, resume as resumePrompt, companyQuestion } from '../ui/miloprompt.js';
-import { expansions, moreList, moreButton, revealOpened } from '../ui/showmore.js';
+import { expansions, moreList, moreButton, lessButton, revealOpened } from '../ui/showmore.js';
 
 import * as delays from '../core/delays.js';
 import { simpleFacts, simpleSection, simpleAnalysis, plainText } from './overview-simple.js';
@@ -51,11 +51,9 @@ import { convictionPhrase } from '../core/research-words.js';
 import * as FIG from '../core/figures.js';
 let lp = null;   // the header's price refresh (dossier-frame livePrice), stopped in dispose()
 let unPrefs = null;   // the analysis view's and the knowledge level's subscription, ended in dispose()
-let advMoved = false;   // set when the view was swapped, so the next paint fades the new one in and keeps its place
-// 'reveal' when Show more swapped it: the new view still fades in, but the place is not kept by an instant scroll.
-// Kept that way, the swap put the analysis under the header in one frame from the More list below it (the jump the
-// operator saw: 1,335 px on AAPL at Beginner, 1440 x 900, 2026-11-10; 693 px on a local server the same day), and
-// the Show more handler scrolls there smoothly instead (ui/showmore.js revealOpened).
+let advMoved = false;   // set when the level swapped the view, so the next paint fades the new one in and keeps its place
+// Show more no longer swaps the view: each section of the advanced analysis opens on its own below the simple one
+// (round-one corrections, 2026-11-10), and its handler scrolls there smoothly (ui/showmore.js revealOpened).
 let VISIT = 0;   // each render is a visit; a response is drawn only into the visit that asked for it
 
 let live = true;
@@ -395,7 +393,7 @@ const quoteKey = () => JSON.stringify([D.quote && D.quote.price, D.quote && D.qu
  *  move and the same last trade, so when the quote it was written from has moved on it is redrawn in place: the
  *  section alone, not the page, so the chart and the reader's place are left as they are. */
 function refreshSimple(main, sym) {
-  if (prefs.level() === 'advanced' || OPEN.has('advanced') || quoteKey() === D.simpleKey) return;
+  if (prefs.level() === 'advanced' || quoteKey() === D.simpleKey) return;
   const sec = $('#ov-analysis > .ov-simple', main); if (!sec || sec.hasAttribute('aria-busy')) return;
   const c = OR.context({ sym, t: D.ticker || null, fw: D.fwRaw, fwError: D.fwNetError, lt: D.longterm || null, stars: (D.fairValue || {}).stars, fund: isFundHere(sym), advanced: false, phase: phase() });
   const tmp = document.createElement('div'); draw(tmp, simpleView(sym, c));
@@ -404,10 +402,37 @@ function refreshSimple(main, sym) {
   if (say && t && say.textContent !== t) say.textContent = t;
 }
 function advancedView(sym, c, fund) {
-  return html`${fund ? (D.fwError && D.fvError && D.earnError ? failed('The four answers', D.fwError, { retry: 'dossier' }) : answers(sym)) : OR.fourQuestions(c)}${fund ? OR.fundRisk(sym, c.f) : ''}
+  return html`${fund ? fourAnswers(sym) : OR.fourQuestions(c)}${fund ? OR.fundRisk(sym, c.f) : ''}
     ${OR.scoreSection(c)}${fund ? '' : OR.keyStats(c)}${OR.casesSection(c)}
     ${fund ? fundRecord(sym) : ''}${combined()}${OR.opticRead(c)}${digest(sym)}${fund ? '' : html`<div data-tc-slot></div>`}${OR.nextSection(c)}${OR.restSection(c)}${D.ticker ? more(sym) : ''}${OR.methodSection(c)}`;
 }
+const fourAnswers = (sym) => (D.fwError && D.fvError && D.earnError ? failed('The four answers', D.fwError, { retry: 'dossier' }) : answers(sym));
+/** The advanced analysis's sections, each with its own Show more below Advanced, in the order Advanced shows them.
+ *  One stub opened all of them as one block (about ten sections), which made "Each opens on its own" untrue of the
+ *  biggest one (round-one corrections, 2026-11-10). The bull and bear case and the thesis check have stubs of their
+ *  own already. A section with nothing to show (no digest, a coin's filings) has no stub, as on Home. The ids are
+ *  stable: the journeys and the focus moves name them. */
+function advParts(sym, c, fund) {
+  const parts = [
+    ['adv:questions', fund ? 'Four questions, answered' : 'Four questions, answered separately',
+      fund ? 'What it is, how its price has moved, what its holdings cost and what it pays.' : 'The business, the share price, what it costs and the next report, each answered on its own.',
+      fund ? html`${fourAnswers(sym)}${OR.fundRisk(sym, c.f)}` : OR.fourQuestions(c)],
+    ['adv:score', 'Optic Score', 'The short-term and long-term scores, with the inputs behind each.', OR.scoreSection(c)],
+    ...(fund ? [] : [['adv:stats', 'Key statistics', 'Every key figure the feed has for the company.', OR.keyStats(c)]]),
+    ...(fund ? [['adv:record', 'The long-term record', 'Returns over one, three, five and ten years.', fundRecord(sym)]] : []),
+    ['adv:combined', 'Taken together', "Optic's combined long-term reading of the business, its price and its value.", combined()],
+    ['adv:read', "Optic's read", 'The short-term signal score and how its inputs scored.', OR.opticRead(c)],
+    ['adv:changed', 'What changed lately', 'What moved in the latest session and the headlines behind it.', digest(sym)],
+    ['adv:next', 'What should I look at next?', 'Dates coming up and the next things to check.', OR.nextSection(c)],
+    ['adv:rest', 'The rest of this ticker', "One reading from each of Optic's other tabs for it.", OR.restSection(c)],
+    ['adv:filings', fund ? 'Key figures and filings' : 'Recent SEC filings', fund ? "The fund's key figures and its latest filings." : 'The latest filings, with links to each.', D.ticker ? more(sym) : ''],
+    ['adv:method', 'How this page is built', 'Where the figures come from and the rules that word them.', OR.methodSection(c)],
+  ];
+  return parts.filter((x) => x[3] !== '').map(([id, title, blurb, body]) => ({ id, title, blurb, body }));
+}
+/** What Show more opened, with its Show less under it. */
+const opened = (id, title, body) => html`<div data-v2-ov-panel="${id}">${body}<p class="sm-less">${lessButton(id, title)}</p></div>`;
+
 // the sticky stack a section scrolls under: the top bar, the Dossier header and the jump strip (ui/sections.js). The
 // strip is measured itself: it comes and goes with the view (the advanced one has enough sections for it), and its
 // height variable is only updated a frame later.
@@ -439,9 +464,10 @@ function paint(main, sym) {
   if (!live) return;
   const swapped = advMoved; advMoved = false;
   // The level decides what the Overview shows (2026-11-09, decision card B: no View setting or "Show advanced
-  // analysis" here any more). Beginner and Intermediate read the simple analysis; Advanced, the advanced one.
+  // analysis" here any more). Beginner and Intermediate read the simple analysis, with each advanced section a Show
+  // more away; Advanced, the advanced one.
   const level = prefs.level();
-  const mode = level === 'advanced' || OPEN.has('advanced') ? 'advanced' : 'simple';
+  const mode = level === 'advanced' ? 'advanced' : 'simple';
   const keepFocus = document.activeElement && main.contains(document.activeElement) ? document.activeElement : null;
   // the page's heading, focused on arrival for a screen reader, keeps focus through the redraws as data arrives
   const key = keepFocus && (keepFocus.dataset.v2Answer || keepFocus.dataset.v2Range || keepFocus.dataset.v2Watch || (keepFocus.dataset.v2Level ? `lv:${keepFocus.dataset.v2Level}` : '') || (keepFocus.tagName === 'H1' ? 'h1' : ''));
@@ -472,9 +498,12 @@ function paint(main, sym) {
   const adv = mode === 'advanced';
   const cases = !adv && (level === 'intermediate' || OPEN.has('cases'));
   const thesisShown = adv || level === 'intermediate' || OPEN.has('thesis');
-  setThesisEdit(level === 'advanced' || OPEN.has('thesis:edit') || OPEN.has('advanced'), moreButton('thesis:edit', 'Your thesis check', { label: 'Show more' }));
+  setThesisEdit(level === 'advanced' || OPEN.has('thesis:edit'), moreButton('thesis:edit', 'Your thesis check', { label: 'Show more' }),
+    level !== 'advanced' && OPEN.has('thesis:edit') ? lessButton('thesis:edit', 'Your thesis check') : '');
+  // the advanced sections are read with the advanced context (its longer list of dates ahead), as Advanced reads them
+  const parts = adv ? [] : advParts(sym, { ...c, advanced: true }, fund);
   const out = [
-    ...(adv ? [] : [['advanced', 'Advanced analysis', 'The four questions, the Optic Score, key statistics, the combined and short-term reads, what changed and the method.']]),
+    ...parts.filter((x) => !OPEN.has(x.id)).map((x) => [x.id, x.title, x.blurb]),
     ...(adv || cases || level === 'intermediate' ? [] : [['cases', 'Bull and bear case', 'The strongest arguments on each side, from the figures on this page.']]),
     ...(thesisShown ? [] : [['thesis', 'Your thesis check', 'Write down why you are interested and what would change your mind; Optic checks it each visit.']]),
     ...(has('investigate') ? [] : [['investigate', 'Investigate this company', 'Six steps, each one Milo answer from figures Optic has already read.']]),
@@ -490,10 +519,11 @@ function paint(main, sym) {
     ${about(sym)}
     <section class="section dchart" aria-labelledby="py-h">${D.tickerError ? failed('The price history', D.tickerError, { retry: 'dossier' }) : chartBlock(sym)}</section>
     <div class="ov-analysis" id="ov-analysis" data-v2-analysis="${mode}" ${swapped ? 'data-swapped' : ''}>${adv ? advancedView(sym, c, fund) : simpleView(sym, c)}</div>
-    ${cases ? html`<div data-v2-ov-panel="cases">${OR.casesSection(c)}</div>` : ''}
-    ${!adv && thesisShown ? html`<div data-tc-slot></div>` : ''}
-    ${has('investigate') ? investigateEntry(sym) : ''}
-    ${has('timeline') ? (phoneAdv() ? html`<details class="ov-tl-fold"><summary>Company events</summary><div data-tl-slot></div></details>` : html`<div data-tl-slot></div>`) : ''}
+    ${parts.filter((x) => OPEN.has(x.id)).map((x) => opened(x.id, x.title, x.body))}
+    ${cases ? (level === 'intermediate' ? html`<div data-v2-ov-panel="cases">${OR.casesSection(c)}</div>` : opened('cases', 'Bull and bear case', OR.casesSection(c))) : ''}
+    ${!adv && thesisShown ? (level === 'intermediate' ? html`<div data-tc-slot></div>` : opened('thesis', 'Your thesis check', html`<div data-tc-slot></div>`)) : ''}
+    ${has('investigate') ? (adv ? investigateEntry(sym) : opened('investigate', 'Investigate this company', investigateEntry(sym))) : ''}
+    ${has('timeline') ? (phoneAdv() ? html`<details class="ov-tl-fold"><summary>Company events</summary><div data-tl-slot></div></details>` : adv ? html`<div data-tl-slot></div>` : opened('timeline', 'Company events', html`<div data-tl-slot></div>`)) : ''}
     ${moreList(out, { heading: `More on ${sym}`, screen: 'overview' })}
     <p class="sr" role="status" data-v2-analysis-status></p>
     <p class="asof disclaimer">${clean((D.ticker || {}).disclaimer || 'Not financial advice. For research and education only.')}</p>`);
@@ -508,7 +538,7 @@ function paint(main, sym) {
     // the browser draws a frame, so the new view is never seen in the wrong place
     queueMicrotask(() => {
       const now = $('#ov-analysis', main), top = stack(main);
-      if (swapped !== 'reveal' && now && anchor !== null && anchor < wasTop) window.scrollTo(0, Math.max(0, window.scrollY + now.getBoundingClientRect().top - top - 8));
+      if (now && anchor !== null && anchor < wasTop) window.scrollTo(0, Math.max(0, window.scrollY + now.getBoundingClientRect().top - top - 8));
     });
     // said once the new view is in the page, so a screen reader hears what changed and focus stays on the button
     const st = $('[data-v2-analysis-status]', main);
@@ -592,11 +622,22 @@ function wire(main) {
     if (e.target.closest('[data-v2-mp-ask]')) { askPrompt(() => stockAsk(sym), e.target.closest('[data-v2-mp-ask]')); return; }
     const more = e.target.closest('[data-v2-show-more]');
     if (more) {
-      const id = more.dataset.v2ShowMore; OPEN.add(id); if (id === 'advanced') advMoved = 'reveal'; paint(main, sym);
-      const to = { cases: '[data-v2-ov-panel="cases"] h2', thesis: '#tc-h', 'thesis:edit': '#ov-thesis [data-tc-start], #ov-thesis [data-tc-edit]', investigate: '#gi-entry-h', timeline: '#tl-h', advanced: '#ov-analysis h2' }[id];
+      const id = more.dataset.v2ShowMore; OPEN.add(id); paint(main, sym);
+      const to = { cases: '[data-v2-ov-panel="cases"] h2', thesis: '#tc-h', 'thesis:edit': '#ov-thesis [data-tc-start], #ov-thesis [data-tc-edit]', investigate: '#gi-entry-h', timeline: '#tl-h' }[id];
+      // an advanced section's heading, or its block when it has none (a fund's four answers are a grid of buttons)
+      const box = id.startsWith('adv:') ? $(`[data-v2-ov-panel="${id}"]`, main) : null;
       // focus moves into what opened (the keyboard journey relies on it); ui/showmore.js scrolls there smoothly first
-      const el = to && $(to, main); if (el) { if (!el.matches('button, a')) el.setAttribute('tabindex', '-1'); revealOpened(el); }
+      const el = box ? $('h2', box) || box : to && $(to, main); if (el) { if (!el.matches('button, a')) el.setAttribute('tabindex', '-1'); revealOpened(el); }
       const st = $('[data-v2-analysis-status]', main); if (st) setTimeout(() => { if (st.isConnected) st.textContent = 'Opened. Your level is unchanged.'; }, 60);
+      return;
+    }
+    const less = e.target.closest('[data-v2-show-less]');
+    if (less) {
+      // that panel only closes and goes back to the list; focus goes back to its Show more, so a keyboard reader is
+      // where they were before they opened it. The level is not touched.
+      const id = less.dataset.v2ShowLess; OPEN.remove(id); paint(main, sym);
+      revealOpened($(`[data-v2-show-more="${id}"]`, main));
+      const st = $('[data-v2-analysis-status]', main); if (st) setTimeout(() => { if (st.isConnected) st.textContent = 'Closed. Your level is unchanged.'; }, 60);
       return;
     }
     const a = e.target.closest('[data-v2-answer]');

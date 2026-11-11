@@ -1,12 +1,15 @@
 // Show more, per panel (2026-11-09). On Home and a company's Overview the level decides which panels appear; a panel
 // the level leaves out, or trims, is never gone: it is listed with one Show more, which opens that panel only and
-// leaves the level as it is. What was opened stays open until the level changes or the reader leaves the screen.
+// leaves the level as it is. What was opened stays open until the reader presses its Show less, the level changes or
+// the reader leaves the screen. Show less closes that one panel only: with Show more alone, the only way to put a panel
+// back was to change the level and back, which closed everything else that was open as well (round-one corrections,
+// 2026-11-10).
 import { html, reducedMotion } from '../core/dom.js';
 
-/** A screen's set of panels opened past its level. Cleared when the level changes. */
+/** A screen's set of panels opened past its level. Cleared when the level changes; one panel leaves it by Show less. */
 export function expansions() {
   const open = new Set();
-  return { has: (id) => open.has(id), add: (id) => open.add(id), clear: () => open.clear(), list: () => [...open] };
+  return { has: (id) => open.has(id), add: (id) => open.add(id), remove: (id) => open.delete(id), clear: () => open.clear(), list: () => [...open] };
 }
 
 /** The panels the level leaves out, each with Show more. `items` is [{id, title, blurb}]. */
@@ -22,6 +25,13 @@ export function moreList(items, { heading = 'More on this screen', sub = 'Each o
 /** One Show more button: for a stub above, or inside a panel the level trims. */
 export function moreButton(id, title, { label = 'Show more' } = {}) {
   return html`<button type="button" class="btn btn-sm" data-v2-show-more="${id}" aria-expanded="false" aria-label="${label}: ${title}">${label}</button>`;
+}
+
+/** One Show less button, on a panel Show more opened: it closes that panel only, the panel goes back to the list above
+ *  and focus goes back to its Show more. The same small plain button as Show more, so the pair reads as one control
+ *  and neither competes with the screen's one gold action. */
+export function lessButton(id, title, { label = 'Show less' } = {}) {
+  return html`<button type="button" class="btn btn-sm" data-v2-show-less="${id}" aria-expanded="true" aria-label="${label}: ${title}">${label}</button>`;
 }
 
 /** Bring what Show more opened into view, then focus it. `target` is scrolled to (a panel or its heading); `focus`,

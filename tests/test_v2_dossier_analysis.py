@@ -191,9 +191,10 @@ def test_the_section_says_its_level_and_leaves_its_own_explanations_unmarked():
 
 def test_one_view_at_a_time_from_one_state(tmp_path):
     d = src("pages/dossier.js")
-    # one view at a time, decided by the level since 2026-11-09 (Advanced, or Show more on the advanced analysis)
+    # one view at a time, decided by the level since 2026-11-09; below Advanced each advanced section opens on its own
+    # under the simple view and never swaps it (round-one corrections, 2026-11-10)
     assert "${adv ? advancedView(sym, c, fund) : simpleView(sym, c)}" in d
-    assert "const mode = level === 'advanced' || OPEN.has('advanced') ? 'advanced' : 'simple';" in d, "the level is the one state"
+    assert "const mode = level === 'advanced' ? 'advanced' : 'simple';" in d, "the level is the one state"
     assert d.count("data-v2-analysis=") == 1 and "ov-simple" not in src("pages/overview-research.js")
     assert "advToggle" not in src("pages/dossier-frame.js"), "the switch is retired with the View setting on this page"
 
@@ -211,9 +212,10 @@ def test_a_response_is_drawn_only_into_the_visit_that_asked_for_it():
 
 def test_the_swap_fades_and_keeps_its_place():
     d = src("pages/dossier.js")
-    # a swap from the level keeps its place at once; Show more's swap ('reveal') is scrolled to smoothly by its handler,
-    # because the instant keep-place scroll moved the page 1,335 px in one frame from the More list (2026-11-10)
-    assert "if (swapped !== 'reveal' && now && anchor !== null && anchor < wasTop) window.scrollTo(0, Math.max(0, window.scrollY + now.getBoundingClientRect().top - top - 8));" in d
+    # a swap from the level keeps its place at once; Show more no longer swaps (each advanced section opens on its own,
+    # 2026-11-10) and its handler scrolls smoothly to what opened
+    assert "if (now && anchor !== null && anchor < wasTop) window.scrollTo(0, Math.max(0, window.scrollY + now.getBoundingClientRect().top - top - 8));" in d
+    assert "'reveal'" not in d
     assert "queueMicrotask(() => {" in d, "after the section strip is redrawn for the new view, before a frame is drawn"
     assert "st.textContent = `Showing the ${mode} analysis.`" in d and '<p class="sr" role="status" data-v2-analysis-status></p>' in d
     css = (V2 / "css/pages.css").read_text()
@@ -237,7 +239,7 @@ def test_a_search_opened_before_the_arrival_frame_keeps_focus():
 def test_the_simple_analysis_follows_the_headers_price_refresh():
     d = src("pages/dossier.js")
     assert "onQuote: () => { if (mine()) refreshSimple(main, sym); }" in d
-    assert "if (prefs.level() === 'advanced' || OPEN.has('advanced') || quoteKey() === D.simpleKey) return;" in d and "sec.replaceWith(tmp.firstElementChild);" in d, \
+    assert "if (prefs.level() === 'advanced' || quoteKey() === D.simpleKey) return;" in d and "sec.replaceWith(tmp.firstElementChild);" in d, \
         "redrawn in place, alone, when the quote it was written from has moved on"
 
 

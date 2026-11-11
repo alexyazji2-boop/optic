@@ -8,6 +8,8 @@ Show more are driven in a real browser in tests/e2e/test_pass1_journeys.py; the 
 read here, as this project reads client contracts (tests/test_ui_refactor.py)."""
 from __future__ import annotations
 
+import re
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -125,12 +127,52 @@ def test_show_more_scrolls_smoothly_then_focuses_without_a_second_scroll():
     ov = (JS / "pages" / "dossier.js").read_text()
     branch = ov[ov.index("const more = e.target.closest('[data-v2-show-more]');"):ov.index("const a = e.target.closest('[data-v2-answer]');")]
     assert "revealOpened(el)" in branch and "preventScroll: false" not in branch
-    assert "advMoved = 'reveal'" in branch and "swapped !== 'reveal'" in ov
+    assert "advMoved" not in branch, "Show more opens a section under the simple view; it never swaps the view"
     assert "Opened. Your level is unchanged." in branch
     ws = (JS / "pages" / "workspace.js").read_text()
     branch = ws[ws.index("if ((b = t('[data-v2-show-more]')))"):ws.index("if ((b = t('[data-ws-preset]')))")]
     assert "revealOpened(" in branch and "preventScroll: false" not in branch
     assert "Your level is unchanged." in branch
+
+
+def test_show_less_closes_one_panel_and_gives_focus_back_to_its_show_more():
+    """Round-one corrections, 2026-11-10: nothing offered Show less, so the only way to put a panel back was to change
+    the level, which closed everything else too. Show less removes that one id, repaints, and focuses its stub; the
+    level is never written by either handler."""
+    sm = (JS / "ui" / "showmore.js").read_text()
+    assert "remove: (id) => open.delete(id)" in sm
+    assert '<button type="button" class="btn btn-sm" data-v2-show-less="${id}" aria-expanded="true" aria-label="${label}: ${title}">${label}</button>' in sm
+    assert "sub = 'Each opens on its own; your level stays as it is.'" in sm
+    ov = (JS / "pages" / "dossier.js").read_text()
+    branch = ov[ov.index("const less = e.target.closest('[data-v2-show-less]');"):ov.index("const a = e.target.closest('[data-v2-answer]');")]
+    assert "OPEN.remove(id); paint(main, sym);" in branch and "revealOpened($(`[data-v2-show-more=\"${id}\"]`, main));" in branch
+    assert "Closed. Your level is unchanged." in branch
+    ws = (JS / "pages" / "workspace.js").read_text()
+    branch = ws[ws.index("if ((b = t('[data-v2-show-less]')))"):ws.index("if ((b = t('[data-ws-preset]')))")]
+    assert "OPEN.remove(id); paintAll();" in branch and "revealOpened($(`[data-v2-show-more=\"${id}\"]`, root));" in branch
+    assert "${lessOf(x) ? lessButton(lessOf(x), p.title) : ''}" in ws, "an opened Home panel carries Show less in its header"
+    code = "\n".join(line.split("//")[0] for line in branch.splitlines())   # the comments say "level" on purpose
+    assert "prefs." not in code and "Level(" not in code, "Show less never touches the level"
+
+
+def test_each_advanced_section_has_its_own_show_more_below_advanced():
+    """One stub opened the whole advanced analysis as one block, so "Each opens on its own" was not true of it. Each
+    section now has a stable id and opens alone, under the simple analysis, with its Show less."""
+    ov = (JS / "pages" / "dossier.js").read_text()
+    assert "['advanced', 'Advanced analysis'" not in ov and "OPEN.has('advanced')" not in ov
+    parts = ov[ov.index("function advParts(sym, c, fund) {"):ov.index("/** What Show more opened, with its Show less under it. */")]
+    ids = re.findall(r"\['(adv:[a-z]+)'", parts)
+    assert ids == ["adv:questions", "adv:score", "adv:stats", "adv:record", "adv:combined", "adv:read", "adv:changed", "adv:next",
+                   "adv:rest", "adv:filings", "adv:method"], ids
+    assert "...parts.filter((x) => !OPEN.has(x.id)).map((x) => [x.id, x.title, x.blurb])," in ov, "unopened sections are stubs"
+    assert "${parts.filter((x) => OPEN.has(x.id)).map((x) => opened(x.id, x.title, x.body))}" in ov, "opened ones are drawn alone"
+    assert '<div data-v2-ov-panel="${id}">${body}<p class="sm-less">${lessButton(id, title)}</p></div>' in ov
+    # the other panels Show more opens on the Overview carry Show less too, and only when Show more opened them
+    for words in ("opened('cases', 'Bull and bear case'", "opened('thesis', 'Your thesis check'", "opened('investigate', 'Investigate this company'",
+                  "opened('timeline', 'Company events'", "lessButton('thesis:edit', 'Your thesis check')"):
+        assert words in ov, words
+    tc = (JS / "pages" / "thesis.js").read_text()
+    assert "export function setThesisEdit(on, more = '', less = '')" in tc and "${TC.canEdit ? TC.less : ''}" in tc
 
 
 def test_a_spent_allowance_is_said_from_the_allowance_not_only_from_a_failed_send():
