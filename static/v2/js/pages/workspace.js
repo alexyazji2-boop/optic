@@ -19,7 +19,8 @@ import * as delays from '../core/delays.js';
 import { kindOf, kindWord, learn, onLearn } from '../core/instrument.js';
 import { row30, skewWords } from './options-panels.js';
 import { skeleton } from '../ui/states.js';
-import { lineChart, spark, mountCharts, meter } from '../ui/chart.js';
+import { lineChart, spark, spanTone, mountCharts, meter } from '../ui/chart.js';
+import { move as mv, moveWords, gauge, divBars, pairBars } from '../ui/glance.js';
 import { provideContext, button as miloButton } from '../ui/milo.js';
 import { marketQuestions } from '../core/market-questions.js';
 import { toast } from '../ui/toast.js';
@@ -28,7 +29,7 @@ import { go } from '../core/router.js';
 import { levelControl } from '../ui/levelcontrol.js';
 import { miloPrompt, press as askPrompt, resume as resumePrompt, homeQuestion } from '../ui/miloprompt.js';
 import { expansions, moreList, moreButton, lessButton, revealOpened } from '../ui/showmore.js';
-import { hello, etDate, portfolio, eventsBlock, STARTERS, STARTER_NAMES, STARTER_ABOUT, portfolioSeries, deskBody, deskBottom, evPress, changesBlock, trendsBlock, briefingHoldings } from './home.js';
+import { hello, etDate, portfolio, eventsBlock, STARTERS, STARTER_NAMES, STARTER_ABOUT, portfolioSeries, deskBody, deskGlance, evPress, changesBlock, trendsBlock, briefingHoldings } from './home.js';
 import { term } from '../ui/term.js';
 import * as FV from '../core/finviz.js';
 import { valuationWord } from '../core/research-words.js';
@@ -50,7 +51,9 @@ export const PRESETS = {
   // sizes to its content sits beside lists that fill the rest of the row (LIST below). Any other panel is one
   // Add panel away in Customize.
   // Market Overview: conditions, then the ticker you are watching, then what is scheduled, then context.
-  market: { label: 'Market Overview', panels: [['indices', 12, 'm'], ['regime', 4, 'm'], ['expected', 4, 'm'], ['sectors', 4, 'm'], ['quote', 8, 'm'], ['watch', 4, 's'], ['calendar', 6, 's'], ['earnings', 6, 's'], ['priority', 6, 'm'], ['news', 6, 's'], ['desk', 6, 'm'], ['movers', 6, 's'], ['portfolio', 12, 'm']] },
+  // Sentiment is its own panel beside Market conditions, and the heat map takes a full row, as the visual update's
+  // prototype draws them (2026-11-11); the rest of the layout is as it was.
+  market: { label: 'Market Overview', panels: [['indices', 12, 'm'], ['regime', 4, 'm'], ['sentiment', 4, 'm'], ['expected', 4, 'm'], ['sectors', 12, 'm'], ['quote', 8, 'm'], ['watch', 4, 's'], ['calendar', 6, 's'], ['earnings', 6, 's'], ['priority', 6, 'm'], ['news', 6, 's'], ['desk', 6, 'm'], ['movers', 6, 's'], ['portfolio', 12, 'm']] },
   // Options Research: the linked instrument, its chain, what the options price, positioning, its earnings.
   options: { label: 'Options Research', panels: [['quote', 8, 'm'], ['watch', 4, 's'], ['contracts', 12, 'l'], ['vol', 6, 'm'], ['gex', 6, 'm'], ['tearn', 6, 'm'], ['cnews', 6, 's']] },
   // Long-Term Investing: the business, its valuation, its financial trends, who owns it, what is happening.
@@ -78,6 +81,7 @@ const FRESH = {
   cnews: 'Headlines re-read at most every 10 minutes.',
   contracts: () => `Chain ${CHAIN()}; re-read at most once a minute.`,
   regime: 'From delayed quotes and daily closes; refreshed every minute while the market is open.',
+  sentiment: 'Re-read at most every 2 minutes from delayed market inputs.',
   expected: 'From the delayed VIX and index; refreshed every minute while the market is open.',
   sectors: () => `Fund prices ${QD()}; refreshed every minute while the market is open.`,
   calendar: 'Schedule from the last built Read (built every 20 minutes); actual and prior from FRED, re-read at most every 6 hours.',
@@ -102,11 +106,11 @@ const freshOf = (id) => (typeof FRESH[id] === 'function' ? FRESH[id]() : FRESH[i
 // The footer's one line: a short source and a status in a word or two. The full source, FRESH and
 // any calculation note are in the panel's "About this panel" explanation (owner, 2026-10-18).
 const SRC = { indices: 'Yahoo Finance', portfolio: 'Your brokerage', priority: 'Optic', watch: 'Yahoo Finance', quote: 'Yahoo Finance', cnews: 'Publisher feeds',
-  contracts: 'Yahoo Finance chain', regime: 'Optic rules', expected: 'Yahoo Finance', sectors: 'Yahoo Finance', calendar: 'Agency schedules', desk: 'Optic Desk',
+  contracts: 'Yahoo Finance chain', regime: 'Optic rules', sentiment: 'Optic sentiment gauge', expected: 'Yahoo Finance', sectors: 'Yahoo Finance', calendar: 'Agency schedules', desk: 'Optic Desk',
   earnings: 'Yahoo Finance', movers: 'Optic scan', news: 'Wire feeds', alerts: 'Optic scan', economy: 'FRED', value: 'Yahoo Finance, SEC',
   vol: 'Yahoo Finance chain', gex: 'Optic estimate', tearn: 'Yahoo Finance', biz: 'SEC filings', fin: 'Company statements', own: 'SEC filings',
   changes: 'Optic rules', trends: 'Yahoo Finance', questions: 'Optic' };
-const QUOTED = new Set(['indices', 'portfolio', 'watch', 'quote', 'contracts', 'regime', 'expected', 'sectors', 'value', 'vol', 'gex', 'trends']);
+const QUOTED = new Set(['indices', 'portfolio', 'watch', 'quote', 'contracts', 'regime', 'sentiment', 'expected', 'sectors', 'value', 'vol', 'gex', 'trends']);
 const CADENCE = { priority: 'Every 10 min', cnews: 'Every 10 min', calendar: 'Every 20 min', news: 'Every 20 min', desk: 'Latest edition', earnings: 'Hourly', movers: 'Nightly scan', alerts: 'Scheduled scan', economy: 'Every 6 h', tearn: 'Every 10 min', biz: 'As filed', fin: 'As filed', own: 'As filed', changes: 'Each session', questions: 'Each market day' };
 // How often each cadence panel's source is rebuilt; data older than three of these says its age instead.
 const CADENCE_MS = { priority: 6e5, cnews: 6e5, calendar: 12e5, news: 12e5, earnings: 36e5, economy: 216e5 };
@@ -129,7 +133,7 @@ const boardQuotes = (rows) => (Array.isArray(rows) ? rows : []).filter((r) => r 
 const LIST = new Set(['watch', 'cnews', 'contracts', 'calendar', 'earnings', 'movers', 'news', 'alerts', 'changes', 'questions']);
 // The instrument or universe behind each market panel, named in its header so no figure is anonymous
 // (owner, 2026-10-19). Linked panels name their ticker the same way (linkLabel).
-const SCOPE = { indices: 'US indices and cross-asset', regime: 'US market', expected: 'S&P 500', sectors: '11 SPDR sector funds', calendar: 'US releases',
+const SCOPE = { indices: 'US indices and cross-asset', regime: 'US market', sentiment: 'US market', expected: 'S&P 500, one day', sectors: 'The 11 sector funds, largest move first', calendar: 'US releases',
   earnings: 'Widely followed US companies', priority: 'US market and your names', news: 'Market wires', desk: 'US market', movers: 'Optic\'s scanned universe',
   economy: 'US economy, FRED', alerts: 'Optic\'s scheduled scan', portfolio: 'Your linked accounts', watch: 'Your open list',
   changes: 'Your names and holdings', trends: '3 index and 11 sector funds', questions: 'For Milo, from today\'s market' };
@@ -142,7 +146,7 @@ const chartH = (id) => { const c = CH[id], x = (S.layouts[S.preset] || []).find(
 const BLURB = {
   indices: 'The main indices, volatility, yields, oil, gold and bitcoin.', portfolio: 'Your linked accounts\' value and the day\'s move.', priority: 'Releases, reports and sector moves, by when they land.',
   watch: 'Your open list with the day\'s move.', quote: 'The linked ticker\'s price and chart.', cnews: 'Headlines about the linked ticker.', contracts: 'Option contracts for the linked ticker at one expiry.',
-  regime: 'The regime score with its factors, and the sentiment gauge.', expected: 'What index options price for one day.', sectors: 'The 11 sector funds by their move.',
+  regime: 'The market score with the factors that moved it.', sentiment: 'The sentiment gauge and its six parts.', expected: 'What index options price for one day.', sectors: 'The 11 sector funds by their move.',
   calendar: 'Scheduled U.S. releases this week.', desk: 'The day\'s Optic Desk edition.', earnings: 'Who reports this week and next.', movers: 'The largest one-month moves.',
   news: 'The day\'s wire headlines.', alerts: 'The scheduled scan\'s latest alerts.', economy: 'U.S. indicators with their history.', value: 'The linked ticker against its own valuation history.',
   vol: 'What the linked ticker\'s options price.', gex: 'Dealer gamma walls and flip for the linked ticker.', tearn: 'The linked ticker\'s next report and its history.',
@@ -172,11 +176,17 @@ const defaults = (preset) => defaultsFor(preset, 'advanced');
  * follows, and the Milo prompt. Intermediate: adds the quote panel and the market panels (Market Overview whole);
  * the layouts are one press away behind Customize. Advanced: everything Home has (every layout, the linked ticker,
  * the options and dealer gamma panels). Every panel a level leaves out is listed below with Show more. */
+// The visual update (2026-11-11, the confirmed prototype): Beginner reads the markets as figures, the sector heat map
+// and the Desk's bottom line; What matters today and the watchlist fold into More on Home. Intermediate adds Market
+// conditions, Sentiment and Expected move as gauges and bars, the heat map a full row, and the watchlist with a line
+// per name beside the Desk; the calendar, earnings, news, movers, the quote and the portfolio are one row away in More
+// on Home. Advanced is every layout as delivered. The Desk is its bottom line below Advanced, the whole edition one
+// press away.
 export const LEVEL_PANELS = {
-  beginner: [['indices', 12, 'm'], ['priority', 8, 'm'], ['watch', 4, 'm'], ['desk', 12, 'm']],
-  intermediate: null,   // Market Overview, every panel of it
+  beginner: [['indices', 12, 'm'], ['sectors', 8, 'm'], ['desk', 4, 'm']],
+  intermediate: [['indices', 12, 'm'], ['regime', 4, 'm'], ['sentiment', 4, 'm'], ['expected', 4, 'm'], ['sectors', 12, 'm'], ['watch', 6, 'm'], ['desk', 6, 'm']],
 };
-const LEVEL_TRIM = { beginner: ['desk'] };   // shown, but only its bottom line, with Show more for the rest
+const LEVEL_TRIM = { beginner: ['desk'], intermediate: ['desk'] };   // shown, but only its bottom line, with The whole desk for the rest
 const OPEN = expansions();
 const lvl = () => prefs.level();
 /** The reader's own layout choice wins at Intermediate: a layout they picked or changed behind Customize. */
@@ -217,13 +227,17 @@ function norm(list) {
   });
   return out.length ? out : null;
 }
+// The standards a layout was saved under before, so one nobody changed still follows the standard when it changes: the
+// visual update (2026-11-11) added Sentiment and widened the heat map, and a layout saved under the old standard
+// without a custom flag (version 4) is the old standard, not the reader's own.
+const FORMER = { market: [[['indices', 12, 'm'], ['regime', 4, 'm'], ['expected', 4, 'm'], ['sectors', 4, 'm'], ['quote', 8, 'm'], ['watch', 4, 's'], ['calendar', 6, 's'], ['earnings', 6, 's'], ['priority', 6, 'm'], ['news', 6, 's'], ['desk', 6, 'm'], ['movers', 6, 's'], ['portfolio', 12, 'm']]] };
 /** Whether a saved layout is still the standard one (panels the standard lacks, appended hidden, aside). */
 // A layout nobody changed is the standard under either view, Simple or Advanced, so it follows the view (D-020)
 function standard(list, preset) {
-  return ['simple', 'advanced'].some((dens) => {
-    const d = defaultsFor(preset, dens), shown = list.filter((x) => !(x.hidden && !d.some((y) => y.id === x.id)));
-    return shown.length === d.length && shown.every((x, i) => x.id === d[i].id && x.span === d[i].span && x.h === d[i].h && !!x.hidden === !!d[i].hidden);
-  });
+  const same = (d) => { const shown = list.filter((x) => !(x.hidden && !d.some((y) => y.id === x.id)));
+    return shown.length === d.length && shown.every((x, i) => x.id === d[i].id && x.span === d[i].span && x.h === d[i].h && !!x.hidden === !!d[i].hidden); };
+  return ['simple', 'advanced'].some((dens) => same(defaultsFor(preset, dens)))
+    || (FORMER[preset] || []).some((f) => same(f.map(([id, span, h]) => ({ id, span, h, hidden: false }))));
 }
 // Panel settings worth keeping between visits (a heatmap's period, a chart's range, a chain's side and
 // sort, a calendar's impact, an economy series). Per-ticker ones (an expiry, implied moves) are not kept.
@@ -311,7 +325,8 @@ const asof = (iso, verb = 'Updated') => {
 };
 
 /* ---------------- the panels ---------------- */
-const UNIT = { 'S&P 500': 'Index points', 'Nasdaq 100': 'Index points', 'Russell 2000': 'Index points', VIX: 'Volatility index', 'US 10Y': 'Yield, change in basis points', 'WTI Crude': 'Dollars a barrel', Gold: 'Dollars an ounce', Bitcoin: 'Dollars' };
+// The tiles' unit lines ('Index points', 'Dollars a barrel') went in the visual update (2026-11-11, change 4): the name
+// and the figure's own form carry them, and the panel's How says each unit.
 // the regime in plain words, with what it means for prices, in place of "risk-on" and "tape" (beginner brief item 4)
 const PLAIN_REGIME = { 'risk-on': 'Investors are leaning toward risk', 'mildly risk-on': 'A mild lean toward risk', 'neutral / mixed': 'Mixed: no clear lean', 'mildly risk-off': 'A mild lean toward caution', 'risk-off': 'Investors are leaning toward caution' };
 // What the inputs read, not how prices will behave: the regime model has no measured outcomes behind "rises have
@@ -332,6 +347,8 @@ function moveText(i) {
   if (i.group === 'rates' && isNum(i.last)) { const bp = Math.round((i.last - i.last / (1 + i.chg_1d / 100)) * 100); return `${bp > 0 ? '+' : bp < 0 ? '−' : ''}${Math.abs(bp)} bp`; }
   return signed(i.chg_1d);
 }
+// what a line's span did, in words, for its text alternative: "up 4.1%" first close to last
+const spanWords = (v) => { const a = v[0], b = v[v.length - 1]; const ch = a ? ((b - a) / Math.abs(a)) * 100 : 0; return moveWords(Math.abs(ch) < 0.05 ? 0 : ch, signed(ch, 1)); };
 // Below Advanced there is no linked ticker to set, so a ticker opens its company (core flow 3: any ticker on Home)
 const tickBtn = (sym, label) => (lvl() === 'advanced' ? html`<button type="button" class="ws-tick" data-ws-pick="${sym}" aria-pressed="${S.link === sym}">${label || sym}</button>`
   : html`<a class="ws-tick" href="#/${encodeURIComponent(sym)}">${label || sym}</a>`);
@@ -425,7 +442,13 @@ export const PANELS = {
       // 2026-10-21): green up, red down, the VIX and the 10-year included; the colour says which way, not good or bad.
       // The figure carries the colour too, not only the 13px move under it (visual hierarchy review, 2026-11-10, change
       // 18, F5: the only saturated colour on Home was its smallest text)
-      return html`<div class="ws-strip">${cells.map((i) => html`<a class="ws-cell" href="#/instrument/${enc(i.symbol)}"><span class="k">${i.label}</span><span class="v ${dir(i.chg_1d)}">${num(i.last, i.last < 20 ? 2 : i.last > 1000 ? 0 : 2)}${i.group === 'rates' ? '%' : ''}</span><span class="d ${dir(i.chg_1d)}">${moveText(i)}</span><span class="u">${UNIT[i.label] || ''}</span>${basisLine(i)}</a>`)}</div>`;
+      // The visual update (2026-11-11, change 4): each tile draws the 90 daily closes /api/home already returns for it,
+      // coloured by that span (up when it ends above where it started), and today's move beside the figure with its
+      // arrow and sign, so the line and the move can disagree and both read right. The unit lines went: the tile's
+      // name and the figure's own form (%, bp) carry them, and the panel's How says each unit.
+      return html`<div class="ws-strip">${cells.map((i) => { const ser = (i.series || []).filter(isNum), t90 = ser.length > 1 ? spanTone(ser) : '';
+        const span = ser.length > 1 ? `; over the past ${ser.length} sessions ${t90 === 'up' ? 'it ended higher' : t90 === 'down' ? 'it ended lower' : 'it ended level'}` : '';
+        return html`<a class="ws-cell" href="#/instrument/${enc(i.symbol)}"><span class="k">${i.label}</span><span class="v">${num(i.last, i.last < 20 ? 2 : i.last > 1000 ? 0 : 2)}${i.group === 'rates' ? '%' : ''}</span><span class="d">${mv(i.chg_1d, moveText(i))}<span class="sr"> today${span}</span></span>${ser.length > 1 ? raw(spark(ser, '', { w: 120, h: 30 })) : ''}${basisLine(i)}</a>`; })}</div>`;
     },
     // the tiles' own prices, each with the delay the feed states and its trade's time (app/analytics/macro.py stated_times)
     foot: (d) => ({ source: 'Yahoo Finance via Optic', at: d.generated_at, quotes: STRIP.map(([g, l]) => inst(d, g, l)).filter((i) => i && isNum(i.last)).map((i) => ({ delayed_minutes: i.delayed_minutes, trade_time: i.trade_time, exchange: i.exchange })), note: ((d.session || {}).is_regular ? '' : 'Outside the regular session, equities are at the last close; futures and crypto keep trading.'), stale: (d.degraded || []).length ? 'Some missing' : '', staleWhy: (d.degraded || []).length ? `Not available: ${d.degraded.join(', ')}.` : '' }),
@@ -433,26 +456,41 @@ export const PANELS = {
   },
   regime: {
     title: 'Market conditions', span: 6,
-    how: 'Two separate reads. The market score adds up named rules (VIX level and change, trend, credit, the curve): each factor shows how much it moved the score. The sentiment gauge averages several market inputs into 0 to 100, where low is fear. When they disagree, the factors say why.',
-    load: async () => { const [h, s] = await Promise.all([get('/api/home'), get('/api/sentiment', { ttl: 120000 }).catch((e) => ({ available: false, reason: api.explain(e, 'Sentiment') }))]); return { h, s }; },
-    body: ({ h, s }) => {
+    how: 'The market score adds up named rules (VIX level and change, trend, credit, the curve) into a reading from −100, cautious, to +100, leaning toward risk. Each bar is how much one factor moved the score, largest first; the table under the bars has every factor with its rule. The sentiment gauge is its own panel.',
+    load: () => get('/api/home'),
+    body: (h) => {
       const m = (h || {}).macro || {};
-      // In plain words first (beginner brief item 4): what conditions are, then the two readings' figures with their
-      // scales, then every factor and input one step away. The labels, scores and rules are unchanged.
-      const all = (m.factors || []).slice().sort((a, b) => Math.abs(b.contribution) - Math.abs(a.contribution)), top = all.slice(0, 3);
-      const frow = (f) => html`<tr><td>${f.factor}<span class="ws-rule ws-clip" title="${f.rule || ''}">${f.rule || ''}</span></td><td class="n">${num(f.value, 2)}</td><td class="n ${dir(f.contribution)}">${f.contribution > 0 ? '+' : ''}${num(f.contribution, 1)}</td></tr>`;
+      if (!isNum(m.risk_score)) return html`<p class="ws-note">The market score did not come back from the feed.</p>`;
+      // The visual update (2026-11-11, change 6): the score as a figure and a gauge, and the factors as bars either side
+      // of zero with their values as text; the plain words, the rules and every factor stay one fold away. The labels,
+      // scores and rules are unchanged.
+      const all = (m.factors || []).filter((f) => isNum(f.contribution)).slice().sort((a, b) => Math.abs(b.contribution) - Math.abs(a.contribution)), top = all.slice(0, 6);
+      const frow = (f) => html`<tr><td>${f.factor}<span class="ws-rule ws-clip" title="${f.rule || ''}">${f.rule || ''}</span></td><td class="n">${num(f.value, 2)}</td><td class="n">${f.contribution > 0 ? '+' : ''}${num(f.contribution, 1)}</td></tr>`;
       const plain = PLAIN_REGIME[m.regime] || capitalize(m.regime || 'Not available');
-      const sent = s && s.available !== false;
-      return html`<p class="ws-lead"><b>${plain}.</b> ${clean(STANCE[m.regime] || m.stance || '')}</p>
-        <dl class="ws-kv ws-cond"><div><dt>Optic's market score</dt><dd><span class="${toneSign(m.risk_score)}">${num(m.risk_score, 0)}</span>${signedLine(m.risk_score)}<small>From −100, cautious, to +100, leaning toward ${term('risk-on', 'risk')}</small></dd></div>
-          <div><dt>Sentiment gauge</dt><dd>${sent ? html`<span class="${toneBand(s.label)}">${num(s.score, 0)}</span> <span class="ws-word ${toneBand(s.label)}">${s.label}</span>${scoreLine(s.score, { tone: toneBand(s.label) })}<small>0 is extreme fear, 100 extreme greed</small>` : html`<small>${(s && s.reason) || 'Not available right now.'}</small>`}</dd></div></dl>
-        <details class="ws-more"><summary>How these readings are built</summary>
-          <p class="ws-rule">The market score adds up named rules (volatility, trend, credit, the yield curve); each factor shows how much it moved the score. The sentiment gauge averages several market inputs. When they disagree, the factors say why.</p>
-          <table class="ws-t"><caption class="sr">The market score's factors, largest first</caption><thead><tr><th scope="col">Factor</th><th scope="col" class="n">Reading</th><th scope="col" class="n">Effect on the score</th></tr></thead><tbody>${all.map(frow)}</tbody></table>
-          ${sent ? html`<p class="ws-k">The sentiment gauge's ${(s.components || []).length} inputs</p><ul class="ws-bars">${(s.components || []).map((c) => html`<li><span>${c.label}</span><span class="ws-gauge is-${toneBand(c.label_text) || 'flat'}" aria-hidden="true"><i style="width:${Math.max(2, Math.min(100, c.score || 0))}%"></i></span><b class="${toneBand(c.label_text)}">${num(c.score, 0)}</b></li>`)}</ul>` : ''}</details>`;
+      return html`<p class="gl-fig"><span class="gl-v">${mv(m.risk_score, signed(m.risk_score, 0, ''))}</span><span class="gl-l">${plain.replace(/^Mixed: /, 'Mixed, ')}</span></p>
+        ${gauge({ v: m.risk_score, lo: -100, hi: 100, ends: ['−100 cautious', '+100 risk-on'], label: `Optic's market score ${signed(m.risk_score, 0, '')}, on a scale from −100, cautious, to +100, leaning toward risk. ${plain}.` })}
+        ${top.length ? html`<p class="gl-k">What moved the score most</p>${divBars(top.map((f) => ({ label: f.factor, v: f.contribution })), { label: 'What moved the market score most, largest first' })}` : ''}
+        <details class="ws-more"><summary>How the score is built</summary>
+          <p class="ws-rule">The market score adds up named rules (volatility, trend, credit, the yield curve); each factor shows how much it moved the score.</p>
+          <table class="ws-t"><caption class="sr">The market score's factors, largest first</caption><thead><tr><th scope="col">Factor</th><th scope="col" class="n">Reading</th><th scope="col" class="n">Effect on the score</th></tr></thead><tbody>${all.map(frow)}</tbody></table></details>`;
     },
-    foot: ({ h, s }) => ({ source: 'Optic market score rules; Optic sentiment gauge', at: (s && s.generated_at) || (h || {}).generated_at }),
-    milo: 'Where do the market score\'s factors and the sentiment components agree or conflict right now?',
+    foot: (h) => ({ source: 'Optic market score rules', at: (h || {}).generated_at }),
+    milo: 'Which factors moved the market score most right now, and do they agree?',
+  },
+  sentiment: {
+    title: 'Sentiment', span: 4,
+    how: 'Optic\'s sentiment gauge averages several market inputs into 0 to 100, where low is fear and high is greed. Each bar is one part against neutral (50): left of the line leans to fear, right to greed. It describes where the crowd is, not where prices go next.',
+    load: () => get('/api/sentiment', { ttl: 120000 }),
+    body: (s) => {
+      if (!s || s.available === false || !isNum(s.score)) return html`<p class="ws-note">${clean((s && s.reason) || 'The sentiment gauge is not available right now.')}</p>`;
+      const parts = (s.components || []).filter((c) => isNum(c.score));
+      return html`<p class="gl-fig"><span class="gl-v">${num(s.score, 0)}</span><span class="gl-l ${toneBand(s.label)}">${s.label}</span></p>
+        ${gauge({ v: s.score, lo: 0, hi: 100, ends: ['0 extreme fear', '100 extreme greed'], label: `Sentiment ${num(s.score, 0)}, ${s.label}, on a scale from 0, extreme fear, to 100, extreme greed.` })}
+        ${parts.length ? html`<p class="gl-k">Each part against neutral (50)</p>${divBars(parts.map((c) => ({ label: c.label, v: c.score - 50 })), { max: 50, label: 'Each part of the sentiment gauge against neutral, 50' })}` : ''}
+        ${s.caveat ? html`<details class="ws-more"><summary>What it does not tell you</summary><p class="ws-rule">${clean(s.caveat)}</p></details>` : ''}`;
+    },
+    foot: (s) => ({ source: 'Optic sentiment gauge', at: (s || {}).generated_at }),
+    milo: 'What are the sentiment gauge\'s parts saying, and where do they disagree?',
   },
   expected: {
     title: 'Expected move', span: 6,
@@ -461,26 +499,31 @@ export const PANELS = {
     body: (d) => {
       const em = ((d || {}).macro || {}).expected_move || {};
       if (!isNum(em.implied_pct)) return html`<p class="ws-note">Expected move unavailable: the VIX or the S&P 500 quote did not load.</p>`;
-      // the three figures on one footing, so the ratio is the first divided by the second (pitch audit, 2026-10-22)
-      return html`<dl class="ws-kv"><div><dt>Move priced by options, one day</dt><dd>±${num(em.implied_pct)}%<small>VIX ${num(em.vix)} ÷ 16, about ±${num(em.implied_points, 0)} points</small></dd></div>
-        <div><dt>Typical day lately</dt><dd>±${num(em.realized_pct)}%<small>14-day ATR ${num(em.atr_pct)}% ÷ 1.6</small></dd></div>
-        <div><dt>Priced against typical</dt><dd>${num(em.ratio, 2)}×<small>±${num(em.implied_pct)} ÷ ±${num(em.realized_pct)}</small></dd></div></dl>
-        <p class="ws-read">${clean(em.reading || '')}</p>`;
+      // the three figures on one footing, so the ratio is the first divided by the second (pitch audit, 2026-10-22); as
+      // the ratio and two bars on one scale since the visual update (2026-11-11, change 6), the arithmetic in one line
+      return html`<p class="gl-fig"><span class="gl-v">${num(em.ratio, 2)}×</span><span class="gl-l">priced against typical</span></p>
+        ${pairBars([{ label: 'Move priced by options, one day', v: em.implied_pct, text: `±${num(em.implied_pct)}%`, cls: 'gold' }, { label: 'Typical day lately', v: em.realized_pct, text: `±${num(em.realized_pct)}%`, cls: 'mute' }], { label: 'The one-day move options price against the typical day lately' })}
+        <p class="ws-read">${clean(em.reading || '')}</p>
+        <p class="ws-rule">VIX ${num(em.vix)} ÷ 16; 14-day ATR ${num(em.atr_pct)}% ÷ 1.6.</p>`;
     },
     foot: (d) => ({ source: 'VIX and S&P 500 from Yahoo Finance; Optic arithmetic', at: d.generated_at }),
     milo: 'Is the market\'s one-day expected move rich or cheap against what the index has been doing, and what would change that?',
   },
   sectors: {
-    title: 'Sector heatmap', span: 6, state: { period: 'chg_1d' },
-    how: 'The 11 sector funds, coloured by their move over the chosen period: green rose, red fell, and the stronger the colour the larger the move, up to full colour at 2% in a day, 4% in a week or 8% in a month. Choose a tile to link its fund to the linked panels. The colour never carries meaning alone: every tile shows its figure.',
+    title: 'Sector heat map', span: 6, state: { period: 'chg_1d' },
+    how: 'The 11 sector funds, largest move first, coloured by their move over the chosen period: green rose, red fell, and the stronger the colour the larger the move, up to full colour at 2% in a day, 4% in a week or 8% in a month. Each tile states its move with an arrow and a sign, so the colour never carries it alone. Choose a tile to link its fund to the linked panels.',
     load: () => get('/api/market', { ttl: 60000 }),
     body: (d, P) => {
       const rows = (((d || {}).sectors || {}).sectors || []).filter((r) => isNum(r[P.period]));
       if (!rows.length) return html`<p class="ws-note">No sector readings came back from the feed.</p>`;
       const full = { chg_1d: 2, chg_5d: 4, chg_20d: 8 }[P.period] || 2; // a move this large, in percent, gets the full tint
       return html`<div class="seg ws-seg" role="group" aria-label="Period">${[['chg_1d', '1 day'], ['chg_5d', '1 week'], ['chg_20d', '1 month']].map(([k, l]) => html`<button type="button" data-ws-set="sectors:period:${k}" aria-pressed="${P.period === k}">${l}</button>`)}</div>
-        <div class="ws-heat">${rows.sort((a, b) => b[P.period] - a[P.period]).map((r) => { const v = r[P.period], a = Math.round(6 + 22 * Math.min(1, Math.abs(v) / full));
-          return html`<button type="button" class="ws-heat-t" data-ws-pick="${r.symbol}" aria-pressed="${S.link === r.symbol}" style="--mix:${a}%" data-dir="${dir(v)}"><span>${r.label || r.name}</span><b>${r.symbol}</b><span class="${dir(v)}">${signed(v)}</span></button>`; })}</div>`;
+        <div class="ws-heat">${rows.sort((a, b) => b[P.period] - a[P.period]).map((r) => {
+          // real red and green (visual update, 2026-11-11, change 5): the tint runs from 14% to 55% of the chart pair,
+          // which lifts the delivered 28% cap; at 55% the tile's ink still reads at 5.2:1 on the green and 7.5:1 on
+          // the red. The fund's code left the tile's face; its name and move stay, and the code is in its label.
+          const v = r[P.period], a = Math.round(14 + 41 * Math.min(1, Math.abs(v) / full));
+          return html`<button type="button" class="ws-heat-t" data-ws-pick="${r.symbol}" aria-pressed="${S.link === r.symbol}" aria-label="${r.label || r.name} (${r.symbol}), ${moveWords(v, signed(v))}" style="--mix:${a}%" data-dir="${dir(v)}"><span>${r.label || r.name}</span>${mv(v)}</button>`; })}</div>`;
     },
     foot: (d) => ({ source: 'Sector SPDR funds, Yahoo Finance', at: (d || {}).generated_at }),
     milo: 'Which sectors are leading and lagging, and is it broad rotation or a few names?',
@@ -555,8 +598,11 @@ export const PANELS = {
       if (d.empty && showOnboard()) return html`<p class="ws-note">Your open watchlist is empty. Follow a company from the card above, or press Watch on any company.</p>`;
       if (d.empty) return html`<p class="ws-note">Your open watchlist is empty. Follow a few names to start, or press Watch on any company.</p>
         <div class="ws-starters" role="group" aria-label="Follow a company to start">${STARTERS.map((sym) => followBtn(sym))}</div>`;
-      return html`<table class="ws-t"><caption class="sr">Watchlist</caption><thead><tr><th scope="col">Ticker</th><th scope="col" class="n">Price</th><th scope="col" class="n">Day</th><th scope="col" class="ws-sec">Changed</th></tr></thead><tbody>
-        ${(d.rows || []).map((r) => html`<tr><td>${tickBtn(r.symbol)}</td><td class="n">${r.available === false ? '' : num(r.price)}</td><td class="n ${dir(r.change_pct)}">${r.available === false ? 'n/a' : pct(r.change_pct)}</td><td class="ws-rule ws-sec">${((r.changed || {}).text) || ''}</td></tr>`)}</tbody></table>
+      // a 30-session line beside each row (visual update, 2026-11-11, change 7): the closes /api/watchlist already
+      // returns per row, coloured by that span; today's move is the figure with its arrow, so the two can disagree
+      return html`<table class="ws-t ws-watch"><caption class="sr">Watchlist</caption><thead><tr><th scope="col">Ticker</th><th scope="col" class="n">Price</th><th scope="col" class="n">Today</th><th scope="col" class="ws-sparkh">30 sessions</th></tr></thead><tbody>
+        ${(d.rows || []).map((r) => { const sp = (r.spark || []).filter(isNum);
+          return html`<tr><td>${tickBtn(r.symbol)}</td><td class="n">${r.available === false ? '' : num(r.price)}</td><td class="n">${r.available === false ? 'n/a' : mv(r.change_pct)}</td><td class="ws-sparkc">${sp.length > 1 ? raw(spark(sp, `${r.symbol}, past ${sp.length} sessions, ${spanWords(sp)}`, { w: 96, h: 26 })) : html`<span class="ws-rule">No line</span>`}</td></tr>`; })}</tbody></table>
         ${d.total > 30 ? html`<p class="ws-note">The first 30 of ${d.total}. <a href="#/watchlist">The whole list is on Watchlist</a>.</p>` : ''}`;
     },
     foot: () => ({ source: `${(store.activeList() || {}).name || 'Your open list'}; prices from Yahoo Finance` }),
@@ -901,14 +947,17 @@ function followBtn(sym, cls = 'ws-tick') {
 function onboard() {
   obVisit = true;
   const following = store.allSymbols();
-  return html`<section class="ws-onboard" id="ws-new" aria-labelledby="ob-h">
+  // smaller since the visual update (2026-11-11, operator decision 3): the three ways in one row of short lines, the
+  // Follow buttons kept, since a stock opened from Home is the owner's first signal; the longer explanations went
+  // (a ticker's meaning is one press away on the word)
+  return html`<section class="ws-onboard is-compact" id="ws-new" aria-labelledby="ob-h">
     <div class="ob-text"><h2 class="ws-title" id="ob-h">New to Optic? Three ways to start</h2><p class="ws-sub">Prices, options, financials and filings for US stocks and funds, each figure with its source.</p></div>
     <ul class="ob-ways">
-      <li><p><b>Research a company.</b> <span class="ob-more">Search by name, such as Apple, or by ${term('ticker', 'ticker')}, such as AAPL. A ticker is the short code a stock trades under.</span></p>
-        <div class="ob-acts"><button type="button" class="btn btn-sm" data-v2-open-palette>Search for a company</button><a class="textlink ob-wide" href="#/AAPL">Apple · AAPL</a><a class="textlink ob-wide" href="#/NVDA">NVIDIA · NVDA</a></div></li>
-      <li><p><b>Understand today's market.</b> <span class="ob-more">What moved, what is scheduled and what it means, in a few lines.</span></p>
+      <li><p><b>Research a company.</b> Search by name or ${term('ticker', 'ticker')}.</p>
+        <div class="ob-acts"><button type="button" class="btn btn-sm" data-v2-open-palette>Search for a company</button><a class="textlink ob-wide" href="#/AAPL">Apple · AAPL</a></div></li>
+      <li><p><b>Understand today's market.</b> What moved, in a few lines.</p>
         <div class="ob-acts"><a class="btn btn-sm" href="#/read">Read today's market</a></div></li>
-      <li><p><b>Save a company to follow.</b> Following adds it to your ${term('watchlist', 'watchlist')}; it does not buy shares or spend money. <span class="ob-more">SPY is a fund that tracks the S&P 500. ${store.signedIn() ? '' : 'Kept in this browser until you sign in.'}</span></p>
+      <li><p><b>Save a company to follow.</b> It goes on your ${term('watchlist', 'watchlist')}; it does not buy shares or spend money. SPY is a fund that tracks the S&P 500.${store.signedIn() ? '' : ' Kept in this browser until you sign in.'}</p>
         <div class="ob-picks" role="group" aria-label="Follow a company">${STARTERS.map((sym) => followBtn(sym))}</div></li>
     </ul>
     <button type="button" class="btn btn-sm" data-ws-onboard-done>${following.length ? 'Done' : 'Not now'}</button>
@@ -958,6 +1007,10 @@ function paintAll() {
  * owner's drawing of 2026-11-09 leads with one large chart and its figure). Every value is one Home already reads: the
  * market strip's (/api/home), the quote panel's quote and take-chart for a name. The tiles stay as the strip below. */
 const MARKET_FIGURE = '^GSPC';
+// The figure's line: 3M, 6M or 1Y of daily closes, the spans take-chart already serves (no 1-day line on Home: it needs
+// an intraday read Home does not make, operator decision 1 of 2026-11-11). Kept for the visit.
+const FEAT_SPANS = [['3m', '3M', 'past 3 months'], ['6m', '6M', 'past 6 months'], ['1y', '1Y', 'past year']];
+let featSpan = '6m';
 let FEAT = { sym: null, q: null, c: null, failed: false, seq: 0 };
 function featureSym() {
   const holdings = briefingHoldings(((((DATA.portfolio || {}).ov || {}).today || {}).rows) || []);
@@ -968,7 +1021,7 @@ function featureFigure() {
   if (FEAT.sym === MARKET_FIGURE || !FEAT.sym) {
     const i = inst(DATA.indices, 'equity', 'S&P 500');
     if (!i || !isNum(i.last)) return null;
-    return { label: 'S&P 500', sub: UNIT['S&P 500'], value: num(i.last, 0), chg: i.chg_1d, chgText: moveText(i), href: `#/instrument/${enc(i.symbol || MARKET_FIGURE)}` };
+    return { label: 'S&P 500', sub: '', value: num(i.last, 0), chg: i.chg_1d, chgText: moveText(i), href: `#/instrument/${enc(i.symbol || MARKET_FIGURE)}` };
   }
   const q = ((FEAT.q || {}).quote) || FEAT.q || {};
   if (!isNum(q.price)) return null;
@@ -979,37 +1032,50 @@ function featureFigure() {
 function featureSay() {
   const m = ((DATA.indices || {}).macro) || {};
   if (!m.regime || !PLAIN_REGIME[m.regime]) return '';
-  return `${PLAIN_REGIME[m.regime]}. ${clean(STANCE[m.regime] || m.stance || '')}`.trim();
+  // at Intermediate and Advanced the inputs' reading alone, to its first clause ("...are mixed."), as the prototype
+  // words it; Beginner keeps what it means for one company (visual update, 2026-11-11)
+  const st = clean(STANCE[m.regime] || m.stance || ''), cut = lvl() === 'beginner' ? st : st.replace(/,\s+(so|which|but)\b.*$/, '.');
+  return html`<b>${PLAIN_REGIME[m.regime]}.</b> ${cut}`;
 }
+const featPts = () => { const ch = ((FEAT.c || {}).chart) || {}, dates = ch.dates || []; return dates.map((d, i) => ({ d, c: (ch.close || [])[i] })).filter((p) => isNum(p.c)); };
 function featureBody() {
-  const f = featureFigure(), ch = ((FEAT.c || {}).chart) || {}, say = featureSay();
+  const f = featureFigure(), pts = featPts(), say = featureSay(), words = (FEAT_SPANS.find((x) => x[0] === featSpan) || FEAT_SPANS[1])[2];
   const head = (label, sub) => html`<p class="hm-feat-k" id="hm-feat-k">${label}${sub ? html` <span class="hm-feat-u">${sub}</span>` : ''}</p>`;
+  const spans = html`<div class="seg hm-feat-seg" role="group" aria-label="Range">${FEAT_SPANS.map(([k, l]) => html`<button type="button" data-hm-span="${k}" aria-pressed="${featSpan === k}">${l}</button>`)}</div>`;
   if (!f) {
     const off = FEAT.failed || ERR.indices;
-    return html`${head(FEAT.sym && FEAT.sym !== MARKET_FIGURE ? FEAT.sym : 'S&P 500', '')}${off ? html`<p class="ws-note">The day's figure did not load. The strip below has the markets.</p>` : skeleton('lines', 1, "Loading the day's figure")}`;
+    return html`<div class="hm-feat-top"><div>${head(FEAT.sym && FEAT.sym !== MARKET_FIGURE ? FEAT.sym : 'S&P 500', '')}</div></div>${off ? html`<p class="ws-note">The day's figure did not load. The strip below has the markets.</p>` : skeleton('lines', 1, "Loading the day's figure")}`;
   }
-  return html`${head(f.label, f.sub)}
-    <p class="hm-feat-fig"><a class="hm-feat-v" href="${f.href}">${f.value}</a>${f.chgText ? html`<span class="hm-feat-d ${dir(f.chg)}">${f.chgText}<span class="sr"> today</span></span>` : ''}</p>
+  // The visual update (2026-11-11, change 3): the line larger, green or red by the span it draws with its start level
+  // dashed, and today's move beside the figure with its arrow and sign
+  const tone = pts.length > 1 ? spanTone(pts.map((p) => p.c)) : '';
+  return html`<div class="hm-feat-top"><div>${head(f.label, f.sub)}
+    <p class="hm-feat-fig"><a class="hm-feat-v" href="${f.href}">${f.value}</a>${f.chgText ? html`<span class="hm-feat-d">${mv(f.chg, f.chgText)} <span class="hm-feat-t">today</span></span>` : ''}</p></div>${spans}</div>
     ${say ? html`<p class="hm-feat-say">${say}</p>` : ''}
-    ${(ch.close || []).length > 1 ? html`<div class="chart-slot hm-feat-chart" data-chart="hm-feature"></div>` : ''}`;
+    ${pts.length > 1 ? html`<div class="chart-slot hm-feat-chart" data-chart="hm-feature"></div>
+      <p class="hm-feat-leg"><span>Daily closes, ${words}. ${tone === 'down' ? 'Red: ends below its start (dashed).' : tone === 'up' ? 'Green: ends above its start (dashed).' : 'Ends at its start (dashed).'}</span><span>Yahoo Finance, delayed ${delays.upTo()}</span></p>`
+      : FEAT.pending ? skeleton('chart', 1, 'Loading the line') : html`<p class="ws-note">The line did not load; the figure above is current.</p>`}`;
 }
 const featureBlock = () => html`<section class="hm-feature" id="hm-feature" aria-labelledby="hm-feat-k">${featureBody()}</section>`;
 function mountFeature() {
   const el = $('#hm-feature', root); if (!el) return;
-  const ch = ((FEAT.c || {}).chart) || {}, dates = ch.dates || [];
-  if (dates.length > 1) mountCharts(el, { 'hm-feature': (w) => lineChart(dates.map((d, i) => ({ d, c: ch.close[i] })), { w, h: Math.round(Math.max(140, Math.min(200, w * 0.16))), area: true, label: `${FEAT.c.ticker || FEAT.sym} daily closes`, summary: `${FEAT.c.ticker || FEAT.sym} daily closes over ${FEAT.c.span_words || 'six months'}.` }) });
+  const pts = featPts(), name = (FEAT.c || {}).ticker === MARKET_FIGURE || FEAT.sym === MARKET_FIGURE ? 'S&P 500' : (FEAT.c || {}).ticker || FEAT.sym;
+  const words = (FEAT_SPANS.find((x) => x[0] === featSpan) || FEAT_SPANS[1])[2];
+  if (pts.length > 1) mountCharts(el, { 'hm-feature': (w) => lineChart(pts, { w, h: Math.round(Math.max(200, Math.min(320, w * 0.24))), area: true, tone: 'span', base: true, label: `${name} daily closes, ${words}` }) });
 }
 function paintFeature() {
   const el = $('#hm-feature', root); if (!el) return;
+  const keep = document.activeElement && el.contains(document.activeElement) ? document.activeElement.dataset.hmSpan : null;
   draw(el, featureBody()); mountFeature();
+  if (keep) { const b = $(`[data-hm-span="${keep}"]`, el); if (b) b.focus({ preventScroll: true }); }
 }
-function loadFeature() {
+function loadFeature(force = false) {
   const sym = featureSym();
-  if (FEAT.sym === sym && (FEAT.c || FEAT.pending)) return;
-  const seq = ++FEAT.seq;
-  FEAT = { sym, q: null, c: null, failed: false, pending: true, seq };
+  if (!force && FEAT.sym === sym && FEAT.span === featSpan && (FEAT.c || FEAT.pending)) return;
+  const seq = ++FEAT.seq, span = featSpan;
+  FEAT = { sym, span, q: FEAT.sym === sym ? FEAT.q : null, c: null, failed: false, pending: true, seq };
   const quote = sym === MARKET_FIGURE ? Promise.resolve(null) : get(`/api/quote/${enc(sym)}`, { ttl: 20000 });
-  Promise.allSettled([quote, get(`/api/take-chart/${enc(sym)}?span=6m`, { ttl: 600000, timeout: 30000 })]).then(([q, c]) => {
+  Promise.allSettled([quote, get(`/api/take-chart/${enc(sym)}?span=${span}`, { ttl: 600000, timeout: 30000 })]).then(([q, c]) => {
     if (!live || FEAT.seq !== seq) return;
     FEAT.pending = false;
     FEAT.q = q.status === 'fulfilled' ? q.value : null;
@@ -1023,7 +1089,8 @@ function loadFeature() {
 function deskTrim(d) {
   const md = (d || {}).morning_desk;
   if (!md || !md.available) return html`<p class="ws-note">${clean((md && md.reason) || 'No Desk edition is available right now.')}</p>`;
-  return deskBottom(md, moreButton('desk:full', 'Optic Desk', { label: 'Show more' }));
+  // its bottom line in two sentences below Advanced (visual update, 2026-11-11, change 8); The whole desk opens the rest
+  return deskGlance(md, moreButton('desk:full', 'Optic Desk', { label: 'The whole desk' }));
 }
 
 /* ---------------- the Milo prompt (2026-11-09) ----------------
@@ -1270,6 +1337,7 @@ function wire() {
       announce(`${(PANELS[id.split(':')[0]] || {}).title || 'The panel'} is closed. Your level is unchanged.`);
       return;
     }
+    if ((b = t('[data-hm-span]'))) { featSpan = b.dataset.hmSpan; paintFeature(); loadFeature(true); return; }
     if ((b = t('[data-ws-preset]'))) { if (b.dataset.wsPreset === 'mine' && !S.layouts.mine.some((x) => !x.hidden)) S.layouts.mine = JSON.parse(JSON.stringify(S.layouts.market)); S.preset = b.dataset.wsPreset; save(); paintAll(); say(`${PRESETS[S.preset].label} layout.`); return; }
     if ((b = t('[data-ws-pick]'))) { setLink(b.dataset.wsPick); return; }
     if ((b = t('[data-ws-fold]'))) { setFold(b.dataset.wsFold, b.getAttribute('aria-expanded') === 'true'); return; }
@@ -1405,7 +1473,7 @@ function wire() {
 }
 
 /* ---------------- page ---------------- */
-const MARKET_PANELS = ['indices', 'regime', 'expected', 'sectors', 'watch', 'quote', 'contracts', 'portfolio', 'trends'];
+const MARKET_PANELS = ['indices', 'regime', 'sentiment', 'expected', 'sectors', 'watch', 'quote', 'contracts', 'portfolio', 'trends'];
 // Quoted footers follow the top bar's session when it arrives or changes phase (the layout may have no
 // Indices panel to carry it).
 let sessionHooked = false;

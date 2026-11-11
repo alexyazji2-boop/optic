@@ -193,7 +193,8 @@ def test_the_ratio_is_the_displayed_figures_divided():
 def test_every_surface_shows_the_atr_converted_beside_the_ratio():
     ws = (JS / "pages/workspace.js").read_text()
     body = ws[ws.index("  expected: {"):ws.index("milo: 'Is the market\\'s one-day expected move")]
-    assert "<dt>Typical day lately</dt><dd>±${num(em.realized_pct)}%" in body and "14-day ATR ${num(em.atr_pct)}% ÷ 1.6" in body
+    # two bars on one scale since the visual update (2026-11-11), the arithmetic in one line under them
+    assert "label: 'Typical day lately', v: em.realized_pct, text: `±${num(em.realized_pct)}%`" in body and "14-day ATR ${num(em.atr_pct)}% ÷ 1.6" in body
     assert "<dt>Recently delivered</dt><dd>${num(em.atr_pct)}%" not in body
     mac = (JS / "pages/macro.js").read_text()
     assert "html`${num(em.atr_pct, 2)}% a day" not in mac and "['Typical day lately', html`±${num(em.realized_pct, 2)}%" in mac   # Home's label too (Phase 04, X-7)

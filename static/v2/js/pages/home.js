@@ -288,6 +288,16 @@ export function deskBottom(md, more) {
     ${limits.length ? html`<details class="more-inline desk-limits" data-v2-fold="desk-limits"><summary>What this does not tell you (${limits.length})</summary><ul>${limits.map((l) => html`<li>${clean(l)}</li>`)}</ul></details>` : ''}
     ${voiceWhy(md) ? html`<p class="asof desk-why">${voiceWhy(md)}</p>` : ''}`;
 }
+// The Desk below Advanced (visual update, 2026-11-11, change 8): its bottom line cut to two sentences, the edition one
+// press away; what it does not tell you is in the whole edition. The sentences are the edition's own, in its order;
+// nothing is reworded.
+const sentences = (t) => String(t || '').match(/(?:[^.!?]|[.!?](?!\s|$))+[.!?]+(?:\s+|$)/g) || (t ? [String(t)] : []);
+export function deskGlance(md, more) {
+  const s = sentences(clean(md.overall || (md.lead || [])[0] || '')), first = (s[0] || '').trim(), rest = s.slice(1, 2).join(' ').trim();
+  return html`<p class="desk-bottom desk-glance"><b>Bottom line.</b> ${first}</p>${rest ? html`<p class="desk-next">${rest}</p>` : ''}
+    <div class="desk-more">${more || ''}</div>
+    <p class="asof">${md.voice !== 'mechanical' ? `Written by an AI model${md.written_by ? ` (${md.written_by})` : ''} from the day's figures.` : 'Compiled by fixed rules from the day\'s figures.'}</p>`;
+}
 /* ---------------- what changed since yesterday ---------------- */
 // The briefing for the reader's own names (app/briefing.py; Classic app.js dailyChangesHTML, parity B8.3): the latest
 // completed session against the one before, item by item, each with why it may matter and where it shows. The

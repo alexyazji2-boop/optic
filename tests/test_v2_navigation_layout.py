@@ -29,8 +29,8 @@ def test_market_overview_is_in_the_owners_order():
     ws = _src("pages/workspace.js")
     line = re.search(r"market: \{ label: 'Market Overview', panels: (\[.*?\]) \}", ws).group(1)
     order = re.findall(r"\['(\w+)', \d+", line)
-    assert order == ["indices", "regime", "expected", "sectors", "quote", "watch", "calendar", "earnings",
-                     "priority", "news", "desk", "movers", "portfolio"]
+    # Sentiment beside Market conditions since the visual update (2026-11-11)
+    assert order == ["indices", "regime", "sentiment", "expected", "sectors", "quote", "watch", "calendar", "earnings", "priority", "news", "desk", "movers", "portfolio"]
     opts = re.findall(r"\['(\w+)', \d+", re.search(r"options: \{ label: 'Options Research', panels: (\[.*?\]) \}", ws).group(1))
     assert opts[:3] == ["quote", "watch", "contracts"], "Options Research leads with the contracts"
     lt = re.findall(r"\['(\w+)', \d+", re.search(r"longterm: \{ label: 'Long-Term Investing', panels: (\[.*?\]) \}", ws).group(1))

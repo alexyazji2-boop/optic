@@ -99,7 +99,7 @@ def home_layout(tmp_path, density, stored=None):
 def test_home_layouts_no_longer_follow_the_view_setting(tmp_path):
     # Since 2026-11-09 (decision card B) Home's layouts are whole whatever the View setting says; what Home shows
     # below Advanced is the level matrix's (pages/workspace.js LEVEL_PANELS, tests/test_pass1_levels.py)
-    market = ["indices", "regime", "expected", "sectors", "quote", "watch", "calendar", "earnings", "priority", "news", "desk", "movers", "portfolio"]
+    market = ["indices", "regime", "sentiment", "expected", "sectors", "quote", "watch", "calendar", "earnings", "priority", "news", "desk", "movers", "portfolio"]
     simple = home_layout(tmp_path, "simple")
     assert simple["shown"] == market
     adv = home_layout(tmp_path, "pro")
