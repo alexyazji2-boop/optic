@@ -146,7 +146,8 @@ function whyFired(h) {
 /* ---------------- sections ---------------- */
 function scheduleLine() {
   if (!store.signedIn()) return 'In this browser. Checked only while this page is open, when you press Check now. Sign in to have Optic check them for you and keep what fired.';
-  return 'On your account. Optic checks them on market days about every 30 minutes from 9:30 to 4:00 ET and once after the close, skipping exchange holidays. Prices can be ${delays.upTo()} behind the exchange, by exchange. What fires is shown here; Optic does not send email or push notifications.';
+  // backticks: in single quotes the placeholder showed as "${delays.upTo()}" on the page (round-one corrections, 2026-11-10)
+  return `On your account. Optic checks them on market days about every 30 minutes from 9:30 to 4:00 ET and once after the close, skipping exchange holidays. Prices can be ${delays.upTo()} behind the exchange, by exchange. What fires is shown here; Optic does not send email or push notifications.`;
 }
 
 function watchesBlock() {
