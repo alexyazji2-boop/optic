@@ -123,7 +123,18 @@ html[data-milo="off"] [data-v2-milo].btn.ws-ask::after { content: none; }
 .chart-tip.is-narrow { white-space: normal; width: max-content; max-width: 100%; } .chart-tip.is-narrow span { display: block; margin-left: 0; } .chart-tip em { display: block; font-style: normal; opacity: .85; }
 .spark { display: block; width: 112px; height: 32px; }
 .spark path { fill: none; stroke-width: 1.6; stroke-linejoin: round; }
-.spark.up path { stroke: var(--c-pos); } .spark.down path { stroke: var(--c-neg); }
+/* red and green in every chart (visual update, 2026-11-11): a sparkline by its own span, flat in the neutral ink, with
+   a dot at its end so the last point reads without colour */
+.spark.up path { stroke: var(--c-up); } .spark.down path { stroke: var(--c-down); } .spark.flat path { stroke: var(--c-ink-2); }
+.spark circle { fill: var(--c-ink-2); } .spark.up circle { fill: var(--c-up); } .spark.down circle { fill: var(--c-down); }
+/* a line chart coloured by its span (lineChart tone: 'span'), with its start level dashed; the gold cone, the event
+   marks and the averages keep their own colours */
+.chart.tone-up .line, .chart.tone-up .end { stroke: var(--c-up); } .chart.tone-up .end { fill: var(--c-up); }
+.chart.tone-down .line, .chart.tone-down .end { stroke: var(--c-down); } .chart.tone-down .end { fill: var(--c-down); }
+.chart.tone-flat .line { stroke: var(--c-ink-2); }
+.chart.tone-up { --c-area-top: var(--c-up-area); --c-area-bottom: transparent; }
+.chart.tone-down { --c-area-top: var(--c-down-area); --c-area-bottom: transparent; }
+.chart .base { stroke: var(--c-ink-3); stroke-width: 1; stroke-dasharray: 4 4; }
 .meter { display: block; height: auto; max-width: 100%; overflow: visible; margin: 6px 0 2px; }
 .meter .tk { stroke: var(--c-ink-3); } .meter .tk.major { stroke: var(--c-ink-2); }
 .meter .fair { fill: var(--c-gold-wash); } .meter .edge { stroke: var(--c-gold); stroke-width: 1.5; }
@@ -953,6 +964,9 @@ table.st td a { text-decoration: none; font-weight: 600; } table.st td a:hover {
 .bars .grid { stroke: var(--c-chart-grid); stroke-width: 1; }
 .gbar.s1, .pdot.s1 { fill: var(--c-s1); } .gbar.s2, .pdot.s2 { fill: var(--c-s2); } .gbar.s3, .pdot.s3 { fill: var(--c-s3); }
 .gbar.s0 { fill: var(--c-ink-3); }
+/* the visual update's figures (2026-11-11): the company's own figures in gold, an outcome in the chart pair */
+.gbar.gold { fill: var(--c-gold); } .gbar.upb { fill: var(--c-up); } .gbar.downb { fill: var(--c-down); } .gbar.flatb { fill: var(--c-ink-3); }
+.gbar.hollow.mute { stroke: var(--c-ink-2); }
 .gbar.hollow { fill: none; stroke-width: 1.5; stroke-dasharray: 3 2; } .gbar.hollow.s1 { stroke: var(--c-s1); } .gbar.hollow.s2 { stroke: var(--c-s2); } .gbar.hollow.s3 { stroke: var(--c-s3); } .gbar.hollow.s0 { stroke: var(--c-ink-3); }
 .gbar.step-out { fill: var(--c-s2); } .gbar.step-in { fill: var(--c-s1); }
 .gbars .gbar.on, .sbars .gbar.on, .bbars .gbar.on { stroke: var(--c-ink); stroke-width: 1.5; }
@@ -1427,24 +1441,19 @@ th .pbadge, dt .pbadge, .k .pbadge { margin-left: 6px; vertical-align: 1px; }
   .lc-q { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 }
 
-.sm-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; margin: 18px 0 8px; padding: 0; list-style: none; }
-.sm-h { margin: 22px 0 0; font: 600 var(--t-lg)/1.3 var(--f-sans); color: var(--c-ink); }
+/* More on Home and More on <ticker>: one compact list of rows, a name and Open, four columns wide on a desktop and one
+   on a phone (visual update, 2026-11-11, change 8; on a phone they were already rows since the hierarchy review's
+   change 7). A row is at least 44px so a finger reaches Open. */
+.sm-h { margin: 28px 0 0; font: 600 var(--t-lg)/1.3 var(--f-sans); color: var(--c-ink); }
 .sm-sub { margin: 4px 0 0; font-size: var(--t-sm); color: var(--c-ink-3); }
-.sm-stub { display: grid; gap: 6px; align-content: start; padding: 14px 16px; border: 1px solid var(--c-line-2); border-radius: var(--r-ctl); background: var(--c-plane-2); }
-.sm-stub h3 { margin: 0; font: 600 var(--t-md)/1.3 var(--f-sans); color: var(--c-ink); }
-.sm-stub p { margin: 0; font-size: var(--t-sm); color: var(--c-ink-3); }
-.sm-stub .btn { justify-self: start; }
+.sm-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); column-gap: 28px; margin: 10px 0 8px; padding: 0; list-style: none; }
+.sm-stub { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: var(--tap); padding: 2px 0; border-bottom: 1px solid var(--c-line-2); }
+.sm-t { min-width: 0; font-size: var(--t-md); line-height: 1.3; color: var(--c-ink-2); }
+.sm-stub .btn { flex: none; }
+.sm-open { min-height: 32px; padding: 0 10px; border-color: transparent; background: none; color: var(--c-gold-ink); }
+.sm-open:hover { background: var(--c-sunk); border-color: var(--c-line); }
 .sm-less { margin-top: 8px; }
-/* On a phone the panels a level leaves out are one list of one-line rows, a title and its Show more, not a card each
-   (visual hierarchy review, 2026-11-10, change 7, F11: 23 stubs as cards made Home 5,067px long at Beginner). The
-   blurb stays in the page for a screen reader. */
-@media (max-width: 719px) {
-  .sm-list { display: block; margin: 10px 0 8px; border-top: 1px solid var(--c-line-2); }
-  .sm-stub { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 4px 0; border: 0; border-bottom: 1px solid var(--c-line-2); border-radius: 0; background: none; }
-  .sm-stub h3 { font: 500 var(--t-base)/1.3 var(--f-sans); }
-  .sm-stub p { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-  .sm-stub .btn { flex: none; }
-}
+@media (max-width: 719px) { .sm-list { display: block; border-top: 1px solid var(--c-line-2); } .sm-t { font-size: var(--t-base); } }
 /* the company events list, folded on a phone at Advanced (hierarchy change 7): about 8,600px of rows otherwise */
 .ov-tl-fold { margin-top: 20px; border: 1px solid var(--c-line); border-radius: var(--r-lg); }
 .ov-tl-fold > summary { display: flex; align-items: center; min-height: var(--tap); padding: 0 16px; font: 600 var(--t-xl)/1.3 var(--f-sans); color: var(--c-ink); cursor: pointer; }
@@ -1461,3 +1470,46 @@ th .pbadge, dt .pbadge, .k .pbadge { margin-left: 6px; vertical-align: 1px; }
 .mp-k { font-weight: 600; color: var(--c-ink-2); }
 .mp-go { flex: none; min-height: var(--tap); padding: 0 22px; font-size: var(--t-base); }
 @media (max-width: 719px) { .mp { flex-wrap: wrap; } .mp-q { flex-basis: calc(100% - 44px); } .mp-go { width: 100%; justify-content: center; } }
+
+/* ---------- figures at a glance (ui/glance.js, the visual update, 2026-11-11) ----------
+   A change figure carries its arrow and its sign; bars and gauges state their values as text beside them; nothing
+   here is set under 13px. Red and green for direction, gold for the brand's own figures. */
+.mv { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.mv.up { color: var(--c-up-ink); } .mv.down { color: var(--c-down-ink); } .mv.flat { color: var(--c-ink-2); }
+.mv-a { display: inline-block; margin-right: .3em; font-size: .78em; vertical-align: .08em; }
+.gauge { display: grid; gap: 6px; margin: 10px 0 4px; }
+/* the scale's two ends in the chart pair and its middle neutral, as three flat bands (no gradient: the design standard
+   keeps gradients to the rail's divider and the loading shimmer) */
+.gauge-track { position: relative; height: 8px; border-radius: var(--r-xs); background: var(--c-sunk); }
+.gauge-track::before, .gauge-track::after { content: ""; position: absolute; top: 0; bottom: 0; width: 33%; }
+.gauge-track::before { left: 0; border-radius: var(--r-xs) 0 0 var(--r-xs); background: var(--c-down); opacity: .75; }
+.gauge-track::after { right: 0; border-radius: 0 var(--r-xs) var(--r-xs) 0; background: var(--c-up); opacity: .75; }
+.gauge-mark { z-index: 1; }
+.gauge-mark { position: absolute; top: -5px; width: 4px; height: 18px; margin-left: -2px; border-radius: 2px; background: var(--c-ink); box-shadow: 0 0 0 2px var(--c-raised); }
+.gauge-ends { display: flex; justify-content: space-between; gap: 12px; font-size: var(--t-sm); color: var(--c-ink-3); }
+.dbars, .pbars { display: grid; gap: 6px; margin: 6px 0 0; padding: 0; list-style: none; }
+.dbars li { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(60px, 1fr) 48px; gap: 10px; align-items: center; font-size: var(--t-sm); color: var(--c-ink-2); }
+.db-l, .pb-l { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.db-track { position: relative; height: 10px; }
+.db-track::before { content: ""; position: absolute; left: 50%; top: -2px; bottom: -2px; width: 1px; background: var(--c-line); }
+.db-fill { position: absolute; top: 0; bottom: 0; border-radius: 2px; }
+.db-fill.pos { background: var(--c-up); } .db-fill.neg { background: var(--c-down); }
+.db-v, .pb-v { text-align: right; font-weight: 600; color: var(--c-ink); font-variant-numeric: tabular-nums; }
+.pbars li { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "l l" "t v"; column-gap: 12px; row-gap: 4px; font-size: var(--t-sm); color: var(--c-ink-3); }
+.pb-l { grid-area: l; } .pb-track { grid-area: t; align-self: center; height: 10px; border-radius: 2px; background: var(--c-sunk); overflow: hidden; } .pb-v { grid-area: v; font-size: var(--t-md); }
+.pb-fill { display: block; height: 100%; border-radius: 2px; background: var(--c-gold); }
+.pb-fill.ink { background: var(--c-ink-2); } .pb-fill.mute { background: var(--c-ink-3); } .pb-fill.up { background: var(--c-up); } .pb-fill.down { background: var(--c-down); }
+.donut { display: flex; flex-wrap: wrap; align-items: center; gap: 14px 18px; }
+.dn-fig { position: relative; flex: none; width: 132px; height: 132px; }
+.dn { display: block; }
+.dn-arc { fill: none; stroke-width: 18; }
+.dn-arc.gold, .donut .sw.gold { stroke: var(--c-gold); background: var(--c-gold); }
+.dn-arc.c1, .donut .sw.c1 { stroke: var(--c-cat-1); background: var(--c-cat-1); }
+.dn-arc.c2, .donut .sw.c2 { stroke: var(--c-cat-2); background: var(--c-cat-2); }
+.dn-arc.c4, .donut .sw.c4 { stroke: var(--c-cat-4); background: var(--c-cat-4); }
+.dn-arc.mute, .donut .sw.mute { stroke: var(--c-ink-3); background: var(--c-ink-3); }
+.dn-c { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; }
+.dn-c b { font: 600 var(--t-xl)/1.1 var(--f-sans); color: var(--c-ink); } .dn-c small { font-size: var(--t-sm); color: var(--c-ink-3); }
+.dn-key { display: grid; gap: 6px; min-width: 150px; margin: 0; padding: 0; list-style: none; font-size: var(--t-md); color: var(--c-ink-2); }
+.dn-key li { display: grid; grid-template-columns: 10px minmax(0, 1fr) auto; gap: 8px; align-items: center; } .dn-key b { color: var(--c-ink); font-variant-numeric: tabular-nums; }
+.donut .sw { display: block; width: 10px; height: 10px; border-radius: 2px; }

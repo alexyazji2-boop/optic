@@ -103,7 +103,9 @@ def test_one_level_control_with_real_buttons_and_announced_state():
 
 def test_show_more_is_a_button_that_says_whether_it_is_open():
     sm = (JS / "ui" / "showmore.js").read_text()
-    assert '<button type="button" class="btn btn-sm" data-v2-show-more="${id}" aria-expanded="false"' in sm
+    assert 'class="btn btn-sm${label === \'Open\' ? \' sm-open\' : \'\'}" data-v2-show-more="${id}" aria-expanded="false"' in sm
+    # the list's rows say Open (the visual update, 2026-11-11, change 8); the button and its state are the same
+    assert "moreButton(x.id, x.title, { label: 'Open' })" in sm
 
 
 def test_the_milo_prompts_and_their_fallbacks():
@@ -142,7 +144,7 @@ def test_show_less_closes_one_panel_and_gives_focus_back_to_its_show_more():
     sm = (JS / "ui" / "showmore.js").read_text()
     assert "remove: (id) => open.delete(id)" in sm
     assert '<button type="button" class="btn btn-sm" data-v2-show-less="${id}" aria-expanded="true" aria-label="${label}: ${title}">${label}</button>' in sm
-    assert "sub = 'Each opens on its own; your level stays as it is.'" in sm
+    assert "{ heading = 'More on this screen', sub = '', screen = '' }" in sm, "one compact list of rows (visual update, 2026-11-11)"
     ov = (JS / "pages" / "dossier.js").read_text()
     branch = ov[ov.index("const less = e.target.closest('[data-v2-show-less]');"):ov.index("const a = e.target.closest('[data-v2-answer]');")]
     assert "OPEN.remove(id); paint(main, sym);" in branch and "revealOpened($(`[data-v2-show-more=\"${id}\"]`, main));" in branch

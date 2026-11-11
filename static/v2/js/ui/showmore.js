@@ -12,19 +12,23 @@ export function expansions() {
   return { has: (id) => open.has(id), add: (id) => open.add(id), remove: (id) => open.delete(id), clear: () => open.clear(), list: () => [...open] };
 }
 
-/** The panels the level leaves out, each with Show more. `items` is [{id, title, blurb}]. */
-export function moreList(items, { heading = 'More on this screen', sub = 'Each opens on its own; your level stays as it is.', screen = '' } = {}) {
+/** The panels the level leaves out, one compact row each: its name and Open (the visual update, 2026-11-11, change 8:
+ *  Home's 23 Show more cards, each with a blurb, took two screens; the prototype's list of rows takes one). Open is
+ *  Show more by another word: it opens that panel only, in place on the page, with its Show less, and leaves the level
+ *  as it is. `items` is [{id, title, blurb}]; the blurb is no longer drawn (the panel's own How says it). */
+export function moreList(items, { heading = 'More on this screen', sub = '', screen = '' } = {}) {
   if (!items.length) return '';
   return html`<section class="sm" aria-labelledby="sm-h-${screen}" data-v2-sm="${screen}">
-    <h2 class="sm-h" id="sm-h-${screen}">${heading}</h2><p class="sm-sub">${sub}</p>
-    <ul class="sm-list">${items.map((x) => html`<li class="sm-stub" data-v2-sm-stub="${x.id}"><h3>${x.title}</h3>${x.blurb ? html`<p>${x.blurb}</p>` : ''}
-      ${moreButton(x.id, x.title)}</li>`)}</ul>
+    <h2 class="sm-h" id="sm-h-${screen}">${heading}</h2>${sub ? html`<p class="sm-sub">${sub}</p>` : ''}
+    <ul class="sm-list">${items.map((x) => html`<li class="sm-stub" data-v2-sm-stub="${x.id}"><span class="sm-t">${x.title}</span>${moreButton(x.id, x.title, { label: 'Open' })}</li>`)}</ul>
   </section>`;
 }
 
 /** One Show more button: for a stub above, or inside a panel the level trims. */
 export function moreButton(id, title, { label = 'Show more' } = {}) {
-  return html`<button type="button" class="btn btn-sm" data-v2-show-more="${id}" aria-expanded="false" aria-label="${label}: ${title}">${label}</button>`;
+  // a label that already names the panel ("The whole desk") is its own name; any other says which panel it opens
+  const named = label.toLowerCase().includes(String(title).toLowerCase().replace(/^optic /, ''));
+  return html`<button type="button" class="btn btn-sm${label === 'Open' ? ' sm-open' : ''}" data-v2-show-more="${id}" aria-expanded="false" aria-label="${named ? label : `${label}: ${title}`}">${label}</button>`;
 }
 
 /** One Show less button, on a panel Show more opened: it closes that panel only, the panel goes back to the list above
