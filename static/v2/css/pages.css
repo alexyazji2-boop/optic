@@ -1756,7 +1756,7 @@ html[data-milo="off"] .ws-ask { opacity: .55; }
 .page-view table.t { font-size: var(--t-md); }
 .page-view table.t th { font: 500 var(--t-xs)/1.2 var(--f-label); color: var(--c-ink-3); }
 /* a second line inside a cell or row (a mid, a share count) keeps the 12px floor */
-.page-view td small, .page-view th small, .ws-body small { font-size: max(12px, .86em); }
+.page-view td small, .page-view th small, .ws-body small { font-size: max(13px, .86em); }
 @media (max-width: 860px) {
   .page-view section.section:not(.section .section):not(.ws-panel), .page-view > section.answers, #op-top > section.readings, #wl-body { padding: 12px 12px 14px; margin-top: 10px; }
   .page-head h1.t-display-m, .page-head .t-display-m { font-size: var(--t-2xl); }

@@ -26,6 +26,11 @@
   --c-gold-ink: #74580c;
   --c-gold-light: #d4b144;
   --c-gold-wash: rgba(212, 177, 68, .14);
+  /* the chart pair (visual update, 2026-11-11): red and green in every chart, gold everywhere else. On ivory the
+     owner's #22c55e is 2.3:1 on a panel, under a graphic's 3:1, so the light theme takes deeper ones (4.9 and 4.7:1);
+     figures set as text keep --c-pos and --c-neg */
+  --c-up: #15803d; --c-down: #dc2626; --c-up-ink: #0c743f; --c-down-ink: #b43a25;
+  --c-up-area: rgba(21, 128, 61, .20); --c-down-area: rgba(220, 38, 38, .18);
   --c-pos: #0c743f;   /* from #0d7a42: 4.20:1 on --c-sunk failed AA text (VC audit 2026-10-27); 4.54:1 now, 5.24:1 on the plane */
   --c-neg: #b43a25;
   --c-warn: #8a5a00;
@@ -68,7 +73,7 @@
   /* the type scale (design standard, 2026-10-19, docs/frontend-v2/DESIGN-STANDARD.md): seven text sizes and
      one lead size. Half-pixel sizes were rounded up into these, so supporting text reads more easily. Figures
      larger than 24px are a component's headline number and say so where they are set. */
-  --t-xs: 12px;     /* chart ticks, data tags, counts */
+  --t-xs: 13px;     /* chart ticks, data tags, counts: 12px until 2026-11-11, now the floor (nothing under 13px) */
   --t-sm: 13px;     /* meta lines, dense labels, as-of lines in tight rows */
   --t-md: 14px;     /* labels, controls in toolbars, table cells */
   --t-base: 15px;   /* supporting text, notes, as-of lines */
@@ -126,14 +131,21 @@
 :root[data-theme="charcoal"] {
   /* four steps of emphasis (owner, 2026-10-18 second review): headings and figures (ink), supporting
      text (ink-2), labels and times (ink-3), and lines strong enough to separate panels. ink-2 and ink-3 were
-     lifted on 2026-10-19 (design standard: "readable secondary text"): ink-3 is 8.4:1 on a panel, was 6.7 */
+     lifted on 2026-10-19 (design standard: "readable secondary text"): ink-3 is 8.4:1 on a panel, was 6.7. Lifted a
+     step again on 2026-11-11 (visual update, palette.md): ink 16.6:1, ink-2 13.9:1 and ink-3 10.0:1 on a panel. The
+     prototype's #e4e0d8 and #c4bfb5 measure 13.76 and 9.89 exact, under the 13.8 and 9.9 asked, so each is one step
+     lighter. The chart pair is the owner's drawing of 2026-11-09 (#22c55e and #ef4444, 8.0 and 4.8:1 on a panel, a
+     graphic needs 3); figures set as text take the lighter pair (10.4 and 6.6:1), and --c-pos and --c-neg follow it,
+     so a move in a sentence and the line beside it are the same green and red. Gold is unchanged. */
   --c-plane: #0b0b0a; --c-plane-2: #0f0f0e; --c-raised: #161614; --c-sunk: #201f1c; --c-active: #2d2c28;
   --c-scene: #080807; --c-scene-2: #121210;
-  --c-ink: #f3f1eb; --c-ink-2: #d3cfc6; --c-ink-3: #b4afa5;
+  --c-ink: #f7f5f0; --c-ink-2: #e5e1d9; --c-ink-3: #c5c0b6;
   --c-line: #363430; --c-line-2: #272623;
   --c-gold: #d4b144; --c-gold-ink: #e3c76f;
-  --c-pos: #4cc38a; --c-neg: #f07a66; --c-warn: #e7b25a; --c-proposed: #b9a0ff; --c-focus: #f0d77c; --c-ind-ema21: #7bd64f; --c-ind-ema50: #ff5a63; --c-ind-vwap: #b28cff;
+  --c-pos: var(--c-up-ink); --c-neg: var(--c-down-ink); --c-warn: #e7b25a; --c-proposed: #b9a0ff; --c-focus: #f0d77c; --c-ind-ema21: #7bd64f; --c-ind-ema50: #ff5a63; --c-ind-vwap: #b28cff;
   --c-ind-wt1: #5b8fe0; --c-ind-wt2: #7fdcec;
+  --c-up: #22c55e; --c-down: #ef4444; --c-up-ink: #4ade80; --c-down-ink: #f87171;
+  --c-up-area: rgba(34, 197, 94, .26); --c-down-area: rgba(239, 68, 68, .24);
   --c-chart-grid: #2a2925; --c-area-top: rgba(212, 177, 68, .20); --c-cone-a: rgba(212, 177, 68, .30); --c-cone-edge: #e3c76f;
   --c-tip-bg: #eceae4; --c-tip-ink: #0b0b0a; --c-scrim: rgba(0, 0, 0, .6); --c-on-gold: #0b0b0a;
   color-scheme: dark;
@@ -142,11 +154,13 @@
   :root:not([data-theme]) {
     --c-plane: #0b0b0a; --c-plane-2: #0f0f0e; --c-raised: #161614; --c-sunk: #201f1c; --c-active: #2d2c28;
     --c-scene: #080807; --c-scene-2: #121210;
-    --c-ink: #f3f1eb; --c-ink-2: #d3cfc6; --c-ink-3: #b4afa5;
+    --c-ink: #f7f5f0; --c-ink-2: #e5e1d9; --c-ink-3: #c5c0b6;
     --c-line: #363430; --c-line-2: #272623;
     --c-gold: #d4b144; --c-gold-ink: #e3c76f;
-    --c-pos: #4cc38a; --c-neg: #f07a66; --c-warn: #e7b25a; --c-proposed: #b9a0ff; --c-focus: #f0d77c; --c-ind-ema21: #7bd64f; --c-ind-ema50: #ff5a63; --c-ind-vwap: #b28cff;
+    --c-pos: var(--c-up-ink); --c-neg: var(--c-down-ink); --c-warn: #e7b25a; --c-proposed: #b9a0ff; --c-focus: #f0d77c; --c-ind-ema21: #7bd64f; --c-ind-ema50: #ff5a63; --c-ind-vwap: #b28cff;
     --c-ind-wt1: #5b8fe0; --c-ind-wt2: #7fdcec;
+    --c-up: #22c55e; --c-down: #ef4444; --c-up-ink: #4ade80; --c-down-ink: #f87171;
+    --c-up-area: rgba(34, 197, 94, .26); --c-down-area: rgba(239, 68, 68, .24);
     --c-chart-grid: #2a2925; --c-area-top: rgba(212, 177, 68, .20); --c-cone-a: rgba(212, 177, 68, .30); --c-cone-edge: #e3c76f;
     --c-tip-bg: #eceae4; --c-tip-ink: #0b0b0a; --c-scrim: rgba(0, 0, 0, .6); --c-on-gold: #0b0b0a;
     color-scheme: dark;
@@ -157,7 +171,7 @@
 .scene {
   --c-ink: var(--c-on-scene); --c-ink-2: var(--c-on-scene-2); --c-ink-3: var(--c-on-scene-2);
   --c-chart-ink: var(--c-on-scene); --c-chart-grid: rgba(244, 239, 229, .07); --c-halo: var(--c-scene);
-  --c-pos: #6fd39b; --c-neg: #f5907f; --c-gold-ink: var(--c-gold-light); --c-cone-edge: var(--c-gold-light);
+  --c-pos: var(--c-up-ink); --c-neg: var(--c-down-ink); --c-gold-ink: var(--c-gold-light); --c-cone-edge: var(--c-gold-light);
   --c-cone-a: rgba(212, 177, 68, .38); --c-cone-b: rgba(212, 177, 68, .03);
   --c-area-top: rgba(212, 177, 68, .16); --c-area-bottom: rgba(212, 177, 68, 0); --c-focus: var(--c-gold-light);
 }

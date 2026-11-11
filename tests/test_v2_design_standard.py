@@ -25,7 +25,7 @@ def _rule(text, sel):
 
 
 def test_the_type_scale():
-    for t in ("--t-xs: 12px;", "--t-sm: 13px;", "--t-md: 14px;", "--t-base: 15px;", "--t-lg: 16px;", "--t-xl: 18px;", "--t-lead: 20px;", "--t-2xl: 24px;"):
+    for t in ("--t-xs: 13px;", "--t-sm: 13px;", "--t-md: 14px;", "--t-base: 15px;", "--t-lg: 16px;", "--t-xl: 18px;", "--t-lead: 20px;", "--t-2xl: 24px;"):
         assert t in TOK, t
     sizes = set(re.findall(r"font-size:\s*(\d+(?:\.\d+)?)px", RULES)) | set(re.findall(r"font:\s*\d{3}\s+(\d+(?:\.\d+)?)px/", RULES))
     assert all(float(s) >= 22 for s in sizes), f"text sizes come from the scale; only headline figures are literal: {sorted(sizes)}"
@@ -56,7 +56,8 @@ def test_radii_by_what_the_shape_holds():
 
 
 def test_readable_secondary_text():
-    assert TOK.count("--c-ink-2: #d3cfc6; --c-ink-3: #b4afa5;") == 2, "lifted in both dark blocks"
+    # lifted a step again on 2026-11-11 (the visual update); the ratios are computed in tests/test_visual_update_tokens.py
+    assert TOK.count("--c-ink-2: #e5e1d9; --c-ink-3: #c5c0b6;") == 2, "lifted in both dark blocks"
     assert "--c-ink-3: #5c564b;" in TOK, "and deepened in the light theme"
 
 
