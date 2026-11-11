@@ -76,3 +76,30 @@ def route_price_history(page):
         route.fulfill(status=200, content_type="application/json", body=json.dumps(ticker_payload(sym)))
 
     page.route(re.compile(r".*/api/ticker/[A-Za-z0-9.^=-]+(\?.*)?$"), ticker)
+
+
+def intraday_payload(sym, n=200):
+    """Hourly bars for the Chart tab's default bar size (1h), shaped as /api/intraday answers. Invented values: a smooth
+    made-up path ending at the fixture's price, one bar an hour across regular sessions."""
+    import datetime as dt
+    import math
+    base = QUOTES[sym]["price"]
+    days = _sessions(n=(n // 7) + 2)
+    times = [f"{d}T{h:02d}:30:00-05:00" for d in days for h in range(9, 16)][-n:]
+    closes = [round(base * (0.9 + 0.1 * i / (len(times) - 1)) + 2 * math.sin(i / 5.0), 2) for i in range(len(times))]
+    closes[-1] = base
+    opens = [closes[0]] + closes[:-1]
+    return {"available": True, "symbol": sym, "times": times, "opens": opens, "closes": closes,
+            "highs": [round(max(o, c) + 0.8, 2) for o, c in zip(opens, closes)], "lows": [round(min(o, c) - 0.8, 2) for o, c in zip(opens, closes)],
+            "volumes": [1_000_000 + 1000 * i for i in range(len(times))], "session_note": "Invented hourly bars (test data)."}
+
+
+def route_intraday(page):
+    """Serve intraday_payload at /api/intraday for the symbols above; opt-in, for the journeys that need the Chart tab drawn."""
+    def intraday(route):
+        sym = route.request.url.split("/api/intraday/", 1)[1].split("?", 1)[0].upper()
+        if sym not in QUOTES:
+            return route.fallback()
+        route.fulfill(status=200, content_type="application/json", body=json.dumps(intraday_payload(sym)))
+
+    page.route(re.compile(r".*/api/intraday/[A-Za-z0-9.^=-]+(\?.*)?$"), intraday)

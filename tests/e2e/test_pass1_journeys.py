@@ -11,7 +11,7 @@ import time
 import pytest
 
 from tests.e2e.conftest import PASSWORD, make_account, usage_rows
-from tests.e2e.fixtures import route_fixtures, route_price_history
+from tests.e2e.fixtures import route_fixtures, route_intraday, route_price_history
 
 DESKTOP = {"width": 1440, "height": 900}
 PHONE = {"width": 390, "height": 844}
@@ -741,3 +741,39 @@ def test_the_chart_tools_and_the_widget_rail_are_in_view_at_every_level(chrome, 
     assert page.locator("#ch-title").count() == 1
     assert page.errors == []
     ctx.close()
+
+
+# ------------------------------------------------------------------ nothing over the chart's plot (round-one corrections)
+
+OVERLAP = """() => {
+  const box = (e) => e.getBoundingClientRect();
+  const meet = (a, b) => a.right > b.left && a.left < b.right && a.bottom > b.top && a.top < b.bottom;
+  const shown = (e) => e.checkVisibility({ visibilityProperty: true, contentVisibilityAuto: true }) && box(e).width > 0;
+  const host = document.querySelector('#ch-body .pc-host'), read = document.querySelector('#ch-body .pc-read');
+  const svg = document.querySelector('#ch-body .pc-host svg');
+  const areas = [host, read, svg].filter(Boolean).map(box);
+  const ctrls = [...document.querySelectorAll('#ch-tools button, #ch-tools select, #ch-tools summary')].filter(shown);
+  return {
+    hits: ctrls.filter((e) => areas.some((a) => meet(box(e), a))).map((e) => e.outerHTML.slice(0, 80)),
+    over: [...document.querySelectorAll('#ch-body .btn, #ch-body [data-v2-ch-max], #ch-body [data-v2-milo]')].filter(shown).map((e) => e.outerHTML.slice(0, 80)),
+    explain: !!document.querySelector('#ch-tools .ctools [data-v2-milo]'), max: document.querySelector('#ch-tools .ctools [data-v2-ch-max]')?.getAttribute('aria-label'),
+    areas: areas.length };
+}"""
+
+
+@pytest.mark.parametrize("viewport", [DESKTOP, {"width": 1024, "height": 768}], ids=["1440", "1024"])
+def test_no_chart_control_sits_over_the_plot_the_readout_or_the_price_scale(chrome, server, viewport):
+    """Explain and full screen were drawn at the plot's top right, over the plot area and the price scale (round-one
+    corrections, 2026-11-10). They are on the toolbar row now, and no control's box meets the plot's."""
+    ctx, page = open_page(chrome, server, level="beginner", viewport=viewport)
+    route_price_history(page)
+    route_intraday(page)
+    page.goto(server["base"] + "/#/AAPL/chart", wait_until="domcontentloaded")
+    page.wait_for_selector("#ch-body .pc-host svg")
+    page.wait_for_selector("#ch-body .pc-read")
+    got = page.evaluate(OVERLAP)
+    assert got["areas"] == 3 and got["explain"] and got["max"] == "Full screen", got
+    assert got["hits"] == [] and got["over"] == [], got
+    assert page.errors == []
+    ctx.close()
+

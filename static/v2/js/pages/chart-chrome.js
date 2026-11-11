@@ -116,4 +116,6 @@ export function setMax(on, native = true) {
   } catch (e) { /* older engines throw instead of rejecting */ }
 }
 export const maxTitle = (on) => (on ? 'Back to the rest of Optic. Escape does this too.' : 'Give the chart the whole window. Its tools, widgets and drawings come with it.');
-export const maxButton = () => html`<button type="button" class="ch-tool" data-v2-ch-max aria-pressed="${isMax()}" aria-label="Full screen" title="${maxTitle(isMax())}">${icon(isMax() ? 'shrink' : 'expand')}</button>`;
+// on the toolbar row, icon-only, at its right end (round-one corrections, 2026-11-10: over the plot's top right it sat on
+// the plot, the readout line and the price scale)
+export const maxButton = () => html`<button type="button" class="btn btn-sm ch-maxbtn" data-v2-ch-max aria-pressed="${isMax()}" aria-label="Full screen" title="${maxTitle(isMax())}">${icon(isMax() ? 'shrink' : 'expand')}</button>`;

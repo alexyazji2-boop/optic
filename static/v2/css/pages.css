@@ -831,10 +831,8 @@ table.chw-table { font-size: var(--t-sm); } table.chw-table th { padding: 6px 4p
   .ch-stage { flex-direction: column; gap: 6px; }
   .ch-stage > #ch-draw { width: 100%; }
   .ch-draw { display: flex; flex-direction: row; position: static; overflow-x: auto; scrollbar-width: none; }
-  /* a phone: Explain and full screen at the readout's corner, and the readout in two short lines, so the plot
-     starts in the first screen (it began at 684px of 844 on a 390px phone, 2026-10-20) */
-  #ch-body > .ch-pacts { display: none; }   /* Explain and full screen are in the toolbar's menu on a phone */
-  #ch-body > .ch-pacts + .pc-host .pc-read { padding-right: 0; }   /* beats the wide screen's room for the corner buttons, below */
+  /* a phone: the readout in two short lines, so the plot starts in the first screen (it began at 684px of 844 on a
+     390px phone, 2026-10-20); Explain and full screen are in the toolbar's menu */
   .chart-page .pc-read { gap: 2px 8px; font-size: var(--t-sm); } .chart-page .pc-read .pc-sym, .chart-page .pc-read .pc-what { display: none; }
   .chart-page .ctools { gap: 6px; } .chart-page .ctools .btn-sm { padding: 0 10px; }
   .ch-more .seg { justify-self: start; }
@@ -887,15 +885,21 @@ table.chw-table { font-size: var(--t-sm); } table.chw-table th { padding: 6px 4p
 .pc .tm circle { fill: var(--c-plane); stroke-width: 1.6; } .pc .tm.pos circle { stroke: var(--c-pos); } .pc .tm.neg circle { stroke: var(--c-neg); }
 .pc .tm text { font: 600 var(--t-xs)/1 var(--f-label); } .pc .tm.pos text { fill: var(--c-pos); } .pc .tm.neg text { fill: var(--c-neg); }
 /* the classic toolbar (2026-10-19): Indicators, Layers with its count and its row, Chart read, Reset; bar size,
-   session or range, Fit, Reset zoom and the style at the right; Explain and full screen over the plot's corner */
+   session or range, Fit, Reset zoom and the style at the right, then Explain and full screen at the row's end. Those
+   two sat over the plot's top right until 2026-11-10 (round-one corrections), on the plot, the readout line and the
+   price scale; nothing is drawn over the plot now. */
 .ch-count { display: inline-grid; place-items: center; min-width: 18px; height: 18px; margin-left: 6px; padding: 0 5px; border-radius: var(--r-sm); background: color-mix(in srgb, var(--c-pos) 22%, transparent); color: var(--c-ink); font: 600 var(--t-xs)/1 var(--f-label); }
 .ch-layers-btn .ic { width: 14px; height: 14px; margin-left: 4px; fill: none; stroke: currentColor; stroke-width: 2; }
 .ch-layers-btn[aria-expanded="true"] { background: var(--c-active); border-color: var(--c-line); } .ch-layers-btn[aria-expanded="true"] .ic { transform: rotate(180deg); }
 .ch-layers { margin-top: 8px; } .ch-layers[hidden] { display: none; }
 .ch-stage > #ch-body { position: relative; }
-.ch-pacts + .pc-host .pc-read { padding-right: 190px; }
-.ch-pacts { position: absolute; top: 0; right: 60px; display: flex; gap: 6px; align-items: center; z-index: 5; }
-.ch-pacts .btn-sm { min-height: 30px; padding: 0 10px; font-size: var(--t-sm); }
+/* margin-left: auto keeps the pair at the right end of the row it lands on when the row wraps (1024px, or an intraday
+   session select on a narrow window); the selects take the phone's compact padding at every width so the pair fits
+   on the one row at 1440 x 900 with the session select showing (measured 2026-11-10: 39px short without it) */
+.ch-tacts { display: inline-flex; gap: 4px; align-items: center; margin-left: auto; }
+.ch-tacts .btn-sm { padding: 0 8px; }
+.ch-maxbtn.btn-sm { padding: 0 8px; }   /* icon-only, so a square-ish target beside Explain */
+.chart-page .ctools .select select { padding: 0 26px 0 10px; font-size: var(--t-md); }
 /* the rail's Milo is its line icon alone, like the rail's other tools; the words stay for a screen reader */
 .chw-milo.btn { width: 60px; min-height: var(--tap); margin-top: 4px; padding: 0; gap: 0; }
 .chw-milo.btn .ic { width: 18px; height: 18px; }
@@ -1087,7 +1091,7 @@ table.chw-table { font-size: var(--t-sm); } table.chw-table th { padding: 6px 4p
 }
 /* full screen (html.ch-max): the chart page alone in the window, with its tools, widgets and drawings. Its button
    pressed is the widget rail's pressed state, not the drawing tools' gold outline, which is the sidebar's */
-.ch-tool[data-v2-ch-max][aria-pressed="true"] { border-color: transparent; background: var(--c-active); box-shadow: inset 0 0 0 1px var(--c-line); }
+.ch-maxbtn[aria-pressed="true"] { border-color: transparent; background: var(--c-active); box-shadow: inset 0 0 0 1px var(--c-line); }
 html.ch-max .rail, html.ch-max .topbar, html.ch-max .tabbar, html.ch-max #legal-footer, html.ch-max .skip { display: none !important; }
 html.ch-max .shell { grid-template-columns: minmax(0, 1fr); }
 html.ch-max #main.page { max-width: none; padding: 6px 10px 8px; }
@@ -2019,7 +2023,7 @@ ul.cal-react { display: flex; flex-wrap: wrap; gap: 4px 18px; padding-left: 0; l
 }
 
 /* the Chart page between bar sizes (pages/chart.js pending): the old plot dimmed and out of reach, a note over it */
-#ch-body.is-pending > .pc-host, #ch-body.is-pending > .ch-pacts { opacity: .5; pointer-events: none; transition: opacity var(--m-press) var(--ease-out); }
+#ch-body.is-pending > .pc-host { opacity: .5; pointer-events: none; transition: opacity var(--m-press) var(--ease-out); }
 .ch-pending { position: absolute; top: 56px; left: 50%; transform: translateX(-50%); z-index: 4; margin: 0; max-width: calc(100% - 24px); padding: 8px 12px; border-radius: var(--r-md); border: 1px solid var(--c-line); background: var(--c-raised); box-shadow: var(--sh-pop); font-size: var(--t-sm); color: var(--c-ink-2); text-align: center; }
 /* the watchlist's refresh (pages/watchlist.js): a moved price holds its direction's colour, then eases back; a
    note with Re-sort when the held order no longer matches the sort */

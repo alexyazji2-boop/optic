@@ -106,7 +106,8 @@ def test_the_compact_header_on_every_dossier_tab():
     assert "${stageLine(sym, st)}${actions(sym, label, true, level)}" in frame, "the stage on the Overview's header line, with Explain"
     assert ".account-btn { flex: none; white-space: nowrap;" in CSS["components.css"], "Sign in never wraps"
     pages = CSS["pages.css"]
-    assert ".ch-pacts + .pc-host .pc-read { padding-right: 190px; }" in pages, "Explain and full screen keep off the readout"
+    # Explain and full screen are on the toolbar row since 2026-11-10, so the readout needs no room kept for them
+    assert ".ch-pacts" not in pages and ".ch-tacts { display: inline-flex;" in pages, "nothing is drawn over the readout"
 
 
 def test_the_reads_bold_markers_become_bold(tmp_path):

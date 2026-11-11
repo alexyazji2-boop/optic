@@ -445,6 +445,7 @@ function toolbar() {
     ${isPhone() ? '' : html`<button type="button" class="btn btn-sm" data-v2-ch-fit title="Every loaded bar on screen">Fit</button>`}
     <button type="button" class="btn btn-sm ch-home" data-v2-ch-home ${D.zoomed ? '' : 'hidden'} title="Back to the ${iv.intraday ? iv.label : V.range} view">Reset zoom</button>
     ${isPhone() ? '' : html`<div class="seg seg-ic" role="group" aria-label="Style">${[['candles', 'Candles', 'candles'], ['line', 'Line', 'lineChart'], ['area', 'Area', 'area']].map(([k, l, ic]) => html`<button type="button" data-v2-ch-style="${k}" aria-pressed="${V.style === k}" aria-label="${l}" title="${l}">${icon(ic)}</button>`)}</div>`}
+    ${isPhone() ? '' : html`<span class="ch-tacts">${miloButton('Explain', { ask: `Explain the ${D.sym} chart: the trend, support, resistance, momentum, volume and risk, and what would invalidate the read.`, context: `${D.sym} Dossier, Chart`, symbol: D.sym, cls: 'btn-sm' })}${C.maxButton()}</span>`}
   </div>
   <div class="ctools ch-layers" id="ch-layers" role="group" aria-label="Layers" ${V.layers ? '' : 'hidden'}>
     ${menu('cmp', 'Compare', V.compare.length, cmpBody(), 'ch-cmp')}
@@ -498,9 +499,9 @@ function paintChart(over) {
   if (D.barsErr) { if (chart) { chart.destroy(); chart = null; } draw(host, failed('The bars', D.barsErr, { retry: 'bars' })); return; }
   if (!D.bars) { if (chart) { chart.destroy(); chart = null; } draw(host, skeleton('chart', 1, 'Loading bars')); return; }
   const iv = INTERVALS.find((x) => x.key === V.interval);
-  // the plot's own header controls, at its top right as in the classic chart: Explain (Milo) and full screen
-  host.innerHTML = '<div class="ch-pacts"></div><div class="pc-host"></div>';
-  draw(host.firstChild, isPhone() ? '' : html`${miloButton('Explain', { ask: `Explain the ${D.sym} chart: the trend, support, resistance, momentum, volume and risk, and what would invalidate the read.`, context: `${D.sym} Dossier, Chart`, symbol: D.sym, cls: 'btn-sm' })}${C.maxButton()}`);
+  // Explain and full screen are on the toolbar row, at its right end, not over the plot: at the plot's top right they
+  // sat on the plot area, the readout line and the price scale (round-one corrections, 2026-11-10)
+  host.innerHTML = '<div class="pc-host"></div>';
   // a rebuild on the same bars keeps the zoom and the undo history; the live refetch hands over its own (`over`)
   const kept = over || (chart && D.chartBars === D.bars ? chart.keep() : {});
   if (chart) chart.destroy();
@@ -601,7 +602,7 @@ function placeMenu(d) {
 }
 function paintMax() {
   const on = C.isMax();
-  // the plot's corner button (a wide screen), or the phone menu's, which says it in words
+  // the toolbar's icon button (a wide screen), or the phone menu's, which says it in words
   $$('[data-v2-ch-max]', mainEl).forEach((b) => { b.setAttribute('aria-pressed', String(on)); b.title = C.maxTitle(on); if (b.closest('.ch-more')) b.textContent = on ? 'Leave full screen' : 'Full screen'; else draw(b, icon(on ? 'shrink' : 'expand')); });
 }
 function toggleMax(on) {
