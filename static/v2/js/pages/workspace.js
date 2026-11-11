@@ -63,7 +63,9 @@ export const PRESETS = {
 
 // Open on a phone without asking: what a reader checks first. The rest fold to
 // their title and one line, and load only when opened.
-const ESSENTIAL = { market: ['indices', 'regime', 'quote', 'watch'], options: ['quote', 'contracts', 'vol'], longterm: ['quote', 'biz', 'value'], mine: ['indices', 'regime', 'quote', 'watch'] };
+// The visual update (2026-11-11) opens the heat map, the Desk's bottom line and the market panels' figures on a phone too,
+// as the confirmed prototype's phone render draws them: each is a picture and a line, not a list to scroll.
+const ESSENTIAL = { market: ['indices', 'regime', 'sentiment', 'expected', 'sectors', 'desk', 'quote', 'watch'], options: ['quote', 'contracts', 'vol'], longterm: ['quote', 'biz', 'value'], mine: ['indices', 'regime', 'sentiment', 'expected', 'sectors', 'desk', 'quote', 'watch'] };
 const PHONE = '(max-width: 860px)';
 const isPhone = () => { try { return matchMedia(PHONE).matches; } catch (e) { return false; } };
 const folded = (id) => isPhone() && ((S.fold[S.preset] || {})[id] ?? !(ESSENTIAL[S.preset] || []).includes(id));

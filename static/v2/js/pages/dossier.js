@@ -115,7 +115,7 @@ function chartBlock(sym) {
   // four-line caption one line under it; the period's finding is the page's lead sentence, and the marks stay with
   // their table below. The delay is the header's and the next report is the Next report figure's.
   const tone = spanTone(shown.map((p) => p.c)), src = (D.ticker || {}).data_source === 'tradier' ? 'Tradier and Yahoo Finance' : 'Yahoo Finance';
-  const toneWords = tone === 'up' ? 'Green: ends above where it started (dashed).' : tone === 'down' ? 'Red: ends below where it started (dashed).' : 'Ends where it started (dashed).';
+  const toneWords = tone === 'up' ? 'Green: ends above its start (dashed).' : tone === 'down' ? 'Red: ends below its start (dashed).' : 'Ends at its start (dashed).';
   return html`${head(html`<div class="seg" role="group" aria-label="Chart range">${Object.keys(RANGES).map((r) => html`<button type="button" data-v2-range="${r}" aria-pressed="${r === range}">${r}</button>`)}</div>`, '')}
     <div class="chart-slot" data-chart="price"></div>
     <p class="dchart-cap">Daily closes through ${shortDate(last.d)}, ${src}. ${toneWords}${im ? html` <span class="dchart-cone">Gold: the ±${num(im.pct)}% range options price through ${shortDate(im.expiry)}.</span>` : ''}</p>
@@ -334,7 +334,7 @@ function revenueMix() {
   const parts = [...top.map((r) => ({ label: r.label, v: r.v })), ...(other > 0 ? [{ label: 'Other', v: other }] : [])];
   const axis = String(tb.axis_label || 'by part').toLowerCase();
   return { parts, center: `$${compact(base)}`, sub: yr, words: `Revenue ${axis}, ${PER.inText(per)}: ${parts.map((x) => `${x.label} ${num((x.v / base) * 100, 0)}%`).join(', ')}.`,
-    caption: `Revenue ${axis}, ${yr || 'the latest year'}, from its filings.` };
+    caption: `${axis.charAt(0).toUpperCase()}${axis.slice(1)}, from its filings.` };
 }
 function about(sym) {
   const t = D.ticker || {}, q = D.quote || {}, prof = (D.session || {}).profile || {};
@@ -355,7 +355,7 @@ function about(sym) {
     <dl class="about-kv">
       ${prof.industry || prof.sector || prof.category ? html`<div><dt>${fund ? 'Kind of fund' : 'Industry'}</dt><dd>${fund ? prof.category || 'Fund' : [prof.industry, prof.sector].filter(Boolean).join(', ')}</dd></div>` : ''}
       ${rev ? html`<div><dt>Where its revenue comes from</dt><dd>${rev}</dd></div>` : ''}
-      ${isNum(q.market_cap) && !fund ? html`<div><dt>${term('market cap', 'Market value')}</dt><dd>$${compact(q.market_cap)}<small>all its shares at today's price</small></dd></div>` : ''}
+      ${isNum(q.market_cap) && !fund ? html`<div><dt>${term('market cap', 'Market value')}</dt><dd>$${compact(q.market_cap)}</dd></div>` : ''}
     </dl>
     ${mix ? html`${donut(mix.parts, { center: mix.center, sub: mix.sub, label: mix.words })}<p class="asof">${mix.caption}</p>` : ''}
     ${items.length ? html`<div class="more">${items.map(([t1, b, hint]) => html`<details><summary>${t1}<span>${hint ? html`<small>${hint}</small>` : ''}${icon('chev')}</span></summary><div class="inner">${b}</div></details>`)}</div>` : ''}</section>`;
@@ -572,15 +572,17 @@ function casesGlance(c) {
   const li = (x, d) => html`<li><span class="mv ${d}"><span class="mv-a" aria-hidden="true">${ARROW[d]}</span><span class="sr">${d === 'up' ? 'For' : 'Against'}: </span></span>${x.view ? html`<a class="textlink" href="${hrefFor(x.view, sym)}">${x.text}</a>` : html`<span>${x.text}</span>`}</li>`;
   return html`<section class="ov-card" data-v2-ov-panel="cases" aria-labelledby="cs-h"><h2 class="t-h3" id="cs-h">Bull case and bear case <small>${f.pos.length} for, ${f.neg.length} against</small></h2>
     ${f.pos.length || f.neg.length ? html`<ul class="cs-glance">${f.pos.map((x) => li(x, 'up'))}${f.neg.map((x) => li(x, 'down'))}</ul>` : html`<p class="t-muted">No point for or against stands out in the data Optic holds. That is not the same as no risk.</p>`}
-    <p class="asof">Listed by fixed rules; each line opens its evidence.</p></section>`;
+    <p class="asof">By fixed rules; each line opens its evidence.</p></section>`;
 }
 function figuresView(sym, c, level, fund) {
   if (fund || !companyLike(sym)) return level === 'advanced' ? '' : simpleView(sym, c);
   // while the figures load, or when they failed, Intermediate's bull and bear case keeps its place (empty until the
   // figures arrive), as it had before the figures
+  // what the company does is said whether or not the figures came, as every level has said it
   const casesHeld = level === 'intermediate' ? html`<div data-v2-ov-panel="cases">${OR.casesSection(c)}</div>` : '';
-  if (D.tickerError && !D.ticker) return level === 'advanced' ? '' : html`${simpleView(sym, c)}${casesHeld}`;
-  if (!D.ticker || D.longterm === undefined || D.earnings === undefined || D.session === undefined) return html`<div class="ov-figs is-loading" role="status" aria-label="Loading the figures for ${sym}">${skeleton('lines', 3)}</div>${casesHeld}`;
+  const aboutHeld = level === 'advanced' ? '' : html`<div class="ov-row2">${about(sym)}</div>`;
+  if (D.tickerError && !D.ticker) return level === 'advanced' ? '' : html`${aboutHeld}${simpleView(sym, c)}${casesHeld}`;
+  if (!D.ticker || D.longterm === undefined || D.earnings === undefined || D.session === undefined) return html`<div class="ov-figs is-loading" role="status" aria-label="Loading the figures for ${sym}">${skeleton('lines', 3)}</div>${aboutHeld}${casesHeld}`;
   const F = simpleFacts({ sym, kind: kindOf(sym, D), t: D.ticker, lt: D.longterm, quote: D.quote, session: D.session, earnings: D.earnings, price: c.price, f: c.f, today: c.today });
   return html`<div class="ov-figs">${figRevenue(F, level)}${figMargin(F, level)}${figPe(F, level)}${figNext(F)}</div>
     ${level === 'advanced' ? '' : html`<div class="ov-row2">${about(sym)}${level === 'beginner' ? figEps(level) : casesGlance(c)}</div>`}

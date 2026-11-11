@@ -826,9 +826,11 @@ ul.plain { margin: 0; padding-left: 18px; } ul.plain li { margin-bottom: 7px; }
      bar's words are the scale's smallest step (12px) and never break. Narrower phones tighten the letters rather than
      shrink the type below the scale (tests/test_v2_design_standard.py): measured in Chromium with the fallback face,
      "Research" needs 52px at 12px against 51px columns at 360 and 45px at 320 */
-  .tabbar a, .tabbar button { min-width: 0; white-space: nowrap; text-align: center; min-height: 54px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; text-decoration: none; font: 500 var(--t-xs)/1 var(--f-sans); letter-spacing: -0.01em; color: var(--c-ink-3); border: 0; background: none; cursor: pointer; }
-  @media (max-width: 374px) { .tabbar { padding-left: 0; padding-right: 0; } .tabbar a, .tabbar button { letter-spacing: -0.035em; } }
-  @media (max-width: 359px) { .tabbar a, .tabbar button { letter-spacing: -0.07em; } }
+  .tabbar a, .tabbar button { min-width: 0; white-space: nowrap; text-align: center; min-height: 54px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; text-decoration: none; font: 500 var(--t-xs)/1 var(--f-sans); letter-spacing: -0.03em; color: var(--c-ink-3); border: 0; background: none; cursor: pointer; }
+  /* the labels at the 13px floor since the visual update (2026-11-11; they were 12px): set a little tighter so
+     "Research" keeps its own seventh of a 390px screen, and tighter again on narrower phones */
+  @media (max-width: 374px) { .tabbar { padding-left: 0; padding-right: 0; } .tabbar a, .tabbar button { letter-spacing: -0.06em; } }
+  @media (max-width: 359px) { .tabbar a, .tabbar button { letter-spacing: -0.1em; } }
   .tabbar svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.6; }
   .tabbar [aria-current="page"] { color: var(--c-ink); font-weight: 600; } .tabbar [aria-current="page"] svg { stroke: var(--c-gold); }
 }
@@ -1476,7 +1478,7 @@ th .pbadge, dt .pbadge, .k .pbadge { margin-left: 6px; vertical-align: 1px; }
    here is set under 13px. Red and green for direction, gold for the brand's own figures. */
 .mv { white-space: nowrap; font-variant-numeric: tabular-nums; }
 .mv.up { color: var(--c-up-ink); } .mv.down { color: var(--c-down-ink); } .mv.flat { color: var(--c-ink-2); }
-.mv-a { display: inline-block; margin-right: .3em; font-size: .78em; vertical-align: .08em; }
+.mv-a { display: inline-block; margin-right: .3em; font-size: max(var(--t-xs), .78em); vertical-align: .08em; }
 .gauge { display: grid; gap: 6px; margin: 10px 0 4px; }
 /* the scale's two ends in the chart pair and its middle neutral, as three flat bands (no gradient: the design standard
    keeps gradients to the rail's divider and the loading shimmer) */
