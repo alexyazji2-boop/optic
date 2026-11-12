@@ -12,7 +12,6 @@ import { CLASSIC } from './core/classic.js';
 // classic app at the same address, so every section stays reachable while the
 // migration runs. docs/frontend-v2/COVERAGE.md tracks the same list.
 
-export const SECTIONS = { home: 'Research', security: 'Research', analyse: 'Research', market: 'Research', discover: 'Research', portfolio: 'Tracking', brokerage: 'Tracking', follow: 'Tracking', reports: 'Owner' };
 
 export const GROUPS = [
   { id: 'home', label: 'Home', icon: 'home', pages: [{ view: 'home', label: 'Home', slug: '', v2: true }] },
@@ -57,14 +56,18 @@ export const GROUPS = [
 
 export const SETTINGS = { view: 'settings', label: 'Settings', slug: 'settings', icon: 'settings', v2: true };
 
-// The phone bar, in the owner's order (2026-10-19): "Home · Markets · Watchlist · Dossier · More, with
-// Discover accessible through More and search". The names are unchanged; Discover moves into More, which
-// lists every destination the bar does not.
+// The phone bar takes the rail's names and sections (the owner's layout of 2026-11-09, below): Home, Research,
+// Markets, Discover, Portfolio and Lists, each opening what the rail's entry opens, and More holding the rest (the
+// Research and Lists entries by name, Compare, Brokerage, Alerts, Reports, Settings). It kept the names of
+// 2026-10-19 (Home, Markets, Watchlist, Dossier, More) through Pass 1's first round, so a phone said Dossier where
+// the rail said Research (gauntlet L3, 2026-11-10; the operator's decision to change it in this pass).
 export const MOBILE_TABS = [
   { label: 'Home', group: 'home', icon: 'home' },
+  { label: 'Research', group: 'security', icon: 'research' },
   { label: 'Markets', group: 'market', icon: 'markets' },
-  { label: 'Watchlist', group: 'follow', icon: 'watchlist' },
-  { label: 'Dossier', group: 'security', icon: 'dossier' },
+  { label: 'Discover', group: 'discover', icon: 'discover' },
+  { label: 'Portfolio', group: 'portfolio', icon: 'positions' },
+  { label: 'Lists', lists: true, icon: 'star' },
   { label: 'More', more: true, icon: 'more' },
 ];
 
@@ -87,4 +90,39 @@ export function hrefFor(view, symbol) {
 
 export function visibleGroups({ admin, brokerage }) {
   return GROUPS.filter((g) => (!g.owner || admin) && (!g.feature || (g.feature === 'brokerage' && brokerage)));
+}
+
+// The rail of the owner's layout of 2026-11-09 (his home screen, item for item): Home; Research with Company
+// Overview, Financials & Valuation, Charts & Technicals, Options & Derivatives and Filings & Ownership; Markets;
+// Discover; Portfolio; and Lists with Watchlist, Ideas and Research. Built over today's routes, so every address
+// above still works and the page tabs (GROUPS) are unchanged. What each entry opens:
+//   Company Overview, Financials & Valuation, Charts & Technicals, Options & Derivatives: the company's Overview,
+//     Financials, Chart and Options tabs (the company open on this visit; with none, the company search)
+//   Filings & Ownership: Insiders, filtered to the company (#/insiders?symbol=), the filings of its insiders
+//   Markets, Discover, Portfolio: those groups, at the page last open in each
+//   Ideas: Scan, the named screens; Research (under Lists): saved research
+// Destinations his rail does not name (Compare, Brokerage, Alerts, the owner's Reports, Settings) stay one press away
+// under More at the rail's foot, so nothing that was reachable is lost.
+export const RESEARCH = [
+  { label: 'Company Overview', view: 'overview', icon: 'grid' },
+  { label: 'Financials & Valuation', view: 'financials', icon: 'layers' },
+  { label: 'Charts & Technicals', view: 'chart', icon: 'research' },
+  { label: 'Options & Derivatives', view: 'swing', icon: 'optionsCurve' },
+  { label: 'Filings & Ownership', view: 'insiders', icon: 'filing', filter: true },
+];
+export const LISTS = [
+  { label: 'Watchlist', href: '#/watchlist', views: ['watchlist'], icon: 'star' },
+  { label: 'Ideas', href: '#/scan', views: ['scan'], icon: 'bulb' },
+  { label: 'Research', href: '#/research', views: ['saved'], icon: 'folder' },
+];
+export const RAIL_MORE = [
+  { label: 'Compare', group: 'analyse', icon: 'compare' },
+  { label: 'Brokerage', group: 'brokerage', icon: 'brokerage' },
+  { label: 'Alerts', view: 'alerts', icon: 'bell' },
+  { label: 'Reports', group: 'reports', icon: 'reports' },
+];
+/** Where a Research entry goes for this symbol (or the company search when none is open). */
+export function researchHref(entry, symbol) {
+  if (entry.filter) return symbol ? `#/insiders?symbol=${encodeURIComponent(symbol)}` : '#/insiders';
+  return symbol ? hrefFor(entry.view, symbol) : '#/dossier';
 }

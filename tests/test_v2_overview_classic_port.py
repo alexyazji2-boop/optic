@@ -306,10 +306,12 @@ def test_the_header_and_the_switch():
     assert "${raw(logoHTML(sym, { lazy: false }))}" in FRAME and "/api/logo/${encodeURIComponent(sym)}" in (JS / "ui/symbols.js").read_text()
     assert "main: `Stage ${r.stage} · ${r.name || ''}`.trim(), tag: r.transition_short || ''" in OVR, "Classic's 'Stage 3 · Topping' and 'breakdown'"
     assert "miloButton('Explain', { ask: st.ask(sym)" in FRAME, "Explain drafts the question; nothing is sent"
-    # the switch swaps the analysis area and names the other view (post-demo Phase 06, BUG-001): it no longer opens folds
-    assert "${adv ? 'Show simple analysis' : 'Show advanced analysis'}</button>" in FRAME and 'data-v2-adv-toggle data-mode="${mode}" aria-controls="ov-analysis"' in FRAME
-    assert "if (e.target.closest('[data-v2-adv-toggle]')) { prefs.setAdvanced(!prefs.advancedOn()); return; }" in DOS, "one state: density"
-    assert "${mode === 'advanced' ? advancedView(sym, c, fund) : simpleView(sym, c)}" in DOS
+    # The switch is retired on the Overview (2026-11-09, decision card B): the level control decides which analysis
+    # shows, and each section of the advanced one is its own Show more below Advanced. It still never opens folds.
+    assert "data-v2-adv-toggle" not in FRAME and "data-v2-adv-toggle" not in DOS
+    assert "const mode = level === 'advanced' ? 'advanced' : 'simple';" in DOS, "one state: the level"
+    # below Advanced the figures, and the words one row away (the visual update, 2026-11-11)
+    assert "${adv ? html`${figuresView(sym, c, level, fund)}${advancedView(sym, c, fund)}` : figuresView(sym, c, level, fund)}" in DOS
     assert "data-adv" not in OVR and "data-adv" not in DOS and 'role="switch"' not in FRAME
 
 

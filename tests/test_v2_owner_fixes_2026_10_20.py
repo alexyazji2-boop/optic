@@ -32,7 +32,8 @@ def js(tmp_path, body):
 
 def test_what_the_company_does_and_its_headlines_come_first():
     paint = DOSSIER[DOSSIER.index("function paint(main, sym)"):]
-    assert paint.index("${about(sym)}") < paint.index('section class="section dchart"'), "above the chart"
+    # above the chart at Advanced and for a fund; beside the revenue mix under it below Advanced (visual update, 2026-11-11)
+    assert paint.index("${adv || !company ? about(sym) : ''}") < paint.index('section class="section dchart"'), "above the chart"
     about = DOSSIER[DOSSIER.index("function about(sym)"):DOSSIER.index("function more(sym)")]
     # since the beginner pass the section is titled "What Apple does" and opens with its lead (test_v2_beginner)
     assert "What ${name} does" in about and "'Latest headlines'" in about
@@ -196,7 +197,9 @@ def test_the_dossier_link_follows_this_visit_never_the_saved_recent_list(tmp_pat
     assert got == {"before": None, "instrument": None, "after": "AAPL", "recent": ["AAPL", "^TNX", "NVDA", "AMD"]}, "the Recent list is kept as it was, and offered in the search"
     shell = (JS / "ui/shell.js").read_text()
     assert "const sym = (route.view !== 'instrument' && route.symbol) || openedNow() || null;" in shell
-    assert "const sym = openedNow() || null;" in shell and "recent()" not in shell
+    # More reads the company the rail and bar were last painted for (that same route-or-this-visit rule) before this
+    # visit's own (phone bar round two, 2026-11-10); never the Recent list
+    assert "const sym = PAINTED_SYM || openedNow() || null;" in shell and "PAINTED_SYM = sym;" in shell and "recent()" not in shell
     # with no company yet, Dossier opens its own start page, not the search (owner, 2026-10-21: "pressing dossier
     # redirects me to the search bar, fix this issue")
     assert ": '#/dossier';" in shell and "SLUG_VIEW.dossier = 'dossierstart';" in (JS / "core/router.js").read_text()

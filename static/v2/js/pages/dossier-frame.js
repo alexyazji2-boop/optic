@@ -3,6 +3,7 @@
 // the only place the Dossier's pages are listed. Each tab module renders its
 // own body under it and loads the core quote through core(), which the API
 // cache shares across tabs so switching tabs does not refetch.
+import { ARROW } from '../ui/glance.js';   // the price's move carries its arrow beside its sign (visual update, 2026-11-11)
 import { html, raw, render as draw } from '../core/dom.js';
 import * as api from '../core/api.js';
 import { num, signed, dir, clean, capFirst, isNum } from '../core/format.js';
@@ -17,7 +18,6 @@ import * as delays from '../core/delays.js';
 import { poll } from '../core/poll.js';
 import { term } from '../ui/term.js';
 import { logoHTML } from '../ui/symbols.js';
-import { advancedOn } from '../core/prefs.js';
 import { saveButton, provide } from '../ui/library.js';
 import { keyOf } from '../core/library.js';
 
@@ -105,24 +105,35 @@ export function livePrice(root, sym, getD, view, opts) {
 // The ticker's actions, grouped at the right of its header (owner, 2026-10-19). Alert and Compare are
 // quieter than Watch, and sit under ⋯ on a phone. The Milo button names the ticker, so it reads as a
 // question about this company and not as the top bar's general "Ask Milo".
-function actions(sym, label, sm) {
+// `level` is the Overview's (2026-11-09, the level matrix): Beginner keeps Watch and Ask Milo; Intermediate adds
+// Alert, Compare and Save; Advanced adds Export. Every other tab passes none and keeps them all, as before.
+function actions(sym, label, sm, level = null) {
   const s = sm ? 'btn-sm' : '';
+  const mid = !level || level !== 'beginner', all = !level || level === 'advanced';
+  if (level) return overviewActions(sym, s, mid, all);
   return html`<div class="acts" role="group" aria-label="${sym} actions">
-    <span class="acts-2"><a class="btn btn-quiet ${s}" href="#/alerts?symbol=${sym}">Alert</a><a class="btn btn-quiet ${s}" href="#/compare?t=${sym}">Compare</a><a class="btn btn-quiet ${s}" href="#/${encodeURIComponent(sym)}/sheet" title="A printable research sheet">Export</a></span>
-    ${watchButton(sym, { compact: sm })}${saveButton('company', keyOf('company', [sym]), { cls: s })}${miloButton(html`<span class="acts-milo-t">Ask about ${sym}</span>`, { ask: `What is the case for ${sym} right now?`, context: `${sym} Dossier, ${label}`, symbol: sym, cls: `${s} acts-milo` })}
+    ${mid ? html`<span class="acts-2"><a class="btn btn-quiet ${s}" href="#/alerts?symbol=${sym}">Alert</a><a class="btn btn-quiet ${s}" href="#/compare?t=${sym}">Compare</a>${all ? html`<a class="btn btn-quiet ${s}" href="#/${encodeURIComponent(sym)}/sheet" title="A printable research sheet">Export</a>` : ''}</span>` : ''}
+    ${watchButton(sym, { compact: sm })}${mid ? saveButton('company', keyOf('company', [sym]), { cls: s }) : ''}${miloButton(html`<span class="acts-milo-t">Ask about ${sym}</span>`, { ask: `What is the case for ${sym} right now?`, context: `${sym} Dossier, ${label}`, symbol: sym, cls: `${s} acts-milo` })}
     <details class="menu acts-more"><summary class="btn btn-quiet ${s}" aria-label="More actions for ${sym}">${icon('more')}</summary><div class="menu-body menu-end">${tickerMenu(sym)}</div></details>
   </div>`;
 }
 
-/* "Show advanced analysis" and "Show simple analysis" (post-demo Phase 06, directive 06 section 3): the Overview's one
- * control for which analysis it shows, at the end of the tab row as in Classic. A press swaps the analysis area, never
- * adds to it, and the label then names the other view. It is the density setting (core/prefs.js, Settings' "How much
- * each page shows", D-019), so it changes nothing about Milo's level or the ticker. Only where it changes something:
- * the Overview. */
-export function advToggle(mode = advancedOn() ? 'advanced' : 'simple') {
-  const adv = mode === 'advanced';
-  return html`<button type="button" class="btn btn-sm adv-toggle" data-v2-adv-toggle data-mode="${mode}" aria-controls="ov-analysis" title="Swaps the analysis below between its simple and advanced views. Milo's level is set in Settings.">${adv ? 'Show simple analysis' : 'Show advanced analysis'}</button>`;
+// The Overview's header (visual hierarchy review, 2026-11-10, change 2, finding F6): Watch, the one quiet secondary
+// beside the price, and More. The header carried 4 to 7 controls at one weight (Watch, Alert, Compare, Save, Export,
+// "Ask about AAPL", More), and "Ask about AAPL" repeated the Milo bar's question 200px below it; the bar's gold button
+// is now the page's one primary action and its one Milo entry (the top bar keeps its outlined Ask Milo). Alert,
+// Compare, Save and Export are in More at every width; the level still decides which of them the menu offers.
+function overviewActions(sym, s, mid, all) {
+  const e = encodeURIComponent(sym);
+  return html`<div class="acts" role="group" aria-label="${sym} actions">
+    ${watchButton(sym, { compact: !!s })}
+    <details class="menu acts-more"><summary class="btn btn-quiet ${s}" aria-label="More actions for ${sym}">${icon('more')}</summary><div class="menu-body menu-end">
+      ${mid ? html`<a href="#/alerts?symbol=${e}">Set an alert</a><a href="#/compare?t=${e}">Compare</a>${saveButton('company', keyOf('company', [sym]), { cls: 'acts-save' })}` : ''}
+      ${all ? html`<a href="#/${e}/sheet">Export research sheet</a>` : ''}
+      ${tickerMenu(sym, { phone: false })}</div></details>
+  </div>`;
 }
+
 /* The Weinstein stage, on the Overview alone as in Classic: its reading in Classic's words ("Stage 3 · Topping",
  * "breakdown") as a label that opens what it means for this symbol, and Explain, which drafts the question for Milo. */
 function stageLine(sym, st) {
@@ -134,7 +145,7 @@ function stageLine(sym, st) {
 /** The feed did not answer and the last bars Optic read stand in: said in the header, with when (Phase 09, S02). */
 const staleBars = (D) => (D.ticker && D.ticker.bars_stale_since
   ? html`<p class="stale dh-stale">Charts and indicators from the bars Optic read at ${etStamp(D.ticker.bars_stale_since)}: the feed did not answer just now.</p>` : '');
-export function header(sym, D, view = 'overview', { compact = false, bar = true, stage = null } = {}) {
+export function header(sym, D, view = 'overview', { compact = false, bar = true, stage = null, level = null } = {}) {
   // what Save keeps (Saved research, Handoff 5): this company and the tab, by reference, with its name and the price as
   // it is now, so the item stays readable if the ticker later goes
   provide('company', () => {
@@ -151,12 +162,12 @@ export function header(sym, D, view = 'overview', { compact = false, bar = true,
   // One line, so the research gets the screen: the Chart page's header (owner, 2026-10-18 second review), on every
   // dossier tab since the design standard of 2026-10-19. The tall header below is kept for a caller that asks.
   if (bar) {
-    return html`<header class="dhead bar${st ? ' is-wide' : ''}${view === 'chart' ? ' dhead-chart' : ''}">${raw(logoHTML(sym, { lazy: false }))}
+    return html`<header class="dhead bar${st ? ' is-wide' : ''}${view === 'chart' ? ' dhead-chart' : ''}${view === 'overview' ? ' dhead-overview' : ''}">${raw(logoHTML(sym, { lazy: false }))}
       <h1 class="name"><b class="tick">${sym}</b>${name && name !== sym ? html`<span>${name}</span>` : ''}<span class="sr">, ${label}</span></h1>
       <p class="dh-price">${isNum(q.price) ? html`<span class="dh-px">${num(q.price)}</span>` : D.quoteError ? '' : html`<span class="sk dh-sk dh-sk-sm" role="status" aria-label="Loading the price"></span>`}
-        <span class="dh-chg ${dir(q.change_pct)}">${isNum(q.change_pct) ? html`${signed(q.change, 2, '')} (${signed(q.change_pct)})` : ''}</span>
+        <span class="dh-chg ${dir(q.change_pct)}">${isNum(q.change_pct) ? html`${ARROW[dir(q.change_pct)] ? html`<span class="mv-a" aria-hidden="true">${ARROW[dir(q.change_pct)]}</span>` : ''}${signed(q.change, 2, '')} (${signed(q.change_pct)})` : ''}</span>
         ${isNum(q.price) ? html`<span class="dh-ext">${priceTag(D)}</span>` : ''}${ext ? html`<span class="dh-ext">${capFirst(ext.kind)} ${num(ext.price)} <span class="${dir(ext.change_pct)}">${signed(ext.change_pct)}</span>${ext.as_of ? html` ${delays.atTag(ext.as_of, '· as of ')}` : ''}</span>` : ''}</p>
-      ${staleBars(D)}${stageLine(sym, st)}${actions(sym, label, true)}
+      ${staleBars(D)}${stageLine(sym, st)}${actions(sym, label, true, level)}
     </header>`;
   }
   return html`<header class="dhead ${compact ? 'compact' : ''}">
@@ -166,7 +177,7 @@ export function header(sym, D, view = 'overview', { compact = false, bar = true,
         <span class="dh-chg ${dir(q.change_pct)}">${isNum(q.change_pct) ? html`${signed(q.change, 2, '')} (${signed(q.change_pct)})` : ''}</span></p>
       <p class="dh-state">${stateLine(D).base}${ext ? html` ${capFirst(ext.kind)} ${num(ext.price)}, <span class="${dir(ext.change_pct)}">${signed(ext.change_pct)}</span>${ext.as_of ? html`, ${delays.atTag(ext.as_of, 'struck ')}` : ''}.` : ''}</p>
     </div>
-    ${actions(sym, label, false)}
+    ${actions(sym, label, false, level)}
   </header>`;
 }
 

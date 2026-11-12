@@ -191,6 +191,20 @@ MODES: Dict[str, Dict[str, Any]] = {
 # Slider order, New to Markets to Expert.
 ORDER = ["new", "beginner", "intermediate", "advanced", "expert"]
 
+# The three levels the reader chooses from since 2026-11-09 (the owner's layout: "How should Optic speak to you?"
+# Beginner, Intermediate, Advanced). Only these are written, in the browser and on the account; the five ids
+# above stay as the server's wording tiers, and a stored New to Markets or Expert reads as its nearest of the
+# three (new and beginner as Beginner, advanced and expert as Advanced). Each of the three writes at its own
+# tier of the same name, so the words a Beginner gets are the Beginner style above, unchanged.
+THREE = ["beginner", "intermediate", "advanced"]
+_TO_THREE = {"new": "beginner", "beginner": "beginner", "intermediate": "intermediate",
+             "advanced": "advanced", "expert": "advanced"}
+
+
+def three(mode: Optional[str]) -> str:
+    """The three-level id a stored or sent value reads as. Unknown values read as the default."""
+    return _TO_THREE[normalise(mode)]
+
 
 def normalise(mode: Optional[str]) -> str:
     """A known level id, or the default.
@@ -246,6 +260,8 @@ def catalogue() -> Dict[str, Any]:
             }
             for key in ORDER
         ],
+        # what the level control offers (2026-11-09); `modes` keeps all five for the wording tiers and old pages
+        "levels": list(THREE),
         "default": DEFAULT_MODE,
         "legacy": dict(LEGACY),
         "preview_fact": PREVIEW_FACT,

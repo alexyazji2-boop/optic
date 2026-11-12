@@ -977,6 +977,29 @@ MIGRATION_20 = [
 ]
 
 
+# The owner's three signals (2026-11-09, app/usage.py): a stock opened from Home, a question to Milo, and the
+# first visit of a day, from which "came back within a week" is counted. A row names a reader by account id or by
+# a random id their browser keeps; never a question's text, an IP address or an email. `user_id` cascades, so the
+# delete-account path takes a signed-in reader's rows with the account; the sweep deletes any row past 400 days.
+MIGRATION_21 = [
+    """
+    CREATE TABLE IF NOT EXISTS usage_event (
+        id            INTEGER PRIMARY KEY AUTOINCREMENT,
+        occurred_at   TEXT NOT NULL,
+        actor_kind    TEXT NOT NULL CHECK (actor_kind IN ('signed_in', 'visitor')),
+        actor_ref     TEXT NOT NULL,
+        user_id       TEXT REFERENCES users(id) ON DELETE CASCADE,
+        event         TEXT NOT NULL CHECK (event IN ('home_stock_open', 'milo_question', 'visit')),
+        symbol        TEXT,
+        source_screen TEXT,
+        level         TEXT
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS usage_event_at ON usage_event (occurred_at)",
+    "CREATE INDEX IF NOT EXISTS usage_event_actor ON usage_event (event, actor_ref, occurred_at)",
+]
+
+
 MIGRATIONS: List[Tuple[int, str, List[str]]] = [
     (1, "accounts", MIGRATION_1),
     (2, "oauth_pkce", MIGRATION_2),
@@ -998,6 +1021,7 @@ MIGRATIONS: List[Tuple[int, str, List[str]]] = [
     (18, "usage_metrics", MIGRATION_18),
     (19, "knowledge_level", MIGRATION_19),
     (20, "research_library", MIGRATION_20),
+    (21, "usage_signals", MIGRATION_21),
 ]
 
 
@@ -1074,6 +1098,9 @@ def sweep() -> Dict[str, int]:
         counts["activity_days"] = cur.rowcount or 0
         cur = conn.execute("DELETE FROM milo_questions WHERE at < ?", (cutoff,))
         counts["milo_questions"] = cur.rowcount or 0
+        # The usage signals (migration 21, app/usage.py) keep the same 400 days
+        cur = conn.execute("DELETE FROM usage_event WHERE occurred_at < ?", (cutoff,))
+        counts["usage_event"] = cur.rowcount or 0
     return counts
 
 

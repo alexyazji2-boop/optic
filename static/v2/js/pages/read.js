@@ -73,14 +73,15 @@ function readHero() {
   if (b.missing) return empty("Today's Read is not ready yet", `${clean(b.reason || '')} ${BUILD_COST}`, buildControl("Build today's Read"));
   const s = b.summary || {}, w = b.wires || {};
   const idx = ((b.overview || {}).groups || {}).indices || [];
-  return html`${idx.length ? html`<div class="mstrip" style="--n:${idx.length}" role="group" aria-label="Indices">${idx.map((r) => html`<a class="mcell" href="#/${r.symbol}"><span class="k">${r.symbol} ${r.name}</span><span class="v">${num(r.last)}</span><span class="d ${dir(r.day)}">${signed(r.day)}</span></a>`)}</div>
+  return html`${idx.length ? html`<div class="mstrip" style="--n:${idx.length}" role="group" aria-label="Indices">${idx.map((r) => html`<a class="mcell" href="#/${r.symbol}"><span class="k">${r.symbol} ${r.name}</span><span class="v ${dir(r.day)}">${num(r.last)}</span><span class="d ${dir(r.day)}">${signed(r.day)}</span></a>`)}</div>
       <p class="asof">Fund prices, not index levels.</p>` : ''}
     <section class="section read-hero" aria-labelledby="rd-h">
       <div class="section-head"><div><p class="t-label">Optic's Read, ${fullDate(b.day)}</p><h2 class="t-display-m" id="rd-h">${clean(s.headline || 'The Read')}</h2>
         <p class="section-sub">Prices and headlines updated ${ago(b.built_at)}${b.previous_day ? '. Showing the previous day\'s Read until today\'s is ready' : b.stale ? '. A newer edition is due shortly' : ''}.${w.window_hours ? ` Covering the ${w.window_hours} hours since the previous session closed${w.window_hours >= 48 ? ', the whole weekend' : ''}.` : ''}</p>
-        ${b.previous_day || b.stale ? html`<div class="read-build">${buildControl(b.previous_day ? "Build today's Read now" : 'Update it now', true)}</div>` : ''}</div>
-        ${ask('Ask Milo about the Read', 'What matters most in today\'s Read, and what period does it cover?')}</div>
+        ${b.previous_day || b.stale ? html`<div class="read-build">${buildControl(b.previous_day ? "Build today's Read now" : 'Update it now', true)}</div>` : ''}</div></div>
       <div class="read-prose">${(s.paragraphs || []).map((p) => (String(p).startsWith('## ') ? html`<h3>${raw(bolded(p.slice(3)))}</h3>` : html`<p>${raw(bolded(p))}</p>`))}</div>
+      ${/* under the body, as the one quiet Milo entry: it sat between the headline and the text (hierarchy change 9) */ ''}
+      <div class="read-ask">${ask('Ask Milo about the Read', 'What matters most in today\'s Read, and what period does it cover?')}</div>
       <!-- two clocks, said apart (design review, 2026-10-19): the data refresh above and when this text was written -->
       ${generated(s, { at: s.written_at })}${s.covers_words ? html`<p class="asof">The text covers the session of ${s.covers_words}.</p>` : ''}${s.written_at && Date.parse(b.built_at) - Date.parse(s.written_at) > 1800000 ? html`<p class="asof">The text was written from the figures at that time; the prices above are newer.</p>` : ''}
       ${((s.figure_check || {}).unmatched || []).length ? html`<p class="stale">Optic could not match ${s.figure_check.unmatched.length === 1 ? 'one figure' : `${s.figure_check.unmatched.length} figures`} in this text to the data it was written from: ${s.figure_check.unmatched.map((u) => `${u.figure} (${clean(u.why)})`).join('; ')}. The figures in the panels are computed, not written by the model.</p>` : ''}
@@ -289,7 +290,7 @@ const TABS = [
 function paint() {
   if (!live) return;
   const y = window.scrollY;
-  draw(mainEl, html`<header class="page-head">${sectionHead('market', 'brief')}</header>
+  draw(mainEl, html`<header class="page-head page-head-label">${sectionHead('market', 'brief')}</header>
     ${readHero()}${desk()}
     <section class="section" aria-labelledby="rd-more-h"><h2 class="t-h2" id="rd-more-h">More from today</h2><div id="rd-more"></div></section>`);
   paintMore();

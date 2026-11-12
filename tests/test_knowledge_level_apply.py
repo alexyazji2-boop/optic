@@ -120,10 +120,12 @@ def test_an_account_has_no_level_until_one_is_chosen(signed_in):
 
 def test_the_level_round_trips_old_ids_map_and_junk_is_dropped(signed_in):
     patch = lambda v: client.patch("/api/auth/preferences", headers={"X-Optic-CSRF": signed_in}, json={"knowledge_level": v}).json()["preferences"]["knowledge_level"]
+    # three levels are written since 2026-11-09 (app/knowledge.py THREE): an old or five-level id is stored as its
+    # nearest of the three
     assert patch("beginner") == "beginner"
-    assert patch("professional") == "expert"
-    assert patch("not-a-level") == "expert", "an unknown value is dropped, the stored one kept"
-    assert client.get("/api/auth/preferences").json()["preferences"]["knowledge_level"] == "expert"
+    assert patch("professional") == "advanced"
+    assert patch("not-a-level") == "advanced", "an unknown value is dropped, the stored one kept"
+    assert client.get("/api/auth/preferences").json()["preferences"]["knowledge_level"] == "advanced"
 
 
 def test_the_preferences_carry_their_version_and_a_client_cannot_set_it(signed_in):
@@ -131,7 +133,7 @@ def test_the_preferences_carry_their_version_and_a_client_cannot_set_it(signed_i
     before = client.get("/api/auth/preferences").json()["preferences"]
     after = client.patch("/api/auth/preferences", headers={"X-Optic-CSRF": signed_in},
                          json={"knowledge_level": "new", "updated_at": "1999-01-01T00:00:00Z"}).json()["preferences"]
-    assert after["knowledge_level"] == "new" and after["updated_at"] and after["updated_at"] != "1999-01-01T00:00:00Z"
+    assert after["knowledge_level"] == "beginner" and after["updated_at"] and after["updated_at"] != "1999-01-01T00:00:00Z"
     assert after["updated_at"] >= (before.get("updated_at") or "")
     assert client.get("/api/auth/me").json()["preferences"]["updated_at"] == after["updated_at"], "the session's answer carries it too"
 

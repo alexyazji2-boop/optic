@@ -29,14 +29,16 @@ function form(S) {
   const p = S.plan, nr = S.nextReport;
   return html`<form class="pk-form" data-pk-form novalidate>
     <div class="pk-row"><div class="seg" role="group" aria-label="Direction to screen for"><button type="button" data-pk-thesis="bull" aria-pressed="${p.thesis !== 'bear'}">A rise</button><button type="button" data-pk-thesis="bear" aria-pressed="${p.thesis === 'bear'}">A fall</button></div>
-      <div class="seg" role="group" aria-label="Window">${HOLDS.map((d) => html`<button type="button" data-pk-hold="${d}" aria-pressed="${Number(p.hold_days) === d}">${d} days</button>`)}</div></div>
+      <div class="seg" role="group" aria-label="Window">${HOLDS.map((d) => html`<button type="button" data-pk-hold="${d}" aria-pressed="${Number(p.hold_days) === d}">${d} days</button>`)}</div>
+      ${/* the page's one gold action, on the form's first row so it is on the first screen (visual hierarchy review,
+         2026-11-10, change 12: it sat at y 893, the first screen's bottom edge); Enter in any field still submits */ ''}
+      <button type="submit" class="btn btn-primary pk-go" ${S.loading ? 'disabled' : ''}>${S.loading ? 'Screening…' : 'Screen the chain'}</button></div>
     <div class="pk-row">
       <label class="pk-in"><span class="t-label">Most premium at risk</span><span class="field pk-field"><span aria-hidden="true">$</span><input name="max_premium" inputmode="decimal" value="${p.max_premium}" aria-label="Most premium at risk, in dollars"></span></label>
       <label class="pk-in"><span class="t-label">Target price <small>optional</small></span><span class="field pk-field"><input name="target" inputmode="decimal" value="${p.target}" placeholder="${S.spot ? num(S.spot * (p.thesis === 'bear' ? 0.93 : 1.07), 0) : ''}" aria-label="Target price for the stock, optional"></span></label>
       <label class="pk-in"><span class="t-label">Invalidation <small>optional</small></span><span class="field pk-field"><input name="invalidation" inputmode="decimal" value="${p.invalidation}" aria-label="Price at which the idea is wrong, optional"></span></label>
     </div>
-    <label class="check"><input type="checkbox" name="through_event" ${p.through_event ? 'checked' : ''}> <span>I mean to hold through the next earnings report${nr ? ` (${shortDate(nr)})` : ''}</span></label>
-    <div class="cluster"><button type="submit" class="btn btn-primary" ${S.loading ? 'disabled' : ''}>${S.loading ? 'Screening…' : 'Screen the chain'}</button></div></form>`;
+    <label class="check"><input type="checkbox" name="through_event" ${p.through_event ? 'checked' : ''}> <span>I mean to hold through the next earnings report${nr ? ` (${shortDate(nr)})` : ''}</span></label></form>`;
 }
 
 function pickRow(c, i, d) {

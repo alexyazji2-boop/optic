@@ -118,7 +118,7 @@ def test_a_level_changed_in_another_tab_rewords_this_page():
     src = read("static/v2/js/core/prefs.js")
     assert "window.addEventListener('storage', (e) => { if (e.key === KNOW_KEY && levelOf(e.newValue)) emit('knowledge-synced'); });" in src
     dossier = read("static/v2/js/pages/dossier.js")
-    assert "else if (what === 'knowledge' || what === 'knowledge-synced') paint(main, sym);" in dossier
+    assert "if (what === 'knowledge' || what === 'knowledge-synced') { OPEN.clear(); advMoved = true; paint(main, sym); }" in dossier
 
 
 def test_the_offline_and_refused_sentences_fit_any_subject():

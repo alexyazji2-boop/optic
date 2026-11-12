@@ -26,7 +26,8 @@ def test_the_matcher_and_the_level(tmp_path):
     """)
     assert got["hits"] == ["forward P/E", "Dealer gamma", "Free cash flow", "EPS", "put/call ratio", "realised P&L"], "the longest term first, whole words, any case"
     assert got["misses"] == [None, None, None, None, None], "words whose everyday sense is the common one here are left plain"
-    assert got["level"] == [False, True, True, True, True, True], "Professional marks nothing, as Classic's explain 'off'"
+    # every one of the three levels marks terms (2026-11-09); Professional, Expert's old id, reads as Advanced
+    assert got["level"] == [True, True, True, True, True, True]
     assert '"explain": EXPLAIN_OFF,' in (V2.parent.parent / "app" / "knowledge.py").read_text()
 
 

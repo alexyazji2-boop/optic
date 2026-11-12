@@ -123,6 +123,10 @@
 /* the ticker menus' buttons read as their links do (ui/company.js tickerMenu); other menus style their own */
 .acts-more .menu-body > button, .co-more .menu-body > button { display: flex; align-items: center; min-height: 44px; padding: 0 10px; border: 0; border-radius: var(--r-md); background: none; color: var(--c-ink); font: 500 var(--t-base)/1.2 var(--f-sans); text-align: left; cursor: pointer; }
 .acts-more .menu-body > button:hover, .co-more .menu-body > button:hover { background: var(--c-sunk); }
+/* Save inside the Overview's More (hierarchy change 2): drawn as a menu item, not a button */
+.acts-more .menu-body > .lib-save { display: block; }
+.acts-more .menu-body .acts-save { width: 100%; min-height: 44px; justify-content: flex-start; gap: 8px; padding: 0 10px; border: 0; border-radius: var(--r-md); background: none; color: var(--c-ink); font: 500 var(--t-base)/1.2 var(--f-sans); }
+.acts-more .menu-body .acts-save:hover { background: var(--c-sunk); }
 @media (max-width: 640px) { .acts-2 { display: none; } .acts-more .menu-phone { display: block; } }
 .dchart { margin-top: 26px; }
 .chart-bar { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; flex-wrap: wrap; margin-bottom: 12px; }
@@ -632,7 +636,6 @@ table.scen td { font-weight: 600; }
 .chart-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 18px; margin-bottom: 16px; }
 /* Financials (pages/financials.js) */
 .fin-figs { margin: 4px 0 14px; border-top: 0; }
-.fin-figs .v { font-size: 26px; }
 .fin-nav { position: sticky; top: 70px; z-index: 6; display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; padding: 8px 0; background: var(--c-plane); }
 .fin-nav .chip { min-height: 36px; font-size: var(--t-md); }
 .fin-nav .fin-jumpsel { display: none; }
@@ -678,20 +681,30 @@ table.scen td { font-weight: 600; }
    plot filling the rest of the window (owner, 2026-10-18 second review) */
 .dhead.bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 18px; padding-top: 4px; }
 .dhead.bar .name { font: 400 var(--t-base)/1.3 var(--f-sans); gap: 8px; margin: 0; }
-.dhead.bar .name .tick { font-size: var(--t-base); }
 .dhead.bar .dh-price { display: flex; align-items: baseline; gap: 4px 10px; margin: 0; flex-wrap: wrap; flex: 1 1 auto; min-width: 0; }
 /* Where the header wraps, the price has a row of its own whether it has arrived or not: the short loading placeholder
    fitted beside the ticker, so the name and price arriving added two rows and pushed the page down about 70 px (BUG-031) */
-@media (max-width: 1100px) { .dhead.bar .dh-price { flex-basis: 100%; } }
+/* the price's own line under the ticker below 1,200px, not 1,100 (visual hierarchy review, 2026-11-10, change 17, F8):
+   between them the h1 was squeezed beside a 44px price into the smallest text of its row */
+@media (max-width: 1199px) { .dhead.bar .dh-price { flex-basis: 100%; } }
 html.eff-1100 .dhead.bar .dh-price { flex-basis: 100%; }
 /* the actions keep their row; the price's time wraps inside its own space */
 @media (min-width: 861px) { .dhead.bar { flex-wrap: nowrap; } .dhead.bar .acts { flex: none; } }
 /* 861 to 1100 px of page (a 1024 window, or beside a docked Milo): one row squeezed the name and the price into
    narrow columns, so the actions take a row of their own and the identity keeps its line (B4a, 2026-10-21) */
-@media (min-width: 861px) and (max-width: 1100px) { .dhead.bar { flex-wrap: wrap; } .dhead.bar .acts { margin-left: auto; } .dhead.bar .name { white-space: nowrap; } }
+@media (min-width: 861px) and (max-width: 1199px) { .dhead.bar { flex-wrap: wrap; } .dhead.bar .acts { margin-left: auto; } .dhead.bar .name { white-space: nowrap; } }
 html.eff-1100 .dhead.bar { flex-wrap: wrap; } html.eff-1100 .dhead.bar .acts { margin-left: auto; } html.eff-1100 .dhead.bar .name { white-space: nowrap; }
+/* The price is the page's one headline figure, at the display size (hierarchy review F1: it was 24px, 1.33 times the
+   18px section headings; now 44px at 1440, 34px on a phone, about twice the next tier). The day's change sits beside it
+   at the lead size in its direction's colour, the one saturated element at a size that reads (F5: it was 15px). The
+   Overview's alone: on the other tabs the tab's own figure leads (Options' implied move, the Chart's chart). */
 .dhead.bar .dh-px { font: 600 var(--t-2xl)/1 var(--f-sans); letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
 .dhead.bar .dh-chg { font-size: var(--t-base); }
+.dhead.bar.dhead-overview .dh-px { font-size: var(--t-figure); letter-spacing: -0.03em; }
+.dhead.bar.dhead-overview .dh-chg { font-size: var(--t-lead); font-weight: 600; }
+.dhead.bar .name .tick { font: 600 var(--t-xl)/1.2 var(--f-label); color: var(--c-ink); }
+/* the h1: the ticker at 18px/600 leads it, the name beside it at 15px/400 (change 17, F8: the h1 was 15px/400 whole) */
+.dhead.bar .name > span:not(.sr) { font: 400 var(--t-base)/1.3 var(--f-sans); color: var(--c-ink-2); }
 .dhead.bar .dh-ext { font-size: var(--t-sm); color: var(--c-ink-3); }
 .dhead.bar .acts { margin-left: auto; gap: 6px; }
 .dhead.bar .acts .btn { min-height: 34px; padding: 0 12px; font-size: var(--t-md); }
@@ -818,10 +831,8 @@ table.chw-table { font-size: var(--t-sm); } table.chw-table th { padding: 6px 4p
   .ch-stage { flex-direction: column; gap: 6px; }
   .ch-stage > #ch-draw { width: 100%; }
   .ch-draw { display: flex; flex-direction: row; position: static; overflow-x: auto; scrollbar-width: none; }
-  /* a phone: Explain and full screen at the readout's corner, and the readout in two short lines, so the plot
-     starts in the first screen (it began at 684px of 844 on a 390px phone, 2026-10-20) */
-  #ch-body > .ch-pacts { display: none; }   /* Explain and full screen are in the toolbar's menu on a phone */
-  #ch-body > .ch-pacts + .pc-host .pc-read { padding-right: 0; }   /* beats the wide screen's room for the corner buttons, below */
+  /* a phone: the readout in two short lines, so the plot starts in the first screen (it began at 684px of 844 on a
+     390px phone, 2026-10-20); Explain and full screen are in the toolbar's menu */
   .chart-page .pc-read { gap: 2px 8px; font-size: var(--t-sm); } .chart-page .pc-read .pc-sym, .chart-page .pc-read .pc-what { display: none; }
   .chart-page .ctools { gap: 6px; } .chart-page .ctools .btn-sm { padding: 0 10px; }
   .ch-more .seg { justify-self: start; }
@@ -874,15 +885,21 @@ table.chw-table { font-size: var(--t-sm); } table.chw-table th { padding: 6px 4p
 .pc .tm circle { fill: var(--c-plane); stroke-width: 1.6; } .pc .tm.pos circle { stroke: var(--c-pos); } .pc .tm.neg circle { stroke: var(--c-neg); }
 .pc .tm text { font: 600 var(--t-xs)/1 var(--f-label); } .pc .tm.pos text { fill: var(--c-pos); } .pc .tm.neg text { fill: var(--c-neg); }
 /* the classic toolbar (2026-10-19): Indicators, Layers with its count and its row, Chart read, Reset; bar size,
-   session or range, Fit, Reset zoom and the style at the right; Explain and full screen over the plot's corner */
+   session or range, Fit, Reset zoom and the style at the right, then Explain and full screen at the row's end. Those
+   two sat over the plot's top right until 2026-11-10 (round-one corrections), on the plot, the readout line and the
+   price scale; nothing is drawn over the plot now. */
 .ch-count { display: inline-grid; place-items: center; min-width: 18px; height: 18px; margin-left: 6px; padding: 0 5px; border-radius: var(--r-sm); background: color-mix(in srgb, var(--c-pos) 22%, transparent); color: var(--c-ink); font: 600 var(--t-xs)/1 var(--f-label); }
 .ch-layers-btn .ic { width: 14px; height: 14px; margin-left: 4px; fill: none; stroke: currentColor; stroke-width: 2; }
 .ch-layers-btn[aria-expanded="true"] { background: var(--c-active); border-color: var(--c-line); } .ch-layers-btn[aria-expanded="true"] .ic { transform: rotate(180deg); }
 .ch-layers { margin-top: 8px; } .ch-layers[hidden] { display: none; }
 .ch-stage > #ch-body { position: relative; }
-.ch-pacts + .pc-host .pc-read { padding-right: 190px; }
-.ch-pacts { position: absolute; top: 0; right: 60px; display: flex; gap: 6px; align-items: center; z-index: 5; }
-.ch-pacts .btn-sm { min-height: 30px; padding: 0 10px; font-size: var(--t-sm); }
+/* margin-left: auto keeps the pair at the right end of the row it lands on when the row wraps (1024px, or an intraday
+   session select on a narrow window); the selects take the phone's compact padding at every width so the pair fits
+   on the one row at 1440 x 900 with the session select showing (measured 2026-11-10: 39px short without it) */
+.ch-tacts { display: inline-flex; gap: 4px; align-items: center; margin-left: auto; }
+.ch-tacts .btn-sm { padding: 0 8px; }
+.ch-maxbtn.btn-sm { padding: 0 8px; }   /* icon-only, so a square-ish target beside Explain */
+.chart-page .ctools .select select { padding: 0 26px 0 10px; font-size: var(--t-md); }
 /* the rail's Milo is its line icon alone, like the rail's other tools; the words stay for a screen reader */
 .chw-milo.btn { width: 60px; min-height: var(--tap); margin-top: 4px; padding: 0; gap: 0; }
 .chw-milo.btn .ic { width: 18px; height: 18px; }
@@ -1074,7 +1091,7 @@ table.chw-table { font-size: var(--t-sm); } table.chw-table th { padding: 6px 4p
 }
 /* full screen (html.ch-max): the chart page alone in the window, with its tools, widgets and drawings. Its button
    pressed is the widget rail's pressed state, not the drawing tools' gold outline, which is the sidebar's */
-.ch-tool[data-v2-ch-max][aria-pressed="true"] { border-color: transparent; background: var(--c-active); box-shadow: inset 0 0 0 1px var(--c-line); }
+.ch-maxbtn[aria-pressed="true"] { border-color: transparent; background: var(--c-active); box-shadow: inset 0 0 0 1px var(--c-line); }
 html.ch-max .rail, html.ch-max .topbar, html.ch-max .tabbar, html.ch-max #legal-footer, html.ch-max .skip { display: none !important; }
 html.ch-max .shell { grid-template-columns: minmax(0, 1fr); }
 html.ch-max #main.page { max-width: none; padding: 6px 10px 8px; }
@@ -1602,15 +1619,16 @@ html[data-milo="off"] .ws-ask { opacity: .55; }
 .ws-kv dd { margin: 4px 0 0; font: 600 var(--t-lead)/1.15 var(--f-sans); font-variant-numeric: tabular-nums; }
 .ws-kv small { display: block; margin-top: 3px; font: 400 var(--t-xs)/1.3 var(--f-sans); color: var(--c-ink-3); }
 
-/* sector heatmap: colour carries direction and size, the figure carries the value. The tint is at most 28% and is
-   scaled to a fixed size of move for the period, not to the day's largest, so a quiet day looks quiet (BUG-077). */
+/* sector heat map: colour carries direction and size, the figure with its arrow and sign carries the value. The tint
+   runs from 14% to 55% of the chart pair since the visual update (2026-11-11; it was capped at 28%), still scaled to a
+   fixed size of move for the period, not to the day's largest, so a quiet day looks quiet (BUG-077). */
 .ws-heat { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 6px; }
 .ws-heat-t { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; min-height: 64px; padding: 8px 10px; border: 1px solid var(--c-line); border-radius: var(--r-md); text-align: left; cursor: pointer; color: var(--c-ink); font-size: var(--t-sm);
   background: color-mix(in srgb, var(--c-raised) calc(100% - var(--mix, 10%)), var(--hue, var(--c-ink-3))); }
-.ws-heat-t[data-dir="up"] { --hue: var(--c-pos); } .ws-heat-t[data-dir="down"] { --hue: var(--c-neg); }
-.ws-heat-t b { font: 600 var(--t-xs)/1 var(--f-label); color: var(--c-ink); }
-.ws-heat-t span:last-child { font: 600 var(--t-md)/1 var(--f-label); }
-.ws-heat-t .up, .ws-heat-t .down { color: var(--c-ink); }
+.ws-heat-t[data-dir="up"] { --hue: var(--c-up); } .ws-heat-t[data-dir="down"] { --hue: var(--c-down); }
+.ws-heat-t > span:first-child { font-size: var(--t-sm); line-height: 1.25; }
+.ws-heat-t .mv { font: 600 var(--t-md)/1 var(--f-label); }
+.ws-heat-t .mv.up, .ws-heat-t .mv.down { color: var(--c-ink); }
 .ws-heat-t[aria-pressed="true"] { border-color: var(--c-gold); box-shadow: inset 0 0 0 1px var(--c-gold); }
 
 .ws-quote { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px 16px; margin-bottom: 6px; }
@@ -1715,9 +1733,12 @@ html[data-milo="off"] .ws-ask { opacity: .55; }
    reading text keeps its own measure inside. VISUAL-SPEC-DARK.md section 4. */
 .page-view { font-size: var(--t-base); }
 .page-head { padding-top: 8px; }
-.page-head h1.t-display-m, .page-head .t-display-m, .ws-pagehead h1 { font-size: 28px; letter-spacing: -0.02em; }
+.page-head h1.t-display-m, .page-head .t-display-m { font-size: 28px; letter-spacing: -0.02em; }
+/* the greeting carries no figure, so it steps down to the lead size under the day's figure (hierarchy review F1: at 28px
+   it was Home's largest text) */
+.ws-pagehead h1 { font-size: var(--t-lead); letter-spacing: -0.01em; }
 .dhead { padding-top: 8px; }
-.dhead .t-display { font-size: clamp(34px, 3.2vw, 44px); letter-spacing: -0.03em; }
+.dhead .t-display { font-size: var(--t-figure); letter-spacing: -0.03em; }
 .page-view section.section:not(.section .section):not(.ws-panel),
 .page-view > section.answers, #op-top > section.readings, #wl-body {
   margin-top: 12px; padding: 16px 18px 18px;
@@ -1736,10 +1757,10 @@ html[data-milo="off"] .ws-ask { opacity: .55; }
 .page-view table.t { font-size: var(--t-md); }
 .page-view table.t th { font: 500 var(--t-xs)/1.2 var(--f-label); color: var(--c-ink-3); }
 /* a second line inside a cell or row (a mid, a share count) keeps the 12px floor */
-.page-view td small, .page-view th small, .ws-body small { font-size: max(12px, .86em); }
+.page-view td small, .page-view th small, .ws-body small { font-size: max(13px, .86em); }
 @media (max-width: 860px) {
   .page-view section.section:not(.section .section):not(.ws-panel), .page-view > section.answers, #op-top > section.readings, #wl-body { padding: 12px 12px 14px; margin-top: 10px; }
-  .page-head h1.t-display-m, .page-head .t-display-m, .ws-pagehead h1 { font-size: var(--t-2xl); }
+  .page-head h1.t-display-m, .page-head .t-display-m { font-size: var(--t-2xl); }
 }
 
 /* Home's layout tabs become the view selector under 640 px (pages/workspace.js bar) */
@@ -2003,7 +2024,7 @@ ul.cal-react { display: flex; flex-wrap: wrap; gap: 4px 18px; padding-left: 0; l
 }
 
 /* the Chart page between bar sizes (pages/chart.js pending): the old plot dimmed and out of reach, a note over it */
-#ch-body.is-pending > .pc-host, #ch-body.is-pending > .ch-pacts { opacity: .5; pointer-events: none; transition: opacity var(--m-press) var(--ease-out); }
+#ch-body.is-pending > .pc-host { opacity: .5; pointer-events: none; transition: opacity var(--m-press) var(--ease-out); }
 .ch-pending { position: absolute; top: 56px; left: 50%; transform: translateX(-50%); z-index: 4; margin: 0; max-width: calc(100% - 24px); padding: 8px 12px; border-radius: var(--r-md); border: 1px solid var(--c-line); background: var(--c-raised); box-shadow: var(--sh-pop); font-size: var(--t-sm); color: var(--c-ink-2); text-align: center; }
 /* the watchlist's refresh (pages/watchlist.js): a moved price holds its direction's colour, then eases back; a
    note with Re-sort when the held order no longer matches the sort */
@@ -2114,7 +2135,7 @@ html.eff-1100 .ob-ways { grid-template-columns: minmax(0, 1fr); }
 .dhead.bar .sym-logo { width: 32px; height: 32px; border-radius: var(--r-sm); }
 /* the Overview's header carries the stage and the switch too, so its actions take a second line when the first is full */
 .dhead.bar.is-wide { flex-wrap: wrap; justify-content: flex-start; } .dhead.bar.is-wide .dh-price { flex: 0 1 auto; } .dhead.bar.is-wide .dh-ext { white-space: nowrap; }
-@media (max-width: 1100px) { .dhead.bar.is-wide .dh-price { flex-basis: 100%; } }   /* the price's own row there, as above (BUG-031) */
+@media (max-width: 1199px) { .dhead.bar.is-wide .dh-price { flex-basis: 100%; } }   /* the price's own row there, as above (BUG-031) */
 html.eff-1100 .dhead.bar.is-wide .dh-price { flex-basis: 100%; }
 /* "Show advanced analysis" at the end of the tab row, as in Classic; under the tabs on a phone */
 .dstick.has-tools { display: flex; flex-wrap: wrap; align-items: flex-end; }
@@ -2142,7 +2163,10 @@ html.eff-1100 .dhead.bar.is-wide .dh-price { flex-basis: 100%; }
 .dh-stage.stage-4 .term { color: var(--c-neg); } .dh-stage.stage-4 .stage-dot { background: var(--c-neg); }
 .dh-stage .dh-explain { min-height: 30px; padding: 0 10px; font-size: var(--t-sm); }
 /* the past year's chart */
-.py-title { margin: 0 0 4px; font-size: var(--t-lg); font-weight: 600; color: var(--c-ink); }
+.py-title { margin: 4px 0 0; font-size: var(--t-xl); font-weight: 600; line-height: 1.3; color: var(--c-ink); }
+/* the lifted sentence (hierarchy change 5): the page's finding, at the lead size, the visible second tier under the
+   price; one line's height is kept while the figures load, so it does not push the page when it arrives */
+.ov-say { margin: 18px 0 0; max-width: 72ch; font-size: var(--t-lead); line-height: 1.4; color: var(--c-ink); min-height: 1.4em; }
 .ovx-marks td:first-child { white-space: nowrap; } .ovx-marks td:last-child { white-space: normal; text-align: left; }
 /* four questions, answered separately: one container, divided */
 .q-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border-top: 1px solid var(--c-line-2); }
@@ -2365,3 +2389,136 @@ html.eff-1100 .dhead.bar.is-wide .dh-price { flex-basis: 100%; }
   .gi-state { min-width: 0; }
   .gi-prose p { font-size: var(--t-base); }
 }
+
+/* Pass 1 (2026-11-09): the level control sits beside Home's greeting, top-aligned as on the owner's home screen; after
+   the .ws-pagehead rules above, which bottom-align it */
+.ws-pagehead.page-lead { align-items: flex-start; }
+.ov-lead { margin-top: 16px; align-items: flex-end; }
+.ov-lead .mp { flex: 1 1 380px; margin: 0; }
+@media (max-width: 860px) { .ws-pagehead.page-lead { flex-direction: column; align-items: stretch; } }
+/* The level control's places (visual hierarchy review, 2026-11-10, change 3): on Home, right-aligned on the date line
+   under the greeting, no longer level with it; on the company page, right-aligned on the tabs row. */
+.ws-pagehead.page-lead { display: block; margin-bottom: 14px; }
+.ws-dateline { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 16px; margin-top: 2px; }
+.ws-dateline .ws-sub { margin: 0; }
+.dstick.has-tools > .lc { flex: none; margin: 0 0 4px auto; padding-left: 12px; }
+/* on the tabs row the question's words would push the control onto a row of its own below 1,500px (the tabs take 606px
+   of 1,072 at 1440): the words stay the group's name for a screen reader, and the help mark and its explanation stay beside the buttons */
+@media (max-width: 1499px) { .dstick.has-tools > .lc .lc-qt { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; } }
+/* Customize joins the level control's row at Intermediate (hierarchy change 4): quiet, at the control's 36px */
+.ws-edit-lone { margin-left: auto; min-height: var(--ctl-sm); }
+.ws-dateline .ws-edit-lone + .lc { margin-left: 0; }
+@media (max-width: 860px) { .dstick.has-tools > .lc { flex: 1 1 100%; margin: 8px 0 4px; padding-left: 0; } }
+
+/* Home's one figure for the day (visual hierarchy review, 2026-11-10, change 1): the largest type on Home, at the
+   display size the company page's price uses, with its move beside it in its direction's colour at the lead size and
+   one line chart under it. Measured before: the greeting at 28px led and the tiles' figures were 16px. */
+.hm-feature { margin: 0 0 18px; }
+.hm-feat-k { margin: 0; font: 600 var(--t-md)/1.3 var(--f-label); color: var(--c-ink-2); }
+.hm-feat-u { font: 400 var(--t-sm)/1.3 var(--f-sans); color: var(--c-ink-3); }
+.hm-feat-fig { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; margin: 4px 0 0; }
+.hm-feat-v { font: 600 var(--t-figure)/1 var(--f-sans); letter-spacing: -0.03em; font-variant-numeric: tabular-nums; color: var(--c-ink); text-decoration: none; }
+.hm-feat-v:hover { text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 6px; }
+.hm-feat-d { font: 600 var(--t-lead)/1 var(--f-sans); font-variant-numeric: tabular-nums; }
+.hm-feat-chart { margin-top: 12px; }
+.hm-feat-say { margin: 10px 0 0; max-width: 72ch; font-size: var(--t-lead); line-height: 1.4; color: var(--c-ink); }
+
+/* Markets, the Read: the day's headline leads (visual hierarchy review, 2026-11-10, change 9, F1). The page title was
+   28px and the headline 26px, so the real focal point came second. The title is now the group's 18px label above the
+   tabs, the headline 32px, Update it now a quiet 13px link, and Ask Milo sits under the text as the one quiet entry. */
+.page-head.page-head-label h1.t-display-m { font: 600 var(--t-xl)/1.3 var(--f-sans); letter-spacing: 0; color: var(--c-ink-2); }
+.read-hero #rd-h.t-display-m { font-size: 32px; letter-spacing: -0.02em; }
+.read-hero .read-build .textlink { font-size: var(--t-sm); font-weight: 500; }
+.read-hero .read-ask { margin-top: 14px; }
+
+/* Financials: one figure leads the summary row (visual hierarchy review, 2026-11-10, change 10, F10). Six figures at
+   26px sat in one row and the largest type on the page was any of them. Revenue now leads at 34px with its year, the
+   other five at the lead size, and the summary's own growth line sits above the row as its finding. */
+.fin-figs .v { font-size: var(--t-lead); }
+.fin-figs .rd-lead .v { font-size: 34px; letter-spacing: -0.03em; }
+.fin-figs .rd-when { font-weight: 400; color: var(--c-ink-3); }
+.fin-lead { margin: 6px 0 10px; max-width: 72ch; font-size: var(--t-lead); line-height: 1.4; color: var(--c-ink); }
+
+/* The Chart page (visual hierarchy review, 2026-11-10, change 11): one title line from Chart read, so the page says what
+   the reader is looking at. The Tools button that hid the rails below Advanced was reverted on 2026-11-10 (round-one
+   corrections); the title line stays. */
+.ch-title { margin: 12px 0 8px; font-size: var(--t-xl); font-weight: 600; line-height: 1.3; color: var(--c-ink); }
+.ch-title:empty { display: none; }
+/* Options: the one gold action on the form's first row, at its right (hierarchy change 12) */
+.pk-row .pk-go { margin-left: auto; }
+
+/* Portfolio (visual hierarchy review, 2026-11-10, change 13, F10): the notice is one 15px line that opens, and each
+   account's value and return lead its card at 24px (they were 15px inside three equal cards) */
+details.whose { display: block; padding: var(--s-2) var(--s-4); }
+details.whose > summary { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; min-height: var(--tap); align-content: center; font-size: var(--t-base); cursor: pointer; }
+details.whose > summary .whose-more { font-size: var(--t-sm); color: var(--c-gold-ink); text-decoration: underline; text-underline-offset: 3px; }
+details.whose[open] > summary .whose-more { display: none; }
+details.whose > p { margin: 4px 0 6px; }
+.bk-figs > span:nth-child(-n+2) { font: 600 var(--t-2xl)/1.15 var(--f-sans); letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+
+/* Discover: each question card leads with its top name and figure (visual hierarchy review, 2026-11-10, change 15) */
+.gq h3 { font: 500 var(--t-base)/1.35 var(--f-sans); color: var(--c-ink-2); }
+.gq .gq-lead { font: 600 var(--t-2xl)/1.15 var(--f-sans); letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.gq .gq-lead a { color: var(--c-ink); text-decoration: none; } .gq .gq-lead a:hover { text-decoration: underline; }
+.gq .gq-lead .gq-k { font: 400 var(--t-sm)/1.3 var(--f-sans); letter-spacing: 0; color: var(--c-ink-3); }
+
+/* ---------- Home, the visual update (2026-11-11): figures first ----------
+   The day's one figure in a card with its line larger, the tiles with their 90-session lines, the market panels as a
+   figure, a gauge and bars, the watchlist with a line per name and the Desk's bottom line. Measured against the
+   confirmed prototype's renders at 1440 and 390. */
+.hm-feature { padding: 18px 20px 14px; border: 1px solid var(--c-line); border-radius: var(--r-lg); background: var(--c-raised); }
+.hm-feat-top { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 10px 16px; }
+.hm-feat-d { display: inline-flex; align-items: baseline; gap: 6px; }
+.hm-feat-t { font: 400 var(--t-md)/1 var(--f-sans); color: var(--c-ink-3); }
+.hm-feat-say { font-size: var(--t-lg); color: var(--c-ink-2); } .hm-feat-say b { color: var(--c-ink); }
+.hm-feat-seg button { min-height: var(--ctl-sm); }
+.hm-feat-leg { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 18px; margin: 8px 0 0; font-size: var(--t-sm); color: var(--c-ink-3); }
+.ws-cell { gap: 4px; }
+.ws-cell .v { color: var(--c-ink); }
+.ws-cell .d .mv { font: 600 var(--t-sm)/1 var(--f-label); }
+.ws-cell .spark { width: 100%; height: 30px; margin-top: 4px; }
+.gl-fig { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; margin: 2px 0 0; }
+.gl-v { font: 600 var(--t-2xl)/1.1 var(--f-sans); color: var(--c-ink); font-variant-numeric: tabular-nums; }
+.gl-l { font-size: var(--t-md); color: var(--c-ink-2); }
+.gl-k { margin: 14px 0 4px; font-size: var(--t-sm); color: var(--c-ink-3); }
+.ws-watch .ws-sparkh { text-align: right; } .ws-watch .ws-sparkc { width: 104px; text-align: right; } .ws-watch .spark { display: inline-block; width: 96px; height: 26px; vertical-align: middle; }
+.desk-glance { margin: 0; font-size: var(--t-lg); line-height: 1.45; color: var(--c-ink); }
+.desk-next { margin: 6px 0 0; font-size: var(--t-base); color: var(--c-ink-2); }
+.desk-more { margin: 12px 0 4px; }
+.ws-onboard.is-compact { padding: 10px 14px; gap: 8px 18px; }
+.ws-onboard.is-compact .ob-ways p { font-size: var(--t-sm); }
+.ws-onboard.is-compact .ws-title { font-size: var(--t-md); }
+@media (max-width: 719px) { .hm-feature { padding: 14px 14px 10px; } .ws-watch .ws-sparkc { width: 72px; } .ws-watch .spark { width: 64px; } }
+
+/* ---------- the company Overview, the visual update (2026-11-11): figures first ----------
+   The chart's one-line caption; "Why does it matter?" as four small figures; what the company does with its revenue
+   mix beside estimates against results (Beginner) or the bull and bear lines (Intermediate); and at Intermediate and
+   Advanced a row of estimates, the day after each report and who owns it. */
+.dchart-cap { margin: 8px 0 0; font-size: var(--t-sm); color: var(--c-ink-3); }
+.dchart-cone { white-space: normal; }
+.ov-figs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; margin-top: 18px; }
+.ov-fig, .ov-card { min-width: 0; padding: 16px 16px 14px; border: 1px solid var(--c-line); border-radius: var(--r-lg); background: var(--c-raised); }
+.ov-fig-k { margin: 0; font: 600 var(--t-sm)/1.3 var(--f-label); letter-spacing: .04em; text-transform: uppercase; color: var(--c-gold-ink); }
+.ov-fig-h { margin: 4px 0 8px; font: 600 var(--t-lg)/1.3 var(--f-sans); color: var(--c-ink); text-wrap: balance; }
+.ov-fig-c { margin: 8px 0 0; font-size: var(--t-sm); line-height: 1.45; color: var(--c-ink-2); }
+.ov-fig-c b { color: var(--c-ink); }
+.ov-fig-big { margin: 6px 0 0; font: 600 var(--t-2xl)/1.1 var(--f-sans); color: var(--c-ink); }
+.ov-fig-big small { margin-left: 8px; font: 400 var(--t-md)/1 var(--f-sans); color: var(--c-ink-3); }
+.ov-fig-none { margin: 8px 0; font-size: var(--t-sm); color: var(--c-ink-3); }
+.ov-fig .pbars { margin-top: 14px; }
+.ov-fig .ov-fig-chart .grid { display: none; }
+.ov-row2 { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 14px; margin-top: 14px; align-items: start; }
+.ov-row3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin-top: 14px; align-items: start; }
+.ov-row2 > .section.about { margin: 0; padding: 16px; border: 1px solid var(--c-line); border-radius: var(--r-lg); background: var(--c-raised); }
+.ov-row2 .about .donut { margin-top: 12px; }
+.ov-card h2 small { margin-left: 6px; font: 400 var(--t-sm)/1 var(--f-sans); color: var(--c-ink-3); }
+.ov-card h2 { margin: 0 0 8px; }
+.ov-key { display: flex; flex-wrap: wrap; gap: 4px 14px; margin: 8px 0 0; font-size: var(--t-sm); color: var(--c-ink-3); }
+.ov-key .sw { display: inline-block; width: 10px; height: 10px; margin-right: 6px; border-radius: 2px; vertical-align: -1px; }
+.ov-sw-up { background: var(--c-up); } .ov-sw-down { background: var(--c-down); }
+.cs-glance { display: grid; gap: 8px; margin: 4px 0 0; padding: 0; list-style: none; font-size: var(--t-md); color: var(--c-ink-2); }
+.cs-glance li { display: grid; grid-template-columns: 18px minmax(0, 1fr); gap: 6px; align-items: baseline; }
+.cs-glance .textlink { color: var(--c-ink-2); font-weight: 400; }
+@media (max-width: 1100px) { .ov-figs { grid-template-columns: repeat(2, minmax(0, 1fr)); } .ov-row3 { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 860px) { .ov-row2 { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 520px) { .ov-figs { grid-template-columns: minmax(0, 1fr); } }

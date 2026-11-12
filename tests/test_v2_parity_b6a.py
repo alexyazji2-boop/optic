@@ -183,6 +183,6 @@ def test_the_research_sections_and_where_they_sit():
     assert "${combined()}${OR.opticRead(c)}${digest(sym)}${fund ? '' : html`<div data-tc-slot></div>`}${OR.nextSection(c)}${OR.restSection(c)}${D.ticker ? more(sym) : ''}${OR.methodSection(c)}" in dossier
     assert "levels:" not in dossier, "no section is folded by a level: the view itself swaps (BUG-068)"
     assert "${fund ? OR.fundRisk(sym, c.f) : ''}" in dossier and "export function fundRisk(sym, f)" in RESEARCH
-    assert "fresh(`/api/stage?symbol=${enc}`" in dossier and "{ stage: () => stageFor(sym) }" in dossier, "the stage survives the live price's redraws"
+    assert "fresh(`/api/stage?symbol=${enc}`" in dossier and "{ stage: () => stageFor(sym), level }" in dossier, "the stage survives the live price's redraws"
     assert "TR.historyLine('stage')" in dossier, "the stage's explanation says what its replay on history found (B6c)"
     assert "/api/chat" not in RESEARCH and "repeating-linear-gradient" not in (V2 / "css/pages.css").read_text()

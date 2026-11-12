@@ -1,0 +1,14 @@
+# Test tools only; nothing here is installed in the image (the Dockerfile reads requirements.txt alone).
+#
+# pytest, httpx    the Python suite and FastAPI's TestClient
+# pillow           the image checks in tests/test_pulse_scout.py
+# playwright       the browser journeys in tests/e2e (Apache-2.0); then `python -m playwright install chromium`
+# pytest-playwright  Playwright's pytest integration (Apache-2.0)
+# axe-playwright-python  the accessibility scan, axe-core inside (MIT; axe-core MPL-2.0, unmodified)
+-r requirements.txt
+pytest>=8
+httpx>=0.27
+pillow>=10
+playwright>=1.59
+pytest-playwright>=0.5
+axe-playwright-python>=0.1.4

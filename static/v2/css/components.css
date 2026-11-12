@@ -51,7 +51,7 @@ kbd { font: 500 var(--t-xs)/1 var(--f-sans); padding: 4px 7px; border-radius: va
 /* Milo switched off on this deployment (ui/milo.js checkAvailability): the buttons still open the drawer,
    which says why, but no longer look ready to answer */
 html[data-milo="off"] .btn-milo, html[data-milo="off"] [data-v2-milo].btn { border-style: dashed; border-color: var(--c-line); color: var(--c-ink-2); }
-html[data-milo="off"] .btn-milo::after, html[data-milo="off"] [data-v2-milo].btn::after { content: "Off"; margin-left: 2px; padding: 3px 6px; border-radius: var(--r-xs); background: var(--c-sunk); color: var(--c-ink-3); font: 600 var(--t-xs)/1 var(--f-label); }
+html[data-milo="off"] .btn-milo::after, html[data-milo="off"] [data-v2-milo].btn::after, html[data-milo="off"] .mp-go::after { content: "Off"; margin-left: 2px; padding: 3px 6px; border-radius: var(--r-xs); background: var(--c-sunk); color: var(--c-ink-3); font: 600 var(--t-xs)/1 var(--f-label); }
 /* Home's panel headers: thirteen "Off" tags on one screen was noise; the dashed outline and the description
    say it, and the top bar's launcher carries the tag */
 html[data-milo="off"] [data-v2-milo].btn.ws-ask::after { content: none; }
@@ -123,7 +123,18 @@ html[data-milo="off"] [data-v2-milo].btn.ws-ask::after { content: none; }
 .chart-tip.is-narrow { white-space: normal; width: max-content; max-width: 100%; } .chart-tip.is-narrow span { display: block; margin-left: 0; } .chart-tip em { display: block; font-style: normal; opacity: .85; }
 .spark { display: block; width: 112px; height: 32px; }
 .spark path { fill: none; stroke-width: 1.6; stroke-linejoin: round; }
-.spark.up path { stroke: var(--c-pos); } .spark.down path { stroke: var(--c-neg); }
+/* red and green in every chart (visual update, 2026-11-11): a sparkline by its own span, flat in the neutral ink, with
+   a dot at its end so the last point reads without colour */
+.spark.up path { stroke: var(--c-up); } .spark.down path { stroke: var(--c-down); } .spark.flat path { stroke: var(--c-ink-2); }
+.spark circle { fill: var(--c-ink-2); } .spark.up circle { fill: var(--c-up); } .spark.down circle { fill: var(--c-down); }
+/* a line chart coloured by its span (lineChart tone: 'span'), with its start level dashed; the gold cone, the event
+   marks and the averages keep their own colours */
+.chart.tone-up .line, .chart.tone-up .end { stroke: var(--c-up); } .chart.tone-up .end { fill: var(--c-up); }
+.chart.tone-down .line, .chart.tone-down .end { stroke: var(--c-down); } .chart.tone-down .end { fill: var(--c-down); }
+.chart.tone-flat .line { stroke: var(--c-ink-2); }
+.chart.tone-up { --c-area-top: var(--c-up-area); --c-area-bottom: transparent; }
+.chart.tone-down { --c-area-top: var(--c-down-area); --c-area-bottom: transparent; }
+.chart .base { stroke: var(--c-ink-3); stroke-width: 1; stroke-dasharray: 4 4; }
 .meter { display: block; height: auto; max-width: 100%; overflow: visible; margin: 6px 0 2px; }
 .meter .tk { stroke: var(--c-ink-3); } .meter .tk.major { stroke: var(--c-ink-2); }
 .meter .fair { fill: var(--c-gold-wash); } .meter .edge { stroke: var(--c-gold); stroke-width: 1.5; }
@@ -805,11 +816,21 @@ ul.plain { margin: 0; padding-left: 18px; } ul.plain li { margin-bottom: 7px; }
   .drawer-panel { top: auto; left: 0; width: 100%; height: 88vh; border-radius: var(--r-xl) var(--r-xl) 0 0; border-left: 0; transform: translateY(32px); }
   .drawer-head { padding-left: 20px; } .drawer-body { padding: 16px 20px 40px; }
   .drawer-panel.is-form { height: min(88vh, var(--vvh, 100dvh)); max-height: var(--vvh, 100dvh); }
-  .tabbar { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); position: fixed; left: 0; right: 0; bottom: 0; z-index: 40; background: color-mix(in srgb, var(--c-raised) 94%, transparent); backdrop-filter: blur(12px); border-top: 1px solid var(--c-line-2); padding: 4px 4px max(8px, env(safe-area-inset-bottom));
+  /* the bar counts its own columns (seven since the rail's names, gauntlet L3, 2026-11-10): a count written here goes
+     stale against MOBILE_TABS, and Classic's .mtabs put a sixth tab on a second row that way (tests/test_nav_coherence.py) */
+  .tabbar { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); position: fixed; left: 0; right: 0; bottom: 0; z-index: 40; background: color-mix(in srgb, var(--c-raised) 94%, transparent); backdrop-filter: blur(12px); border-top: 1px solid var(--c-line-2); padding: 4px 2px max(8px, env(safe-area-inset-bottom));
     /* its full height before its buttons arrive: the shell mounts it empty and the route paints it, and empty it was
        13px tall, so every load grew it 54px upward (motion check 2026-10-24: top 831 to 777, part of a 0.58 shift) */
     min-height: calc(55px + 4px + max(8px, env(safe-area-inset-bottom))); }
-  .tabbar a, .tabbar button { min-width: 0; overflow-wrap: anywhere; text-align: center; min-height: 54px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; text-decoration: none; font: 500 var(--t-sm)/1 var(--f-sans); color: var(--c-ink-3); border: 0; background: none; cursor: pointer; }
+  /* seven labels share 390px, about 55px each: at 13px "Portfolio" is wider than its column and broke mid-word, so the
+     bar's words are the scale's smallest step (12px) and never break. Narrower phones tighten the letters rather than
+     shrink the type below the scale (tests/test_v2_design_standard.py): measured in Chromium with the fallback face,
+     "Research" needs 52px at 12px against 51px columns at 360 and 45px at 320 */
+  .tabbar a, .tabbar button { min-width: 0; white-space: nowrap; text-align: center; min-height: 54px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; text-decoration: none; font: 500 var(--t-xs)/1 var(--f-sans); letter-spacing: -0.03em; color: var(--c-ink-3); border: 0; background: none; cursor: pointer; }
+  /* the labels at the 13px floor since the visual update (2026-11-11; they were 12px): set a little tighter so
+     "Research" keeps its own seventh of a 390px screen, and tighter again on narrower phones */
+  @media (max-width: 374px) { .tabbar { padding-left: 0; padding-right: 0; } .tabbar a, .tabbar button { letter-spacing: -0.06em; } }
+  @media (max-width: 359px) { .tabbar a, .tabbar button { letter-spacing: -0.1em; } }
   .tabbar svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.6; }
   .tabbar [aria-current="page"] { color: var(--c-ink); font-weight: 600; } .tabbar [aria-current="page"] svg { stroke: var(--c-gold); }
 }
@@ -893,6 +914,10 @@ table.st td a { text-decoration: none; font-weight: 600; } table.st td a:hover {
 .legal-full p { line-height: 1.5; }
 .legal-slot:empty { display: none; }
 .legal-area { margin: 20px 0 0; padding: 12px 14px; border-radius: var(--r-2); background: var(--c-plane-2, var(--c-sunk)); font-size: var(--t-md); line-height: 1.5; color: var(--c-ink-2); max-width: 90ch; }
+/* A page's notice is read, not led with (hierarchy change 6, F13): a 1px-bordered note at regular weight, no fill. The
+   words are counsel's and unchanged; only the weight and the box. Milo's inset (#pulse-legal) keeps its own rules. */
+.page-view .legal-area { background: none; border: 1px solid var(--c-line-2); font-weight: 500; }
+.page-view .legal-area strong { font-weight: 500; color: var(--c-ink-2); }
 .legal-milo { font-size: var(--t-sm); color: var(--c-ink-3); } .legal-milo summary { cursor: pointer; min-height: 32px; display: flex; align-items: center; gap: 4px; } .legal-milo p { margin: 4px 0 0; line-height: 1.45; }
 .build-new { position: fixed; z-index: 60; left: 50%; transform: translateX(-50%); bottom: calc(24px + env(safe-area-inset-bottom, 0px)); display: flex; align-items: center; gap: 10px; padding: 10px 12px 10px 16px; border-radius: var(--r-3); background: var(--c-raised); border: 1px solid var(--c-line); box-shadow: 0 16px 40px rgba(20, 18, 15, .18); }
 .build-new p { margin: 0; font-weight: 500; }
@@ -941,6 +966,9 @@ table.st td a { text-decoration: none; font-weight: 600; } table.st td a:hover {
 .bars .grid { stroke: var(--c-chart-grid); stroke-width: 1; }
 .gbar.s1, .pdot.s1 { fill: var(--c-s1); } .gbar.s2, .pdot.s2 { fill: var(--c-s2); } .gbar.s3, .pdot.s3 { fill: var(--c-s3); }
 .gbar.s0 { fill: var(--c-ink-3); }
+/* the visual update's figures (2026-11-11): the company's own figures in gold, an outcome in the chart pair */
+.gbar.gold { fill: var(--c-gold); } .gbar.upb { fill: var(--c-up); } .gbar.downb { fill: var(--c-down); } .gbar.flatb { fill: var(--c-ink-3); }
+.gbar.hollow.mute { stroke: var(--c-ink-2); }
 .gbar.hollow { fill: none; stroke-width: 1.5; stroke-dasharray: 3 2; } .gbar.hollow.s1 { stroke: var(--c-s1); } .gbar.hollow.s2 { stroke: var(--c-s2); } .gbar.hollow.s3 { stroke: var(--c-s3); } .gbar.hollow.s0 { stroke: var(--c-ink-3); }
 .gbar.step-out { fill: var(--c-s2); } .gbar.step-in { fill: var(--c-s1); }
 .gbars .gbar.on, .sbars .gbar.on, .bbars .gbar.on { stroke: var(--c-ink); stroke-width: 1.5; }
@@ -1163,6 +1191,25 @@ h2.sec-head { cursor: pointer; }
 .sec-bulk { display: flex; gap: 4px; flex: none; align-items: center; }
 @media (pointer: coarse) { .sec-chip { min-height: var(--tap); } }
 @media (max-width: 640px) { .sec-index { flex-wrap: wrap; } .sec-bulk { width: 100%; justify-content: flex-end; } }
+/* A floating strip (visual hierarchy review, 2026-11-10, change 4, F7): where the strip is sticky it takes no room in the
+   page, and its list of 13px links shows under the sticky header only once the reader has scrolled past the page's
+   head (.is-past). Where it is not sticky (a phone, a short window) it stays in the page as before. */
+@media (min-width: 641px) and (min-height: 561px) {
+  .sec-index.is-float { height: 0; margin: 0; padding: 0; border: 0; overflow: visible; }
+  .sec-index.is-float > .sec-list { z-index: 1; position: absolute; left: 0; right: 0; top: 0; padding: 4px 0; background: var(--c-plane); border-bottom: 1px solid var(--c-line-2); visibility: hidden; opacity: 0; transition: opacity var(--m-content) var(--ease-out), visibility 0s linear var(--m-content); }
+  .sec-index.is-float.is-past > .sec-list { visibility: visible; opacity: 1; transition: opacity var(--m-content) var(--ease-out); }
+  /* a page without a menu for them keeps Expand all, Collapse all and Panels on the strip's row, shown with it */
+  .sec-index.is-float:has(> .sec-bulk) > .sec-list { right: 330px; border-bottom: 0; }
+  .sec-index.is-float > .sec-bulk { position: absolute; left: 0; right: 0; top: 0; justify-content: flex-end; min-height: 36px; padding: 4px 0; background: var(--c-plane); border-bottom: 1px solid var(--c-line-2); visibility: hidden; opacity: 0; transition: opacity var(--m-content) var(--ease-out), visibility 0s linear var(--m-content); }
+  .sec-index.is-float.is-past > .sec-bulk { visibility: visible; opacity: 1; transition: opacity var(--m-content) var(--ease-out); }
+  .sec-index.is-float .sec-chip { min-height: 28px; font-size: var(--t-sm); }
+}
+/* Expand all, Collapse all and the chooser inside a page's own More menu (bulkIn) */
+.sec-menu { display: grid; margin-top: 4px; padding-top: 4px; border-top: 1px solid var(--c-line-2); }
+.sec-menu > button, .sec-menu > details > summary { display: flex; align-items: center; min-height: 44px; padding: 0 10px; border: 0; border-radius: var(--r-md); background: none; color: var(--c-ink); font: 500 var(--t-base)/1.2 var(--f-sans); text-align: left; cursor: pointer; }
+.sec-menu > button:hover, .sec-menu > details > summary:hover { background: var(--c-sunk); }
+.sec-menu > button:disabled { color: var(--c-ink-3); cursor: default; background: none; }
+.sec-panels-in { display: grid; gap: 4px; padding: 4px 10px 8px; }
 /* sideways strips (ui/strips.js): an arrow at an edge while there is more that way, taking no room */
 .strip-edge { position: sticky; z-index: 2; flex: none; align-self: stretch; width: 32px; min-height: 32px; display: grid; place-items: center; padding: 0; border: 0; background: var(--strip-bg, var(--c-plane)); color: var(--c-ink-2); cursor: pointer; }
 .strip-edge.strip-start { left: calc(0px - var(--strip-pl, 0px)); margin-right: -32px; }
@@ -1318,6 +1365,17 @@ html.eff-1100 .answers { grid-template-columns: 1fr 1fr; } html.eff-1100 .answer
 .milo-panel .drawer-head { overflow: visible; }
 .milo-panel .drawer-head .scout-menu { position: absolute; top: calc(100% - 6px); left: 50%; transform: translateX(-50%); z-index: 3; }
 @media (max-height: 720px), (max-width: 480px) { .milo-panel .drawer-head .scout-menu { left: 12px; transform: none; } }
+/* The question first (visual hierarchy review, 2026-11-10, change 14, F12): a one-line head at every size, Scout at
+   48px beside his name rather than 88px over it, and, while the conversation is empty, the composer at the top of the
+   panel under the head, so the gold Send is in the first 150px instead of at y 798. A conversation keeps the composer
+   at the foot, under the answers. */
+.milo-panel .drawer-head { justify-content: flex-start; padding: 8px 12px; }
+.milo-panel .drawer-head .scout-menu { left: 12px; transform: none; }
+.milo-panel .milo-co { flex-direction: row; align-items: center; gap: 10px; padding: 0 148px 0 4px; max-width: 100%; }
+.milo-panel .milo-co-stage { width: 48px; height: 63px; }
+.milo-panel .milo-co-stage .scout-full { width: 48px; }
+.milo-panel .milo-co-say, .milo-panel .milo-co-status { align-items: flex-start; }
+.milo:has(.milo-opening) > .milo-form { order: -1; border-top: 0; border-bottom: 1px solid var(--c-line-2); }
 
 /* Period line (Handoff 2, ui/period.js): a statement or segment block's period under its title. Badges are words in
    squared tags (the period type, the accounting basis), never colour; the line wraps under the title on a phone. */
@@ -1344,3 +1402,117 @@ th .pbadge, dt .pbadge, .k .pbadge { margin-left: 6px; vertical-align: 1px; }
 .lib-form-err { margin: 0; font-size: var(--t-sm); color: var(--c-neg); }
 .lib-del { margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--c-line-2); }
 
+
+/* ---------------- Pass 1 (2026-11-09): the owner's layout ----------------
+   The rail of his home screen (Research and its five sections, Lists), the level control "How should Optic speak to
+   you?", Show more on a panel the level trims, and the one Milo prompt per screen. Tokens only. */
+.rail-head { cursor: default; color: var(--c-ink); font-weight: 600; }
+.rail-head:hover { border-color: transparent; background: none; }
+.rail-group { display: flex; flex-direction: column; gap: 1px; margin: 6px 0; padding: 4px; border: 1px solid var(--c-line-2); border-radius: var(--r-ctl); }
+.rail-group.is-in { background: var(--c-plane-2); }
+.rail-sub { min-height: 36px; padding-left: 14px; font-size: var(--t-md); }
+.rail-sub svg { width: 16px; height: 16px; }
+.rail-lists, .rail-more { display: flex; flex-direction: column; gap: 1px; padding-top: 10px; margin-top: 10px; border-top: 1px solid var(--c-line-2); }
+.rail-lists-h { display: flex; align-items: center; justify-content: space-between; }
+.rail-plus { display: inline-grid; place-items: center; width: 28px; height: 28px; border-radius: var(--r-pill); color: var(--c-ink-3); }
+.rail-plus:hover { color: var(--c-ink); background: var(--c-sunk); }
+.rail-plus svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; }
+.rail-more .rail-sub { min-height: 32px; color: var(--c-ink-3); }
+.shell.is-tight .rail-group { border: 0; padding: 0; }
+.shell.is-tight .rail-lists-h, .shell.is-tight .rail-more .rail-sec { display: none; }
+
+/* The level control, a setting in the second tier (visual hierarchy review, 2026-11-10, change 3, F3): one row, the
+   question a 13px label, 14px labels on 36px buttons (the dense toolbar size), and the pressed level marked the way the
+   current tab is, ink text over a 2px gold bar (gold marks the current selection). The pressed fill was 1.37:1 against
+   its own track; the bar is --c-gold-ink, 12:1 on charcoal and 5.6:1 on ivory. The preview sentence is the group's
+   description, shown as a line for a few seconds after a change (.is-said). */
+.lc { position: relative; display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 4px 10px; }
+.lc-q { margin: 0; display: inline-flex; align-items: center; gap: 6px; font-size: var(--t-sm); color: var(--c-ink-3); }
+.lc-i svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.6; vertical-align: -3px; }
+.lc-seg { display: grid; grid-template-columns: repeat(3, auto); padding: 2px; border-radius: var(--r-ctl); background: var(--c-plane-2); border: 1px solid var(--c-line); }
+.lc-b { min-height: var(--ctl-sm); padding: 0 12px; border: 0; border-bottom: 2px solid transparent; border-radius: var(--r-ctl-in) var(--r-ctl-in) 0 0; background: none; color: var(--c-ink-2); cursor: pointer; font: 500 var(--t-md)/1 var(--f-sans); transition: background-color var(--dur-ui) var(--ease-ui), color var(--dur-ui) var(--ease-ui); }
+.lc-b:hover:not([aria-pressed="true"]) { color: var(--c-ink); }
+.lc-b[aria-pressed="true"] { background: var(--c-active); color: var(--c-ink); font-weight: 600; border-bottom-color: var(--c-gold-ink); }
+.lc-says { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; margin: 0; }
+.lc.is-said .lc-says { position: static; width: auto; height: auto; overflow: visible; clip-path: none; white-space: normal; flex-basis: 100%; font-size: var(--t-sm); color: var(--c-ink-3); text-align: right; }
+.page-lead { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 16px 24px; margin-bottom: 18px; }
+@media (max-width: 719px) {
+  .lc { justify-content: stretch; width: 100%; }
+  .lc-seg { flex: 1 1 auto; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .lc.is-said .lc-says { text-align: left; }
+  /* one compact 36px row on a phone: the question is the group's name for a screen reader, not a second line */
+  .lc-q { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+}
+
+/* More on Home and More on <ticker>: one compact list of rows, a name and Open, four columns wide on a desktop and one
+   on a phone (visual update, 2026-11-11, change 8; on a phone they were already rows since the hierarchy review's
+   change 7). A row is at least 44px so a finger reaches Open. */
+.sm-h { margin: 28px 0 0; font: 600 var(--t-lg)/1.3 var(--f-sans); color: var(--c-ink); }
+.sm-sub { margin: 4px 0 0; font-size: var(--t-sm); color: var(--c-ink-3); }
+.sm-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); column-gap: 28px; margin: 10px 0 8px; padding: 0; list-style: none; }
+.sm-stub { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: var(--tap); padding: 2px 0; border-bottom: 1px solid var(--c-line-2); }
+.sm-t { min-width: 0; font-size: var(--t-md); line-height: 1.3; color: var(--c-ink-2); }
+.sm-stub .btn { flex: none; }
+.sm-open { min-height: 32px; padding: 0 10px; border-color: transparent; background: none; color: var(--c-gold-ink); }
+.sm-open:hover { background: var(--c-sunk); border-color: var(--c-line); }
+.sm-less { margin-top: 8px; }
+@media (max-width: 719px) { .sm-list { display: block; border-top: 1px solid var(--c-line-2); } .sm-t { font-size: var(--t-base); } }
+/* the company events list, folded on a phone at Advanced (hierarchy change 7): about 8,600px of rows otherwise */
+.ov-tl-fold { margin-top: 20px; border: 1px solid var(--c-line); border-radius: var(--r-lg); }
+.ov-tl-fold > summary { display: flex; align-items: center; min-height: var(--tap); padding: 0 16px; font: 600 var(--t-xl)/1.3 var(--f-sans); color: var(--c-ink); cursor: pointer; }
+.ov-tl-fold[open] > summary { border-bottom: 1px solid var(--c-line-2); }
+.ov-tl-fold > [data-tl-slot], .ov-tl-fold > .tl { margin: 0; }
+
+/* The Milo bar is the question on the page and one gold button (visual hierarchy review, 2026-11-10, change 2, F4): the
+   grey box (1.1:1 against the page) and its border are gone, the question is at the lead size, and the button is the
+   gold primary, the full height of the bar. */
+.mp { display: flex; align-items: center; gap: 12px; margin: 0 0 18px; padding: 0; border: 0; background: none; }
+.mp-head { display: inline-grid; place-items: center; width: 32px; height: 32px; border-radius: var(--r-pill); background: var(--c-sunk); color: var(--c-ink-2); flex: none; }
+.mp-head svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.6; }
+.mp-q { margin: 0; flex: 1; font-size: var(--t-lead); line-height: 1.3; color: var(--c-ink); }
+.mp-k { font-weight: 600; color: var(--c-ink-2); }
+.mp-go { flex: none; min-height: var(--tap); padding: 0 22px; font-size: var(--t-base); }
+@media (max-width: 719px) { .mp { flex-wrap: wrap; } .mp-q { flex-basis: calc(100% - 44px); } .mp-go { width: 100%; justify-content: center; } }
+
+/* ---------- figures at a glance (ui/glance.js, the visual update, 2026-11-11) ----------
+   A change figure carries its arrow and its sign; bars and gauges state their values as text beside them; nothing
+   here is set under 13px. Red and green for direction, gold for the brand's own figures. */
+.mv { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.mv.up { color: var(--c-up-ink); } .mv.down { color: var(--c-down-ink); } .mv.flat { color: var(--c-ink-2); }
+.mv-a { display: inline-block; margin-right: .3em; font-size: max(var(--t-xs), .78em); vertical-align: .08em; }
+.gauge { display: grid; gap: 6px; margin: 10px 0 4px; }
+/* the scale's two ends in the chart pair and its middle neutral, as three flat bands (no gradient: the design standard
+   keeps gradients to the rail's divider and the loading shimmer) */
+.gauge-track { position: relative; height: 8px; border-radius: var(--r-xs); background: var(--c-sunk); }
+.gauge-track::before, .gauge-track::after { content: ""; position: absolute; top: 0; bottom: 0; width: 33%; }
+.gauge-track::before { left: 0; border-radius: var(--r-xs) 0 0 var(--r-xs); background: var(--c-down); opacity: .75; }
+.gauge-track::after { right: 0; border-radius: 0 var(--r-xs) var(--r-xs) 0; background: var(--c-up); opacity: .75; }
+.gauge-mark { z-index: 1; }
+.gauge-mark { position: absolute; top: -5px; width: 4px; height: 18px; margin-left: -2px; border-radius: 2px; background: var(--c-ink); box-shadow: 0 0 0 2px var(--c-raised); }
+.gauge-ends { display: flex; justify-content: space-between; gap: 12px; font-size: var(--t-sm); color: var(--c-ink-3); }
+.dbars, .pbars { display: grid; gap: 6px; margin: 6px 0 0; padding: 0; list-style: none; }
+.dbars li { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(60px, 1fr) 48px; gap: 10px; align-items: center; font-size: var(--t-sm); color: var(--c-ink-2); }
+.db-l, .pb-l { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.db-track { position: relative; height: 10px; }
+.db-track::before { content: ""; position: absolute; left: 50%; top: -2px; bottom: -2px; width: 1px; background: var(--c-line); }
+.db-fill { position: absolute; top: 0; bottom: 0; border-radius: 2px; }
+.db-fill.pos { background: var(--c-up); } .db-fill.neg { background: var(--c-down); }
+.db-v, .pb-v { text-align: right; font-weight: 600; color: var(--c-ink); font-variant-numeric: tabular-nums; }
+.pbars li { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "l l" "t v"; column-gap: 12px; row-gap: 4px; font-size: var(--t-sm); color: var(--c-ink-3); }
+.pb-l { grid-area: l; } .pb-track { grid-area: t; align-self: center; height: 10px; border-radius: 2px; background: var(--c-sunk); overflow: hidden; } .pb-v { grid-area: v; font-size: var(--t-md); }
+.pb-fill { display: block; height: 100%; border-radius: 2px; background: var(--c-gold); }
+.pb-fill.ink { background: var(--c-ink-2); } .pb-fill.mute { background: var(--c-ink-3); } .pb-fill.up { background: var(--c-up); } .pb-fill.down { background: var(--c-down); }
+.donut { display: flex; flex-wrap: wrap; align-items: center; gap: 14px 18px; }
+.dn-fig { position: relative; flex: none; width: 132px; height: 132px; }
+.dn { display: block; }
+.dn-arc { fill: none; stroke-width: 18; }
+.dn-arc.gold, .donut .sw.gold { stroke: var(--c-gold); background: var(--c-gold); }
+.dn-arc.c1, .donut .sw.c1 { stroke: var(--c-cat-1); background: var(--c-cat-1); }
+.dn-arc.c2, .donut .sw.c2 { stroke: var(--c-cat-2); background: var(--c-cat-2); }
+.dn-arc.c4, .donut .sw.c4 { stroke: var(--c-cat-4); background: var(--c-cat-4); }
+.dn-arc.mute, .donut .sw.mute { stroke: var(--c-ink-3); background: var(--c-ink-3); }
+.dn-c { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; }
+.dn-c b { font: 600 var(--t-xl)/1.1 var(--f-sans); color: var(--c-ink); } .dn-c small { font-size: var(--t-sm); color: var(--c-ink-3); }
+.dn-key { display: grid; gap: 6px; min-width: 150px; margin: 0; padding: 0; list-style: none; font-size: var(--t-md); color: var(--c-ink-2); }
+.dn-key li { display: grid; grid-template-columns: 10px minmax(0, 1fr) auto; gap: 8px; align-items: center; } .dn-key b { color: var(--c-ink); font-variant-numeric: tabular-nums; }
+.donut .sw { display: block; width: 10px; height: 10px; border-radius: 2px; }
