@@ -1234,8 +1234,9 @@ html.eff-1100 .answers { grid-template-columns: 1fr 1fr; } html.eff-1100 .answer
 
 
 /* Advice policy (2026-10-29): the server's line for a question that asked for a personal decision, and the
-   note under an answer a sentence was removed from. Quiet, on the panel's own surface, never a banner. */
-.milo-policy, .milo-amended { margin: 6px 0 0; font-size: var(--t-sm); color: var(--c-ink-2); }
+   note under an answer a sentence was removed from. Quiet, on the panel's own surface, never a banner. The line
+   on an answer that read the reader's linked accounts (audit M1, 2026-11-11) is the same kind of note. */
+.milo-policy, .milo-amended, .milo-linked { margin: 6px 0 0; font-size: var(--t-sm); color: var(--c-ink-2); }
 .milo-amended { margin-top: 8px; }
 
 /* The knowledge-level slider (ui/levelslider.js, post-demo Phase 05): five steps on a quiet, squared track, the

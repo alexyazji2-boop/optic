@@ -188,6 +188,8 @@ function persist() {
   const from = Math.max(0, S.conv.messages.length - MAX_MESSAGES);
   const messages = S.conv.messages.slice(-MAX_MESSAGES).map((m, k) => { const inf = meta.get(from + k) || {}, o = { role: m.role, content: String(m.content || '').slice(0, MAX_CHARS) };
     if (inf.policyLine) o.policy = String(inf.policyLine).slice(0, 400); if (inf.amended) o.amended = String(inf.amended).slice(0, 400); if (inf.level) o.level = String(inf.level).slice(0, 20);
+    // and the server's line saying the answer read the reader's linked accounts (audit M1), kept the same way
+    if (inf.linkedLine) o.linked = String(inf.linkedLine).slice(0, 200);
     // what the answer was for (ticker, timeframe, indicators, tab), so a reopened answer still says it (Handoff 6)
     if (inf.used) o.context = keepUsed({ ...inf.used, at: ((inf.context || {}).focus || {}).captured_at }); return o; });
   const list = loadHistory().filter((c) => c.id !== S.conv.id);
@@ -485,6 +487,7 @@ function msgHTML(it) {
     ${info.deep ? html`<p class="milo-assumed">Deep research: read from live web sources.</p>` : info.web ? html`<p class="milo-assumed">Web search was on for this answer.</p>` : ''}
     ${info.notSent && info.notSent.length ? html`<p class="milo-not-sent" role="note"><b>Not sent with this question:</b> ${info.notSent.join('; ')}.</p>` : ''}
     ${info.policyLine ? html`<p class="milo-policy" role="note">${info.policyLine}</p>` : ''}
+    ${linkedNote(info)}
     <div class="milo-bubble">${raw(body)}</div>
     ${info.amended ? html`<p class="milo-amended" role="note">${info.amended}</p>` : ''}
     ${live ? html`<span class="activity" role="progressbar" aria-label="Milo is working on this answer"></span>` : ''}
@@ -580,6 +583,19 @@ function forLine(info, used, now) {
   else if (t) { const also = (info || {}).named ? alsoLooked(info, [t, ...data]) : []; if (also.length) head += `; also looked up ${join(also)}`; }
   const other = about.length && now && now.symbol && !about.includes(now.symbol);
   return html`<p class="milo-about milo-for ${other || used.unavailable ? 'is-other' : ''}" ${used.unavailable ? html`role="note"` : ''}>${head}${at ? `, ${prefs.clock(at)}` : ''}${other ? html`. <b>Not about ${now.symbol}, the page now open.</b>` : ''}</p>`;
+}
+/** The server's line on an answer that read the reader's linked brokerage accounts (live audit M1, 2026-11-11): the
+ *  server sends it whenever their holdings reach Milo, from the question's own context or the portfolio tool. */
+export function linkedNote(info) {
+  const line = (info || {}).linkedLine;
+  return line ? html`<p class="milo-linked" role="note">${line}</p>` : '';
+}
+/** That line drawn as soon as it arrives, above the answer still streaming (the tool can read the accounts mid-answer). */
+function paintLinked(i) {
+  const h = host(), box = h && $(`[data-v2-milo-i="${i}"]`, h); if (!box || $('.milo-linked', box)) return;
+  const tmp = document.createElement('div'); render(tmp, linkedNote(meta.get(i) || {}));
+  const note = tmp.firstElementChild, bubble = $('.milo-bubble', box);
+  if (note && bubble) bubble.before(note);
 }
 // The line above one answer drawn again in place (its `context` event came after the answer was first drawn)
 function paintAbout(i) {
@@ -899,6 +915,7 @@ export function conversationSpec(conv, facts, savedFrom = '') {
   const messages = msgs.map((m, i) => {
     const inf = facts.get(i) || {}, o = { role: m.role, content: String(m.content || '') };
     if (inf.policyLine) o.policy = inf.policyLine; if (inf.amended) o.amended = inf.amended; if (inf.level) o.level = inf.level;
+    if (inf.linkedLine) o.linked = inf.linkedLine;
     if (m.role === 'assistant') {
       o.sources = { citations: inf.citations || [], read: inf.read || [], retrieved: inf.retrieved || [], loaded: inf.loaded || [] };
       const f = (inf.context || {}).focus; if (f) o.focus = { view_label: f.view_label || '', ticker: f.ticker || inf.symbol || '', captured_at: f.captured_at || '' };
@@ -924,7 +941,7 @@ export function restoreSaved(item, newConvId = newId) {
   msgs.forEach((m, i) => {
     if (m.role !== 'assistant') return;
     const src = m.sources || {}, f = m.focus || {};
-    facts.set(i, { question: (msgs[i - 1] || {}).content || '', symbol: f.ticker || ticker, policyLine: m.policy || '', amended: m.amended || '', level: m.level || '',
+    facts.set(i, { question: (msgs[i - 1] || {}).content || '', symbol: f.ticker || ticker, policyLine: m.policy || '', amended: m.amended || '', level: m.level || '', linkedLine: m.linked || '',
       citations: src.citations || [], read: src.read || [], retrieved: src.retrieved || [], loaded: src.loaded || [],
       context: { focus: { scope: 'auto', view_label: f.view_label || '', ticker: f.ticker || ticker, captured_at: f.captured_at || '' } } });
   });
@@ -1243,7 +1260,9 @@ export async function send(text, { deep = false } = {}) {
           else if (ev === 'retrieved') { S.live.got = Array.isArray(p.items) ? p.items : []; S.live.act = actOn(S.live.act, 'retrieved', p.items); paintLive(); }
           // the advice policy (app/ai_policy.py): the server's own line for a question that asked for a personal decision,
           // and, after the stream, the answer with any sentence that read as personal advice taken out, said in a note
-          else if (ev === 'notice') { if (p.kind === 'policy' && p.text) { meta.get(ai).policyLine = String(p.text); paintLive(); } }
+          else if (ev === 'notice') { if (p.kind === 'policy' && p.text) { meta.get(ai).policyLine = String(p.text); paintLive(); }
+            // the server's line when the answer reads the reader's linked accounts (audit M1): shown as it arrives
+            else if (p.kind === 'linked_accounts' && p.text) { meta.get(ai).linkedLine = String(p.text); paintLinked(ai); } }
           else if (ev === 'amend') { if (typeof p.text === 'string') { S.live.text = p.text; S.live.amended = true; S.conv.messages[ai].content = p.text; meta.get(ai).amended = String(p.note || 'Milo removed a sentence that read as personal investment advice.'); paintLive(); } }
           else if (ev === 'error') { finished = true; failed = { text: p.message || 'Milo could not answer.' }; }
           else if (ev === 'done') { finished = true; Object.assign(meta.get(ai), { citations: p.sources || p.citations || [], read: Array.isArray(p.read) ? p.read : [], retrieved: Array.isArray(p.retrieved) ? p.retrieved : [], loaded: Array.isArray(p.loaded) ? p.loaded : [], named: p.named && typeof p.named === 'object' ? p.named : null }); }
@@ -1703,7 +1722,7 @@ function wire(root) {
       const c = loadHistory().find((x) => x.id === b.dataset.v2MiloOpen); if (!c) return;
       S.conv = { id: c.id, messages: (c.messages || []).map((m) => ({ role: m.role, content: m.content })), lastTicker: c.ticker || null, lastChart: null }; S.report = null;
       meta.clear(); SC.rest = 'idle'; clearTimeout(settleT); S.items = S.conv.messages.map((m, i) => ({ kind: 'msg', i }));
-      S.conv.messages.forEach((m, i) => { if (m.role === 'assistant') { const saved = (c.messages || [])[i] || {}; meta.set(i, { question: (S.conv.messages[i - 1] || {}).content || '', symbol: c.ticker || null, policyLine: saved.policy || '', amended: saved.amended || '', used: keepUsed(saved.context), level: saved.level || '' }); } });
+      S.conv.messages.forEach((m, i) => { if (m.role === 'assistant') { const saved = (c.messages || [])[i] || {}; meta.set(i, { question: (S.conv.messages[i - 1] || {}).content || '', symbol: c.ticker || null, policyLine: saved.policy || '', amended: saved.amended || '', linkedLine: saved.linked || '', used: keepUsed(saved.context), level: saved.level || '' }); } });
       S.showHistory = false; S.toEnd = true; S.follow = true; S.view = null; paintChrome(); paintLog(); const ta = $('#milo-q', root); if (ta) ta.focus(); return;
     }
     if ((b = t('[data-v2-milo-del]'))) { const id = b.dataset.v2MiloDel; if (S.busy && id === S.conv.id) { toast(WAIT_HISTORY); return; } saveHistory(loadHistory().filter((c) => c.id !== id)); if (S.conv.id === id && !S.busy) { S.conv = blankConv(); S.items = []; meta.clear(); } paintChrome(); paintLog(false); const hd = $('#milo-hist-h', root); if (hd) { hd.setAttribute('tabindex', '-1'); hd.focus({ preventScroll: true }); } return; }

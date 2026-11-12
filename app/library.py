@@ -213,7 +213,8 @@ def _conversation(raw: Any) -> Dict[str, Any]:
         if not isinstance(m, dict) or m.get("role") not in ("user", "assistant"):
             continue
         one: Dict[str, Any] = {"role": m["role"], "content": text(m.get("content"), 12000)}
-        for k in ("policy", "amended", "level"):
+        # the server's notes beside an answer: the advice policy's, and the line saying it read the linked accounts
+        for k in ("policy", "amended", "level", "linked"):
             if m.get(k):
                 one[k] = text(m[k], 400)
         src = m.get("sources") if isinstance(m.get("sources"), dict) else {}

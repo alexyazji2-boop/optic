@@ -42,6 +42,7 @@ from .brokerage import service as brokerage_service
 from .brokerage import store as brokerage_store
 from .brokerage import workspace as brokerage_workspace
 from .brokerage import workspace_routes as brokerage_ws_routes
+from . import portfolio_intent
 from . import db as accounts_db
 from . import frontend
 from . import metrics as metrics_mod
@@ -8765,12 +8766,13 @@ def _milo_toolbox(request: Request, context: Optional[Dict[str, Any]] = None,
                   history: Optional[List[Dict[str, Any]]] = None) -> milo_tools.Toolbox:
     """The tools for one answer, bound to the asking reader for the tools that are theirs.
 
-    The portfolio tool follows the CONTEXT block's rule (`_with_linked_portfolio`):
-    offered only from the Brokerage page or in a thread where the reader asked
-    about their own portfolio, and never with Milo set to the market only or to
-    no context. Offered everywhere, it let the model add the owner's weights to
-    a Compare answer about two public stocks (live, 2026-10-27), so the
-    instruction in its description was not enough of a fence."""
+    The portfolio tool follows the CONTEXT block's rule (`_linked_portfolio_reach`):
+    offered from the Brokerage page or in a thread where the reader asked about
+    their own portfolio, never for a question that rules their real book out or
+    only names their shares in a tax or legal question, and never with Milo set
+    to the market only or to no context. Offered everywhere, it let the model add
+    the owner's weights to a Compare answer about two public stocks (live,
+    2026-10-27), so the instruction in its description was not enough of a fence."""
     try:
         user = auth_deps.current_user(request)
     except Exception as exc:                                        # noqa: BLE001 - as _spend_guard
@@ -8794,7 +8796,6 @@ def _milo_toolbox(request: Request, context: Optional[Dict[str, Any]] = None,
         return milo_tools.fit({"status": "ok", "signed_in": True, "source": "The reader's saved watchlists",
                                "watchlists": [{"name": w.get("name"), "symbols": w.get("symbols") or []} for w in lists]})
 
-    focus = (context or {}).get("focus") if isinstance((context or {}).get("focus"), dict) else {}
     raw_scope = (context or {}).get("brokerage_scope")
     scope = [str(a)[:64] for a in raw_scope][:20] if isinstance(raw_scope, list) else None
 
@@ -8811,38 +8812,44 @@ def _milo_toolbox(request: Request, context: Optional[Dict[str, Any]] = None,
         # pages (post-demo Phase 08, from the milo-upgrade branch's 795a766)
         **milo_data.runners(PROVIDER, YF_PROVIDER),
     }
-    # a turn that is not a dict is skipped, as `_personal_blocks_for` skips it (BUG-189): here it raised after the
-    # question was charged and the stream ended with neither an error nor an answer (Phase 12 red team, MRT-08)
-    if focus.get("scope") in ("none", "market") or not (
-            focus.get("view") == "brokerage" or any(_asks_about_own_portfolio(t) for t in (history or [])
-                                                    if isinstance(t, dict) and t.get("role") != "assistant")):
+    if _linked_portfolio_reach(history, context) == "none":
         runners.pop("get_my_portfolio")
     return milo_tools.Toolbox(runners=runners)
 
 
-# Narrowed after review (M5): a bare "earnings" or "sync" sent a reader's
-# holdings to the model for questions that were about a company, not them.
-# Narrowed again 2026-10-27: bare "position", "exposure", "concentrated",
-# "allocation" and "I hold" matched company questions too. "Position setup" is
-# a Compare horizon, and Compare's own drafted question carries it, so every
-# comparison a linked reader sent attached their whole portfolio (seen live: a
-# Compare answer quoted the owner's MSFT weight and tech share). Only the
-# reader's own ownership counts now: "my holdings", "what do I own", "how
-# exposed am I", "affects me".
-_MINE_NOUNS = (r"portfolios?|positions?|holdings?|accounts?|brokerage|stocks|shares|options|book|cash|money|"
-               r"exposure|allocation|weights?|weighting|returns?|performance|gains?|losses|dividends")
-_LINKED_WORDS = re.compile(
-    r"\b(?:my|our)\s+(?:[\w-]+\s+)?(?:" + _MINE_NOUNS + r")\b"   # one word between: "my tech exposure"
-    r"|\b(?:do|did) (?:i|we) (?:own|hold)\b"
-    r"|(?<!should )(?<!would )(?<!could )\b(?:i|we) (?:own|hold|bought|sold)\b"
-    r"|\b(?:affects?|hits?|hurts?|touch(?:es)?) (?:me|us)\b"
-    r"|\b(?:am i|are we) (?:exposed|concentrated|diversified|overweight|underweight)\b"
-    r"|\b(?:exposed|concentrated|diversified|overweight|underweight) (?:am i|are we)\b"
-    r"|\blast sync\b|\bsince (?:my|the) last\b", re.I)
-
-
+# Which questions are about the reader's own portfolio is app/portfolio_intent.py: narrowed after review (M5), on
+# 2026-10-27 (Compare's "position setup" attached every linked holding) and after the 2026-11-11 live audit (M1: a
+# tax question, a legal question and a made-up portfolio each brought the real holdings in). Its notes tell each step.
 def _asks_about_own_portfolio(turn: Optional[Dict[str, Any]]) -> bool:
-    return bool(turn and _LINKED_WORDS.search(str(turn.get("content") or "")))
+    return isinstance(turn, dict) and portfolio_intent.asks_about_own(str(turn.get("content") or ""))
+
+
+def _linked_portfolio_reach(history: Optional[List[Dict[str, Any]]], context: Optional[Dict[str, Any]]) -> str:
+    """How far one answer may reach into the reader's linked accounts, for the CONTEXT block and the tool alike:
+    "attach" (the block, and the tool), "tool" (the tool alone, for a follow-up in a thread that asked about their
+    portfolio) or "none".
+
+    The newest question decides first. One that rules the real book out (a made-up, example, paper or someone else's
+    portfolio, or "not my real holdings") reaches nothing from any page or thread, and so does a tax or legal question
+    that names the reader's shares only as its premise. The Brokerage page attaches the rest; elsewhere the question
+    has to ask about the portfolio itself. Milo set to the market only or to no context never reaches it."""
+    focus = (context or {}).get("focus") if isinstance((context or {}).get("focus"), dict) else {}
+    if focus.get("scope") in ("none", "market"):
+        return "none"
+    # a turn that is not a dict is skipped, as `_personal_blocks_for` skips it (BUG-189): here it raised after the
+    # question was charged and the stream ended with neither an error nor an answer (Phase 12 red team, MRT-08)
+    asked = [str(t.get("content") or "") for t in (history or [])
+             if isinstance(t, dict) and t.get("role") != "assistant"]
+    kind = portfolio_intent.classify(asked[-1]) if asked else portfolio_intent.NONE
+    if kind == portfolio_intent.EXCLUDED:
+        return "none"
+    if focus.get("view") == "brokerage" or kind == portfolio_intent.ASKED:
+        return "attach"
+    if kind == portfolio_intent.MENTIONED:
+        return "none"
+    if any(portfolio_intent.asks_about_own(q) for q in asked[:-1]):
+        return "tool"
+    return "none"
 
 # Context keys only the server writes: the reader's linked brokerage, read from
 # their own session. The model trusts `brokerage_portfolio` as the reader's real
@@ -8866,7 +8873,7 @@ def _without_linked_keys(context: Any) -> Any:
 async def _with_linked_portfolio(request: Request, history: List[Dict[str, Any]],
                                  context: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
     """The signed-in reader's linked brokerage portfolio, when the question is
-    about it or they asked from the Brokerage page.
+    about it or they asked from the Brokerage page (`_linked_portfolio_reach`).
 
     Built on the server from the caller's own session: the browser cannot send
     a portfolio, name another reader's, or widen this. It reaches Milo through
@@ -8874,7 +8881,8 @@ async def _with_linked_portfolio(request: Request, history: List[Dict[str, Any]]
     the tool loop (ai.stream_chat). get_my_portfolio can fetch it too, and is
     offered under the same rule (`_milo_toolbox`), so the model cannot pull
     holdings into a question that was not about them. The context budget
-    keeps it ahead of everything else (ai._ORDER_BASE)."""
+    keeps it ahead of everything else (ai._ORDER_BASE). When it is attached,
+    the answer opens with the server's line saying so (ai.LINKED_ACCOUNTS_LINE)."""
     context = _without_linked_keys(context)
     focus = (context or {}).get("focus") if isinstance((context or {}).get("focus"), dict) else {}
     if focus.get("scope") in ("none", "market"):
@@ -8885,15 +8893,13 @@ async def _with_linked_portfolio(request: Request, history: List[Dict[str, Any]]
         return context
     if not user or not brokerage_service.open_to(user):
         return context
-    last = next((t for t in reversed(history or []) if t.get("role") != "assistant"), None)
-    asked = _asks_about_own_portfolio(last)
     try:
         linked = bool(brokerage_store.link(user["id"]) and brokerage_store.accounts(user["id"]))
     except (sqlite3.Error, OSError):
         return context
     if not linked:
         return context
-    if not asked and focus.get("view") != "brokerage":
+    if _linked_portfolio_reach(history, context) != "attach":
         # Say that something is linked without sending it, so Milo does not
         # tell a linked reader they have nothing linked.
         return dict({"brokerage_linked": True}, **(context or {}))

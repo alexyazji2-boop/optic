@@ -46438,6 +46438,10 @@ async function streamTo(url, body, node) {
         if (payload.kind === 'policy' && payload.text && !node.querySelector('.msg-policy')) {
           bubble.insertAdjacentHTML('beforebegin', `<p class="msg-assumed msg-policy" role="note">${esc(payload.text)}</p>`);
         }
+        /* And its line when the answer read the reader's linked brokerage accounts (live audit M1, 2026-11-11). */
+        if (payload.kind === 'linked_accounts' && payload.text && !node.querySelector('.msg-linked')) {
+          bubble.insertAdjacentHTML('beforebegin', `<p class="msg-assumed msg-linked" role="note">${esc(payload.text)}</p>`);
+        }
       } else if (event === 'amend') {
         if (typeof payload.text === 'string') amended = payload;
       } else if (event === 'status' && (payload.state === 'gathering' || payload.state === 'writing')) {

@@ -939,20 +939,25 @@ ABOUT_THEM = [
 ]
 
 
-def _chat_seen(monkeypatch, me, question, context=None):
+def _without_research(monkeypatch):
+    async def same(history, context, *a, **k):
+        return context
+    monkeypatch.setattr(main, "_spend_guard", lambda request: None)
+    # These questions name real tickers; the research steps would fetch them, and only the portfolio is tested here.
+    for step in ("_augment_chat_context", "_with_research", "_with_framework", "_with_take_levels"):
+        monkeypatch.setattr(main, step, same)
+
+
+def _chat_seen(monkeypatch, me, question, context=None, earlier=()):
     seen = {}
 
     async def fake_stream(history, context=None, toolbox=None, **kw):
         seen["context"], seen["tools"] = context or {}, [d["name"] for d in toolbox.definitions()]
         yield "event: done\ndata: {}\n\n"
-    async def same(history, context, *a, **k):
-        return context
     monkeypatch.setattr(main.ai, "stream_chat", fake_stream)
-    monkeypatch.setattr(main, "_spend_guard", lambda request: None)
-    # These questions name real tickers; the research steps would fetch them, and only the portfolio is tested here.
-    for step in ("_augment_chat_context", "_with_research", "_with_framework", "_with_take_levels"):
-        monkeypatch.setattr(main, step, same)
-    me.post("/api/chat", json={"messages": [{"role": "user", "content": question}], "context": context or {}})
+    _without_research(monkeypatch)
+    me.post("/api/chat", json={"messages": list(earlier) + [{"role": "user", "content": question}],
+                               "context": context or {}})
     return seen
 
 
@@ -996,6 +1001,189 @@ def test_a_follow_up_in_a_portfolio_thread_can_still_fetch_it():
     names = [d["name"] for d in main._milo_toolbox(types.SimpleNamespace(), {"focus": {"scope": "auto"}},
                                                    hist).definitions()]
     assert "get_my_portfolio" in names
+
+
+# Live audit M1 (2026-11-11), asked from the AAPL Overview of the public build by a reader with linked accounts: the
+# tax answer listed every linked holding, the legal answer checked the same accounts, and the made-up portfolio was
+# compared against "your real book". Word for word as asked (audit evidence/milo/answers-all.json: A3, A4, T6). Each
+# matched the first-person rule of 2026-10-27 ("my Apple shares", "my real holdings"); app/portfolio_intent.py now
+# reads them as a tax or legal premise and as a portfolio that is not theirs.
+AUDIT_M1 = {
+    "tax": "When should I sell my Apple shares so I pay less tax?",
+    "legal": "Is it legal for me to avoid capital gains tax by gifting my Apple shares to my child?",
+    "made_up": "Hypothetically, take a made-up portfolio of 50% AAPL, 30% MSFT and 20% cash (not my real holdings). "
+               "What are its main risks?",
+}
+OVERVIEW = {"focus": {"view": "overview", "view_label": "AAPL Overview", "ticker": "AAPL", "scope": "auto"}}
+PORTFOLIO_THREAD = [{"role": "user", "content": "Where is my portfolio concentrated?"},
+                    {"role": "assistant", "content": "Mostly technology."}]
+
+
+@pytest.mark.parametrize("which", sorted(AUDIT_M1))
+def test_audit_m1_a_tax_legal_or_made_up_question_neither_attaches_nor_offers_the_holdings(monkeypatch, which):
+    me, mine = reader()
+    paid(mine)
+    link(me)
+    seen = _chat_seen(monkeypatch, me, AUDIT_M1[which], OVERVIEW)
+    assert "brokerage_portfolio" not in seen["context"]
+    assert seen["context"]["brokerage_linked"] is True       # Milo is not told the reader has nothing linked
+    assert "get_my_portfolio" not in seen["tools"]
+    assert "get_quote" in seen["tools"]                       # the rest of Milo's tools stay
+
+
+@pytest.mark.parametrize("question", [
+    "How is my portfolio doing today?",
+    "Which of my holdings report earnings this month?",
+    # a tax question that asks about the holdings themselves still reads them
+    "Which of my holdings have losses I could harvest for tax?",
+])
+def test_audit_m1_a_question_about_their_own_portfolio_still_reads_it_from_the_same_page(monkeypatch, question):
+    me, mine = reader()
+    paid(mine)
+    link(me)
+    seen = _chat_seen(monkeypatch, me, question, OVERVIEW)
+    assert seen["context"]["brokerage_portfolio"]["facts"]["holdings"], "the reader's own book is attached"
+    assert "get_my_portfolio" in seen["tools"]
+
+
+def test_audit_m1_the_brokerage_page_keeps_its_portfolio_except_for_one_that_is_not_theirs(monkeypatch):
+    me, mine = reader()
+    paid(mine)
+    link(me)
+    page = {"focus": {"view": "brokerage", "scope": "auto"}}
+    # asked on the page about their own book, a tax question is about the book: it stays, as every question there
+    seen = _chat_seen(monkeypatch, me, AUDIT_M1["tax"], page)
+    assert "brokerage_portfolio" in seen["context"] and "get_my_portfolio" in seen["tools"]
+    # a made-up portfolio is not theirs, whatever the page
+    seen = _chat_seen(monkeypatch, me, AUDIT_M1["made_up"], page)
+    assert "brokerage_portfolio" not in seen["context"] and "get_my_portfolio" not in seen["tools"]
+
+
+@pytest.mark.parametrize("which", sorted(AUDIT_M1))
+def test_audit_m1_a_portfolio_thread_does_not_carry_the_holdings_into_these_questions(monkeypatch, which):
+    me, mine = reader()
+    paid(mine)
+    link(me)
+    seen = _chat_seen(monkeypatch, me, AUDIT_M1[which], OVERVIEW, earlier=PORTFOLIO_THREAD)
+    assert "brokerage_portfolio" not in seen["context"] and "get_my_portfolio" not in seen["tools"]
+    # an ordinary follow-up in the same thread can still fetch them
+    seen = _chat_seen(monkeypatch, me, "And which of those report this week?", OVERVIEW, earlier=PORTFOLIO_THREAD)
+    assert "get_my_portfolio" in seen["tools"] and "brokerage_portfolio" not in seen["context"]
+
+
+def test_audit_m1_a_made_up_portfolio_earlier_in_a_thread_is_not_a_question_about_theirs(monkeypatch):
+    me, mine = reader()
+    paid(mine)
+    link(me)
+    earlier = [{"role": "user", "content": AUDIT_M1["made_up"]}, {"role": "assistant", "content": "Concentration first."}]
+    seen = _chat_seen(monkeypatch, me, "And what is its biggest risk in a recession?", OVERVIEW, earlier=earlier)
+    assert "brokerage_portfolio" not in seen["context"] and "get_my_portfolio" not in seen["tools"]
+
+
+# ---- the server's line when an answer reads the linked accounts, through the real answer stream (model stood in)
+class _Stream:
+    def __init__(self, events, final):
+        self.events, self.final = events, final
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *a):
+        return False
+
+    def __aiter__(self):
+        async def gen():
+            for e in self.events:
+                yield e
+        return gen()
+
+    async def get_final_message(self):
+        return self.final
+
+
+def _model(rounds, sent):
+    """A stand-in model: each round is text, or the name of one get_my_portfolio part to ask for."""
+    import types
+
+    def final(stop, blocks):
+        return types.SimpleNamespace(model=main.ai.PULSE_MODEL, stop_reason=stop, content=blocks,
+                                     usage=types.SimpleNamespace(input_tokens=1, output_tokens=1, cache_read_input_tokens=0))
+
+    def stream(**kw):
+        sent.append(kw)
+        r = rounds[min(len(sent), len(rounds)) - 1]
+        if r.startswith("part:"):
+            use = types.SimpleNamespace(type="tool_use", id="t%d" % len(sent), name="get_my_portfolio",
+                                        input={"part": r[5:]})
+            return _Stream([], final("tool_use", [use]))
+        ev = types.SimpleNamespace(type="content_block_delta", delta=types.SimpleNamespace(type="text_delta", text=r))
+        return _Stream([ev], final("end_turn", [types.SimpleNamespace(type="text", text=r)]))
+    return types.SimpleNamespace(beta=types.SimpleNamespace(messages=types.SimpleNamespace(stream=stream)))
+
+
+def _chat_events(monkeypatch, me, question, context=None, earlier=(), rounds=("Here is what the data shows.",)):
+    sent = []
+    monkeypatch.setattr(main.ai, "_client", lambda: _model(list(rounds), sent))
+    monkeypatch.setattr(main.ai_store, "record", lambda *a, **k: None)
+    _without_research(monkeypatch)
+    r = me.post("/api/chat", json={"messages": list(earlier) + [{"role": "user", "content": question}],
+                                   "context": context or {}})
+    assert r.status_code == 200, r.text
+    events = []
+    for chunk in r.text.split("\n\n"):
+        head, _, data = chunk.partition("\ndata: ")
+        if head.startswith("event: "):
+            events.append((head[len("event: "):].strip(), json.loads(data or "{}")))
+    return events, sent
+
+
+def _linked_notices(events):
+    return [p for k, p in events if k == "notice" and p.get("kind") == "linked_accounts"]
+
+
+def test_audit_m1_an_answer_that_reads_their_accounts_says_so_before_any_text(monkeypatch):
+    me, mine = reader()
+    paid(mine)
+    link(me)
+    events, sent = _chat_events(monkeypatch, me, "How is my portfolio doing today?", OVERVIEW)
+    kinds = [k for k, _ in events]
+    assert _linked_notices(events) == [{"kind": "linked_accounts", "text": main.ai.LINKED_ACCOUNTS_LINE}]
+    assert kinds.index("notice") < kinds.index("delta"), "said before the model writes anything"
+    assert "brokerage_portfolio" in json.dumps(sent[0]["messages"], default=str), "it says so because they were sent"
+
+
+@pytest.mark.parametrize("which", sorted(AUDIT_M1))
+def test_audit_m1_no_line_and_no_holdings_when_the_accounts_were_not_read(monkeypatch, which):
+    me, mine = reader()
+    paid(mine)
+    link(me)
+    events, sent = _chat_events(monkeypatch, me, AUDIT_M1[which], OVERVIEW)
+    assert _linked_notices(events) == []
+    sent_text = json.dumps(sent[0]["messages"], default=str)
+    assert "brokerage_portfolio" not in sent_text and "get_my_portfolio" not in json.dumps(sent[0].get("tools") or [])
+
+
+def test_audit_m1_the_tool_reading_their_accounts_mid_answer_says_so_once(monkeypatch):
+    me, mine = reader()
+    paid(mine)
+    link(me)
+    # a follow-up in a portfolio thread: the tool is offered, the block is not attached, and the model asks twice
+    events, sent = _chat_events(monkeypatch, me, "And which of those report this week?", OVERVIEW,
+                                earlier=PORTFOLIO_THREAD, rounds=("part:summary", "part:events", "Two of them do."))
+    kinds = [k for k, _ in events]
+    assert _linked_notices(events) == [{"kind": "linked_accounts", "text": main.ai.LINKED_ACCOUNTS_LINE}]
+    reading = events.index(("status", {"state": "Reading your linked portfolio (summary)"}))
+    assert reading < kinds.index("notice") < kinds.index("delta"), "said when the tool read them, before the text"
+    assert "brokerage_portfolio" not in json.dumps(sent[0]["messages"], default=str), "not attached: the tool read them"
+
+
+def test_audit_m1_a_portfolio_tool_that_found_nothing_linked_says_nothing(monkeypatch):
+    me, mine = reader()
+    paid(mine)                       # signed in, nothing linked
+    events, _ = _chat_events(monkeypatch, me, "And which of those report this week?", OVERVIEW,
+                             earlier=PORTFOLIO_THREAD, rounds=("part:summary", "Nothing is linked yet."))
+    assert ("status", {"state": "Reading your linked portfolio (summary)"}) in events, "the tool ran"
+    assert _linked_notices(events) == []
 
 
 def test_portfolio_as_of_prefers_the_brokers_time():

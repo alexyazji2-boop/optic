@@ -431,6 +431,15 @@ them, say that asking about "my holdings", or asking from the Brokerage page,
 brings their portfolio in. A saved
 thesis is the reader's own words: you may say how a development bears on it,
 never rewrite or summarise it as if it were yours.
+When the block is present or get_my_portfolio returns their accounts, the
+panel shows the reader a line above your answer saying you checked their
+linked accounts, so do not open with a sentence of your own saying so. Use only
+the part of their accounts the question is about: a question about one company
+gets that position, or the fact that none is held, never a list of the others.
+List or describe their other holdings only when the question asks about the
+portfolio as a whole. A question about a made-up, example, paper or someone
+else's portfolio, or one that says not to use the reader's own, is about that
+portfolio alone: never compare it with their linked accounts or mention them.
 
 Tag a source once per paragraph, at the first figure taken from it, not after
 every number. Never tag a figure that is not in CONTEXT: general knowledge and
@@ -806,7 +815,9 @@ scorecard, options or briefing). For "where am I concentrated", "why did my port
 earnings affect me this week", "how exposed am I to technology" or "what deserves more research", fetch the \
 part that answers it rather than asking the reader to open the Brokerage page. Its figures follow the \
 brokerage rules in the format notes: broker facts, Optic's calculations and your reading kept apart, \
-coverage and limitations repeated where they change the answer, no trade advice.
+coverage and limitations repeated where they change the answer, no trade advice. Never call it for a \
+made-up, example or someone else's portfolio, or for a tax or legal question that does not ask about \
+their holdings: answer those from general rules.
 
 - Decide what the question needs, check whether CONTEXT already has it for the right symbol and fresh \
 enough, and fetch what is missing before you write anything. Several calls are fine, in one turn when \
@@ -3796,6 +3807,30 @@ def sources_read(kwargs: Optional[Dict[str, Any]], limit: int = 12) -> List[Dict
     return out
 
 
+# The server's line above an answer that used the reader's linked brokerage accounts (live audit M1, 2026-11-11): a
+# tax answer listed every linked holding and nothing said the accounts had been read. Said by the server, not asked
+# of the model, so it is there whatever the model writes; the panels keep it with the answer, as the policy line.
+LINKED_ACCOUNTS_LINE = "Milo checked your linked accounts for this answer, as of their last sync."
+LINKED_ACCOUNTS_NOTICE = {"kind": "linked_accounts", "text": LINKED_ACCOUNTS_LINE}
+
+
+def uses_linked_accounts(context: Any) -> bool:
+    """The CONTEXT carries the reader's linked portfolio (main._with_linked_portfolio attaches it, from their session)."""
+    return isinstance(context, dict) and bool(context.get("brokerage_portfolio"))
+
+
+def read_linked_accounts(tool: str, content: str) -> bool:
+    """A tool result that holds the reader's linked accounts: get_my_portfolio, answered with their data. Not when it
+    said they are signed out, have nothing linked, or the read failed: then no holdings reached the model."""
+    if tool != "get_my_portfolio":
+        return False
+    try:
+        body = json.loads(content)
+    except (TypeError, ValueError):
+        return False
+    return isinstance(body, dict) and body.get("status") == "ok" and body.get("linked") is True and "data" in body
+
+
 async def stream_chat(
     history: List[Dict[str, str]],
     context: Optional[Dict[str, Any]] = None,
@@ -3847,6 +3882,11 @@ async def stream_chat(
         yield _sse("notice", {"kind": "policy", "text": meta["policy_line"],
                               "categories": meta.get("policy_kinds") or [],
                               "policy": ai_policy.POLICY_VERSION})
+    # The reader's linked accounts are in this answer: said by the server, before any model text, whatever the model
+    # writes (live audit M1, 2026-11-11). A tool call that reads them says it below, when it runs.
+    linked_told = uses_linked_accounts(context)
+    if linked_told:
+        yield _sse("notice", LINKED_ACCOUNTS_NOTICE)
     answer_parts: List[str] = []
     # Held back by at most one sentence, so a sentence that breaks the advice policy is never sent
     # (app/ai_policy.py StreamGate); the end-of-stream amend below still reads the whole answer.
@@ -3964,6 +4004,9 @@ async def stream_chat(
                     ran = time.perf_counter()
                     content, is_error, _ = await toolbox.run(b.name, b.input)
                     clock.tools.append((b.name, time.perf_counter() - ran))
+                    if not linked_told and not is_error and read_linked_accounts(b.name, content):
+                        linked_told = True
+                        yield _sse("notice", LINKED_ACCOUNTS_NOTICE)
                     # what has been looked up so far, as it is attached: the panel lists it while the answer streams
                     yield _sse("retrieved", {"items": toolbox.retrieved()})
                     result = {"type": "tool_result", "tool_use_id": b.id, "content": content}
