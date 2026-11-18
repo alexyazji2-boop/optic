@@ -63,7 +63,7 @@ function coverage(sc) {
 export function scenariosSection(sc, { retry = 'scenarios', id = 'sc-h' } = {}) {
   const head = html`<h2 class="t-h2" id="${id}">What could happen to these positions</h2>`;
   if (sc === undefined) return html`<section class="section" aria-labelledby="${id}">${head}<p class="t-muted" role="status">Revaluing every position under each scenario…</p></section>`;
-  if (sc && typeof sc.error === 'string') return html`<section class="section" aria-labelledby="${id}">${head}<div class="state err" role="alert"><p class="t-h3">The scenarios did not load</p><p>${sc.error}</p><button type="button" class="btn btn-sm" data-v2-retry="${retry}">Try again</button></div></section>`;
+  if (sc && typeof sc.error === 'string') return html`<section class="section" aria-labelledby="${id}">${head}${failed('The scenarios', null, { body: sc.error, retry })}</section>`;
   if (!sc || sc.error) return html`<section class="section" aria-labelledby="${id}">${head}${failed('The scenarios', (sc || {}).error, { retry })}</section>`;
   if (!sc.available) return html`<section class="section" aria-labelledby="${id}">${head}<p>${clean(sc.reason || 'Unavailable.')}</p>${((sc.coverage || {}).unpriced || []).length ? coverage({ coverage: { priced: 0, positions: sc.coverage.unpriced.length, ...sc.coverage }, marks: {} }) : ''}</section>`;
   const hasOptions = sc.groups.some((g) => g.id === 'volatility');

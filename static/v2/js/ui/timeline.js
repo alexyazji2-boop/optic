@@ -15,7 +15,7 @@ import * as api from '../core/api.js';
 import * as prefs from '../core/prefs.js';
 import { clean, fullDate } from '../core/format.js';
 import { icon } from './icons.js';
-import { how, skeleton, whenText } from './states.js';
+import { failed, how, skeleton, whenText } from './states.js';
 
 export const TYPES = [['news', 'News', 'news'], ['earnings', 'Earnings', 'earnings'], ['insiders', 'Insiders', 'insider'],
   ['congress', 'Congress', 'congress'], ['analysts', 'Analysts', 'analyst'], ['filings', 'Filings', 'filing']];
@@ -101,7 +101,7 @@ function emptyFor(d) {
     const why = (d.types || []).filter((x) => x.reach).map((x) => `${x.label}: ${x.reach}`);
     return html`<div class="state" role="note"><p class="t-h3">No events for this company in this period</p>${why.length ? html`<p>${clean(why.join(' '))}</p>` : ''}</div>`;
   }
-  if (t.state === 'failed') return html`<div class="state err" role="note"><p class="t-h3">${t.label}: temporarily unavailable</p><p>${clean(t.failed)} The other kinds of event are still here: choose All to see them.</p></div>`;
+  if (t.state === 'failed') return failed(t.label, null, { title: `${t.label}: temporarily unavailable`, body: `${clean(t.failed)} The other kinds of event are still here: choose All to see them.`, role: 'note' });
   return html`<div class="state" role="note"><p class="t-h3">${clean(t.empty)}</p>${t.absent || t.reach ? html`<p>${clean(t.absent || t.reach)}</p>` : ''}</div>`;
 }
 
@@ -115,7 +115,7 @@ export function sectionHTML(sym) {
       <p>An insider's or a member of Congress's trade is the record of a trade they disclosed. It is not a recommendation or a signal, and Optic draws no conclusion from it. Not investment advice.</p>`) : ''}</div></div>`;
   if (!TL.started || (TL.loading && !d)) return html`${head}${skeleton('rows', 4, 'Loading company events')}`;
   if (TL.err && !d) {
-    return html`${head}<div class="state err" role="alert"><p class="t-h3">Company events did not load</p><p>${clean(String(TL.err.message || 'The server did not answer.').replace(/\.?$/, '.'))} The rest of the page is unaffected.</p><button type="button" class="btn btn-sm" data-tl-retry>Try again</button></div>`;
+    return html`${head}${failed('Company events', null, { body: `${clean(String(TL.err.message || 'The server did not answer.').replace(/\.?$/, '.'))} The rest of the page is unaffected.`, retryAttr: 'data-tl-retry' })}`;
   }
   const failed = (d.types || []).filter((t) => t.state === 'failed');
   const reach = (d.types || []).filter((t) => (TL.kind === 'all' || t.id === TL.kind) && t.state !== 'failed' && (t.reach || t.partial || t.absent));

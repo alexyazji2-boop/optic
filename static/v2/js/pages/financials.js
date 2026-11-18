@@ -15,6 +15,7 @@ import * as FV from '../core/finviz.js';
 import { closeCell, CLOSE_NOTE } from '../core/congress.js';
 import { skeleton, empty, failed } from '../ui/states.js';
 import { button as miloButton, provideContext } from '../ui/milo.js';
+import { watchInView } from '../ui/inview.js';
 import { core, header, tabs, isFund, livePrice } from './dossier-frame.js';
 import { kindOf, can, kindWord } from '../core/instrument.js';
 import { icon } from '../ui/icons.js';
@@ -22,6 +23,7 @@ import * as FIG from '../core/figures.js';
 import { fig } from '../ui/figure.js';
 import * as PER from '../core/periods.js';
 import { periodLine, nonGaap, typeBadge, filingLink } from '../ui/period.js';
+let seen = null;  // what the reader is looking at, for Milo (ui/inview.js)
 let lp = null;   // the header's price refresh (dossier-frame livePrice), stopped in dispose()
 
 let D = {}, live = true, mainEl = null;
@@ -74,6 +76,12 @@ const regFig = (id) => { const fv = FIG.of(D.t, id); return fv && fv.status === 
 const regWhen = (fv) => (fv ? `${FIG.period(fv)}${(fv.period || {}).fiscal ? ` (${fv.period.fiscal})` : ''}` : '');
 // the statements' own notes print the provider's net margin and net cash; the registry's are printed instead
 const NET_NOTE = /net margin|net (cash|debt) position/i;
+// Each chart names its source under it, as Home's headline chart does; the section head said it once, and a chart read
+// on its own, sent to Milo or printed, did not (Pass 2 gauntlet, D5, 2026-11-18). No delay: statements are filed, not
+// quoted.
+const sourceLine = (s) => html`<p class="fv-unit" data-fv-source>Source: ${s}</p>`;
+const STATEMENTS_SOURCE = "the company's statements, as Yahoo Finance carries them";
+const FILINGS_SOURCE = "the company's 10-Q and 10-K filings, from SEC EDGAR";
 function readings() {
   const c = (D.t || {}).company || {}, f = c.financials || {}, m = f.margins || {}, g = f.growth || {}, eh = c.earnings_history || {}, si = c.short_interest || {}, ow = c.ownership || {};
   const items = [], nm = regFig('net_margin_fy');
@@ -91,6 +99,7 @@ function readings() {
   if (si.available) { const parts = [isNum(si.percent_of_float) ? `${pct(si.percent_of_float * 100)} of float` : 'Share of float not reported', isNum(si.days_to_cover) ? `${num(si.days_to_cover, 1)} days to cover` : '', isNum(si.change_vs_prior_pct) ? `${signed(si.change_vs_prior_pct, 1)} since the last report` : ''].filter(Boolean); items.push(['Short interest', `${parts.join(', ')}.${isNum(si.percent_of_float) && si.squeeze_potential ? ` Squeeze potential ${si.squeeze_potential}.` : ''}`]); }
   if (ow.available) items.push(['Insiders', insiderLine(ow)]);
   if (!items.length && !f.available) return '';
+  const growth = (items.find(([k]) => k === 'Growth') || [])[1] || '';
   const a = f.annual || {};
   // free cash flow, the net margin and net debt are the registry's, each with its own period and source
   const fcf = regFig('free_cash_flow_fy'), nd = FIG.of(D.t, 'net_debt');
@@ -110,9 +119,12 @@ function readings() {
     .filter(([, fv]) => fv && a0 && a0.end && (fv.period || {}).end && Date.parse(fv.period.end) - Date.parse(a0.end) > 15 * 864e5);
   const lf = later.length ? later[0][1] : null, lp = lf ? lf.period || {} : {};
   const laterNote = lf ? `${capFirst(andList(later.map(([n]) => n.toLowerCase())))} ${later.length > 1 ? 'are' : 'is'} from ${(lf.source || {}).form ? `the ${lf.source.form}` : 'a later filing'}${lp.fiscal ? ` for ${lp.fiscal}` : ''}, ${lowerFirst(FIG.period(lf))}: a later year than the provider's statements, which do not have it yet.` : '';
-  return html`<section class="section fin-sum" id="fin-summary" aria-labelledby="fr-h"><h2 class="t-h2" id="fr-h">Summary</h2>
+  return html`<section class="section fin-sum" id="fin-summary" data-v2-metric="" aria-labelledby="fr-h"><h2 class="t-h2" id="fr-h">Summary</h2>
     ${f.available ? periodLine({ type: 'annual', basis: PER.basisOf(D.t) || 'Basis not stated', what: a0 ? PER.label(a0) : PER.UNAVAILABLE, filing: a0 && a0.filing, notes: [...PER.notes(a0 ? [a0] : [], PER.calendarOf(D.t)), laterNote].filter(Boolean) }) : ''}
-    ${cells.length ? html`<div class="readings fin-figs" style="--rn:${cells.length}">${cells.map(([k, v, d]) => html`<div class="rd"><span class="k">${k}</span><span class="v">${v}</span><span class="d">${d}</span></div>`)}</div>` : ''}
+    ${/* one finding over the row, the summary's own Growth line, and revenue leading it at the figure size with its year
+       (visual hierarchy review, 2026-11-10, change 10, F10: six figures at 26px in one row, none leading) */ ''}
+    ${growth ? html`<p class="fin-lead">${growth}</p>` : ''}
+    ${cells.length ? html`<div class="readings fin-figs" style="--rn:${cells.length}">${cells.map(([k, v, d], i) => html`<div class="rd${i === 0 ? ' rd-lead' : ''}"><span class="k">${k}${i === 0 && a0 ? html` <span class="rd-when">${PER.inText(a0)}</span>` : ''}</span><span class="v">${v}</span><span class="d">${d}</span></div>`)}</div>` : ''}
     ${/* folded on a phone, so the period control and the charts come sooner (pitch audit, 2026-10-22); the figures above are the finding */ ''}
     ${items.length ? html`<details class="fin-say" ${wideScreen() ? 'open' : ''}><summary><h3>What the figures say</h3>${icon('chev')}</summary><dl class="reads-dl">${items.map(([k, v]) => html`<div><dt>${k}</dt><dd>${v}</dd></div>`)}</dl></details>` : ''}</section>`;
 }
@@ -177,21 +189,28 @@ function statements(sym) {
   const rows = [['Revenue', 'revenue'], ['Gross profit', 'gross_profit'], ['Operating income', 'operating_income'], ['EBITDA', 'ebitda', true], ['Net income', 'net_income'], ['Operating cash flow', 'operating_cash_flow'], ['Capital expenditure', 'capital_expenditure'], ['Free cash flow', 'free_cash_flow', true], ['Diluted EPS (GAAP)', 'diluted_eps'], ['Diluted shares', 'diluted_shares']];
   const cell = (k, v) => (k === 'diluted_eps' ? num(v) : k === 'diluted_shares' ? compact(v) : usd(v));
   const cal = PER.calendarOf(D.t), basis = PER.basisOf(D.t) || 'Basis not stated';
+  const src = sourceLine(f.source ? clean(f.source).replace(/\.\s*$/, '') : STATEMENTS_SOURCE);
   return html`<section class="section" id="fin-statements" aria-labelledby="st-h"><div class="section-head"><div><h2 class="t-h2" id="st-h">Statements</h2>
       ${periodLine({ type: V.q ? 'quarter' : 'annual', basis, what: PER.range(V.desc), filing: PER.latestFiling(V.desc), notes: PER.notes(V.desc, cal) })}<p class="section-sub">${clean(f.source || "The company's statements as Yahoo Finance carries them.")} In ${ccyWords()}${ccy !== 'USD' ? ', as the company files; the share price is in US dollars' : ''}.</p></div>
       ${(f.quarterly_periods || []).length ? seg(period, [['year', 'Fiscal years'], ['quarter', 'Quarters']]) : ''}</div>
     <div class="fv-grid">
-      <figure class="fv"><figcaption><h3>Revenue and profit</h3><p class="fv-take">${FV.profitLine(a.revenue, a.net_income, labels, C.back, C.against, usd)}</p>${qoq ? html`<p class="fv-take fv-sub">${qoq}</p>` : ''}
-        ${key([['s1', 'Revenue'], ['s2', 'Operating income'], ['s3', 'Net income']])}<p class="fv-unit">${unit}, ${ccyWords()}</p></figcaption><div class="chart-slot" data-chart="profit"></div></figure>
-      <figure class="fv"><figcaption><h3>Margins</h3><p class="fv-take">${FV.marginLine('Operating margin', opm, labels, C.back)}</p>
-        ${key([['s1', 'Gross margin'], ['s2', 'Operating margin'], ['s3', 'Net margin']])}<p class="fv-unit">${unit}, percent of revenue</p></figcaption><div class="chart-slot" data-chart="margins"></div></figure>
-      ${hasCf ? html`<figure class="fv"><figcaption><h3>Cash flow</h3><p class="fv-take">${FV.cashFlowLine(ya.operating_cash_flow, ya.capital_expenditure, ya.free_cash_flow, ysaid, usd)}</p>
-        ${key([['s1', 'Operating cash flow'], ['s2', 'Capital spending, shown as cash out'], ['s3', 'Free cash flow, non-GAAP']])}<p class="fv-unit">${V.q ? html`${typeBadge('annual')} ` : ''}Fiscal years, ${ccyWords()}${V.q ? '. The statements Optic reads carry no quarterly cash flow' : ''}</p></figcaption>
+      <figure class="fv" data-v2-metric=""><figcaption><h3>Revenue and profit</h3><p class="fv-take">${FV.profitLine(a.revenue, a.net_income, labels, C.back, C.against, usd)}</p>${qoq ? html`<p class="fv-take fv-sub">${qoq}</p>` : ''}
+        ${key([['s1', 'Revenue'], ['s2', 'Operating income'], ['s3', 'Net income']])}<p class="fv-unit">${unit}, ${ccyWords()}</p>${src}</figcaption><div class="chart-slot" data-chart="profit"></div></figure>
+      <figure class="fv" data-v2-metric=""><figcaption><h3>Margins</h3><p class="fv-take">${FV.marginLine('Operating margin', opm, labels, C.back)}</p>
+        ${key([['s1', 'Gross margin'], ['s2', 'Operating margin'], ['s3', 'Net margin']])}<p class="fv-unit">${unit}, percent of revenue</p>${src}</figcaption><div class="chart-slot" data-chart="margins"></div></figure>
+      ${hasCf ? html`<figure class="fv" data-v2-metric=""><figcaption><h3>Cash flow</h3><p class="fv-take">${FV.cashFlowLine(ya.operating_cash_flow, ya.capital_expenditure, ya.free_cash_flow, ysaid, usd)}</p>
+        ${key([['s1', 'Operating cash flow'], ['s2', 'Capital spending, shown as cash out'], ['s3', 'Free cash flow, non-GAAP']])}<p class="fv-unit">${V.q ? html`${typeBadge('annual')} ` : ''}Fiscal years, ${ccyWords()}${V.q ? '. The statements Optic reads carry no quarterly cash flow' : ''}</p>${src}</figcaption>
         <div class="chart-slot" data-chart="cashflow"></div>${latestBridge ? html`<p class="t-label fv-bridge-h">${Y.said(0)}: from operating cash flow to free cash flow</p><div class="chart-slot" data-chart="bridge"></div>` : ''}</figure>` : ''}
-      ${hasBal ? html`<figure class="fv"><figcaption><h3>Cash and debt</h3><p class="fv-take">${FV.netCashLine(bh.cash, bh.total_debt, yat, usd)}</p>
-        ${key([['s1', 'Cash and equivalents'], ['s2', 'Total debt']])}<p class="fv-unit">${V.q ? html`${typeBadge('annual')} ` : ''}At each fiscal year end, ${ccyWords()}</p></figcaption><div class="chart-slot" data-chart="balance"></div></figure>` : ''}
-      ${(a.diluted_eps || []).some(isNum) ? html`<figure class="fv fv-wide"><figcaption><h3>Per share</h3><p class="fv-take">${FV.perShareLine(a.diluted_eps, shares, labels, C.back, C.against)}</p>
-        <p class="fv-unit">${unit}. Diluted EPS (GAAP) in ${ccyWords()} a share; the share count is the weighted diluted average each EPS divides by.</p></figcaption>
+      ${hasBal ? html`<figure class="fv" data-v2-metric=""><figcaption><h3>Cash and debt</h3><p class="fv-take">${FV.netCashLine(bh.cash, bh.total_debt, yat, usd)}</p>
+        ${key([['s1', 'Cash and equivalents'], ['s2', 'Total debt']])}<p class="fv-unit">${V.q ? html`${typeBadge('annual')} ` : ''}At each fiscal year end, ${ccyWords()}</p>${src}</figcaption><div class="chart-slot" data-chart="balance"></div></figure>` : ''}
+      ${shapeOk(bh) ? html`<figure class="fv" data-v2-metric=""><figcaption><h3>Balance sheet</h3><p class="fv-take">${shapeLine(bh, ysaid)}</p>
+        ${key([['s2', 'Total liabilities'], ['s1', "Shareholders' equity"]])}<p class="fv-unit">${V.q ? html`${typeBadge('annual')} ` : ''}At each fiscal year end, ${ccyWords()}; the bar's height is total assets</p>${src}</figcaption><div class="chart-slot" data-chart="shape"></div></figure>` : ''}
+      ${V.q && ((f.quarterly_cash || {}).operating_cash_flow || []).some(isNum) ? html`<figure class="fv" data-v2-metric=""><figcaption><h3>Cash flow by quarter</h3>
+        ${key([['s1', 'Operating cash flow'], ['s2', 'Capital spending, shown as cash out'], ['s3', 'Free cash flow, non-GAAP']])}<p class="fv-unit">Quarters, ${ccyWords()}</p>${src}</figcaption><div class="chart-slot" data-chart="qcash"></div></figure>` : ''}
+      ${V.q && ((f.quarterly_balance || {}).cash || []).some(isNum) ? html`<figure class="fv" data-v2-metric=""><figcaption><h3>Cash and debt by quarter</h3>
+        ${key([['s1', 'Cash and equivalents'], ['s2', 'Total debt']])}<p class="fv-unit">At each quarter end, ${ccyWords()}</p>${src}</figcaption><div class="chart-slot" data-chart="qbal"></div></figure>` : ''}
+      ${(a.diluted_eps || []).some(isNum) ? html`<figure class="fv fv-wide" data-v2-metric=""><figcaption><h3>Per share</h3><p class="fv-take">${FV.perShareLine(a.diluted_eps, shares, labels, C.back, C.against)}</p>
+        <p class="fv-unit">${unit}. Diluted EPS (GAAP) in ${ccyWords()} a share; the share count is the weighted diluted average each EPS divides by.</p>${src}</figcaption>
         <div class="fv-pair"><div><p class="t-label">Diluted EPS</p><div class="chart-slot" data-chart="eps"></div></div>${shares.some(isNum) ? html`<div><p class="t-label">Diluted shares</p><div class="chart-slot" data-chart="shares"></div></div>` : ''}</div></figure>` : ''}
     </div>
     <details class="more-inline fv-data"><summary>View data</summary>
@@ -209,6 +228,13 @@ function colHead(d, extra = '') {
   const long = d && (d.weeks === 53 || d.weeks === 14) ? `, ${d.weeks} weeks` : '';
   const sub = [d && d.short ? `to ${PER.endText(d)}` : '', extra].filter(Boolean).join(', ');
   return html`${PER.short(d)}${sub || long ? html`<small class="t-muted fin-end">${sub}${long}</small>` : ''}`;
+}
+const shapeOk = (bh) => (bh.total_liabilities || []).some(isNum) && (bh.total_equity || []).some(isNum) && !(bh.total_equity || []).some((v) => isNum(v) && v < 0);
+// The balance sheet in one sentence, from the latest fiscal year end: how much of what it holds is owed
+function shapeLine(bh, said) {
+  const l = (bh.total_liabilities || [])[0], e = (bh.total_equity || [])[0];
+  if (!isNum(l) || !isNum(e) || l + e <= 0) return '';
+  return `In ${said[0]}, ${num(l / (l + e) * 100, 0)}% of what it holds was owed (liabilities of ${usd(l)}) and ${num(e / (l + e) * 100, 0)}% belonged to shareholders (equity of ${usd(e)}).`;
 }
 function statementCharts() {
   const f = ((D.t || {}).company || {}).financials || {};
@@ -228,6 +254,13 @@ function statementCharts() {
   }
   const bh = f.balance_history || {};
   if ((bh.cash || []).some(isNum)) out.balance = (w) => groupedBars(GY, [{ name: 'Cash and equivalents', cls: 's1', values: col(bh.cash, yn) }, { name: 'Total debt', cls: 's2', values: col(bh.total_debt, yn) }], { w, h: 200, labelWidth: lw, label: 'Cash and debt at each fiscal year end', fmt: usd, note: (i) => { const k = yn - 1 - i, nc = FV.netCash((bh.cash || [])[k], (bh.total_debt || [])[k]); return nc ? `${nc.net < 0 ? 'Net debt' : 'Net cash'} ${usd(Math.abs(nc.net))}` : ''; } });
+  // the balance sheet's shape (Pass 2): what it owes and what is left for shareholders, stacked to what it holds;
+  // only when both are read from the statement and equity is not negative (a stack from zero cannot draw a deficit)
+  if (shapeOk(bh)) out.shape = (w) => stackedBars(GY, [{ name: 'Total liabilities', cls: 's2', values: col(bh.total_liabilities, yn) }, { name: "Shareholders' equity", cls: 's1', values: col(bh.total_equity, yn) }], { w, h: 210, labelWidth: lw, label: 'Total liabilities and shareholders\' equity at each fiscal year end; together they are total assets', fmt: usd });
+  // by quarter, where the feed carries the quarterly statements (Pass 2: the series the free update held back)
+  const qc = f.quarterly_cash || {}, qb = f.quarterly_balance || {};
+  if (V.q && (qc.operating_cash_flow || []).some(isNum)) out.qcash = (w) => groupedBars(G, [{ name: 'Operating cash flow', cls: 's1', values: col(qc.operating_cash_flow) }, { name: 'Capital spending', cls: 's2', values: col(qc.capital_expenditure) }, { name: 'Free cash flow', cls: 's3', values: col(qc.free_cash_flow) }], { w, h: 220, labelWidth: lw, label: 'Operating cash flow, capital spending and free cash flow by quarter', fmt: usd });
+  if (V.q && (qb.cash || []).some(isNum)) out.qbal = (w) => groupedBars(G, [{ name: 'Cash and equivalents', cls: 's1', values: col(qb.cash) }, { name: 'Total debt', cls: 's2', values: col(qb.total_debt) }], { w, h: 200, labelWidth: lw, label: 'Cash and debt at each quarter end', fmt: usd });
   if ((a.diluted_eps || []).some(isNum)) out.eps = (w) => groupedBars(G, [{ name: 'Diluted EPS', cls: 's1', values: col(a.diluted_eps) }], { w, h: 170, labelWidth: lw, label: `Diluted EPS ${V.q ? 'by quarter' : 'by fiscal year'}`, fmt: (v) => num(v, 2), axisFmt: (v) => num(v, Math.abs(v) < 1 && v !== 0 ? 2 : 1) });
   if ((a.diluted_shares || []).some(isNum)) out.shares = (w) => periodLines(G, [{ name: 'Diluted shares', cls: 's2', values: col(a.diluted_shares) }], { w, h: 170, zero: false, labelWidth: lw, label: `Diluted share count ${V.q ? 'by quarter' : 'by fiscal year'}`, fmt: (v) => compact(v), axisFmt: (v) => compact(v) });
   return out;
@@ -237,10 +270,10 @@ function statementCharts() {
 const noRate = (v) => (isNum(v) && v < 0 ? 'a loss, so no growth rate' : 'no growth rate: the year before was a loss or is not reported');
 function record(which) {
   const c = (D.t || {}).company || {}, eh = which === 'earnings' ? c.earnings_history || {} : {}, si = which === 'short' ? c.short_interest || {} : {};
-  return html`${eh.available ? html`<section class="section" id="fin-earnings" aria-labelledby="er-h"><h2 class="t-h2" id="er-h">Earnings track record</h2>
+  return html`${eh.available ? html`<section class="section" id="fin-earnings" data-v2-metric="" aria-labelledby="er-h"><h2 class="t-h2" id="er-h">Earnings track record</h2>
       <div class="tscroll"><table class="t"><thead><tr><th>Report</th><th>Estimate</th><th>Reported</th><th>Surprise</th></tr></thead><tbody>${(eh.quarters || []).map((q) => html`<tr><td>${fullDate(q.date)}</td><td>${num(q.eps_estimate)}</td><td>${num(q.eps_reported)}</td><td class="${dir(q.surprise_pct)}">${signed(q.surprise_pct, 1)}</td></tr>`)}</tbody></table></div>
       ${(eh.upcoming || [])[0] ? html`<p>Next report ${fullDate(eh.upcoming[0].date)}, estimate ${num(eh.upcoming[0].eps_estimate)}.</p>` : ''}<ul class="plain">${(eh.notes || []).map((n) => html`<li>${clean(n)}</li>`)}</ul>${eh.eps_basis ? html`<p class="asof">${clean(eh.eps_basis)}</p>` : ''}</section>` : ''}
-    ${si.available ? html`<section class="section" id="fin-short" aria-labelledby="si-h"><h2 class="t-h2" id="si-h">Short interest</h2>
+    ${si.available ? html`<section class="section" id="fin-short" data-v2-metric="" aria-labelledby="si-h"><h2 class="t-h2" id="si-h">Short interest</h2>
       ${kv([['Share of float', isNum(si.percent_of_float) ? pct(si.percent_of_float * 100, 2) : 'Not reported'], ['Days to cover', isNum(si.days_to_cover) ? num(si.days_to_cover, 1) : 'Not reported'], ['Since the last report', isNum(si.change_vs_prior_pct) ? signed(si.change_vs_prior_pct, 1) : 'Not reported'], ['Shares short', isNum(si.shares_short) ? compact(si.shares_short) : 'Not reported'], ['Prior', isNum(si.shares_short_prior) ? compact(si.shares_short_prior) : 'Not reported'], ['Float', isNum(si.float_shares) ? compact(si.float_shares) : 'Not reported']], 3)}
       <p>${isNum(si.percent_of_float) && si.squeeze_potential ? `Squeeze potential: ${si.squeeze_potential}. ` : 'No squeeze reading without the share of float. '}${(si.notes || []).map(clean).join(' ')}</p><p class="asof">Settlement ${fullDate(si.settlement_date)}. ${clean(si.caveat || '')}</p></section>` : ''}`;
 }
@@ -249,7 +282,7 @@ function ownership(sym) {
   const ow = ((D.t || {}).company || {}).ownership || {};
   if (!ow.available) return '';
   const i6 = ow.insider_6m || {};
-  return html`<section class="section" id="fin-ownership" aria-labelledby="ow-h"><div class="section-head"><h2 class="t-h2" id="ow-h">Insider and institutional activity</h2>${ask(sym, 'Ask Milo about insiders', `What does recent insider and institutional activity in ${sym} suggest?`)}</div>
+  return html`<section class="section" id="fin-ownership" data-v2-metric="" aria-labelledby="ow-h"><div class="section-head"><h2 class="t-h2" id="ow-h">Insider and institutional activity</h2>${ask(sym, 'Ask Milo about insiders', `What does recent insider and institutional activity in ${sym} suggest?`)}</div>
     <p>${insiderLine(ow)}</p>
     ${kv([['Open-market purchases, 6 months', `${num(i6.purchase_count, 0)} (${compact(i6.purchase_shares)} shares)`], ['Open-market sales, 6 months', `${num(i6.sale_count, 0)} (${compact(i6.sale_shares)} shares)`], ['Net shares', signed(i6.net_shares, 0, '')], ['Held by institutions', isNum(ow.institutional_pct_held) ? pct(ow.institutional_pct_held * 100) : 'Not reported'], ['Held by insiders', isNum(ow.insider_pct_held) ? pct(ow.insider_pct_held * 100, 2) : 'Not reported']], 3)}
     <p>${ow.holders_adding} of the ${ow.holders_counted || (ow.top_holders || []).length} largest holders raised their stake and ${ow.holders_trimming} cut it by more than ${num(ow.holder_change_threshold_pct || 2, 0)}% at their last 13F filing; the rest changed by less. ${(ow.top_holders || []).length > 6 ? `The bars show the ${6} largest.` : ''}</p>
@@ -259,10 +292,43 @@ function ownership(sym) {
     <p class="asof">${clean(ow.insider_method || '')}${(ow.yahoo_tally_6m || {}).acquired_count ? ` Yahoo Finance's own tally, every acquisition and disposal counted: ${num(ow.yahoo_tally_6m.acquired_count, 0)} acquired and ${num(ow.yahoo_tally_6m.disposed_count, 0)} disposed.` : ''} ${clean(ow.caveat || '')}</p></section>`;
 }
 
+// The full insider history (Pass 2, 2026-11-17): open-market purchases and sales over 2, 5 or 10 years, Yahoo's
+// latest rows and, before them, the SEC's own Form 4 filings; every row says which, and the line under the table says
+// how far each reaches and how many filings are still being read (they are read in the background, so the page asks
+// again a few times while any are).
+const IH_YEARS = [2, 5, 10], IH_POLLS = 8, IH_EVERY = 15000;
+let ihYears = 5;
+function insiderHistory(sym) {
+  const h = D.ih;
+  const pick = html`<div class="seg" role="group" aria-label="Years of insider history">${IH_YEARS.map((y) => html`<button type="button" data-fin-ih="${y}" aria-pressed="${ihYears === y}">${y} years</button>`)}</div>`;
+  const head = html`<div class="section-head"><h2 class="t-h2" id="ih-h">Insider trades, full history</h2>${pick}</div>`;
+  if (h === undefined) return html`<section class="section" id="fin-ih" data-v2-metric="" aria-labelledby="ih-h">${head}${skeleton('rows', 4, 'Reading the insider history')}</section>`;
+  if (h === null) return html`<section class="section" id="fin-ih" data-v2-metric="" aria-labelledby="ih-h">${head}${failed('The insider history', D.ihErr, { retry: 'ih' })}</section>`;
+  const rows = h.rows || [], cov = h.coverage || {};
+  const buys = rows.filter((r) => r.action === 'purchase').length, sells = rows.length - buys;
+  const reading = cov.sec_unread > 0;
+  const line = `${rows.length ? `${num(buys, 0)} open-market purchase${buys === 1 ? '' : 's'} and ${num(sells, 0)} sale${sells === 1 ? '' : 's'} since ${fullDate(h.since)}.` : `No open-market purchases or sales found since ${fullDate(h.since)}.`}`;
+  const src = (r) => (r.source === 'sec' ? (r.accession ? html`<a class="textlink" href="https://www.sec.gov/Archives/edgar/data/${encodeURIComponent((cov.cik || ''))}/${String(r.accession).replace(/-/g, '')}/" target="_blank" rel="noopener">SEC Form 4</a>` : 'SEC Form 4') : 'Yahoo Finance');
+  return html`<section class="section" id="fin-ih" data-v2-metric="" aria-labelledby="ih-h">${head}
+    <p>${line}</p>
+    ${rows.length ? html`<div class="tscroll"><table class="t"><thead><tr><th>Date</th><th>Insider</th><th>Trade</th><th>Shares</th><th>Value</th><th>Source</th></tr></thead><tbody>
+      ${rows.slice(0, 25).map((r) => html`<tr><td>${fullDate(r.date)}</td><td>${clean(r.insider || '')}<br><small class="t-muted">${clean(r.position || '')}</small></td><td>${r.action === 'purchase' ? 'Purchase' : 'Sale'}</td><td>${compact(r.shares)}</td><td>${isNum(r.value) ? usd(r.value) : 'Not reported'}</td><td>${src(r)}</td></tr>`)}</tbody></table></div>
+      ${rows.length > 25 ? html`<p class="t-muted">The latest 25 of ${num(rows.length, 0)} shown.</p>` : ''}` : ''}
+    <p class="asof" role="${reading ? 'status' : 'note'}">Yahoo Finance lists the latest ${num(cov.yahoo_rows || 0, 0)} rows${cov.yahoo_from ? `, back to ${fullDate(cov.yahoo_from)}` : ''}; before that, ${num(cov.sec_rows || 0, 0)} trades come from Form 4 filings read from SEC EDGAR. ${reading ? `${num(cov.sec_unread, 0)} filings are still being read; this table fills in as they are.` : cov.complete === false ? 'The SEC list could not be read in full this time.' : 'Complete for the period.'} Awards, option exercises, tax withholding and gifts are not trades and are left out.</p></section>`;
+}
+async function loadInsiderHistory(sym, round = 0) {
+  try {
+    const h = await api.get(`/api/insiders/${encodeURIComponent(sym)}/history?years=${ihYears}`, { ttl: 0, force: round > 0, timeout: 60000 });
+    if (D.sym !== sym || !live) return;
+    D.ih = h; paint();
+    if (h && (h.coverage || {}).sec_unread > 0 && round < IH_POLLS) setTimeout(() => { if (D.sym === sym && live) loadInsiderHistory(sym, round + 1); }, IH_EVERY);
+  } catch (e) { if (D.sym === sym && live) { D.ih = null; D.ihErr = e; paint(); } }
+}
+
 function filings() {
   const fl = (D.t || {}).filings || {};
   if (!fl.available) return '';
-  return html`<section class="section" id="fin-filings" aria-labelledby="fl-h"><h2 class="t-h2" id="fl-h">Recent SEC filings</h2>
+  return html`<section class="section" id="fin-filings" data-v2-metric="" aria-labelledby="fl-h"><h2 class="t-h2" id="fl-h">Recent SEC filings</h2>
     <ul class="plain">${(fl.filings || []).slice(0, 10).map((f) => html`<li><a href="${f.url}" target="_blank" rel="noopener">${f.form}</a> ${clean(f.what)}, filed ${fullDate(f.filed)}</li>`)}</ul>
     <p class="asof">${clean(fl.method || '')}</p></section>`;
 }
@@ -272,7 +338,7 @@ function extras() {
   if (x === undefined) return html`<section class="section">${skeleton('lines', 3, 'Loading corporate actions')}</section>`;
   if (!x) return '';
   const a = x.actions || {}, sv = x.short_volume || {}, rl = x.relative || {};
-  return html`<section class="section" id="fin-actions" aria-labelledby="ca-h"><h2 class="t-h2" id="ca-h">Corporate actions and flow</h2>
+  return html`<section class="section" id="fin-actions" data-v2-metric="" aria-labelledby="ca-h"><h2 class="t-h2" id="ca-h">Corporate actions and flow</h2>
     ${a.pays_dividend ? html`<h3>Dividends</h3>${kv([['Payments on record', a.payment_count], ['Years of growth', a.growth_streak_years], ['Last cut', a.last_cut_year || 'None on record'], ['Latest', (a.dividends || []).length ? `$${num(a.dividends[a.dividends.length - 1].amount, 3)} on ${fullDate(a.dividends[a.dividends.length - 1].date)}` : 'n/a']], 4)}
       ${(a.annual || []).length >= 2 ? html`<div class="chart-slot" data-chart="divs"></div>` : ''}
       ${(a.annual || []).length ? html`<details class="more-inline"><summary>Each year's total</summary><div class="tscroll"><table class="t"><thead><tr><th>Year</th><th>Total a share</th></tr></thead><tbody>${a.annual.slice(-8).map((y) => html`<tr><td>${y.year}</td><td>$${num(y.total, 3)}</td></tr>`)}</tbody></table></div></details>` : ''}` : html`<p>No dividend on record.</p>`}
@@ -300,7 +366,7 @@ function congress() {
   const c = D.cg;
   if (c === undefined) return '';
   if (!c || !c.available) return '';
-  return html`<section class="section" id="fin-congress" aria-labelledby="cg-h"><h2 class="t-h2" id="cg-h">Congressional disclosures</h2>
+  return html`<section class="section" id="fin-congress" data-v2-metric="" aria-labelledby="cg-h"><h2 class="t-h2" id="cg-h">Congressional disclosures</h2>
     <p>${plural(c.count, 'trade')} by ${plural(c.members, 'member')} of the House: ${plural(c.buys, 'buy')} and ${plural(c.sells, 'sale')}, worth ${money(c.amount_low, 0)} to ${money(c.amount_high, 0)} in the bands filed. Filed a median ${plural(c.lag_median, 'day')} after the trade.</p>
     <div class="tscroll"><table class="t"><thead><tr><th>Traded</th><th>Member</th><th>Action</th><th>Amount</th><th>Close that day</th><th>Filed after</th></tr></thead>
       <tbody>${(c.trades || []).slice(0, 15).map((t) => html`<tr><td>${t.traded_iso ? fullDate(t.traded_iso) : t.traded}</td><td>${t.member} <small class="t-muted">${t.district || ''}</small></td><td>${capFirst(t.transaction || '')}</td><td>${money(t.amount_low, 0)} to ${money(t.amount_high, 0)}</td><td>${closeCell(t)}</td><td>${isNum(t.disclosure_lag_days) ? `${plural(t.disclosure_lag_days, 'day')}` : ''}</td></tr>`)}</tbody></table></div>
@@ -343,12 +409,12 @@ function segments() {
   };
   const figure = (t, k) => {
     const v = view(t), c = v.comp;
-    if (!c || !c.rows.length) return html`<figure class="fv"><figcaption><h3>${t.metric_label}, ${t.axis_label.toLowerCase()}</h3><p class="t-muted">No figures for the latest period in the filings read.</p></figcaption></figure>`;
+    if (!c || !c.rows.length) return html`<figure class="fv" data-v2-metric=""><figcaption><h3>${t.metric_label}, ${t.axis_label.toLowerCase()}</h3><p class="t-muted">No figures for the latest period in the filings read.</p>${sourceLine(FILINGS_SOURCE)}</figcaption></figure>`;
     const base = c.reconciles ? c.total : c.sum;
     const pos = c.rows.filter((r) => r.v >= 0), neg = c.rows.filter((r) => r.v < 0);
-    return html`<figure class="fv"><figcaption><h3>${t.metric_label}, ${t.axis_label.toLowerCase()}</h3><p class="fv-take">${FV.compositionLine(c, t.metric_label, PER.inText(v.per), susd, reconOf(t, v.rep))}</p>
+    return html`<figure class="fv" data-v2-metric=""><figcaption><h3>${t.metric_label}, ${t.axis_label.toLowerCase()}</h3><p class="fv-take">${FV.compositionLine(c, t.metric_label, PER.inText(v.per), susd, reconOf(t, v.rep))}</p>
         <p class="fv-unit">${t.annual_only && !years ? html`${typeBadge('annual')} Annual only: the company reports this breakdown in its 10-K, not each quarter. ` : ''}US dollars, as filed${c.dropped.length ? html`. ${c.dropped.join(', ')} is a total of other lines here, so it is left out rather than counted twice` : ''}</p>
-        ${(t.notes || []).map((n) => html`<p class="fv-unit">${clean(n)}</p>`)}</figcaption>
+        ${(t.notes || []).map((n) => html`<p class="fv-unit">${clean(n)}</p>`)}${sourceLine(FILINGS_SOURCE)}</figcaption>
       ${raw(hbars(pos.map((r) => ({ label: r.label, v: r.v, text: c.canShare && base > 0 ? `${susd(r.v)}, ${num((r.v / base) * 100, 0)}%` : susd(r.v) })), { fmt: (x) => susd(x) }))}
       ${neg.length ? html`<p class="fv-unit">${neg.map((r) => `${r.label}: ${susd(r.v)}`).join('; ')}. Costs or income the filing does not assign to a segment.</p>` : ''}
       ${v.yr && c.canShare && v.ends.length > 1 ? html`<p class="t-label fv-bridge-h">Over the fiscal years</p>${key([...c.rows.slice(0, 3).map((r, i) => [SEG_CLS[i], r.label]), ...(c.rows.length > 3 ? [['s0', 'Other']] : [])])}<div class="chart-slot" data-chart="segmix${k}"></div>` : ''}</figure>`;
@@ -362,7 +428,7 @@ function segments() {
     per && per.derived && !years ? `${per.short ? `${per.short} (to ${PER.endText(per)})` : `The quarter to ${PER.endText(per)}`} is not filed on its own: it is the 10-K's year less the three quarters filed before it.` : '',
     per && stEnd && Date.parse(per.end) - Date.parse(stEnd) > 15 * 864e5 ? `A later period than the statements above, read from the company's filings before the provider has it.` : '',
   ].filter(Boolean);
-  return html`<section class="section" id="fin-segments" aria-labelledby="sg-h"><div class="section-head"><div><h2 class="t-h2" id="sg-h">Segments and geography</h2>
+  return html`<section class="section" id="fin-segments" data-v2-metric="" aria-labelledby="sg-h"><div class="section-head"><div><h2 class="t-h2" id="sg-h">Segments and geography</h2>
     ${periodLine({ type: years ? 'annual' : 'quarter', basis: s.basis || 'GAAP', what: per ? PER.label(per) : PER.UNAVAILABLE, filing: per && (per.read_from || per.filing), notes })}<p class="section-sub">Where the money comes from, as the company reports it in its filings.</p></div>
     ${seg(years ? 'year' : 'quarter', [['year', 'Fiscal years'], ['quarter', 'Quarters']])}</div>
     <div class="fv-grid">${PER.segmentTables(s).map((t, k) => figure(t, k))}</div>
@@ -403,7 +469,7 @@ function paint() {
   if (D.na) body = notApplicable(sym, D.na);
   else if (D.tErr) body = failed('The financial statements', D.tErr, { retry: 'ticker' });
   else if (!D.t) body = skeleton('lines', 6, 'Loading the statements');
-  else body = html`${readings()}${jumpList()}${statements(sym)}${segments()}${record('earnings')}${ownership(sym)}${record('short')}${extras()}${filings()}${congress()}`;
+  else body = html`${readings()}${jumpList()}${statements(sym)}${segments()}${record('earnings')}${ownership(sym)}${insiderHistory(sym)}${record('short')}${extras()}${filings()}${congress()}`;
   // a section heading the reader was taken to (a jump, a link's ?section=) keeps focus while later figures redraw the page
   const was = document.activeElement, onHead = was && was.tagName === 'H2' && mainEl.contains(was) && was.closest('section[id]');
   draw(mainEl, html`<div class="dstick">${header(sym, D, 'financials')}${tabs(sym, 'financials', { fund: isFund(D) })}</div><div class="fin">${body}</div>`);
@@ -442,7 +508,11 @@ export async function render(main, route) {
   document.title = `${sym} Financials, Optic`;
   if (lp) lp.stop();
   lp = livePrice(main, route.symbol, () => D, 'financials', undefined);
-  provideContext(() => ({ view: 'financials', ticker: sym, quote: FIG.quoteForMilo(D.quote), figures: FIG.forMilo((D.t || {}).figures), company: FIG.companyForMilo((D.t || {}).company, (D.t || {}).figures), filings: (D.t || {}).filings, extras: D.x }));
+  if (seen) seen.stop();
+  seen = watchInView(main);
+  // the chart or section in view, with the period the statements show (Pass 2: Milo given the metric looked at)
+  const inView = () => { const v = seen && seen.get(); return v && v.metric ? { metric: v.metric, period: v.el.closest('#fin-statements') ? (period === 'quarter' ? 'quarters' : 'fiscal years') : null } : null; };
+  provideContext(() => ({ view: 'financials', ticker: sym, quote: FIG.quoteForMilo(D.quote), figures: FIG.forMilo((D.t || {}).figures), company: FIG.companyForMilo((D.t || {}).company, (D.t || {}).figures), filings: (D.t || {}).filings, extras: D.x, in_view: inView() }));
   // folds and Panels (Classic parity B3); Financials keeps its own jump strip
   sections(main, 'financials', { strip: false, norm: (t) => t.replace(/,\s*FY\d+$/i, '') });
   if (!main.dataset.finWired) {
@@ -451,6 +521,7 @@ export async function render(main, route) {
     const jump = (id) => jumpTo(main, id);
     main.addEventListener('click', (e) => {
       const b = e.target.closest('[data-fin-jump]'); if (b) { jump(b.dataset.finJump); return; }
+      const yb = e.target.closest('[data-fin-ih]'); if (yb) { ihYears = Number(yb.dataset.finIh) || 5; D.ih = undefined; paint(); loadInsiderHistory(D.sym); return; }
       const p = e.target.closest('[data-fin-period]');
       if (p) { period = p.dataset.finPeriod; try { localStorage.setItem(PERIOD_KEY, period); } catch (err) { /* private mode */ } const at = p.closest('section'); const id = at && at.id; paint(); const again = id && document.querySelector(`#${id} [data-fin-period="${period}"]`); if (again) again.focus(); }
     });
@@ -470,6 +541,7 @@ export async function render(main, route) {
   step(api.get(`/api/extras/${enc}?benchmark=SPY`, { ttl: 600000, timeout: 30000 }), (d) => { D.x = d; }, () => { D.x = null; });
   step(api.get(`/api/congress?ticker=${enc}&limit=40`, { ttl: 600000, timeout: 30000 }), (d) => { D.cg = d; }, () => { D.cg = null; });
   loadSegments(sym);
+  loadInsiderHistory(sym);
 }
 /** The Summary, Statements and Segments blocks drawn from one payload ({ sym, t, sg }) and a period view, for a check
  * that needs no browser (tests/test_fiscal_periods.py); the page's own state is put back as it was. */
@@ -478,6 +550,6 @@ export function blocksFor(d, view = 'year') {
   D = d; period = view === 'quarter' ? 'quarter' : 'year';
   try { return html`${readings()}${statements(d.sym)}${segments()}`; } finally { [D, period] = was; }
 }
-export function dispose() { if (lp) { lp.stop(); lp = null; } live = false; }
-export const retry = { ticker: (m, r) => render(m, r) };
+export function dispose() { if (lp) { lp.stop(); lp = null; } if (seen) { seen.stop(); seen = null; } live = false; }
+export const retry = { ticker: (m, r) => render(m, r), ih: () => { D.ih = undefined; paint(); loadInsiderHistory(D.sym); } };
 void empty;

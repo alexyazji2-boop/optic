@@ -193,7 +193,7 @@ function trimEnds(groups, series) {
 
 /**
  * Several measures across the same periods, side by side, from zero.
- * groups: [{x, sub?, subCls?}] oldest first; series: [{name, cls, values, hollow?}] values aligned to groups
+ * groups: [{x, sub?, subCls?}] oldest first; series: [{name, cls, values, hollow?, clsOf(i)?}] values aligned to groups
  * opts: {w, h, label, fmt(v), axisFmt(v), refs: [{v, text}], valueLabels: 'none' (default) | 'last' | 'all', summary, note(i)}
  * The figures are read on hover, tap or the arrow keys and in the chart's data table, not printed on the bars (owner, 2026-10-20).
  */
@@ -219,7 +219,9 @@ export function groupedBars(groupsIn, seriesIn, opts = {}) {
       const v = s.values[i], x = pad.l + gw * i + (gw - inner) / 2 + j * bw + 1;
       if (!fin(v)) { bars += `<line class="gap-mark" data-g="${i}" x1="${x.toFixed(1)}" x2="${(x + bw - 2).toFixed(1)}" y1="${Y(0).toFixed(1)}" y2="${Y(0).toFixed(1)}"/>`; return; }
       const y = Math.min(Y(v), Y(0)), h = Math.max(1, Math.abs(Y(v) - Y(0)));
-      bars += `<rect class="gbar ${s.cls || 's1'}${s.hollow ? ' hollow' : ''}" data-g="${i}" x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${Math.max(1, bw - 2).toFixed(1)}" height="${h.toFixed(1)}" rx="1.5"/>`;
+      // clsOf(i): a class for one bar, where the bar's own outcome is its colour (an estimate beaten or missed, a move up
+      // or down; the visual update, 2026-11-11); otherwise the series' class
+      bars += `<rect class="gbar ${(s.clsOf && s.clsOf(i)) || s.cls || 's1'}${s.hollow ? ' hollow' : ''}" data-g="${i}" x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${Math.max(1, bw - 2).toFixed(1)}" height="${h.toFixed(1)}" rx="1.5"/>`;
       if (lab === 'all' || (lab === 'last' && i === groups.length - 1)) cands.push({ x: x + (bw - 2) / 2, y: v >= 0 ? Y(v) - 5 : Y(v) + 13, text: fmt(v) });
     });
   });

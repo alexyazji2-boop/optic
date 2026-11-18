@@ -184,7 +184,8 @@ def test_the_server_reads_the_lines_behind_the_charts():
     a = f["annual"]
     assert a["operating_cash_flow"] == [111.5, 118.3] and a["capital_expenditure"] == [-12.7, -9.4], "on the income statement's years"
     assert a["diluted_shares"] == [15.0, 15.4] and f["quarterly"]["diluted_shares"] == [14.7]
-    assert f["balance_history"] == {"cash": [35.9, 29.9], "total_debt": [98.7, 106.6]}
+    bh = f["balance_history"]   # Pass 2 added assets, liabilities and equity beside these
+    assert bh["cash"] == [35.9, 29.9] and bh["total_debt"] == [98.7, 106.6]
 
 
 def test_earnings_leads_with_the_newcomers_questions():

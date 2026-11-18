@@ -32,13 +32,14 @@ import * as router from '../core/router.js';
 import { holds } from '../core/device.js';
 import { esc, compact } from '../core/format.js';
 import { GROUPS, SETTINGS } from '../nav.js';
-import { renderAnswer, splitFollowUps, streamingHTML, settledEnd, FOLLOW_AT, sourcesAsText, STUDIES, SECTIONS as ACT_SECTIONS } from '../core/milo-text.js';
+import { renderAnswer, FACT_KEY, splitFollowUps, streamingHTML, settledEnd, FOLLOW_AT, sourcesAsText, STUDIES, SECTIONS as ACT_SECTIONS } from '../core/milo-text.js';
 import { lineChart, mountCharts } from './chart.js';
 import * as FF from './finfigs.js';
 import { CLASSIC } from '../core/classic.js';
 import { miloNotice } from '../core/legal.js';
 import { icon } from './icons.js';
 import { levelSlider } from './levelslider.js';
+import { visitorId } from '../core/usage.js';
 import { begin as actBegin, on as actOn, companionHTML, syncCompanion } from './milo-activity.js';
 import { researchOf, researchLine, researchWords, researchRows, removedSince, usedLine, keepUsed, barWhen, TIMEFRAMES } from './milo-context.js';
 
@@ -157,6 +158,11 @@ export function buildContext(scope, prevTicker, now = new Date()) {
   const cmpNames = scope === 'auto' && r.view === 'compare' && ctx.compare && Array.isArray(ctx.compare.tickers) ? ctx.compare.tickers.slice(0, 4) : [];
   if (cmpNames.length >= 2) { focus.compare = { tickers: cmpNames, focus: cmpNames.includes(S.pick) ? S.pick : null }; if (!own) focus.ticker = focus.compare.focus; }
   if (prevTicker && focus.ticker && prevTicker !== focus.ticker) focus.previous_ticker = prevTicker;
+  // what on the page is in view (Pass 2: a Financials chart and its period), so "this" in a question means it
+  if (scope === 'auto' && focus.ticker && ctx.in_view && typeof ctx.in_view === 'object' && ctx.in_view.metric) {
+    focus.in_view = { metric: String(ctx.in_view.metric).slice(0, 60), period: ctx.in_view.period ? String(ctx.in_view.period).slice(0, 60) : null };
+  }
+  delete ctx.in_view;
   delete ctx.focus_label; delete ctx.focus;
   if (scope === 'none') return { focus };
   if (scope === 'market') { const out = { focus }; ['macro', 'sectors', 'indices', 'read'].forEach((k) => { if (ctx[k]) out[k] = ctx[k]; }); return out; }
@@ -447,12 +453,21 @@ function blocked() {
   const ai = r.ai || {}, a = r.allowance || {};
   if (ai.enabled === false) return { kind: 'off', text: 'Milo is switched off right now, so it cannot answer questions. Everything else in Optic works without it.' };
   if (a.requires_account && !store.signedIn()) return { kind: 'signin', text: 'Asking Milo needs a free account.', perDay: a.signed_in_allowance };
-  if (Number.isFinite(a.allowed) && a.allowed > 0 && a.left === 0) return { kind: 'spent', text: `You have used today's ${a.allowed} questions.${a.next_at ? ` The next one is available ${new Date(a.next_at).toLocaleString('en-US', { weekday: 'short', hour: 'numeric', minute: '2-digit' })}.` : ''}` };
+  if (Number.isFinite(a.allowed) && a.allowed > 0 && a.left === 0) {
+    const at = a.next_at ? new Date(a.next_at).toLocaleString('en-US', { weekday: 'short', hour: 'numeric', minute: '2-digit' }) : '';
+    // `short` is the box's placeholder, so the box itself says why Send does nothing
+    return { kind: 'spent', text: `You have used today's ${a.allowed} questions.${at ? ` The next one is available ${at}.` : ''}`, short: `Today's ${a.allowed} questions are used${at ? `; the next one frees at ${at}` : ''}` };
+  }
   return null;
 }
+// A spent allowance is said here, from the allowance itself, on open and on every repaint. It used to be blank
+// exactly then: the box kept "Ask about AAPL" and Send was dead with no sentence, and the reason appeared only after
+// an ask failed with 429, so the reader took it for a broken button (spent free account on the evaluation copy,
+// 2026-11-10: notes on open none, Send disabled, the box enabled).
 function allowanceLine() {
   const a = (S.allowance || {}).allowance || {};
-  if (blocked()) return '';
+  const b = blocked();
+  if (b) return b.kind === 'spent' ? b.text : '';
   return Number.isFinite(a.left) && Number.isFinite(a.allowed) && a.allowed > 0 ? `${a.left} of ${a.allowed} questions left today.` : '';
 }
 async function loadAllowance() {
@@ -477,7 +492,9 @@ function msgHTML(it) {
   const live = S.live && S.live.i === it.i;
   // an answer still arriving, when the whole log is drawn (the panel opened again mid-answer): as the live drawing has
   // it, so no half-written tag shows for the frame before paintLive takes it over
-  const { html: body, ups } = live ? { html: streamingHTML(shown, info.symbol || null), ups: [] } : renderAnswer(shown, info.symbol || null);
+  const drawn = live ? { html: streamingHTML(shown, info.symbol || null), ups: [] } : renderAnswer(shown, info.symbol || null);
+  // a finished answer with reported figures says once what the underline means (Pass 2)
+  const { html: body, ups } = !live && drawn.html.includes('class="milo-fact"') ? { html: drawn.html + FACT_KEY, ups: drawn.ups } : drawn;
   // an answer sits on the panel's own surface: its name, what it was about, the text; sources and actions after it
   return html`<article class="milo-msg milo-bot" data-v2-milo-i="${it.i}" aria-label="Milo's answer"><p class="milo-who">Milo</p>
     ${aboutLine(info)}
@@ -671,6 +688,7 @@ function settingsHTML() {
   return html`<div class="milo-sheet-scrim" data-v2-milo-settings-done aria-hidden="true"></div>
     <div class="milo-settings" id="milo-settings" role="dialog" aria-modal="false" aria-labelledby="milo-set-h">
     <div class="milo-set-head"><h3 id="milo-set-h" tabindex="-1">Response settings</h3><button type="button" class="icon-btn" data-v2-milo-settings-done aria-label="Close Response settings" title="Close">${icon('close')}</button></div>
+    ${personaHTML()}
     ${ms.length ? html`<div class="milo-level">${levelSlider({ id: 'milo-lvl', label: 'Level', compact: true })}</div>` : ''}
     ${hz.length ? html`<div class="milo-hz" role="group" aria-labelledby="milo-hz-lab"><span class="t-label" id="milo-hz-lab">Timeframe</span>
       <div class="seg">${hz.map((x) => html`<button type="button" aria-pressed="${h && x.id === h.id ? 'true' : 'false'}" data-v2-milo-hz="${x.id}" title="${x.blurb || ''}">${HZ_SHORT[x.id] || x.label}</button>`)}</div></div>
@@ -869,9 +887,12 @@ function accessHTML(b) {
     <p class="milo-guest-sub">Without an account you can search companies, read every page, follow companies in this browser, and tap an underlined term for its meaning.</p></div>`;
   return html`<div class="state milo-block" role="status"><p>${b.text}</p></div>`;
 }
+// The persona is a response setting, so it sits in Response settings, not above the question (visual hierarchy
+// review, 2026-11-10, change 14, F12: signed in, the head, the context block and the persona row put the greeting at
+// y 490 and the gold Send at y 798 of the panel)
 function chromeHTML() {
   const b = blocked();
-  return html`${accessHTML(b)}${ctxHTML()}${movedHTML()}${personaHTML()}`;
+  return html`${accessHTML(b)}${ctxHTML()}${movedHTML()}`;
 }
 function logHTML() {
   if (S.showHistory) return historyHTML();
@@ -1030,7 +1051,8 @@ function paintForm() {
   // the send control turns into Stop while Milo answers; focus follows it rather than falling to the page
   if (S.busy && hadFocus === send && stop) stop.focus({ preventScroll: true });
   if (!S.busy && hadFocus === stop && ta) ta.focus({ preventScroll: true });
-  if (ta) { ta.disabled = !!b && b.kind !== 'spent'; ta.placeholder = placeholder(); }
+  // spent: the box stays enabled so the reader may draft for later; Send stays disabled and the placeholder says why
+  if (ta) { ta.disabled = !!b && b.kind !== 'spent'; ta.placeholder = b && b.kind === 'spent' ? b.short : placeholder(); }
   // no conversation form that cannot be used: hidden while asking needs an account or Milo is off
   const fm = $('.milo-form', h); if (fm) fm.hidden = !!b && b.kind !== 'spent';
   const at = $('#milo-attached span', h); if (at) at.textContent = attachedLine();
@@ -1118,6 +1140,7 @@ function paintFinished(i, live, ok) {
   if (body.length > live.cut) settled.insertAdjacentHTML('beforeend', renderAnswer(body.slice(live.cut), live.symbol, live.seen || {}).html);
   settled.replaceWith(...settled.childNodes);
   const tailNode = $('.milo-tail', old); if (tailNode) tailNode.remove();
+  if (old.querySelector('.milo-fact') && !old.querySelector('.milo-key')) old.insertAdjacentHTML('beforeend', FACT_KEY);
   // The streaming notices go with the stream. He does not: he is in the header and stays there, which is the
   // whole point of the companion, so nothing here touches him.
   const linesNode = $('.milo-live-lines', old); if (linesNode) linesNode.remove();
@@ -1223,7 +1246,8 @@ export async function send(text, { deep = false } = {}) {
     const askedText = /^Deep research: /.test(text) && deep ? null : text;
     const res = await fetch(deep ? '/api/research' : '/api/chat', {
       method: 'POST', credentials: 'same-origin', signal: ctl.signal,
-      headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream', 'X-Optic-CSRF': (document.cookie.match(/(?:^|; )optic_csrf=([^;]*)/) || [])[1] || '' },
+      // the visitor id goes with a question so one asked without an account (where the owner allows it) is counted
+      headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream', 'X-Optic-CSRF': (document.cookie.match(/(?:^|; )optic_csrf=([^;]*)/) || [])[1] || '', 'X-Optic-Visitor': visitorId() },
       body: JSON.stringify(deep
         ? { ticker: focusTicker || sym0 || null, question: askedText || (focusTicker || sym0 ? null : MARKET_BRIEF), context, mode: prefs.knowledge() }
         : { messages: S.conv.messages.slice(0, ai).map((m) => ({ role: m.role, content: m.content })), context, web: !!S.web, attachments, persona: persona(), mode: prefs.knowledge(), horizon: horizon() }),

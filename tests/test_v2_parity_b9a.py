@@ -23,7 +23,8 @@ def test_which_sections_start_open(tmp_path):
     """)
     assert got == [True, True, False, False, True, False, False], "a list opens only its headings; the reader's own choice wins; the level still folds"
     assert "tracker: ['optic portfolio', 'open positions', 'three books', 'no trades yet']," in CLASSIC
-    assert "sections(main, 'tracker', { open: ['optic portfolio', 'open positions', 'three simulated accounts', 'no trades yet'] });" in TRK
+    # float: the strip shows past the page's head (visual hierarchy review, 2026-11-10, change 13)
+    assert "sections(main, 'tracker', { float: true, open: ['optic portfolio', 'open positions', 'three simulated accounts', 'no trades yet'] });" in TRK
 
 
 def test_when_scan_draws_bars(tmp_path):

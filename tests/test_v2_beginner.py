@@ -44,13 +44,14 @@ def test_linked_panels_say_what_they_follow_and_sit_under_it():
 
 
 def test_the_market_strip_and_conditions_are_plain():
-    assert "title: 'Markets at a glance'" in WS and "'WTI Crude': 'Dollars a barrel'" in WS and "VIX: 'Volatility index'" in WS
+    # the tiles' unit lines went in the visual update (2026-11-11, change 4); the How says each unit
+    assert "title: 'Markets at a glance'" in WS and "'WTI Crude': 'Dollars a barrel'" not in WS
     # every move by its direction only, the VIX and the 10-year included, as Classic's strip (owner, 2026-10-21,
-    # pointing at the VIX's uncoloured -4.04%); before that, the beginner brief left those two uncoloured
-    assert "NEUTRAL_MOVE" not in WS and '<span class="d ${dir(i.chg_1d)}">' in WS
+    # pointing at the VIX's uncoloured -4.04%), and with its arrow and sign since the visual update
+    assert "NEUTRAL_MOVE" not in WS and '<span class="d">${mv(i.chg_1d, moveText(i))}' in WS
     assert "title: 'Market conditions'" in WS
-    body = WS[WS.index("title: 'Market conditions'"):WS.index("  expected: {")]
-    assert body.index('<p class="ws-lead">') < body.index('<details class="ws-more"><summary>How these readings are built</summary>'), "the finding before the arithmetic"
+    body = WS[WS.index("title: 'Market conditions'"):WS.index("  sentiment: {")]
+    assert body.index('<p class="gl-fig">') < body.index('<details class="ws-more"><summary>How the score is built</summary>'), "the finding before the arithmetic"
     assert "'neutral / mixed': 'Mixed: no clear lean'" in WS
 
 
@@ -66,9 +67,12 @@ def test_the_calendar_says_why_a_figure_is_missing(tmp_path):
 
 def test_overview_opens_on_what_the_company_does():
     paint = OV[OV.index("function paint(main, sym) {"):]
-    assert paint.index("${about(sym)}") < paint.index('section class="section dchart"')
+    # above the chart at Advanced and for a fund; below Advanced a company's sits beside its revenue mix under the
+    # chart, with the figures (the visual update, 2026-11-11, changes 10 and 11)
+    assert paint.index("${adv || !company ? about(sym) : ''}") < paint.index('section class="section dchart"')
+    assert "<div class=\"ov-row2\">${about(sym)}" in OV
     ab = OV[OV.index("function about(sym) {"):OV.index("/* ---------------- the rest, one step away")]
-    for want in ("What ${name} does", "<dt>${fund ? 'Kind of fund' : 'Industry'}</dt>", "Where its revenue comes from", "US dollars. ${delays.label(q, quoteCtx(D))}", "replace(/^The Company\\b/, name)"):
+    for want in ("What ${name} does", "<dt>${fund ? 'Kind of fund' : 'Industry'}</dt>", "Where its revenue comes from", "donut(mix.parts", "replace(/^The Company\\b/, name)"):
         assert want in ab, want
     assert "String(d.data_caveat).split(" in OV, "the chart's footer is the delay, not Greeks and Black-Scholes"
     # A company's four answers are Classic's four questions since 2026-10-25 (owner's screenshots; the owner chose to
@@ -76,7 +80,10 @@ def test_overview_opens_on_what_the_company_does():
     # setup. A fund keeps its four, with the price trend in place of a trade setup.
     ans = OV[OV.index("function answers(sym) {"):OV.index("function answerGrid(out) {")]
     assert "return answerGrid(fundAnswers(sym, trendItem(sym)));" in ans
-    assert "${fund ? (D.fwError && D.fvError && D.earnError ? failed('The four answers', D.fwError, { retry: 'dossier' }) : answers(sym)) : OR.fourQuestions(c)}" in OV
+    # the fund's branch is one function since the advanced sections got a Show more each (2026-11-10), so Advanced and the
+    # adv:questions stub draw the same thing
+    assert "const fourAnswers = (sym) => (D.fwError && D.fvError && D.earnError ? failed('The four answers', D.fwError, { retry: 'dossier' }) : answers(sym));" in OV
+    assert "${fund ? fourAnswers(sym) : OR.fourQuestions(c)}" in OV
     ovr = (JS / "pages/overview-research.js").read_text()
     assert "This describes the stock, not the business." in ovr and "tile('trade', 'Is there a short-term setup?', setupGrade(sw.grade), sw.why" in ovr
 
@@ -116,7 +123,7 @@ def test_milo_tells_a_guest_what_needs_an_account():
     acc = MILO[MILO.index("function accessHTML(b) {"):MILO.index("function chromeHTML() {")]
     assert "Milo is available. A free account lets you ask it" in acc and 'href="#/signin">Sign in or create an account' in acc
     assert "Without an account you can search companies, read every page" in acc
-    assert "return html`${accessHTML(b)}${ctxHTML()}${movedHTML()}${personaHTML()}`;" in MILO, "said first, the personas still shown"
+    assert "return html`${accessHTML(b)}${ctxHTML()}${movedHTML()}`;" in MILO and "${personaHTML()}" in MILO, "said first, the personas in Response settings"
     assert "const fm = $('.milo-form', h); if (fm) fm.hidden = !!b && b.kind !== 'spent';" in MILO, "no disabled form presented as ready"
     assert "'Milo is available with a free account.'" in STATUS and "'Milo is answering.'" not in STATUS
 

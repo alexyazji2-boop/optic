@@ -11,7 +11,7 @@ import * as store from '../core/store.js';
 import { sections } from '../ui/sections.js';
 import { num, signed, dir, compact, clean, bolded, capFirst, longDate, fullDate, shortDate, isNum, ago, plural } from '../core/format.js';
 import * as RP from '../core/reports.js';
-import { mountCharts } from '../ui/chart.js';
+import { mountCharts, targetRange } from '../ui/chart.js';
 import { signedBars, groupedBars } from '../ui/bars.js';
 import * as FV from '../core/finviz.js';
 import { term } from '../ui/term.js';
@@ -198,6 +198,7 @@ function analysts(sym) {
   if (!isNum(a.target_mean) && !(a.ratings || []).length) return '';
   return html`<section class="section" aria-labelledby="an-h"><div class="section-head"><h2 class="t-h2" id="an-h">Analyst view</h2>${ask(sym, 'Ask Milo about the analysts', `How much weight should I give analysts' view of ${sym}?`)}</div>
     ${kv([['Average target', html`${num(a.target_mean)} <span class="t-muted">${signed(a.upside_pct, 1)}</span>`], ['Range', `${num(a.target_low)} to ${num(a.target_high)}`], ['Ratings', `${a.buys} buy, ${a.holds} hold, ${a.sells} sell`], ['Analysts', a.analyst_count]], 4)}
+    ${isNum(a.target_low) && isNum(a.target_high) ? html`<figure class="fv-target" data-v2-metric="Analyst price targets"><figcaption class="t-label">Price targets, lowest to highest, the average marked and the price now as the dot</figcaption>${raw(targetRange({ lo: a.target_low, mid: a.target_mean, hi: a.target_high, price: (((D.quote || {}).quote) || D.quote || {}).price }))}<p class="asof">The analysts' own targets as the data source reports them; Optic does not set or check them.</p></figure>` : ''}
     <div class="tscroll"><table class="t"><thead><tr><th>Month</th><th>Strong buy</th><th>Buy</th><th>Hold</th><th>Sell</th><th>Strong sell</th></tr></thead>
       <tbody>${(a.ratings || []).map((r) => html`<tr><td>${r.period === '0m' ? 'This month' : ((n) => `${n} month${n === '1' ? '' : 's'} ago`)(r.period.replace('-', '').replace('m', ''))}</td><td>${num(r.strong_buy, 0)}</td><td>${num(r.buy, 0)}</td><td>${num(r.hold, 0)}</td><td>${num(r.sell, 0)}</td><td>${num(r.strong_sell, 0)}</td></tr>`)}</tbody></table></div>
     <ul class="plain">${(a.notes || []).map((n) => html`<li>${clean(n)}</li>`)}</ul></section>`;

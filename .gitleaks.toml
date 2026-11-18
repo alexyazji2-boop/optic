@@ -1,0 +1,19 @@
+# gitleaks: the default rules, and an allowlist for the shapes that are not secrets (2026-11-09).
+# Measured over the full history that day: 43 matches, every one rule generic-api-key, every one one of these:
+#  - browser storage key names, constants such as KNOW_KEY = 'optic.knowledge.v1'
+#  - fixture passwords a test registers its own account with, under tests/
+#  - a directory path in docs/post-demo-ultra/RECONCILIATION.md
+# Anything else is a finding.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "storage key names, test fixtures, one docs path"
+regexes = [
+  '''^optic\.[a-z0-9_.]+$''',
+  '''phase09/recon/''',
+]
+# the one test file whose registered fixture passwords match the generic rule; tests stay scanned otherwise
+paths = [
+  '''^tests/test_auth_accounts\.py$''',
+]

@@ -135,7 +135,7 @@ function legQuote(l) {
 const quotedAt = (iso) => (iso ? `Quotes read ${etStamp(iso)}${((D.session || {}).prices || {}).phase === 'regular' ? `, ${delays.chainWords()}` : ', from the last session the feed has'}` : '');
 function result(sym) {
   if (B.analyzing) return skeleton('chart', 1, 'Pricing the position');
-  if (B.error) return html`<div class="state err" role="alert"><p class="t-h3">The position could not be priced</p><p>${clean(B.error)}</p></div>`;
+  if (B.error) return failed('The position', null, { title: 'The position could not be priced', body: clean(B.error) });
   const a = B.analysis;
   if (!B.legs.length || !a) return html`<p class="quiet">No position yet. A template fills the legs from the ${R.expiry ? shortDate(R.expiry) : 'selected'} expiry; Add in the table puts in one contract.</p>`;
   const en = a.entry || {}, gk = a.greeks || {};

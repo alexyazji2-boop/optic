@@ -202,8 +202,10 @@ def test_the_clients_level_table_agrees_with_the_server():
     legacy = COMPONENT.split("var LEGACY = {", 1)[1].split("};", 1)[0]
     assert dict(re.findall(r"(\w+): '(\w+)'", legacy)) == knowledge.LEGACY
     v2 = open("static/v2/js/core/prefs.js", encoding="utf-8").read()
-    assert "export const LEVEL_IDS = ['new', 'beginner', 'intermediate', 'advanced', 'expert'];" in v2
-    assert "const LEGACY = { simple: 'new', literate: 'intermediate', professional: 'expert', adaptive: 'intermediate' };" in v2
+    # v2 offers three since 2026-11-09 and maps every older id onto them; the server's five stay as wording tiers
+    assert "export const LEVEL_IDS = ['beginner', 'intermediate', 'advanced'];" in v2
+    assert "const LEGACY = { new: 'beginner', expert: 'advanced', simple: 'beginner', literate: 'intermediate', professional: 'advanced', adaptive: 'intermediate' };" in v2
+    assert knowledge.THREE == ["beginner", "intermediate", "advanced"]
     assert "const DEFAULT_MODE = 'intermediate';" in v2 and "var DEFAULT_MODE = 'intermediate';" in COMPONENT
 
 

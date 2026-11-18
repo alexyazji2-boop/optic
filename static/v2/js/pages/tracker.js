@@ -365,8 +365,11 @@ function paint() {
   // whose portfolio this is, before any figure (beginner brief item 9): Optic's own simulated record, the same for
   // every reader, with pretend money; the reader's own practice portfolio and real accounts are elsewhere
   draw(mainEl, html`<header class="page-head">${sectionHead('portfolio', 'tracker')}
-      <div class="whose" role="note"><p><b>This is Optic's demonstration portfolio, not yours.</b> Three simulated accounts trade Optic's own signals with pretend money, the same for every reader. No money is real and no order reaches a broker.</p>
-        <p>Your own practice portfolio is the <a class="textlink" href="#/paper">Paper Desk</a>.${store.signedIn() ? html` Accounts you link are under <a class="textlink" href="#/brokerage">Brokerage</a>, read only.` : ''}</p></div></header>
+      ${/* one 15px line, the rest a press away (visual hierarchy review, 2026-11-10, change 13): the notice took the first
+         140px of content above the three accounts; every word of it is kept */ ''}
+      <details class="whose" role="note"><summary><b>This is Optic's demonstration portfolio, not yours.</b> <span class="whose-more">What that means</span></summary>
+        <p>Three simulated accounts trade Optic's own signals with pretend money, the same for every reader. No money is real and no order reaches a broker.</p>
+        <p>Your own practice portfolio is the <a class="textlink" href="#/paper">Paper Desk</a>.${store.signedIn() ? html` Accounts you link are under <a class="textlink" href="#/brokerage">Brokerage</a>, read only.` : ''}</p></details></header>
     ${D.err ? failed("Optic's position ledger", D.err, { retry: 'load' }) : !d ? skeleton('rows', 6, "Loading Optic's own position ledger") : html`
       ${books(d)}${ledger(d)}${openPositions(d.open || [])}${months(d)}${funnel(d)}
       ${empty ? html`<section class="section"><h2 class="t-h2">No trades yet</h2><p>The ledger is empty. It only opens a position when a name's composite score clears ${num((d.config || {}).min_composite, 0)}, and most scans find nothing. Open "Run the shared scan" above to run one, or wait for the scheduled one.</p></section>` : ''}
@@ -440,7 +443,8 @@ export async function render(main) {
   main.addEventListener('change', (e) => { if (e.target.matches('[data-v2-tk-month]')) { month = e.target.value; load(true); } });
   // each section folds, remembered under Classic's keys (Classic parity B9.2); Classic's four open at first, the
   // record's detail one press away (app.js PANELS_OPEN_BY_DEFAULT.tracker; "three books" is v2's three accounts)
-  sections(main, 'tracker', { open: ['optic portfolio', 'open positions', 'three simulated accounts', 'no trades yet'] });
+  // the jump strip floats in only past the page's head (hierarchy change 13, change 4's rule): it sat at y 366
+  sections(main, 'tracker', { float: true, open: ['optic portfolio', 'open positions', 'three simulated accounts', 'no trades yet'] });
   load();
 }
 export function dispose() { live = false; clearTimeout(poll); }

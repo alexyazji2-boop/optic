@@ -25,7 +25,7 @@ def _rule(text, sel):
 
 
 def test_the_type_scale():
-    for t in ("--t-xs: 12px;", "--t-sm: 13px;", "--t-md: 14px;", "--t-base: 15px;", "--t-lg: 16px;", "--t-xl: 18px;", "--t-lead: 20px;", "--t-2xl: 24px;"):
+    for t in ("--t-xs: 13px;", "--t-sm: 13px;", "--t-md: 14px;", "--t-base: 15px;", "--t-lg: 16px;", "--t-xl: 18px;", "--t-lead: 20px;", "--t-2xl: 24px;"):
         assert t in TOK, t
     sizes = set(re.findall(r"font-size:\s*(\d+(?:\.\d+)?)px", RULES)) | set(re.findall(r"font:\s*\d{3}\s+(\d+(?:\.\d+)?)px/", RULES))
     assert all(float(s) >= 22 for s in sizes), f"text sizes come from the scale; only headline figures are literal: {sorted(sizes)}"
@@ -56,7 +56,8 @@ def test_radii_by_what_the_shape_holds():
 
 
 def test_readable_secondary_text():
-    assert TOK.count("--c-ink-2: #d3cfc6; --c-ink-3: #b4afa5;") == 2, "lifted in both dark blocks"
+    # lifted a step again on 2026-11-11 (the visual update); the ratios are computed in tests/test_visual_update_tokens.py
+    assert TOK.count("--c-ink-2: #e5e1d9; --c-ink-3: #c5c0b6;") == 2, "lifted in both dark blocks"
     assert "--c-ink-3: #5c564b;" in TOK, "and deepened in the light theme"
 
 
@@ -100,12 +101,14 @@ def test_one_icon_family_in_the_shared_panels():
 
 def test_the_compact_header_on_every_dossier_tab():
     frame = (JS / "pages/dossier-frame.js").read_text()
-    assert "export function header(sym, D, view = 'overview', { compact = false, bar = true, stage = null } = {}) {" in frame
-    assert "<header class=\"dhead bar${st ? ' is-wide' : ''}${view === 'chart' ? ' dhead-chart' : ''}\">${raw(logoHTML(sym, { lazy: false }))}" in frame, "the company's logo on every tab (Classic, 2026-10-25)"
-    assert "${stageLine(sym, st)}${actions(sym, label, true)}" in frame, "the stage on the Overview's header line, with Explain"
+    assert "export function header(sym, D, view = 'overview', { compact = false, bar = true, stage = null, level = null } = {}) {" in frame
+    # dhead-overview: the Overview's price at the display size (visual hierarchy review, 2026-11-10, change 1)
+    assert "<header class=\"dhead bar${st ? ' is-wide' : ''}${view === 'chart' ? ' dhead-chart' : ''}${view === 'overview' ? ' dhead-overview' : ''}\">${raw(logoHTML(sym, { lazy: false }))}" in frame, "the company's logo on every tab (Classic, 2026-10-25)"
+    assert "${stageLine(sym, st)}${actions(sym, label, true, level)}" in frame, "the stage on the Overview's header line, with Explain"
     assert ".account-btn { flex: none; white-space: nowrap;" in CSS["components.css"], "Sign in never wraps"
     pages = CSS["pages.css"]
-    assert ".ch-pacts + .pc-host .pc-read { padding-right: 190px; }" in pages, "Explain and full screen keep off the readout"
+    # Explain and full screen are on the toolbar row since 2026-11-10, so the readout needs no room kept for them
+    assert ".ch-pacts" not in pages and ".ch-tacts { display: inline-flex;" in pages, "nothing is drawn over the readout"
 
 
 def test_the_reads_bold_markers_become_bold(tmp_path):

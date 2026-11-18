@@ -3,6 +3,13 @@
 import { raw } from '../core/dom.js';
 
 const P = {
+  // the rail of the owner's 2026-11-09 layout (Research's sections and Lists), drawn to his screen
+  research: '<path d="M4 20V10M10 20V4M16 20v-8M22 20H2"/>',
+  grid: '<rect x="4" y="4" width="7" height="7" rx="1"/><rect x="13" y="4" width="7" height="7" rx="1"/><rect x="4" y="13" width="7" height="7" rx="1"/><rect x="13" y="13" width="7" height="7" rx="1"/>',
+  optionsCurve: '<path d="M4 16c3 0 4-8 8-8s5 8 8 8"/><path d="M4 8h16"/>',
+  star: '<path d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/>',
+  bulb: '<path d="M9 18h6M10 21h4"/><path d="M8 13a5 5 0 1 1 8 0c-1 1-1.5 2-1.5 3h-5c0-1-.5-2-1.5-3z"/>',
+  folder: '<path d="M3 6h6l2 2h10v11H3z"/>',
   home: '<path d="M4 11 12 4l8 7v9h-5v-6H9v6H4z"/>',
   dossier: '<path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5M9 12h7M9 16h5"/>',
   compare: '<path d="M8 4v16M16 4v16M4 8h8M12 16h8"/>',

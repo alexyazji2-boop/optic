@@ -4,7 +4,7 @@
 import { html, render, $, $$ } from '../core/dom.js';
 import { icon, brandMark } from './icons.js';
 import { footer as legalFooter } from '../core/legal.js';
-import { GROUPS, SECTIONS, SETTINGS, MOBILE_TABS, visibleGroups, hrefFor, groupOf } from '../nav.js';
+import { GROUPS, SETTINGS, MOBILE_TABS, visibleGroups, hrefFor, groupOf, RESEARCH, LISTS, RAIL_MORE, researchHref } from '../nav.js';
 import { state as store, openedNow } from '../core/store.js';
 
 let flags = { admin: false, brokerage: false };
@@ -18,6 +18,10 @@ export function setRailTight(on) { try { localStorage.setItem(RAIL_KEY, on ? '1'
 // The page last open in each section on this visit (the classic app's NAV_LAST, kept in memory as it was): a
 // section's button returns to it, so leaving Markets on Macro and coming back is Macro, not Markets' first page.
 const NAV_LAST = {};
+// the company the rail and the phone bar point at, as last painted: More's Research entries follow it, so they match
+// the bar's Research tab on a company's page (the visit's recents alone lagged behind the quote, and More said the
+// company search while the bar said the company; round two's live run, 2026-11-10)
+let PAINTED_SYM = null;
 function groupHref(g, symbol) {
   const page = g.pages.find((p) => p.view === NAV_LAST[g.id]) || g.pages[0];
   // with no company open, Dossier's own start page rather than the search (owner, 2026-10-21)
@@ -30,10 +34,10 @@ const WHAT = {
   indices: 'The major indexes over the long run', explore: 'Sectors, themes and what is moving', scan: 'Named screens across the ranked list',
   insiders: 'Company insiders and House members\' trades', analysts: 'Rating and price-target changes, newest first',
   tracker: "Optic's own demonstration portfolio", paper: 'Practice trades you enter yourself', roth: 'A rules-based allocation to compare yours against',
-  brokerage: 'Your linked accounts, read-only', watchlist: 'The names you follow', alerts: 'What fired on your alerts, and why',
+  brokerage: 'Your linked accounts, read-only', watchlist: 'The names you follow', alerts: 'What fired on your alerts, and why', saved: 'The research you saved',
   reports: 'What readers reported as broken', usage: 'What the model has cost', accounts: 'Everyone who signed up', metrics: 'Sign-ups, actives, retention and Milo', settings: 'Your account and preferences',
 };
-/* ---------------- unread alerts: the bell on the top bar, the count on the phone bar's Watchlist (where Alerts lives) */
+/* ---------------- unread alerts: the bell on the top bar, the count on the phone bar's Lists (it opens the Watchlist, where Alerts is a tab) */
 let unread = 0;
 export function setUnread(n) { unread = Math.max(0, Number(n) || 0); paintUnread(); }
 function paintUnread() {
@@ -44,12 +48,12 @@ function paintUnread() {
     bell.setAttribute('aria-label', unread ? `Alerts, ${words}` : 'Alerts');
     const c = bell.querySelector('.bell-n'); if (c) c.textContent = unread > 9 ? '9+' : String(unread);
   }
-  $$('.tabbar [data-v2-tab="follow"]').forEach((t) => {
+  $$('.tabbar [data-v2-tab="lists"]').forEach((t) => {
     let dot = t.querySelector('.tab-n');
     if (!unread) { if (dot) dot.remove(); t.removeAttribute('aria-label'); return; }
     if (!dot) { dot = document.createElement('span'); dot.className = 'tab-n'; dot.setAttribute('aria-hidden', 'true'); t.appendChild(dot); }
     dot.textContent = unread > 9 ? '9+' : String(unread);
-    t.setAttribute('aria-label', `Watchlist. ${words}`);   // starts with the visible word (WCAG 2.5.3)
+    t.setAttribute('aria-label', `Lists. ${words}`);   // starts with the visible word (WCAG 2.5.3); Lists opens the Watchlist, where Alerts is a tab
   });
 }
 const groupIsV2 = (g) => g.pages.some((p) => p.v2);
@@ -96,49 +100,70 @@ export function paint(route) {
   // an instrument page (^TNX) has no Dossier: the Dossier link stays on the company opened on this visit; with none,
   // it opens the search, where the Recent list is offered rather than followed
   const sym = (route.view !== 'instrument' && route.symbol) || openedNow() || null;
+  PAINTED_SYM = sym;
   const groups = visibleGroups(flags);
-  let lastSec = '';
-  const rows = [];
-  groups.forEach((gr) => {
-    const sec = SECTIONS[gr.id];
-    if (sec !== lastSec) { rows.push(html`<p class="rail-sec">${sec}</p>`); lastSec = sec; }
-    const href = groupHref(gr, sym);
-    const cur = g && g.id === gr.id ? 'page' : null;
-    const out = !groupIsV2(gr);
-    const inner = html`${icon(gr.icon)}<span>${gr.label}</span>${out ? html`<span class="legacy" aria-hidden="true">${icon('out')}</span>` : ''}`;
-    const name = out ? `${gr.label}, opens in the classic app` : gr.label;
-    rows.push(href
-      ? html`<a class="rail-row" href="${href}" aria-label="${name}" ${cur ? html`aria-current="page"` : ''}>${inner}</a>`
-      : html`<button type="button" class="rail-row" data-v2-open-palette aria-label="${name}, search for a company" ${cur ? html`aria-current="page"` : ''}>${inner}</button>`);
-  });
+  const has = (id) => groups.some((x) => x.id === id);
+  const byId = (id) => GROUPS.find((x) => x.id === id);
+  const cur = (on) => (on ? html`aria-current="page"` : '');
+  const row = (href, ic, label, on, cls = 'rail-row') => html`<a class="${cls}" href="${href}" ${cur(on)}>${icon(ic)}<span>${label}</span></a>`;
+  const gid = g ? g.id : null, view = route.view;
+  // The owner's rail of 2026-11-09 (nav.js RESEARCH and LISTS), item for item, over today's routes
+  const inResearch = gid === 'security' || view === 'dossierstart' || view === 'insiders';
+  const research = RESEARCH.map((e) => row(researchHref(e, sym), e.icon, e.label,
+    e.filter ? view === 'insiders' : (gid === 'security' && (view === e.view || (e.view === 'overview' && !['financials', 'chart', 'swing'].includes(view)))), 'rail-row rail-sub'));
+  const more = RAIL_MORE.filter((m) => (m.group ? has(m.group) : true)).map((m) => row(m.group ? groupHref(byId(m.group), sym) : hrefFor(m.view), m.icon, m.label,
+    m.group ? gid === m.group : view === m.view, 'rail-row rail-sub'));
   render($('.rail'), html`<a class="brand" href="#/" aria-label="Optic Terminal, Home">${brandMark()}<span class="brand-word" aria-hidden="true">OPTIC <span>TERMINAL</span></span></a>
-    <nav class="rail-nav" aria-label="Sections">${rows}</nav>
-    <div class="rail-foot"><a class="rail-row" href="${hrefFor('settings')}" ${SETTINGS.v2 ? '' : html`aria-label="${SETTINGS.label}, opens in the classic app"`} ${route.view === 'settings' ? html`aria-current="page"` : ''}>${icon(SETTINGS.icon)}<span>${SETTINGS.label}</span>${SETTINGS.v2 ? '' : html`<span class="legacy" aria-hidden="true">${icon('out')}</span>`}</a><button type="button" class="rail-row" data-v2-rail-collapse aria-pressed="${railTight()}" aria-label="Collapse">${icon('chev')}<span>Collapse</span></button></div>`);
+    <nav class="rail-nav" aria-label="Sections">
+      ${row('#/', 'home', 'Home', view === 'home')}
+      <div class="rail-group ${inResearch ? 'is-in' : ''}" role="group" aria-labelledby="rail-research">
+        <p class="rail-row rail-head" id="rail-research">${icon('research')}<span>Research</span></p>
+        ${research}
+      </div>
+      ${row(groupHref(byId('market'), sym), 'markets', 'Markets', gid === 'market')}
+      ${row(groupHref(byId('discover'), sym), 'discover', 'Discover', gid === 'discover' && view !== 'scan')}
+      ${row(groupHref(byId('portfolio'), sym), 'positions', 'Portfolio', gid === 'portfolio')}
+      <div class="rail-lists" role="group" aria-labelledby="rail-lists-h">
+        <p class="rail-sec rail-lists-h"><span id="rail-lists-h">Lists</span><a class="rail-plus" href="#/watchlist" aria-label="Your lists: open or make one">${icon('plus')}</a></p>
+        ${LISTS.map((l) => row(l.href, l.icon, l.label, l.views.includes(view), 'rail-row rail-sub'))}
+      </div>
+      <div class="rail-more" role="group" aria-labelledby="rail-more-h"><p class="rail-sec" id="rail-more-h">More</p>${more}</div>
+    </nav>
+    <div class="rail-foot"><a class="rail-row" href="${hrefFor('settings')}" ${route.view === 'settings' ? html`aria-current="page"` : ''}>${icon(SETTINGS.icon)}<span>${SETTINGS.label}</span></a><button type="button" class="rail-row" data-v2-rail-collapse aria-pressed="${railTight()}" aria-label="Collapse">${icon('chev')}<span>Collapse</span></button></div>`);
 
+  // The phone bar: the rail's sections by the rail's names, each to the address the rail's entry opens (nav.js MOBILE_TABS)
+  const tabOn = {
+    home: view === 'home', security: inResearch && view !== 'insiders', market: gid === 'market',
+    discover: gid === 'discover' && view !== 'scan', portfolio: gid === 'portfolio', lists: LISTS.some((l) => l.views.includes(view)),
+  };
+  const tabHref = { home: '#/', security: researchHref(RESEARCH[0], sym), market: groupHref(byId('market'), sym), discover: groupHref(byId('discover'), sym), portfolio: groupHref(byId('portfolio'), sym), lists: LISTS[0].href };
   render($('.tabbar'), MOBILE_TABS.map((t) => {
     if (t.more) {
-      const inMore = g && !MOBILE_TABS.some((m) => m.group === g.id);
+      const inMore = view !== 'home' && !Object.values(tabOn).some(Boolean);
       return html`<button type="button" data-v2-more ${inMore ? html`aria-current="page"` : ''}>${icon(t.icon)}<span>${t.label}</span></button>`;
     }
-    const gr = GROUPS.find((x) => x.id === t.group);
-    const href = groupHref(gr, sym);
-    const cur = g && g.id === t.group ? html`aria-current="page"` : '';
-    return href ? html`<a href="${href}" data-v2-tab="${t.group}" ${cur}>${icon(t.icon)}<span>${t.label}</span></a>`
-      : html`<button type="button" data-v2-open-palette data-v2-tab="${t.group}" ${cur}>${icon(t.icon)}<span>${t.label}</span></button>`;
+    const key = t.lists ? 'lists' : t.group;
+    return html`<a href="${tabHref[key]}" data-v2-tab="${key}" ${tabOn[key] ? html`aria-current="page"` : ''}>${icon(t.icon)}<span>${t.label}</span></a>`;
   }));
   paintUnread();
   paintAccount();
 }
 
 export function moreBody() {
-  const shown = new Set(MOBILE_TABS.filter((t) => t.group).map((t) => t.group));
-  const sym = openedNow() || null;
-  // every page the phone bar does not name, in its section, with what it is for; Sign in for a guest, whose
-  // top bar keeps its width for search (the classic app's More sheet)
+  const sym = PAINTED_SYM || openedNow() || null;
+  const groups = visibleGroups(flags), has = (id) => groups.some((x) => x.id === id), byId = (id) => GROUPS.find((x) => x.id === id);
+  // What the phone bar does not hold, in the rail's sections and by the rail's names: Research's and Lists' entries,
+  // the rail's More (Compare, Brokerage, Alerts, the owner's Reports), Settings; Sign in for a guest, whose top bar
+  // keeps its width for search (the classic app's More sheet)
   const row = (href, ic, label, what, out) => html`<a class="more-row" href="${href}">${icon(ic)}<span class="more-lab">${label}${what ? html`<small>${what}</small>` : ''}</span>${out ? html`<span class="legacy">${icon('out')}<span class="sr">, opens in the classic app</span></span>` : ''}</a>`;
-  return html`<nav class="more-list" aria-label="More sections">${visibleGroups(flags).filter((g) => !shown.has(g.id)).map((g) => (g.pages.length > 1
-    ? html`<div class="more-group"><p class="more-glab">${g.label}</p>${g.pages.map((p) => row(hrefFor(p.view, sym), g.icon, p.label, WHAT[p.view], !p.v2))}</div>`
-    : row(groupHref(g, sym), g.icon, g.label, WHAT[g.pages[0].view], !groupIsV2(g))))}
+  const group = (label, rows) => html`<div class="more-group"><p class="more-glab">${label}</p>${rows}</div>`;
+  const research = RESEARCH.map((e) => row(researchHref(e, sym), e.icon, e.label, sym ? '' : 'Opens the company search first', false));
+  const lists = LISTS.map((l) => row(l.href, l.icon, l.label, WHAT[l.views[0]], false));
+  const more = RAIL_MORE.filter((m) => (m.group ? has(m.group) : true)).map((m) => {
+    const g = m.group ? byId(m.group) : null;
+    return row(g ? groupHref(g, sym) : hrefFor(m.view), m.icon, m.label, WHAT[g ? g.pages[0].view : m.view], g ? !groupIsV2(g) : false);
+  });
+  return html`<nav class="more-list" aria-label="More sections">${group('Research', research)}${group('Lists', lists)}${group('More', more)}
     <div class="more-group">${row(hrefFor('settings'), 'settings', SETTINGS.label, WHAT.settings, !SETTINGS.v2)}${store.user ? '' : row('#/signin', 'user', 'Sign in', 'A free account, for Milo and a saved watchlist', false)}</div></nav>`;
 }
 

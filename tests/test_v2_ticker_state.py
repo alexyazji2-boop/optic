@@ -49,7 +49,7 @@ def test_a_ticker_the_reader_chose_is_kept_between_visits(tmp_path):
 
 
 def test_choosing_marks_the_choice_and_show_on_home_does_too():
-    set_link = WS[WS.index("function setLink(sym)"):WS.index("function setLink(sym)") + 600]
+    set_link = WS[WS.index("function setLink(sym, grp = 'blue')"):WS.index("function setLink(sym, grp = 'blue')") + 600]
     assert "S.link = sym; S.linkChosen = true; save();" in set_link
     home = (JS / "core/homelink.js").read_text()
     assert "{ link: sym, linkChosen: true }" in home
