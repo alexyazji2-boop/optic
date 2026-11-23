@@ -413,7 +413,10 @@ _OUT = {
     ],
     "guarantee": [
         re.compile(r"\bguarantee(?:d|s)?\s+(?:returns?|profits?|upside|gains?|income|win|to\s+(?:rise|go\s+up|double|recover|beat|make))\b", _I),
-        re.compile(r"\b(?:can'?t|cannot|won'?t|will\s+not)\s+lose\b", _I),
+        # a limit on a loss is not a promise ("a bought call can't lose more than you paid", "you can't lose money on
+        # stock you don't own": the paid pilot of 2026-11-21); "you can't lose" and "this can't lose" still are
+        re.compile(r"\b(?:can'?t|cannot|won'?t|will\s+not)\s+lose\b(?!\s+(?:more\s+than|beyond|in\s+excess\s+of)\b)"
+                   r"(?![^.;!?]{0,40}\byou\s+(?:don'?t|do\s+not)\s+(?:own|hold)\b)", _I),
         re.compile(r"\brisk[- ]free\s+(?:returns?|profits?|trade|money|gains?|bet|way)\b", _I),
         re.compile(r"\b(?:sure\s+thing|free\s+money|100%\s+(?:safe|sure|certain|guaranteed))\b", _I),
         re.compile(r"\b(?:basically|essentially|practically|virtually|all\s+but|effectively)\s+guaranteed\b", _I),
@@ -589,11 +592,12 @@ _MORE = ["add", "enter", "switch", "reduce", "increase", "wait for", "wait until
 _A = _alt(_ACTIONS)
 _A_ALL = _alt(_ACTIONS + _MORE)
 _A_ING = _alt([_ing(x) for x in _ACTIONS + _MORE])
-# What follows a sentence-start verb when it is a noun or a screen instruction, not an order.
+# What follows a sentence-start verb when it is a noun or a screen instruction, not an order. ("Own history." and
+# "Own track record." label a stock's own past multiples, not an order to own it: the paid pilot of 2026-11-21.)
 _NOT_AN_ORDER = (r"(?![- ](?:side|sellers?|interest|squeeze|term|positions?\b|and[- ]hold|ratio|volume|signals?|ratings?|"
                  r"orders?|write|dated|ups?\b|walls?\b|programs?\b|backs?\b|polls?\b|strateg\w*|plans?\b|fees?\b|multiples?\b|"
                  r"periods?\b|times?\b|costs?\b|prices?\b|values?\b|dates?\b|levels?\b|points?\b|rules?\b|windows?\b|"
-                 r"triggers?\b|story\b|stories\b)|-off\b|\s*[:=]|\s+(?:where|shift|down\s+the|the\s+(?:key|"
+                 r"triggers?\b|story\b|stories\b|histor(?:y|ies)\b|track\s+records?\b)|-off\b|\s*[:=]|\s+(?:where|shift|down\s+the|the\s+(?:key|"
                  r"button|handle|shift))|\s+(?:in|of)\s+(?:revenue|sales|demand|margins?|costs?|rates?|the\s+sector))")
 _HYPOTHETICAL = re.compile(r"\b(?:if|when|whether|unless|once|suppose|say|in\s+case|anyone\s+who|someone\s+who|those\s+who|"
                            r"a\s+trader\s+who|an\s+investor\s+who|traders\s+who|investors\s+who)\b", _I)
@@ -613,7 +617,8 @@ _SHAPES = {
         (re.compile(r"\byou(?:'d|\s+would|'re|\s+are)?\s+(?:should|ought\s+to|need\s+to|must|have\s+to|might\s+want\s+to|"
                     r"may\s+want\s+to|want\s+to|really\s+should|definitely\s+should|be\s+(?:smart|wise|well\s+served)\s+to|"
                     r"better\s+off|(?:could|might|may|should)\s+consider|could\s+(?:always|also)|can\s+(?:always|safely))\s+"
-                    r"(?:consider\s+|think\s+about\s+|look\s+(?:at|to)\s+)?(?:" + _A_ALL + "|" + _A_ING + r")\b", _I), "hypothetical"),
+                    r"(?:consider\s+|think\s+about\s+|look\s+(?:at|to)\s+)?(?:" + _A_ALL + "|" + _A_ING + r")\b", _I),
+         "hypothetical+exercise_consequence"),
         # 3. "I'd wait for 190 before adding", "I'd be comfortable owning it here", "I would sell half"
         (re.compile(r"\bI(?:'d|\s+would|'ll|\s+will|\s+am|'m)?\s+(?:also\s+|still\s+|probably\s+|happily\s+|gladly\s+|definitely\s+|"
                     r"personally\s+|really\s+|rather\s+)?(?:" + _A_ALL + r"|be\s+(?:a\s+)?(?:buyer|seller)s?|be\s+(?:comfortable|happy|"
@@ -813,11 +818,29 @@ _SHAPES["trade_instruction"] += _SHAPES.pop("trade_instruction+")
 # The phrase-by-phrase patterns' own exemptions: "You asked whether you should sell ..." reports a question, and
 # "obligates the seller to buy 100 shares per contract" explains an option, not a size for the reader.
 _MECHANICS = re.compile(r"\b(?:per\s+contract|obligat\w*|oblig\w*|if\s+assigned|(?:the\s+)?right\s+to\s+(?:buy|sell)|covers?\s+100)\b", _I)
+# What an exercise or assignment itself causes, stated as its consequence: "If you exercised, you would need cash to buy
+# 100 shares at the strike" (the paid pilot of 2026-11-21 lost it as position sizing), "Exercise would buy 100 shares at
+# the strike", "If it is exercised at expiration, you would have to buy 100 shares". It needs both an exercise or
+# assignment the sentence supposes or describes, a clause that states a consequence (a subject, or would, need to,
+# have to) rather than an order ("If you exercise, buy 100 shares") or advice ("..., you should buy 100 more"), and
+# the purchase or sale at the strike that exercise makes ("If you exercise, you must sell the shares right away to lock
+# in the gain" is an order put as a necessity).
+_EXERCISE_CONTEXT = re.compile(
+    r"\b(?:if|when|once|should)\s+(?:you|it|they|the\s+(?:call|put|option|contract)s?)\s+(?:(?:is|are|was|were|gets?|got|"
+    r"has\s+been|had\s+been)\s+)?(?:auto[- ]?)?(?:exercise[sd]?|exercising|assigned)\b"
+    r"|\bif\s+(?:auto[- ]?)?(?:exercised|assigned)\b"
+    r"|\b(?:upon|on|at|after)\s+(?:an?\s+|early\s+)?(?:exercise|assignment)\b"
+    r"|\b(?:exercise|exercising(?:\s+(?:it|them|the\s+(?:call|put|option|contract)s?))?)\s+(?:would|will|means|requires|involves)\b",
+    _I)
+_CONSEQUENCE = re.compile(r"\b(?:you|it|they|the\s+holder|would|will|needs?|ha(?:ve|s)\s+to|means|requires|involves)\b|'d\b|'ll\b", _I)
+_ADVICE_MODAL = re.compile(r"\b(?:should|ought|might\s+want|may\s+want|want\s+to|better\s+off|smart\s+to|wise\s+to|consider)\b", _I)
+_AT_THE_STRIKE = re.compile(r"\b(?:strike|exercise\s+price|deliverable)\b", _I)
 # ("If you sell your shares at a loss, the wash-sale rule may apply" explains a tax rule: the last trade_instruction
 # pattern reads it as the supposition it is, Phase 08)
-_OUT_EXEMPT = {("trade_instruction", 0): "hypothetical", ("trade_instruction", 1): "generic_conditional",
+_OUT_EXEMPT = {("trade_instruction", 0): "hypothetical+exercise_consequence", ("trade_instruction", 1): "generic_conditional",
                ("trade_instruction", 3): "asked", ("trade_instruction", 10): "hypothetical",
-               ("timing", 0): "hypothetical", ("position_sizing", 1): "mechanics", ("position_sizing", 2): "hypothetical"}
+               ("timing", 0): "hypothetical", ("position_sizing", 1): "mechanics+exercise_consequence",
+               ("position_sizing", 2): "hypothetical"}
 
 # A negation before the trigger, inside the same clause, turns "you should buy"
 # into "nobody can tell you that you should buy" or "I can't say you should buy".
@@ -856,6 +879,16 @@ def _hypothetical(sentence: str, start: int) -> bool:
     breaks = [m.end() for m in _CLAUSE_BREAK.finditer(head)]
     clause = head[breaks[-1]:] if breaks else head
     return bool(_HYPOTHETICAL.search(clause))
+
+
+def _exercise_consequence(sentence: str, start: int, match: str) -> bool:
+    """The share purchase or sale that a supposed or described exercise (or assignment) itself causes."""
+    if not _EXERCISE_CONTEXT.search(sentence) or _ADVICE_MODAL.search(match) or not _AT_THE_STRIKE.search(sentence[start:]):
+        return False
+    head = sentence[:start]
+    breaks = [m.end() for m in _CLAUSE_BREAK.finditer(head)]
+    clause = head[breaks[-1]:] if breaks else head
+    return bool(_CONSEQUENCE.search(clause + " " + match))
 
 
 # Found by the Phase 08 stand-in answers (post-demo overhaul, 2026-10-29), each a sentence the gate would have cut:
@@ -929,7 +962,9 @@ def check_output(text: str) -> List[Dict[str, Any]]:
                         continue
                     if "attributed" in ex and _ATTRIBUTED.search(s):
                         continue
-                    if exempt == "mechanics" and _MECHANICS.search(s):
+                    if "mechanics" in ex and _MECHANICS.search(s):
+                        continue
+                    if "exercise_consequence" in ex and _exercise_consequence(s, m.start(), m.group(0)):
                         continue
                     if exempt == "lead_clause" and (_hypothetical(s, m.start()) or _lead_is_a_list(m.group(0))):
                         continue
