@@ -158,6 +158,11 @@ PICKS = [
     ("**My recommendation:** NVDA.", "trade_instruction"),  # C09: a recommendation label and a ticker
     ("**Pick of the week:** NVDA.", "trade_instruction"),  # C10: a pick label and a ticker
     ("**My pick:** NVDA, rated a buy by 30 analysts.", "trade_instruction"),  # C11: added while implementing: Milo's own pick stays a pick whatever it cites
+    ("**My pick:** Nvidia, at these levels.", "trade_instruction"),  # C12: review of 305a153e: a company name after a first-person pick label
+    ("**Top pick:** the cheaper of the two stocks.", "trade_instruction"),  # C13: review of 305a153e: a security named generically
+    ("**My pick:** NVDA's margins make it the better business.", "trade_instruction"),  # C14: review of 305a153e: the pick, then why
+    ("**Recommendation:** NVDA — it is cheap here.", "trade_instruction"),  # C15: review of 305a153e: 'Recommendation' with a ticker at its head is one, whatever follows
+    ("**Verdict:** NVDA at these levels.", "trade_instruction"),  # C16: review of 305a153e: a verdict that is only a ticker and a pick's context
 ]
 
 
@@ -178,6 +183,12 @@ PICKS_KEPT = [
     "**Top picks:** none; Optic doesn't rank stocks for you.",  # P13: a negated label
     "**Top pick:** NVDA, according to the analyst consensus data.",  # P14: added while implementing: a superlative pick attributed after the label is research
     "That is my recommendation: talk to a tax professional first.",  # P15: added while implementing: 'is my recommendation' after a pronoun names no security
+    "**Verdict:** NVDA, at 40x, is pricier than AMD.",  # P16: review of 305a153e: a verdict that goes on into analysis is analysis
+    "**Bottom line:** NVDA, like AMD, trades above its five-year average.",  # P17: review of 305a153e: the same
+    "**My choice:** the weekly chart, because daily bars are noisy.",  # P18: review of 305a153e: a first-person choice that names no security
+    "**My picks:** P/E and EV/EBITDA, since both use earnings.",  # P19: review of 305a153e: metrics, not securities
+    "**My pick:** the 10-K, because it has the segment data.",  # P20: review of 305a153e: a document, not a security
+    "**My recommendation:** use the weekly chart for this question.",  # P21: review of 305a153e: a screen choice
 ]
 
 

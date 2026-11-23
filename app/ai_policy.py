@@ -1186,28 +1186,43 @@ _SUGGESTED = (r"(?:sold|bought|exercised|trimmed|shorted|dumped|exited|covered|r
 _WHAT_IF_YOU = re.compile(r"\bwhat\s+if\s+you\s+(?:just\s+|simply\s+|instead\s+|also\s+|now\s+)?" + _SUGGESTED + r"\b", _I)
 #
 # A pick with no order verb: "**My pick:** NVDA.", "**Top pick:** NVDA, at these levels.", "**Recommendation:** NVDA.",
-# "NVDA is my top pick." A first-person or superlative pick label is a pick whatever follows it, unless what follows refuses,
-# hedges or sends the reader to the evidence ("**My pick:** I don't pick stocks ...", "**Top picks:** none; ..."); a
-# neutral label ("Recommendation", "Verdict") is one only with a ticker standing alone after it, so "**Verdict:** NVDA's
-# multiple is high ..." and "**Recommendation:** talk to a tax professional ..." are analysis and a redirect. A pick put in
-# other people's mouths ("**Top pick among analysts:** ...") is not this label, and "top" or "best" picks attributed after
-# the label ("..., per the consensus data") are research.
+# "NVDA is my top pick." A first-person or superlative pick label is a pick when what follows names a security (a ticker, a
+# company, "the cheaper of the two stocks", "both") and does not refuse, hedge or send the reader to the evidence ("**My
+# pick:** I don't pick stocks ...", "**Top picks:** none; ...", "**My choice:** the weekly chart"); "Recommendation",
+# "Pick" or "Choice" is one with a ticker at the head of what follows; "Verdict" or "Bottom line" only with a ticker standing
+# alone, so "**Verdict:** NVDA's multiple is high ..." and "**Verdict:** NVDA, at 40x, is pricier than AMD." are analysis,
+# and "**Recommendation:** talk to a tax professional ..." a redirect. A pick put in other people's mouths ("**Top pick
+# among analysts:** ...") is not this label, and "top" or "best" picks attributed after the label ("..., per the consensus
+# data") are research.
 _PICK_WORDS = (r"(?:(?:my|our)\s+(?:(?:very\s+)?(?:top|best|favou?rite|first|main|preferred|highest[- ]conviction)\s+)?(?:picks?|choices?|"
                r"recommendations?)|(?:top|best)\s+(?:picks?|choices?|buys?|ideas?)|picks?\s+of\s+the\s+(?:day|week|month|year)|"
                r"(?:best\s+)?stocks?\s+to\s+(?:buy|own))(?:\s+(?:for\s+you|here|now|today|right\s+now|this\s+(?:week|month|year)))?")
 _PICK_MINE = re.compile(r"^(?:my|our)\b", _I)
 _PICK_STRONG = re.compile(r"^" + _PICK_WORDS + r"$", _I)
-_PICK_NEUTRAL = re.compile(r"^(?:recommendation|verdict|the\s+pick|pick|choice|the\s+play|trade\s+idea|bottom\s+line)$", _I)
+# A neutral label is a recommendation's ("**Recommendation:** NVDA — it is cheap here") or a verdict's ("**Verdict:** NVDA.");
+# a verdict that goes on into analysis is analysis ("**Verdict:** NVDA, at 40x, is pricier than AMD.": the review of the
+# first commit, 305a153e, found these, and first-person labels naming no security, "**My choice:** the weekly chart")
+_PICK_NEUTRAL = re.compile(r"^(?:recommendation|the\s+pick|pick|choice|the\s+play|trade\s+idea)$", _I)
+_PICK_VERDICT = re.compile(r"^(?:verdict|bottom\s+line)$", _I)
 _PICK_LEAD = re.compile(r"^\s*(?:[-*•]|\d{1,2}[.)])?\s*(?:\*\*)?\s*(?P<label>" + _PICK_WORDS + r"|recommendation|verdict|the\s+pick|pick|choice|"
                         r"the\s+play|trade\s+idea|bottom\s+line)\s*(?:\*\*)?\s*[:–—]\s*(?:\*\*)?\s*", _I)
 _NOT_A_PICK = re.compile(r"^\W{0,4}(?:no\b|none\b|not\b|nothing\b|neither\b|n/?a\b|i\b|i'm\b|i'd\b|it\s+depends|depends\b|there'?s\s+no|"
                          r"that\s+depends|that'?s\s+(?:up|for|your)|hard\s+to|too\s+(?:early|soon)|can'?t\b|cannot\b|we\s+don'?t|"
                          r"optic\s+(?:doesn'?t|does\s+not)|milo\s+(?:doesn'?t|does\s+not)|it'?s\s+(?:up\s+to|your)|your\s+(?:call|decision|choice)|"
                          r"up\s+to\s+you|compare\b|check\b|look\b|read\b|see\b|ask\b|start\s+with|wait\b|review\b|weigh\b|talk\b|speak\b)", _I)
-_TICKER_ALONE = re.compile(r"^\s*\$?(?-i:(?!(?:I|A|IV|HV|EPS|ETFs?|PE|GAAP|CEO|CFO|COO|OK|US|USD|SEC|FOMC|CPI|GDP|AI|OCC|ITM|OTM|ATM|DTE|"
-                           r"YTD|TTM|EBIT|EBITDA|DCF|ROE|ROIC|FCF|NAV|IPO|NA|TBD|FAQ|IRA|HSA|SPAC|REIT)\b)[A-Z]{1,5})(?![\w'’/-]|\.\w)"
-                           r"(?=\s*(?:[.!;,)]|$|[—–]|\s-\s|\()|\s+(?:at|over|here|now|today|for|instead|rather|right|on|under|below|above|and|"
-                           r"or|vs\.?)\b)")
+_TICKER = (r"\$?(?-i:(?!(?:I|A|IV|HV|EPS|ETFs?|PE|GAAP|CEO|CFO|COO|OK|US|USD|SEC|FOMC|CPI|GDP|AI|OCC|ITM|OTM|ATM|DTE|YTD|TTM|EBIT|"
+           r"EBITDA|DCF|ROE|ROIC|FCF|NAV|IPO|NA|TBD|FAQ|IRA|HSA|SPAC|REIT)\b)[A-Z]{1,5})(?![\w/&-]|\.\w)")
+# a ticker at the head of what follows the label, not its possessive ("NVDA's analysts ...")
+_TICKER_HEAD = re.compile(r"^\s*" + _TICKER + r"(?!['’])")
+# a ticker standing alone, or with a pick's context only, to the sentence's end
+_TICKER_ALONE = re.compile(r"^\s*" + _TICKER + r"(?:\s*,?\s*(?:at\s+these\s+levels|at\s+this\s+price|here|now|today|right\s+now|for\s+you|"
+                           r"(?:over|instead\s+of|rather\s+than|vs\.?)\s+" + _TICKER + r"))?\s*[.!]?\s*$", _I)
+# what a first-person or superlative pick names: a ticker (its possessive too), a company's name, a security named
+# generically ("the cheaper of the two stocks", "the ETF"), or "both"; not a chart, a metric or a document
+_PICK_HEAD = re.compile(r"^\s*(?:" + _TICKER + r"|(?-i:[A-Z][a-z]+)(?:\s+(?-i:[A-Z][\w&.-]*)){0,3}(?=['’]s\b|\s*(?:[.!;,)(—–]|$)|"
+                        r"\s+(?:at|over|here|now|today|for|instead|rather|right|on|and|or|vs\.?|stock|shares|calls?|puts?)\b)|"
+                        r"(?:the|a|an)\s+(?:[\w-]+\s+){0,4}?(?:stocks?|shares|etfs?|funds?|one|name|calls?|puts?|options?|spreads?|"
+                        r"positions?)\b|both\b)", _I)
 # "NVDA is my top pick", "Nvidia is our pick" ("That is my recommendation" names no security)
 _IS_MY_PICK = re.compile(r"(?<![\w$])(?!(?:That|This|It|Which|What|Here|There|Mine|Yours|Who)\b)(?:\$?(?-i:[A-Z]{1,5})|(?-i:[A-Z][a-z]+))\s+is\s+"
                          r"(?:still\s+)?(?:my|our)\s+(?:(?:very\s+)?(?:top|best|favou?rite|first|main|preferred)\s+)?(?:pick|choice|recommendation)\b")
@@ -1265,12 +1280,15 @@ def _pick_hit(whole: str) -> Optional["re.Match"]:
         return None
     strong = _PICK_STRONG.match(label)
     if strong:
-        if _NOT_A_PICK.match(rest) or (not _PICK_MINE.match(label) and _ATTRIBUTED.search(rest)):
+        if _NOT_A_PICK.match(rest) or not _PICK_HEAD.match(rest) or (not _PICK_MINE.match(label) and _ATTRIBUTED.search(rest)):
             return None
         return strong
     neutral = _PICK_NEUTRAL.match(label)
-    if neutral and _TICKER_ALONE.match(rest) and not _ATTRIBUTED.search(rest):
+    if neutral and _TICKER_HEAD.match(rest) and not _ATTRIBUTED.search(rest):
         return neutral
+    verdict = _PICK_VERDICT.match(label)
+    if verdict and _TICKER_ALONE.match(rest):
+        return verdict
     return None
 
 
