@@ -414,9 +414,15 @@ _OUT = {
     "guarantee": [
         re.compile(r"\bguarantee(?:d|s)?\s+(?:returns?|profits?|upside|gains?|income|win|to\s+(?:rise|go\s+up|double|recover|beat|make))\b", _I),
         # a limit on a loss is not a promise ("a bought call can't lose more than you paid", "you can't lose money on
-        # stock you don't own": the paid pilot of 2026-11-21); "you can't lose" and "this can't lose" still are
+        # stock you don't own": the paid pilot of 2026-11-21); "you can't lose" and "this can't lose" still are, and so
+        # is a loss-free outcome made to depend on the reader. The exemption names only the thing the reader doesn't own
+        # or hold, so "You can't lose if you don't hold it past Friday" and "... on stock you don't hold overnight" are
+        # promises again (the session porting this fix to main found the gap, 2026-11-22)
         re.compile(r"\b(?:can'?t|cannot|won'?t|will\s+not)\s+lose\b(?!\s+(?:more\s+than|beyond|in\s+excess\s+of)\b)"
-                   r"(?![^.;!?]{0,40}\byou\s+(?:don'?t|do\s+not)\s+(?:own|hold)\b)", _I),
+                   r"(?![^.;!?]{0,40}\b(?:on|in|from|with|for|through)\s+(?:the\s+|a\s+|an\s+|any\s+|some\s+)?(?:\w+\s+)?"
+                   r"(?:stocks?|shares?|positions?|securities|assets?|calls?|puts?|options?|contracts?|anything|something)\s+"
+                   r"(?:that\s+)?you\s+(?:don'?t|do\s+not)\s+(?:own|hold)\b"
+                   r"(?!\s+(?:it\s+|them\s+)?(?:past|through|beyond|until|till|into|over|overnight|after)\b))", _I),
         re.compile(r"\brisk[- ]free\s+(?:returns?|profits?|trade|money|gains?|bet|way)\b", _I),
         re.compile(r"\b(?:sure\s+thing|free\s+money|100%\s+(?:safe|sure|certain|guaranteed))\b", _I),
         re.compile(r"\b(?:basically|essentially|practically|virtually|all\s+but|effectively)\s+guaranteed\b", _I),
@@ -525,7 +531,12 @@ for _rx in [
     re.compile(r"\byou(?:'re|\s+are|'d\s+be|\s+would\s+be)\s+better\s+off\b|\byou\s+have\s+room\s+to\s+(?:add|buy|increase)\b|"
                r"\b(?:clear|easy|obvious)\s+(?:avoid|pass|buy|sell)\b|\bavoid\s+for\s+your\b|\blet\s+(?:it|them|the\s+position|your\s+winners?)\s+run\b|"
                r"\bis\s+the\s+best\s+place\s+for\s+(?:this|your|the)\s+money\b|\bthe\s+ones?\s+to\s+(?:exit|sell|cut|trim|dump|buy)\s+first\b|"
-               r"\bso\s+(?:cut|trim|sell|dump|buy|add)\s+(?:it|them|half|some|the)\b|\bcut\s+it\s+in\s+half\b|"
+               # "so add them to the $240." adds fees to a figure, not shares to a position (the paid retest of
+               # 2026-11-22); only when the figure ends the clause, so "so add them to the $240 and buy two more" counts
+               r"\bso\s+(?:cut|trim|sell|dump|buy|add(?!\s+(?:it|them|those|these)\s+to\s+(?:the|that|this|your)\s+"
+               r"(?:\$[\d,.]+|costs?|figure|loss|premium|amount|sum|maximum|fees?|total\s+(?:cost|loss|premium|figure))"
+               r"(?:\s+per\s+(?:share|contract))?\s*(?:[.;!?)]|$)))"
+               r"\s+(?:it|them|half|some|the)\b|\bcut\s+it\s+in\s+half\b|"
                r"\brebalancing\s+(?:deserves|is\s+worth)\s+a\s+look\b", _I),
     re.compile(r"^\W{0,6}don'?t\s+chase\b|\blet\s+it\s+(?:come\s+back|pull\s+back|drop|dip)\b[^.;]{0,40}\bbefore\s+you\s+(?:buy|add|enter)\b|"
                r"\b(?:now|today|this\s+week)\s+is\s+(?:not|no)\s+(?:the\s+)?time\s+to\s+(?:be\s+)?(?:adding|buying|selling|trimming|add|buy|sell)\b", _I),
@@ -618,13 +629,13 @@ _SHAPES = {
                     r"may\s+want\s+to|want\s+to|really\s+should|definitely\s+should|be\s+(?:smart|wise|well\s+served)\s+to|"
                     r"better\s+off|(?:could|might|may|should)\s+consider|could\s+(?:always|also)|can\s+(?:always|safely))\s+"
                     r"(?:consider\s+|think\s+about\s+|look\s+(?:at|to)\s+)?(?:" + _A_ALL + "|" + _A_ING + r")\b", _I),
-         "hypothetical+exercise_consequence"),
+         "hypothetical+exercise_consequence+payment"),
         # 3. "I'd wait for 190 before adding", "I'd be comfortable owning it here", "I would sell half"
         (re.compile(r"\bI(?:'d|\s+would|'ll|\s+will|\s+am|'m)?\s+(?:also\s+|still\s+|probably\s+|happily\s+|gladly\s+|definitely\s+|"
                     r"personally\s+|really\s+|rather\s+)?(?:" + _A_ALL + r"|be\s+(?:a\s+)?(?:buyer|seller)s?|be\s+(?:comfortable|happy|"
                     r"inclined|tempted|keen)\s+(?:" + _A_ING + r"|to\s+" + _A_ALL + r")|(?:like|love|favou?r|prefer)\s+(?:" + _A_ING +
                     r"|it\s+here|it\s+at|this\s+(?:one|stock|name)))\b(?!\s+(?:that|a\s+(?:note|caveat|point)|one\s+(?:caveat|point)|context))",
-                    re.I), "self_future"),
+                    re.I), "self_future+reader_question"),
         # 4. framing that calls it a buy: "the dip to buy", "a must-buy", "worth adding a little", "is a buy here"
         (re.compile(r"\b(?:the\s+(?:dip|pullback|drop|level)\s+to\s+(?:buy|add)|must[- ](?:buy|own|have)\b|"
                     r"(?:is|looks\s+like|remains)\s+a\s+(?:strong\s+|clear\s+|solid\s+)?(?:buy|sell)\b|"
@@ -667,7 +678,8 @@ _SHAPES = {
                     r"savings|retirement)\b|"
                     r"go\s+with|stick\s+with|opt\s+for|pick|choose|favou?r|use\s+(?:any|the|a|this)\s+(?:pullback|dip|drop|weakness|rally|"
                     r"bounce|pop)\b[^.;]{0,30}?\bto\s+(?:" + _A_ALL + r"))|"
-                    r"\bI\s+(?:wouldn'?t|would\s+not|won'?t)\s+(?:touch|go\s+near|own|buy|hold)\b|\bneither\s+should\s+you\b", re.I), None),
+                    r"\bI\s+(?:wouldn'?t|would\s+not|won'?t)\s+(?:touch|go\s+near|own|buy|hold)\b|\bneither\s+should\s+you\b", re.I),
+         "analysis_start"),
         # framing addressed to the reader
         (re.compile(r"\b(?:better|best|smarter|safer)\s+(?:buy|bet|pick|choice|investment|hold)\s+for\s+you\b|"
                     r"\b(?:deserves|has\s+earned|belongs\s+in)\s+(?:a\s+(?:permanent\s+|core\s+)?(?:place|spot|home|slot)\s+in\s+)?your\s+"
@@ -826,8 +838,10 @@ _MECHANICS = re.compile(r"\b(?:per\s+contract|obligat\w*|oblig\w*|if\s+assigned|
 # the purchase or sale at the strike that exercise makes ("If you exercise, you must sell the shares right away to lock
 # in the gain" is an order put as a necessity).
 _EXERCISE_CONTEXT = re.compile(
+    # "If you did exercise", "if you ever exercise", "if you were to exercise" (the paid retest of 2026-11-22)
     r"\b(?:if|when|once|should)\s+(?:you|it|they|the\s+(?:call|put|option|contract)s?)\s+(?:(?:is|are|was|were|gets?|got|"
-    r"has\s+been|had\s+been)\s+)?(?:auto[- ]?)?(?:exercise[sd]?|exercising|assigned)\b"
+    r"has\s+been|had\s+been|did|do|does|ever|were\s+to|decide\s+to|decided\s+to|choose\s+to|chose\s+to)\s+)?"
+    r"(?:auto[- ]?)?(?:exercise[sd]?|exercising|assigned)\b"
     r"|\bif\s+(?:auto[- ]?)?(?:exercised|assigned)\b"
     r"|\b(?:upon|on|at|after)\s+(?:an?\s+|early\s+)?(?:exercise|assignment)\b"
     r"|\b(?:exercise|exercising(?:\s+(?:it|them|the\s+(?:call|put|option|contract)s?))?)\s+(?:would|will|means|requires|involves)\b",
@@ -838,8 +852,9 @@ _AT_THE_STRIKE = re.compile(r"\b(?:strike|exercise\s+price|deliverable)\b", _I)
 # ("If you sell your shares at a loss, the wash-sale rule may apply" explains a tax rule: the last trade_instruction
 # pattern reads it as the supposition it is, Phase 08)
 _OUT_EXEMPT = {("trade_instruction", 0): "hypothetical+exercise_consequence", ("trade_instruction", 1): "generic_conditional",
-               ("trade_instruction", 3): "asked", ("trade_instruction", 10): "hypothetical",
-               ("timing", 0): "hypothetical", ("position_sizing", 1): "mechanics+exercise_consequence",
+               ("trade_instruction", 3): "asked+reader_question", ("trade_instruction", 10): "hypothetical",
+               ("timing", 0): "hypothetical",
+               ("position_sizing", 1): "mechanics+exercise_consequence+option_right+reader_question",
                ("position_sizing", 2): "hypothetical"}
 
 # A negation before the trigger, inside the same clause, turns "you should buy"
@@ -882,8 +897,13 @@ def _hypothetical(sentence: str, start: int) -> bool:
 
 
 def _exercise_consequence(sentence: str, start: int, match: str) -> bool:
-    """The share purchase or sale that a supposed or described exercise (or assignment) itself causes."""
+    """The share purchase or sale that a supposed or described exercise (or assignment) itself causes.
+
+    Not when an order follows it in the sentence: "If you exercise, you'd buy 100 shares at the strike, so buy 100 more
+    today" (candidate 2 let it through; the paid retest of 2026-11-22)."""
     if not _EXERCISE_CONTEXT.search(sentence) or _ADVICE_MODAL.search(match) or not _AT_THE_STRIKE.search(sentence[start:]):
+        return False
+    if _ORDER_LATER.search(sentence, start + len(match)):
         return False
     head = sentence[:start]
     breaks = [m.end() for m in _CLAUSE_BREAK.finditer(head)]
@@ -920,6 +940,67 @@ _ASKING = re.compile(r"\b(?:do|does|did|can|could|should|would|will|shall|may|mi
 
 def _asked(sentence: str, start: int) -> bool:
     return bool(_ASKING.search(sentence[:start])) and sentence.rstrip().endswith("?")
+
+
+# A question the reader asks in the first person, as Milo's suggested follow-ups are written ("→ How does time decay
+# affect a call I own?", "→ What happens to my call if I hold it to expiration?", "→ What happens if my call is
+# exercised and I get 100 shares?": the paid retest of 2026-11-22). It opens with a question word, ends with "?", and
+# the person doing the matched action is "I", the reader asking. "Why not buy 100 shares now?", "→ Should you buy 100
+# shares now?" and "I'd sell the call now, wouldn't you?" still count.
+_QUESTION_START = re.compile(r"^\W{0,6}(?:what|how|why|when|which|where|who|whom|whose|is|are|was|were|do|does|did|can|could|"
+                             r"should|would|will|shall|may|might|must)\b", _I)
+_PERSON = re.compile(r"\b(?:I(?:'d|'ll|'m|'ve)?|you(?:'d|'ll|'re|'ve)?|we|they|he|she)\b", _I)
+
+
+def _reader_question(sentence: str, start: int, match: str) -> bool:
+    text = sentence.rstrip()
+    if not text.endswith("?") or not _QUESTION_START.search(text):
+        return False
+    if re.match(r"\W{0,3}I(?:'d|'ll|'m|'ve)?\b", match):
+        return True
+    people = _PERSON.findall(sentence[:start])
+    return bool(people) and people[-1] in ("I", "I'd", "I'll", "I'm", "I've")
+
+
+# What a bought option itself grants, put plainly ("Your call lets you buy 100 shares at the strike price, but you
+# don't have to": the paid retest of 2026-11-22). The option is the subject and the purchase its object, so "This dip
+# lets you buy 100 shares cheaply" and a second purchase later in the sentence still count.
+_OPTION_RIGHT = re.compile(r"\b(?:calls?|puts?|options?|contracts?)\s+(?:lets?|allows?|gives?|entitles?)\s+(?:you|the\s+(?:holder|buyer|owner))\s+"
+                           r"(?:the\s+right\s+)?(?:to\s+)?$", _I)
+
+
+_ORDER_LATER = re.compile(r"\b(?:buy|sell|add|trim|short|exit|accumulate|dump|grab|load\s+up)\b", _I)
+
+
+def _option_right(sentence: str, start: int, end: int) -> bool:
+    return bool(_OPTION_RIGHT.search(sentence[max(0, start - 80):start])) and not _ORDER_LATER.search(sentence, end)
+
+
+# Cash or collateral someone would have to "put up" is a payment stated as a consequence: "That is cash (or margin)
+# you'd have to put up, and then you'd own the stock" (the paid retest of 2026-11-22). Only with "would have to" or
+# "would need to", and only before a pause or a word for money; "You should put up more collateral and add to the
+# position" and "you'd have to put up a limit order" still count.
+_PAYMENT = re.compile(r"\byou(?:'d|\s+would)\s+(?:have|need)\s+to\s+put$", _I)
+_PUT_UP_MONEY = re.compile(r"\s+up(?:\s*[,.;:)!?]|\s*$|\s+(?:as\s+|in\s+)?(?:the\s+|that\s+|more\s+|some\s+|extra\s+|any\s+)?"
+                           r"(?:cash|money|margin|collateral|funds|capital)\b)", _I)
+
+
+def _payment(sentence: str, end: int, match: str) -> bool:
+    return bool(_PAYMENT.search(match)) and bool(_PUT_UP_MONEY.match(sentence, end))
+
+
+# Where an analysis begins: "The snapshot is labelled synthetic, so I'd be starting from a real symbol rather than
+# this fixture" (the paid retest of 2026-11-22). Only "starting from" a symbol, a ticker, the data or scratch, with no
+# trade later in the sentence; "I'd be starting from a 5% position" and "... and buying 100 shares" still count.
+_ANALYSIS_START = re.compile(r"\s+from\s+(?:a\s+|an\s+|the\s+|this\s+)?(?:real\s+|new\s+|different\s+)?(?:symbol|ticker|company|"
+                             r"filing|fixture|snapshot|data|scratch)\b", _I)
+_TRADE_LATER = re.compile(r"\b(?:buy\w*|sell\w*|add\w*|trim\w*|hold\w*|short\w*|own\w*|exit\w*|accumulat\w*|positions?|"
+                          r"stakes?|shares|allocat\w*)\b", _I)
+
+
+def _analysis_start(sentence: str, end: int, match: str) -> bool:
+    return (match.lower().endswith("starting") and bool(_ANALYSIS_START.match(sentence, end))
+            and not _TRADE_LATER.search(sentence, end))
 
 
 # "Own a piece of it, and you share in whatever it earns": an order's form used to explain, the English conditional ("if
@@ -968,9 +1049,17 @@ def check_output(text: str) -> List[Dict[str, Any]]:
                         continue
                     if exempt == "lead_clause" and (_hypothetical(s, m.start()) or _lead_is_a_list(m.group(0))):
                         continue
-                    if exempt == "self_future" and (_milo_next_step(m.group(0)) or _asked(s, m.start())):
+                    if "self_future" in ex and (_milo_next_step(m.group(0)) or _asked(s, m.start())):
                         continue
-                    if exempt == "asked" and _asked(s, m.start()):
+                    if "asked" in ex and _asked(s, m.start()):
+                        continue
+                    if "reader_question" in ex and _reader_question(s, m.start(), m.group(0)):
+                        continue
+                    if "option_right" in ex and _option_right(s, m.start(), m.end()):
+                        continue
+                    if "payment" in ex and _payment(s, m.end(), m.group(0)):
+                        continue
+                    if "analysis_start" in ex and _analysis_start(s, m.end(), m.group(0)):
                         continue
                     if exempt == "generic_conditional" and _GENERIC_CONDITIONAL.search(s):
                         continue
