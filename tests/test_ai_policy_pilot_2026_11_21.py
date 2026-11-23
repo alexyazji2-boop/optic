@@ -111,7 +111,8 @@ ADVICE = [
     # an order put as what exercise requires: not a purchase or sale at the strike, so not mechanics
     ("If you exercise, you must sell the shares right away to lock in the gain.", "trade_instruction"),
     ("Once exercised, you need to sell the stock immediately.", "trade_instruction"),
-    ("Exercise the call and buy 100 shares of the stock.", "position_sizing"),
+    # (removed as position sizing until candidate 5, 2026-11-23, whose exercise order reads "Exercise the call" first)
+    ("Exercise the call and buy 100 shares of the stock.", "trade_instruction"),
     ("You need cash to buy 100 shares, so buy 100 shares now.", "position_sizing"),
     ("Put 10% of your portfolio into this call.", "position_sizing"),
     ("Risk 2% of your account per trade.", "position_sizing"),

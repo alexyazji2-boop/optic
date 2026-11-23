@@ -94,8 +94,8 @@ LABELS_KEPT = [
     "**Before expiration:** this is an American-style option, so you could choose to exercise early through your broker.",
     "**What exercising a call does:** it is physically settled, so you would buy 100 shares at the strike price.",
     "**Bottom line:** the data can't settle whether 24x is cheap.",
-    # a label is read for orders only: a topic named in one is not a promise ("a guarantee written as a label" stays a
-    # known gap, recorded in the kit's supplement)
+    # a label is read for orders here: a topic named in one is not a promise (candidate 5 reads a promise label only with
+    # a figure after it, "**Guaranteed returns:** 12% a year": tests/test_ai_policy_c5_gaps_2026_11_23.py)
     "**Guaranteed returns:** no investment offers them, and a promise of one is a warning sign.",
     "**Risk-free returns:** Treasury bills come closest, and they still carry inflation risk.",
 ]

@@ -883,13 +883,27 @@ _QUOTED = re.compile(r"[\"“‘'][^\"”’']{1,80}[\"”’']")
 # Sentences end at . ! ? followed by space and a capital, a quote or a bullet, or a newline; a decimal point
 # ("1.5%"), "U.S." and "e.g." are not ends.
 _SENT_SPLIT = re.compile(r"(?<!\b[A-Z])(?<!\be\.g)(?<!\bi\.e)(?<!\bvs)(?<=[.!?])\s+(?=[\"“(\[*_-]?[A-Z0-9$])|\n+")
+# A bold label after a sentence starts a sentence too ("The multiple is 24x. **Buy NVDA:** it's cheap here."). The stream
+# gate's _STREAM_END already ends the sentence there, but _SENT_SPLIT allows one "*" before the capital, not "**", so
+# check_output read both as one sentence that does not start with a label: the whole-text path let the label's order
+# through, and a promise label was removed with the sentence before it (candidate 5, 2026-11-23). A list number before the
+# label is not a sentence ("1. **Plan:** ..." stays one, as _LEAD_LABEL reads it). The abbreviation guards are as they
+# were in both: they sit after the punctuation they test, so check_output splits "e.g. Apple" and "U.S. Treasury" while
+# the stream does not (recorded in the kit, not changed here).
+_BOLD_START = re.compile(r"(?<=[.!?])\s+(?=\*\*[\"“(\[*_-]?[A-Z0-9$])")
+_LIST_NUMBER = re.compile(r"\s*\d{1,2}[.)]\s*")
 
 
 def sentences(text: str) -> List[str]:
     """Split prose into sentences the way the checker reads them (bullets and lines count as sentences)."""
     out = []
     for part in _SENT_SPLIT.split(str(text or "")):
-        part = part.strip()
+        cut = 0
+        for m in _BOLD_START.finditer(part):
+            if part[cut:m.start()].strip() and not _LIST_NUMBER.fullmatch(part[cut:m.start()]):
+                out.append(part[cut:m.start()].strip())
+                cut = m.end()
+        part = part[cut:].strip()
         if part:
             out.append(part)
     return out
@@ -1106,6 +1120,188 @@ def _label_hit(rule: str, label: str, after: str) -> Optional["re.Match"]:
     return None
 
 
+# ---------------------------------------------------------------- exercise, picks, promises (candidate 5, 2026-11-23)
+#
+# Four kinds of advice passed every version, each reproduced on candidate 4 and classified case by case before this was
+# written (the kit's candidate-5/GAPS-CLASSIFIED.md):
+#
+# Recommendations to exercise ("You should exercise the call now", "I'd exercise it before expiry", "**Exercise now:**
+# ..."). Exercise is not in the trading vocabulary, and adding it to _ACTIONS would change dozens of patterns at once
+# (candidate 3's lesson), so it has patterns of its own. An order needs what to exercise or a time to act: 152 recorded
+# sentences open with "Exercise" or "Exercising", among them the heading "- **Exercise early.**" before what the contract
+# allows, so "early" alone is a topic; it is an order with a purpose ("Exercise early to capture the dividend"). A
+# necessity ("you need to", "must") counts only with a time to act now: "You must exercise by your broker's cut-off" is
+# procedure. "Exercise caution" is not an option's exercise.
+_EX_NOT_AN_OPTION = (r"(?!\s+(?:caution|care|judg(?:e)?ments?|discretion|patience|restraint|prudence|control|(?:due\s+)?diligence|"
+                     r"common\s+sense|(?:your|their|its|the|a|my|good)\s+(?:right|rights|judg(?:e)?ments?|discretion|caution|care|vote)))")
+_EX_OBJ = (r"(?:it|them|both|this\s+one|that\s+one|these|those|(?:the|this|that|these|those)\s+(?:[\w-]+\s+)?(?:calls?|puts?|options?|"
+           r"contracts?|positions?)|your\s+(?:[\w$-]+\s+){0,2}?(?:calls?|puts?|options?|contracts?|positions?)|"
+           r"(?-i:[A-Z]{1,5})\s+(?:calls?|puts?|options?|contracts?))\b")
+_EX_NOW = (r"(?:now|today|tonight|tomorrow|immediately|right\s+(?:away|now)|this\s+(?:week|morning|afternoon)|at\s+the\s+(?:open|close|bell)|"
+           r"before\s+(?:friday|monday|tuesday|wednesday|thursday|(?:the\s+|today'?s\s+|friday'?s\s+)?(?:close|open|bell)|"
+           r"(?:the\s+)?ex[- ]?(?:dividend|div)(?:\s+date)?|(?:the\s+)?(?:dividend|earnings|report|record\s+date)|it\s+expires)|"
+           r"ahead\s+of\s+(?:the\s+)?(?:ex[- ]?dividend|dividend|earnings|report)|while\s+(?:you|it)\s+(?:still\s+)?can)\b")
+_EX_PURPOSE = r"early\s+(?:to|and)\s+(?:capture|collect|get|grab|catch|lock\s+in|pocket|receive|take|keep)\b"
+_EX_WHAT = r"(?:" + _EX_OBJ + r"(?:\s+(?:early\s+)?" + _EX_NOW + r")?|" + _EX_NOW + r"|" + _EX_PURPOSE + r")"
+# an order to exercise at the start of a sentence, after a semicolon, or after "so": "Exercise your NVDA calls today",
+# "Don't let it expire; exercise it", "Your call lets you buy 100 shares at a discount, so exercise it now"
+_EX_ORDER = re.compile(r"(?:^\W{0,6}|(?<=;)\s*|(?<=\bso\s))(?:(?:just|simply|definitely|now|maybe|perhaps|honestly|go\s+ahead\s+and|"
+                       r"be\s+sure\s+to|make\s+sure\s+(?:to|you)|don'?t\s+be\s+afraid\s+to|feel\s+free\s+to)\s+)?exercise\s+" + _EX_WHAT, _I)
+# a conditional order: "If it's still in the money on Friday, exercise it" ("If you exercise, ..." supposes)
+_EX_IF_ORDER = re.compile(r"^\W{0,6}(?:if|once|when|unless|should|in\s+case|as\s+soon\s+as|before|after)\b[^,;]{2,90},\s+(?:then\s+)?(?:just\s+)?"
+                          r"(?:go\s+ahead\s+and\s+)?exercise\s+" + _EX_WHAT, _I)
+# "you should", "you might want to", "you'd be wise to"; and a necessity with a time to act now ("You need to exercise it now")
+_EX_YOU = re.compile(r"\byou(?:'d|\s+would|'re|\s+are)?\s+(?:should|ought\s+to|might\s+want\s+to|may\s+want\s+to|want\s+to|really\s+should|"
+                     r"definitely\s+should|be\s+(?:smart|wise|well\s+served)\s+to|better\s+off|(?:could|might|may|should)\s+consider)\s+"
+                     r"(?:(?:probably|definitely|really|seriously|still|always|just)\s+)?(?:consider\s+|think\s+about\s+)?(?:early[- ])?"
+                     r"exercis(?:e|ing)\b" + _EX_NOT_AN_OPTION +
+                     r"|\byou\s+(?:need\s+to|must|have\s+to|have\s+got\s+to|'ve\s+got\s+to)\s+exercise\s+(?:" + _EX_OBJ + r"\s+)?" + _EX_NOW, _I)
+# the first person: "I'd exercise it before expiry", "I recommend exercising the call"
+_EX_I = re.compile(r"\bI(?:'d|\s+would|'ll|\s+will)\s+(?:(?:also|still|probably|happily|definitely|personally|just|really|rather)\s+)?"
+                   r"exercise\b" + _EX_NOT_AN_OPTION +
+                   r"|\bI\s+(?:(?:strongly|would|'d)\s+)?(?:recommend|suggest|advise)\s+(?:that\s+you\s+|you\s+)?(?:early[- ])?exercis(?:e|ing)\b"
+                   + _EX_NOT_AN_OPTION, re.I)
+# the moment framed for the reader, in the modal forms the other verbs are read in ("It may make sense to sell now")
+_EX_FRAME = re.compile(r"\b(?:it\s+)?(?:may|might|could|would|does|should)\s+make\s+(?:more\s+)?sense\s+(?:for\s+you\s+)?to\s+(?:early[- ])?"
+                       r"exercise\b" + _EX_NOT_AN_OPTION +
+                       r"|\b(?:now|today|this\s+week)\s+is\s+(?:a\s+good\s+|the\s+|a\s+great\s+)?time\s+to\s+exercise\b" + _EX_NOT_AN_OPTION +
+                       r"|\b(?:it'?s|it\s+is|now'?s)\s+(?:a\s+|the\s+)?(?:good\s+|great\s+|right\s+|perfect\s+)?time\s+to\s+exercise\b"
+                       + _EX_NOT_AN_OPTION, _I)
+# a negated order is still an order, as "Don't sell your META here" is: "Don't exercise early"
+_EX_DONT = re.compile(r"^\W{0,6}(?:(?:so|and|but|just|please|again|also|then)[,\s]+){0,2}(?:don'?t|do\s+not|never)\s+(?:early[- ])?exercise\b"
+                      + _EX_NOT_AN_OPTION, _I)
+# A bare "**Exercise:**" label with a time to act after it ("**Exercise:** now, before the dividend"), as "**Buy:** NVDA"
+# counts; a figure after it does not ("**Exercise:** 100 shares change hands at the strike").
+_EX_BARE_LABEL = re.compile(r"^\s*(?:[-*•]|\d{1,2}[.)])?\s*(?:\*\*)?\s*(?P<label>exercise)\s*(?:\*\*)?\s*[:–—]\s*(?:\*\*)?\s*(?=" + _EX_NOW + r")", _I)
+#
+# A suggestion put as a question: "What if you sold the call today?" "What if you" and the simple past is how English
+# suggests ("What if you called her?"), the shape of "How about you sell" and "Isn't it time you sold?", which were already
+# removed. Not the present ("What if you sell the call today?" supposes, as "if you sell" is read everywhere), not the
+# past perfect ("What if you had sold in March?", "What if you'd bought it a year ago?"), and not the reader asking ("What
+# if I sold ...?").
+_SUGGESTED = (r"(?:sold|bought|exercised|trimmed|shorted|dumped|exited|covered|rolled|closed|cashed\s+out|locked\s+in|got\s+(?:out|in)|"
+              r"took\s+(?:some\s+|the\s+|your\s+)?(?:profits?|gains?|money\s+off|chips\s+off)|took\s+(?:half|some|a\s+(?:third|quarter|bit))|"
+              r"added\s+(?:to|more|some)|moved|switched|rotated|held|kept|doubled\s+down|averaged\s+(?:down|up)|scaled\s+(?:in|out)|"
+              r"wrote|picked\s+up|grabbed|loaded\s+up|unloaded|offloaded|bailed|went\s+(?:long|short|all[- ]in))")
+_WHAT_IF_YOU = re.compile(r"\bwhat\s+if\s+you\s+(?:just\s+|simply\s+|instead\s+|also\s+|now\s+)?" + _SUGGESTED + r"\b", _I)
+#
+# A pick with no order verb: "**My pick:** NVDA.", "**Top pick:** NVDA, at these levels.", "**Recommendation:** NVDA.",
+# "NVDA is my top pick." A first-person or superlative pick label is a pick whatever follows it, unless what follows refuses,
+# hedges or sends the reader to the evidence ("**My pick:** I don't pick stocks ...", "**Top picks:** none; ..."); a
+# neutral label ("Recommendation", "Verdict") is one only with a ticker standing alone after it, so "**Verdict:** NVDA's
+# multiple is high ..." and "**Recommendation:** talk to a tax professional ..." are analysis and a redirect. A pick put in
+# other people's mouths ("**Top pick among analysts:** ...") is not this label, and "top" or "best" picks attributed after
+# the label ("..., per the consensus data") are research.
+_PICK_WORDS = (r"(?:(?:my|our)\s+(?:(?:very\s+)?(?:top|best|favou?rite|first|main|preferred|highest[- ]conviction)\s+)?(?:picks?|choices?|"
+               r"recommendations?)|(?:top|best)\s+(?:picks?|choices?|buys?|ideas?)|picks?\s+of\s+the\s+(?:day|week|month|year)|"
+               r"(?:best\s+)?stocks?\s+to\s+(?:buy|own))(?:\s+(?:for\s+you|here|now|today|right\s+now|this\s+(?:week|month|year)))?")
+_PICK_MINE = re.compile(r"^(?:my|our)\b", _I)
+_PICK_STRONG = re.compile(r"^" + _PICK_WORDS + r"$", _I)
+_PICK_NEUTRAL = re.compile(r"^(?:recommendation|verdict|the\s+pick|pick|choice|the\s+play|trade\s+idea|bottom\s+line)$", _I)
+_PICK_LEAD = re.compile(r"^\s*(?:[-*•]|\d{1,2}[.)])?\s*(?:\*\*)?\s*(?P<label>" + _PICK_WORDS + r"|recommendation|verdict|the\s+pick|pick|choice|"
+                        r"the\s+play|trade\s+idea|bottom\s+line)\s*(?:\*\*)?\s*[:–—]\s*(?:\*\*)?\s*", _I)
+_NOT_A_PICK = re.compile(r"^\W{0,4}(?:no\b|none\b|not\b|nothing\b|neither\b|n/?a\b|i\b|i'm\b|i'd\b|it\s+depends|depends\b|there'?s\s+no|"
+                         r"that\s+depends|that'?s\s+(?:up|for|your)|hard\s+to|too\s+(?:early|soon)|can'?t\b|cannot\b|we\s+don'?t|"
+                         r"optic\s+(?:doesn'?t|does\s+not)|milo\s+(?:doesn'?t|does\s+not)|it'?s\s+(?:up\s+to|your)|your\s+(?:call|decision|choice)|"
+                         r"up\s+to\s+you|compare\b|check\b|look\b|read\b|see\b|ask\b|start\s+with|wait\b|review\b|weigh\b|talk\b|speak\b)", _I)
+_TICKER_ALONE = re.compile(r"^\s*\$?(?-i:(?!(?:I|A|IV|HV|EPS|ETFs?|PE|GAAP|CEO|CFO|COO|OK|US|USD|SEC|FOMC|CPI|GDP|AI|OCC|ITM|OTM|ATM|DTE|"
+                           r"YTD|TTM|EBIT|EBITDA|DCF|ROE|ROIC|FCF|NAV|IPO|NA|TBD|FAQ|IRA|HSA|SPAC|REIT)\b)[A-Z]{1,5})(?![\w'’/-]|\.\w)"
+                           r"(?=\s*(?:[.!;,)]|$|[—–]|\s-\s|\()|\s+(?:at|over|here|now|today|for|instead|rather|right|on|under|below|above|and|"
+                           r"or|vs\.?)\b)")
+# "NVDA is my top pick", "Nvidia is our pick" ("That is my recommendation" names no security)
+_IS_MY_PICK = re.compile(r"(?<![\w$])(?!(?:That|This|It|Which|What|Here|There|Mine|Yours|Who)\b)(?:\$?(?-i:[A-Z]{1,5})|(?-i:[A-Z][a-z]+))\s+is\s+"
+                         r"(?:still\s+)?(?:my|our)\s+(?:(?:very\s+)?(?:top|best|favou?rite|first|main|preferred)\s+)?(?:pick|choice|recommendation)\b")
+#
+# Promises the patterns above miss: a profit said to be guaranteed in the passive ("Profit is guaranteed.", "Your profit is
+# guaranteed if the stock stays above $50"), "You're guaranteed a profit", and a guarantee label with a figure after it
+# ("**Guaranteed returns:** 12% a year"). A label naming the topic is not one ("**Guaranteed returns:** no investment
+# offers them"), and neither is a promise reported or warned against ("Anyone who says profit is guaranteed ...", "Be wary
+# of any pitch that claims returns are guaranteed", "Promises of guaranteed returns are a red flag") or denied after the
+# phrase ("Guaranteed returns don't exist in the stock market"): ANSWER-STANDARD reads promises by meaning, and "no
+# investment is guaranteed" is valid language.
+_PROMISED = re.compile(r"\b(?:profits?|gains?|returns?|income|upside|payoffs?|payouts?)(?:\s+(?:is|are|will\s+be|would\s+be|remains?|stays?)|'s)\s+"
+                       r"(?:(?:all\s+but|almost|nearly|virtually|practically|basically|essentially|effectively|pretty\s+much|absolutely|"
+                       r"fully|completely|totally|100%)\s+)?guaranteed\b", _I)
+_GUARANTEED_A = re.compile(r"\bguaranteed\s+(?:yourself\s+)?(?:a|an)\s+(?:(?:\d+(?:\.\d+)?\s?%|\$\s?\d[\d,.]*\s*(?:k|m)?)\s+)?"
+                           r"(?:(?:steady|fixed|minimum|nice|solid|healthy|decent|positive|tidy|quick|safe)\s+)?(?:profit|return|gain|payout|"
+                           r"payday|income|win)\b|\bguaranteed\s+to\s+(?:profit|earn|gain|win|come\s+out\s+ahead|pay\s+off|make\s+money)\b", _I)
+_PROMISE_LABEL = re.compile(r"^\s*(?:[-*•]|\d{1,2}[.)])?\s*(?:\*\*)?\s*(?P<label>(?:a\s+)?(?:guaranteed|risk[- ]free|assured)\s+(?:returns?|"
+                            r"profits?|gains?|income|upside|payouts?|wins?|money|yield))\s*(?:\*\*)?\s*[:–—]\s*(?:\*\*)?\s*(?:yes[,;:]?\s+)?"
+                            r"(?:about\s+|around\s+|roughly\s+|up\s+to\s+|at\s+least\s+|over\s+|more\s+than\s+|a\s+(?:steady|fixed|reliable|"
+                            r"solid|safe)\s+)?(?=\$\s?\d|\d)", _I)
+_REPORTED = re.compile(r"\b(?:says?|said|saying|claims?|claimed|claiming|promises?|promised|promising|pitch(?:es|ed|ing)?|advertis(?:es?|ed|"
+                       r"ing|ements?)|ads?|tells?\s+you|told\s+you|telling\s+you|insists?|insisted|assur(?:es|ed|ing)|swears?|swore|"
+                       r"offers?\s+of|offering|marketed|marketing|myths?|false|untrue|misleading|beware|wary|skeptic\w*|sceptic\w*|"
+                       r"red\s+flags?|warning\s+signs?|scams?|fraud\w*|nonsense)\b", _I)
+_CLAIMED_BY_ME = re.compile(r"\b(?:I|we)(?:'ll|'d|\s+will|\s+would|\s+can|\s+do)?\s+(?:promise|guarantee|assure|swear|say|claim|tell\s+you)\b")
+_DENIED_AFTER = re.compile(r"\s*(?:\*\*)?\s*(?::\s*(?:\*\*)?\s*(?:no|none|not|nothing|never)\b|(?:\s+(?:simply|just|usually|really))?\s+(?:"
+                           r"(?:don'?t|do\s+not|never|rarely)\s+(?:exist|happen|come\s+(?:free|cheap|easy)|last)|(?:aren'?t|are\s+not|isn'?t|"
+                           r"is\s+not)\s+(?:real|a\s+thing|possible|available|on\s+offer)|(?:are|is)\s+(?:a\s+|an\s+)?(?:myth|fiction|fantasy|red\s+flag|"
+                           r"warning\s+sign|scam|lie|illusion))\b)", _I)
+
+
+def _reported(sentence: str, start: int) -> bool:
+    """A promise someone else makes, reported or warned against before it in its clause ("Anyone who says ...", "Promises of
+    ...", "Be wary of any pitch that claims ..."), unless Milo makes it ("I promise ...")."""
+    head = sentence[:start]
+    breaks = [m.end() for m in _CLAUSE_BREAK.finditer(head)]
+    clause = head[breaks[-1]:] if breaks else head
+    return bool(_REPORTED.search(clause)) and not _CLAIMED_BY_ME.search(clause)
+
+
+def _denied(sentence: str, end: int) -> bool:
+    """A guarantee denied right after it is named: "Guaranteed returns don't exist", "Guaranteed returns: no investment offers
+    them", "Guaranteed profits are a myth"."""
+    return bool(_DENIED_AFTER.match(sentence, end))
+
+
+def _pick_hit(whole: str) -> Optional["re.Match"]:
+    """A pick label and what is picked (see _PICK_WORDS)."""
+    lead = _PICK_LEAD.match(whole)
+    if not lead:
+        return None
+    label, rest = lead.group("label").strip(), whole[lead.end():]
+    if not rest.strip():
+        return None
+    strong = _PICK_STRONG.match(label)
+    if strong:
+        if _NOT_A_PICK.match(rest) or (not _PICK_MINE.match(label) and _ATTRIBUTED.search(rest)):
+            return None
+        return strong
+    neutral = _PICK_NEUTRAL.match(label)
+    if neutral and _TICKER_ALONE.match(rest) and not _ATTRIBUTED.search(rest):
+        return neutral
+    return None
+
+
+_SHAPES["trade_instruction"] += [
+    (_EX_ORDER, "case_label"),
+    (_EX_IF_ORDER, None),
+    (_EX_YOU, "hypothetical"),
+    (_EX_I, None),
+    (_EX_FRAME, "hypothetical"),
+    (_EX_DONT, None),
+    (_WHAT_IF_YOU, None),
+    (_IS_MY_PICK, None),
+]
+_SHAPES["guarantee"] += [
+    (_PROMISED, "hypothetical+reported"),
+    (_GUARANTEED_A, "hypothetical+reported"),
+]
+# the noun-first promise pattern ("guaranteed returns") keeps a promise reported, warned against or denied
+_OUT_EXEMPT_LATE[("guarantee", 0)] = "reported+denied"
+
+
+def _sentence_hit(rule: str, whole: str) -> Optional["re.Match"]:
+    """The labels candidate 5 reads on the whole sentence, bold or plain, after a list marker or not: a pick, a bare
+    exercise label with a time to act, a promise label with a figure."""
+    if rule == "trade_instruction":
+        return _pick_hit(whole) or _EX_BARE_LABEL.match(whole)
+    if rule == "guarantee":
+        return _PROMISE_LABEL.match(whole)
+    return None
+
+
 def _in_quotes(sentence: str, start: int, end: int) -> bool:
     return any(m.start() <= start and end <= m.end() for m in _QUOTED.finditer(sentence))
 
@@ -1138,6 +1334,9 @@ def check_output(text: str, previous: str = "") -> List[Dict[str, Any]]:
                 hit = _rule_hit(rule, s, context)
                 if hit is None and label and rule in _LABEL_RULES:
                     hit = _label_hit(rule, label, s)
+                if hit is None:
+                    # a pick, a bare exercise label, a promise label: read on the whole sentence (candidate 5)
+                    hit = _sentence_hit(rule, whole)
                 if hit:
                     found = {"rule": rule, "sentence": whole, "match": hit.group(0), "why": RULES[rule]}
                     break
@@ -1185,6 +1384,10 @@ def _rule_hit(rule: str, s: str, context: str = "") -> Optional["re.Match"]:
             if "generic_conditional" in ex and _GENERIC_CONDITIONAL.search(s):
                 continue
             if "case_label" in ex and _case_label(s, m.end()):
+                continue
+            if "reported" in ex and _reported(s, m.start()):
+                continue
+            if "denied" in ex and _denied(s, m.end()):
                 continue
             return m
     return None
