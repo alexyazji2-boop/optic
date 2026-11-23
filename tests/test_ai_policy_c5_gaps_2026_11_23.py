@@ -189,6 +189,8 @@ PICKS_KEPT = [
     "**My picks:** P/E and EV/EBITDA, since both use earnings.",  # P19: review of 305a153e: metrics, not securities
     "**My pick:** the 10-K, because it has the segment data.",  # P20: review of 305a153e: a document, not a security
     "**My recommendation:** use the weekly chart for this question.",  # P21: review of 305a153e: a screen choice
+    "**Recommendation:** NVDA's 10-K first, then its two closest peers.",  # P22: added with the mutation check of the second commit: a ticker's possessive after 'Recommendation' names what to read
+    "**My pick:** None. The decision is yours.",  # P23: added with the mutation check of the second commit: a refusal that is capitalised like a name
 ]
 
 
