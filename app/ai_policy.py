@@ -1065,9 +1065,45 @@ _GENERIC_CONDITIONAL = re.compile(r"^\W{0,6}(?:own|buy|hold|sell|short|write)\s+
 
 
 # A list number or a bold or plain label before the sentence ("1. ", "**Action:** ", "Bottom line: "), read past so an
-# order after it is still at the start (set C)
-_LEAD_LABEL = re.compile(r"^\s*(?:\d{1,2}[.)]\s+)?(?:\*\*[^*\n]{1,40}:\*\*\s*|\*\*[^*\n]{1,40}\*\*\s*:\s*|"
+# order after it is still at the start (set C); a bold label's own words are read too (_label_hit)
+_LEAD_LABEL = re.compile(r"^\s*(?:\d{1,2}[.)]\s+)?(?:\*\*(?P<bold>[^*\n]{1,40}):\*\*\s*|\*\*(?P<bold2>[^*\n]{1,40})\*\*\s*:\s*|"
                          r"(?:bottom\s+line|action|next\s+steps?|my\s+take|the\s+move|takeaway|verdict|plan)\s*:\s+)?", _I)
+
+
+# An order in the bold label itself: "**Buy NVDA:** it's cheap here.", "1. **Sell your shares:** the run is over."
+# Reading past the label hid it, so every version let these through, while "- **Buy NVDA:** ..." with a dash was
+# removed (found while preparing candidate 4, 2026-11-23). The label is now read as a sentence of its own, by the
+# order rules' patterns. Milo's labels are nearly all noun phrases, and some begin with an order's word ("**Short
+# answer:**" in the first retest, baseline r08 A01 turn 3; "**Short straddle/strangle:**", "**Sell to close:**"), so a
+# trade instruction in a label counts only when it names what to trade: a ticker, the reader's own holding, a part of
+# it, a pronoun for it, a count or a price, or a time to act; or when it is an order idiom ("Take profits", "Load up")
+# or a negated order ("Don't sell"). A bare "**Buy:**" counts when what to trade follows it ("**Buy:** NVDA at these
+# levels"). "IV" and "HV" are volatility, not tickers ("**Short IV:**").
+_LABEL_RULES = ("trade_instruction", "position_sizing", "allocation", "timing")
+_LABEL_TARGET = re.compile(r"\s*(?:(?:to|into|out\s+of|in|on|off|up|down)\s+)?(?:(?-i:(?!(?:IV|HV)\b)[A-Z]{1,5})\b|your\b|my\b|"
+                           r"it\b|them\b|this\b|these\b|those\b|half\b|all\b|some\b|more\b|everything\b|now\b|today\b|"
+                           r"tomorrow\b|immediately\b|the\s+(?:rest|dip|rally|position|shares|stock|stake|lot|winners?|losers?)\b|"
+                           r"(?:at|near|around|below|above|under)\s+\$?\d|\$?\d)", _I)
+_LABEL_IDIOM = re.compile(r"\b(?:take\s+(?:some\s+)?profits?|load\s+up|get\s+(?:out|in)|lock\s+in|cash\s+out|go\s+all[- ]in|"
+                          r"double\s+down|cut\s+(?:your\s+)?losses|average\s+(?:down|up)|scale\s+(?:in|out)|back\s+up\s+the\s+truck)\b", _I)
+_LABEL_NEGATED = re.compile(r"^\W{0,6}(?:don'?t|do\s+not|never)\b", _I)
+
+
+def _label_hit(rule: str, label: str, after: str) -> Optional["re.Match"]:
+    """The match when a bold label the checker read past is itself an order under `rule` (see _LABEL_TARGET)."""
+    hit = _rule_hit(rule, label)
+    if hit is None or rule != "trade_instruction":
+        return hit
+    said = hit.group(0)
+    if _LABEL_NEGATED.match(said) or _LABEL_IDIOM.search(said):
+        return hit
+    # what to trade, right after one of the order's words: "Buy NVDA", "Exit the position", "Add to your position"
+    if any(_LABEL_TARGET.match(label, hit.start() + w.end()) for w in re.finditer(r"\w+", said)):
+        return hit
+    # a bare order, with what to trade right after the label: "**Buy:** NVDA at these levels"
+    if not label[hit.end():].strip(" .!") and _LABEL_TARGET.match(after):
+        return hit
+    return None
 
 
 def _in_quotes(sentence: str, start: int, end: int) -> bool:
@@ -1083,7 +1119,9 @@ def check_output(text: str, previous: str = "") -> List[Dict[str, Any]]:
     `previous` is the sentence the reader got just before `text` on the same line. StreamGate passes it, because it
     checks one sentence at a time; inside `text`, a sentence's previous one is the sentence before it on its line that
     is not a finding (so the same as in the text the reader gets). It can only name the exercise that a share purchase
-    at the strike follows from (candidate 3's retest of 2026-11-22)."""
+    at the strike follows from (candidate 3's retest of 2026-11-22).
+
+    A bold label that is read past ("**Action:** ...") is also read on its own, so an order in it counts (_label_hit)."""
     findings = []
     # line by line, so the sentence before is known; these are the sentences sentences(text) finds
     for n, line in enumerate(str(text or "").split("\n")):
@@ -1091,51 +1129,15 @@ def check_output(text: str, previous: str = "") -> List[Dict[str, Any]]:
         for whole in sentences(line):
             lead = _LEAD_LABEL.match(whole)
             s = whole[lead.end():] if lead else whole
+            # a bold label read past, whose own words are an order too ("**Buy NVDA:** it's cheap here.")
+            label = ((lead.group("bold") or lead.group("bold2") or "") if lead else "").strip()
             # what the reader reads just before the checked words: a label read past, and the sentence before
             context = (whole[:lead.end()] if lead else "") + " " + prev
             found = None
             for rule in RULES:
-                hit = None
-                for rx, exempt in ([(rx, _OUT_EXEMPT.get((rule, i)) or _OUT_EXEMPT_LATE.get((rule, i)))
-                                    for i, rx in enumerate(_OUT.get(rule, []))]
-                                   + _SHAPES.get(rule, [])):
-                    for m in rx.finditer(s):
-                        if _negated(s, m.start()) or _in_quotes(s, m.start(), m.end()):
-                            continue
-                        # a label may name two exemptions ("attributed+hypothetical", Phase 12's round 2)
-                        ex = set((exempt or "").split("+"))
-                        if "hypothetical" in ex and _hypothetical(s, m.start()):
-                            continue
-                        if "attributed" in ex and _ATTRIBUTED.search(s):
-                            continue
-                        if "mechanics" in ex and _MECHANICS.search(s):
-                            continue
-                        if "exercise_consequence" in ex and _exercise_consequence(s, m.start(), m.group(0), context):
-                            continue
-                        if "lead_clause" in ex and (_hypothetical(s, m.start()) or _lead_is_a_list(m.group(0))):
-                            continue
-                        if "noun_series" in ex and _noun_series(s, m.end(), m.group(0)):
-                            continue
-                        if "self_future" in ex and (_milo_next_step(m.group(0)) or _asked(s, m.start())):
-                            continue
-                        if "asked" in ex and _asked(s, m.start()):
-                            continue
-                        if "reader_question" in ex and _reader_question(s, m.start(), m.group(0)):
-                            continue
-                        if "option_right" in ex and _option_right(s, m.start(), m.end()):
-                            continue
-                        if "payment" in ex and _payment(s, m.end(), m.group(0)):
-                            continue
-                        if "analysis_start" in ex and _analysis_start(s, m.end(), m.group(0)):
-                            continue
-                        if "generic_conditional" in ex and _GENERIC_CONDITIONAL.search(s):
-                            continue
-                        if "case_label" in ex and _case_label(s, m.end()):
-                            continue
-                        hit = m
-                        break
-                    if hit:
-                        break
+                hit = _rule_hit(rule, s, context)
+                if hit is None and label and rule in _LABEL_RULES:
+                    hit = _label_hit(rule, label, s)
                 if hit:
                     found = {"rule": rule, "sentence": whole, "match": hit.group(0), "why": RULES[rule]}
                     break
@@ -1144,6 +1146,48 @@ def check_output(text: str, previous: str = "") -> List[Dict[str, Any]]:
             else:
                 prev = whole
     return findings
+
+
+def _rule_hit(rule: str, s: str, context: str = "") -> Optional["re.Match"]:
+    """The first match in `s` of one of `rule`'s patterns that no exemption covers (`context`: see check_output)."""
+    for rx, exempt in ([(rx, _OUT_EXEMPT.get((rule, i)) or _OUT_EXEMPT_LATE.get((rule, i)))
+                        for i, rx in enumerate(_OUT.get(rule, []))]
+                       + _SHAPES.get(rule, [])):
+        for m in rx.finditer(s):
+            if _negated(s, m.start()) or _in_quotes(s, m.start(), m.end()):
+                continue
+            # a label may name two exemptions ("attributed+hypothetical", Phase 12's round 2)
+            ex = set((exempt or "").split("+"))
+            if "hypothetical" in ex and _hypothetical(s, m.start()):
+                continue
+            if "attributed" in ex and _ATTRIBUTED.search(s):
+                continue
+            if "mechanics" in ex and _MECHANICS.search(s):
+                continue
+            if "exercise_consequence" in ex and _exercise_consequence(s, m.start(), m.group(0), context):
+                continue
+            if "lead_clause" in ex and (_hypothetical(s, m.start()) or _lead_is_a_list(m.group(0))):
+                continue
+            if "noun_series" in ex and _noun_series(s, m.end(), m.group(0)):
+                continue
+            if "self_future" in ex and (_milo_next_step(m.group(0)) or _asked(s, m.start())):
+                continue
+            if "asked" in ex and _asked(s, m.start()):
+                continue
+            if "reader_question" in ex and _reader_question(s, m.start(), m.group(0)):
+                continue
+            if "option_right" in ex and _option_right(s, m.start(), m.end()):
+                continue
+            if "payment" in ex and _payment(s, m.end(), m.group(0)):
+                continue
+            if "analysis_start" in ex and _analysis_start(s, m.end(), m.group(0)):
+                continue
+            if "generic_conditional" in ex and _GENERIC_CONDITIONAL.search(s):
+                continue
+            if "case_label" in ex and _case_label(s, m.end()):
+                continue
+            return m
+    return None
 
 
 def sanitize(text: str) -> Tuple[str, List[Dict[str, Any]]]:
