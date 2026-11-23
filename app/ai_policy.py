@@ -520,6 +520,8 @@ def _add(rule: str, rx: "re.Pattern", exempt: Optional[str] = None) -> None:
 
 
 _OUT_EXEMPT_LATE: Dict[Tuple[str, int], str] = {}
+# a figure fees can be added to ("the $240", "the premium"), as Milo states a loss
+_FIGURE = r"(?:\$[\d,.]+|costs?|figure|loss|premium|amount|sum|maximum|fees?|total\s+(?:cost|loss|premium|figure))"
 for _rx in [
     re.compile(r"\b(?:is|would\s+be)\s+the\s+(?:right|correct|smart|smarter|sensible|best|disciplined|prudent|wise|obvious|logical)\s+"
                r"(?:call|move|play|step|way|choice|approach|thing\s+to\s+do)\b", _I),
@@ -532,9 +534,11 @@ for _rx in [
                r"\b(?:clear|easy|obvious)\s+(?:avoid|pass|buy|sell)\b|\bavoid\s+for\s+your\b|\blet\s+(?:it|them|the\s+position|your\s+winners?)\s+run\b|"
                r"\bis\s+the\s+best\s+place\s+for\s+(?:this|your|the)\s+money\b|\bthe\s+ones?\s+to\s+(?:exit|sell|cut|trim|dump|buy)\s+first\b|"
                # "so add them to the $240." adds fees to a figure, not shares to a position (the paid retest of
-               # 2026-11-22); only when the figure ends the clause, so "so add them to the $240 and buy two more" counts
-               r"\bso\s+(?:cut|trim|sell|dump|buy|add(?!\s+(?:it|them|those|these)\s+to\s+(?:the|that|this|your)\s+"
-               r"(?:\$[\d,.]+|costs?|figure|loss|premium|amount|sum|maximum|fees?|total\s+(?:cost|loss|premium|figure))"
+               # 2026-11-22), and so does "so add them on top." (candidate 3's retest); only when the figure or "on top"
+               # ends the clause, so "so add them to the $240 and buy two more" and "so add them on top of your
+               # position" count
+               r"\bso\s+(?:cut|trim|sell|dump|buy|add(?!\s+(?:it|them|those|these)\s+(?:to\s+(?:the|that|this|your)\s+" + _FIGURE +
+               r"|on\s+top(?:\s+of\s+(?:the|that|this|your)\s+" + _FIGURE + r")?)"
                r"(?:\s+per\s+(?:share|contract))?\s*(?:[.;!?)]|$)))"
                r"\s+(?:it|them|half|some|the)\b|\bcut\s+it\s+in\s+half\b|"
                r"\brebalancing\s+(?:deserves|is\s+worth)\s+a\s+look\b", _I),
@@ -623,7 +627,8 @@ _SHAPES = {
         # 1. an order at the start of a sentence or bullet: "Pick up a few shares", "Average down", "Exit if it closes under 200"
         (re.compile(r"^\W{0,6}(?:(?:just|simply|definitely|then|so|now|maybe|perhaps|honestly|try\s+to|be\s+sure\s+to|make\s+sure\s+to|"
                     r"go\s+ahead\s+and|don'?t\s+be\s+afraid\s+to|feel\s+free\s+to)\s+)?(?:consider\s+" + _A_ING + r"|" + _A +
-                    r"|switch\s+to\s+(?:cash|bonds|stocks|treasur\w*|(?-i:[A-Z]{2,5}\b)))\b" + _NOT_AN_ORDER, _I), "generic_conditional"),
+                    r"|switch\s+to\s+(?:cash|bonds|stocks|treasur\w*|(?-i:[A-Z]{2,5}\b)))\b" + _NOT_AN_ORDER, _I),
+         "generic_conditional+case_label"),
         # 2. "you should ...", "you'd be smart to trim", "you're better off holding", "you might consider swapping"
         (re.compile(r"\byou(?:'d|\s+would|'re|\s+are)?\s+(?:should|ought\s+to|need\s+to|must|have\s+to|might\s+want\s+to|"
                     r"may\s+want\s+to|want\s+to|really\s+should|definitely\s+should|be\s+(?:smart|wise|well\s+served)\s+to|"
@@ -646,10 +651,12 @@ _SHAPES = {
     ],
     "trade_instruction+": [
         # a conditional order: "Should it gap below $62, cut it loose at the open", "If it closes under 200, exit"
+        # ("When the car, cover and year are identical, ..." lists nouns: candidate 3's retest of 2026-11-22)
         (re.compile(r"^\W{0,6}(?:if|should|once|when|unless|in\s+case)\b[^,]{0,80},\s+(?:then\s+)?(?:just\s+)?(?:" + _A + r")\b"
-                    + _NOT_AN_ORDER, _I), None),
+                    + _NOT_AN_ORDER, _I), "noun_series"),
         # (not "short" here: "..., short customer-bought puts" and "..., short of the 2.5 an S needs" describe)
-        (re.compile(r"^\W{0,6}[^,]{2,60},\s+(?:then\s+)?(?:just\s+)?(?!short\b)(?:" + _A + r")\b" + _NOT_AN_ORDER, _I), "lead_clause"),
+        (re.compile(r"^\W{0,6}[^,]{2,60},\s+(?:then\s+)?(?:just\s+)?(?!short\b)(?:" + _A + r")\b" + _NOT_AN_ORDER, _I),
+         "lead_clause+noun_series"),
         # a reading made into an order (Handoff 7, Explain This Indicator): "RSI at 72 is overbought, consider taking
         # profits"; "it's time to take profits"; the reading itself ("RSI is above 70") stays a description
         (re.compile(r"^\W{0,6}[^,]{2,60},\s+(?:so\s+|then\s+)?(?:you\s+)?(?:may\s+|might\s+|could\s+)?consider\s+" + _A_ING + r"\b", _I), "lead_clause"),
@@ -837,21 +844,28 @@ _MECHANICS = re.compile(r"\b(?:per\s+contract|obligat\w*|oblig\w*|if\s+assigned|
 # have to) rather than an order ("If you exercise, buy 100 shares") or advice ("..., you should buy 100 more"), and
 # the purchase or sale at the strike that exercise makes ("If you exercise, you must sell the shares right away to lock
 # in the gain" is an order put as a necessity).
+# (who exercises: also the reader's broker, alone or beside the reader, "If you or your broker exercise the call":
+# candidate 3's retest of 2026-11-22)
+_EX_SUBJECT = r"(?:you|it|they|the\s+(?:call|put|option|contract)s?|(?:your|the)\s+broker(?:age)?)"
 _EXERCISE_CONTEXT = re.compile(
     # "If you did exercise", "if you ever exercise", "if you were to exercise" (the paid retest of 2026-11-22)
-    r"\b(?:if|when|once|should)\s+(?:you|it|they|the\s+(?:call|put|option|contract)s?)\s+(?:(?:is|are|was|were|gets?|got|"
-    r"has\s+been|had\s+been|did|do|does|ever|were\s+to|decide\s+to|decided\s+to|choose\s+to|chose\s+to)\s+)?"
-    r"(?:auto[- ]?)?(?:exercise[sd]?|exercising|assigned)\b"
+    r"\b(?:if|when|once|should)\s+" + _EX_SUBJECT + r"(?:\s*,?\s*\(?or\s+" + _EX_SUBJECT + r"\)?,?)?\s+"
+    r"(?:(?:is|are|was|were|gets?|got|has\s+been|had\s+been|did|do|does|ever|were\s+to|decide\s+to|decided\s+to|choose\s+to|"
+    r"chose\s+to)\s+)?(?:auto[- ]?)?(?:exercise[sd]?|exercising|assigned)\b"
     r"|\bif\s+(?:auto[- ]?)?(?:exercised|assigned)\b"
     r"|\b(?:upon|on|at|after)\s+(?:an?\s+|early\s+)?(?:exercise|assignment)\b"
-    r"|\b(?:exercise|exercising(?:\s+(?:it|them|the\s+(?:call|put|option|contract)s?))?)\s+(?:would|will|means|requires|involves)\b",
+    # "Exercise would buy ...", and a label saying what exercise does: "**What exercising a call does:**" (candidate 3's
+    # retest)
+    r"|\b(?:exercise|exercising(?:\s+(?:it|them|(?:a|an|the|your|this|that)\s+(?:call|put|option|contract)s?))?)\s+"
+    r"(?:would|will|does|means|requires|involves)\b",
     _I)
 _CONSEQUENCE = re.compile(r"\b(?:you|it|they|the\s+holder|would|will|needs?|ha(?:ve|s)\s+to|means|requires|involves)\b|'d\b|'ll\b", _I)
 _ADVICE_MODAL = re.compile(r"\b(?:should|ought|might\s+want|may\s+want|want\s+to|better\s+off|smart\s+to|wise\s+to|consider)\b", _I)
 _AT_THE_STRIKE = re.compile(r"\b(?:strike|exercise\s+price|deliverable)\b", _I)
 # ("If you sell your shares at a loss, the wash-sale rule may apply" explains a tax rule: the last trade_instruction
 # pattern reads it as the supposition it is, Phase 08)
-_OUT_EXEMPT = {("trade_instruction", 0): "hypothetical+exercise_consequence", ("trade_instruction", 1): "generic_conditional",
+_OUT_EXEMPT = {("trade_instruction", 0): "hypothetical+exercise_consequence",
+               ("trade_instruction", 1): "generic_conditional+case_label",
                ("trade_instruction", 3): "asked+reader_question", ("trade_instruction", 10): "hypothetical",
                ("timing", 0): "hypothetical",
                ("position_sizing", 1): "mechanics+exercise_consequence+option_right+reader_question",
@@ -896,12 +910,18 @@ def _hypothetical(sentence: str, start: int) -> bool:
     return bool(_HYPOTHETICAL.search(clause))
 
 
-def _exercise_consequence(sentence: str, start: int, match: str) -> bool:
+def _exercise_consequence(sentence: str, start: int, match: str, context: str = "") -> bool:
     """The share purchase or sale that a supposed or described exercise (or assignment) itself causes.
 
     Not when an order follows it in the sentence: "If you exercise, you'd buy 100 shares at the strike, so buy 100 more
-    today" (candidate 2 let it through; the paid retest of 2026-11-22)."""
-    if not _EXERCISE_CONTEXT.search(sentence) or _ADVICE_MODAL.search(match) or not _AT_THE_STRIKE.search(sentence[start:]):
+    today" (candidate 2 let it through; the paid retest of 2026-11-22).
+
+    `context` is what the reader reads just before the checked words: a label the checker read past, and the sentence
+    before on the same line ("If the call is exercised, it is physically settled. You would buy 100 shares at the strike,
+    paying in cash or on margin": candidate 3's retest). It can name the exercise and nothing else; the purchase must
+    still be stated as its consequence, at the strike, with no order after it."""
+    if not (_EXERCISE_CONTEXT.search(sentence) or (context and _EXERCISE_CONTEXT.search(context))) \
+            or _ADVICE_MODAL.search(match) or not _AT_THE_STRIKE.search(sentence[start:]):
         return False
     if _ORDER_LATER.search(sentence, start + len(match)):
         return False
@@ -1003,6 +1023,39 @@ def _analysis_start(sentence: str, end: int, match: str) -> bool:
             and not _TRADE_LATER.search(sentence, end))
 
 
+# A bold case label naming what an option's holder can do, one choice being to let it expire: "- **Sell or let it
+# expire out of the money.** The loss is capped at the premium, ..." (candidate 3's retest of 2026-11-22, in a list after
+# "A few cases:"). Letting an option expire is not a trade, so the label names the cases rather than telling the reader
+# to sell. Only in bold at the start of the line, with nothing else in the label: "**Sell now or let it expire.**",
+# "**Sell NVDA or let it expire.**", "**Sell or hold.**" and a plain "Sell or let it expire." still count, and so does
+# an order after the label.
+_HOLDER_STEP = r"(?:sell|close|exercise)(?:\s+(?:it|them|the\s+(?:call|put|option|contract|position)s?))?"
+_CASE_LABEL = re.compile(r"^\s*(?:[-*•]|\d{1,2}[.)])?\s*\*\*\s*" + _HOLDER_STEP + r"(?:\s*,\s*" + _HOLDER_STEP + r")*,?\s+or\s+"
+                         r"let\s+(?:it|them|the\s+(?:call|put|option|contract)s?)\s+(?:expire|lapse)(?:\s+worthless)?"
+                         r"(?:\s+(?:out\s+of|in|at)\s+the\s+money|\s+(?:at|on)\s+(?:expiration|expiry))?\s*[.:]?\s*\*\*", _I)
+
+
+def _case_label(sentence: str, end: int) -> bool:
+    label = _CASE_LABEL.match(sentence)
+    return bool(label) and end <= label.end()
+
+
+# Nouns listed as identical, read as "<lead>, cover": "The comparison works when the car, cover and year are identical"
+# (insurance cover, in an analogy for implied volatility: candidate 3's retest of 2026-11-22). Only when the lead ends
+# with "when", "if" or the like and a noun phrase ("when the car"), and the word after the comma is followed by more bare
+# nouns and "are identical", "are the same" or the like. "At the target, cover and gains are locked", "If it spikes,
+# cover and the shorts are flat" and "On the open, cover and positions are identical" still count.
+_SERIES_LEAD = re.compile(r"\b(?:when|whenever|if|where|while|as\s+long\s+as|provided|unless|once|whether|because|since|though|"
+                          r"although)\s+(?:the|a|an|this|that|these|those|its|their|your)\s+(?:[\w-]+\s+)?[\w-]+\s*$", _I)
+_SERIES_TAIL = re.compile(r"(?:\s*,\s*[\w-]+){0,3},?\s+(?:and|or)\s+[\w-]+\s+(?:are|were)\s+(?:all\s+|both\s+|exactly\s+|"
+                          r"otherwise\s+|essentially\s+)?(?:identical|the\s+same|equal|alike|similar|comparable|matched|"
+                          r"unchanged|fixed|constant|held\s+constant|different)\b", _I)
+
+
+def _noun_series(sentence: str, end: int, match: str) -> bool:
+    return bool(_SERIES_LEAD.search(match.rsplit(",", 1)[0])) and bool(_SERIES_TAIL.match(sentence, end))
+
+
 # "Own a piece of it, and you share in whatever it earns": an order's form used to explain, the English conditional ("if
 # you own a piece of it, you share ..."), when the object is a generic piece and the consequence a present fact. "Buy a
 # stake now, and you lock in the price" and "Buy a share, and you'll profit" still count (stand-in round 3, Phase 08).
@@ -1021,55 +1074,75 @@ def _in_quotes(sentence: str, start: int, end: int) -> bool:
     return any(m.start() <= start and end <= m.end() for m in _QUOTED.finditer(sentence))
 
 
-def check_output(text: str) -> List[Dict[str, Any]]:
+def check_output(text: str, previous: str = "") -> List[Dict[str, Any]]:
     """Every sentence in `text` that breaks the policy, with the rule it breaks.
 
     Each finding is {"rule", "sentence", "match", "why"}. A sentence appears once,
-    under the first rule it breaks, in RULES order."""
+    under the first rule it breaks, in RULES order.
+
+    `previous` is the sentence the reader got just before `text` on the same line. StreamGate passes it, because it
+    checks one sentence at a time; inside `text`, a sentence's previous one is the sentence before it on its line that
+    is not a finding (so the same as in the text the reader gets). It can only name the exercise that a share purchase
+    at the strike follows from (candidate 3's retest of 2026-11-22)."""
     findings = []
-    for whole in sentences(text):
-        s = _LEAD_LABEL.sub("", whole, count=1)
-        for rule in RULES:
-            hit = None
-            for rx, exempt in ([(rx, _OUT_EXEMPT.get((rule, i)) or _OUT_EXEMPT_LATE.get((rule, i)))
-                                for i, rx in enumerate(_OUT.get(rule, []))]
-                               + _SHAPES.get(rule, [])):
-                for m in rx.finditer(s):
-                    if _negated(s, m.start()) or _in_quotes(s, m.start(), m.end()):
-                        continue
-                    # a label may name two exemptions ("attributed+hypothetical", Phase 12's round 2)
-                    ex = set((exempt or "").split("+"))
-                    if "hypothetical" in ex and _hypothetical(s, m.start()):
-                        continue
-                    if "attributed" in ex and _ATTRIBUTED.search(s):
-                        continue
-                    if "mechanics" in ex and _MECHANICS.search(s):
-                        continue
-                    if "exercise_consequence" in ex and _exercise_consequence(s, m.start(), m.group(0)):
-                        continue
-                    if exempt == "lead_clause" and (_hypothetical(s, m.start()) or _lead_is_a_list(m.group(0))):
-                        continue
-                    if "self_future" in ex and (_milo_next_step(m.group(0)) or _asked(s, m.start())):
-                        continue
-                    if "asked" in ex and _asked(s, m.start()):
-                        continue
-                    if "reader_question" in ex and _reader_question(s, m.start(), m.group(0)):
-                        continue
-                    if "option_right" in ex and _option_right(s, m.start(), m.end()):
-                        continue
-                    if "payment" in ex and _payment(s, m.end(), m.group(0)):
-                        continue
-                    if "analysis_start" in ex and _analysis_start(s, m.end(), m.group(0)):
-                        continue
-                    if exempt == "generic_conditional" and _GENERIC_CONDITIONAL.search(s):
-                        continue
-                    hit = m
-                    break
+    # line by line, so the sentence before is known; these are the sentences sentences(text) finds
+    for n, line in enumerate(str(text or "").split("\n")):
+        prev = previous if n == 0 else ""
+        for whole in sentences(line):
+            lead = _LEAD_LABEL.match(whole)
+            s = whole[lead.end():] if lead else whole
+            # what the reader reads just before the checked words: a label read past, and the sentence before
+            context = (whole[:lead.end()] if lead else "") + " " + prev
+            found = None
+            for rule in RULES:
+                hit = None
+                for rx, exempt in ([(rx, _OUT_EXEMPT.get((rule, i)) or _OUT_EXEMPT_LATE.get((rule, i)))
+                                    for i, rx in enumerate(_OUT.get(rule, []))]
+                                   + _SHAPES.get(rule, [])):
+                    for m in rx.finditer(s):
+                        if _negated(s, m.start()) or _in_quotes(s, m.start(), m.end()):
+                            continue
+                        # a label may name two exemptions ("attributed+hypothetical", Phase 12's round 2)
+                        ex = set((exempt or "").split("+"))
+                        if "hypothetical" in ex and _hypothetical(s, m.start()):
+                            continue
+                        if "attributed" in ex and _ATTRIBUTED.search(s):
+                            continue
+                        if "mechanics" in ex and _MECHANICS.search(s):
+                            continue
+                        if "exercise_consequence" in ex and _exercise_consequence(s, m.start(), m.group(0), context):
+                            continue
+                        if "lead_clause" in ex and (_hypothetical(s, m.start()) or _lead_is_a_list(m.group(0))):
+                            continue
+                        if "noun_series" in ex and _noun_series(s, m.end(), m.group(0)):
+                            continue
+                        if "self_future" in ex and (_milo_next_step(m.group(0)) or _asked(s, m.start())):
+                            continue
+                        if "asked" in ex and _asked(s, m.start()):
+                            continue
+                        if "reader_question" in ex and _reader_question(s, m.start(), m.group(0)):
+                            continue
+                        if "option_right" in ex and _option_right(s, m.start(), m.end()):
+                            continue
+                        if "payment" in ex and _payment(s, m.end(), m.group(0)):
+                            continue
+                        if "analysis_start" in ex and _analysis_start(s, m.end(), m.group(0)):
+                            continue
+                        if "generic_conditional" in ex and _GENERIC_CONDITIONAL.search(s):
+                            continue
+                        if "case_label" in ex and _case_label(s, m.end()):
+                            continue
+                        hit = m
+                        break
+                    if hit:
+                        break
                 if hit:
+                    found = {"rule": rule, "sentence": whole, "match": hit.group(0), "why": RULES[rule]}
                     break
-            if hit:
-                findings.append({"rule": rule, "sentence": whole, "match": hit.group(0), "why": RULES[rule]})
-                break
+            if found:
+                findings.append(found)
+            else:
+                prev = whole
     return findings
 
 
@@ -1184,6 +1257,7 @@ class StreamGate:
         self._held = ""
         self._line_start = True
         self._sent_any = False
+        self._prev = ""           # the last sentence sent on the current line (check_output's `previous`)
         self.findings: List[Dict[str, Any]] = []
 
     def feed(self, text: str) -> str:
@@ -1203,9 +1277,14 @@ class StreamGate:
 
     def _check(self, piece: str) -> str:
         at_line_start, self._line_start = self._line_start, piece.endswith("\n")
-        found = check_output(piece)
+        if at_line_start:
+            self._prev = ""
+        found = check_output(piece, previous=self._prev)
         if not found:
             self._sent_any = self._sent_any or bool(piece.strip())
+            said = sentences(piece)
+            if said:
+                self._prev = said[-1]
             return piece
         self.findings.extend(found)
         newlines = "\n" * (len(piece) - len(piece.rstrip("\n")))
