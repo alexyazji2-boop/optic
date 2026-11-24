@@ -416,7 +416,7 @@ def test_the_migration_keeps_what_was_saved_before(tmp_path, monkeypatch):
     db.execute("INSERT INTO saved_research (id, user_id, title, symbol, content, research_type, created_at, updated_at) "
                "VALUES ('r1', 'u1', 'Is AAPL cheap?', 'AAPL', 'Is AAPL cheap?', 'pulse', '2026-10-02', '2026-10-02')")
     monkeypatch.setattr(db, "MIGRATIONS", every)
-    assert db.migrate() == [20] and 20 in db.applied()
+    assert db.migrate()[:1] == [20] and 20 in db.applied()   # and any later migration after it
     cols = {r["name"] for r in db.rows("PRAGMA table_info(saved_research)")}
     assert {"tickers", "ref", "summary", "payload", "item_key"} <= cols
     row = db.row("SELECT * FROM saved_research WHERE id = 'r1'")
@@ -491,7 +491,8 @@ def test_the_library_page_and_save_controls_fit_a_phone():
 
 def test_the_save_buttons_sit_where_the_handoff_asks():
     frame = (JS / "pages/dossier-frame.js").read_text()
-    assert "${watchButton(sym, { compact: sm })}${saveButton('company', keyOf('company', [sym]), { cls: s })}" in frame
+    # beside Watch, from Intermediate up on the Overview (the level matrix, 2026-11-09) and on every other tab
+    assert "${watchButton(sym, { compact: sm })}${mid ? saveButton('company', keyOf('company', [sym]), { cls: s }) : ''}" in frame
     cmp_ = (JS / "pages/compare.js").read_text()
     assert "saveButton('comparison', keyOf('comparison', result.tickers), { cls: '', label: 'Save comparison' })" in cmp_
     milo = (JS / "ui/milo.js").read_text()

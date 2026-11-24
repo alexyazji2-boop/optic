@@ -115,16 +115,27 @@ def _tracking_since() -> Optional[date]:
     return at.date() if at else None
 
 
+def owner_ids(users: Optional[List[Dict[str, Any]]] = None) -> set:
+    """The account ids of the owner's own accounts (ADMIN_EMAILS), verified or not, so the owner's testing does
+    not read as customers. One answer for this page and the three signals (app/usage.py), so the two cannot
+    disagree about who the owner is."""
+    owners = auth_admin.emails()
+    if not owners:
+        return set()
+    if users is None:
+        users = db.rows("SELECT id, email FROM users")
+    return {u["id"] for u in users if (u["email"] or "").lower() in owners}
+
+
 def overview(now: Optional[datetime] = None) -> Dict[str, Any]:
     now = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
     today = now.date()
-    owners = auth_admin.emails()
     users = db.rows(
         "SELECT u.id, u.email, u.email_verified, u.is_active, u.created_at, u.last_login_at, "
         "(SELECT MAX(s.last_used_at) FROM sessions s WHERE s.user_id = u.id) AS session_used_at "
         "FROM users u")
-    owner_ids = {u["id"] for u in users if (u["email"] or "").lower() in owners}
-    people = [u for u in users if u["id"] not in owner_ids]
+    owner_ids_ = owner_ids(users)
+    people = [u for u in users if u["id"] not in owner_ids_]
     ids = {u["id"] for u in people}
 
     days: Dict[str, List[date]] = {}
@@ -178,7 +189,7 @@ def overview(now: Optional[datetime] = None) -> Dict[str, Any]:
     owner_questions, guests_7d, askers_7d = 0, 0, set()
     for r in rows:
         at = _ts(r["at"])
-        if r["user_id"] in owner_ids:
+        if r["user_id"] in owner_ids_:
             owner_questions += 1
             continue
         k = by_kind.setdefault(r["kind"], {"kind": r["kind"], "label": KINDS.get(r["kind"], r["kind"]),
@@ -204,7 +215,7 @@ def overview(now: Optional[datetime] = None) -> Dict[str, Any]:
     return {
         "generated_at": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
         "tracking_since": since.isoformat() if since else None,
-        "owners_left_out": len(owner_ids),
+        "owners_left_out": len(owner_ids_),
         "accounts": {"total": len(people), "verified": sum(1 for u in people if u["email_verified"]),
                      "deactivated": sum(1 for u in people if not u["is_active"]),
                      "active_7_days": active_within(7), "active_30_days": active_within(30)},

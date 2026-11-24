@@ -279,3 +279,29 @@ Returning visitors see changes immediately: `index.html` is served
 `Cache-Control: no-cache`, so the browser revalidates instead of reusing a
 cached copy. See `tests/test_asset_cache.py` — this regressed once, and a
 stale-HTML bug presents as a deploy that appears to have done nothing.
+
+## One front end, and the usage signals (2026-11-09)
+
+**The new design (v2) is the only front end by default.** With nothing set, every public page address (`/`,
+`/v2/`, `/classic`, `/index.html`) serves v2 to everyone, whatever cookie a browser carries.
+
+**One setting turns Classic back on: `OPTIC_CLASSIC=on`, then restart.** With it on, everything works exactly
+as before this change: `OPTIC_DEFAULT_UI` and `OPTIC_V2_ACCESS` decide what `/` serves, and `/classic` is the
+classic app. Remove the setting (or set it to `off`) and restart to go back to v2 for everyone. Classic's code is
+kept, not deleted, so this is never more than a setting.
+
+How to see which one is live: `GET /api/health` returns
+`"frontend": {"active": "v2", "classic": false, "setting": "OPTIC_CLASSIC"}`, and the owner's Metrics page
+(`#/metrics`) says the same in words at the top.
+
+**The three signals.** From the first deploy of this change Optic records, in its own database and nowhere else:
+a company opened from Home, a question asked of Milo, and the first visit of each day, from which "came back
+within a week" is counted. Signed-out readers are counted by a random id their own browser makes and keeps
+(`optic.visitor.v1`); no question text, IP address or email is ever stored with an event. Raw counts are on the
+owner's Metrics page. Rows are kept 400 days, deleted by the same sweep that already removes expired sessions, and
+deleted with the account when someone deletes theirs. `OPTIC_USAGE_CAPTURE=off` stops recording;
+`/api/health` reports `"usage_capture"`.
+
+**Milo's provider timeout.** `ANTHROPIC_TIMEOUT_SECONDS` and `ANTHROPIC_MAX_RETRIES` are optional; unset, the
+Anthropic SDK's own timeout and five retries apply, as before. The test suite sets them low to play Anthropic
+timing out.

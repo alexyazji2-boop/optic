@@ -156,12 +156,15 @@ def test_full_screen_takes_the_window_and_gives_it_back():
     fit = re.search(r"fit: '([^']+)'", icons).group(1)
     assert expand == '<path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>' and fit != expand
     assert "enter: 'M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4'" in CLASSIC, "the classic button is the four corners too"
-    assert "${C.maxButton()}`);" in CH, "in the plot's own header, at its top right, as the classic chart has it (2026-10-19)"
+    # on the toolbar row, at its right end, icon-only (round-one corrections, 2026-11-10): at the plot's top right, as the
+    # classic chart had it, it sat over the plot area and the price scale
+    assert "symbol: D.sym, cls: 'btn-sm' })}${C.maxButton()}</span>`}" in CH and '<span class="ch-tacts">' in CH
+    assert 'class="btn btn-sm ch-maxbtn" data-v2-ch-max' in CC and "ch-pacts" not in CH
 
 
 def test_the_chrome_follows_the_house_rules():
     assert "var(--r-pill)" not in CHROME_CSS and "999px" not in CHROME_CSS, "no pill shapes"
-    for pressed in ('.cc-swatch[aria-pressed="true"]', '.ch-tool[data-v2-ch-max][aria-pressed="true"]'):
+    for pressed in ('.cc-swatch[aria-pressed="true"]', '.ch-maxbtn[aria-pressed="true"]'):
         rule = CSS[CSS.index(pressed):CSS.index("}", CSS.index(pressed))]
         assert "gold" not in rule, "the gold outline is the sidebar's alone"
     # sizes are the type scale's tokens since the design standard (2026-10-19), the smallest 12px

@@ -4,7 +4,16 @@ Two apps live side by side: the classic app (static/index.html and its
 siblings) and v2 (static/v2/). This module decides which one "/" serves and
 builds v2's page.
 
-Who gets what
+v2 is the only front end (2026-11-09)
+  ``OPTIC_CLASSIC`` is the one setting, ``off`` by default. Off, every public
+  page address serves v2 to everyone: "/", "/v2/", "/classic" and
+  "/index.html", whatever cookie a reader carries, and the two settings below
+  are not read. ``on`` turns Classic back on exactly as it was before this
+  change: the rules below apply again, unchanged. Classic's code is kept, not
+  deleted, so turning it back on is a setting and a restart. /api/health names
+  the active front end in both states.
+
+Who gets what while OPTIC_CLASSIC=on
   * ``OPTIC_DEFAULT_UI``: ``classic`` (the default) or ``v2``. What "/" serves
     when the reader has not chosen.
   * The ``optic_ui`` cookie (``classic`` or ``v2``), set by the "Try the new
@@ -49,12 +58,33 @@ V2_PREFIX = "/v2/"
 COOKIE = "optic_ui"
 
 
+CLASSIC_SETTING = "OPTIC_CLASSIC"
+_ON = ("1", "on", "true", "yes")
+
+
+def classic_on() -> bool:
+    """Whether Classic is turned back on. Anything but a clear yes is off, so a
+    typo leaves the public on v2 rather than on the old app."""
+    return (os.environ.get(CLASSIC_SETTING) or "").strip().lower() in _ON
+
+
+def active() -> str:
+    """The front end "/" serves a visitor with no cookie: what /api/health reports."""
+    if not classic_on():
+        return "v2"
+    return "v2" if default_ui() == "v2" and v2_access() == "all" else "classic"
+
+
 def default_ui() -> str:
+    if not classic_on():
+        return "v2"
     v = (os.environ.get("OPTIC_DEFAULT_UI") or "classic").strip().lower()
     return "v2" if v == "v2" else "classic"
 
 
 def v2_access() -> str:
+    if not classic_on():
+        return "all"
     raw = os.environ.get("OPTIC_V2_ACCESS")
     if raw is None or not raw.strip():
         return "owner"                      # fail closed: the preview, not the public
@@ -84,6 +114,8 @@ def v2_page_path(path: str) -> bool:
 
 def choose(cookie: Optional[str], is_owner: bool) -> str:
     """What "/" serves this reader: 'v2' or 'classic'."""
+    if not classic_on():
+        return "v2"                         # one front end: a stored "classic" cookie no longer chooses
     want = cookie if cookie in ("v2", "classic") else default_ui()
     if want == "v2" and not v2_allowed(is_owner):
         return "classic"
@@ -172,7 +204,9 @@ def v2_page(v2_dir: Path, classic_url: str = "/classic") -> str:
     head_add = f'<script type="importmap">{importmap}</script>{preload}<script type="application/json" id="v2-graph">{graph}</script><meta name="optic-build" content="{v2_build(v2_dir)}">'
     # the import map must come before the first module script
     html = html.replace('<script type="module"', head_add + '<script type="module"', 1)
-    html = html.replace("<html", f'<html data-classic="{classic_url}"', 1)
+    # With Classic off there is no classic app to offer: the page says so and v2 hides its links to it
+    attrs = f'data-classic="{classic_url}"' if classic_on() else 'data-classic-off="1"'
+    html = html.replace("<html", f"<html {attrs}", 1)
     return html
 
 

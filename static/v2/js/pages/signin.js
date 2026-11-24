@@ -86,7 +86,7 @@ export async function render(main, route, app) {
       const b = e.target.closest('[data-v2-pk-signin]'); b.disabled = true; b.textContent = 'Waiting for your device...';
       const remember = !!(($('input[name=remember]', main) || {}).checked);
       try { await passkey.signIn({ remember }); await done('in'); }
-      catch (x) { b.disabled = false; b.textContent = 'Sign in with a passkey'; if (!(x && (x.name === 'NotAllowedError' || x.name === 'AbortError'))) { const err = $('#si-err', main); if (err) err.textContent = fail(x, 'The passkey'); } }
+      catch (x) { b.disabled = false; b.textContent = 'Sign in with a passkey'; if (!(x && (x.name === 'NotAllowedError' || x.name === 'AbortError' || x.kind === 'unloading'))) { const err = $('#si-err', main); if (err) err.textContent = fail(x, 'The passkey'); } }
     }
   });
   main.addEventListener('submit', async (e) => {
@@ -116,6 +116,9 @@ export async function render(main, route, app) {
         toast('Password changed, and you are signed in.');
       }
     } catch (x) {
+      // the page is reloading or leaving with the request in flight: say nothing and let it finish (round-one
+      // corrections, 2026-11-10: "Could not reach Optic" on a first sign-in that the server never saw)
+      if (x && x.kind === 'unloading') return;
       if (err) err.textContent = fail(x, kind === 'up' ? 'Creating the account' : kind === 'forgot' ? 'The reset link' : kind === 'reset' ? 'The new password' : 'Sign in');
       btn.disabled = false;
       const bad = $('input[name=password]', f) || $('input', f); if (bad) bad.focus();

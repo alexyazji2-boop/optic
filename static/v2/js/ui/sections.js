@@ -62,7 +62,9 @@ function apply(root) {
     const title = s.dataset.secTitle, id = panelId(view, title), min = levelOf(opts.levels, title);
     if (!s.id) s.id = `sec-${slug(title)}`;
     if (s.dataset.secKey !== id) s.dataset.secKey = id;
-    const off = !!hidden[id], open = startsOpen(saved, id, min, level, openByDefault(opts.open, title));
+    // opts.folded(section): a page's own rule for what starts folded (the Overview on a phone at Advanced, hierarchy
+    // change 7); what the reader chose still wins
+    const off = !!hidden[id], open = startsOpen(saved, id, min, level, openByDefault(opts.open, title) && !(opts.folded && opts.folded(s)));
     if (s.hidden !== off) s.hidden = off;
     s.classList.toggle('is-folded', !open);
     let b = h.querySelector('.sec-fold');
@@ -91,19 +93,42 @@ const CHIP = {
 };
 export const chipLabel = (t) => CHIP[t] || (t.length > 28 ? `${t.slice(0, 27).trimEnd()}…` : t);
 
+// Expand all, Collapse all and the Panels chooser, drawn into a menu the page already has (opts.bulkIn, the Overview
+// header's More) instead of a row of their own: that row held nothing to its left and took 60px above the content at
+// Intermediate (visual hierarchy review, 2026-11-10, change 4, F7).
+function bulkMenu(menu, list) {
+  const sig = JSON.stringify(list.map((x) => [x.s.id, x.title, x.off]));
+  let g = menu.querySelector(':scope > .sec-menu');
+  if (!g || g.dataset.sig !== sig) {
+    const html = `<button type="button" data-sec-bulk="open">Expand all sections</button><button type="button" data-sec-bulk="close">Collapse all sections</button>
+      <details class="sec-panels"><summary>Choose sections${list.some((x) => x.off) ? ` <span class="ch-count">${list.filter((x) => x.off).length} off</span>` : ''}</summary><div class="sec-panels-in">
+        <p class="menu-help">Which sections this page shows. Kept in this browser.</p>
+        ${list.map((x) => `<label class="check"><input type="checkbox" data-sec-show="${esc(x.id)}" ${x.off ? '' : 'checked'}> <span>${esc(x.title)}</span></label>`).join('')}
+        <button type="button" class="btn btn-sm" data-sec-showall ${list.some((x) => x.off) ? '' : 'disabled'}>Show every section</button></div></details>`;
+    const open = g ? !!g.querySelector('details.sec-panels[open]') : false;
+    if (!g) { g = document.createElement('div'); g.className = 'sec-menu'; g.setAttribute('role', 'group'); g.setAttribute('aria-label', 'Sections of this page'); menu.append(g); }
+    g.innerHTML = html; g.dataset.sig = sig;
+    if (open) { const d = g.querySelector('details.sec-panels'); if (d) d.open = true; }
+  }
+  return g;
+}
+
 function bar(root, list, opts) {
   const shown = list.filter((x) => !x.off), strip = opts.strip !== false && shown.length >= (opts.min || 6), bulk = list.length >= 4;
   let nav = root.querySelector(':scope > .sec-index');
-  if (!strip && !bulk) { if (nav) nav.remove(); return; }
+  const menu = opts.bulkIn ? root.querySelector(opts.bulkIn) : null;
+  const inMenu = !!(menu && bulk);
+  if (menu) { const had = menu.querySelector(':scope > .sec-menu'); if (inMenu) bulkMenu(menu, list); else if (had) had.remove(); }
+  if (!strip && (!bulk || inMenu)) { if (nav) nav.remove(); return; }
   const sig = JSON.stringify([strip, list.map((x) => [x.s.id, x.title, x.off])]);
   if (!nav || nav.dataset.sig !== sig) {
     const open = nav ? !!nav.querySelector('details.sec-panels[open]') : false;
     const html = `${strip ? `<div class="sec-list">${shown.map((x) => `<button type="button" class="sec-chip" data-sec-jump="${esc(x.s.id)}" title="${esc(x.title)}">${esc(chipLabel(x.title))}</button>`).join('')}</div>` : ''}
-      <div class="sec-bulk"><button type="button" class="btn btn-sm btn-quiet" data-sec-bulk="open">Expand all</button><button type="button" class="btn btn-sm btn-quiet" data-sec-bulk="close">Collapse all</button>
+      ${inMenu ? '' : `<div class="sec-bulk"><button type="button" class="btn btn-sm btn-quiet" data-sec-bulk="open">Expand all</button><button type="button" class="btn btn-sm btn-quiet" data-sec-bulk="close">Collapse all</button>
       <details class="menu sec-panels"><summary class="btn btn-sm btn-quiet">Panels${list.some((x) => x.off) ? ` <span class="ch-count">${list.filter((x) => x.off).length} off</span>` : ''}</summary><div class="menu-body menu-end">
         <p class="menu-help">Which sections this page shows. Kept in this browser.</p>
         ${list.map((x) => `<label class="check"><input type="checkbox" data-sec-show="${esc(x.id)}" ${x.off ? '' : 'checked'}> <span>${esc(x.title)}</span></label>`).join('')}
-        <button type="button" class="btn btn-sm" data-sec-showall ${list.some((x) => x.off) ? '' : 'disabled'}>Show every section</button></div></details></div>`;
+        <button type="button" class="btn btn-sm" data-sec-showall ${list.some((x) => x.off) ? '' : 'disabled'}>Show every section</button></div></details></div>`}`;
     if (!nav) {
       nav = document.createElement(strip ? 'nav' : 'div');
       const after = root.querySelector(':scope > .dstick') || root.querySelector(':scope > header');
@@ -111,13 +136,16 @@ function bar(root, list, opts) {
     } else if ((nav.tagName === 'NAV') !== strip) {
       const n2 = document.createElement(strip ? 'nav' : 'div'); nav.replaceWith(n2); nav = n2;
     }
-    nav.className = `sec-index${strip ? '' : ' sec-only-bulk'}`;
+    // opts.float: the strip takes no room until the reader has scrolled past the page's head, then shows as one row of
+    // 13px links under the sticky header (hierarchy change 4: at Advanced it was a second tab row above the content)
+    nav.className = `sec-index${strip ? '' : ' sec-only-bulk'}${strip && opts.float ? ' is-float' : ''}`;
     if (strip) nav.setAttribute('aria-label', 'Jump to a section'); else { nav.setAttribute('role', 'group'); nav.setAttribute('aria-label', 'Sections of this page'); }
     nav.innerHTML = html; nav.dataset.sig = sig;
     if (open) { const d = nav.querySelector('details.sec-panels'); if (d) d.open = true; }
   }
   const any = shown.some((x) => !x.open), all = shown.some((x) => x.open);
-  const o = nav.querySelector('[data-sec-bulk="open"]'), cl = nav.querySelector('[data-sec-bulk="close"]');
+  const host = inMenu ? menu : nav;
+  const o = host.querySelector('[data-sec-bulk="open"]'), cl = host.querySelector('[data-sec-bulk="close"]');
   if (o && o.disabled !== !any) o.disabled = !any;
   if (cl && cl.disabled !== !all) cl.disabled = !all;
   current(root);
@@ -179,8 +207,15 @@ function onChange(e) {
 
 /* ---------------- the section on screen ---------------- */
 const px = (name) => parseFloat(getComputedStyle(document.documentElement).getPropertyValue(name)) || 0;
+/** A floating strip shows once its sticky place is reached, which is once the page's head has scrolled under. */
+function past(nav) {
+  if (!nav.classList.contains('is-float')) return;
+  const stuck = getComputedStyle(nav).position === 'sticky' && nav.getBoundingClientRect().top <= px('--topbar-h') + px('--dstick-h') + 1;
+  if (nav.classList.contains('is-past') !== stuck) nav.classList.toggle('is-past', stuck);
+}
 function current(root) {
   const nav = root.querySelector(':scope > .sec-index:not(.sec-only-bulk)'); if (!nav) return;
+  past(nav);
   const list = find(root).filter(({ s }) => !s.hidden), stack = px('--topbar-h') + px('--dstick-h') + px('--secidx-h');
   const k = currentOf(list.map(({ s }) => s.getBoundingClientRect().top), stack), id = list[k] && list[k].s.id;
   const strip = nav.querySelector('.sec-list');
@@ -197,7 +232,9 @@ let ro = null;
 function measure(root) {
   const nav = root.querySelector(':scope > .sec-index:not(.sec-only-bulk)');
   if (ro && nav && nav.dataset.ro !== '1') { nav.dataset.ro = '1'; ro.observe(nav); }   // a strip made after the first paint
-  const h = nav && getComputedStyle(nav).position === 'sticky' ? nav.offsetHeight : 0;
+  // a floating strip is 0px tall itself; what it covers when shown is its list's height
+  const list = nav && nav.classList.contains('is-float') ? nav.querySelector('.sec-list') : nav;
+  const h = nav && getComputedStyle(nav).position === 'sticky' && list ? list.offsetHeight : 0;
   document.documentElement.style.setProperty('--secidx-h', `${h}px`);
 }
 

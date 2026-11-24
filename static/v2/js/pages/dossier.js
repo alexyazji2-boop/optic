@@ -26,18 +26,24 @@ import * as store from '../core/store.js';
 import { sections } from '../ui/sections.js';
 import { num, signed, dir, money, compact, clean, longDate, fullDate, shortDate, isNum, score100, plural } from '../core/format.js';
 import * as RP from '../core/reports.js';
-import { lineChart, mountCharts } from '../ui/chart.js';
+import { lineChart, mountCharts, spanTone } from '../ui/chart.js';
+import { groupedBars } from '../ui/bars.js';
+import { donut, pairBars, ARROW } from '../ui/glance.js';
 import { skeleton, empty, failed, staleLine, how } from '../ui/states.js';
 import { icon } from '../ui/icons.js';
-import { header as frameHeader, tabs as frameTabs, isFund, fresher, livePrice, advToggle, quoteCtx } from './dossier-frame.js';
+import { header as frameHeader, tabs as frameTabs, isFund, fresher, livePrice, quoteCtx } from './dossier-frame.js';
+import { levelControl } from '../ui/levelcontrol.js';
+import { miloPrompt, press as askPrompt, resume as resumePrompt, companyQuestion } from '../ui/miloprompt.js';
+import { expansions, moreList, moreButton, lessButton, revealOpened } from '../ui/showmore.js';
+
 import * as delays from '../core/delays.js';
-import { simpleFacts, simpleSection } from './overview-simple.js';
+import { simpleFacts, simpleSection, simpleAnalysis, plainText } from './overview-simple.js';
 import { levelLabel } from '../ui/levelslider.js';
 import { button as miloButton, provideContext } from '../ui/milo.js';
 import * as drawer from '../ui/drawer.js';
 import { hrefFor } from '../nav.js';
 import { kindOf, learn } from '../core/instrument.js';
-import { mountThesis, disposeThesis, thesisContext } from './thesis.js';
+import { mountThesis, disposeThesis, thesisContext, setThesisEdit } from './thesis.js';
 import { mountTimeline, startTimeline, disposeTimeline } from '../ui/timeline.js';
 import * as OR from './overview-research.js';
 import * as prefs from '../core/prefs.js';
@@ -47,12 +53,27 @@ import { convictionPhrase } from '../core/research-words.js';
 import * as FIG from '../core/figures.js';
 let lp = null;   // the header's price refresh (dossier-frame livePrice), stopped in dispose()
 let unPrefs = null;   // the analysis view's and the knowledge level's subscription, ended in dispose()
-let advMoved = false;   // set when the view was swapped, so the next paint fades the new one in and keeps its place
+let advMoved = false;   // set when the level swapped the view, so the next paint fades the new one in and keeps its place
+// Show more no longer swaps the view: each section of the advanced analysis opens on its own below the simple one
+// (round-one corrections, 2026-11-10), and its handler scrolls there smoothly (ui/showmore.js revealOpened).
 let VISIT = 0;   // each render is a visit; a response is drawn only into the visit that asked for it
 
 let live = true;
 let D = {};
 let range = '1Y';
+const OPEN = expansions();   // panels opened past the level by Show more, for this visit (ui/showmore.js)
+
+/** The Overview's Milo prompt: "Why is Apple moving today?", or the ticker when no name is known (a fund, an index,
+ *  a name the feeds cannot give), with the quote's figures as the page shows them and the company in focus. */
+function stockAsk(sym) {
+  const q = D.quote || {}, name = q.name || (D.session && (D.session.name || (D.session.profile || {}).name)) || '';
+  const figures = [];
+  if (isNum(q.price)) figures.push(['Price', num(q.price)]);
+  if (isNum(q.change_pct)) figures.push(['Change today', `${signed(q.change, 2, '')} (${signed(q.change_pct)})`]);
+  if (isNum(q.volume)) figures.push(['Volume', compact(q.volume)]);
+  if (isNum(q.market_cap)) figures.push(['Market value', `$${compact(q.market_cap)}`]);
+  return { question: companyQuestion(sym, name), about: `${sym} Overview`, symbol: sym, figures: { name: `${sym} quote`, figures, notes: [] }, screen: 'overview' };
+}
 // Sessions of change each range spans. The chart draws one more close than that, so its first point is the
 // close the one-year answer measures from: the chart started a session later and read 33.7% against the
 // answer's 31.5% (pitch audit, 2026-10-22).
@@ -81,17 +102,23 @@ function implied() {
 }
 function chartBlock(sym) {
   const pts = series();
-  const head = (bar) => html`<div class="section-head"><div><h2 class="t-h2" id="py-h">${RANGE_TITLE[range]}</h2></div>${bar || ''}</div>`;
+  // the chart's own one-line reading is its title, in the heading at 18px (hierarchy change 5: it sat under the range
+  // buttons at 16px, so the chart had a period for a heading and no title)
+  const head = (bar, title) => html`<div class="section-head"><div><h2 class="t-h2" id="py-h">${RANGE_TITLE[range]}</h2>${title ? html`<p class="py-title">${title}</p>` : ''}</div>${bar || ''}</div>`;
   if (!D.ticker) return html`${head()}<div class="chart-slot">${skeleton('chart', 1, 'Loading the price history')}</div>`;
   if (pts.length < 20) return html`${head()}${empty('No price history to draw', 'The quote above is current; the chart returns when the history does.')}`;
   const im = implied();
   const shown = windowOf(pts, range), last = pts[pts.length - 1];
   const up = ((((D.ticker || {}).company || {}).earnings_history || {}).upcoming || [])[0] || {};
   const next = String(((D.earnings || {}).next_report || {}).date || up.date || '').slice(0, 10);
-  return html`${head(html`<div class="seg" role="group" aria-label="Chart range">${Object.keys(RANGES).map((r) => html`<button type="button" data-v2-range="${r}" aria-pressed="${r === range}">${r}</button>`)}</div>`)}
-    <p class="py-title">${OR.chartTitle(sym, shown.map((p) => p.c), OR.tradesDaily(pts.map((p) => p.d)) ? { year: range === '1Y' && OR.windowStart(pts.map((p) => p.d), RANGES['1Y']).full } : {})}</p>
-    <p class="section-sub">${OR.chartSource(D.ticker, last.d, next)}${im ? html` The gold cone is the ±${num(im.pct)}% range options price through the ${shortDate(im.expiry)} expiry.` : ''}</p>
+  // The visual update (2026-11-11, change 9): the line green or red by the span it draws, its start dashed, and the
+  // four-line caption one line under it; the period's finding is the page's lead sentence, and the marks stay with
+  // their table below. The delay is the header's and the next report is the Next report figure's.
+  const tone = spanTone(shown.map((p) => p.c)), src = (D.ticker || {}).data_source === 'tradier' ? 'Tradier and Yahoo Finance' : 'Yahoo Finance';
+  const toneWords = tone === 'up' ? 'Green: ends above its start (dashed).' : tone === 'down' ? 'Red: ends below its start (dashed).' : 'Ends at its start (dashed).';
+  return html`${head(html`<div class="seg" role="group" aria-label="Chart range">${Object.keys(RANGES).map((r) => html`<button type="button" data-v2-range="${r}" aria-pressed="${r === range}">${r}</button>`)}</div>`, '')}
     <div class="chart-slot" data-chart="price"></div>
+    <p class="dchart-cap">Daily closes through ${shortDate(last.d)}, ${src}. ${toneWords}${im ? html` <span class="dchart-cone">Gold: the ±${num(im.pct)}% range options price through ${shortDate(im.expiry)}.</span>` : ''}</p>
     ${OR.marksFold(chartEvents(shown))}
     ${D.freshText ? html`<p class="asof">${D.freshText}</p>` : ''}`;
 }
@@ -101,7 +128,7 @@ function mountChart(main, sym) {
   const im = implied();
   const evs = chartEvents(pts);
   mountCharts(main, { price: (w) => lineChart(pts, {
-    w, h: Math.round(Math.max(220, Math.min(340, w * 0.3))), area: true, label: `${sym} closing price`,
+    w, h: Math.round(Math.max(220, Math.min(340, w * 0.3))), area: true, tone: 'span', base: true, label: `${sym} closing price`,
     events: evs, monthStep: range === '1Y' ? 3 : 1, pad: { t: 26, r: 52, b: 24, l: 0 },
     future: im ? im.sessions : 0, cone: im ? { lo: im.lo, hi: im.hi, pct: im.pct, expiry: im.expiry, from: (D.quote || {}).price } : null, focusEnd: true,
     onEvent: (iso, el) => {
@@ -290,27 +317,47 @@ export function revenueLineFor(s) {
   const base = c.reconciles ? c.total : c.sum, top = c.rows.slice(0, 2).map((r) => `${r.label}, ${num((r.v / base) * 100, 0)}%`);
   return `${top.join('; ')} of revenue in ${PER.inText(PER.segmentPeriod(s, ends[k], true))}, ${t.axis_label.toLowerCase()}.`;
 }
+/** The revenue mix as a donut (visual update, 2026-11-11, change 11): the same product breakdown, year and reconciliation
+ *  as revenueLineFor's sentence, drawn only when its shares are of a total the filings report for that year. */
+function revenueMix() {
+  const s = D.segments;
+  if (!s || !s.available) return null;
+  const tb = PER.segmentTables(s).filter((x) => x.metric === 'revenue' && ((x.annual || {}).ends || []).length).sort((a, b) => (a.axis === 'product' ? -1 : 1) - (b.axis === 'product' ? -1 : 1))[0];
+  if (!tb) return null;
+  const ends = tb.annual.ends, rows = tb.annual.rows, k = ends.map((_, i) => rows.some((r) => isNum(r.values[i]))).lastIndexOf(true);
+  if (k < 0) return null;
+  const tot = PER.segmentTotal(tb, k, true);
+  const c = FV.composition(rows.map((r) => clean(r.member)), rows.map((r) => r.values[k]), tot ? tot.value : null);
+  if (c.rows.length < 2 || !c.canShare) return null;
+  const base = c.reconciles ? c.total : c.sum, per = PER.segmentPeriod(s, ends[k], true), yr = (per && per.short) || '';
+  const top = c.rows.slice(0, 4), other = c.rows.slice(4).reduce((a, r) => a + r.v, 0);
+  const parts = [...top.map((r) => ({ label: r.label, v: r.v })), ...(other > 0 ? [{ label: 'Other', v: other }] : [])];
+  const axis = String(tb.axis_label || 'by part').toLowerCase();
+  return { parts, center: `$${compact(base)}`, sub: yr, words: `Revenue ${axis}, ${PER.inText(per)}: ${parts.map((x) => `${x.label} ${num((x.v / base) * 100, 0)}%`).join(', ')}.`,
+    caption: `${axis.charAt(0).toUpperCase()}${axis.slice(1)}, from its filings.` };
+}
 function about(sym) {
   const t = D.ticker || {}, q = D.quote || {}, prof = (D.session || {}).profile || {};
   const news = t.news || {}, name = q.name || prof.name || sym, fund = isFundHere(sym);
   const summary = clean(prof.summary || '').replace(/^The Company\b/, name);
   const lead = firstSentences(summary);
-  const rev = fund ? '' : revenueLine();
+  const mix = fund ? null : revenueMix(), rev = fund || mix ? '' : revenueLine();
   const ses = ((D.session || {}).session) || {};
   const price = isNum(q.price) ? html`${money(q.price)}${isNum(q.change_pct) ? html`, <span class="${dir(q.change_pct)}">${signed(q.change_pct)}</span> ${ses.is_regular ? 'today' : 'at the last close'}` : ''}<small>US dollars. ${delays.label(q, quoteCtx(D))}</small>` : '';
   const items = [
     ...(summary && summary.length > lead.length + 20 ? [[`${fund ? 'What it is' : 'What it does'}, in full`, html`<p>${summary}</p>${prof.summary_source && prof.summary_source.form_name ? html`<p class="asof">From its ${prof.summary_source.form_name}${prof.summary_source.filed ? `, filed ${fullDate(prof.summary_source.filed)}` : ''}.</p>` : ''}`, '']] : []),
     ...((news.articles || []).length ? [['Latest headlines', html`<ul class="plain">${news.articles.slice(0, 6).map((a) => html`<li><a href="${a.url}" target="_blank" rel="noopener">${clean(a.title)}</a> <span class="t-muted">${a.publisher}, published ${a.age_words || ''}${a.tone && (a.keywords || []).length ? `, ${a.tone} wording` : ''}</span></li>`)}</ul><a class="textlink" href="${hrefFor('news', sym)}">All headlines on News ${icon('out')}</a>`, news.overall_tone || '']] : []),
   ];
-  if (!lead && !items.length && !price) return '';
+  // the share price is the header's, at the display size with its arrow (visual update, 2026-11-11, change 9)
+  if (!lead && !items.length && !mix && !price) return '';
   return html`<section class="section about" aria-labelledby="ab-h"><h2 class="t-h2" id="ab-h">${fund ? `What ${name} is` : `What ${name} does`}</h2>
     ${lead ? html`<p class="about-lead">${lead}</p>` : ''}
     <dl class="about-kv">
       ${prof.industry || prof.sector || prof.category ? html`<div><dt>${fund ? 'Kind of fund' : 'Industry'}</dt><dd>${fund ? prof.category || 'Fund' : [prof.industry, prof.sector].filter(Boolean).join(', ')}</dd></div>` : ''}
       ${rev ? html`<div><dt>Where its revenue comes from</dt><dd>${rev}</dd></div>` : ''}
-      ${price ? html`<div><dt>Share price</dt><dd>${price}</dd></div>` : ''}
-      ${isNum(q.market_cap) && !fund ? html`<div><dt>${term('market cap', 'Market value')}</dt><dd>$${compact(q.market_cap)}<small>all its shares at today's price</small></dd></div>` : ''}
+      ${isNum(q.market_cap) && !fund ? html`<div><dt>${term('market cap', 'Market value')}</dt><dd>$${compact(q.market_cap)}</dd></div>` : ''}
     </dl>
+    ${mix ? html`${donut(mix.parts, { center: mix.center, sub: mix.sub, label: mix.words })}<p class="asof">${mix.caption}</p>` : ''}
     ${items.length ? html`<div class="more">${items.map(([t1, b, hint]) => html`<details><summary>${t1}<span>${hint ? html`<small>${hint}</small>` : ''}${icon('chev')}</span></summary><div class="inner">${b}</div></details>`)}</div>` : ''}</section>`;
 }
 
@@ -355,30 +402,82 @@ function simpleView(sym, c) {
   D.simpleKey = quoteKey();
   return simpleSection(F, level, { label });
 }
+/** The one sentence lifted to the top of the page (visual hierarchy review, 2026-11-10, change 5): the simple analysis's
+ *  first line ("What's happening?") at Beginner and Intermediate, the "Taken together" synthesis at Advanced. Both
+ *  are on the page already, from the same figures; nothing new is said. The simple analysis sat about 1,400px down, so
+ *  the first screen had a figure and no finding (directive 04's thirty seconds). Null until the figures arrive. */
+function leadLine(sym, c, level) {
+  if (level === 'advanced') { const s = synthesisLine(); if (s) return s; }
+  if (!D.ticker || D.session === undefined || D.longterm === undefined || D.earnings === undefined) return null;
+  const F = simpleFacts({ sym, kind: kindOf(sym, D), t: D.ticker, lt: D.longterm, quote: D.quote, session: D.session, earnings: D.earnings, price: c.price, f: c.f, today: c.today });
+  const first = ((simpleAnalysis(F, prefs.knowledge())[0] || [])[1] || [])[0];
+  return first ? plainText(first, F) : null;
+}
+const sayBlock = (t) => html`<p class="ov-say${t ? '' : ' is-loading'}" data-v2-ov-say>${t || ''}</p>`;
 const quoteKey = () => JSON.stringify([D.quote && D.quote.price, D.quote && D.quote.change_pct, D.quote && D.quote.delayed_minutes, !!(((D.session || {}).session) || {}).is_regular]);
 /** The header's price refreshes every 20 seconds (dossier-frame livePrice). The simple analysis says the same day's
  *  move and the same last trade, so when the quote it was written from has moved on it is redrawn in place: the
  *  section alone, not the page, so the chart and the reader's place are left as they are. */
 function refreshSimple(main, sym) {
-  if (prefs.advancedOn() || quoteKey() === D.simpleKey) return;
-  const sec = $('#ov-analysis > .ov-simple', main); if (!sec || sec.hasAttribute('aria-busy')) return;
+  if (prefs.level() === 'advanced' || quoteKey() === D.simpleKey) return;
+  const sec = $('.ov-simple', main); if (!sec || sec.hasAttribute('aria-busy')) return;
   const c = OR.context({ sym, t: D.ticker || null, fw: D.fwRaw, fwError: D.fwNetError, lt: D.longterm || null, stars: (D.fairValue || {}).stars, fund: isFundHere(sym), advanced: false, phase: phase() });
   const tmp = document.createElement('div'); draw(tmp, simpleView(sym, c));
   if (tmp.firstElementChild) sec.replaceWith(tmp.firstElementChild);
+  const say = $('[data-v2-ov-say]', main), t = leadLine(sym, c, prefs.level());
+  if (say && t && say.textContent !== t) say.textContent = t;
 }
 function advancedView(sym, c, fund) {
-  return html`${fund ? (D.fwError && D.fvError && D.earnError ? failed('The four answers', D.fwError, { retry: 'dossier' }) : answers(sym)) : OR.fourQuestions(c)}${fund ? OR.fundRisk(sym, c.f) : ''}
+  return html`${fund ? fourAnswers(sym) : OR.fourQuestions(c)}${fund ? OR.fundRisk(sym, c.f) : ''}
     ${OR.scoreSection(c)}${fund ? '' : OR.keyStats(c)}${OR.casesSection(c)}
     ${fund ? fundRecord(sym) : ''}${combined()}${OR.opticRead(c)}${digest(sym)}${fund ? '' : html`<div data-tc-slot></div>`}${OR.nextSection(c)}${OR.restSection(c)}${D.ticker ? more(sym) : ''}${OR.methodSection(c)}`;
 }
+const fourAnswers = (sym) => (D.fwError && D.fvError && D.earnError ? failed('The four answers', D.fwError, { retry: 'dossier' }) : answers(sym));
+/** The advanced analysis's sections, each with its own Show more below Advanced, in the order Advanced shows them.
+ *  One stub opened all of them as one block (about ten sections), which made "Each opens on its own" untrue of the
+ *  biggest one (round-one corrections, 2026-11-10). The bull and bear case and the thesis check have stubs of their
+ *  own already. A section with nothing to show (no digest, a coin's filings) has no stub, as on Home. The ids are
+ *  stable: the journeys and the focus moves name them. */
+function advParts(sym, c, fund) {
+  const parts = [
+    ['adv:questions', fund ? 'Four questions, answered' : 'Four questions, answered separately',
+      fund ? 'What it is, how its price has moved, what its holdings cost and what it pays.' : 'The business, the share price, what it costs and the next report, each answered on its own.',
+      fund ? html`${fourAnswers(sym)}${OR.fundRisk(sym, c.f)}` : OR.fourQuestions(c)],
+    ['adv:score', 'Optic Score', 'The short-term and long-term scores, with the inputs behind each.', OR.scoreSection(c)],
+    ...(fund ? [] : [['adv:stats', 'Key statistics', 'Every key figure the feed has for the company.', OR.keyStats(c)]]),
+    ...(fund ? [['adv:record', 'The long-term record', 'Returns over one, three, five and ten years.', fundRecord(sym)]] : []),
+    ['adv:combined', 'Taken together', "Optic's combined long-term reading of the business, its price and its value.", combined()],
+    ['adv:read', "Optic's read", 'The short-term signal score and how its inputs scored.', OR.opticRead(c)],
+    ['adv:changed', 'What changed lately', 'What moved in the latest session and the headlines behind it.', digest(sym)],
+    ['adv:next', 'What should I look at next?', 'Dates coming up and the next things to check.', OR.nextSection(c)],
+    ['adv:rest', 'The rest of this ticker', "One reading from each of Optic's other tabs for it.", OR.restSection(c)],
+    ['adv:filings', fund ? 'Key figures and filings' : 'Recent SEC filings', fund ? "The fund's key figures and its latest filings." : 'The latest filings, with links to each.', D.ticker ? more(sym) : ''],
+    ['adv:method', 'How this page is built', 'Where the figures come from and the rules that word them.', OR.methodSection(c)],
+  ];
+  return parts.filter((x) => x[3] !== '').map(([id, title, blurb, body]) => ({ id, title, blurb, body }));
+}
+/** What Show more opened, with its Show less under it. */
+const opened = (id, title, body) => html`<div data-v2-ov-panel="${id}">${body}<p class="sm-less">${lessButton(id, title)}</p></div>`;
+
 // the sticky stack a section scrolls under: the top bar, the Dossier header and the jump strip (ui/sections.js). The
 // strip is measured itself: it comes and goes with the view (the advanced one has enough sections for it), and its
 // height variable is only updated a frame later.
 const cssPx = (name) => parseFloat(getComputedStyle(document.documentElement).getPropertyValue(name)) || 0;
 function stack(main) {
   const nav = main.querySelector(':scope > .sec-index:not(.sec-only-bulk)');
-  return cssPx('--topbar-h') + cssPx('--dstick-h') + (nav && getComputedStyle(nav).position === 'sticky' ? nav.offsetHeight : 0);
+  return cssPx('--topbar-h') + cssPx('--dstick-h') + cssPx('--secidx-h') * (nav && getComputedStyle(nav).position === 'sticky' ? 1 : 0);
 }
+
+// On a phone at Advanced the sections after the four questions start folded, so the page is a list of headings to
+// open (visual hierarchy review, 2026-11-10, change 7, F11: the page was 27,482px on a phone at Advanced). The about
+// block, the chart and the four questions stay open; a section the reader opened stays open (ui/sections.js).
+const phoneAdv = () => prefs.level() === 'advanced' && matchMedia('(max-width: 640px)').matches;
+const phoneFold = (s) => {
+  if (!phoneAdv()) return false;
+  if (s.matches('.about, .dchart')) return false;
+  const an = s.closest('#ov-analysis');
+  return !(an && s === an.querySelector(':scope > section.section'));
+};
 
 // Investigate this company (Handoff 10): the way into the checklist, after the analysis it goes deeper than. It opens
 // the plan; nothing runs and nothing is spent until the reader starts it there.
@@ -386,14 +485,141 @@ const investigateEntry = (sym) => html`<section class="section gi-entry" aria-la
   <p class="section-sub">Six steps, each one Milo answer from figures Optic has already read, with their sources: what it does, financial health, segments, peers, recent events, and risks to check. You choose the steps, and see how much of your Milo allowance they use, before anything runs.</p>
   <a class="btn" href="#/${encodeURIComponent(sym)}/investigate">See the steps</a></section>`;
 
+/* ---------------- the figures (the visual update, 2026-11-11, changes 10 to 12) ----------------
+ * "Why does it matter?" as four small figures, each with one line of words: revenue by year, net margin by year, the
+ * P/E against its usual and the next report; the revenue mix beside what the company does; estimates against results;
+ * and at Intermediate and Advanced the day after each report, who owns it and the bull and bear lines. Every value is
+ * one the page already reads (/api/ticker, /api/longterm, /api/fair-value, /api/earnings, /api/segments); a series
+ * that did not come back says so where its figure would be. The words the simple analysis said are one row away in
+ * More, under its own name. A fund, an index or a coin has no statements to draw, so it keeps the simple analysis. */
+const KICK = { rev: 'Why does it matter?', margin: 'How much it keeps', pe: 'What it costs', next: 'What else?' };
+const say3 = (level, b, i) => (level === 'beginner' ? b : i);
+// a company, or a symbol not yet known to be anything else (the session's profile may not have answered): a fund, an
+// index or a coin keeps the simple analysis in words
+const companyLike = (sym) => !['fund', 'index', 'crypto'].includes(kindOf(sym, D));
+function annual() {
+  const t = D.ticker, fn = ((t || {}).company || {}).financials || {};
+  if (!fn.available) return [];
+  const desc = PER.statementPeriods(t, 'annual'), a = fn.annual || {};
+  // the company's own name for each year ("FY26") where the filings give one, else the year its column ends, never a
+  // name guessed from a date (core/periods.js)
+  return desc.map((d, i) => ({ x: d.short || String(d.end || '').slice(0, 4), title: PER.inText(d), rev: (a.revenue || [])[i], ni: (a.net_income || [])[i] }))
+    .filter((r) => r.x && isNum(r.rev) && r.rev > 0).slice(0, 4).reverse();
+}
+function surpriseRows() {
+  const s = (D.earnings || {}).surprise || {};
+  return (s.rows || []).filter((r) => isNum(r.eps_reported) || isNum(r.eps_estimate)).slice(0, 8).reverse();
+}
+const qGroups = (rows) => rows.map((r, i) => { const [q, fy] = String(r.fiscal || '').split(' '); return { x: q || shortDate(r.date), sub: fy && (q === 'Q1' || i === 0) ? fy : '', title: r.fiscal || fullDate(r.date) }; });
+const figCard = (k, title, body, line) => html`<section class="ov-fig" aria-labelledby="of-${k}"><p class="ov-fig-k">${KICK[k]}</p><h3 class="ov-fig-h" id="of-${k}">${title}</h3>${body}${line ? html`<p class="ov-fig-c">${line}</p>` : ''}</section>`;
+const gone = (what) => html`<p class="ov-fig-none">${what}</p>`;
+function figRevenue(F, level) {
+  const rows = annual();
+  if (rows.length < 2) return figCard('rev', 'Revenue', gone(D.tickerError ? 'The statements did not load.' : 'No yearly revenue came back for it.'), '');
+  const g = F.rev;
+  const title = isNum(g) ? `Revenue ${g >= 1 ? 'grew' : g <= -1 ? 'fell' : 'was flat'}${Math.abs(g) >= 1 ? ` ${num(Math.abs(g), 0)}%` : ''}` : 'Revenue';
+  return figCard('rev', title, html`<div class="chart-slot ov-fig-chart" data-chart="of-rev"></div>`,
+    say3(level, 'By fiscal year. Revenue is the money it makes from sales.', F.fyEnd ? `${rows[rows.length - 1].x} to ${shortDate(F.fyEnd)}, ${String(F.fyEnd).slice(0, 4)}.` : 'By fiscal year.'));
+}
+function figMargin(F, level) {
+  const rows = annual().filter((r) => isNum(r.ni));
+  if (rows.length < 2) return figCard('margin', 'Net margin', gone('No yearly profit came back for it.'), '');
+  const last = rows[rows.length - 1], m = (last.ni / last.rev) * 100;
+  return figCard('margin', `Net margin ${F.netFig ? F.netFig.text : `${num(m, 1)}%`}`, html`<div class="chart-slot ov-fig-chart" data-chart="of-margin"></div>`,
+    say3(level, m >= 0 ? 'Profit kept from each sales dollar.' : 'It lost money on each sales dollar.', isNum(F.ni) ? `Net income ${F.ni >= 1 ? 'rose' : F.ni <= -1 ? 'fell' : 'was flat'} ${num(Math.abs(F.ni), 1)}%.` : 'Net income over revenue, each year.'));
+}
+function figPe(F, level) {
+  const v = OR.valuationRead(D.longterm);
+  if (!v) return figCard('pe', 'P/E', isNum(F.pe) ? html`<p class="ov-fig-big">${num(F.pe, 1)}×</p>` : gone(F.losing ? 'No P/E: it is losing money.' : 'No P/E history came back for it.'), isNum(F.pe) ? 'No record of its usual P/E to compare with.' : '');
+  const word = v.tone === 'bad' ? 'above' : v.tone === 'good' ? 'below' : 'near';
+  return figCard('pe', `P/E ${word} its usual`, pairBars([{ label: 'Today', v: v.cur, text: `${num(v.cur, 1)}×`, cls: 'gold' }, { label: `Its ${v.years}-year median`, v: v.med, text: `${num(v.med, 1)}×`, cls: 'mute' }], { label: `The P/E today, ${num(v.cur, 1)}, against its ${v.years}-year median, ${num(v.med, 1)}` }),
+    say3(level, 'A higher P/E means more good news is already expected.', `${num(Math.abs(v.prem), 0)}% ${v.prem >= 0 ? 'above' : 'below'} its ${v.years}-year median.`));
+}
+function figNext(F) {
+  const st = ((D.fairValue || {}).stars) || {}, r = F.report;
+  const stars = st.available && isNum(st.stars) ? html`<p class="ov-fig-c">Optic's star rating: <b>${st.stars} of 5</b>${st.word ? `, ${String(st.word).toLowerCase()}` : ''}.</p>` : '';
+  if (!r) return figCard('next', 'Next report', html`${gone('No report date came back yet.')}${stars}`, '');
+  return figCard('next', 'Next report', html`<p class="ov-fig-big">${r.days === 0 ? 'Today' : shortDate(r.date)}<small>${r.days === 0 ? '' : `in ${plural(r.days, 'day')}`}</small></p>${stars}`, 'Results can move the price sharply either way.');
+}
+function figEps(level) {
+  const rows = surpriseRows(), s = (D.earnings || {}).surprise || {};
+  const body = rows.length < 2 ? gone(D.earnError ? 'The earnings history did not load.' : 'No reported quarters came back for it.')
+    : html`<div class="chart-slot ov-fig-chart" data-chart="of-eps"></div>
+      <p class="legend-line ov-key"><span><i class="sw hollow s0"></i>Estimate</span><span><i class="sw ov-sw-up"></i>Reported, beat</span>${rows.some((r) => r.beat === false) ? html`<span><i class="sw ov-sw-down"></i>Reported, missed</span>` : ''}${isNum(s.beat_count) ? html`<span>${s.beat_count} of ${rows.length} beats</span>` : ''}</p>`;
+  return html`<section class="ov-card" aria-labelledby="oc-eps"><h2 class="t-h3" id="oc-eps">${level === 'beginner' ? 'Earnings against estimates' : 'Earnings against estimates'} <small>last ${rows.length || 8} quarters</small></h2>${body}</section>`;
+}
+function figReactions() {
+  const rows = surpriseRows().filter((r) => isNum(r.next_day_move_pct));
+  if (rows.length < 2) return html`<section class="ov-card" aria-labelledby="oc-react"><h2 class="t-h3" id="oc-react">The day after each report</h2>${gone('No day-after moves came back for it.')}</section>`;
+  const beats = rows.filter((r) => r.beat === true), fell = beats.filter((r) => r.next_day_move_pct < 0).length;
+  return html`<section class="ov-card" aria-labelledby="oc-react"><h2 class="t-h3" id="oc-react">The day after each report</h2><div class="chart-slot ov-fig-chart" data-chart="of-react"></div>
+    <p class="ov-fig-c">Next-day move, percent.${beats.length ? ` It fell after ${fell} of ${beats.length} beats.` : ''}</p></section>`;
+}
+function figOwners() {
+  const o = (((D.ticker || {}).company) || {}).ownership || {};
+  const inst = isNum(o.institutional_pct_held) ? o.institutional_pct_held * 100 : null, ins = isNum(o.insider_pct_held) ? o.insider_pct_held * 100 : null;
+  if (!o.available || (inst === null && ins === null)) return html`<section class="ov-card" aria-labelledby="oc-own"><h2 class="t-h3" id="oc-own">Who owns it</h2>${gone('No holder figures came back for it.')}</section>`;
+  const sig = o.insider_signal === 'selling' ? 'Insiders sold, net, over six months.' : o.insider_signal === 'buying' ? 'Insiders bought, net, over six months.' : 'No net insider buying or selling over six months.';
+  return html`<section class="ov-card" aria-labelledby="oc-own"><h2 class="t-h3" id="oc-own">Who owns it</h2>
+    ${pairBars([{ label: 'Institutions', v: inst, text: `${num(inst, 0)}%`, cls: 'gold' }, { label: 'Insiders', v: ins, text: `${num(ins, 1)}%`, cls: 'mute' }], { max: 100, label: 'Share of the company held by institutions and by insiders' })}
+    <p class="ov-fig-c">${sig}</p><p class="asof">Holders' filings, via Yahoo Finance.</p></section>`;
+}
+/** The bull and bear case as lines with arrows, each opening its evidence (Intermediate; the full section is Advanced's
+ *  and one row away at Beginner). The lines are casesSection's own, from the same fixed rules. */
+function casesGlance(c) {
+  const f = c.f || { pos: [], neg: [] }, sym = c.sym;
+  if (!c.t) return '';
+  const li = (x, d) => html`<li><span class="mv ${d}"><span class="mv-a" aria-hidden="true">${ARROW[d]}</span><span class="sr">${d === 'up' ? 'For' : 'Against'}: </span></span>${x.view ? html`<a class="textlink" href="${hrefFor(x.view, sym)}">${x.text}</a>` : html`<span>${x.text}</span>`}</li>`;
+  return html`<section class="ov-card" data-v2-ov-panel="cases" aria-labelledby="cs-h"><h2 class="t-h3" id="cs-h">Bull case and bear case <small>${f.pos.length} for, ${f.neg.length} against</small></h2>
+    ${f.pos.length || f.neg.length ? html`<ul class="cs-glance">${f.pos.map((x) => li(x, 'up'))}${f.neg.map((x) => li(x, 'down'))}</ul>` : html`<p class="t-muted">No point for or against stands out in the data Optic holds. That is not the same as no risk.</p>`}
+    <p class="asof">By fixed rules; each line opens its evidence.</p></section>`;
+}
+function figuresView(sym, c, level, fund) {
+  if (fund || !companyLike(sym)) return level === 'advanced' ? '' : simpleView(sym, c);
+  // while the figures load, or when they failed, Intermediate's bull and bear case keeps its place (empty until the
+  // figures arrive), as it had before the figures
+  // what the company does is said whether or not the figures came, as every level has said it
+  const casesHeld = level === 'intermediate' ? html`<div data-v2-ov-panel="cases">${OR.casesSection(c)}</div>` : '';
+  const aboutHeld = level === 'advanced' ? '' : html`<div class="ov-row2">${about(sym)}</div>`;
+  if (D.tickerError && !D.ticker) return level === 'advanced' ? '' : html`${aboutHeld}${simpleView(sym, c)}${casesHeld}`;
+  if (!D.ticker || D.longterm === undefined || D.earnings === undefined || D.session === undefined) return html`<div class="ov-figs is-loading" role="status" aria-label="Loading the figures for ${sym}">${skeleton('lines', 3)}</div>${aboutHeld}${casesHeld}`;
+  const F = simpleFacts({ sym, kind: kindOf(sym, D), t: D.ticker, lt: D.longterm, quote: D.quote, session: D.session, earnings: D.earnings, price: c.price, f: c.f, today: c.today });
+  return html`<div class="ov-figs">${figRevenue(F, level)}${figMargin(F, level)}${figPe(F, level)}${figNext(F)}</div>
+    ${level === 'advanced' ? '' : html`<div class="ov-row2">${about(sym)}${level === 'beginner' ? figEps(level) : casesGlance(c)}</div>`}
+    ${level === 'beginner' ? '' : html`<div class="ov-row3">${figEps(level)}${figReactions()}${figOwners()}</div>`}`;
+}
+function mountFigures(main) {
+  const rows = annual(), q = surpriseRows(), rq = q.filter((r) => isNum(r.next_day_move_pct));
+  // a year's revenue in whole billions over its bar ("$479B"), as the prototype labels them; the exact figure is in the
+  // tip and on Financials. The small figures carry no value axis: each bar states its own value.
+  const usd = (v) => (Math.abs(v) >= 1e9 ? `$${num(v / 1e9, Math.abs(v) >= 1e11 ? 0 : 1)}B` : `$${compact(v)}`), none = () => '';
+  const H = (w) => Math.round(Math.max(130, Math.min(170, w * 0.6)));
+  mountCharts(main, {
+    'of-rev': (w) => groupedBars(rows.map((r) => ({ x: r.x, title: r.title })), [{ name: 'Revenue', cls: 'gold', values: rows.map((r) => r.rev) }],
+      { w, h: H(w), fmt: usd, axisFmt: none, valueLabels: 'all', tickCount: 2, labelWidth: 30, label: 'Revenue by fiscal year', pad: { l: 4, r: 4 } }),
+    'of-margin': (w) => { const m = rows.filter((r) => isNum(r.ni)); return groupedBars(m.map((r) => ({ x: r.x, title: r.title })), [{ name: 'Net margin', cls: 'gold', values: m.map((r) => (r.ni / r.rev) * 100) }],
+      { w, h: H(w), fmt: (v) => `${num(v, 1)}%`, axisFmt: none, valueLabels: 'all', tickCount: 2, labelWidth: 30, label: 'Net margin by fiscal year', pad: { l: 4, r: 4 } }); },
+    'of-eps': (w) => groupedBars(qGroups(q), [
+      { name: "Analysts' estimate", cls: 's0', hollow: true, values: q.map((r) => r.eps_estimate) },
+      { name: 'Reported EPS', clsOf: (i) => (q[i].beat === true ? 'upb' : q[i].beat === false ? 'downb' : 'flatb'), values: q.map((r) => r.eps_reported) }],
+      { w, h: Math.round(Math.max(150, Math.min(190, w * 0.4))), fmt: (v) => `$${num(v, 2)}`, axisFmt: (v) => `$${num(v, 2)}`, tickCount: 2, label: 'Earnings per share against the estimate, by quarter', labelWidth: 30 }),
+    'of-react': (w) => groupedBars(qGroups(rq), [{ name: 'Next-day move', clsOf: (i) => (rq[i].next_day_move_pct > 0 ? 'upb' : rq[i].next_day_move_pct < 0 ? 'downb' : 'flatb'), values: rq.map((r) => r.next_day_move_pct) }],
+      { w, h: Math.round(Math.max(150, Math.min(190, w * 0.4))), fmt: (v) => signed(v, 1, ''), axisFmt: none, valueLabels: 'all', tickCount: 2, label: 'Share price move the day after each report, percent', labelWidth: 30 }),
+  });
+}
+
 /* ---------------- page ---------------- */
 function paint(main, sym) {
   if (!live) return;
   const swapped = advMoved; advMoved = false;
-  const mode = prefs.advancedOn() ? 'advanced' : 'simple';
+  // The level decides what the Overview shows (2026-11-09, decision card B: no View setting or "Show advanced
+  // analysis" here any more). Beginner and Intermediate read the simple analysis, with each advanced section a Show
+  // more away; Advanced, the advanced one.
+  const level = prefs.level();
+  const mode = level === 'advanced' ? 'advanced' : 'simple';
   const keepFocus = document.activeElement && main.contains(document.activeElement) ? document.activeElement : null;
   // the page's heading, focused on arrival for a screen reader, keeps focus through the redraws as data arrives
-  const key = keepFocus && (keepFocus.dataset.v2Answer || keepFocus.dataset.v2Range || keepFocus.dataset.v2Watch || (keepFocus.hasAttribute('data-v2-adv-toggle') ? 'adv' : '') || (keepFocus.tagName === 'H1' ? 'h1' : ''));
+  const key = keepFocus && (keepFocus.dataset.v2Answer || keepFocus.dataset.v2Range || keepFocus.dataset.v2Watch || (keepFocus.dataset.v2Level ? `lv:${keepFocus.dataset.v2Level}` : '') || (keepFocus.tagName === 'H1' ? 'h1' : ''));
   // what the reader opened stays open while later data arrives
   const openDetails = $$('details[open] summary', main).map((x) => x.textContent.trim());
   const openEvs = $$('[data-v2-ev][aria-expanded="true"]', main).map((x) => x.getAttribute('aria-controls'));
@@ -408,23 +634,57 @@ function paint(main, sym) {
   // symbol that does not exist (investor audit, 2026-10-27).
   const unlisted = !!(D.quoteError && !D.quote && D.quoteError.kind === 'notfound' && D.tickerError && D.tickerError.kind === 'notfound' && !D.ticker);
   if (unlisted) {
-    draw(main, html`<div class="dstick has-tools">${frameHeader(sym, D, 'overview', { stage: () => stageFor(sym) })}${frameTabs(sym, 'overview', { fund: isFund(D) })}</div>
+    draw(main, html`<div class="dstick has-tools">${frameHeader(sym, D, 'overview', { stage: () => stageFor(sym), level })}${frameTabs(sym, 'overview', { fund: isFund(D) })}</div>
       ${empty(`Optic has no listing for ${sym}`, 'No quote and no price history came back for this symbol. It may be misspelled, delisted, or listed outside the US under another form.', html`<div class="cluster"><button type="button" class="btn btn-primary btn-sm" data-v2-open-palette>Search for the company</button><a class="btn btn-sm" href="#/">Go to Home</a></div>`)}`);
     return;
   }
-  draw(main, html`<div class="dstick has-tools">${frameHeader(sym, D, 'overview', { stage: () => stageFor(sym) })}${frameTabs(sym, 'overview', { fund: isFund(D) })}<div class="dh-tools">${advToggle(mode)}</div></div>
+  // The level matrix for the Overview (workflow map section C, three levels). Beginner: the simple Overview, the quote,
+  // the past year's chart, Watch and Ask Milo. Intermediate: adds the bull and bear case, the thesis check (to read;
+  // writing it is one Show more away), Alert and Compare. Advanced: the advanced analysis, thesis edits, Export and
+  // every panel the Overview had. A panel a level leaves out is listed with Show more. Figures, caveats and the
+  // disclaimer are the same at every level: the header, the about block, the chart and the notices are never trimmed.
+  const has = (id) => level === 'advanced' || OPEN.has(id);
+  const adv = mode === 'advanced';
+  const cases = !adv && (level === 'intermediate' || OPEN.has('cases'));
+  // the thesis check is one row away below Advanced since the visual update (2026-11-11), as the prototype lists it
+  const thesisShown = adv || OPEN.has('thesis');
+  setThesisEdit(level === 'advanced' || OPEN.has('thesis:edit'), moreButton('thesis:edit', 'Your thesis check', { label: 'Show more' }),
+    level !== 'advanced' && OPEN.has('thesis:edit') ? lessButton('thesis:edit', 'Your thesis check') : '');
+  // the advanced sections are read with the advanced context (its longer list of dates ahead), as Advanced reads them
+  const parts = adv ? [] : advParts(sym, { ...c, advanced: true }, fund);
+  const company = !fund && companyLike(sym);
+  const out = [
+    ...(company && !adv && !OPEN.has('words') ? [['words', 'Simple analysis', 'What is happening, why it matters and what else to know, in words.']] : []),
+    ...parts.filter((x) => !OPEN.has(x.id)).map((x) => [x.id, x.title, x.blurb]),
+    ...(adv || cases || level === 'intermediate' ? [] : [['cases', 'Bull and bear case', 'The strongest arguments on each side, from the figures on this page.']]),
+    ...(thesisShown ? [] : [['thesis', 'Your thesis check', 'Write down why you are interested and what would change your mind; Optic checks it each visit.']]),
+    ...(has('investigate') ? [] : [['investigate', 'Investigate this company', 'Six steps, each one Milo answer from figures Optic has already read.']]),
+    ...(has('timeline') ? [] : [['timeline', 'Company events', 'Reports, filings, dividends and other dated events for the company.']]),
+  ].map(([id, title, blurb]) => ({ id, title, blurb }));
+  // the level control on the tabs row, right-aligned (visual hierarchy review, 2026-11-10, change 3): it shared a row
+  // with the Milo bar at y 280 to 340, so neither led; the bar now has its row to itself
+  draw(main, html`<div class="dstick has-tools">${frameHeader(sym, D, 'overview', { stage: () => stageFor(sym), level })}${frameTabs(sym, 'overview', { fund: isFund(D) })}${levelControl({ id: 'ov-lc' })}</div>
+    ${sayBlock(leadLine(sym, c, level))}
+    <div class="page-lead ov-lead" data-v2-level-now="${level}">${miloPrompt(stockAsk(sym))}</div>
     ${D.quoteError && !D.quote ? (D.quoteError.kind === 'notfound' ? empty(`Optic has no listing for ${sym}`, 'No quote came back for this symbol. It may be misspelled, delisted, or listed outside the US under another form.', html`<button type="button" class="btn btn-sm" data-v2-open-palette>Search for the company</button>`) : failed(`${sym}'s quote`, D.quoteError, { retry: 'dossier' })) : ''}
     ${((D.framework || {}).freshness || {}).state === 'stale' ? staleLine({ text: clean(D.framework.freshness.text) }) : ''}
-    ${about(sym)}
+    ${adv || !company ? about(sym) : ''}
     <section class="section dchart" aria-labelledby="py-h">${D.tickerError ? failed('The price history', D.tickerError, { retry: 'dossier' }) : chartBlock(sym)}</section>
-    <div class="ov-analysis" id="ov-analysis" data-v2-analysis="${mode}" ${swapped ? 'data-swapped' : ''}>${mode === 'advanced' ? advancedView(sym, c, fund) : simpleView(sym, c)}</div>
-    ${investigateEntry(sym)}
-    <div data-tl-slot></div>
+    <div class="ov-analysis" id="ov-analysis" data-v2-analysis="${mode}" ${swapped ? 'data-swapped' : ''}>${adv ? html`${figuresView(sym, c, level, fund)}${advancedView(sym, c, fund)}` : figuresView(sym, c, level, fund)}</div>
+    ${company && !adv && OPEN.has('words') ? opened('words', 'Simple analysis', simpleView(sym, c)) : ''}
+    ${parts.filter((x) => OPEN.has(x.id)).map((x) => opened(x.id, x.title, x.body))}
+    ${cases && level !== 'intermediate' ? opened('cases', 'Bull and bear case', OR.casesSection(c)) : ''}
+    ${cases && level === 'intermediate' && !company ? html`<div data-v2-ov-panel="cases">${OR.casesSection(c)}</div>` : ''}
+    ${!adv && thesisShown ? opened('thesis', 'Your thesis check', html`<div data-tc-slot></div>`) : ''}
+    ${has('investigate') ? (adv ? investigateEntry(sym) : opened('investigate', 'Investigate this company', investigateEntry(sym))) : ''}
+    ${has('timeline') ? (phoneAdv() ? html`<details class="ov-tl-fold"><summary>Company events</summary><div data-tl-slot></div></details>` : adv ? html`<div data-tl-slot></div>` : opened('timeline', 'Company events', html`<div data-tl-slot></div>`)) : ''}
+    ${moreList(out, { heading: `More on ${sym}`, screen: 'overview' })}
     <p class="sr" role="status" data-v2-analysis-status></p>
     <p class="asof disclaimer">${clean((D.ticker || {}).disclaimer || 'Not financial advice. For research and education only.')}</p>`);
   mountThesis(main, sym, () => D);   // the thesis check: one node for the visit, so a half-typed note survives this redraw and a swap
   mountTimeline(main, sym);   // the company's events (Handoff 9): one node for the visit, read once /api/ticker settles
   if (D.ticker) mountChart(main, sym);
+  mountFigures(main);
   $$('details summary', main).forEach((x) => { if (openDetails.includes(x.textContent.trim())) x.parentElement.open = true; });
   openEvs.forEach((id) => { const b = $(`[aria-controls="${id}"]`, main); const body = document.getElementById(id); if (b && body) { b.setAttribute('aria-expanded', 'true'); body.hidden = false; } });
   if (Math.abs(window.scrollY - scrollY) > 2) window.scrollTo(0, scrollY);
@@ -440,13 +700,13 @@ function paint(main, sym) {
     setTimeout(() => { if (st && st.isConnected) st.textContent = `Showing the ${mode} analysis.`; }, 60);
   }
   if (key) {
-    const el = key === 'adv' ? $('[data-v2-adv-toggle]', main) : key === 'h1' ? $('h1', main) : $(`[data-v2-answer="${key}"],[data-v2-range="${key}"],[data-v2-watch="${key}"]`, main);
+    const el = key.startsWith('lv:') ? $(`[data-v2-level="${key.slice(3)}"]`, main) : key === 'h1' ? $('h1', main) : $(`[data-v2-answer="${key}"],[data-v2-range="${key}"],[data-v2-watch="${key}"]`, main);
     if (el) { if (key === 'h1') el.setAttribute('tabindex', '-1'); el.focus({ preventScroll: true }); }
   }
 }
 
 export async function render(main, route) {
-  live = true;
+  live = true; OPEN.clear();
   const sym = route.symbol, visit = ++VISIT;
   D = { sym, visit };
   const mine = () => live && D.visit === visit;
@@ -460,11 +720,15 @@ export async function render(main, route) {
   // level, from anywhere, rewords the simple analysis
   unPrefs = prefs.onChange((what) => {
     if (!mine()) return;
-    if (what === 'density') { advMoved = true; paint(main, sym); } else if (what === 'knowledge' || what === 'knowledge-synced') paint(main, sym);
+    // the level, from this page's control or anywhere else: the panels and the words follow it, and what Show more
+    // opened closes (it was opened past the old level). The View setting no longer changes this page.
+    if (what === 'knowledge' || what === 'knowledge-synced') { OPEN.clear(); advMoved = true; paint(main, sym); }
   });
   paint(main, sym);
   wire(main);
-  sections(main, 'overview', { norm: (t) => { const n = ((main.querySelector('.dhead .name span') || {}).textContent || '').trim(); return n ? t.split(n).join('the company') : t; } });   // folds, Expand all, Panels (Classic parity B3)
+  // the strip floats in only past the header, and Expand all, Collapse all and Panels are in the header's More (hierarchy
+  // change 4)
+  sections(main, 'overview', { float: true, bulkIn: '.dhead .acts-more .menu-body', folded: phoneFold, norm: (t) => { const n = ((main.querySelector('.dhead .name span') || {}).textContent || '').trim(); return n ? t.split(n).join('the company') : t; } });   // folds, Expand all, Panels (Classic parity B3)
   const enc = encodeURIComponent(sym);
   const step = (p, ok, bad) => { p.then((d) => { if (mine()) ok(d); }, (e) => { if (mine()) bad(e); }).finally(() => { if (mine()) paint(main, sym); }); };
   // A copy kept past its time is drawn at once and asked for again behind it; the fresh one is drawn when it lands. It
@@ -495,6 +759,8 @@ export async function render(main, route) {
     () => { D.stage = null; if (tries > 0) setTimeout(() => { if (mine()) stageRead(tries - 1); }, 30000); });
   stageRead(1);
   TR.load().then(() => { if (mine() && D.stage) stageFor(sym); });   // the stage's explanation adds what history says (B6c)
+  // a question asked from this page's prompt before signing in: Milo asks it now (ui/miloprompt.js)
+  resumePrompt('overview', sym);
 }
 
 export function dispose() { if (lp) { lp.stop(); lp = null; } if (unPrefs) { unPrefs(); unPrefs = null; } live = false; disposeThesis(); disposeTimeline(); drawer.close({ silent: true }); }
@@ -508,7 +774,27 @@ function wire(main) {
     const sym = D.sym;
     const r = e.target.closest('[data-v2-range]');
     if (r) { range = r.dataset.v2Range; paint(main, sym); return; }
-    if (e.target.closest('[data-v2-adv-toggle]')) { prefs.setAdvanced(!prefs.advancedOn()); return; }   // the repaint follows from prefs.onChange
+    if (e.target.closest('[data-v2-mp-ask]')) { askPrompt(() => stockAsk(sym), e.target.closest('[data-v2-mp-ask]')); return; }
+    const more = e.target.closest('[data-v2-show-more]');
+    if (more) {
+      const id = more.dataset.v2ShowMore; OPEN.add(id); paint(main, sym);
+      const to = { words: '#sa-h', cases: '[data-v2-ov-panel="cases"] h2', thesis: '#tc-h', 'thesis:edit': '#ov-thesis [data-tc-start], #ov-thesis [data-tc-edit]', investigate: '#gi-entry-h', timeline: '#tl-h' }[id];
+      // an advanced section's heading, or its block when it has none (a fund's four answers are a grid of buttons)
+      const box = id.startsWith('adv:') ? $(`[data-v2-ov-panel="${id}"]`, main) : null;
+      // focus moves into what opened (the keyboard journey relies on it); ui/showmore.js scrolls there smoothly first
+      const el = box ? $('h2', box) || box : to && $(to, main); if (el) { if (!el.matches('button, a')) el.setAttribute('tabindex', '-1'); revealOpened(el); }
+      const st = $('[data-v2-analysis-status]', main); if (st) setTimeout(() => { if (st.isConnected) st.textContent = 'Opened. Your level is unchanged.'; }, 60);
+      return;
+    }
+    const less = e.target.closest('[data-v2-show-less]');
+    if (less) {
+      // that panel only closes and goes back to the list; focus goes back to its Show more, so a keyboard reader is
+      // where they were before they opened it. The level is not touched.
+      const id = less.dataset.v2ShowLess; OPEN.remove(id); paint(main, sym);
+      revealOpened($(`[data-v2-show-more="${id}"]`, main));
+      const st = $('[data-v2-analysis-status]', main); if (st) setTimeout(() => { if (st.isConnected) st.textContent = 'Closed. Your level is unchanged.'; }, 60);
+      return;
+    }
     const a = e.target.closest('[data-v2-answer]');
     if (a) {   // a fund's answers (a company's four questions carry their own folds)
       const k = a.dataset.v2Answer;

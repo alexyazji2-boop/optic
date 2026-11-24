@@ -20,7 +20,10 @@ let seq = 0;
  *         tipMore(i) a second line in the reading,
  *         measure: 'change' (a level: the change and the percent change) | 'points' (already in percent or points:
  *         the change only) | false; default 'points' for a fixed-range oscillator, else 'change'; unit: the points'
- *         word, as ' pts' }
+ *         word, as ' pts',
+ *         tone: 'span' colours the line by the span it draws, first point to last (green ends above where it started,
+ *         red below, the neutral ink when flat), never by today's move; base: true draws the start level as a dashed
+ *         line, so above or below it reads without colour (visual update, 2026-11-11, operator decision 2) }
  * Measuring follows docs/frontend-v2/CHART-GESTURES.md: Shift-drag, the Measure button, a held touch, two fingers or M.
  * Returns { html, wire(root) }.
  */
@@ -118,6 +121,8 @@ export function lineChart(series, opts = {}) {
       <path class="area" fill="url(#${id}-g)" d="${path}L${X(pts.length - 1).toFixed(1)} ${H - pad.b}L${X(0).toFixed(1)} ${H - pad.b}Z"/>` : '';
   const first = pts[0];
   const change = last.c - first.c;
+  const tone = opts.tone === 'span' ? spanTone(pts.map((p) => p.c)) : '';
+  const baseSvg = opts.base ? `<line class="base" x1="${pad.l}" x2="${(X(pts.length - 1)).toFixed(1)}" y1="${Y(first.c).toFixed(1)}" y2="${Y(first.c).toFixed(1)}"/>` : '';
   const summary = opts.summary || `${opts.label || 'Chart'}: from ${num(first.c, dp)} on ${fullDate(first.d)} to ${num(last.c, dp)} on ${fullDate(last.d)}, ${change >= 0 ? 'up' : 'down'} ${num(Math.abs(change / first.c * 100), 1)} percent. Low ${num(Math.min(...pts.map((p) => p.c)), dp)}, high ${num(Math.max(...pts.map((p) => p.c)), dp)}.`;
 
   const refSvg = (opts.refs || []).map((r) => `<line class="ref ${r.cls || ''}" x1="${pad.l}" x2="${W - pad.r}" y1="${Y(r.v).toFixed(1)}" y2="${Y(r.v).toFixed(1)}"/>`).join('');
@@ -129,13 +134,22 @@ export function lineChart(series, opts = {}) {
   }).join('');
   const markSvg = marks.map((m) => { const x = X(m.i).toFixed(1); return `<g class="mark"><line class="mark-rule" x1="${x}" x2="${x}" y1="${pad.t}" y2="${H - pad.b}"/><text class="mark-t" x="${(X(m.i) - 6).toFixed(1)}" y="${pad.t + 12}" text-anchor="end">${esc(m.label)}</text></g>`; }).join('');
   const markWords = marks.map((m) => ` ${m.label} on ${fullDate(pts[m.i].d)}${m.detail ? `: ${m.detail}` : ''}.`).join('');
-  const svg = `<svg class="chart" id="${id}" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="${esc(summary + markWords)}" tabindex="0">
-    ${ticks.map((t) => `<line class="grid" x1="${pad.l}" x2="${W - pad.r}" y1="${Y(t).toFixed(1)}" y2="${Y(t).toFixed(1)}"/>${opts.noTicks ? '' : `<text class="ax" x="${W - pad.r + 6}" y="${(Y(t) + 4).toFixed(1)}">${tickText(t)}</text>`}`).join('')}
-    ${refSvg}${months.join('')}${area}${barSvg}${overlays.map((o) => { let d = '', pen = false; o.values.forEach((v, i) => { if (Number.isFinite(v)) { d += `${pen ? 'L' : 'M'}${X(i).toFixed(1)} ${Y(v).toFixed(1)}`; pen = true; } else pen = false; }); return d ? `<path class="ov ${o.cls || ''}" d="${d}"/>` : ''; }).join('')}${lineSvg}${markSvg}${coneSvg}${events}${tags}${pinSvg}
+  // A chart whose event marks are buttons (the Overview's E, D and S, which open the report's drawer) cannot be
+  // role="img": ARIA makes an image's children presentational, so the marks were reached by Tab and not read, and axe
+  // reports nested-interactive (serious) on every stock page once the price history draws (gauntlet D1, 2026-11-10).
+  // Such a chart is a group named by the same summary, its marks real buttons with their own names, and everything
+  // else in it hidden from the accessibility tree as decoration; the chart itself stays focusable for the crosshair's
+  // arrow keys. A chart with no marks to press keeps role="img", as before. The rule Classic's static/charts.js follows.
+  const pressable = !!(opts.onEvent && events);
+  const name = `${pressable ? 'role="group" aria-roledescription="chart"' : 'role="img"'} aria-label="${esc(summary + markWords)}"`;
+  const deco = (inner) => (pressable ? `<g aria-hidden="true">${inner}</g>` : inner);
+  const svg = `<svg class="chart${tone ? ` tone-${tone}` : ''}" id="${id}" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" ${name} tabindex="0">
+    ${deco(`${ticks.map((t) => `<line class="grid" x1="${pad.l}" x2="${W - pad.r}" y1="${Y(t).toFixed(1)}" y2="${Y(t).toFixed(1)}"/>${opts.noTicks ? '' : `<text class="ax" x="${W - pad.r + 6}" y="${(Y(t) + 4).toFixed(1)}">${tickText(t)}</text>`}`).join('')}
+    ${refSvg}${months.join('')}${area}${baseSvg}${barSvg}${overlays.map((o) => { let d = '', pen = false; o.values.forEach((v, i) => { if (Number.isFinite(v)) { d += `${pen ? 'L' : 'M'}${X(i).toFixed(1)} ${Y(v).toFixed(1)}`; pen = true; } else pen = false; }); return d ? `<path class="ov ${o.cls || ''}" d="${d}"/>` : ''; }).join('')}${lineSvg}${markSvg}${coneSvg}`)}${events}${deco(`${tags}${pinSvg}
     ${opts.focusEnd ? `<circle class="focus-ring" cx="${X(pts.length - 1)}" cy="${Y(last.c)}" r="10"/>` : ''}
     <circle class="end" cx="${X(pts.length - 1)}" cy="${Y(last.c)}" r="3.5"/>
     ${mode ? `<g class="ms" style="display:none"><rect class="ms-band" y="${pad.t}" height="${H - pad.t - pad.b}"/><line class="ms-edge ms-a" y1="${pad.t}" y2="${H - pad.b}"/><line class="ms-edge ms-b" y1="${pad.t}" y2="${H - pad.b}"/><circle class="ms-dot ms-da" r="4.5"/><circle class="ms-dot ms-db" r="4.5"/></g>` : ''}
-    <g class="xh" style="display:none"><line class="xh-v" y1="${pad.t}" y2="${H - pad.b}"/><circle class="xh-dot" r="4"/></g>
+    <g class="xh" style="display:none"><line class="xh-v" y1="${pad.t}" y2="${H - pad.b}"/><circle class="xh-dot" r="4"/></g>`)}
   </svg><div class="chart-tip" aria-hidden="true" style="display:none"></div>`;
 
   function wire(root) {
@@ -331,13 +345,24 @@ export function measured(pts, a, b, { mode = 'change', levels = true, dp = 2, un
   return { i, j, head: `${signed(ch, dp, unit || '')}${pct !== null ? ` (${signed(pct)})` : ''}`, span: `${fullDate(pts[i].d)} to ${fullDate(pts[j].d)}` };
 }
 
-export function spark(values, label = '') {
+/** Which way a span went, first point to last: 'up', 'down' or 'flat'. What colours a line or a sparkline (operator
+ *  decision 2, 2026-11-11): the span it draws, never today's move, which is the figure and arrow beside it. */
+export function spanTone(values) {
+  const v = (values || []).filter(Number.isFinite);
+  if (v.length < 2) return 'flat';
+  return v[v.length - 1] > v[0] ? 'up' : v[v.length - 1] < v[0] ? 'down' : 'flat';
+}
+
+/** A sparkline, coloured by its own span with a dot at its end. `label` names it for a screen reader (role img);
+ *  without one it is decoration beside words that say the same. opts: {w, h} its drawn size. */
+export function spark(values, label = '', opts = {}) {
   const v = (values || []).filter(Number.isFinite);
   if (v.length < 2) return '';
-  const W = 112, H = 32, lo = Math.min(...v), hi = Math.max(...v), s = hi - lo || 1;
-  const d = v.map((x, i) => `${i ? 'L' : 'M'}${((i / (v.length - 1)) * W).toFixed(1)} ${(2 + (1 - (x - lo) / s) * (H - 4)).toFixed(1)}`).join('');
-  const up = v[v.length - 1] >= v[0];
-  return `<svg class="spark ${up ? 'up' : 'down'}" viewBox="0 0 ${W} ${H}" ${label ? `role="img" aria-label="${esc(label)}"` : 'aria-hidden="true"'}><path d="${d}"/></svg>`;
+  const W = opts.w || 112, H = opts.h || 32, lo = Math.min(...v), hi = Math.max(...v), s = hi - lo || 1;
+  const X = (i) => 2 + (i / (v.length - 1)) * (W - 6), Yv = (x) => 3 + (1 - (x - lo) / s) * (H - 6);
+  const d = v.map((x, i) => `${i ? 'L' : 'M'}${X(i).toFixed(1)} ${Yv(x).toFixed(1)}`).join('');
+  const tone = spanTone(v);
+  return `<svg class="spark ${tone}" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" ${label ? `role="img" aria-label="${esc(label)}"` : 'aria-hidden="true"'}><path d="${d}"/><circle cx="${X(v.length - 1).toFixed(1)}" cy="${Yv(v[v.length - 1]).toFixed(1)}" r="2"/></svg>`;
 }
 
 /** Where a price sits against a fair value range, read like a light meter. */

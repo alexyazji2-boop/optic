@@ -146,7 +146,8 @@ function whyFired(h) {
 /* ---------------- sections ---------------- */
 function scheduleLine() {
   if (!store.signedIn()) return 'In this browser. Checked only while this page is open, when you press Check now. Sign in to have Optic check them for you and keep what fired.';
-  return 'On your account. Optic checks them on market days about every 30 minutes from 9:30 to 4:00 ET and once after the close, skipping exchange holidays. Prices can be ${delays.upTo()} behind the exchange, by exchange. What fires is shown here; Optic does not send email or push notifications.';
+  // backticks: in single quotes the placeholder showed as "${delays.upTo()}" on the page (round-one corrections, 2026-11-10)
+  return `On your account. Optic checks them on market days about every 30 minutes from 9:30 to 4:00 ET and once after the close, skipping exchange holidays. Prices can be ${delays.upTo()} behind the exchange, by exchange. What fires is shown here; Optic does not send email or push notifications.`;
 }
 
 function watchesBlock() {
@@ -178,8 +179,10 @@ function watchesBlock() {
 }
 
 function hitsBlock() {
+  // the sign-in note's way in is a text link: New alert is the view's one gold action (visual hierarchy review,
+  // 2026-11-10, change 16: a guest saw two gold fills, New alert at y 227 and this at y 665)
   if (!store.signedIn()) {
-    return html`<div class="state"><p class="t-h3">A history needs an account</p><p>Signed in, Optic checks your alerts on its own schedule and keeps each one that fires here, with what it read. In this browser, each alert shows when it last fired at your own check.</p><a class="btn btn-primary" href="#/signin">Sign in or create an account</a></div>`;
+    return html`<div class="state"><p class="t-h3">A history needs an account</p><p>Signed in, Optic checks your alerts on its own schedule and keeps each one that fires here, with what it read. In this browser, each alert shows when it last fired at your own check.</p><a class="textlink" href="#/signin">Sign in or create an account</a></div>`;
   }
   if (S.hitsErr) return failed('What fired', S.hitsErr, { retry: 'hits' });
   if (!S.hits) return skeleton('rows', 2, 'Loading what fired');

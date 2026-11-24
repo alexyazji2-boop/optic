@@ -29,8 +29,8 @@ def test_market_overview_is_in_the_owners_order():
     ws = _src("pages/workspace.js")
     line = re.search(r"market: \{ label: 'Market Overview', panels: (\[.*?\]) \}", ws).group(1)
     order = re.findall(r"\['(\w+)', \d+", line)
-    assert order == ["indices", "regime", "expected", "sectors", "quote", "watch", "calendar", "earnings",
-                     "priority", "news", "desk", "movers", "portfolio"]
+    # Sentiment beside Market conditions since the visual update (2026-11-11)
+    assert order == ["indices", "regime", "sentiment", "expected", "sectors", "quote", "watch", "calendar", "earnings", "priority", "news", "desk", "movers", "portfolio"]
     opts = re.findall(r"\['(\w+)', \d+", re.search(r"options: \{ label: 'Options Research', panels: (\[.*?\]) \}", ws).group(1))
     assert opts[:3] == ["quote", "watch", "contracts"], "Options Research leads with the contracts"
     lt = re.findall(r"\['(\w+)', \d+", re.search(r"longterm: \{ label: 'Long-Term Investing', panels: (\[.*?\]) \}", ws).group(1))
@@ -55,12 +55,18 @@ def test_first_visit_welcome_is_compact_and_dismissible():
 # ------------------------------------------------------------ navigation
 
 def test_phone_bar_is_the_owners_order_and_more_lists_the_rest():
+    # The rail's names and sections since gauntlet L3 (2026-11-10, the operator's decision): the 2026-10-19 order
+    # (Home, Markets, Watchlist, Dossier, More, with Discover in More) gave a phone different names from the rail.
     nav = _src("nav.js")
     block = nav[nav.index("export const MOBILE_TABS = ["):]
     block = block[:block.index("];")]
-    assert re.findall(r"label: '([^']+)'", block) == ["Home", "Markets", "Watchlist", "Dossier", "More"]
-    assert "group: 'discover'" not in block
-    assert "visibleGroups(flags).filter((g) => !shown.has(g.id))" in _src("ui/shell.js")
+    assert re.findall(r"label: '([^']+)'", block) == ["Home", "Research", "Markets", "Discover", "Portfolio", "Lists", "More"]
+    assert "group: 'discover'" in block and "group: 'security'" in block
+    shell = _src("ui/shell.js")
+    # each tab opens what the rail's entry opens
+    assert "security: researchHref(RESEARCH[0], sym)" in shell and "lists: LISTS[0].href" in shell
+    more = shell[shell.index("export function moreBody() {"):shell.index("export function paintAccount()")]
+    assert "RESEARCH.map(" in more and "LISTS.map(" in more and "RAIL_MORE.filter(" in more
 
 
 def test_every_tab_list_has_a_view_selector_for_a_phone():

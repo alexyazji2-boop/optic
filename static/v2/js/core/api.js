@@ -11,7 +11,7 @@ const CSRF_HEADER = 'X-Optic-CSRF';
 export class ApiError extends Error {
   constructor(kind, status, message, body) {
     super(message);
-    this.kind = kind;      // 'offline' | 'timeout' | 'auth' | 'forbidden' | 'notfound' | 'limit' | 'server' | 'bad'
+    this.kind = kind;      // 'offline' | 'timeout' | 'auth' | 'forbidden' | 'notfound' | 'limit' | 'server' | 'bad' | 'cancelled' | 'unloading'
     this.status = status;
     this.body = body;
   }
@@ -36,6 +36,19 @@ function classify(status) {
 let reachedAt = 0;
 export const lastReached = () => reachedAt;
 
+// Set when the page starts to go (a reload, a move off the page, the device session switching accounts). A fetch the
+// browser drops for that reason rejects exactly as an unreachable server does, and a form would say "Could not reach
+// Optic" for a request the page itself abandoned (a first sign-in, round-one corrections, 2026-11-10). beforeunload can
+// be cancelled (Investigate's leave guard asks), so its mark lapses after two seconds if the page is still here;
+// pagehide is final, except a page restored from the back-forward cache, which clears it.
+let unloading = false;
+export const isUnloading = () => unloading;
+try {
+  window.addEventListener('pagehide', () => { unloading = true; });
+  window.addEventListener('pageshow', (e) => { if (e.persisted) unloading = false; });
+  window.addEventListener('beforeunload', () => { unloading = true; setTimeout(() => { if (document.visibilityState === 'visible') unloading = false; }, 2000); });
+} catch (e) { /* no window in tests */ }
+
 async function request(method, path, { body, timeout = 20000, signal } = {}) {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort('timeout'), timeout);
@@ -52,6 +65,8 @@ async function request(method, path, { body, timeout = 20000, signal } = {}) {
     clearTimeout(timer);
     if (ctrl.signal.aborted && ctrl.signal.reason === 'timeout') throw new ApiError('timeout', 0, 'The server took too long to answer.');
     if (ctrl.signal.aborted) throw new ApiError('cancelled', 0, 'Cancelled.');
+    // the page is going: not an outage, and nothing should say one (see `unloading` above)
+    if (unloading) throw new ApiError('unloading', 0, 'The page is reloading.');
     throw new ApiError(navigator.onLine === false ? 'offline' : 'server', 0, navigator.onLine === false ? 'You appear to be offline.' : 'Could not reach Optic.');
   }
   clearTimeout(timer);
@@ -130,7 +145,7 @@ export async function settle(map) {
 
 /** A readable sentence for an ApiError, for state cards. */
 export function explain(err, what = 'This') {
-  if (!err) return '';
+  if (!err || err.kind === 'unloading') return '';   // the page is going; there is nothing to tell the reader
   switch (err.kind) {
     // said so the verb fits any subject: "The headlines needs a connection" (BUG-199, Phase 11), as notfound's below
     case 'offline': return `Optic needs a connection for ${what.toLowerCase()}. It will try again when you are back online.`;

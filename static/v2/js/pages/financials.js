@@ -91,6 +91,7 @@ function readings() {
   if (si.available) { const parts = [isNum(si.percent_of_float) ? `${pct(si.percent_of_float * 100)} of float` : 'Share of float not reported', isNum(si.days_to_cover) ? `${num(si.days_to_cover, 1)} days to cover` : '', isNum(si.change_vs_prior_pct) ? `${signed(si.change_vs_prior_pct, 1)} since the last report` : ''].filter(Boolean); items.push(['Short interest', `${parts.join(', ')}.${isNum(si.percent_of_float) && si.squeeze_potential ? ` Squeeze potential ${si.squeeze_potential}.` : ''}`]); }
   if (ow.available) items.push(['Insiders', insiderLine(ow)]);
   if (!items.length && !f.available) return '';
+  const growth = (items.find(([k]) => k === 'Growth') || [])[1] || '';
   const a = f.annual || {};
   // free cash flow, the net margin and net debt are the registry's, each with its own period and source
   const fcf = regFig('free_cash_flow_fy'), nd = FIG.of(D.t, 'net_debt');
@@ -112,7 +113,10 @@ function readings() {
   const laterNote = lf ? `${capFirst(andList(later.map(([n]) => n.toLowerCase())))} ${later.length > 1 ? 'are' : 'is'} from ${(lf.source || {}).form ? `the ${lf.source.form}` : 'a later filing'}${lp.fiscal ? ` for ${lp.fiscal}` : ''}, ${lowerFirst(FIG.period(lf))}: a later year than the provider's statements, which do not have it yet.` : '';
   return html`<section class="section fin-sum" id="fin-summary" aria-labelledby="fr-h"><h2 class="t-h2" id="fr-h">Summary</h2>
     ${f.available ? periodLine({ type: 'annual', basis: PER.basisOf(D.t) || 'Basis not stated', what: a0 ? PER.label(a0) : PER.UNAVAILABLE, filing: a0 && a0.filing, notes: [...PER.notes(a0 ? [a0] : [], PER.calendarOf(D.t)), laterNote].filter(Boolean) }) : ''}
-    ${cells.length ? html`<div class="readings fin-figs" style="--rn:${cells.length}">${cells.map(([k, v, d]) => html`<div class="rd"><span class="k">${k}</span><span class="v">${v}</span><span class="d">${d}</span></div>`)}</div>` : ''}
+    ${/* one finding over the row, the summary's own Growth line, and revenue leading it at the figure size with its year
+       (visual hierarchy review, 2026-11-10, change 10, F10: six figures at 26px in one row, none leading) */ ''}
+    ${growth ? html`<p class="fin-lead">${growth}</p>` : ''}
+    ${cells.length ? html`<div class="readings fin-figs" style="--rn:${cells.length}">${cells.map(([k, v, d], i) => html`<div class="rd${i === 0 ? ' rd-lead' : ''}"><span class="k">${k}${i === 0 && a0 ? html` <span class="rd-when">${PER.inText(a0)}</span>` : ''}</span><span class="v">${v}</span><span class="d">${d}</span></div>`)}</div>` : ''}
     ${/* folded on a phone, so the period control and the charts come sooner (pitch audit, 2026-10-22); the figures above are the finding */ ''}
     ${items.length ? html`<details class="fin-say" ${wideScreen() ? 'open' : ''}><summary><h3>What the figures say</h3>${icon('chev')}</summary><dl class="reads-dl">${items.map(([k, v]) => html`<div><dt>${k}</dt><dd>${v}</dd></div>`)}</dl></details>` : ''}</section>`;
 }

@@ -37,6 +37,10 @@ import { watch as watchGlossary } from './ui/glossmark.js';
 import './ui/figure.js';
 import { catalogue as levelCatalogue } from './ui/levelslider.js';
 import { wire as wireTypeahead } from './ui/typeahead.js';
+import { track } from './core/usage.js';
+import { groupOf } from './nav.js';
+// the level control (Home and a company's Overview): its press handler, registered when it loads
+import './ui/levelcontrol.js';
 
 // Home is the research workspace (Market Overview by default); pages/home.js supplies its blocks
 // Each page's module is fetched the first time it is opened, not with the shell: a first visit on a phone
@@ -205,17 +209,26 @@ async function show(route) {
   // answer, above the evidence, i.e. after the page's first section. Pages repaint themselves, so an
   // observer puts it back after every paint; no page can drop it.
   if (noticeWatch) noticeWatch.disconnect();
+  const FOOT_NOTICE = new Set(['compare', 'watchlist', 'explore']);
   const notice = areaNotice(route.view);
   if (notice) {
     const place = () => {
       if (view.querySelector(':scope .legal-area')) return;
       const holder = document.createElement('div'); render(holder, notice);
-      const first = view.querySelector(':scope > section.section, :scope > .section');
+      // Its place, not its words (visual hierarchy review, 2026-11-10, change 6, F13): drawn between the Overview's
+      // about block and its chart, 14px/700 in a filled 1,000px block, it ranked third by weight on the page, above
+      // every finding. It now sits under the chart on the Overview, and at the page's foot on Compare, Watchlist and
+      // Explore, where it came second only to the title.
+      if (FOOT_NOTICE.has(route.view)) { if (view.firstElementChild) view.appendChild(holder.firstElementChild); return; }
+      const first = view.querySelector(':scope > section.dchart') || view.querySelector(':scope > section.section, :scope > .section');
       const anchor = first ? first.nextSibling : null;
       if (first) view.insertBefore(holder.firstElementChild, anchor); else if (view.firstElementChild) view.appendChild(holder.firstElementChild);
     };
     noticeWatch = new MutationObserver(place); noticeWatch.observe(view, { childList: true });
   }
+  // the first of the owner's three signals (app/usage.py): a company opened from Home, by any link, button or search
+  const from = current && current.route;
+  if (from && from.view === 'home' && route.symbol && (groupOf(route.view) || {}).id === 'security') track('home_stock_open', { symbol: route.symbol, screen: 'home' });
   current = { page, view, route };
   shell.paint(route);
   // Milo forgets the last page before this one renders (it registers its own context as it renders)
@@ -392,6 +405,8 @@ async function boot() {
   startStrips();   // sideways strips: edge arrows, the wheel and a mouse drag (Classic parity B3)   // the bell and the phone bar's Watchlist count (signed in only)
   scrollmem.start();
   router.onRoute(show);
+  // a visit, for "came back within a week": the server keeps the first of each day and drops the rest
+  track('visit', { screen: router.parse().view });
   if (link && link.reset) { startReset(link.reset); history.replaceState(history.state, '', `${location.pathname}${location.search}#/signin?mode=reset`); }
   else if (link && link.signin && !store.signedIn()) history.replaceState(history.state, '', `${location.pathname}${location.search}#/signin${link.mode ? `?mode=${link.mode}` : ''}`);
   else if (link && link.signedIn && link.hash) history.replaceState(history.state, '', `${location.pathname}${location.search}${link.hash}`);

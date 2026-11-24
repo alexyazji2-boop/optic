@@ -15,7 +15,9 @@ src = lambda p: (JS / p).read_text()   # noqa: E731
 CLASSIC = (V2.parent / "components/knowledge.js").as_posix()
 
 
-def test_five_ids_old_ids_map_once_and_each_level_says_how_terms_explain(tmp_path):
+def test_three_ids_older_ids_map_once_and_each_level_says_how_terms_explain(tmp_path):
+    # three levels since 2026-11-09 (the owner's Beginner, Intermediate, Advanced); Phase 05's five and the ids
+    # before it map on read, and only the three are written
     got = _run(tmp_path, f"""
       localStorage.setItem('optic.knowledge.v1', 'literate');
       const p = await import('{(JS / "core/prefs.js").as_posix()}');
@@ -26,13 +28,13 @@ def test_five_ids_old_ids_map_once_and_each_level_says_how_terms_explain(tmp_pat
       print(JSON.stringify({{ ids: p.LEVEL_IDS, first, stored, moved, again, bad, quiet, seen, index: p.levelIndex(), chosen: p.knowledgeChosen(),
         policy: p.LEVEL_IDS.map((x) => p.explainPolicy(x)), legacy: ['simple', 'professional', 'adaptive'].map((x) => p.explainPolicy(x)) }}));
     """)
-    assert got["ids"] == ["new", "beginner", "intermediate", "advanced", "expert"]
+    assert got["ids"] == ["beginner", "intermediate", "advanced"]
     assert got["first"] == "intermediate" and got["stored"] == "intermediate", "an id from before Phase 05, rewritten on its first read"
     assert got["moved"] is True and got["again"] is False and got["bad"] is False and got["quiet"] is True
     assert got["seen"] == ["knowledge", "knowledge-synced"], "a reader's change and the account's arrival are told apart"
-    assert got["index"] == 4 and got["chosen"] is True
-    assert got["policy"] == ["inline", "on_demand", "on_demand", "on_demand", "off"]
-    assert got["legacy"] == ["inline", "off", "on_demand"]
+    assert got["index"] == 2 and got["chosen"] is True, "Expert is written as Advanced, the last of the three"
+    assert got["policy"] == ["on_demand", "on_demand", "on_demand"]
+    assert got["legacy"] == ["on_demand", "on_demand", "on_demand"]
 
 
 def test_classic_reads_the_same_value_and_maps_an_old_id(tmp_path):
@@ -151,17 +153,17 @@ def test_a_failed_save_is_remembered_with_the_version_this_browser_saw(tmp_path)
     got = account_run(tmp_path, {}, local="beginner", chosen=True,
                       me_prefs={"knowledge_level": "beginner", "updated_at": "2026-10-29T15:00:00Z"}, patch_fails=True,
                       then="p.setKnowledge('expert'); const r = await store.pushLevel(); print(JSON.stringify({ ok: r.ok }));")
-    assert got["level"] == "expert"
-    assert got["pending"] == {"user": "u1", "base": "2026-10-29T15:00:00Z", "level": "expert"}
+    assert got["level"] == "advanced", "Expert is written as Advanced (three levels since 2026-11-09)"
+    assert got["pending"] == {"user": "u1", "base": "2026-10-29T15:00:00Z", "level": "advanced"}
 
 
 def test_at_the_next_load_an_unchanged_account_takes_the_browsers_unsaved_level(tmp_path):
     # this browser now holds another account's level (beginner); the unsaved one is the pending entry's own
     got = account_run(tmp_path, {}, local="beginner", chosen=True, pending={"user": "u1", "base": "2026-10-29T15:00:00Z", "level": "expert"},
                       me_prefs={"knowledge_level": "beginner", "updated_at": "2026-10-29T15:00:00Z"})
-    assert got["level"] == "expert", "nothing changed the account since, so this browser's level is the newer one"
+    assert got["level"] == "advanced", "nothing changed the account since, so this browser's level is the newer one (Expert read as Advanced)"
     patch = [c for c in got["calls"] if c[0] == "PATCH"]
-    assert patch and json.loads(patch[0][2]) == {"knowledge_level": "expert"} and got["pending"] is None
+    assert patch and json.loads(patch[0][2]) == {"knowledge_level": "advanced"} and got["pending"] is None
 
 
 def test_at_the_next_load_an_account_changed_elsewhere_wins_over_an_unsaved_level(tmp_path):
@@ -179,7 +181,7 @@ def test_another_readers_unsaved_level_is_never_sent_to_this_account(tmp_path):
 def test_the_sessions_own_preferences_are_used_without_asking_again(tmp_path):
     got = account_run(tmp_path, {"preferences": {"knowledge_level": "new"}}, local="beginner", chosen=True,
                       me_prefs={"knowledge_level": "expert"})
-    assert got["level"] == "expert", "the session's answer, not the separate endpoint's"
+    assert got["level"] == "advanced", "the session's answer (Expert, read as Advanced), not the separate endpoint's"
     assert [c[1] for c in got["calls"]] == ["/api/auth/me"], "one request at load"
 
 
@@ -192,15 +194,17 @@ def test_one_slider_everywhere_with_an_accessible_name_and_value(tmp_path):
     """)
     h = got["html"]
     assert '<label class="lvl-label" for="t-in">Explain things for</label>' in h
-    assert 'type="range" min="1" max="5" step="1" value="2"' in h and 'aria-describedby="t-prev"' in h
-    assert 'aria-valuetext="Level 2 of 5"' in h, "before the catalogue lands it still names the position"
-    assert '<span class="t-label">Illustration</span>' in h and h.count("<i></i>") == 5
+    # three positions since 2026-11-09; Beginner is the first
+    assert 'type="range" min="1" max="3" step="1" value="1"' in h and 'aria-describedby="t-prev"' in h
+    assert 'aria-valuetext="Level 1 of 3"' in h, "before the catalogue lands it still names the position"
+    assert '<span class="t-label">Illustration</span>' in h and h.count("<i></i>") == 3
     assert "Explain things for" in src("pages/settings.js") and "levelSlider({ id: 'set-lvl'" in src("pages/settings.js")
-    assert "levelSlider({ id: 'ob-lvl', label: 'How should Optic speak to you?', compact: true })" in src("pages/workspace.js")
+    # Home asks it with the level control now (ui/levelcontrol.js), not the slider (decision card B)
+    assert "levelSlider(" not in src("pages/workspace.js") and "${levelControl({ id: 'home-lc' })}" in src("pages/workspace.js")
     assert "levelSlider({ id: 'milo-lvl', label: 'Level', compact: true })" in src("ui/milo.js")
     assert "data-v2-milo-mode>${ms.map(" not in src("ui/milo.js"), "Milo's old Level select is gone"
     sl = src("ui/levelslider.js")
-    assert "if (!id || !prefs.setKnowledge(id) || !store.signedIn()) return;" in sl and "store.pushLevel().then((r) => { if (!r.ok) toast(" in sl
+    assert "if (!id || !prefs.setKnowledge(id)) return false;" in sl and "if (store.signedIn()) {" in sl and "store.pushLevel().then((r) => { if (!r.ok) toast(" in sl
     assert "window.addEventListener('storage', (e) => { if (e.key === 'optic.knowledge.v1') sync(); });" in sl
 
 
@@ -227,7 +231,8 @@ def test_new_to_markets_shows_definitions_from_the_one_glossary(tmp_path):
     """)
     assert got["dv"] == "share price multiplied by shares traded"
     assert got["ex"] == "the average profit or loss per trade across every completed trade"
-    assert got["none"] == "" and got["mark"] == [True, True, False, False]
+    # every one of the three levels marks terms to explain themselves (2026-11-09); Expert and Professional read as Advanced
+    assert got["none"] == "" and got["mark"] == [True, True, True, True]
     got = _run(tmp_path, f"""
       const g = await import('{(JS / "ui/glossmark.js").as_posix()}');
       print(JSON.stringify(['adx', 'regression channel', 'stochastic', 'keltner channel'].map(g.gloss)));

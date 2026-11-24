@@ -53,19 +53,28 @@ def test_page_names_are_the_classic_ones():
     assert {v for v, _ in pages} >= set(labels) - {"overview"} | {"overview"}
 
 
-def test_sections_and_phone_bar_are_the_classic_ones():
+def test_the_rail_is_the_owners_and_the_phone_bar_the_classic_names():
+    # The rail is the owner's layout of 2026-11-09, item for item (his yes for the names, nav.js), replacing the
+    # classic section headings (Research, Tracking, Owner) the rail drew before; Classic itself is unchanged.
     assert re.search(r"portfolio: 'Tracking', follow: 'Tracking', brokerage: 'Tracking'", APP)
-    for gid, section in re.findall(r"(\w+): '(Research|Tracking|Owner)'", NAV):
-        assert re.search(r"%s: '%s'" % (gid, section), APP), gid
+    research = re.findall(r"label: '([^']+)'", NAV[NAV.index("export const RESEARCH = ["):][:900])[:5]
+    assert research == ["Company Overview", "Financials & Valuation", "Charts & Technicals", "Options & Derivatives", "Filings & Ownership"]
+    lists = re.findall(r"label: '([^']+)'", NAV[NAV.index("export const LISTS = ["):][:600])[:3]
+    assert lists == ["Watchlist", "Ideas", "Research"]
+    shell_src = (V2 / "js/ui/shell.js").read_text()
+    for name in ("'Home'", "<span>Research</span>", "'Markets'", "'Discover'", "'Portfolio'", ">Lists<"):
+        assert name in shell_src, name
     classic = re.findall(r"label: '([^']+)', (?:nav|more)", APP[APP.index("const MOBILE_TABS = ["):][:600])
     block = NAV[NAV.index("export const MOBILE_TABS = ["):]
     v2 = re.findall(r"label: '([^']+)'", block[:block.index("];")])
     assert classic == ["Home", "Dossier", "Markets", "Discover", "More"]     # Classic is unchanged
-    # The owner's order for v2's bar (2026-10-19): "Home · Markets · Watchlist · Dossier · More, with
-    # Discover accessible through More and search". Same names; More lists every group the bar does not.
-    assert v2 == ["Home", "Markets", "Watchlist", "Dossier", "More"]
+    # v2's bar takes the rail's names and sections (operator's decision on gauntlet L3, 2026-11-10), replacing the
+    # 2026-10-19 order (Home, Markets, Watchlist, Dossier, More); More holds the rest by the rail's names.
+    assert v2 == ["Home", "Research", "Markets", "Discover", "Portfolio", "Lists", "More"]
     shell = (V2 / "js/ui/shell.js").read_text()
-    assert "visibleGroups(flags).filter((g) => !shown.has(g.id))" in shell, "Discover must stay reachable in More"
+    more = shell[shell.index("export function moreBody() {"):shell.index("export function paintAccount()")]
+    for part in ("RESEARCH.map(", "LISTS.map(", "RAIL_MORE.filter(", "hrefFor('settings')"):
+        assert part in more, "More holds what the bar does not: " + part
 
 
 def test_every_navigation_page_is_in_the_coverage_tracker():
