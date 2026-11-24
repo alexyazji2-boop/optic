@@ -56,8 +56,9 @@ def test_health_exposes_commit_and_uptime(monkeypatch):
 
 def test_a_visitor_gets_the_public_fields_only():
     body = client.get("/api/health").json()
+    # the front end and whether usage is recorded are public too (2026-11-09): neither is about anyone
     assert set(body) == {"status", "provider", "realtime_chain", "server_time", "assistant", "commit", "booted_at",
-                         "uptime_seconds"}, body
+                         "uptime_seconds", "frontend", "usage_capture"}, body
     assert set(body["assistant"]) <= {"enabled", "hint"}, body["assistant"]
 
 

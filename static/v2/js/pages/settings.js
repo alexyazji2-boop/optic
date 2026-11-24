@@ -76,17 +76,19 @@ function account() {
 function billing() {
   const b = D.billing;
   if (b === undefined) return html`<span class="t-muted">Checking plans...</span>`;
-  if (!b || !b.available) return html`<span class="set-row-note">${billingOff((b || {}).reason, !!(store.state.me && store.state.me.admin))}</span>`;
+  // billing off (nothing set on the platform): a reader sees no billing at all; the owner sees which variables are
+  // missing, by name (Pass 2: "with nothing set, nothing shows")
+  if (!b || !b.available) return store.state.me && store.state.me.admin ? html`<span class="set-row-note">${billingOff((b || {}).reason, true)}</span>` : '';
   const pro = ((b.subscription || me().subscription || {}).plan || '') === 'pro';
   const test = b.mode === 'test' ? tag(false, 'Test mode') : '';
   if (pro) return b.can_manage ? html`<button type="button" class="btn btn-sm" data-v2-billing="portal">Manage billing</button>${test}` : html`<span class="set-row-note">Pro, granted by the operator.</span>`;
-  return html`<button type="button" class="btn btn-sm btn-primary" data-v2-billing="checkout">Upgrade to Pro, ${b.price_label || ''}</button>${b.can_manage ? html`<button type="button" class="btn btn-sm" data-v2-billing="portal">Billing history</button>` : ''}${test}`;
+  return html`<button type="button" class="btn btn-sm btn-primary" data-v2-billing="checkout">Upgrade to Pro${b.price_label ? `, ${b.price_label}` : ''}</button>${b.can_manage ? html`<button type="button" class="btn btn-sm" data-v2-billing="portal">Billing history</button>` : ''}${test}`;
 }
 
 function security() {
   const s = D.sec;
   if (s === undefined) return skeleton('lines', 3, 'Loading your sign-in methods');
-  if (s && s.error) return html`<p class="stale">Could not load your sign-in methods: ${api.explain(s.error, 'The list')}</p>`;
+  if (s && s.error) return html`<p class="stale">Your sign-in methods did not load: ${api.explain(s.error, 'The list')}</p>`;
   const ids = s.identities || {}, methods = ids.methods || me().methods || {}, only = (methods.count || 0) <= 1;
   const lastTitle = 'This is the only way into this account. Add another method before removing it.';
   const pw = !!methods.password, provs = me().providers || {}, connected = (ids.identities || []);

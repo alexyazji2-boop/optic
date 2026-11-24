@@ -3,6 +3,7 @@
 import { keepDeviceSession, bringGuestThings, keepGuestThingsOut, switchedSaid, askIsPending } from './core/device.js';
 import { CLASSIC } from './core/classic.js';
 import { $, html, render, announce } from './core/dom.js';
+import { failed } from './ui/states.js';
 import * as api from './core/api.js';
 import * as store from './core/store.js';
 import * as router from './core/router.js';
@@ -37,6 +38,10 @@ import { watch as watchGlossary } from './ui/glossmark.js';
 import './ui/figure.js';
 import { catalogue as levelCatalogue } from './ui/levelslider.js';
 import { wire as wireTypeahead } from './ui/typeahead.js';
+import { track } from './core/usage.js';
+import { groupOf } from './nav.js';
+// the level control (Home and a company's Overview): its press handler, registered when it loads
+import './ui/levelcontrol.js';
 
 // Home is the research workspace (Market Overview by default); pages/home.js supplies its blocks
 // Each page's module is fetched the first time it is opened, not with the shell: a first visit on a phone
@@ -67,7 +72,7 @@ const P = {
   dossierstart: lazy(() => import('./pages/dossierstart.js'), 'dossierstart'),
   notfound: lazy(() => import('./pages/notfound.js'), 'notfound'),
 };
-const PAGES = { home: P.workspace, overview: P.dossier, swing: P.options, long: P.investing, earnings: P.earnings, financials: P.financials, news: P.news, chart: P.chart, brief: P.read, market: P.macro, indices: P.indices, instrument: P.instrument, explore: P.explore, scan: P.scan, insiders: P.insiders, analysts: P.analysts, settings: () => settingsPage, compare: P.compare, tracker: P.tracker, paper: P.paper, roth: P.retirement, brokerage: P.brokerage, reports: P.reports, usage: P.reports, accounts: P.reports, metrics: P.reports, watchlist: P.watchlist, alerts: P.alerts, signin: () => signin, terms: P.legal, privacy: P.legal, earningsweek: P.earningsweek, dossierstart: P.dossierstart, sheet: P.sheet, investigate: P.investigate, saved: P.saved, notfound: P.notfound };
+const PAGES = { home: P.workspace, overview: P.dossier, swing: P.options, long: P.investing, earnings: P.earnings, financials: P.financials, news: P.news, chart: P.chart, brief: P.read, market: P.macro, indices: P.indices, instrument: P.instrument, explore: P.explore, scan: P.scan, insiders: P.insiders, analysts: P.analysts, settings: () => settingsPage, compare: P.compare, tracker: P.tracker, paper: P.paper, roth: P.retirement, brokerage: P.brokerage, reports: P.reports, usage: P.reports, accounts: P.reports, metrics: P.reports, watchlist: P.watchlist, alerts: P.alerts, signin: () => signin, terms: P.legal, privacy: P.legal, earningsweek: P.earningsweek, dossierstart: P.dossierstart, stockgrid: P.workspace, sheet: P.sheet, investigate: P.investigate, saved: P.saved, notfound: P.notfound };
 // While an uncached check is out, a quiet line in place of the last page (after a moment, so a quick answer shows none)
 function holdFor(my, text) {
   setTimeout(() => {
@@ -185,7 +190,7 @@ async function show(route) {
     try { page = await load(); }
     catch (e) {
       if (my !== SHOW) return;
-      const v = $('#main'); render(v, html`<div class="page-view"><div class="state err" role="alert"><p class="t-h3">This page did not load</p><p>Its code could not be fetched. Check the connection and try again.</p><button type="button" class="btn" data-v2-reload>Try again</button></div></div>`);
+      const v = $('#main'); render(v, html`<div class="page-view">${failed('This page', null, { body: 'Its code could not be fetched. Check the connection and try again.', retryAttr: 'data-v2-reload', size: '' })}</div>`);
       return;
     }
     if (my !== SHOW) return;
@@ -205,17 +210,26 @@ async function show(route) {
   // answer, above the evidence, i.e. after the page's first section. Pages repaint themselves, so an
   // observer puts it back after every paint; no page can drop it.
   if (noticeWatch) noticeWatch.disconnect();
+  const FOOT_NOTICE = new Set(['compare', 'watchlist', 'explore']);
   const notice = areaNotice(route.view);
   if (notice) {
     const place = () => {
       if (view.querySelector(':scope .legal-area')) return;
       const holder = document.createElement('div'); render(holder, notice);
-      const first = view.querySelector(':scope > section.section, :scope > .section');
+      // Its place, not its words (visual hierarchy review, 2026-11-10, change 6, F13): drawn between the Overview's
+      // about block and its chart, 14px/700 in a filled 1,000px block, it ranked third by weight on the page, above
+      // every finding. It now sits under the chart on the Overview, and at the page's foot on Compare, Watchlist and
+      // Explore, where it came second only to the title.
+      if (FOOT_NOTICE.has(route.view)) { if (view.firstElementChild) view.appendChild(holder.firstElementChild); return; }
+      const first = view.querySelector(':scope > section.dchart') || view.querySelector(':scope > section.section, :scope > .section');
       const anchor = first ? first.nextSibling : null;
       if (first) view.insertBefore(holder.firstElementChild, anchor); else if (view.firstElementChild) view.appendChild(holder.firstElementChild);
     };
     noticeWatch = new MutationObserver(place); noticeWatch.observe(view, { childList: true });
   }
+  // the first of the owner's three signals (app/usage.py): a company opened from Home, by any link, button or search
+  const from = current && current.route;
+  if (from && from.view === 'home' && route.symbol && (groupOf(route.view) || {}).id === 'security') track('home_stock_open', { symbol: route.symbol, screen: 'home' });
   current = { page, view, route };
   shell.paint(route);
   // Milo forgets the last page before this one renders (it registers its own context as it renders)
@@ -227,7 +241,7 @@ async function show(route) {
   rendered.catch((e) => {
     console.error(e);
     // a button that draws the page again: a link to the address already open did nothing (BUG-046)
-    render(view, html`<div class="state err" role="alert"><p class="t-h3">This page did not load</p><p>${e.message || 'An error stopped it.'}</p><button type="button" class="btn" data-v2-retry="page">Try again</button></div>`);
+    render(view, failed('This page', null, { body: 'An error stopped it from drawing. Try again; if it happens again, Report a problem in Settings tells us.', retry: 'page', size: '' }));
   });
   // a tab strip's bar slides (if the press has not moved it already) and the content fades in, once drawn (ui/motion.js)
   if (tabsWere) whenDrawn(view, 'nav.tabs', () => motion.tabsAfter(view, tabsWere));
@@ -392,6 +406,8 @@ async function boot() {
   startStrips();   // sideways strips: edge arrows, the wheel and a mouse drag (Classic parity B3)   // the bell and the phone bar's Watchlist count (signed in only)
   scrollmem.start();
   router.onRoute(show);
+  // a visit, for "came back within a week": the server keeps the first of each day and drops the rest
+  track('visit', { screen: router.parse().view });
   if (link && link.reset) { startReset(link.reset); history.replaceState(history.state, '', `${location.pathname}${location.search}#/signin?mode=reset`); }
   else if (link && link.signin && !store.signedIn()) history.replaceState(history.state, '', `${location.pathname}${location.search}#/signin${link.mode ? `?mode=${link.mode}` : ''}`);
   else if (link && link.signedIn && link.hash) history.replaceState(history.state, '', `${location.pathname}${location.search}${link.hash}`);

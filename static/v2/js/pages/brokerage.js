@@ -16,7 +16,7 @@ import { num, clean, capFirst, ago, isNum, billingOff } from '../core/format.js'
 import * as RP from '../core/reports.js';
 import { stamp, knowledge } from '../core/prefs.js';
 import { catalogue as levels, levelLabel } from '../ui/levelslider.js';
-import { skeleton } from '../ui/states.js';
+import { skeleton, failed } from '../ui/states.js';
 import * as delays from '../core/delays.js';
 import { marketSession } from '../core/status.js';
 import { lineChart, mountCharts } from '../ui/chart.js';
@@ -181,7 +181,7 @@ function safe(sec) {
 }
 function sectionHTML(sec) {
   if (sec === 'connections') return connections();
-  if (W.error[sec]) return html`<div class="state err" role="alert"><p class="t-h3">${(SECTIONS.find((s) => s.id === sec) || {}).label} did not load</p><p>${W.error[sec]}</p><button type="button" class="btn btn-sm" data-v2-bk-retry>Try again</button></div>`;
+  if (W.error[sec]) return failed((SECTIONS.find((s) => s.id === sec) || {}).label || 'This section', null, { body: W.error[sec], retryAttr: 'data-v2-bk-retry' });
   const d = W.data[sec];
   if (!d) return skeleton('rows', 5, `Loading ${(SECTIONS.find((s) => s.id === sec) || {}).label}`);
   if (sec === 'overview') return overview(d);
@@ -430,9 +430,13 @@ function alertsBlock(a, s, choices) {
 /* ---------------- page ---------------- */
 function body() {
   const st = S.status;
-  if (S.err) return html`<div class="state err" role="alert"><p class="t-h3">Brokerage did not load</p><p>${S.err}</p><button type="button" class="btn btn-sm" data-v2-bk-reload>Try again</button></div>`;
+  if (S.err) return failed('Brokerage', null, { body: S.err, retryAttr: 'data-v2-bk-reload' });
   if (!st) return skeleton('rows', 4, 'Loading your brokerage');
-  if (!st.available) return html`<section class="section first"><p>${clean(st.reason || 'Brokerage linking is not available right now.')}</p></section>`;
+  // off on this deployment: say so, and give the reader somewhere to go from here (a dead end before; Pass 2 workflow
+  // walk, 2026-11-17): the portfolio Optic keeps without a broker, and the paper desk
+  if (!st.available) return html`<section class="section first"><h2 class="t-h2">Brokerage</h2><p>${clean(st.reason || 'Brokerage linking is not available right now.')}</p>
+    <p>Meanwhile, Optic can follow your names and keep a practice book without a broker.</p>
+    <div class="cluster"><a class="btn btn-sm" href="#/watchlist">Your watchlist</a><a class="btn btn-sm btn-quiet" href="#/paper">Paper Desk</a></div></section>`;
   if (!st.signed_in) return html`<section class="section first"><h2 class="t-h2">Link your brokerage</h2><p>See your real holdings in Optic and ask Milo about them. Read-only: Optic cannot trade or move money. Sign in first; linking is part of the paid plan.</p><a class="btn btn-primary" href="#/signin">Sign in</a></section>${permissions(st, true)}`;
   const ent = st.entitlement || {};
   if (!ent.can_link && !linked()) return html`${upgrade(ent)}${permissions(st, true)}`;

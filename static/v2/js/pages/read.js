@@ -73,14 +73,15 @@ function readHero() {
   if (b.missing) return empty("Today's Read is not ready yet", `${clean(b.reason || '')} ${BUILD_COST}`, buildControl("Build today's Read"));
   const s = b.summary || {}, w = b.wires || {};
   const idx = ((b.overview || {}).groups || {}).indices || [];
-  return html`${idx.length ? html`<div class="mstrip" style="--n:${idx.length}" role="group" aria-label="Indices">${idx.map((r) => html`<a class="mcell" href="#/${r.symbol}"><span class="k">${r.symbol} ${r.name}</span><span class="v">${num(r.last)}</span><span class="d ${dir(r.day)}">${signed(r.day)}</span></a>`)}</div>
+  return html`${idx.length ? html`<div class="mstrip" style="--n:${idx.length}" role="group" aria-label="Indices">${idx.map((r) => html`<a class="mcell" href="#/${r.symbol}"><span class="k">${r.symbol} ${r.name}</span><span class="v ${dir(r.day)}">${num(r.last)}</span><span class="d ${dir(r.day)}">${signed(r.day)}</span></a>`)}</div>
       <p class="asof">Fund prices, not index levels.</p>` : ''}
     <section class="section read-hero" aria-labelledby="rd-h">
       <div class="section-head"><div><p class="t-label">Optic's Read, ${fullDate(b.day)}</p><h2 class="t-display-m" id="rd-h">${clean(s.headline || 'The Read')}</h2>
         <p class="section-sub">Prices and headlines updated ${ago(b.built_at)}${b.previous_day ? '. Showing the previous day\'s Read until today\'s is ready' : b.stale ? '. A newer edition is due shortly' : ''}.${w.window_hours ? ` Covering the ${w.window_hours} hours since the previous session closed${w.window_hours >= 48 ? ', the whole weekend' : ''}.` : ''}</p>
-        ${b.previous_day || b.stale ? html`<div class="read-build">${buildControl(b.previous_day ? "Build today's Read now" : 'Update it now', true)}</div>` : ''}</div>
-        ${ask('Ask Milo about the Read', 'What matters most in today\'s Read, and what period does it cover?')}</div>
+        ${b.previous_day || b.stale ? html`<div class="read-build">${buildControl(b.previous_day ? "Build today's Read now" : 'Update it now', true)}</div>` : ''}</div></div>
       <div class="read-prose">${(s.paragraphs || []).map((p) => (String(p).startsWith('## ') ? html`<h3>${raw(bolded(p.slice(3)))}</h3>` : html`<p>${raw(bolded(p))}</p>`))}</div>
+      ${/* under the body, as the one quiet Milo entry: it sat between the headline and the text (hierarchy change 9) */ ''}
+      <div class="read-ask">${ask('Ask Milo about the Read', 'What matters most in today\'s Read, and what period does it cover?')}</div>
       <!-- two clocks, said apart (design review, 2026-10-19): the data refresh above and when this text was written -->
       ${generated(s, { at: s.written_at })}${s.covers_words ? html`<p class="asof">The text covers the session of ${s.covers_words}.</p>` : ''}${s.written_at && Date.parse(b.built_at) - Date.parse(s.written_at) > 1800000 ? html`<p class="asof">The text was written from the figures at that time; the prices above are newer.</p>` : ''}
       ${((s.figure_check || {}).unmatched || []).length ? html`<p class="stale">Optic could not match ${s.figure_check.unmatched.length === 1 ? 'one figure' : `${s.figure_check.unmatched.length} figures`} in this text to the data it was written from: ${s.figure_check.unmatched.map((u) => `${u.figure} (${clean(u.why)})`).join('; ')}. The figures in the panels are computed, not written by the model.</p>` : ''}
@@ -114,7 +115,10 @@ function overnight() {
 function priority() {
   const p = D.priority;
   if (p === undefined) return skeleton('lines', 4, "Loading today's priority");
-  if (!p || !p.available) return empty('Nothing on the board right now', '');
+  // a first build of the board takes a minute or two cold (its earnings leg); the server says so after a few seconds
+  // and the page asks again, rather than holding a placeholder for the whole build (Pass 2 workflow walk, 2026-11-17)
+  if (p && p.building) return html`<p class="asof" role="status">${clean(p.reason || 'Building the board.')} ${D.priorityPolls > PRIORITY_POLLS ? 'Still building: reload the page to check.' : 'It appears here when it is done.'}</p>`;
+  if (!p || !p.available) return empty('Nothing on the board right now', clean((p && p.reason) || ''));
   // A row's day and time are left out when its title already says them ("AAPL reports Monday after the close
   // Monday, After close"), and a reason every row shares is said once, under the list (Phase 12 editorial pass)
   const bare = (t) => String(t || '').toLowerCase().replace(/\bthe\s+/g, '');      // "after the close" says "After close"
@@ -289,7 +293,7 @@ const TABS = [
 function paint() {
   if (!live) return;
   const y = window.scrollY;
-  draw(mainEl, html`<header class="page-head">${sectionHead('market', 'brief')}</header>
+  draw(mainEl, html`<header class="page-head page-head-label">${sectionHead('market', 'brief')}</header>
     ${readHero()}${desk()}
     <section class="section" aria-labelledby="rd-more-h"><h2 class="t-h2" id="rd-more-h">More from today</h2><div id="rd-more"></div></section>`);
   paintMore();
@@ -329,11 +333,22 @@ export async function render(main) {
   const step = (p, ok, bad, repaintAll) => p.then(ok, bad).finally(() => { if (live) (repaintAll ? paint() : paintMore()); });
   step(api.get('/api/brief?cached=true', { ttl: 60000, timeout: 30000 }), (d) => { D.brief = d; }, (e) => { D.briefErr = e; }, true);
   step(api.get('/api/desk/edition', { ttl: 300000 }), (d) => { D.desk = d; }, () => { D.desk = null; }, true);
-  step(api.get('/api/priority', { ttl: 300000, timeout: 90000 }), (d) => { D.priority = d; }, () => { D.priority = null; });
+  loadPriority();
   step(api.get('/api/catalyst-mode?cached=true', { ttl: 600000, timeout: 45000 }), (d) => { D.catmode = d; }, () => { D.catmode = null; });
   step(api.get('/api/weekly?cached=true', { ttl: 600000, timeout: 30000 }), (d) => { D.weekly = d; }, () => { D.weekly = null; });
   step(api.get('/api/sentiment', { ttl: 600000, timeout: 30000 }), (d) => { D.sent = d; }, () => { D.sent = null; });
   loadCats();
+}
+const PRIORITY_POLLS = 10, PRIORITY_EVERY = 10000;
+function loadPriority() {
+  const mine = D;
+  api.get('/api/priority?quick=true', { ttl: 300000, timeout: 90000, force: !!D.priorityPolls }).then((d) => { if (mine === D) D.priority = d; }, () => { if (mine === D) D.priority = null; })
+    .finally(() => {
+      if (!live || mine !== D) return;
+      paintMore();
+      if (D.priority && D.priority.building && (D.priorityPolls = (D.priorityPolls || 0) + 1) <= PRIORITY_POLLS) setTimeout(() => { if (live && mine === D) loadPriority(); }, PRIORITY_EVERY);
+      else if (D.priority && D.priority.building) paintMore();
+    });
 }
 export function dispose() { live = false; }
 export const retry = { brief: (m, r) => { api.invalidate('/api/brief'); render(m, r); } };

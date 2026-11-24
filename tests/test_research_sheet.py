@@ -3,9 +3,13 @@
 Reached from the Dossier at #/SYM/sheet, not a tab. Its facts come from the same payloads the Dossier reads,
 each section is tagged Reported, Estimate or Optic, missing figures are said, and private holdings are never
 read. Printed at Letter and A4 it is two pages, the second an intentional continuation: measured in print media
-at 710 x 940 and 688 x 1010 (AAPL 840/874 px, SPY 579/870 px) and in Chromium's PDF output (two pages).
+at 710 x 940 and 688 x 1010 (AAPL 840/874 px, SPY 579/870 px) and in Chromium's PDF output (two pages). Those widths
+are under the 860 px breakpoint, where the shell is one column anyway; from a wider window it was not (Pass 2, D4), so
+it is re-measured from a 1280 px window too (2026-11-18: sheet 1280 px wide, two pages at Letter and at A4).
 """
 from __future__ import annotations
+
+import re
 
 from tests.test_frontend_v2_stage0 import V2, _run
 
@@ -73,3 +77,28 @@ def test_a_decimal_does_not_end_a_sentence(tmp_path):
       print(JSON.stringify([S.firstSentences(t, 1), O.firstSentences(t, 1)]));
     """)
     assert got == ["$217.94 is 16.2% above the 200-day at $187.99."] * 2
+
+
+def _print_block():
+    """The @media print block that carries the sheet's rules, braces matched."""
+    start = CSS.index("@media print", CSS.index(".sh-chart svg { width: 100%"))
+    depth, i = 0, CSS.index("{", start)
+    while True:
+        depth += {"{": 1, "}": -1}.get(CSS[i], 0)
+        if depth == 0:
+            return CSS[start:i + 1]
+        i += 1
+
+
+def test_the_sheet_prints_in_one_column_and_never_as_a_grid():
+    """Printed from a window wider than 860 px, the sheet fell into the rail's column: the print block hid .rail but left
+    .shell a two-column grid (components.css: the 256 px rail, then the page), so .sheet measured 256 px wide at x 0
+    and the PDF ran to four pages (Pass 2 gauntlet, D4, 2026-11-18). Inside a grid Chromium also printed a paragraph
+    broken across a page over the next one. The shell, the sheet and each page are blocks in print."""
+    block = _print_block()
+    assert ".sh-cont { break-before: page; }" in block, "the block found is the sheet's"
+    rules = re.sub(r"/\*.*?\*/", "", block, flags=re.S).split("}")
+    rule = next((r for r in rules if "display: block" in r and ".shell" in r.split("{")[0]), "")
+    names = {n.strip() for n in rule.split("{")[0].split(",")}
+    assert {".shell", ".sheet", ".sh-page"} <= names, "the shell, sheet and pages are one column of blocks in print: " + rule
+    assert "measured at 710 x 940)" not in block, "the measurement in the comment is the one taken from a wide window"

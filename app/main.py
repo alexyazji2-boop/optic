@@ -46,6 +46,7 @@ from . import portfolio_intent
 from . import db as accounts_db
 from . import frontend
 from . import metrics as metrics_mod
+from . import usage as usage_mod
 from .auth import admin as auth_admin
 from .auth import config as auth_config
 from .auth import deps as auth_deps
@@ -1264,6 +1265,10 @@ async def health(request: Request) -> Dict[str, Any]:
         # things you want to see rather than infer.
         "booted_at": _BOOTED_AT.isoformat(),
         "uptime_seconds": int((now - _BOOTED_AT).total_seconds()),
+        # Which front end the public gets, and the one setting that changes it (app/frontend.py), so a deploy that
+        # switched it is visible from outside; and whether the three usage signals are being recorded (app/usage.py)
+        "frontend": {"active": frontend.active(), "classic": frontend.classic_on(), "setting": frontend.CLASSIC_SETTING},
+        "usage_capture": usage_mod.capture_on(),
     }
     assistant = _assistant_status()
     # Where the AI credential comes from, whether Anthropic refused it and the migrations are the operator's
@@ -4894,6 +4899,29 @@ def intraday_bars(symbol: str, spec: Dict[str, Any]) -> pd.DataFrame:
     return out
 
 
+@app.get("/api/sparklines")
+async def sparklines(symbols: str = Query("", description="Up to 30 symbols, comma separated")) -> Dict[str, Any]:
+    """Home's ticker rows' lines in one request (Pass 2): five-minute closes since the open in session, else the last
+    30 daily closes, through the intraday source app/sparklines.py chooses, so a licensed feed slots in there."""
+    from . import sparklines as sparklines_mod
+    want = [s.strip().upper() for s in (symbols or "").split(",") if s.strip()]
+    want = [s for s in dict.fromkeys(want) if re.fullmatch(r"[A-Z0-9.^=\-]{1,12}", s)][:sparklines_mod.MAX_SYMBOLS]
+    if not want:
+        raise HTTPException(status_code=422, detail="Name at least one symbol.")
+
+    def build() -> Dict[str, Any]:
+        src = sparklines_mod.source(YF_PROVIDER)
+        prev: Dict[str, Optional[float]] = {}
+        for s in want:
+            try:
+                q = YF_PROVIDER.quote(s) or {}
+                prev[s] = q.get("previous_close")
+            except Exception:                                # noqa: BLE001 - the row draws without its direction
+                prev[s] = None
+        return sparklines_mod.build(src, want, session_mod.state(), prev)
+    return await _run(build)
+
+
 @app.get("/api/intraday/{ticker}")
 async def intraday(ticker: str, range: str = Query("1d"),
                    window: str = Query("", description="One of the size's windows"),
@@ -6523,6 +6551,69 @@ async def admin_metrics(request: Request) -> JSONResponse:
     return JSONResponse(content=out, headers={"Cache-Control": "no-store"})
 
 
+@app.get("/api/admin/usage-signals")
+async def admin_usage_signals(request: Request) -> JSONResponse:
+    """The owner's three signals as raw counts (app/usage.py): stocks opened from Home, questions to Milo,
+    visits and returns within a week. The same guard as Metrics; counts only, no ids, no addresses."""
+    _owner_session_guard(request)
+    out = await _run(usage_mod.signals)
+    return JSONResponse(content=out, headers={"Cache-Control": "no-store"})
+
+
+@app.post("/api/usage")
+async def usage_event(request: Request) -> Dict[str, Any]:
+    """One of the page's two usage events (app/usage.py): a stock opened from Home, or a visit. Anyone may send
+    one, signed in or not, because the signals are about readers who have no account yet. What keeps it honest:
+    only the named events, a body of at most 1 KB, a burst limit per reader and one per address (held in memory,
+    never stored), the CSRF check when a session cookie rides along, and nothing personal in the row."""
+    raw = await request.body()
+    if len(raw) > usage_mod.MAX_BODY:
+        raise HTTPException(status_code=413, detail="That usage event is too large.")
+    try:
+        body = json.loads(raw or b"{}")
+    except ValueError:
+        raise HTTPException(status_code=400, detail="That usage event is not JSON.")
+    if not isinstance(body, dict):
+        raise HTTPException(status_code=400, detail="That usage event is not an object.")
+    event = body.get("event")
+    if event not in usage_mod.CLIENT_EVENTS:
+        raise HTTPException(status_code=400, detail="Unknown usage event.")
+    auth_deps.csrf_guard(request)
+    try:
+        user = auth_deps.current_user(request)
+    except Exception:                                             # noqa: BLE001 - counted as a visitor
+        user = None
+    actor = usage_mod.actor_for(user, body.get("visitor") if isinstance(body.get("visitor"), str) else None)
+    if actor is None:
+        raise HTTPException(status_code=400, detail="A usage event needs a reader.")
+    if not usage_mod.ADDRESSES.allow(auth_ratelimit.client_ip(request)) or not usage_mod.ACTORS.allow(actor[1]):
+        raise HTTPException(status_code=429, detail="Too many usage events. Slow down.")
+    wrote = await _run(usage_mod.record, event, actor, symbol=body.get("symbol"),
+                       source_screen=body.get("screen"), level=body.get("level"))
+    return {"ok": True, "recorded": bool(wrote)}
+
+
+def _usage_milo(request: Request, payload: Dict[str, Any]) -> None:
+    """A question to Milo passed the allowance: one milo_question row, with the screen it came from, the
+    symbol in focus and the level (app/usage.py). Never the question's text. Never raises."""
+    try:
+        try:
+            user = auth_deps.current_user(request)
+        except Exception:                                         # noqa: BLE001
+            user = None
+        ctx = payload.get("context") if isinstance(payload.get("context"), dict) else {}
+        focus = ctx.get("focus") if isinstance(ctx.get("focus"), dict) else {}
+        visitor = request.headers.get("x-optic-visitor") or None
+        actor = usage_mod.actor_for(user, visitor)
+        if actor is None:
+            return
+        level = knowledge_mod.three(payload.get("mode"))
+        usage_mod.record("milo_question", actor, symbol=focus.get("ticker") if isinstance(focus.get("ticker"), str) else None,
+                         source_screen=focus.get("view") if isinstance(focus.get("view"), str) else None, level=level)
+    except Exception:                                             # noqa: BLE001
+        pass
+
+
 # Resolving a report, one or all. The same guard as reading them, because it is
 # the same person, and writes as well: the token, or the signed-in owner with
 # the CSRF header. An update and never a delete (see feedback.resolve).
@@ -7132,6 +7223,29 @@ async def segments_panel(ticker: str,
     sym = (ticker or "").upper().strip()
     # the company facts name each period and reconcile each table (Handoff 2); loaded only once the symbol has filings
     return await _run(segments_mod.build, sym, force, sec=lambda: figures_mod.load_via(YF_PROVIDER, sym))
+
+
+@app.get("/api/insiders/{ticker}/history")
+async def insider_history(ticker: str, years: int = Query(5, description="2, 5 or 10")) -> Dict[str, Any]:
+    """One company's open-market insider purchases and sales over 2, 5 or 10 years: Yahoo's latest rows and, before
+    them, the SEC's own Form 4 filings (Pass 2). Makes no SEC request on the reader's time: what is not yet read is
+    read in the background, and `coverage` says how much is still to come."""
+    from . import insider_fill
+    sym = ticker.upper().strip()
+    if not re.fullmatch(r"[A-Z0-9.\-]{1,10}", sym):
+        raise HTTPException(status_code=400, detail="Not a ticker symbol.")
+    if years not in insider_fill.HISTORY_YEARS:
+        raise HTTPException(status_code=422, detail="years must be 2, 5 or 10.")
+
+    def build() -> Dict[str, Any]:
+        try:
+            raw = YF_PROVIDER.insiders(sym)
+        except Exception:                                    # noqa: BLE001 - the feed down; the SEC may still answer
+            raw = {}
+        out = insider_fill.history(sym, raw or {}, years)
+        out["yahoo_answered"] = bool((raw or {}).get("transactions"))
+        return out
+    return await _run(build)
 
 
 @app.get("/api/insiders/latest")
@@ -8931,6 +9045,7 @@ async def chat(request: Request,
         raise HTTPException(status_code=413, detail=too_long)      # before the allowance is charged (BUG-112)
     _spend_guard(request)
     _count_question(request, "chat")
+    _usage_milo(request, payload)
     history = payload.get("messages") or []
     context = payload.get("context")
     use_web = bool(payload.get("web"))
@@ -9116,6 +9231,7 @@ async def research(request: Request,
         raise HTTPException(status_code=413, detail=too_long)      # before the allowance is charged (BUG-112)
     _spend_guard(request)
     _count_question(request, "research")
+    _usage_milo(request, payload)
     ticker = (payload.get("ticker") or "").upper()
     question = payload.get("question")
     # Research is about a company or the market, never the reader's accounts. The reader's own blocks (a paper book,
@@ -9142,6 +9258,8 @@ async def research(request: Request,
 app.include_router(auth_routes.router)
 app.include_router(account_mod.router)
 app.include_router(library_mod.router)
+from . import layouts as layouts_mod  # noqa: E402 - named layouts on the account (Pass 2)
+app.include_router(layouts_mod.router)
 app.include_router(valuation_store.router)
 app.include_router(billing_mod.router)
 app.include_router(brokerage_routes.router)
@@ -9478,7 +9596,10 @@ if STATIC_DIR.exists():
 
     @app.get("/classic", include_in_schema=False)
     async def classic(request: Request) -> Any:
-        """The classic app, always, whatever "/" serves."""
+        """The classic app while OPTIC_CLASSIC is on, whatever "/" serves. Off, v2: an old bookmark or the
+        classic app's own links land on the one front end rather than on a page that is switched off."""
+        if not frontend.classic_on() and (_V2_DIR / "index.html").exists():
+            return _v2_page()
         return _classic_page(request)
 
     @app.get("/v2/", include_in_schema=False)
@@ -9497,6 +9618,10 @@ if STATIC_DIR.exists():
         or a 404, never a v2 file; and every API answer carries
         X-Optic-V2: closed, so a v2 tab left open learns of it at once."""
         path = request.url.path
+        # Classic off: its page, reached by its file name, is v2 too (StaticFiles would serve static/index.html)
+        if not frontend.classic_on() and request.method in ("GET", "HEAD") and path.lower() in ("/index.html", "/classic/") \
+                and (_V2_DIR / "index.html").exists():
+            return _v2_page()
         if frontend.v2_path(path):
             if not frontend.v2_allowed(_is_owner(request)):
                 if frontend.v2_page_path(path) or path.endswith("/"):

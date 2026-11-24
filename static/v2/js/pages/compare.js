@@ -12,7 +12,7 @@ import { hbars } from '../ui/bars.js';
 import { button as miloButton, provideContext, contextChanged } from '../ui/milo.js';
 import { icon } from '../ui/icons.js';
 import { scoreLine, tone100 } from '../ui/score.js';
-import { asOfLine } from '../ui/states.js';
+import { asOfLine, failed } from '../ui/states.js';
 import { fig as figControl } from '../ui/figure.js';
 import * as symbols from '../core/symbolcheck.js';
 import { saveButton, provide } from '../ui/library.js';
@@ -237,7 +237,7 @@ function grid(c) {
       ${GROUPS.map((g) => html`<tr class="cmp-group"><th scope="rowgroup" colspan="${rows.length + 1}">${g.title}</th></tr>
         ${g.rows.map((m) => { const lead = leader(m, rows, c.leaders);
           return html`<tr><th scope="row">${m.label}${m.note ? html` <small class="t-muted">${m.note}</small>` : ''}<small class="t-muted cmp-means">${m.means}</small></th>${rows.map((r) => html`<td>${regCell(m, r) || cell(m.kind, r[m.key], (r.why_na || {})[m.key])}${lead === r.ticker ? html` <span class="cmp-dot" title="${m.lead === 'high' ? 'Higher' : 'Lower'} on this measure">·<span class="sr">, leads this row</span></span>` : ''}${m.sub && r[m.sub] ? html`<br><small class="t-muted">${clean(r[m.sub])}</small>` : ''}</td>`)}</tr>`; })}`)}</tbody></table></div>
-    ${(c.failed || []).length ? html`<p class="stale">Could not load: ${c.failed.map((f) => `${f.ticker} (${f.reason})`).join(', ')}.</p>` : ''}
+    ${(c.failed || []).length ? html`<p class="stale">Did not load: ${c.failed.map((f) => `${f.ticker} (${f.reason})`).join(', ')}.</p>` : ''}
     ${anyLead ? html`<p class="asof">A dot marks the higher or lower reading on the rows where one direction is better. No dot when fewer than two names have the figure, when the top two read the same, or when they are within 5% of each other.</p>` : ''}
     ${c.method ? html`<p class="asof">${clean(c.method)}</p>` : ''}</section>`;
 }
@@ -251,7 +251,7 @@ function paint() {
       ${c && c.available && (c.horizons || []).length ? html`<div class="cmp-hzs">${c.horizons.map((h) => html`<div><p class="t-label">${h.name}</p><p><b>Horizon: ${h.horizon}</b></p><p class="t-muted">${clean(h.basis || '')}</p></div>`)}</div>
         <p class="t-muted cmp-own">These are Compare's own scores, built only from inputs every compared name has. A Dossier's short- and long-term readings weigh more (options activity, news tone, the business's filings), so their numbers differ from these.</p>` : ''}</section>
     <div aria-live="polite">${running ? html`<div class="sk-wrap" role="status" aria-label="Comparing"><p>Pulling ${inputs.filter(Boolean).map((x) => x.toUpperCase()).join(' and ')} in full. The same analysis the Options and Investing tabs run, for each name.</p><div class="sk sk-row"></div><div class="sk sk-row"></div><div class="sk sk-row"></div></div>`
-      : !c ? '' : !c.available ? html`<div class="state err" role="alert"><p class="t-h3">Not compared</p><p>${clean(c.reason || 'Not enough names loaded to compare.')}</p>${(c.failed || []).map((f) => html`<p class="t-muted">${f.ticker}: ${clean(f.reason)}</p>`)}${refusedFixes(c)}${inputs.filter((x) => x.trim()).length >= 2 && !(c.refused || []).some((r) => r.status !== 'unavailable') ? html`<button type="button" class="btn btn-sm" data-v2-cmp-again>Try again</button>` : ''}</div>`
+      : !c ? '' : !c.available ? failed('The comparison', null, { title: 'Not compared', body: clean(c.reason || 'Not enough names loaded to compare.'), extra: html`${(c.failed || []).map((f) => html`<p class="t-muted">${f.ticker}: ${clean(f.reason)}</p>`)}${refusedFixes(c)}`, retryAttr: inputs.filter((x) => x.trim()).length >= 2 && !(c.refused || []).some((r) => r.status !== 'unavailable') ? 'data-v2-cmp-again' : '' })
         : html`${stale() ? html`<div class="stale cmp-stale" role="status"><p>These results are for ${c.tickers.join(', ')}. ${wanted().length >= 2 ? html`Press Compare for ${wanted().join(', ')}.` : 'Add a second name to compare again.'}</p>${wanted().length >= 2 ? html`<button type="button" class="btn btn-sm" data-v2-cmp-again>Compare ${wanted().join(', ')}</button>` : ''}</div>` : ''}<div class="${stale() ? 'cmp-old' : ''}">${take(c)}${perf(c)}${bars(c)}${grid(c)}${asOfLine(c.generated_at, { what: 'Compared', note: 'From delayed quotes and daily closes.' })}</div>`}</div>`);
   // a phone's table header sticks under the top bar, whatever its height
   const bar = document.querySelector('.topbar'); if (bar && mainEl) mainEl.style.setProperty('--cmp-top', `${Math.round(bar.getBoundingClientRect().height)}px`);

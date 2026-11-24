@@ -37,7 +37,8 @@ def test_the_pages_use_them():
         "pages/investing.js": "${scoreLine(s, { tone })}",
         "pages/options-panels.js": "${scoreLine(s)}",
         "pages/read.js": "scoreLine(s.score, { tone: toneBand(s.label) })",
-        "pages/workspace.js": "${signedLine(m.risk_score)}",
+        # a gauge on the same -100 to +100 scale since the visual update (2026-11-11)
+        "pages/workspace.js": "gauge({ v: m.risk_score, lo: -100, hi: 100",
         "pages/compare.js": "${scoreLine(x.score)}",
     }
     for path, snippet in uses.items():

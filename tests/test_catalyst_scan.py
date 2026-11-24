@@ -459,7 +459,10 @@ def _record(hours_ago, ok):
     with sqlite3.connect(catalysts.DB_PATH) as conn:
         conn.executescript(catalysts.SCHEMA)
         conn.execute("INSERT INTO catalyst_scans (at, kind, ok) VALUES (?,?,?)",
-                     ((NOW - timedelta(hours=hours_ago)).isoformat(), "scheduled", int(ok)))
+                     # the clock at the call, not at import: scan_due reads the clock when it runs, and a suite that
+                     # spends more than six minutes before this test (the browser journeys run first) moved 5.9 hours
+                     # ago past the six-hour interval (2026-11-09, measured: due came back True)
+                     ((datetime.now(timezone.utc) - timedelta(hours=hours_ago)).isoformat(), "scheduled", int(ok)))
 
 
 def test_a_store_with_no_scans_is_due():

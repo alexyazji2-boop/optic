@@ -123,7 +123,7 @@ function ask() {
     <details class="sc-ex" ${wideScreen() ? 'open' : ''}><summary>Examples <span class="t-muted">${EXAMPLES.length}</span></summary>
       <div class="chips chips-scroll" role="group" aria-label="Examples">${EXAMPLES.map((e) => html`<button type="button" class="chip" data-v2-ask-ex="${e}">${e}</button>`)}</div></details>
     ${recent.length ? html`<p class="t-label" style="margin-top:12px">Your recent requests <button type="button" class="textlink" data-v2-ask-clear>Clear</button></p><div class="chips chips-scroll">${recent.map((e) => html`<button type="button" class="chip" data-v2-ask-ex="${e}">${e}</button>`)}</div>` : ''}
-    <div aria-live="polite">${S.propErr ? html`<div class="state err" role="alert"><p class="t-h3">The request was not read</p><p>${api.explain(S.propErr, 'Reading the request')}</p></div>` : S.prop ? html`${review()}${resultView()}` : ''}</div>
+    <div aria-live="polite">${S.propErr ? failed('The request', null, { title: 'The request was not read', body: api.explain(S.propErr, 'Reading the request') }) : S.prop ? html`${review()}${resultView()}` : ''}</div>
   </section>`;
 }
 /** The filters as read, before anything runs: each in plain English, each editable or removable. */
@@ -209,7 +209,7 @@ function readings(r) {
 function builder() {
   const f = S.fields, sp = S.spec;
   if (f === undefined) return skeleton('lines', 3, 'Loading the filters');
-  if (!f) return empty('Could not load the filter list', '');
+  if (!f) return empty('The filter list did not load', '');
   const used = new Set(sp.filters.map((x) => x.field));
   const max = f.max_filters || 8;
   const res = S.screen;

@@ -547,6 +547,12 @@ SETTINGS = {
     # Milo's "Find stocks" card pressed: the Scan page reads it once, this tab only, in sessionStorage, and
     # removes it, so a shared #/scan?q= link never spends a Milo message without a press (Phase 02, 2026-10-29).
     "optic.scan.go.v1",
+    # This browser's random visitor id for the owner's usage signals (2026-11-09, core/usage.js): a fact about the
+    # browser, like the passkey flag, not about an account, so it stays put across sign-in and sign-out.
+    "optic.visitor.v1",
+    # A question pressed on a Milo prompt while signed out (ui/miloprompt.js): sessionStorage, this tab only, read
+    # once by the page after sign-in and removed, like the scan go flag above.
+    "optic.milo.ask.v1",
 }
 
 

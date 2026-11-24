@@ -2,9 +2,10 @@
 // the printable sheet, show it on Home, and copy the ticker or the price as it is on screen with its time. The first
 // three are buttons of their own on a wide header, so there they sit in the menu only on a phone (.menu-phone).
 // `price` is a selector for the figure to copy, read from the page so what is copied is what the reader sees.
-export function tickerMenu(sym, { price = '.dhead .dh-price', sheet = true } = {}) {
+export function tickerMenu(sym, { price = '.dhead .dh-price', sheet = true, phone = true } = {}) {
   const e = encodeURIComponent(sym);
-  return html`<a href="#/${e}/investigate">Investigate this company</a><a class="menu-phone" href="#/alerts?symbol=${e}">Set an alert</a><a class="menu-phone" href="#/compare?t=${e}">Compare</a>${sheet ? html`<a class="menu-phone" href="#/${e}/sheet">Export research sheet</a>` : ''}
+  // `phone: false` where the caller lists Alert, Compare and Export in the menu at every width (the Overview's header)
+  return html`<a href="#/${e}/investigate">Investigate this company</a>${phone ? html`<a class="menu-phone" href="#/alerts?symbol=${e}">Set an alert</a><a class="menu-phone" href="#/compare?t=${e}">Compare</a>${sheet ? html`<a class="menu-phone" href="#/${e}/sheet">Export research sheet</a>` : ''}` : ''}
     <button type="button" data-v2-homelink="${sym}">Show on Home</button>
     <button type="button" data-v2-copy="${sym}">Copy ticker</button>
     ${price ? html`<button type="button" data-v2-copy-price="${sym}" data-v2-copy-from="${price}">Copy price and time</button>` : ''}`;

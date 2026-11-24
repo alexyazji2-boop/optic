@@ -1013,6 +1013,16 @@ def _client():
         # two tries. Five attempts costs nothing when the API is healthy and
         # absorbs the short spikes that cause almost all of these.
         kwargs: Dict[str, Any] = {"max_retries": 5}
+        # Both overridable (2026-11-09), defaults unchanged: the timeout and the retry count Milo's calls run under,
+        # so a test can play Anthropic timing out in seconds rather than in the SDK's ten minutes times six tries.
+        # Unset or unreadable, the SDK's own timeout and the five retries above stand.
+        try:
+            if (os.environ.get("ANTHROPIC_TIMEOUT_SECONDS") or "").strip():
+                kwargs["timeout"] = max(1.0, float(os.environ["ANTHROPIC_TIMEOUT_SECONDS"]))
+            if (os.environ.get("ANTHROPIC_MAX_RETRIES") or "").strip():
+                kwargs["max_retries"] = max(0, min(10, int(os.environ["ANTHROPIC_MAX_RETRIES"])))
+        except ValueError:
+            pass
         # A personal API key -- one created as a user, rather than inside a
         # workspace -- is refused on every call unless the request names a
         # workspace: "This API key is not scoped to a workspace, so this request
@@ -1546,7 +1556,7 @@ def research_focus(snapshot: Any) -> Dict[str, Any]:
     out: Dict[str, Any] = {"scope": "none" if unavailable else scope, "general": general, "unavailable": unavailable,
                            "ticker": None, "section": None, "timeframe": None, "range": None, "visible": None,
                            "indicators": [], "compared": [], "compare": None, "removed": [], "described": False,
-                           "page": None}
+                           "page": None, "in_view": None}
     if general or scope == "market":
         return out
     chart = focus.get("chart") if isinstance(focus.get("chart"), dict) else {}
@@ -1576,6 +1586,12 @@ def research_focus(snapshot: Any) -> Dict[str, Any]:
     out["indicators"] = _ctx_indicators(chart.get("indicators"))
     out["compared"] = [s for s in _ctx_words(chart.get("compared"), _CTX_SYMBOL, 3) if s != ticker]
     out["removed"] = [w for w in _ctx_indicators(focus.get("indicators_removed")) if w not in out["indicators"]]
+    # what on the page the reader is looking at (Pass 2, 2026-11-17): a Financials chart, a section in view, with its
+    # period; identifiers only, checked like every other word the page sends
+    iv = focus.get("in_view") if isinstance(focus.get("in_view"), dict) else {}
+    metric = _ctx_word(iv.get("metric"))
+    if metric:
+        out["in_view"] = {"metric": metric, "period": _ctx_word(iv.get("period"))}
     return out
 
 
@@ -1661,6 +1677,11 @@ def _research_lines(rf: Dict[str, Any]) -> List[str]:
             if rf["compared"]:
                 said += ", compared with {}".format(_ctx_join(rf["compared"]))
         lines.append(said + ".")
+    if rf.get("in_view") and not cmp_:
+        iv = rf["in_view"]
+        lines.append("On that page the reader is looking at {}{}. Where the question allows, answer about that first "
+                     "(\"this\", \"that chart\" and \"these numbers\" mean it).".format(
+                         iv["metric"], " ({})".format(iv["period"]) if iv.get("period") else ""))
     lines.append("This question is about {t} unless it names another symbol; the reader does not need to type it. "
                  "Start the answer by saying, in a few words, the ticker{tf} it is for (\"For {t}{ex}, ...\")."
                  .format(t=ticker, tf=" and the timeframe" if rf["timeframe"] else "",

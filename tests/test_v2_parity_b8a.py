@@ -92,7 +92,7 @@ def test_the_desk_in_full(tmp_path):
     assert "The written version from 9:40 AM ET is not shown, because the market has moved since it was written" in t and "A new one is being written" in t
     assert "Written for today by an AI model (Claude) from the day&#39;s figures and nothing else." in got["w"] and "desk-why" not in got["w"]
     assert "The written version${at ? ` from ${at}` : ''} is not shown, because the market has `" in CLASSIC, "Classic's reason, kept"
-    assert "return deskBody(md);" in WS
+    assert "${deskBody(md)}</div>${deskSide(md, d)}</div>`;" in WS, "the Desk in full, with its right side (Pass 2)"
 
 
 def test_the_strip_contains_its_screen_reader_text():

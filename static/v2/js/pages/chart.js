@@ -21,7 +21,7 @@ import { num, clean, isNum, signed, fullDate } from '../core/format.js';
 import { tradeTime } from '../core/marketTime.js';
 import { skeleton, failed } from '../ui/states.js';
 import { icon } from '../ui/icons.js';
-import { chartReadCard } from '../ui/chartread.js';
+import { chartReadCard, chartReadModel } from '../ui/chartread.js';
 import { button as miloButton, provideContext, openMilo, contextChanged } from '../ui/milo.js';
 import { toast } from '../ui/toast.js';
 import { createPriceChart, EXPLAINABLE } from '../ui/pricechart.js';
@@ -445,6 +445,7 @@ function toolbar() {
     ${isPhone() ? '' : html`<button type="button" class="btn btn-sm" data-v2-ch-fit title="Every loaded bar on screen">Fit</button>`}
     <button type="button" class="btn btn-sm ch-home" data-v2-ch-home ${D.zoomed ? '' : 'hidden'} title="Back to the ${iv.intraday ? iv.label : V.range} view">Reset zoom</button>
     ${isPhone() ? '' : html`<div class="seg seg-ic" role="group" aria-label="Style">${[['candles', 'Candles', 'candles'], ['line', 'Line', 'lineChart'], ['area', 'Area', 'area']].map(([k, l, ic]) => html`<button type="button" data-v2-ch-style="${k}" aria-pressed="${V.style === k}" aria-label="${l}" title="${l}">${icon(ic)}</button>`)}</div>`}
+    ${isPhone() ? '' : html`<span class="ch-tacts">${miloButton('Explain', { ask: `Explain the ${D.sym} chart: the trend, support, resistance, momentum, volume and risk, and what would invalidate the read.`, context: `${D.sym} Dossier, Chart`, symbol: D.sym, cls: 'btn-sm' })}${C.maxButton()}</span>`}
   </div>
   <div class="ctools ch-layers" id="ch-layers" role="group" aria-label="Layers" ${V.layers ? '' : 'hidden'}>
     ${menu('cmp', 'Compare', V.compare.length, cmpBody(), 'ch-cmp')}
@@ -459,6 +460,8 @@ function toolbar() {
 // The drawing tools: the classic rail, two columns of named icons beside the plot in their groups, then snap,
 // undo, redo, delete and remove all; on a phone a row above the plot, shown when Draw is on (or while a tool other
 // than select is in use).
+// At every level, on a wide screen, the rail is out: hiding it and the widget rail behind a Tools button below Advanced
+// (hierarchy change 11) was reverted in round-one corrections on 2026-11-10; the customer wants the tools in view.
 const drawOpen = () => !isPhone() || !!D.drawOpen || V.tool !== 'select';
 function drawbar() {
   return html`<div class="ch-draw" role="toolbar" aria-label="Drawing tools" aria-orientation="${isPhone() ? 'horizontal' : 'vertical'}" ${drawOpen() ? '' : 'hidden'}>
@@ -496,9 +499,9 @@ function paintChart(over) {
   if (D.barsErr) { if (chart) { chart.destroy(); chart = null; } draw(host, failed('The bars', D.barsErr, { retry: 'bars' })); return; }
   if (!D.bars) { if (chart) { chart.destroy(); chart = null; } draw(host, skeleton('chart', 1, 'Loading bars')); return; }
   const iv = INTERVALS.find((x) => x.key === V.interval);
-  // the plot's own header controls, at its top right as in the classic chart: Explain (Milo) and full screen
-  host.innerHTML = '<div class="ch-pacts"></div><div class="pc-host"></div>';
-  draw(host.firstChild, isPhone() ? '' : html`${miloButton('Explain', { ask: `Explain the ${D.sym} chart: the trend, support, resistance, momentum, volume and risk, and what would invalidate the read.`, context: `${D.sym} Dossier, Chart`, symbol: D.sym, cls: 'btn-sm' })}${C.maxButton()}`);
+  // Explain and full screen are on the toolbar row, at its right end, not over the plot: at the plot's top right they
+  // sat on the plot area, the readout line and the price scale (round-one corrections, 2026-11-10)
+  host.innerHTML = '<div class="pc-host"></div>';
   // a rebuild on the same bars keeps the zoom and the undo history; the live refetch hands over its own (`over`)
   const kept = over || (chart && D.chartBars === D.bars ? chart.keep() : {});
   if (chart) chart.destroy();
@@ -599,7 +602,7 @@ function placeMenu(d) {
 }
 function paintMax() {
   const on = C.isMax();
-  // the plot's corner button (a wide screen), or the phone menu's, which says it in words
+  // the toolbar's icon button (a wide screen), or the phone menu's, which says it in words
   $$('[data-v2-ch-max]', mainEl).forEach((b) => { b.setAttribute('aria-pressed', String(on)); b.title = C.maxTitle(on); if (b.closest('.ch-more')) b.textContent = on ? 'Leave full screen' : 'Full screen'; else draw(b, icon(on ? 'shrink' : 'expand')); });
 }
 function toggleMax(on) {
@@ -650,6 +653,7 @@ const noExtended = () => ['index', 'crypto'].includes(kindOf(D.sym));   // an in
 function paint() {
   draw(mainEl, html`${header(D.sym, D, 'chart', { bar: true })}${tabs(D.sym, 'chart', { fund: isFund(D) })}
     <section class="section chart-page" aria-label="${D.sym} chart">
+      <p class="ch-title" id="ch-title">${chartTitle()}</p>
       <div id="ch-tools">${toolbar()}</div>
       <div class="ch-stage"><div id="ch-draw">${drawbar()}</div><div id="ch-body"></div>
         <div class="ch-wrail" id="ch-wrail">${W.rail(shown(), isPhone())}${miloButton(html`<span class="sr">Ask Milo about the ${D.sym} chart</span>`, { context: `${D.sym} Dossier, Chart`, symbol: D.sym, cls: 'chw-milo' })}</div>
@@ -660,7 +664,14 @@ function paint() {
   applyColours(); paintChart(); paintRead(); syncSide();
 }
 // The chart read (ui/chartread.js), from the daily technicals this page already loads.
+// The chart's one title line: Chart read's own first words, the trend and the fact it rests on first (hierarchy change
+// 11: Chart read existed only as a button, so nothing on the page said what the reader was looking at)
+function chartTitle() {
+  const m = D.t ? chartReadModel(D.t) : null;
+  return m ? `${m.trend}, daily. ${m.facts[0] || ''}`.trim() : '';
+}
 function paintRead() {
+  const ti = $('#ch-title', mainEl); if (ti) { const t = chartTitle(); if (ti.textContent !== t) ti.textContent = t; }
   const h = $('#ch-read', mainEl); if (!h) return;
   h.hidden = !V.read;
   const side = $('#ch-side', mainEl); if (side) side.hidden = !V.read && !shown().length;

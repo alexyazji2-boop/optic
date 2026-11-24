@@ -38,6 +38,7 @@ ROW_ALIASES = {
     "total_debt": ("Total Debt",),
     "total_assets": ("Total Assets",),
     "total_equity": ("Stockholders Equity", "Total Equity Gross Minority Interest"),
+    "total_liabilities": ("Total Liabilities Net Minority Interest", "Total Liabilities"),
     "free_cash_flow": ("Free Cash Flow",),
     "operating_cash_flow": ("Operating Cash Flow",),
     # spending on property and equipment, negative on the statement (cash out); free cash flow is operating cash
@@ -312,6 +313,19 @@ def analyse_financials(raw: Dict[str, Any]) -> Dict[str, Any]:
     capex = _pick_row(cash, "capital_expenditure", a_periods) if a_periods else None
     cash_hist = _pick_row(balance, "cash", a_periods) if a_periods else None
     debt_hist = _pick_row(balance, "total_debt", a_periods) if a_periods else None
+    # the balance sheet's shape at each fiscal year end (Pass 2, Financials as charts): what the company holds against
+    # what it owes and what is left for shareholders; liabilities read from the statement, never derived
+    assets_hist = _pick_row(balance, "total_assets", a_periods) if a_periods else None
+    liab_hist = _pick_row(balance, "total_liabilities", a_periods) if a_periods else None
+    equity_hist = _pick_row(balance, "total_equity", a_periods) if a_periods else None
+    # the same lines by quarter, where the feed has the quarterly statements, on the income statement's quarters
+    bq, cq = raw.get("balance_quarterly"), raw.get("cashflow_quarterly")
+    quarter_lines = {}
+    if q_periods:
+        for key, block in (("cash", bq), ("total_debt", bq), ("total_assets", bq), ("total_liabilities", bq),
+                           ("total_equity", bq), ("operating_cash_flow", cq), ("capital_expenditure", cq),
+                           ("free_cash_flow", cq)):
+            quarter_lines[key] = _pick_row(block, key, q_periods) if block else None
     shares_a = _pick_row(annual, "diluted_shares")
     shares_q = _pick_row(quarterly, "diluted_shares")
 
@@ -371,7 +385,11 @@ def analyse_financials(raw: Dict[str, Any]) -> Dict[str, Any]:
         "quarterly": {"revenue": rev_q, "gross_profit": gp_q, "operating_income": oi_q, "ebitda": ebitda_q,
                       "net_income": ni_q, "diluted_eps": eps_q, "diluted_shares": shares_q},
         # cash and equivalents and total debt at each fiscal year end, under annual_periods
-        "balance_history": {"cash": cash_hist, "total_debt": debt_hist},
+        "balance_history": {"cash": cash_hist, "total_debt": debt_hist, "total_assets": assets_hist,
+                            "total_liabilities": liab_hist, "total_equity": equity_hist},
+        # under quarterly_periods; each line None where the feed has no quarterly statement for it
+        "quarterly_balance": {k: quarter_lines.get(k) for k in ("cash", "total_debt", "total_assets", "total_liabilities", "total_equity")},
+        "quarterly_cash": {k: quarter_lines.get(k) for k in ("operating_cash_flow", "capital_expenditure", "free_cash_flow")},
         # Yahoo carries the filings' statements; the diluted EPS here is the statement's (GAAP), which is not
         # the basis analysts' estimates and surprises use (usually adjusted)
         "source": "The company's annual and quarterly statements as Yahoo Finance carries them.",

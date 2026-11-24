@@ -26,6 +26,9 @@ def is_classic(r):
 
 @pytest.fixture(autouse=True)
 def env(monkeypatch):
+    # These are the rules Classic follows while it is turned on (OPTIC_CLASSIC=on, 2026-11-09). With it off, the
+    # default since then, every page is v2 whatever these settings say: tests/test_pass1_frontend.py.
+    monkeypatch.setenv("OPTIC_CLASSIC", "on")
     monkeypatch.delenv("OPTIC_DEFAULT_UI", raising=False)
     # most tests are about the switch itself, with v2 open to all; the access
     # tests below set or unset it themselves

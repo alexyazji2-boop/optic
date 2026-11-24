@@ -183,7 +183,11 @@ def signed_in(accounts):
     client.cookies.clear()
 
 
-def test_acceptance_3_a_bogus_symbol_cannot_be_saved_to_a_watchlist(directory, signed_in):
+def test_acceptance_3_a_bogus_symbol_cannot_be_saved_to_a_watchlist(directory, signed_in, monkeypatch):
+    # the save route checks against the real clock, not NOW: the over-the-counter quote must be this week's whenever the
+    # suite runs (dated 2026-11-04, it read as no longer trading from mid-November and the save was refused)
+    recent = (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat()
+    monkeypatch.setitem(QUOTES, "TCEHY", dict(QUOTES["TCEHY"], trade_time=recent))
     h = {"X-Optic-CSRF": signed_in["csrf"]}
     made = client.post("/api/watchlists", headers=h, json={"name": "L", "symbols": ["AAPL"]}).json()
     wid = made["watchlist"]["id"] if "watchlist" in made else made["watchlists"][0]["id"]

@@ -74,7 +74,8 @@ def test_colour_marks_direction_not_a_firms_opinion():
     an = src("pages/analysts.js")
     assert '<span class="t-muted" title="Raised">↑</span>' in an and '<span class="up">↑</span>' not in an
     ws = src("pages/workspace.js")
-    assert "a = Math.round(6 + 22 * Math.min(1, Math.abs(v) / full));" in ws, "a fixed scale, at most 28%, not the day's largest"
+    # real red and green since the visual update (2026-11-11): 14% to 55%, still a fixed scale, not the day's largest
+    assert "a = Math.round(14 + 41 * Math.min(1, Math.abs(v) / full));" in ws, "a fixed scale, at most 55%, not the day's largest"
     assert "const full = { chg_1d: 2, chg_5d: 4, chg_20d: 8 }[P.period] || 2;" in ws
 
 

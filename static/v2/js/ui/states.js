@@ -54,9 +54,16 @@ export function reExplain(x) {
 }
 export const empty = (title, body, action) => html`<div class="state" role="note"><p class="t-h3">${title}</p>${body ? html`<p>${body}</p>` : ''}${action || ''}</div>`;
 
-export const failed = (what, err, { retry } = {}) => html`<div class="state err" role="alert">
-  <p class="t-h3">${what} did not load</p><p>${detail(err, what)}</p>
-  ${retry ? html`<button type="button" class="btn btn-sm" data-v2-retry="${retry}">Try again</button>` : ''}</div>`;
+/**
+ * The failed block, the only one in the app (Pass 2, 2026-11-17; tests/test_pass2_states_contract.py). `title` replaces
+ * "<what> did not load" where the page has a truer heading (a refusal, a price that could not be worked out); `body`
+ * replaces the explained error; `retry` names a handler in the page's retry table (app.js), and `retryAttr` is for a
+ * page that wires its own Try again (brokerage, the timeline); `extra` is drawn after the body; `role` is "note" for a
+ * part of a list that failed while the rest stands.
+ */
+export const failed = (what, err, { retry, title, body, retryAttr, extra, role = 'alert', size = 'btn-sm' } = {}) => html`<div class="state err" role="${role}">
+  <p class="t-h3">${title || `${what} did not load`}</p>${body === '' ? '' : html`<p>${body != null ? body : detail(err, what)}</p>`}${extra || ''}
+  ${retry ? html`<button type="button" class="btn ${size}" data-v2-retry="${retry}">Try again</button>` : retryAttr ? html`<button type="button" class="btn ${size}" ${raw(retryAttr)}>Try again</button>` : ''}</div>`;
 
 function detail(err, what) {
   if (err && (err.kind === 'server' || err.kind === 'bad') && err.message && err.message !== 'Request failed') {

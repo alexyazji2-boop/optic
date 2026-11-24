@@ -30,14 +30,20 @@ export function start() {
   // The position is noted on every scroll, while the page it belongs to is still on screen; only the write to
   // sessionStorage waits. Debouncing the note as well lost a scroll made just before leaving (2,000 px came back as
   // 1,400: audit 2026-10-22), and noting it at arrival is too late: the old page is already cleared by then.
-  window.addEventListener('scroll', () => { const k = id(); if (k && !restoring) mem[k] = Math.round(window.scrollY); clearTimeout(timer); timer = setTimeout(save, 120); }, { passive: true });
+  window.addEventListener('scroll', () => { const k = id(), a = byAddress(); if (k && !restoring) { mem[k] = Math.round(window.scrollY); if (a) mem[a] = mem[k]; } clearTimeout(timer); timer = setTimeout(save, 120); }, { passive: true });
   window.addEventListener('pagehide', save);
 }
 
 /** On every route: a new entry starts at the top; a revisited one goes back to where it was left. */
+// A company's tabs keep their place (Pass 2, 2026-11-17): going from AAPL's Financials to its Chart and back by the
+// tabs, not by Back, is a new history entry, which started at the top. Within this browser tab's session a Dossier
+// tab's address remembers where it was left, and a new entry for that address goes back there.
+const TAB_ADDRESS = /^#\/[A-Z0-9.^=-]{1,12}(\/[a-z]+)?$/;
+const byAddress = () => (TAB_ADDRESS.test(location.hash || '') ? `h:${location.hash}` : null);
 export function arrive() {
   if (cancel) cancel();
-  const k = tag(), y = mem[k] || 0;
+  const fresh = !id();
+  const k = tag(), a = byAddress(), y = mem[k] || (fresh && a ? mem[a] : 0) || 0;
   if (!y) { window.scrollTo(0, 0); return; }
   restoring = true;
   const t0 = performance.now();

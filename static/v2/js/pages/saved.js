@@ -111,7 +111,7 @@ function guestBody() {
 function paint() {
   if (!live || !mainEl) return;
   const signed = store.signedIn();
-  draw(mainEl, html`<header class="page-head"><h1 class="t-display-m">Saved research</h1>
+  draw(mainEl, html`<header class="page-head"><h1 class="t-display-m">Research<span class="sr">, saved research</span></h1>
       <p class="section-sub">What you saved from a Dossier, Compare, a research sheet or Milo, to come back to.</p></header>
     <section class="section" aria-labelledby="lib-h"><h2 class="t-h2 sr" id="lib-h">Your saved research</h2>
       ${signed ? html`${filters()}<div id="lib-body" aria-live="polite">${body()}</div>` : guestBody()}</section>

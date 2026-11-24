@@ -2011,7 +2011,12 @@ class YFinanceProvider(MarketDataProvider):
             ("income_quarterly", "quarterly_income_stmt"),
             ("balance_annual", "balance_sheet"),
             ("cashflow_annual", "cashflow"),
+            # quarterly balance sheet and cash flow (Pass 2, Financials as charts): optional, so a quarter the feed
+            # cannot give never fails the four statements above
+            ("balance_quarterly", "quarterly_balance_sheet"),
+            ("cashflow_quarterly", "quarterly_cashflow"),
         )
+        required = 4
 
         def read(attr: str):
             # A Ticker each: the four share nothing but the session, and one
@@ -2028,7 +2033,7 @@ class YFinanceProvider(MarketDataProvider):
                 frames = list(pool.map(read, [attr for _, attr in statements]))
             # Any statement that failed makes the whole answer a failure: kept,
             # a missing balance sheet would read as "none filed" for hours.
-            broke = any(isinstance(f, _Failed) for f in frames)
+            broke = any(isinstance(f, _Failed) for f in frames[:required])
             frames = [f.value if isinstance(f, _Failed) else f for f in frames]
             out: Dict[str, Any] = {}
             for (name, _), frame in zip(statements, frames):

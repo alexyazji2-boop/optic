@@ -74,8 +74,45 @@ def status() -> Dict[str, Any]:
         return {"available": False, "reason": runtime.for_reader(
             "Plans are not on sale yet. Every account is on Free.",
             "A live Stripe key is set but BILLING_LIVE_APPROVED is not true. Refusing live billing.")}
-    return {"available": True, "mode": mode(),
-            "price_label": os.environ.get("BILLING_PRICE_LABEL") or "$20 a month"}
+    return {"available": True, "mode": mode(), "price_label": price_label()}
+
+
+# The price the button names (Pass 2, 2026-11-17): BILLING_PRICE_LABEL when the owner sets one, else read from the
+# Stripe price itself (amount, currency, interval), so the button can never name a price Stripe will not charge. It
+# said "$20 a month" by default before, a figure no variable set. Read once an hour; when Stripe cannot be read, the
+# button names no price rather than a guess.
+_PRICE = {"id": None, "at": 0.0, "label": None}
+PRICE_TTL = 3600
+
+
+def _money(amount: Any, currency: str) -> Optional[str]:
+    try:
+        value = int(amount) / 100.0
+    except (TypeError, ValueError):
+        return None
+    sym = {"usd": "$", "eur": "\u20ac", "gbp": "\u00a3", "cad": "CA$", "aud": "A$"}.get((currency or "").lower())
+    num = ("{:,.0f}" if value == int(value) else "{:,.2f}").format(value)
+    return "{}{}".format(sym, num) if sym else "{} {}".format(num, (currency or "").upper())
+
+
+def price_label(now: Optional[float] = None) -> Optional[str]:
+    own = (os.environ.get("BILLING_PRICE_LABEL") or "").strip()
+    if own:
+        return own
+    pid = (os.environ.get("STRIPE_PRICE_ID") or "").strip()
+    now = time.time() if now is None else now
+    if _PRICE["id"] == pid and now - _PRICE["at"] < PRICE_TTL:
+        return _PRICE["label"]
+    label = None
+    try:
+        p = _stripe("GET", "/prices/" + pid)
+        money = _money(p.get("unit_amount"), p.get("currency") or "")
+        every = ((p.get("recurring") or {}).get("interval") or "")
+        label = "{} a {}".format(money, every) if money and every else money
+    except HTTPException:
+        label = None
+    _PRICE.update({"id": pid, "at": now, "label": label})
+    return label
 
 
 def _stripe(method: str, path: str, data: Optional[Dict[str, Any]] = None,

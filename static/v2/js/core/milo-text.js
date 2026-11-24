@@ -102,10 +102,23 @@ export function splitFollowUps(text) {
 }
 
 /** [[src key]] tags as chips, at most one of each label per paragraph; unknown keys vanish. */
+// A figure Milo quotes is bold and tagged with its source straight after it (app/ai.py, "tag it with its source").
+// That bold figure is a reported fact, and it is marked as one, apart from Milo's reading around it (Pass 2,
+// 2026-11-17): a solid underline and the source named on it. A bold phrase with no source after it stays Milo's.
+const FACT_RE = /<strong>([^<]{1,60})<\/strong>([^<\[]{0,24}?)(\s?\[\[src ([a-z_]{2,20})\]\])/g;
+export function markFacts(para) {
+  return para.replace(FACT_RE, (m, fig, mid, tag, key) => {
+    const s = SOURCES[key];
+    if (!s) return m;
+    return `<strong class="milo-fact" title="Reported: ${esc(s[0])}">${fig}</strong>${mid}${tag}`;
+  });
+}
+/** The one line under a finished answer that has reported figures in it (ui/milo.js adds it once, at the end). */
+export const FACT_KEY = '<p class="milo-key">Underlined figures are reported, from the source beside them; the rest is Milo\'s reading of them.</p>';
 export function sourcesIn(htmlText, symbol) {
   return htmlText.split(/(<\/p>)/).map((para) => {
     const seen = new Set();
-    return para.replace(SRC_RE, (m, key) => {
+    return markFacts(para).replace(SRC_RE, (m, key) => {
       const s = SOURCES[key];
       if (!s || seen.has(s[0])) return '';
       seen.add(s[0]);

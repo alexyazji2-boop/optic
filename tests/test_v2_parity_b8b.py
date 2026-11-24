@@ -83,5 +83,5 @@ def test_the_panels_on_home():
     overview = WS.split("market: { label: 'Market Overview'")[1].split("\n")[0]
     for pid in ("changes", "questions", "trends"):
         assert f"  {pid}: {{" in WS and f"'{pid}'" not in overview, f"{pid}: one Add panel away; Market Overview keeps the owner's order (tests/test_v2_navigation_layout.py)"
-    assert "const MARKET_PANELS = ['indices', 'regime', 'expected', 'sectors', 'watch', 'quote', 'contracts', 'portfolio', 'trends'];" in WS
+    assert "const MARKET_PANELS = ['indices', 'regime', 'sentiment', 'expected', 'sectors', 'watch', 'quote', 'contracts', 'portfolio', 'trends'];" in WS
     assert "miloButton(q, { ask: q, context: 'Home, Questions worth asking'" in WS, "a question only drafts into Milo"

@@ -244,7 +244,9 @@ def test_account_deletion_stops_if_stripe_will_not_cancel(monkeypatch):
 def test_status_reports_price_label_and_plan():
     c, _ = reader()
     st = c.get("/api/billing/status").json()
-    assert st["available"] and st["mode"] == "test" and st["price_label"] == "$20 a month"
+    # no BILLING_PRICE_LABEL and Stripe not reachable from the suite: the button names no price rather than the
+    # "$20 a month" it defaulted to before Pass 2 (tests/test_pass2_billing.py reads the price from Stripe)
+    assert st["available"] and st["mode"] == "test" and st["price_label"] is None
     assert st["subscription"]["plan"] == "free"
 
 

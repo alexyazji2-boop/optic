@@ -49,7 +49,8 @@ def test_milo_answers_render_sources_charts_actions_and_follow_ups(tmp_path):
       }}));
     """)
     h = got["html"]
-    assert "<strong>30 times</strong>" in h and "[[src" not in h
+    # a bold figure tagged with its source is a reported fact, marked apart from Milo's reading (Pass 2)
+    assert '<strong class="milo-fact" title="Reported: Research framework">30 times</strong>' in h and "[[src" not in h
     assert 'data-v2-milo-chart="AAPL"' in h and 'data-span="6m"' in h
     assert "<p><figure" not in h                    # a tag alone in its paragraph is the block
     assert h.count('class="milo-act"') == 2           # at most two action cards per answer

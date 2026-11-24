@@ -128,12 +128,27 @@ export function guestThingsHere() {
 /** Whether a guest's things are still waiting for the reader's answer. */
 export const askIsPending = () => !!askPending;
 
+// Work that must not start while this browser may still reload into another person's session: Milo's kept question
+// (ui/miloprompt.js). Asked at once, it opened Milo docked over the "Keep what you made?" sheet and answered; the
+// sheet, closed by the reader's next move, reloaded the page and the answer was gone (gauntlet, 2026-11-10, the
+// copy: answered by 0.6 s, reloaded 2 s after a rail click). Run once the question is answered and the page stays;
+// a reload drops them, and the next page starts its own.
+let waiting = [];
+/** Run `fn` now if the device session is settled, or once the reader's answer keeps this page. */
+export function whenSettled(fn) {
+  if (ending) return;
+  if (!askPending) { fn(); return; }
+  waiting.push(fn);
+}
+function runWaiting() { const fns = waiting; waiting = []; fns.forEach((fn) => { try { fn(); } catch (e) { /* one failure stops none */ } }); }
+
 /** The guest's things become the account's: they stay where they are. */
 export function bringGuestThings() {
   const ask = askPending;
   if (!ask) return false;
   askPending = null;
   try { localStorage.setItem(SESSION_HOLDER_KEY, ask.who); holderSeen = ask.who; } catch (e) { /* refused */ }
+  setTimeout(runWaiting, 0);   // after the caller has merged the guest's lists
   return true;
 }
 
@@ -142,6 +157,7 @@ export function keepGuestThingsOut() {
   const ask = askPending;
   if (!ask) return false;
   askPending = null;
+  waiting = [];   // the page reloads; the kept question is still in sessionStorage for the next one
   try { localStorage.setItem(SESSION_HOLDER_KEY, SESSION_GUEST); } catch (e) { return false; }
   holderSeen = SESSION_GUEST;
   try {
