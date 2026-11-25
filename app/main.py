@@ -7577,6 +7577,19 @@ _PORTFOLIO_WORDS = re.compile(
 PORTFOLIO_MAX_PROFILES = 15
 
 
+def _paper_positions(block: Any) -> List[Dict[str, Any]]:
+    """The open trades in the page's `reader_holdings`, whichever app sent them.
+
+    Classic sends `{source, positions}` (static/app.js, the chat context) and v2's Paper page the bare list of
+    positions (static/v2/js/pages/paper.js, provideContext). Only Classic's was read: `.get("positions")` on v2's
+    list raised AttributeError, so a v2 reader's question about their own paper book was answered in general mode,
+    "Page context unavailable", without the book (reproduced 2026-11-24). The browser decides what arrives here, so
+    anything that is not a book is no positions, never an error."""
+    if isinstance(block, dict):
+        block = block.get("positions")
+    return [p for p in block if isinstance(p, dict)] if isinstance(block, list) else []
+
+
 def _portfolio_summary(positions: List[Dict[str, Any]]) -> Dict[str, Any]:
     """Sector exposure and concentration of the reader's paper trades.
 
@@ -7783,8 +7796,8 @@ async def _augment_chat_context(history: List[Dict[str, Any]],
         return context
     out = await _augment_chat_context_lookups(history, context)
     last = next((t for t in reversed(history or []) if t.get("role") != "assistant"), None)
-    held = ((out or {}).get("reader_holdings") or {}).get("positions")
-    if last and isinstance(held, list) and held and _PORTFOLIO_WORDS.search(last.get("content") or ""):
+    held = _paper_positions((out or {}).get("reader_holdings"))
+    if last and held and _PORTFOLIO_WORDS.search(last.get("content") or ""):
         out = dict(out or {})
         try:
             out["portfolio_summary"] = await _run(_portfolio_summary, held)
