@@ -346,7 +346,12 @@ export async function render(main, route) {
   loadBook();
   fromDraft = '';
   try { const d = JSON.parse(localStorage.getItem(DRAFT_KEY) || 'null'); if (d && d.ticker) { ticket = ticketFromDraft(d); fromDraft = `Filled from ${d.source || 'your research'}: check the price and the plan, then open it.`; } localStorage.removeItem(DRAFT_KEY); } catch (e) { /* no draft */ }
-  provideContext(() => ({ view: 'paper', reader_holdings: book.open.slice(0, 30).map((p) => ({ ticker: p.ticker, instrument: p.instrument, direction: p.direction, qty: p.qty, entry_price: p.entry_price, stop: p.stop, pnl: (marks[p.id] || {}).pnl })), journal: J.forMilo(book.closed) }));
+  // each trade as Classic sends it, plus its mark's P&L. Without the option type, strike and expiry Milo could not name
+  // a v2 option contract, and without the entry time and target it could not say how long a trade had run or how far
+  // it was from its target (2026-11-26)
+  provideContext(() => ({ view: 'paper', reader_holdings: book.open.slice(0, 30).map((p) => ({ ticker: p.ticker, instrument: p.instrument, direction: p.direction,
+    option_type: p.option_type, strike: p.strike, expiry: p.expiry, qty: p.qty, entry_price: p.entry_price, entry_at: p.entry_at, stop: p.stop, target: p.target,
+    pnl: (marks[p.id] || {}).pnl })), journal: J.forMilo(book.closed) }));
   if (fromDraft && ticket.instrument === 'option' && ticket.ticker) loadChain(ticket.ticker);
   api.get('/api/health', { ttl: 60000 }).then((h) => { health0 = h; paint(); }, () => {});
   // marked again while the page is open, every two minutes in the trading day and ten outside it, paused while hidden:

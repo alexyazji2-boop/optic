@@ -8,6 +8,9 @@ reader asking about their own paper book got "Page context unavailable" and an a
 question that kept the block raised, not only a portfolio question: the block was read before the portfolio words
 were tested. Reproduced 2026-11-24 on origin/main 3e4fa5fb; the Milo eval's paper fixture sends Classic's shape, so
 the eval never met v2's.
+
+v2 also told Milo less about each trade than Classic: no option type, strike or expiry, so Milo could not name a v2
+option contract, and no entry time or target. Since 2026-11-26 it sends Classic's fields in its own shape.
 """
 from __future__ import annotations
 
@@ -38,17 +41,20 @@ STORED = [
 MARKS = {"marked_at": "2026-11-25T15:00:00Z", "marks": [{"id": "p1", "mark_price": 304.5, "pnl": 45},
                                                         {"id": "p2", "mark_price": 2.0, "pnl": -600}]}
 
-# The same two trades as each app sends them with a question
-V2_SENT = [{"ticker": "AAPL", "instrument": "shares", "direction": "long", "qty": 10, "entry_price": 300, "stop": 280,
-            "pnl": 45},
-           {"ticker": "XOM", "instrument": "option", "direction": "long", "qty": 2, "entry_price": 5.0, "stop": 2.5,
-            "pnl": -600}]
+# The same two trades as each app sends them with a question. Classic sends these eleven fields a trade under
+# `{source, positions}`, and v2's Paper page the bare list, with the same fields and the P&L of its latest marks.
+CLASSIC_FIELDS = ("ticker", "instrument", "direction", "option_type", "strike", "expiry", "qty", "entry_price",
+                  "entry_at", "stop", "target")
 CLASSIC_SENT = {
     "source": "paper trades the reader entered in Optic (simulated, in this browser). Not a brokerage account; linked "
               "brokerage holdings, if any, are added by the server as brokerage_portfolio.",
-    "positions": [{k: p[k] for k in ("ticker", "instrument", "direction", "option_type", "strike", "expiry", "qty",
-                                     "entry_price", "entry_at", "stop", "target")} for p in STORED],
+    "positions": [{k: p[k] for k in CLASSIC_FIELDS} for p in STORED],
 }
+V2_SENT = [dict(p, pnl=m["pnl"]) for p, m in zip(CLASSIC_SENT["positions"], MARKS["marks"])]
+# A v2 tab loaded before 2026-11-26 sends seven fields a trade until it reloads: no option type, strike, expiry,
+# entry time or target
+V2_SENT_BEFORE = [{k: p[k] for k in ("ticker", "instrument", "direction", "qty", "entry_price", "stop", "pnl")}
+                  for p in V2_SENT]
 
 BY_SECTOR = [{"sector": "Technology", "share_pct": 75.0}, {"sector": "Energy", "share_pct": 25.0}]
 LARGEST = [{"ticker": "AAPL", "share_pct": 75.0}, {"ticker": "XOM", "share_pct": 25.0}]
@@ -64,7 +70,7 @@ def augment(question, holdings, monkeypatch):
     return asyncio.run(main._augment_chat_context([{"role": "user", "content": question}], ctx))
 
 
-@pytest.mark.parametrize("sent", [V2_SENT, CLASSIC_SENT], ids=["v2", "classic"])
+@pytest.mark.parametrize("sent", [V2_SENT, V2_SENT_BEFORE, CLASSIC_SENT], ids=["v2", "v2-before-2026-11-26", "classic"])
 def test_a_portfolio_question_gets_the_paper_books_summary_from_either_app(sent, monkeypatch):
     summary = augment("How is my portfolio doing?", sent, monkeypatch)["portfolio_summary"]
     assert summary["positions"] == 2
@@ -110,6 +116,13 @@ def v2_paper_context(tmp_path):
       for (let i = 0; i < 40; i++) await Promise.resolve();
       print(JSON.stringify(M.buildContext('auto', null, new Date('2026-11-25T15:00:00Z'))));
     """)
+
+
+def test_v2_tells_milo_what_classic_does_about_each_trade(tmp_path):
+    """v2 sent seven fields a trade to Classic's eleven. Without the option type, strike and expiry Milo could not name
+    a v2 option contract, only "2 XOM options", and without the entry time and the target it could not say how long a
+    trade had run or how far it was from its target. v2 sends Classic's fields now, and its marks' P&L as before."""
+    assert v2_paper_context(tmp_path)["reader_holdings"] == V2_SENT
 
 
 def chat(question, context):
